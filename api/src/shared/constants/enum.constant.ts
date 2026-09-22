@@ -1,31 +1,24 @@
-// ==========================================
-// 1. CORE: IDENTITY, AUTHENTICATION & PROFILES
-// ==========================================
+// =============================================================================
+// TREKGO PLATFORM - SYSTEM ENUMS & CONSTANTS (v2.0)
+// Consolidated Reference from docs/master.md, bao.md, luat.md, quan.md & DBML v2.0
+// =============================================================================
+
+// =============================================================================
+// 1. CORE: IDENTITY, AUTHENTICATION & PROFILES (Shared Platform / Supabase)
+// =============================================================================
 
 export enum UserRole {
   USER = 'USER',
   LEADER = 'LEADER',
-  USER_LEADER = 'USER_LEADER',
+  STAFF_WAREHOUSE = 'STAFF_WAREHOUSE',
+  STAFF_LOGISTICS = 'STAFF_LOGISTICS',
   ADMIN = 'ADMIN',
-  STAFF = 'STAFF',
 }
 
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED',
   INACTIVE = 'INACTIVE',
-  BLOCKED = 'BLOCKED',
-  PENDING = 'PENDING',
-}
-
-export enum IdentityProvider {
-  GOOGLE = 'GOOGLE',
-  FACEBOOK = 'FACEBOOK',
-  APPLE = 'APPLE',
-}
-
-export enum LeaderType {
-  COMMUNITY = 'COMMUNITY',
-  SYSTEM = 'SYSTEM',
 }
 
 export enum LeaderVerifyStatus {
@@ -34,230 +27,418 @@ export enum LeaderVerifyStatus {
   REJECTED = 'REJECTED',
 }
 
-// ==========================================
-// 2. TOURS, LOGISTICS & CHECKPOINTS
-// ==========================================
-
-export enum TourType {
-  PUBLIC = 'PUBLIC',
-  PRIVATE = 'PRIVATE',
+export enum LeaderTestStatus {
+  NOT_TAKEN = 'NOT_TAKEN',
+  PASSED = 'PASSED',
+  FAILED = 'FAILED',
 }
 
-export enum TourDifficulty {
+// =============================================================================
+// 2. DESTINATIONS, TRAILS & CHECKPOINTS (Area A - Bảo & Area C - Luật)
+// =============================================================================
+
+export enum DestinationRegion {
+  NORTH = 'NORTH',
+  CENTRAL = 'CENTRAL',
+  SOUTH = 'SOUTH',
+}
+
+export enum DestinationStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}
+
+export enum TrailDifficulty {
   EASY = 'EASY',
-  MEDIUM = 'MEDIUM',
+  MODERATE = 'MODERATE',
   HARD = 'HARD',
   EXTREME = 'EXTREME',
 }
 
-export enum TourStatus {
+export enum SystemTrailStatus {
   DRAFT = 'DRAFT',
-  OPEN = 'OPEN',
-  ONGOING = 'ONGOING',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
 }
 
-export enum LocationType {
-  PICKUP = 'PICKUP',
-  DROPOFF = 'DROPOFF',
-  CHECKPOINT = 'CHECKPOINT',
+export enum PersonalTrailStatus {
+  DRAFT = 'DRAFT',
+  READY = 'READY',
+  ARCHIVED = 'ARCHIVED',
+  DELETED = 'DELETED',
 }
 
-export enum TourLocationRole {
+export enum TrailAccessSourceType {
+  PURCHASED = 'PURCHASED',
+  PROMO = 'PROMO',
+  SYSTEM_FREE = 'SYSTEM_FREE',
+}
+
+export enum TrailAccessStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
+}
+
+export enum CheckpointType {
   START = 'START',
-  CHECKPOINT = 'CHECKPOINT',
+  CAMPSITE = 'CAMPSITE',
+  SUMMIT = 'SUMMIT',
+  WATER_SOURCE = 'WATER_SOURCE',
+  VIEWPOINT = 'VIEWPOINT',
   END = 'END',
+}
+
+export enum CheckpointStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}
+
+// =============================================================================
+// 3. TRIPS, BOOKINGS & PRIVATE MEMBERSHIPS (Area A - Bảo)
+// =============================================================================
+
+export enum TripType {
+  PUBLIC = 'PUBLIC', // Tour thương mại do Leader dẫn đoàn, đặt qua Booking
+  PRIVATE = 'PRIVATE', // Nhóm tự tổ chức do Host tạo, join qua invite code
+}
+
+export enum TripTrailType {
+  SYSTEM = 'SYSTEM',
+  PERSONAL = 'PERSONAL',
+}
+
+export enum TripStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  REGISTRATION_OPEN = 'REGISTRATION_OPEN',
+  REGISTRATION_CLOSED = 'REGISTRATION_CLOSED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCEL_PENDING = 'CANCEL_PENDING',
+  CANCELLED = 'CANCELLED',
+  INTERRUPTED = 'INTERRUPTED',
+}
+
+export enum TripCheckpointStatus {
+  PENDING = 'PENDING',
+  ARRIVED = 'ARRIVED',
+  REACHED = 'REACHED',
+  COMPLETED = 'COMPLETED',
+  SKIPPED = 'SKIPPED',
+  OVERRIDDEN = 'OVERRIDDEN',
+}
+
+export enum CheckpointMissionType {
+  QUIZ = 'QUIZ',
+  PHOTO_EVIDENCE = 'PHOTO_EVIDENCE',
+  CHECKIN_ONLY = 'CHECKIN_ONLY',
+  QR_CODE = 'QR_CODE',
+  GPS_LOCATION = 'GPS_LOCATION',
+}
+
+export enum TripTransportType {
   PICKUP = 'PICKUP',
   DROPOFF = 'DROPOFF',
 }
 
-// ==========================================
-// 3. BOOKINGS & PARTICIPANTS
-// ==========================================
+export enum VehicleType {
+  SEATER_16 = '16_SEATER',
+  SEATER_29 = '29_SEATER',
+  SEATER_45 = '45_SEATER',
+}
 
 export enum BookingStatus {
-  PENDING = 'PENDING',
-  DEPOSIT_PAID = 'DEPOSIT_PAID',
+  PENDING_PAYMENT = 'PENDING_PAYMENT',
   CONFIRMED = 'CONFIRMED',
+  CHECKED_IN = 'CHECKED_IN',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
 }
 
 export enum BookingParticipantStatus {
-  CONFIRMED = 'CONFIRMED',
+  ACTIVE = 'ACTIVE',
   CANCELLED = 'CANCELLED',
+  NO_SHOW = 'NO_SHOW',
 }
 
-export enum CheckInStatus {
+export enum ParticipantCheckinStatus {
+  PENDING = 'PENDING',
+  CHECKED_IN = 'CHECKED_IN',
+}
+
+export enum PrivateTripInviteStatus {
+  ACTIVE = 'ACTIVE',
+  REVOKED = 'REVOKED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum TripMemberRole {
+  HOST = 'HOST',
+  MEMBER = 'MEMBER',
+}
+
+export enum TripMemberStatus {
+  ACTIVE = 'ACTIVE',
+  LEFT = 'LEFT',
+  REMOVED = 'REMOVED',
+  COMPLETED = 'COMPLETED',
+  NO_SHOW = 'NO_SHOW',
+}
+
+export enum TripMemberAttendanceStatus {
+  PENDING = 'PENDING',
   PRESENT = 'PRESENT',
   NO_SHOW = 'NO_SHOW',
 }
 
-// ==========================================
-// 4. INSURANCE & RISK MANAGEMENT
-// ==========================================
+// =============================================================================
+// 4. EQUIPMENT RENTAL, INVENTORY & LOGISTICS (Area B - Quân)
+// =============================================================================
 
-export enum BookingInsuranceStatus {
-  ACTIVE = 'ACTIVE',
-  CLAIMED = 'CLAIMED',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum InsuranceClaimStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-}
-
-export enum IncidentType {
-  MEDICAL = 'MEDICAL',
-  WEATHER = 'WEATHER',
-  LOST_PERSON = 'LOST_PERSON',
-  ACCIDENT = 'ACCIDENT',
-  OTHER = 'OTHER',
-}
-
-export enum IncidentStatus {
-  OPEN = 'OPEN',
-  IN_PROGRESS = 'IN_PROGRESS',
-  RESOLVED = 'RESOLVED',
-  CLOSED = 'CLOSED',
-}
-
-// ==========================================
-// 5. E-COMMERCE, INVENTORY & RENTAL
-// ==========================================
-
-export enum EquipmentStatus {
+export enum EquipmentUnitStatus {
   AVAILABLE = 'AVAILABLE',
   RESERVED = 'RESERVED',
+  PICKED = 'PICKED',
+  PACKED = 'PACKED',
   RENTED = 'RENTED',
+  RETURN_PENDING = 'RETURN_PENDING',
   MAINTENANCE = 'MAINTENANCE',
   DAMAGED = 'DAMAGED',
   LOST = 'LOST',
 }
 
 export enum EquipmentCondition {
+  NEW = 'NEW',
   GOOD = 'GOOD',
   USED = 'USED',
   DAMAGED = 'DAMAGED',
 }
 
-export enum OrderStatus {
-  PENDING = 'PENDING',
-  PROCESSING = 'PROCESSING',
+export enum RentalOrderStatus {
+  DRAFT = 'DRAFT',
+  PENDING_PAYMENT = 'PENDING_PAYMENT',
+  PAID = 'PAID',
+  PREPARING = 'PREPARING',
+  READY_FOR_HANDOVER = 'READY_FOR_HANDOVER',
+  ACTIVE = 'ACTIVE',
+  RETURN_PENDING = 'RETURN_PENDING',
+  INSPECTED = 'INSPECTED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
 }
 
-export enum RentalDepositStatus {
-  HOLDING = 'HOLDING',
-  REFUNDED = 'REFUNDED',
-  PARTIAL_REFUNDED = 'PARTIAL_REFUNDED',
+export enum EquipmentReservationStatus {
+  RESERVED = 'RESERVED',
+  RELEASED = 'RELEASED',
+  FULFILLED = 'FULFILLED',
 }
 
-export enum RentalContractStatus {
-  PENDING_HANDOVER = 'PENDING_HANDOVER',
-  IN_USE = 'IN_USE',
+export enum PackageStatus {
+  PACKED = 'PACKED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  HANDED_OVER = 'HANDED_OVER',
   RETURNED = 'RETURNED',
-  DISPUTED = 'DISPUTED',
-  CANCELLED = 'CANCELLED',
+  DISBANDED = 'DISBANDED',
 }
 
-export enum RentalItemReturnStatus {
+export enum WarehouseTaskStatus {
+  OPEN = 'OPEN',
+  PICKING = 'PICKING',
+  CONDITION_CAPTURED = 'CONDITION_CAPTURED',
+  PACKED = 'PACKED',
+  READY = 'READY',
+  TRANSFERRED = 'TRANSFERRED',
+  CLOSED = 'CLOSED',
+}
+
+export enum LogisticsTaskType {
+  HANDOVER = 'HANDOVER',
+  RETURN_COLLECT = 'RETURN_COLLECT',
+}
+
+export enum LogisticsTaskStatus {
+  SCHEDULED = 'SCHEDULED',
+  PACKAGE_RECEIVED = 'PACKAGE_RECEIVED',
+  USER_VERIFIED = 'USER_VERIFIED',
+  HANDED_OVER = 'HANDED_OVER',
+  RETURN_DUE = 'RETURN_DUE',
+  RETURNED = 'RETURNED',
+  NO_SHOW = 'NO_SHOW',
+  CLOSED = 'CLOSED',
+}
+
+export enum ConditionSnapshotStage {
+  PRE_HANDOVER = 'PRE_HANDOVER',
+  POST_RETURN = 'POST_RETURN',
+}
+
+export enum ConditionGrade {
   GOOD = 'GOOD',
+  SCRATCHED = 'SCRATCHED',
   DAMAGED = 'DAMAGED',
   LOST = 'LOST',
 }
 
-// ==========================================
-// 6. FINANCE: INVOICE, PAYMENT & REFUND
-// ==========================================
+export enum ReturnInspectionStage {
+  LOGISTICS_PRELIMINARY = 'LOGISTICS_PRELIMINARY',
+  WAREHOUSE_FINAL = 'WAREHOUSE_FINAL',
+}
 
-export enum InvoiceSourceType {
-  TOUR_BOOKING = 'TOUR_BOOKING',
-  SHOP_ORDER = 'SHOP_ORDER',
-  MIXED = 'MIXED',
+export enum ReturnInspectionStatus {
+  NORMAL = 'NORMAL',
+  DAMAGED = 'DAMAGED',
+  LOST = 'LOST',
+}
+
+export enum DepositSettlementStatus {
+  PENDING = 'PENDING',
+  REFUNDED = 'REFUNDED',
+  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+  FORFEITED = 'FORFEITED',
+}
+
+export enum MaintenanceStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}
+
+// =============================================================================
+// 5. GPS TRACKING, MAPLIBRE 3D & WEATHER (Area C - Luật)
+// =============================================================================
+
+export enum GpsSessionStatus {
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  STOPPED = 'STOPPED',
+}
+
+export enum RouteDeviationStatus {
+  DEVIATED = 'DEVIATED',
+  RECOVERED = 'RECOVERED',
+}
+
+export enum CheckpointEventStatus {
+  ARRIVED = 'ARRIVED',
+  VALIDATED = 'VALIDATED',
+}
+
+export enum CheckpointMissionStatus {
+  LOCKED = 'LOCKED',
+  UNLOCKED = 'UNLOCKED',
+  COMPLETED = 'COMPLETED',
+  SKIPPED = 'SKIPPED',
+}
+
+export enum WeatherProvider {
+  OPENWEATHER = 'OPENWEATHER',
+  TOMORROW_IO = 'TOMORROW_IO',
+}
+
+export enum WeatherCondition {
+  SUNNY = 'SUNNY',
+  RAIN = 'RAIN',
+  FOG = 'FOG',
+  THUNDERSTORM = 'THUNDERSTORM',
+}
+
+export enum WeatherRiskSummary {
+  SAFE = 'SAFE',
+  MODERATE_RAIN = 'MODERATE_RAIN',
+  HIGH_WIND = 'HIGH_WIND',
+  STORM_DANGER = 'STORM_DANGER',
+}
+
+export enum TrailRecordingStatus {
+  RECORDING = 'RECORDING',
+  STOPPED = 'STOPPED',
+  PROCESSED = 'PROCESSED',
+  SUBMITTED = 'SUBMITTED',
+}
+
+// =============================================================================
+// 6. SHARED FINANCE: INVOICES, PAYMENTS & REFUNDS
+// =============================================================================
+
+export enum InvoiceType {
+  TRIP_BOOKING = 'TRIP_BOOKING',
+  RENTAL_FEE = 'RENTAL_FEE',
+  TRAIL_PURCHASE = 'TRAIL_PURCHASE',
+  DEPOSIT_DEDUCTION = 'DEPOSIT_DEDUCTION',
 }
 
 export enum InvoiceStatus {
   UNPAID = 'UNPAID',
-  PARTIAL = 'PARTIAL',
   PAID = 'PAID',
-  REFUNDED = 'REFUNDED',
   CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED',
 }
 
-export enum InvoiceLineItemType {
-  TOUR_FEE = 'TOUR_FEE',
-  INSURANCE = 'INSURANCE',
-  BUY_ITEM = 'BUY_ITEM',
-  RENT_FEE = 'RENT_FEE',
-  RENT_DEPOSIT = 'RENT_DEPOSIT',
-  PENALTY = 'PENALTY',
-  DISCOUNT = 'DISCOUNT',
-}
-
-export enum PaymentMethod {
+export enum PaymentGateway {
   VNPAY = 'VNPAY',
   MOMO = 'MOMO',
-  CASH = 'CASH',
-  BANK_TRANSFER = 'BANK_TRANSFER',
+  PAYOS = 'PAYOS',
+  STRIPE = 'STRIPE',
 }
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
 }
 
 export enum RefundType {
-  CANCEL_TOUR = 'CANCEL_TOUR',
-  RETURN_DEPOSIT = 'RETURN_DEPOSIT',
-  ORDER_REFUND = 'ORDER_REFUND',
-  PARTIAL_REFUND = 'PARTIAL_REFUND',
+  CANCEL_BOOKING = 'CANCEL_BOOKING',
+  DEPOSIT_RETURN = 'DEPOSIT_RETURN',
+  RENTAL_CANCEL = 'RENTAL_CANCEL',
 }
 
 export enum RefundStatus {
   PROCESSING = 'PROCESSING',
   SUCCESS = 'SUCCESS',
-  REJECTED = 'REJECTED',
+  FAILED = 'FAILED',
 }
 
-// ==========================================
-// 7. GAMIFICATION & REWARD
-// ==========================================
+// =============================================================================
+// 7. GAMIFICATION, REVIEWS & AUDIT LOGS
+// =============================================================================
+
+export enum RankLevel {
+  BRONZE = 'BRONZE',
+  SILVER = 'SILVER',
+  GOLD = 'GOLD',
+  PLATINUM = 'PLATINUM',
+}
 
 export enum PointTransactionType {
-  EARN = 'EARN',
-  SPEND = 'SPEND',
+  EARN_CHECKPOINT = 'EARN_CHECKPOINT',
+  EARN_TRIP = 'EARN_TRIP',
+  SPEND_RENTAL = 'SPEND_RENTAL',
   PENALTY = 'PENALTY',
 }
 
-// ==========================================
-// 8. NOTIFICATIONS & AUDIT LOGS
-// ==========================================
-
 export enum NotificationType {
-  ALERT = 'ALERT',
-  PROMO = 'PROMO',
+  TRIP_ALERT = 'TRIP_ALERT',
+  DEVIATION_WARNING = 'DEVIATION_WARNING',
+  RENTAL_REMINDER = 'RENTAL_REMINDER',
   SYSTEM = 'SYSTEM',
-}
-
-export enum AuditEntityType {
-  BOOKING = 'BOOKING',
-  PAYMENT = 'PAYMENT',
-  ORDER = 'ORDER',
-  USER = 'USER',
-  TOUR = 'TOUR',
-  INVOICE = 'INVOICE',
-  RENTAL_CONTRACT = 'RENTAL_CONTRACT',
 }
 
 export enum AuditAction {
   CREATE = 'CREATE',
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
+  OVERRIDE = 'OVERRIDE',
+}
+
+export enum AuditEntityType {
+  BOOKING = 'BOOKING',
+  RENTAL_ORDER = 'RENTAL_ORDER',
+  TRIP = 'TRIP',
+  CHECKPOINT = 'CHECKPOINT',
+  USER = 'USER',
+  INVOICE = 'INVOICE',
+  PAYMENT = 'PAYMENT',
 }
