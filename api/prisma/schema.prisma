@@ -1,3 +1,9 @@
+// TrekGo Prisma schema
+// Target: Prisma ORM 6.3.1 + PostgreSQL
+// Generated from TrekGo_Production_Locked_v3.dbml
+// CHECK constraints, partial unique indexes, and PostgreSQL EXCLUDE constraints
+// are intentionally implemented in migration SQL, not duplicated in Prisma PSL.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,12 +12,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// TrekGo Prisma schema
-// Target: Prisma ORM 6.3.1 + PostgreSQL
-// Generated from TrekGo_Production_Locked_v3.dbml
-// CHECK constraints, partial unique indexes, and PostgreSQL EXCLUDE constraints
-// are intentionally implemented in migration SQL, not duplicated in Prisma PSL.
 
 // =========================================================
 // ENUMS
@@ -1169,6 +1169,9 @@ model TripActiveTrailPlan {
   changedByUser User          @relation("R_TripActiveTrailPlan_changed_by", fields: [changedBy], references: [id])
   tripTrailPlan TripTrailPlan @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id", fields: [tripId, trailPlanId], references: [tripId, id])
 
+  // Prisma 6.3.1 requires the complete defining side of a 1:1 relation to be unique.
+  // tripId is already the PK, so this is logically redundant but required by the Prisma relation validator.
+  @@unique([tripId, trailPlanId], map: "uq_trip_active_trail_plan_trip_plan")
   @@map("trip_active_trail_plans")
 }
 
