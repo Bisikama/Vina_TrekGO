@@ -1,4 +1,4 @@
-import { User } from '@prisma/client'
+import { User, UserRole, UserStatus } from '@prisma/client'
 
 export const I_USER_REPOSITORY = 'I_USER_REPOSITORY'
 
@@ -10,8 +10,9 @@ export interface IUserRepository {
     phone?: string
     cccd?: string
     avatar?: string
-    role?: string
-    status?: string
+    avatarUrl?: string
+    role?: UserRole | string
+    status?: UserStatus | string
   }): Promise<User>
 
   findByAuthId(authUserId: string): Promise<User | null>
