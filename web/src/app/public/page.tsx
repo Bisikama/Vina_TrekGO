@@ -2,23 +2,21 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { AuthModal, useAuthStore } from "@/features/auth";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/features/auth";
 
 export default function PublicLandingPage() {
+  const router = useRouter();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [selectedDestination, setSelectedDestination] = useState("Tất cả điểm đến");
   const [selectedDifficulty, setSelectedDifficulty] = useState("Tất cả độ khó");
 
   const openLogin = () => {
-    setAuthMode("login");
-    setAuthModalOpen(true);
+    router.push("/public/login");
   };
 
   const openRegister = () => {
-    setAuthMode("register");
-    setAuthModalOpen(true);
+    router.push("/public/register");
   };
 
   const featuredTrails = [
@@ -546,13 +544,6 @@ export default function PublicLandingPage() {
           © 2026 VinaTrekGO Portal. All rights reserved. Designed according to DESIGN.md specs.
         </div>
       </footer>
-
-      {/* 🟢 AUTH MODAL (LOGIN & REGISTER) */}
-      <AuthModal
-        isOpen={authModalOpen}
-        initialMode={authMode}
-        onClose={() => setAuthModalOpen(false)}
-      />
     </div>
   );
 }

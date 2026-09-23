@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className={`${inter.variable} scroll-smooth antialiased`}>
-      <body className="min-h-screen flex flex-col font-sans bg-[#F7F7F4] text-[#1F2937]">
+    <html lang="vi" className={`${inter.variable} scroll-smooth antialiased`} data-scroll-behavior="smooth" suppressHydrationWarning>
+      <body className="min-h-screen flex flex-col font-sans bg-[#F7F7F4] text-[#1F2937]" suppressHydrationWarning>
         {children}
       </body>
     </html>

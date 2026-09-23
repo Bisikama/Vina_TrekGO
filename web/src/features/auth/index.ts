@@ -1,8 +1,16 @@
-// Public API for the Auth Feature
+// Auth Feature Public API
+export * from "./types/auth.types";
+export * from "./services/auth.api";
+export * from "./store/authStore";
+export { useRegister } from "./hooks/useRegister";
+export { useLogin } from "./hooks/useLogin";
+export { useRefreshToken } from "./hooks/useRefreshToken";
+export { useLogout } from "./hooks/useLogout";
+export { useAuth } from "./hooks/useAuth";
+
+// Form & UI Components
+export { AuthLayout } from "./components/AuthLayout";
+export { AuthBrandingHero } from "./components/AuthBrandingHero";
 export { LoginForm } from "./components/LoginForm";
 export { RegisterForm } from "./components/RegisterForm";
 export { AuthModal } from "./components/AuthModal";
-export { useAuthStore } from "./store/authStore";
-export { useLogin } from "./hooks/useLogin";
-export { useRegister } from "./hooks/useRegister";
-export type { User, LoginPayload, RegisterPayload, AuthResponse } from "./types/auth.types";
