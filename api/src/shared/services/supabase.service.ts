@@ -10,6 +10,12 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as dotenv from 'dotenv'
 import envConfig from '../config'
+import * as WebSocket from 'ws'
+
+//Polyfill bằng thư viện ws - Để có thể sử dụng NodeJS-V20
+if (typeof globalThis.WebSocket === 'undefined') {
+  ;(globalThis as any).WebSocket = WebSocket
+}
 
 @Injectable()
 export class SupabaseService {

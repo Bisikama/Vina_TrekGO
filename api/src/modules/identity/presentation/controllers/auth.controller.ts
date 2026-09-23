@@ -1,6 +1,5 @@
-import { Body, Controller, Get, Post, Req, UsePipes } from '@nestjs/common'
+import { Body, Controller, Get, Post, Req } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
-import { AuthService } from './auth.service'
 import { Auth } from 'src/shared/decorators/auth.decorator'
 import { AuthType, REQUEST_USER_KEY } from 'src/shared/constants/auth.constant'
 import {
@@ -14,13 +13,26 @@ import {
   RefreshTokenSchema,
   RegisterDto,
   RegisterSchema,
-} from './auth.dto'
+} from '../dtos/auth.dto'
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe'
+import { AuthRegisterUseCase } from '../../application/use-cases/auth-register.use-case'
+import { AuthLoginUseCase } from '../../application/use-cases/auth-login.use-case'
+import { AuthBootstrapUseCase } from '../../application/use-cases/auth-bootstrap.use-case'
+import { AuthRefreshUseCase } from '../../application/use-cases/auth-refresh.use-case'
+import { AuthLogoutUseCase } from '../../application/use-cases/auth-logout.use-case'
+import { GetProfileUseCase } from '../../application/use-cases/get-profile.use-case'
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authRegisterUseCase: AuthRegisterUseCase,
+    private readonly authLoginUseCase: AuthLoginUseCase,
+    private readonly authBootstrapUseCase: AuthBootstrapUseCase,
+    private readonly authRefreshUseCase: AuthRefreshUseCase,
+    private readonly authLogoutUseCase: AuthLogoutUseCase,
+    private readonly getProfileUseCase: GetProfileUseCase,
+  ) {}
 
   @Auth([AuthType.None])
   @ApiOperation({
@@ -31,7 +43,7 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ (Zod Validation)' })
   @Post('bootstrap')
   async bootstrap(@Body(new ZodValidationPipe(BootstrapSchema)) body: BootstrapDto) {
-    return await this.authService.bootstrap(body)
+    return await this.authBootstrapUseCase.execute(body)
   }
 
   @Auth([AuthType.Bearer])
@@ -45,7 +57,7 @@ export class AuthController {
   async getMe(@Req() req: any) {
     const user = req[REQUEST_USER_KEY]
     if (user?.id) {
-      return await this.authService.getMe(user.id)
+      return await this.getProfileUseCase.execute(user.id)
     }
     return user
   }
@@ -57,7 +69,7 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'Email hoặc CCCD đã tồn tại' })
   @Post('register')
   async register(@Body(new ZodValidationPipe(RegisterSchema)) body: RegisterDto) {
-    return await this.authService.register(body)
+    return await this.authRegisterUseCase.execute(body)
   }
 
   @Auth([AuthType.None])
@@ -67,7 +79,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Email hoặc mật khẩu không chính xác' })
   @Post('login')
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginDto) {
-    return await this.authService.login(body)
+    return await this.authLoginUseCase.execute(body)
   }
 
   @Auth([AuthType.None])
@@ -77,7 +89,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Refresh token không hợp lệ hoặc đã hết hạn' })
   @Post('refresh-token')
   async refreshToken(@Body(new ZodValidationPipe(RefreshTokenSchema)) body: RefreshTokenDto) {
-    return await this.authService.refreshToken(body.refreshToken)
+    return await this.authRefreshUseCase.execute(body.refreshToken)
   }
 
   @Auth([AuthType.None])
@@ -85,7 +97,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công' })
   @Post('logout')
   async logout(@Body(new ZodValidationPipe(LogoutSchema)) body: LogoutDto) {
-    return await this.authService.logout(body.refreshToken)
+    const req = arguments[1] // Dùng auth token nếu có thể
+    return await this.authLogoutUseCase.execute(body.refreshToken)
   }
 }
-
