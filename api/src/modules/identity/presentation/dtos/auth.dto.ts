@@ -2,9 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { z } from 'zod'
 import { UserRole } from 'src/shared/constants'
 
-// ==========================================
 // 1. REGISTER SCHEMA & DTO
-// ==========================================
 export const RegisterSchema = z.object({
   email: z.string().trim().email('Email không đúng định dạng'),
   password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
@@ -70,9 +68,7 @@ export class RegisterDto {
   role?: UserRole
 }
 
-// ==========================================
 // 2. LOGIN SCHEMA & DTO
-// ==========================================
 export const LoginSchema = z.object({
   email: z.string().trim().email('Email không đúng định dạng'),
   password: z.string().min(1, 'Mật khẩu là bắt buộc'),
@@ -92,9 +88,7 @@ export class LoginDto {
   password!: string
 }
 
-// ==========================================
 // 3. REFRESH TOKEN SCHEMA & DTO
-// ==========================================
 export const RefreshTokenSchema = z.object({
   refreshToken: z.string().trim().min(1, 'Refresh token là bắt buộc'),
 })
@@ -107,9 +101,7 @@ export class RefreshTokenDto {
   refreshToken!: string
 }
 
-// ==========================================
 // 4. LOGOUT SCHEMA & DTO
-// ==========================================
 export const LogoutSchema = z.object({
   refreshToken: z.string().trim().optional(),
 })
@@ -122,9 +114,7 @@ export class LogoutDto {
   refreshToken?: string
 }
 
-// ==========================================
 // 5. BOOTSTRAP SCHEMA & DTO
-// ==========================================
 export const BootstrapSchema = z.object({
   authUserId: z.string().trim().uuid('authUserId phải là định dạng UUID hợp lệ từ Supabase'),
   email: z.string().trim().email('Email không đúng định dạng'),
@@ -179,5 +169,3 @@ export class BootstrapDto {
   })
   role?: UserRole
 }
-
-
