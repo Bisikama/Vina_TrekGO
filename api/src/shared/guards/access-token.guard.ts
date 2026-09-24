@@ -41,8 +41,8 @@ export class AccessTokenGuard implements CanActivate {
       const trekGoUser = await this.prismaService.user.findUnique({
         where: { authUserId: supabaseUser.id },
         include: {
-          leaderProfile: true,
-          userRank: true,
+          leaderProfileViaUserId: true,
+          userRankViaUserId: true,
         },
       })
 

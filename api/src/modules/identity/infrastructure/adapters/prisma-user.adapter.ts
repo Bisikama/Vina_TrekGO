@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { IUserRepository } from '../../application/ports/user.port'
-import { User } from '@prisma/client'
+import { User, UserRole, UserStatus } from '@prisma/client'
 
 @Injectable()
 export class PrismaUserAdapter implements IUserRepository {
@@ -14,8 +14,9 @@ export class PrismaUserAdapter implements IUserRepository {
     phone?: string
     cccd?: string
     avatar?: string
-    role?: string
-    status?: string
+    avatarUrl?: string
+    role?: UserRole | string
+    status?: UserStatus | string
   }): Promise<User> {
     return this.prisma.user.create({
       data: {
@@ -23,10 +24,9 @@ export class PrismaUserAdapter implements IUserRepository {
         email: data.email,
         fullName: data.fullName,
         phone: data.phone,
-        cccd: data.cccd,
-        avatar: data.avatar,
-        role: data.role,
-        status: data.status,
+        avatarUrl: data.avatarUrl || data.avatar,
+        role: (data.role as UserRole) || UserRole.USER,
+        status: (data.status as UserStatus) || UserStatus.ACTIVE,
       },
     })
   }
@@ -43,8 +43,8 @@ export class PrismaUserAdapter implements IUserRepository {
         OR: [{ authUserId }, { email }],
       },
       include: {
-        leaderProfile: true,
-        userRank: true,
+        leaderProfileViaUserId: true,
+        userRankViaUserId: true,
       },
     })
   }
@@ -53,8 +53,8 @@ export class PrismaUserAdapter implements IUserRepository {
     return this.prisma.user.findUnique({
       where: { id },
       include: {
-        leaderProfile: true,
-        userRank: true,
+        leaderProfileViaUserId: true,
+        userRankViaUserId: true,
       },
     })
   }

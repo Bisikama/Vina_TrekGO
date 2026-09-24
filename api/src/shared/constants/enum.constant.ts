@@ -18,7 +18,8 @@ export enum UserRole {
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
   SUSPENDED = 'SUSPENDED',
-  INACTIVE = 'INACTIVE',
+  BANNED = 'BANNED',
+  DEACTIVATED = 'DEACTIVATED',
 }
 
 export enum LeaderVerifyStatus {
