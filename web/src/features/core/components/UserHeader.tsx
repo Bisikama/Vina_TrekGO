@@ -47,10 +47,10 @@ export const UserHeader = () => {
         <nav className="hidden md:flex items-center gap-6 text-[13px] font-bold text-gray-600">
           <Link href="/explore" className="hover:text-[#1B5E41]">Khám phá</Link>
           <Link href="/trips" className="hover:text-[#1B5E41]">Chuyến đi</Link>
-          <Link href="/equipment" className="hover:text-[#1B5E41]">Thuê thiết bị</Link>
+
           <Link href="/my-trips" className="hover:text-[#1B5E41]">Chuyến đi của tôi</Link>
           <Link href="/my-routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
-          <Link href="/leader-program" className="flex items-center gap-1 hover:text-[#1B5E41]">
+          <Link href="/leader-registration" className="flex items-center gap-1 hover:text-[#1B5E41]">
             Trở thành Leader
             <span className="bg-amber-400 text-[9px] px-1.5 py-0.5 rounded text-black leading-none">PRO</span>
           </Link>

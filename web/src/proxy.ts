@@ -8,7 +8,7 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get('mock_token')?.value;
 
   // Các route không cần đăng nhập
-  const isPublicPath = path.startsWith('/public');
+  const isPublicPath = path.startsWith('/public') || path === '/';
 
   // Nếu người dùng cố vào các trang (user), (admin), (leader)... nhưng chưa có token
   if (!isPublicPath && !token) {
@@ -16,7 +16,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Nếu đã đăng nhập mà cố vào lại trang login/register thì đá về trang chủ
-  if (isPublicPath && token && path !== '/') {
+  if (token && (path === '/public/login' || path === '/public/register')) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

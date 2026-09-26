@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export const QuickActionCards = () => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
       {/* Khám phá cung đường */}
       <Link href="/explore" className="group bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-gray-100 rounded-2xl p-5 transition-all">
         <div className="flex justify-between items-start mb-4">
@@ -33,20 +33,6 @@ export const QuickActionCards = () => {
         </div>
       </Link>
 
-      {/* Thuê thiết bị */}
-      <Link href="/equipment" className="group bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-gray-100 rounded-2xl p-5 transition-all">
-        <div className="flex justify-between items-start mb-4">
-          <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center text-gray-700 group-hover:scale-110 transition-transform">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-          </div>
-          <span className="bg-white px-2 py-0.5 rounded text-[10px] font-bold text-gray-500 border border-gray-100">Kho Bắc - Nam</span>
-        </div>
-        <h3 className="font-bold text-[15px] text-gray-900 mb-1">Thuê thiết bị dã ngoại</h3>
-        <p className="text-[11px] text-gray-500 mb-4 line-clamp-2">Lều chống bão, balo trợ lực, bộ đàm cự ly 5km VFRS.</p>
-        <div className="text-[11px] font-bold text-[#154B36] flex items-center gap-1 group-hover:gap-2 transition-all">
-          Kho đồ chuẩn cứu hộ <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
-        </div>
-      </Link>
 
       {/* Đăng ký Leader */}
       <Link href="/leader-program" className="group bg-[#F8FAFC] hover:bg-[#154B36] border border-gray-100 rounded-2xl p-5 transition-all text-gray-900 hover:text-white">

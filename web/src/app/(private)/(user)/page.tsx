@@ -1,6 +1,5 @@
 import { UserWelcomeHeader } from "@/features/users/components/UserWelcomeHeader";
 import { QuickActionCards } from "@/features/users/components/QuickActionCards";
-import { ActiveRentalAlert } from "@/features/equipment/components/ActiveRentalAlert";
 import { UpcomingTripHero } from "@/features/trips/components/UpcomingTripHero";
 import { PromoBanner } from "@/features/trips/components/PromoBanner";
 import { RecommendedRoutes } from "@/features/trips/components/RecommendedRoutes";
@@ -17,8 +16,6 @@ export default function UserDashboardPage() {
         {/* Quick Actions */}
         <QuickActionCards />
 
-        {/* Active Rental Alert */}
-        <ActiveRentalAlert />
 
         {/* Main Dashboard Layout */}
         <div className="mt-4">
