@@ -5,7 +5,8 @@
 // are intentionally implemented in migration SQL, not duplicated in Prisma PSL.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
