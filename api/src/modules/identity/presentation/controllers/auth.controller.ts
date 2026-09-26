@@ -5,6 +5,8 @@ import { AuthType, REQUEST_USER_KEY } from 'src/shared/constants/auth.constant'
 import {
   BootstrapDto,
   BootstrapSchema,
+  ForgotPasswordDto,
+  ForgotPasswordSchema,
   LoginDto,
   LoginSchema,
   LogoutDto,
@@ -13,6 +15,10 @@ import {
   RefreshTokenSchema,
   RegisterDto,
   RegisterSchema,
+  ResendOtpDto,
+  ResendOtpSchema,
+  VerifyOtpDto,
+  VerifyOtpSchema,
 } from '../dtos/auth.dto'
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe'
 import { AuthRegisterUseCase } from '../../application/use-cases/auth-register.use-case'
@@ -21,6 +27,13 @@ import { AuthBootstrapUseCase } from '../../application/use-cases/auth-bootstrap
 import { AuthRefreshUseCase } from '../../application/use-cases/auth-refresh.use-case'
 import { AuthLogoutUseCase } from '../../application/use-cases/auth-logout.use-case'
 import { GetProfileUseCase } from '../../application/use-cases/get-profile.use-case'
+import { AuthForgotPasswordUseCase } from '../../application/use-cases/auth-forgot-password.use-case'
+import { AuthVerifyOtpUseCase } from '../../application/use-cases/auth-verify-otp.use-case'
+import { AuthResendOtpUseCase } from '../../application/use-cases/auth-resend-otp.use-case'
+import { ActiveUser } from 'src/shared/decorators/active-user.decorator'
+import type { ActiveUserData } from 'src/shared/types/user.type'
+import { Roles } from 'src/shared/decorators/roles.decorator'
+import { UserRole } from 'src/shared/constants'
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -32,12 +45,17 @@ export class AuthController {
     private readonly authRefreshUseCase: AuthRefreshUseCase,
     private readonly authLogoutUseCase: AuthLogoutUseCase,
     private readonly getProfileUseCase: GetProfileUseCase,
+    private readonly authForgotPasswordUseCase: AuthForgotPasswordUseCase,
+    private readonly authVerifyOtpUseCase: AuthVerifyOtpUseCase,
+    private readonly authResendOtpUseCase: AuthResendOtpUseCase,
   ) {}
 
-  @Auth([AuthType.None])
+  @Auth([AuthType.Bearer])
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Bootstrap/Map profile từ Supabase Auth (RC-API-005)',
-    description: 'Sau khi user đăng ký/đăng nhập qua Supabase Auth SDK, gọi endpoint này để tạo hoặc lấy profile TrekGo',
+    description:
+      'Sau khi user đăng ký/đăng nhập qua Supabase Auth SDK, gọi endpoint này để tạo hoặc lấy profile TrekGo',
   })
   @ApiResponse({ status: 201, description: 'Tạo hoặc đồng bộ profile thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ (Zod Validation)' })
@@ -54,8 +72,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Thông tin người dùng hiện tại' })
   @Get('me')
-  async getMe(@Req() req: any) {
-    const user = req[REQUEST_USER_KEY]
+  async getMe(@ActiveUser() user: ActiveUserData) {
     if (user?.id) {
       return await this.getProfileUseCase.execute(user.id)
     }
@@ -66,7 +83,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Đăng ký tài khoản người dùng mới' })
   @ApiResponse({ status: 201, description: 'Đăng ký thành công, trả về user và tokens' })
   @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ (Zod Validation)' })
-  @ApiResponse({ status: 409, description: 'Email hoặc CCCD đã tồn tại' })
+  @ApiResponse({ status: 409, description: 'Email đã tồn tại' })
   @Post('register')
   async register(@Body(new ZodValidationPipe(RegisterSchema)) body: RegisterDto) {
     return await this.authRegisterUseCase.execute(body)
@@ -92,12 +109,42 @@ export class AuthController {
     return await this.authRefreshUseCase.execute(body.refreshToken)
   }
 
-  @Auth([AuthType.None])
+   @Auth([AuthType.Bearer])
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Đăng xuất khỏi hệ thống (RC-API-003)' })
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công' })
   @Post('logout')
-  async logout(@Body(new ZodValidationPipe(LogoutSchema)) body: LogoutDto) {
-    const req = arguments[1] // Dùng auth token nếu có thể
-    return await this.authLogoutUseCase.execute(body.refreshToken)
+  async logout(@Req() req: any) {
+    // Lấy Bearer Access Token từ header của request
+    const authHeader = req.headers.authorization
+    const accessToken = authHeader?.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : undefined
+
+    return await this.authLogoutUseCase.execute(accessToken)
+  }
+
+
+  @Auth([AuthType.None])
+  @ApiOperation({ summary: 'Yêu cầu đặt lại mật khẩu (Forgot Password)' })
+  @ApiResponse({ status: 200, description: 'Đã gửi email khôi phục' })
+  @Post('reset-forgot-password')
+  async forgotPassword(@Body(new ZodValidationPipe(ForgotPasswordSchema)) body: ForgotPasswordDto) {
+    return await this.authForgotPasswordUseCase.execute(body.email)
+  }
+  @Auth([AuthType.None])
+  @ApiOperation({ summary: 'Xác thực mã OTP để kích hoạt tài khoản' })
+  @ApiResponse({ status: 200, description: 'Xác thực thành công, đăng nhập vào hệ thống' })
+  @Post('verify-otp')
+  async verifyOtp(@Body(new ZodValidationPipe(VerifyOtpSchema)) body: VerifyOtpDto) {
+    return await this.authVerifyOtpUseCase.execute(body)
+  }
+  
+  @Auth([AuthType.None])
+  @ApiOperation({ summary: 'Gửi lại mã OTP xác thực email' })
+  @ApiResponse({ status: 200, description: 'Gửi lại mã OTP thành công' })
+  @Post('resend-otp')
+  async resendOtp(@Body(new ZodValidationPipe(ResendOtpSchema)) body: ResendOtpDto) {
+    return await this.authResendOtpUseCase.execute(body.email)
   }
 }

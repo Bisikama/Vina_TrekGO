@@ -14,8 +14,7 @@ export class AuthBootstrapUseCase {
     email: string
     fullName?: string
     phone?: string
-    cccd?: string
-    avatar?: string
+    avatarUrl?: string
     role?: string
   }) {
     const existing = await this.userRepository.findByAuthId(body.authUserId)
@@ -29,8 +28,7 @@ export class AuthBootstrapUseCase {
       email: body.email,
       fullName: body.fullName || body.email.split('@')[0],
       phone: body.phone,
-      cccd: body.cccd,
-      avatar: body.avatar,
+      avatarUrl: body.avatarUrl,
       role: body.role ?? UserRole.USER,
       status: UserStatus.ACTIVE,
     })

@@ -13,12 +13,6 @@ export const RegisterSchema = z.object({
     .regex(/^(0|\+84)[0-9]{9}$/, 'Số điện thoại không hợp lệ (10 chữ số bắt đầu bằng 0 hoặc +84)')
     .optional()
     .nullable(),
-  cccd: z
-    .string()
-    .trim()
-    .regex(/^[0-9]{12}$/, 'CCCD phải gồm đúng 12 chữ số')
-    .optional()
-    .nullable(),
   avatar: z.string().trim().url('Đường dẫn ảnh đại diện không hợp lệ').optional().nullable(),
   role: z.nativeEnum(UserRole).optional().default(UserRole.USER),
 })
@@ -47,12 +41,6 @@ export class RegisterDto {
     description: 'Số điện thoại (10 chữ số)',
   })
   phone?: string
-
-  @ApiPropertyOptional({
-    example: '012345678901',
-    description: 'Căn cước công dân (12 chữ số)',
-  })
-  cccd?: string
 
   @ApiPropertyOptional({
     example: 'https://example.com/avatar.jpg',
@@ -120,7 +108,6 @@ export const BootstrapSchema = z.object({
   email: z.string().trim().email('Email không đúng định dạng'),
   fullName: z.string().trim().optional(),
   phone: z.string().trim().optional().nullable(),
-  cccd: z.string().trim().optional().nullable(),
   avatar: z.string().trim().optional().nullable(),
   role: z.nativeEnum(UserRole).optional().default(UserRole.USER),
 })
@@ -151,12 +138,6 @@ export class BootstrapDto {
   phone?: string
 
   @ApiPropertyOptional({
-    example: '012345678901',
-    description: 'Căn cước công dân (12 chữ số)',
-  })
-  cccd?: string
-
-  @ApiPropertyOptional({
     example: 'https://example.com/avatar.jpg',
     description: 'Đường dẫn ảnh đại diện',
   })
@@ -168,4 +149,36 @@ export class BootstrapDto {
     description: 'Vai trò trong TrekGo',
   })
   role?: UserRole
+}
+// FORGOT PASSWORD SCHEMA & DTO
+export const ForgotPasswordSchema = z.object({
+  email: z.string().trim().email('Email không đúng định dạng'),
+})
+
+export class ForgotPasswordDto {
+  @ApiProperty({
+    example: 'user@example.com',
+    description: 'Email người dùng cần reset mật khẩu',
+  })
+  email!: string
+}
+export const VerifyOtpSchema = z.object({
+  email: z.string().trim().email('Email không đúng định dạng'),
+  otp: z.string().trim().length(6, 'Mã OTP phải đúng 6 chữ số'),
+})
+
+export class VerifyOtpDto {
+  @ApiProperty({ example: 'user@example.com', description: 'Email tài khoản' })
+  email!: string
+
+  @ApiProperty({ example: '123456', description: 'Mã OTP 6 số' })
+  otp!: string
+}
+export const ResendOtpSchema = z.object({
+  email: z.string().trim().email('Email không đúng định dạng'),
+})
+
+export class ResendOtpDto {
+  @ApiProperty({ example: 'user@example.com', description: 'Email nhận lại mã OTP' })
+  email!: string
 }

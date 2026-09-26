@@ -4,6 +4,8 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common'
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js'
 import * as fs from 'fs'
@@ -160,6 +162,47 @@ export class SupabaseService {
 
     return data.user
   }
+    /**
+   * Đăng ký tài khoản mới & gửi mã OTP về Email
+   */
+  async signUp(params: {
+    email: string
+    password?: string
+    fullName?: string
+    phone?: string
+  }): Promise<SupabaseUser> {
+    const client = this.getClient()
+
+    const { data, error } = await client.auth.signUp({
+      email: params.email,
+      password: params.password || 'TrekGo@123456',
+      options: {
+        data: {
+          full_name: params.fullName,
+          phone: params.phone,
+        },
+      },
+    })
+
+    if (error) {
+      this.logger.error(`Supabase signUp error: ${error.message}`)
+      if (error.message.toLowerCase().includes('already')) {
+        throw new ConflictException('Email này đã tồn tại trên Supabase')
+      }
+      throw new BadRequestException(`Lỗi đăng ký Supabase: ${error.message}`)
+    }
+
+    if (!data.user) {
+      throw new BadRequestException('Không thể tạo tài khoản trên Supabase')
+    }
+    // Nếu email đã tồn tại và đã được kích hoạt, Supabase sẽ trả về identities rỗng
+    if (data.user.identities && data.user.identities.length === 0) {
+      throw new ConflictException('Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.')
+    }
+
+    return data.user
+  }
+
 
   /**
    * Xóa user trên Supabase (Rollback khi tạo profile Postgres thất bại)
@@ -209,17 +252,25 @@ export class SupabaseService {
     return data.session
   }
 
-  /**
-   * Đăng xuất trên Supabase
+    /**
+   * Đăng xuất trên Supabase: Thu hồi token/session của user
    */
   async signOut(accessToken?: string): Promise<void> {
-    const client = this.getClient()
+    if (!accessToken) return
+
     try {
-      await client.auth.signOut()
+      if (this.adminClient) {
+        // Thu hồi toàn bộ refresh token của user trên Supabase
+        const { error } = await this.adminClient.auth.admin.signOut(accessToken)
+        if (error) {
+          this.logger.warn(`Supabase admin.signOut error: ${error.message}`)
+        }
+      }
     } catch (err) {
       this.logger.warn('Supabase signOut error', err)
     }
   }
+
 
   /**
    * Xác thực Supabase Access Token (JWT) từ client gửi lên
@@ -242,6 +293,82 @@ export class SupabaseService {
 
     return user
   }
+
+  async resetPasswordForEmail(email: string, redirectTo?: string): Promise<void> {
+    const client = this.getClient()
+
+    // Config redirect url - nếu không có thì dùng default url
+    const { data, error } = await client.auth.resetPasswordForEmail(email,{redirectTo})
+
+    if (error) {
+      this.logger.error(`Supabase resetPassword error: ${error.message}`)
+      throw new BadRequestException(`Lỗi gửi email reset mật khẩu: ${error.message}`)
+    }
+
+    // Optionally return something, but usually void or a confirmation
+  }
+    /**
+   * Xác thực mã OTP người dùng nhập
+   */
+    async verifyOtp(email: string, token: string) {
+    const client = this.getClient()
+
+    const { data, error } = await client.auth.verifyOtp({
+      email,
+      token,
+      type: 'signup',
+    })
+
+    if (error) {
+      this.logger.error(`Supabase verifyOtp error: ${error.message}`)
+      throw new BadRequestException(`Mã OTP không hợp lệ hoặc đã hết hạn: ${error.message}`)
+    }
+
+    // Đảm bảo trả về user và session không null
+    if (!data.user || !data.session) {
+      throw new BadRequestException('Không tìm thấy thông tin phiên đăng nhập sau khi xác thực OTP')
+    }
+
+    return {
+      user: data.user,
+      session: data.session,
+    }
+  }
+    /**
+   * Gửi lại mã OTP qua email (Resend OTP)
+   */
+    async resendOtp(email: string) {
+    const client = this.getClient()
+
+    const { data, error } = await client.auth.resend({
+      type: 'signup',
+      email,
+    })
+
+    if (error) {
+      this.logger.error(`Supabase resendOtp error: ${error.message}`)
+
+      // 👉 Bắt lỗi spam gửi liên tục từ Supabase:
+      if (
+        error.status === 429 ||
+        error.code === 'over_email_send_rate_limit' ||
+        error.message.toLowerCase().includes('rate limit') ||
+        error.message.toLowerCase().includes('security purposes')
+      ) {
+        throw new HttpException(
+          'Bạn đang thao tác quá nhanh. Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã mới.',
+          HttpStatus.TOO_MANY_REQUESTS, // Trả về HTTP 429
+        )
+      }
+
+      throw new BadRequestException(`Lỗi gửi lại mã OTP: ${error.message}`)
+    }
+
+    return data
+  }
+
+
+
 }
 
 
