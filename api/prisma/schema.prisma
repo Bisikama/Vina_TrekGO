@@ -1,16 +1,21 @@
 // TrekGo Prisma schema
 // Target: Prisma ORM 6.3.1 + PostgreSQL
-// Generated from TrekGo_Production_Locked_v3.dbml
-// CHECK constraints, partial unique indexes, and PostgreSQL EXCLUDE constraints
-// are intentionally implemented in migration SQL, not duplicated in Prisma PSL.
+// Updated for Rental FINAL FLOW (25/09/2026).
+// Key decisions: PUBLIC/PRIVATE rental both require a valid Booking;
+// quantity hold is product+quantity+time-window; exact units are assigned only when Staff Inventory picks;
+// physical inventory storage entity is InventoryLocation.
+// CHECK constraints and partial unique indexes that Prisma PSL cannot express
+// are implemented in migration SQL, not duplicated in Prisma PSL.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // =========================================================
@@ -20,7 +25,7 @@ datasource db {
 enum UserRole {
   USER
   LEADER
-  STAFF_WAREHOUSE
+  STAFF_INVENTORY
   STAFF_LOGISTICS
   ADMIN
 
@@ -312,13 +317,6 @@ enum EquipmentCondition {
   @@map("equipment_condition")
 }
 
-enum RentalContextType {
-  PUBLIC_BOOKING
-  PRIVATE_MEMBER
-
-  @@map("rental_context_type")
-}
-
 enum RentalQuoteStatus {
   ACTIVE
   CONVERTED
@@ -328,13 +326,6 @@ enum RentalQuoteStatus {
   @@map("rental_quote_status")
 }
 
-enum RentalHandoverMode {
-  TRIP_PICKUP
-  WAREHOUSE_PICKUP
-
-  @@map("rental_handover_mode")
-}
-
 enum RentalOrderStatus {
   PENDING_PAYMENT
   PAID
@@ -342,7 +333,7 @@ enum RentalOrderStatus {
   READY_FOR_HANDOVER
   ACTIVE
   RETURN_PENDING
-  INSPECTED
+  RETURN_PROCESSING
   COMPLETED
   CANCELLED
   EXPIRED
@@ -377,9 +368,32 @@ enum ReservationStatus {
   RELEASED
   EXPIRED
   CLOSED
-  CANCELLED
 
   @@map("reservation_status")
+}
+
+enum RentalUnitAssignmentStatus {
+  ASSIGNED
+  PACKED
+  HANDED_OVER
+  RETURNED
+  CLOSED
+  REPLACED
+  UNASSIGNED
+
+  @@map("rental_unit_assignment_status")
+}
+
+enum DepositItemStatus {
+  HELD
+  REFUND_PENDING
+  REVIEW_REQUIRED
+  APPROVED
+  REJECTED
+  REFUND_FAILED
+  SETTLED
+
+  @@map("deposit_item_status")
 }
 
 enum PackageStatus {
@@ -389,14 +403,14 @@ enum PackageStatus {
   TRANSFERRED_TO_LOGISTICS
   HANDED_OVER
   RETURNING
-  RETURNED_TO_WAREHOUSE
+  RETURNED_TO_INVENTORY
   CLOSED
   CANCELLED
 
   @@map("package_status")
 }
 
-enum WarehouseTaskStatus {
+enum InventoryTaskStatus {
   OPEN
   PICKING
   CONDITION_CAPTURED
@@ -408,7 +422,7 @@ enum WarehouseTaskStatus {
   BLOCKED
   CANCELLED
 
-  @@map("warehouse_task_status")
+  @@map("inventory_task_status")
 }
 
 enum LogisticsTaskType {
@@ -421,11 +435,11 @@ enum LogisticsTaskType {
 enum LogisticsTaskStatus {
   SCHEDULED
   PACKAGE_RECEIVED
-  USER_VERIFIED
+  RECIPIENT_VERIFIED
   HANDED_OVER
   COLLECTING
   RETURNED
-  WAREHOUSE_RECEIVED
+  INVENTORY_RECEIVED
   NO_SHOW
   REFUSED
   CLOSED
@@ -451,19 +465,20 @@ enum InspectionStage {
   @@map("inspection_stage")
 }
 
-enum InspectionStatus {
+enum ReturnInspectionOutcome {
   NORMAL
-  DAMAGED
-  LOST
+  ISSUE
+  MISSING_PENDING_REVIEW
+  DAMAGE_CONFIRMED
+  LOST_CONFIRMED
 
-  @@map("inspection_status")
+  @@map("return_inspection_outcome")
 }
 
 enum DepositSettlementStatus {
-  HELD
-  REVIEW_REQUIRED
-  REFUND_PENDING
-  REFUND_FAILED
+  OPEN
+  PARTIALLY_SETTLED
+  ACTION_REQUIRED
   SETTLED
 
   @@map("deposit_settlement_status")
@@ -487,7 +502,7 @@ enum MaintenanceStatus {
 }
 
 enum CustodyActorType {
-  WAREHOUSE
+  INVENTORY_LOCATION
   LOGISTICS
   USER
   SYSTEM
@@ -496,10 +511,10 @@ enum CustodyActorType {
 }
 
 enum CustodyEventType {
-  WAREHOUSE_TO_LOGISTICS
+  INVENTORY_TO_LOGISTICS
   LOGISTICS_TO_USER
   USER_TO_LOGISTICS
-  LOGISTICS_TO_WAREHOUSE
+  LOGISTICS_TO_INVENTORY
   INTERNAL_TRANSFER
 
   @@map("custody_event_type")
@@ -638,69 +653,70 @@ model User {
   updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deactivatedAt DateTime?  @map("deactivated_at") @db.Timestamptz(6)
 
-  leaderProfileViaUserId                  LeaderProfile?              @relation("R_LeaderProfile_user_id")
-  leaderProfilesViaVerifiedBy             LeaderProfile[]             @relation("R_LeaderProfile_verified_by")
-  leaderApplicationsViaUserId             LeaderApplication[]         @relation("R_LeaderApplication_user_id")
-  leaderApplicationsViaReviewedBy         LeaderApplication[]         @relation("R_LeaderApplication_reviewed_by")
-  leaderTestsViaCreatedBy                 LeaderTest[]                @relation("R_LeaderTest_created_by")
-  leaderTestAttemptsViaUserId             LeaderTestAttempt[]         @relation("R_LeaderTestAttempt_user_id")
-  leaderCertificatesViaUserId             LeaderCertificate[]         @relation("R_LeaderCertificate_user_id")
-  leaderCertificatesViaVerifiedBy         LeaderCertificate[]         @relation("R_LeaderCertificate_verified_by")
-  pickupPointsViaCreatedBy                PickupPoint[]               @relation("R_PickupPoint_created_by")
-  personalTrailsViaUserId                 PersonalTrail[]             @relation("R_PersonalTrail_user_id")
-  trailSubmissionsViaSubmittedBy          TrailSubmission[]           @relation("R_TrailSubmission_submitted_by")
-  trailSubmissionsViaReviewedBy           TrailSubmission[]           @relation("R_TrailSubmission_reviewed_by")
-  systemTrailsViaCreatedBy                SystemTrail[]               @relation("R_SystemTrail_created_by")
-  trailAccesssViaUserId                   TrailAccess[]               @relation("R_TrailAccess_user_id")
-  trailRecordingsViaUserId                TrailRecording[]            @relation("R_TrailRecording_user_id")
-  tripsViaCreatorId                       Trip[]                      @relation("R_Trip_creator_id")
-  tripsViaLeaderId                        Trip[]                      @relation("R_Trip_leader_id")
-  tripActiveTrailPlansViaChangedBy        TripActiveTrailPlan[]       @relation("R_TripActiveTrailPlan_changed_by")
-  tripTrailSwitchsViaActorId              TripTrailSwitch[]           @relation("R_TripTrailSwitch_actor_id")
-  tripCheckpointProgresssViaUpdatedBy     TripCheckpointProgress[]    @relation("R_TripCheckpointProgress_updated_by")
-  tripCancellationRequestsViaRequestedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_requested_by")
-  tripCancellationRequestsViaReviewedBy   TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
-  privateTripInvitesViaCreatedBy          PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
-  tripMembersViaUserId                    TripMember[]                @relation("R_TripMember_user_id")
-  tripMembersViaAttendanceMarkedBy        TripMember[]                @relation("R_TripMember_attendance_marked_by")
-  bookingPolicysViaCreatedBy              BookingPolicy[]             @relation("R_BookingPolicy_created_by")
-  bookingsViaUserId                       Booking[]                   @relation("R_Booking_user_id")
-  bookingParticipantsViaUserId            BookingParticipant[]        @relation("R_BookingParticipant_user_id")
-  bookingParticipantsViaCheckedInBy       BookingParticipant[]        @relation("R_BookingParticipant_checked_in_by")
-  bookingCancellationsViaCancelledBy      BookingCancellation[]       @relation("R_BookingCancellation_cancelled_by")
-  rentalPolicysViaCreatedBy               RentalPolicy[]              @relation("R_RentalPolicy_created_by")
-  rentalProductPriceHistorysViaChangedBy  RentalProductPriceHistory[] @relation("R_RentalProductPriceHistory_changed_by")
-  rentalQuotesViaUserId                   RentalQuote[]               @relation("R_RentalQuote_user_id")
-  rentalOrdersViaUserId                   RentalOrder[]               @relation("R_RentalOrder_user_id")
-  warehouseTasksViaStaffId                WarehouseTask[]             @relation("R_WarehouseTask_staff_id")
-  logisticsTasksViaStaffId                LogisticsTask[]             @relation("R_LogisticsTask_staff_id")
-  handoverConfirmationsViaRecipientUserId HandoverConfirmation[]      @relation("R_HandoverConfirmation_recipient_user_id")
-  conditionSnapshotsViaTakenBy            ConditionSnapshot[]         @relation("R_ConditionSnapshot_taken_by")
-  conditionSnapshotsViaUserConfirmedBy    ConditionSnapshot[]         @relation("R_ConditionSnapshot_user_confirmed_by")
-  returnInspectionsViaInspectorId         ReturnInspection[]          @relation("R_ReturnInspection_inspector_id")
-  rentalExceptionCasesViaOpenedBy         RentalExceptionCase[]       @relation("R_RentalExceptionCase_opened_by")
-  rentalExceptionCasesViaAssignedTo       RentalExceptionCase[]       @relation("R_RentalExceptionCase_assigned_to")
-  rentalAssessmentReviewsViaUserId        RentalAssessmentReview[]    @relation("R_RentalAssessmentReview_user_id")
-  depositSettlementsViaSettledBy          DepositSettlement[]         @relation("R_DepositSettlement_settled_by")
-  maintenanceRecordsViaStaffId            MaintenanceRecord[]         @relation("R_MaintenanceRecord_staff_id")
-  custodyEventsViaFromUserId              CustodyEvent[]              @relation("R_CustodyEvent_from_user_id")
-  custodyEventsViaToUserId                CustodyEvent[]              @relation("R_CustodyEvent_to_user_id")
-  custodyEventsViaPerformedBy             CustodyEvent[]              @relation("R_CustodyEvent_performed_by")
-  gpsPolicysViaCreatedBy                  GpsPolicy[]                 @relation("R_GpsPolicy_created_by")
-  gpsSessionsViaUserId                    GpsSession[]                @relation("R_GpsSession_user_id")
-  routeDeviationEventsViaUserId           RouteDeviationEvent[]       @relation("R_RouteDeviationEvent_user_id")
-  checkpointEventsViaUserId               CheckpointEvent[]           @relation("R_CheckpointEvent_user_id")
-  invoicesViaUserId                       Invoice[]                   @relation("R_Invoice_user_id")
-  userRankViaUserId                       UserRank?                   @relation("R_UserRank_user_id")
-  pointTransactionsViaUserId              PointTransaction[]          @relation("R_PointTransaction_user_id")
-  userBadgesViaUserId                     UserBadge[]                 @relation("R_UserBadge_user_id")
-  tripReviewsViaUserId                    TripReview[]                @relation("R_TripReview_user_id")
-  leaderReviewsViaLeaderId                LeaderReview[]              @relation("R_LeaderReview_leader_id")
-  leaderReviewsViaUserId                  LeaderReview[]              @relation("R_LeaderReview_user_id")
-  rentalReviewsViaUserId                  RentalReview[]              @relation("R_RentalReview_user_id")
-  systemConfigsViaUpdatedBy               SystemConfig[]              @relation("R_SystemConfig_updated_by")
-  notificationsViaUserId                  Notification[]              @relation("R_Notification_user_id")
-  auditLogsViaUserId                      AuditLog[]                  @relation("R_AuditLog_user_id")
+  leaderProfileViaUserId                 LeaderProfile?              @relation("R_LeaderProfile_user_id")
+  leaderProfilesViaVerifiedBy            LeaderProfile[]             @relation("R_LeaderProfile_verified_by")
+  leaderApplicationsViaUserId            LeaderApplication[]         @relation("R_LeaderApplication_user_id")
+  leaderApplicationsViaReviewedBy        LeaderApplication[]         @relation("R_LeaderApplication_reviewed_by")
+  leaderTestsViaCreatedBy                LeaderTest[]                @relation("R_LeaderTest_created_by")
+  leaderTestAttemptsViaUserId            LeaderTestAttempt[]         @relation("R_LeaderTestAttempt_user_id")
+  leaderCertificatesViaUserId            LeaderCertificate[]         @relation("R_LeaderCertificate_user_id")
+  leaderCertificatesViaVerifiedBy        LeaderCertificate[]         @relation("R_LeaderCertificate_verified_by")
+  pickupPointsViaCreatedBy               PickupPoint[]               @relation("R_PickupPoint_created_by")
+  personalTrailsViaUserId                PersonalTrail[]             @relation("R_PersonalTrail_user_id")
+  trailSubmissionsViaSubmittedBy         TrailSubmission[]           @relation("R_TrailSubmission_submitted_by")
+  trailSubmissionsViaReviewedBy          TrailSubmission[]           @relation("R_TrailSubmission_reviewed_by")
+  systemTrailsViaCreatedBy               SystemTrail[]               @relation("R_SystemTrail_created_by")
+  trailAccesssViaUserId                  TrailAccess[]               @relation("R_TrailAccess_user_id")
+  trailRecordingsViaUserId               TrailRecording[]            @relation("R_TrailRecording_user_id")
+  tripsViaCreatorId                      Trip[]                      @relation("R_Trip_creator_id")
+  tripsViaLeaderId                       Trip[]                      @relation("R_Trip_leader_id")
+  tripActiveTrailPlansViaChangedBy       TripActiveTrailPlan[]       @relation("R_TripActiveTrailPlan_changed_by")
+  tripTrailSwitchsViaActorId             TripTrailSwitch[]           @relation("R_TripTrailSwitch_actor_id")
+  tripCheckpointProgresssViaUpdatedBy    TripCheckpointProgress[]    @relation("R_TripCheckpointProgress_updated_by")
+  tripCancellationRequestsViaRequestedBy TripCancellationRequest[]   @relation("R_TripCancellationRequest_requested_by")
+  tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
+  privateTripInvitesViaCreatedBy         PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
+  tripMembersViaUserId                   TripMember[]                @relation("R_TripMember_user_id")
+  tripMembersViaAttendanceMarkedBy       TripMember[]                @relation("R_TripMember_attendance_marked_by")
+  bookingPolicysViaCreatedBy             BookingPolicy[]             @relation("R_BookingPolicy_created_by")
+  bookingsViaUserId                      Booking[]                   @relation("R_Booking_user_id")
+  bookingParticipantsViaUserId           BookingParticipant[]        @relation("R_BookingParticipant_user_id")
+  bookingParticipantsViaCheckedInBy      BookingParticipant[]        @relation("R_BookingParticipant_checked_in_by")
+  bookingCancellationsViaCancelledBy     BookingCancellation[]       @relation("R_BookingCancellation_cancelled_by")
+  rentalPolicysViaCreatedBy              RentalPolicy[]              @relation("R_RentalPolicy_created_by")
+  rentalProductPriceHistorysViaChangedBy RentalProductPriceHistory[] @relation("R_RentalProductPriceHistory_changed_by")
+  rentalQuotesViaUserId                  RentalQuote[]               @relation("R_RentalQuote_user_id")
+  rentalOrdersViaUserId                  RentalOrder[]               @relation("R_RentalOrder_user_id")
+  inventoryTasksViaStaffId               InventoryTask[]             @relation("R_InventoryTask_staff_id")
+  logisticsTasksViaStaffId               LogisticsTask[]             @relation("R_LogisticsTask_staff_id")
+  rentalPickupCodesViaVerifiedBy         RentalPickupCode[]          @relation("R_RentalPickupCode_verified_by")
+  rentalHandoversViaStaffId              RentalHandover[]            @relation("R_RentalHandover_staff_id")
+  conditionSnapshotsViaTakenBy           ConditionSnapshot[]         @relation("R_ConditionSnapshot_taken_by")
+  returnInspectionsViaInspectorId        ReturnInspection[]          @relation("R_ReturnInspection_inspector_id")
+  rentalExceptionCasesViaOpenedBy        RentalExceptionCase[]       @relation("R_RentalExceptionCase_opened_by")
+  rentalExceptionCasesViaAssignedTo      RentalExceptionCase[]       @relation("R_RentalExceptionCase_assigned_to")
+  rentalAssessmentReviewsViaUserId       RentalAssessmentReview[]    @relation("R_RentalAssessmentReview_user_id")
+  depositSettlementsViaSettledBy         DepositSettlement[]         @relation("R_DepositSettlement_settled_by")
+  depositSettlementItemsViaApprovedBy    DepositSettlementItem[]     @relation("R_DepositSettlementItem_approved_by")
+  maintenanceRecordsViaStaffId           MaintenanceRecord[]         @relation("R_MaintenanceRecord_staff_id")
+  custodyEventsViaFromUserId             CustodyEvent[]              @relation("R_CustodyEvent_from_user_id")
+  custodyEventsViaToUserId               CustodyEvent[]              @relation("R_CustodyEvent_to_user_id")
+  custodyEventsViaPerformedBy            CustodyEvent[]              @relation("R_CustodyEvent_performed_by")
+  gpsPolicysViaCreatedBy                 GpsPolicy[]                 @relation("R_GpsPolicy_created_by")
+  gpsSessionsViaUserId                   GpsSession[]                @relation("R_GpsSession_user_id")
+  routeDeviationEventsViaUserId          RouteDeviationEvent[]       @relation("R_RouteDeviationEvent_user_id")
+  checkpointEventsViaUserId              CheckpointEvent[]           @relation("R_CheckpointEvent_user_id")
+  invoicesViaUserId                      Invoice[]                   @relation("R_Invoice_user_id")
+  userRankViaUserId                      UserRank?                   @relation("R_UserRank_user_id")
+  pointTransactionsViaUserId             PointTransaction[]          @relation("R_PointTransaction_user_id")
+  userBadgesViaUserId                    UserBadge[]                 @relation("R_UserBadge_user_id")
+  tripReviewsViaUserId                   TripReview[]                @relation("R_TripReview_user_id")
+  leaderReviewsViaLeaderId               LeaderReview[]              @relation("R_LeaderReview_leader_id")
+  leaderReviewsViaUserId                 LeaderReview[]              @relation("R_LeaderReview_user_id")
+  rentalReviewsViaUserId                 RentalReview[]              @relation("R_RentalReview_user_id")
+  systemConfigsViaUpdatedBy              SystemConfig[]              @relation("R_SystemConfig_updated_by")
+  notificationsViaUserId                 Notification[]              @relation("R_Notification_user_id")
+  auditLogsViaUserId                     AuditLog[]                  @relation("R_AuditLog_user_id")
 
   @@index([role])
   @@index([status])
@@ -870,12 +886,14 @@ model PickupPoint {
   destination   Destination? @relation("R_PickupPoint_destination_id", fields: [destinationId], references: [id])
   createdByUser User         @relation("R_PickupPoint_created_by", fields: [createdBy], references: [id])
 
-  tripTransportsViaPickupPointId TripTransport[] @relation("R_TripTransport_pickup_point_id")
-  tripTransportsViaReturnPointId TripTransport[] @relation("R_TripTransport_return_point_id")
-  tripMembersViaPickupPointId    TripMember[]    @relation("R_TripMember_pickup_point_id")
-  bookingsViaPickupPointId       Booking[]       @relation("R_Booking_pickup_point_id")
-  rentalOrdersViaPickupPointId   RentalOrder[]   @relation("R_RentalOrder_pickup_point_id")
-  logisticsTasksViaPickupPointId LogisticsTask[] @relation("R_LogisticsTask_pickup_point_id")
+  tripTransportsViaPickupPointId  TripTransport[] @relation("R_TripTransport_pickup_point_id")
+  tripTransportsViaReturnPointId  TripTransport[] @relation("R_TripTransport_return_point_id")
+  tripMembersViaPickupPointId     TripMember[]    @relation("R_TripMember_pickup_point_id")
+  bookingsViaPickupPointId        Booking[]       @relation("R_Booking_pickup_point_id")
+  bookingsViaReturnPointId        Booking[]       @relation("R_Booking_return_point_id")
+  rentalOrdersViaPickupPointId    RentalOrder[]   @relation("R_RentalOrder_pickup_point_id")
+  rentalOrdersViaReturnPointId    RentalOrder[]   @relation("R_RentalOrder_return_point_id")
+  logisticsTasksViaServicePointId LogisticsTask[] @relation("R_LogisticsTask_service_point_id")
 
   @@index([destinationId, status])
   @@index([name])
@@ -1362,10 +1380,7 @@ model TripMember {
   pickupPoint            PickupPoint?       @relation("R_TripMember_pickup_point_id", fields: [pickupPointId], references: [id])
   attendanceMarkedByUser User?              @relation("R_TripMember_attendance_marked_by", fields: [attendanceMarkedBy], references: [id])
 
-  rentalQuotesViaMemberId          RentalQuote[] @relation("R_RentalQuote_member_id")
-  rentalOrdersViaMemberId          RentalOrder[] @relation("R_RentalOrder_member_id")
-  rentalOrdersViaRecipientMemberId RentalOrder[] @relation("R_RentalOrder_recipient_member_id")
-  tripReviewsViaMemberId           TripReview[]  @relation("R_TripReview_member_id")
+  tripReviewsViaMemberId TripReview[] @relation("R_TripReview_member_id")
 
   @@unique([tripId, userId])
   @@index([userId, status])
@@ -1399,23 +1414,25 @@ model BookingPolicy {
 }
 
 /// PENDING_PAYMENT represents a capacity hold until expires_at. One active booking per user/trip is enforced with a PostgreSQL partial unique index.
+/// PUBLIC and PRIVATE Trips both create a valid Booking. Rental eligibility always starts from Booking.
 model Booking {
   id                         String        @id @default(uuid()) @db.Uuid
   tripId                     String        @map("trip_id") @db.Uuid
   userId                     String        @map("user_id") @db.Uuid
   pickupPointId              String        @map("pickup_point_id") @db.Uuid
+  returnPointId              String        @map("return_point_id") @db.Uuid
   bookingPolicyId            String        @map("booking_policy_id") @db.Uuid
   status                     BookingStatus @default(PENDING_PAYMENT)
   participantCount           Int           @map("participant_count")
   pricePerPaxSnapshot        Decimal       @map("price_per_pax_snapshot") @db.Decimal(12, 2)
   subtotalAmount             Decimal       @map("subtotal_amount") @db.Decimal(12, 2)
   discountAmount             Decimal       @default(0) @map("discount_amount") @db.Decimal(12, 2)
-  /// Optional insurance component when used by the Trip
+  /// Optional insurance component when used by the Trip.
   insuranceAmount            Decimal       @default(0) @map("insurance_amount") @db.Decimal(12, 2)
   totalAmount                Decimal       @map("total_amount") @db.Decimal(12, 2)
   currency                   String        @default("VND") @db.Char(3)
   policySnapshot             Json          @map("policy_snapshot")
-  /// Set when payment confirmation is applied to Booking
+  /// Set when payment confirmation is applied to Booking.
   confirmationIdempotencyKey String?       @unique @map("confirmation_idempotency_key") @db.VarChar(200)
   expiresAt                  DateTime      @map("expires_at") @db.Timestamptz(6)
   confirmedAt                DateTime?     @map("confirmed_at") @db.Timestamptz(6)
@@ -1428,6 +1445,7 @@ model Booking {
   trip          Trip          @relation("R_Booking_trip_id", fields: [tripId], references: [id])
   user          User          @relation("R_Booking_user_id", fields: [userId], references: [id])
   pickupPoint   PickupPoint   @relation("R_Booking_pickup_point_id", fields: [pickupPointId], references: [id])
+  returnPoint   PickupPoint   @relation("R_Booking_return_point_id", fields: [returnPointId], references: [id])
   bookingPolicy BookingPolicy @relation("R_Booking_booking_policy_id", fields: [bookingPolicyId], references: [id])
 
   bookingParticipantsViaBookingId  BookingParticipant[]  @relation("R_BookingParticipant_booking_id")
@@ -1441,6 +1459,8 @@ model Booking {
   @@index([userId, status])
   @@index([tripId, userId])
   @@index([bookingPolicyId])
+  @@index([pickupPointId])
+  @@index([returnPointId])
   @@index([expiresAt])
   @@map("bookings")
 }
@@ -1448,7 +1468,7 @@ model Booking {
 model BookingParticipant {
   id                    String            @id @default(uuid()) @db.Uuid
   bookingId             String            @map("booking_id") @db.Uuid
-  /// Nullable for non-account participant
+  /// Nullable for non-account participant.
   userId                String?           @map("user_id") @db.Uuid
   fullName              String            @map("full_name") @db.VarChar(150)
   phone                 String?           @db.VarChar(30)
@@ -1469,6 +1489,7 @@ model BookingParticipant {
   user            User?   @relation("R_BookingParticipant_user_id", fields: [userId], references: [id])
   checkedInByUser User?   @relation("R_BookingParticipant_checked_in_by", fields: [checkedInBy], references: [id])
 
+  rentalQuotesViaRecipientParticipantId RentalQuote[] @relation("R_RentalQuote_recipient_participant_id")
   rentalOrdersViaRecipientParticipantId RentalOrder[] @relation("R_RentalOrder_recipient_participant_id")
 
   @@index([bookingId, status])
@@ -1517,10 +1538,12 @@ model BookingOutboxEvent {
 }
 
 // =========================================================
-// DOMAIN B - RENTAL / INVENTORY / WAREHOUSE / LOGISTICS
+// DOMAIN B - RENTAL / INVENTORY / INVENTORY LOCATION / LOGISTICS
 // =========================================================
 
-model Warehouse {
+/// Physical storage/operation place for rental inventory.
+/// Physical storage/operation place; the domain can support more than one kind of inventory location later.
+model InventoryLocation {
   id        String       @id @default(uuid()) @db.Uuid
   code      String       @unique @db.VarChar(60)
   name      String       @db.VarChar(160)
@@ -1531,15 +1554,15 @@ model Warehouse {
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  equipmentUnitsViaHomeWarehouseId    EquipmentUnit[]     @relation("R_EquipmentUnit_home_warehouse_id")
-  equipmentUnitsViaCurrentWarehouseId EquipmentUnit[]     @relation("R_EquipmentUnit_current_warehouse_id")
-  rentalOrdersViaPickupWarehouseId    RentalOrder[]       @relation("R_RentalOrder_pickup_warehouse_id")
-  warehouseTasksViaWarehouseId        WarehouseTask[]     @relation("R_WarehouseTask_warehouse_id")
-  maintenanceRecordsViaWarehouseId    MaintenanceRecord[] @relation("R_MaintenanceRecord_warehouse_id")
-  custodyEventsViaFromWarehouseId     CustodyEvent[]      @relation("R_CustodyEvent_from_warehouse_id")
-  custodyEventsViaToWarehouseId       CustodyEvent[]      @relation("R_CustodyEvent_to_warehouse_id")
+  equipmentUnitsViaHomeInventoryLocationId    EquipmentUnit[]     @relation("R_EquipmentUnit_home_inventory_location_id")
+  equipmentUnitsViaCurrentInventoryLocationId EquipmentUnit[]     @relation("R_EquipmentUnit_current_inventory_location_id")
+  inventoryTasksViaInventoryLocationId        InventoryTask[]     @relation("R_InventoryTask_inventory_location_id")
+  maintenanceRecordsViaInventoryLocationId    MaintenanceRecord[] @relation("R_MaintenanceRecord_inventory_location_id")
+  custodyEventsViaFromInventoryLocationId     CustodyEvent[]      @relation("R_CustodyEvent_from_inventory_location_id")
+  custodyEventsViaToInventoryLocationId       CustodyEvent[]      @relation("R_CustodyEvent_to_inventory_location_id")
 
-  @@map("warehouses")
+  @@index([status])
+  @@map("inventory_locations")
 }
 
 model RentalCategory {
@@ -1557,26 +1580,26 @@ model RentalCategory {
 }
 
 model RentalProduct {
-  id                String              @id @default(uuid()) @db.Uuid
-  categoryId        String              @map("category_id") @db.Uuid
-  sku               String              @unique @db.VarChar(80)
-  name              String              @db.VarChar(200)
-  description       String?
-  dailyPrice        Decimal             @map("daily_price") @db.Decimal(12, 2)
-  currency          String              @default("VND") @db.Char(3)
-  replacementValue  Decimal             @map("replacement_value") @db.Decimal(12, 2)
-  depositPolicyType DepositPolicyType   @default(FIXED) @map("deposit_policy_type")
-  depositValue      Decimal             @map("deposit_value") @db.Decimal(12, 2)
-  usageGroup        String?             @map("usage_group") @db.VarChar(80)
-  capacity          Int?
-  maxPerParticipant Int?                @map("max_per_participant")
-  maxPerGroup       Int?                @map("max_per_group")
-  images            Json?
-  specifications    Json?
-  status            RentalProductStatus @default(ACTIVE)
-  version           Int                 @default(1)
-  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                           String              @id @default(uuid()) @db.Uuid
+  categoryId                   String              @map("category_id") @db.Uuid
+  sku                          String              @unique @db.VarChar(80)
+  name                         String              @db.VarChar(200)
+  description                  String?
+  dailyPrice                   Decimal             @map("daily_price") @db.Decimal(12, 2)
+  currency                     String              @default("VND") @db.Char(3)
+  replacementValue             Decimal             @map("replacement_value") @db.Decimal(12, 2)
+  depositPolicyType            DepositPolicyType   @default(FIXED) @map("deposit_policy_type")
+  depositValue                 Decimal             @map("deposit_value") @db.Decimal(12, 2)
+  usageGroup                   String?             @map("usage_group") @db.VarChar(80)
+  images                       Json?
+  specifications               Json?
+  recommendationTags           Json?               @map("recommendation_tags")
+  requiredAccessories          Json?               @map("required_accessories")
+  requiresDeepReturnInspection Boolean             @default(false) @map("requires_deep_return_inspection")
+  status                       RentalProductStatus @default(ACTIVE)
+  version                      Int                 @default(1)
+  createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   category RentalCategory @relation("R_RentalProduct_category_id", fields: [categoryId], references: [id])
 
@@ -1584,6 +1607,7 @@ model RentalProduct {
   rentalProductPriceHistorysViaProductId RentalProductPriceHistory[] @relation("R_RentalProductPriceHistory_product_id")
   rentalQuoteLinesViaProductId           RentalQuoteLine[]           @relation("R_RentalQuoteLine_product_id")
   rentalOrderLinesViaProductId           RentalOrderLine[]           @relation("R_RentalOrderLine_product_id")
+  rentalQuantityReservationsViaProductId RentalQuantityReservation[] @relation("R_RentalQuantityReservation_product_id")
   rentalReviewsViaProductId              RentalReview[]              @relation("R_RentalReview_product_id")
 
   @@index([categoryId, status])
@@ -1592,41 +1616,46 @@ model RentalProduct {
 }
 
 /// Physical lifecycle only. Future reservations do not change AVAILABLE to RESERVED.
+/// Physical lifecycle only. Future quantity reservations never change an AVAILABLE unit into RESERVED.
+/// Exact unit assignment starts only when Staff Inventory picks after payment.
 model EquipmentUnit {
-  id                 String              @id @default(uuid()) @db.Uuid
-  productId          String              @map("product_id") @db.Uuid
-  homeWarehouseId    String              @map("home_warehouse_id") @db.Uuid
-  currentWarehouseId String?             @map("current_warehouse_id") @db.Uuid
-  assetCode          String              @unique @map("asset_code") @db.VarChar(100)
-  qrCode             String              @unique @map("qr_code") @db.VarChar(180)
-  serialNumber       String?             @map("serial_number") @db.VarChar(120)
-  status             EquipmentUnitStatus @default(AVAILABLE)
-  condition          EquipmentCondition  @default(GOOD)
-  acquiredAt         DateTime?           @map("acquired_at") @db.Date
-  retiredAt          DateTime?           @map("retired_at") @db.Date
-  version            Int                 @default(1)
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                         String              @id @default(uuid()) @db.Uuid
+  productId                  String              @map("product_id") @db.Uuid
+  homeInventoryLocationId    String              @map("home_inventory_location_id") @db.Uuid
+  currentInventoryLocationId String?             @map("current_inventory_location_id") @db.Uuid
+  assetCode                  String              @unique @map("asset_code") @db.VarChar(100)
+  qrCode                     String?             @unique @map("qr_code") @db.VarChar(180)
+  serialNumber               String?             @map("serial_number") @db.VarChar(120)
+  status                     EquipmentUnitStatus @default(AVAILABLE)
+  condition                  EquipmentCondition  @default(GOOD)
+  expectedReadyAt            DateTime?           @map("expected_ready_at") @db.Timestamptz(6)
+  acquiredAt                 DateTime?           @map("acquired_at") @db.Date
+  retiredAt                  DateTime?           @map("retired_at") @db.Date
+  version                    Int                 @default(1)
+  createdAt                  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  product          RentalProduct @relation("R_EquipmentUnit_product_id", fields: [productId], references: [id])
-  homeWarehouse    Warehouse     @relation("R_EquipmentUnit_home_warehouse_id", fields: [homeWarehouseId], references: [id])
-  currentWarehouse Warehouse?    @relation("R_EquipmentUnit_current_warehouse_id", fields: [currentWarehouseId], references: [id])
+  product                  RentalProduct      @relation("R_EquipmentUnit_product_id", fields: [productId], references: [id])
+  homeInventoryLocation    InventoryLocation  @relation("R_EquipmentUnit_home_inventory_location_id", fields: [homeInventoryLocationId], references: [id])
+  currentInventoryLocation InventoryLocation? @relation("R_EquipmentUnit_current_inventory_location_id", fields: [currentInventoryLocationId], references: [id])
 
-  equipmentReservationsViaUnitId  EquipmentReservation[]  @relation("R_EquipmentReservation_unit_id")
-  packageItemsViaEquipmentUnitId  PackageItem[]           @relation("R_PackageItem_equipment_unit_id")
-  conditionSnapshotsViaUnitId     ConditionSnapshot[]     @relation("R_ConditionSnapshot_unit_id")
-  returnInspectionsViaUnitId      ReturnInspection[]      @relation("R_ReturnInspection_unit_id")
-  depositSettlementItemsViaUnitId DepositSettlementItem[] @relation("R_DepositSettlementItem_unit_id")
-  maintenanceRecordsViaUnitId     MaintenanceRecord[]     @relation("R_MaintenanceRecord_unit_id")
-  custodyEventsViaUnitId          CustodyEvent[]          @relation("R_CustodyEvent_unit_id")
+  rentalUnitAssignmentsViaEquipmentUnitId RentalUnitAssignment[]  @relation("R_RentalUnitAssignment_equipment_unit_id")
+  packageItemsViaEquipmentUnitId          PackageItem[]           @relation("R_PackageItem_equipment_unit_id")
+  conditionSnapshotsViaUnitId             ConditionSnapshot[]     @relation("R_ConditionSnapshot_unit_id")
+  returnInspectionsViaUnitId              ReturnInspection[]      @relation("R_ReturnInspection_unit_id")
+  rentalExceptionCasesViaUnitId           RentalExceptionCase[]   @relation("R_RentalExceptionCase_unit_id")
+  depositSettlementItemsViaUnitId         DepositSettlementItem[] @relation("R_DepositSettlementItem_unit_id")
+  maintenanceRecordsViaUnitId             MaintenanceRecord[]     @relation("R_MaintenanceRecord_unit_id")
+  custodyEventsViaUnitId                  CustodyEvent[]          @relation("R_CustodyEvent_unit_id")
 
   @@index([productId, status, condition])
-  @@index([currentWarehouseId, status])
-  @@index([status])
+  @@index([currentInventoryLocationId, status])
+  @@index([status, expectedReadyAt])
   @@map("equipment_units")
 }
 
 /// Versioned rental business policy. Quotes/orders persist policy snapshot so later rule changes never rewrite historical financial decisions.
+/// Versioned rental business policy. Quotes/orders persist policy snapshots so later rule changes never rewrite history.
 model RentalPolicy {
   id                    String    @id @default(uuid()) @db.Uuid
   policyCode            String    @map("policy_code") @db.VarChar(80)
@@ -1635,6 +1664,7 @@ model RentalPolicy {
   cutoffHoursBeforeTrip Int       @map("cutoff_hours_before_trip")
   prepBufferMinutes     Int       @default(0) @map("prep_buffer_minutes")
   returnBufferMinutes   Int       @default(0) @map("return_buffer_minutes")
+  cleaningBufferMinutes Int       @default(0) @map("cleaning_buffer_minutes")
   quantityRules         Json      @map("quantity_rules")
   cancellationRules     Json      @map("cancellation_rules")
   damageDeductionRules  Json      @map("damage_deduction_rules")
@@ -1678,55 +1708,58 @@ model RentalProductPriceHistory {
 }
 
 /// Quote is a time-limited price offer. It freezes product price/deposit/policy through RENTAL_QUOTE_LINES; later catalog price changes do not alter this quote.
+/// Rental always starts from a valid Booking, for both PUBLIC and PRIVATE Trips.
+/// Quote freezes price/deposit/policy but DOES NOT reserve capacity.
 model RentalQuote {
-  id             String            @id @default(uuid()) @db.Uuid
-  userId         String            @map("user_id") @db.Uuid
-  tripId         String            @map("trip_id") @db.Uuid
-  contextType    RentalContextType @map("context_type")
-  bookingId      String?           @map("booking_id") @db.Uuid
-  memberId       String?           @map("member_id") @db.Uuid
-  contextVersion Int               @map("context_version")
-  rentalPolicyId String            @map("rental_policy_id") @db.Uuid
-  rentalStartAt  DateTime          @map("rental_start_at") @db.Timestamptz(6)
-  rentalEndAt    DateTime          @map("rental_end_at") @db.Timestamptz(6)
-  rentalFee      Decimal           @map("rental_fee") @db.Decimal(12, 2)
-  totalDeposit   Decimal           @map("total_deposit") @db.Decimal(12, 2)
-  totalAmount    Decimal           @map("total_amount") @db.Decimal(12, 2)
-  currency       String            @default("VND") @db.Char(3)
-  policySnapshot Json              @map("policy_snapshot")
-  status         RentalQuoteStatus @default(ACTIVE)
-  expiresAt      DateTime          @map("expires_at") @db.Timestamptz(6)
-  version        Int               @default(1)
-  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String            @id @default(uuid()) @db.Uuid
+  userId                 String            @map("user_id") @db.Uuid
+  tripId                 String            @map("trip_id") @db.Uuid
+  bookingId              String            @map("booking_id") @db.Uuid
+  recipientParticipantId String?           @map("recipient_participant_id") @db.Uuid
+  recipientSnapshot      Json              @map("recipient_snapshot")
+  contextVersion         Int               @map("context_version")
+  rentalPolicyId         String            @map("rental_policy_id") @db.Uuid
+  rentalStartAt          DateTime          @map("rental_start_at") @db.Timestamptz(6)
+  rentalEndAt            DateTime          @map("rental_end_at") @db.Timestamptz(6)
+  rentalFee              Decimal           @map("rental_fee") @db.Decimal(12, 2)
+  totalDeposit           Decimal           @map("total_deposit") @db.Decimal(12, 2)
+  totalAmount            Decimal           @map("total_amount") @db.Decimal(12, 2)
+  currency               String            @default("VND") @db.Char(3)
+  policySnapshot         Json              @map("policy_snapshot")
+  status                 RentalQuoteStatus @default(ACTIVE)
+  expiresAt              DateTime          @map("expires_at") @db.Timestamptz(6)
+  version                Int               @default(1)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user         User         @relation("R_RentalQuote_user_id", fields: [userId], references: [id])
-  trip         Trip         @relation("R_RentalQuote_trip_id", fields: [tripId], references: [id])
-  booking      Booking?     @relation("R_RentalQuote_booking_id", fields: [bookingId], references: [id])
-  member       TripMember?  @relation("R_RentalQuote_member_id", fields: [memberId], references: [id])
-  rentalPolicy RentalPolicy @relation("R_RentalQuote_rental_policy_id", fields: [rentalPolicyId], references: [id])
+  user                 User                @relation("R_RentalQuote_user_id", fields: [userId], references: [id])
+  trip                 Trip                @relation("R_RentalQuote_trip_id", fields: [tripId], references: [id])
+  booking              Booking             @relation("R_RentalQuote_booking_id", fields: [bookingId], references: [id])
+  recipientParticipant BookingParticipant? @relation("R_RentalQuote_recipient_participant_id", fields: [recipientParticipantId], references: [id])
+  rentalPolicy         RentalPolicy        @relation("R_RentalQuote_rental_policy_id", fields: [rentalPolicyId], references: [id])
 
   rentalQuoteLinesViaQuoteId RentalQuoteLine[] @relation("R_RentalQuoteLine_quote_id")
   rentalOrderViaQuoteId      RentalOrder?      @relation("R_RentalOrder_quote_id")
 
   @@index([userId, status])
   @@index([tripId, status])
+  @@index([bookingId, status])
   @@index([rentalPolicyId])
   @@index([expiresAt])
   @@map("rental_quotes")
 }
 
 model RentalQuoteLine {
-  id                 String   @id @default(uuid()) @db.Uuid
-  quoteId            String   @map("quote_id") @db.Uuid
-  productId          String   @map("product_id") @db.Uuid
-  quantity           Int
-  dailyPriceSnapshot Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
-  depositSnapshot    Decimal  @map("deposit_snapshot") @db.Decimal(12, 2)
-  chargedDays        Int      @map("charged_days")
-  lineRentalFee      Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
-  lineDeposit        Decimal  @map("line_deposit") @db.Decimal(12, 2)
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                     String   @id @default(uuid()) @db.Uuid
+  quoteId                String   @map("quote_id") @db.Uuid
+  productId              String   @map("product_id") @db.Uuid
+  quantity               Int
+  dailyPriceSnapshot     Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
+  depositPerUnitSnapshot Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
+  chargedDays            Int      @map("charged_days")
+  lineRentalFee          Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
+  lineDeposit            Decimal  @map("line_deposit") @db.Decimal(12, 2)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   quote   RentalQuote   @relation("R_RentalQuoteLine_quote_id", fields: [quoteId], references: [id])
   product RentalProduct @relation("R_RentalQuoteLine_product_id", fields: [productId], references: [id])
@@ -1736,20 +1769,19 @@ model RentalQuoteLine {
 }
 
 /// Rental billing dates come from Trip. occupied_* includes operational preparation/return/cleaning buffers and is the window used for reservation overlap.
+/// Billing dates come from Trip. occupied_* includes preparation/return/cleaning buffers.
+/// PUBLIC and PRIVATE Trips both require a valid Booking before creating a RentalOrder.
 model RentalOrder {
   id                     String                     @id @default(uuid()) @db.Uuid
   quoteId                String                     @unique @map("quote_id") @db.Uuid
   rentalPolicyId         String                     @map("rental_policy_id") @db.Uuid
   userId                 String                     @map("user_id") @db.Uuid
   tripId                 String                     @map("trip_id") @db.Uuid
-  contextType            RentalContextType          @map("context_type")
-  bookingId              String?                    @map("booking_id") @db.Uuid
-  memberId               String?                    @map("member_id") @db.Uuid
+  bookingId              String                     @map("booking_id") @db.Uuid
   recipientParticipantId String?                    @map("recipient_participant_id") @db.Uuid
-  recipientMemberId      String?                    @map("recipient_member_id") @db.Uuid
-  handoverMode           RentalHandoverMode         @map("handover_mode")
-  pickupPointId          String?                    @map("pickup_point_id") @db.Uuid
-  pickupWarehouseId      String?                    @map("pickup_warehouse_id") @db.Uuid
+  recipientSnapshot      Json                       @map("recipient_snapshot")
+  pickupPointId          String                     @map("pickup_point_id") @db.Uuid
+  returnPointId          String                     @map("return_point_id") @db.Uuid
   contextVersionSnapshot Int                        @map("context_version_snapshot")
   rentalStartAt          DateTime                   @map("rental_start_at") @db.Timestamptz(6)
   rentalEndAt            DateTime                   @map("rental_end_at") @db.Timestamptz(6)
@@ -1763,7 +1795,7 @@ model RentalOrder {
   totalAmount            Decimal                    @map("total_amount") @db.Decimal(12, 2)
   currency               String                     @default("VND") @db.Char(3)
   policySnapshot         Json                       @map("policy_snapshot")
-  expiresAt              DateTime                   @map("expires_at") @db.Timestamptz(6)
+  paymentExpiresAt       DateTime                   @map("payment_expires_at") @db.Timestamptz(6)
   paidAt                 DateTime?                  @map("paid_at") @db.Timestamptz(6)
   cancelledAt            DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
   completedAt            DateTime?                  @map("completed_at") @db.Timestamptz(6)
@@ -1775,35 +1807,34 @@ model RentalOrder {
   rentalPolicy         RentalPolicy        @relation("R_RentalOrder_rental_policy_id", fields: [rentalPolicyId], references: [id])
   user                 User                @relation("R_RentalOrder_user_id", fields: [userId], references: [id])
   trip                 Trip                @relation("R_RentalOrder_trip_id", fields: [tripId], references: [id])
-  booking              Booking?            @relation("R_RentalOrder_booking_id", fields: [bookingId], references: [id])
-  member               TripMember?         @relation("R_RentalOrder_member_id", fields: [memberId], references: [id])
+  booking              Booking             @relation("R_RentalOrder_booking_id", fields: [bookingId], references: [id])
   recipientParticipant BookingParticipant? @relation("R_RentalOrder_recipient_participant_id", fields: [recipientParticipantId], references: [id])
-  recipientMember      TripMember?         @relation("R_RentalOrder_recipient_member_id", fields: [recipientMemberId], references: [id])
-  pickupPoint          PickupPoint?        @relation("R_RentalOrder_pickup_point_id", fields: [pickupPointId], references: [id])
-  pickupWarehouse      Warehouse?          @relation("R_RentalOrder_pickup_warehouse_id", fields: [pickupWarehouseId], references: [id])
+  pickupPoint          PickupPoint         @relation("R_RentalOrder_pickup_point_id", fields: [pickupPointId], references: [id])
+  returnPoint          PickupPoint         @relation("R_RentalOrder_return_point_id", fields: [returnPointId], references: [id])
 
-  rentalOrderLinesViaOrderId            RentalOrderLine[]        @relation("R_RentalOrderLine_order_id")
-  equipmentReservationsViaRentalOrderId EquipmentReservation[]   @relation("R_EquipmentReservation_rental_order_id")
-  packagesViaOrderId                    Package[]                @relation("R_Package_order_id")
-  warehouseTasksViaOrderId              WarehouseTask[]          @relation("R_WarehouseTask_order_id")
-  logisticsTasksViaOrderId              LogisticsTask[]          @relation("R_LogisticsTask_order_id")
-  handoverConfirmationsViaOrderId       HandoverConfirmation[]   @relation("R_HandoverConfirmation_order_id")
-  conditionSnapshotsViaOrderId          ConditionSnapshot[]      @relation("R_ConditionSnapshot_order_id")
-  returnInspectionsViaOrderId           ReturnInspection[]       @relation("R_ReturnInspection_order_id")
-  rentalExceptionCasesViaOrderId        RentalExceptionCase[]    @relation("R_RentalExceptionCase_order_id")
-  rentalAssessmentReviewsViaOrderId     RentalAssessmentReview[] @relation("R_RentalAssessmentReview_order_id")
-  depositSettlementViaOrderId           DepositSettlement?       @relation("R_DepositSettlement_order_id")
-  custodyEventsViaOrderId               CustodyEvent[]           @relation("R_CustodyEvent_order_id")
-  invoicesViaRentalOrderId              Invoice[]                @relation("R_Invoice_rental_order_id")
-  refundsViaRentalOrderId               Refund[]                 @relation("R_Refund_rental_order_id")
-  rentalReviewsViaRentalOrderId         RentalReview[]           @relation("R_RentalReview_rental_order_id")
+  rentalOrderLinesViaOrderId        RentalOrderLine[]        @relation("R_RentalOrderLine_order_id")
+  packageViaOrderId                 Package?                 @relation("R_Package_order_id")
+  inventoryTaskViaOrderId           InventoryTask?           @relation("R_InventoryTask_order_id")
+  logisticsTasksViaOrderId          LogisticsTask[]          @relation("R_LogisticsTask_order_id")
+  rentalPickupCodesViaOrderId       RentalPickupCode[]       @relation("R_RentalPickupCode_order_id")
+  rentalHandoverViaOrderId          RentalHandover?          @relation("R_RentalHandover_order_id")
+  conditionSnapshotsViaOrderId      ConditionSnapshot[]      @relation("R_ConditionSnapshot_order_id")
+  returnInspectionsViaOrderId       ReturnInspection[]       @relation("R_ReturnInspection_order_id")
+  rentalExceptionCasesViaOrderId    RentalExceptionCase[]    @relation("R_RentalExceptionCase_order_id")
+  rentalAssessmentReviewsViaOrderId RentalAssessmentReview[] @relation("R_RentalAssessmentReview_order_id")
+  depositSettlementViaOrderId       DepositSettlement?       @relation("R_DepositSettlement_order_id")
+  custodyEventsViaOrderId           CustodyEvent[]           @relation("R_CustodyEvent_order_id")
+  invoicesViaRentalOrderId          Invoice[]                @relation("R_Invoice_rental_order_id")
+  refundsViaRentalOrderId           Refund[]                 @relation("R_Refund_rental_order_id")
+  rentalReviewsViaRentalOrderId     RentalReview[]           @relation("R_RentalReview_rental_order_id")
 
   @@index([userId, status])
   @@index([tripId, status])
   @@index([rentalPolicyId])
   @@index([bookingId, status])
-  @@index([memberId, status])
-  @@index([expiresAt])
+  @@index([pickupPointId])
+  @@index([returnPointId])
+  @@index([paymentExpiresAt])
   @@map("rental_orders")
 }
 
@@ -1813,7 +1844,7 @@ model RentalOrderLine {
   productId                String   @map("product_id") @db.Uuid
   quantity                 Int
   dailyPriceSnapshot       Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
-  depositSnapshot          Decimal  @map("deposit_snapshot") @db.Decimal(12, 2)
+  depositPerUnitSnapshot   Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
   replacementValueSnapshot Decimal  @map("replacement_value_snapshot") @db.Decimal(12, 2)
   chargedDays              Int      @map("charged_days")
   lineRentalFee            Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
@@ -1823,51 +1854,83 @@ model RentalOrderLine {
   order   RentalOrder   @relation("R_RentalOrderLine_order_id", fields: [orderId], references: [id])
   product RentalProduct @relation("R_RentalOrderLine_product_id", fields: [productId], references: [id])
 
-  equipmentReservationsViaRentalOrderLineId EquipmentReservation[] @relation("R_EquipmentReservation_rental_order_line_id")
+  rentalQuantityReservationsViaOrderLineId RentalQuantityReservation[] @relation("R_RentalQuantityReservation_order_line_id")
+  rentalUnitAssignmentsViaOrderLineId      RentalUnitAssignment[]      @relation("R_RentalUnitAssignment_order_line_id")
 
   @@unique([orderId, productId])
   @@map("rental_order_lines")
 }
 
-/// Only HELD (while TTL valid) and CONFIRMED block overlap. PostgreSQL EXCLUDE USING gist enforces atomic no-overlap.
-model EquipmentReservation {
-  id                String            @id @default(uuid()) @db.Uuid
-  rentalOrderId     String            @map("rental_order_id") @db.Uuid
-  rentalOrderLineId String            @map("rental_order_line_id") @db.Uuid
-  unitId            String            @map("unit_id") @db.Uuid
-  /// Prevents duplicate reservation creation on retry
-  idempotencyKey    String            @unique @map("idempotency_key") @db.VarChar(200)
-  occupiedStartAt   DateTime          @map("occupied_start_at") @db.Timestamptz(6)
-  occupiedEndAt     DateTime          @map("occupied_end_at") @db.Timestamptz(6)
-  status            ReservationStatus @default(HELD)
-  holdExpiresAt     DateTime?         @map("hold_expires_at") @db.Timestamptz(6)
-  reservedAt        DateTime          @default(now()) @map("reserved_at") @db.Timestamptz(6)
-  confirmedAt       DateTime?         @map("confirmed_at") @db.Timestamptz(6)
-  releasedAt        DateTime?         @map("released_at") @db.Timestamptz(6)
-  closedAt          DateTime?         @map("closed_at") @db.Timestamptz(6)
-  version           Int               @default(1)
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+/// Product-level capacity hold by quantity + occupied window.
+/// HELD/CONFIRMED reservations consume availability.
+/// Overbooking is prevented atomically by the create-order transaction,
+/// not by an EXCLUDE constraint.
+model RentalQuantityReservation {
+  id               String            @id @default(uuid()) @db.Uuid
+  orderLineId      String            @map("order_line_id") @db.Uuid
+  productId        String            @map("product_id") @db.Uuid
+  reservationCycle Int               @default(1) @map("reservation_cycle")
+  quantity         Int
+  occupiedFrom     DateTime          @map("occupied_from") @db.Timestamptz(6)
+  occupiedUntil    DateTime          @map("occupied_until") @db.Timestamptz(6)
+  status           ReservationStatus @default(HELD)
+  holdExpiresAt    DateTime?         @map("hold_expires_at") @db.Timestamptz(6)
+  reservedAt       DateTime          @default(now()) @map("reserved_at") @db.Timestamptz(6)
+  confirmedAt      DateTime?         @map("confirmed_at") @db.Timestamptz(6)
+  releasedAt       DateTime?         @map("released_at") @db.Timestamptz(6)
+  closedAt         DateTime?         @map("closed_at") @db.Timestamptz(6)
+  version          Int               @default(1)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  rentalOrder     RentalOrder     @relation("R_EquipmentReservation_rental_order_id", fields: [rentalOrderId], references: [id])
-  rentalOrderLine RentalOrderLine @relation("R_EquipmentReservation_rental_order_line_id", fields: [rentalOrderLineId], references: [id])
-  unit            EquipmentUnit   @relation("R_EquipmentReservation_unit_id", fields: [unitId], references: [id])
+  orderLine RentalOrderLine @relation("R_RentalQuantityReservation_order_line_id", fields: [orderLineId], references: [id])
+  product   RentalProduct   @relation("R_RentalQuantityReservation_product_id", fields: [productId], references: [id])
 
-  packageItemViaReservationId        PackageItem?        @relation("R_PackageItem_reservation_id")
-  conditionSnapshotsViaReservationId ConditionSnapshot[] @relation("R_ConditionSnapshot_reservation_id")
-  returnInspectionsViaReservationId  ReturnInspection[]  @relation("R_ReturnInspection_reservation_id")
-
-  @@unique([rentalOrderId, unitId])
-  @@index([unitId, occupiedStartAt, occupiedEndAt])
-  @@index([unitId, status])
+  @@unique([orderLineId, reservationCycle])
+  @@index([productId, status, occupiedFrom, occupiedUntil])
+  @@index([orderLineId, status])
   @@index([holdExpiresAt])
-  @@map("equipment_reservations")
+  @@map("rental_quantity_reservations")
+}
+
+/// Exact physical unit selected by Staff Inventory only after payment, during preparation.
+model RentalUnitAssignment {
+  id              String                     @id @default(uuid()) @db.Uuid
+  orderLineId     String                     @map("order_line_id") @db.Uuid
+  equipmentUnitId String                     @map("equipment_unit_id") @db.Uuid
+  status          RentalUnitAssignmentStatus @default(ASSIGNED)
+  replacedFromId  String?                    @map("replaced_from_id") @db.Uuid
+  assignedAt      DateTime                   @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  packedAt        DateTime?                  @map("packed_at") @db.Timestamptz(6)
+  handedOverAt    DateTime?                  @map("handed_over_at") @db.Timestamptz(6)
+  returnedAt      DateTime?                  @map("returned_at") @db.Timestamptz(6)
+  closedAt        DateTime?                  @map("closed_at") @db.Timestamptz(6)
+  version         Int                        @default(1)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  orderLine     RentalOrderLine        @relation("R_RentalUnitAssignment_order_line_id", fields: [orderLineId], references: [id])
+  equipmentUnit EquipmentUnit          @relation("R_RentalUnitAssignment_equipment_unit_id", fields: [equipmentUnitId], references: [id])
+  replacedFrom  RentalUnitAssignment?  @relation("R_RentalUnitAssignment_replacement", fields: [replacedFromId], references: [id])
+  replacements  RentalUnitAssignment[] @relation("R_RentalUnitAssignment_replacement")
+
+  packageItemViaAssignmentId           PackageItem?           @relation("R_PackageItem_assignment_id")
+  conditionSnapshotsViaAssignmentId    ConditionSnapshot[]    @relation("R_ConditionSnapshot_assignment_id")
+  returnInspectionsViaAssignmentId     ReturnInspection[]     @relation("R_ReturnInspection_assignment_id")
+  rentalExceptionCasesViaAssignmentId  RentalExceptionCase[]  @relation("R_RentalExceptionCase_assignment_id")
+  depositSettlementItemViaAssignmentId DepositSettlementItem? @relation("R_DepositSettlementItem_assignment_id")
+
+  @@index([orderLineId, status])
+  @@index([equipmentUnitId, status])
+  @@index([replacedFromId])
+  @@map("rental_unit_assignments")
 }
 
 model Package {
   id          String        @id @default(uuid()) @db.Uuid
   packageCode String        @unique @map("package_code") @db.VarChar(120)
-  orderId     String        @map("order_id") @db.Uuid
+  /// MVP: one logical package per RentalOrder.
+  orderId     String        @unique @map("order_id") @db.Uuid
   status      PackageStatus @default(OPEN)
   sealedAt    DateTime?     @map("sealed_at") @db.Timestamptz(6)
   version     Int           @default(1)
@@ -1876,55 +1939,57 @@ model Package {
 
   order RentalOrder @relation("R_Package_order_id", fields: [orderId], references: [id])
 
-  packageItemsViaPackageId          PackageItem[]          @relation("R_PackageItem_package_id")
-  warehouseTasksViaPackageId        WarehouseTask[]        @relation("R_WarehouseTask_package_id")
-  logisticsTasksViaPackageId        LogisticsTask[]        @relation("R_LogisticsTask_package_id")
-  handoverConfirmationsViaPackageId HandoverConfirmation[] @relation("R_HandoverConfirmation_package_id")
-  conditionSnapshotsViaPackageId    ConditionSnapshot[]    @relation("R_ConditionSnapshot_package_id")
-  custodyEventsViaPackageId         CustodyEvent[]         @relation("R_CustodyEvent_package_id")
+  packageItemsViaPackageId       PackageItem[]       @relation("R_PackageItem_package_id")
+  inventoryTasksViaPackageId     InventoryTask[]     @relation("R_InventoryTask_package_id")
+  logisticsTasksViaPackageId     LogisticsTask[]     @relation("R_LogisticsTask_package_id")
+  rentalHandoverViaPackageId     RentalHandover?     @relation("R_RentalHandover_package_id")
+  conditionSnapshotsViaPackageId ConditionSnapshot[] @relation("R_ConditionSnapshot_package_id")
+  custodyEventsViaPackageId      CustodyEvent[]      @relation("R_CustodyEvent_package_id")
 
-  @@index([orderId, status])
+  @@index([status])
   @@map("packages")
 }
 
 model PackageItem {
   id              String   @id @default(uuid()) @db.Uuid
   packageId       String   @map("package_id") @db.Uuid
-  reservationId   String   @unique @map("reservation_id") @db.Uuid
+  assignmentId    String   @unique @map("assignment_id") @db.Uuid
   equipmentUnitId String   @map("equipment_unit_id") @db.Uuid
   addedAt         DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
 
   package       Package              @relation("R_PackageItem_package_id", fields: [packageId], references: [id])
-  reservation   EquipmentReservation @relation("R_PackageItem_reservation_id", fields: [reservationId], references: [id])
+  assignment    RentalUnitAssignment @relation("R_PackageItem_assignment_id", fields: [assignmentId], references: [id])
   equipmentUnit EquipmentUnit        @relation("R_PackageItem_equipment_unit_id", fields: [equipmentUnitId], references: [id])
 
   @@unique([packageId, equipmentUnitId])
+  @@index([equipmentUnitId])
   @@map("package_items")
 }
 
-model WarehouseTask {
-  id          String              @id @default(uuid()) @db.Uuid
-  orderId     String              @map("order_id") @db.Uuid
-  warehouseId String              @map("warehouse_id") @db.Uuid
-  packageId   String?             @map("package_id") @db.Uuid
-  staffId     String?             @map("staff_id") @db.Uuid
-  status      WarehouseTaskStatus @default(OPEN)
-  deadline    DateTime?           @db.Timestamptz(6)
-  startedAt   DateTime?           @map("started_at") @db.Timestamptz(6)
-  completedAt DateTime?           @map("completed_at") @db.Timestamptz(6)
-  version     Int                 @default(1)
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+/// Preparation task executed by Staff Inventory at an InventoryLocation.
+/// The task starts from product + quantity; exact units appear only as RentalUnitAssignment rows after pick.
+model InventoryTask {
+  id                  String              @id @default(uuid()) @db.Uuid
+  orderId             String              @unique @map("order_id") @db.Uuid
+  inventoryLocationId String              @map("inventory_location_id") @db.Uuid
+  packageId           String?             @map("package_id") @db.Uuid
+  staffId             String?             @map("staff_id") @db.Uuid
+  status              InventoryTaskStatus @default(OPEN)
+  deadline            DateTime?           @db.Timestamptz(6)
+  startedAt           DateTime?           @map("started_at") @db.Timestamptz(6)
+  completedAt         DateTime?           @map("completed_at") @db.Timestamptz(6)
+  version             Int                 @default(1)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order     RentalOrder @relation("R_WarehouseTask_order_id", fields: [orderId], references: [id])
-  warehouse Warehouse   @relation("R_WarehouseTask_warehouse_id", fields: [warehouseId], references: [id])
-  package   Package?    @relation("R_WarehouseTask_package_id", fields: [packageId], references: [id])
-  staff     User?       @relation("R_WarehouseTask_staff_id", fields: [staffId], references: [id])
+  order             RentalOrder       @relation("R_InventoryTask_order_id", fields: [orderId], references: [id])
+  inventoryLocation InventoryLocation @relation("R_InventoryTask_inventory_location_id", fields: [inventoryLocationId], references: [id])
+  package           Package?          @relation("R_InventoryTask_package_id", fields: [packageId], references: [id])
+  staff             User?             @relation("R_InventoryTask_staff_id", fields: [staffId], references: [id])
 
-  @@index([orderId, status])
-  @@index([warehouseId, status, deadline])
+  @@index([inventoryLocationId, status, deadline])
   @@index([staffId, status])
-  @@map("warehouse_tasks")
+  @@map("inventory_tasks")
 }
 
 model LogisticsTask {
@@ -1932,7 +1997,7 @@ model LogisticsTask {
   orderId             String              @map("order_id") @db.Uuid
   packageId           String              @map("package_id") @db.Uuid
   tripId              String              @map("trip_id") @db.Uuid
-  pickupPointId       String              @map("pickup_point_id") @db.Uuid
+  servicePointId      String              @map("service_point_id") @db.Uuid
   staffId             String?             @map("staff_id") @db.Uuid
   taskType            LogisticsTaskType   @map("task_type")
   status              LogisticsTaskStatus @default(SCHEDULED)
@@ -1941,120 +2006,150 @@ model LogisticsTask {
   recipientVerifiedAt DateTime?           @map("recipient_verified_at") @db.Timestamptz(6)
   handoverAt          DateTime?           @map("handover_at") @db.Timestamptz(6)
   returnedAt          DateTime?           @map("returned_at") @db.Timestamptz(6)
-  warehouseReceivedAt DateTime?           @map("warehouse_received_at") @db.Timestamptz(6)
+  inventoryReceivedAt DateTime?           @map("inventory_received_at") @db.Timestamptz(6)
   noShowReason        String?             @map("no_show_reason")
   version             Int                 @default(1)
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order       RentalOrder @relation("R_LogisticsTask_order_id", fields: [orderId], references: [id])
-  package     Package     @relation("R_LogisticsTask_package_id", fields: [packageId], references: [id])
-  trip        Trip        @relation("R_LogisticsTask_trip_id", fields: [tripId], references: [id])
-  pickupPoint PickupPoint @relation("R_LogisticsTask_pickup_point_id", fields: [pickupPointId], references: [id])
-  staff       User?       @relation("R_LogisticsTask_staff_id", fields: [staffId], references: [id])
+  order        RentalOrder @relation("R_LogisticsTask_order_id", fields: [orderId], references: [id])
+  package      Package     @relation("R_LogisticsTask_package_id", fields: [packageId], references: [id])
+  trip         Trip        @relation("R_LogisticsTask_trip_id", fields: [tripId], references: [id])
+  servicePoint PickupPoint @relation("R_LogisticsTask_service_point_id", fields: [servicePointId], references: [id])
+  staff        User?       @relation("R_LogisticsTask_staff_id", fields: [staffId], references: [id])
 
-  handoverConfirmationsViaLogisticsTaskId HandoverConfirmation[] @relation("R_HandoverConfirmation_logistics_task_id")
-  custodyEventsViaLogisticsTaskId         CustodyEvent[]         @relation("R_CustodyEvent_logistics_task_id")
+  rentalHandoverViaLogisticsTaskId RentalHandover? @relation("R_RentalHandover_logistics_task_id")
+  custodyEventsViaLogisticsTaskId  CustodyEvent[]  @relation("R_CustodyEvent_logistics_task_id")
 
+  @@unique([orderId, taskType])
   @@index([staffId, status, scheduledAt])
   @@index([tripId, taskType, status])
-  @@index([orderId, taskType])
+  @@index([servicePointId, taskType, status])
   @@map("logistics_tasks")
 }
 
-/// One-time recipient confirmation. Server validates expiry, package version and exact units before committing handover.
-model HandoverConfirmation {
+/// Short-lived one-time pickup code shown by the recipient and verified by Staff Logistics.
+/// This is NOT a User confirmation mutation.
+model RentalPickupCode {
   id                     String    @id @default(uuid()) @db.Uuid
   orderId                String    @map("order_id") @db.Uuid
-  packageId              String    @map("package_id") @db.Uuid
-  logisticsTaskId        String    @map("logistics_task_id") @db.Uuid
-  recipientUserId        String    @map("recipient_user_id") @db.Uuid
-  /// Same handover request returns the same result instead of applying twice
-  idempotencyKey         String    @unique @map("idempotency_key") @db.VarChar(200)
-  tokenHash              String    @unique @map("token_hash") @db.VarChar(255)
-  packageVersionSnapshot Int       @map("package_version_snapshot")
+  codeHash               String    @unique @map("code_hash") @db.VarChar(255)
+  verificationRef        String?   @unique @map("verification_ref") @db.VarChar(180)
+  packageVersionSnapshot Int?      @map("package_version_snapshot")
   expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
-  confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  verifiedAt             DateTime? @map("verified_at") @db.Timestamptz(6)
+  verifiedBy             String?   @map("verified_by") @db.Uuid
+  usedAt                 DateTime? @map("used_at") @db.Timestamptz(6)
+  revokedAt              DateTime? @map("revoked_at") @db.Timestamptz(6)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  order         RentalOrder   @relation("R_HandoverConfirmation_order_id", fields: [orderId], references: [id])
-  package       Package       @relation("R_HandoverConfirmation_package_id", fields: [packageId], references: [id])
-  logisticsTask LogisticsTask @relation("R_HandoverConfirmation_logistics_task_id", fields: [logisticsTaskId], references: [id])
-  recipientUser User          @relation("R_HandoverConfirmation_recipient_user_id", fields: [recipientUserId], references: [id])
+  order          RentalOrder @relation("R_RentalPickupCode_order_id", fields: [orderId], references: [id])
+  verifiedByUser User?       @relation("R_RentalPickupCode_verified_by", fields: [verifiedBy], references: [id])
 
-  @@index([orderId, createdAt])
-  @@index([logisticsTaskId, createdAt])
-  @@map("handover_confirmations")
+  rentalHandoverViaPickupCodeId RentalHandover? @relation("R_RentalHandover_pickup_code_id")
+
+  @@index([orderId, expiresAt])
+  @@index([verifiedBy, verifiedAt])
+  @@map("rental_pickup_codes")
 }
 
+/// Staff Logistics commits handover after pickup-code verification and recipient inspection.
+model RentalHandover {
+  id                String   @id @default(uuid()) @db.Uuid
+  orderId           String   @unique @map("order_id") @db.Uuid
+  packageId         String   @unique @map("package_id") @db.Uuid
+  logisticsTaskId   String   @unique @map("logistics_task_id") @db.Uuid
+  pickupCodeId      String   @unique @map("pickup_code_id") @db.Uuid
+  staffId           String   @map("staff_id") @db.Uuid
+  verificationRef   String   @unique @map("verification_ref") @db.VarChar(180)
+  recipientSnapshot Json     @map("recipient_snapshot")
+  recipientNotes    String?  @map("recipient_notes")
+  reportedIssues    Json?    @map("reported_issues")
+  idempotencyKey    String   @unique @map("idempotency_key") @db.VarChar(200)
+  handedOverAt      DateTime @default(now()) @map("handed_over_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order         RentalOrder      @relation("R_RentalHandover_order_id", fields: [orderId], references: [id])
+  package       Package          @relation("R_RentalHandover_package_id", fields: [packageId], references: [id])
+  logisticsTask LogisticsTask    @relation("R_RentalHandover_logistics_task_id", fields: [logisticsTaskId], references: [id])
+  pickupCode    RentalPickupCode @relation("R_RentalHandover_pickup_code_id", fields: [pickupCodeId], references: [id])
+  staff         User             @relation("R_RentalHandover_staff_id", fields: [staffId], references: [id])
+
+  @@index([staffId, handedOverAt])
+  @@map("rental_handovers")
+}
+
+/// Immutable before/after evidence for an exact assigned unit.
 model ConditionSnapshot {
-  id              String             @id @default(uuid()) @db.Uuid
-  orderId         String             @map("order_id") @db.Uuid
-  reservationId   String?            @map("reservation_id") @db.Uuid
-  unitId          String             @map("unit_id") @db.Uuid
-  packageId       String?            @map("package_id") @db.Uuid
-  snapshotStage   SnapshotStage      @map("snapshot_stage")
-  condition       EquipmentCondition
-  notes           String?
-  accessories     Json?
-  imageUrls       Json?              @map("image_urls")
-  takenBy         String             @map("taken_by") @db.Uuid
-  userConfirmedBy String?            @map("user_confirmed_by") @db.Uuid
-  userConfirmedAt DateTime?          @map("user_confirmed_at") @db.Timestamptz(6)
-  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  id            String             @id @default(uuid()) @db.Uuid
+  orderId       String             @map("order_id") @db.Uuid
+  assignmentId  String             @map("assignment_id") @db.Uuid
+  unitId        String             @map("unit_id") @db.Uuid
+  packageId     String?            @map("package_id") @db.Uuid
+  snapshotStage SnapshotStage      @map("snapshot_stage")
+  condition     EquipmentCondition
+  notes         String?
+  accessories   Json?
+  evidenceIds   Json?              @map("evidence_ids")
+  takenBy       String             @map("taken_by") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  order               RentalOrder           @relation("R_ConditionSnapshot_order_id", fields: [orderId], references: [id])
-  reservation         EquipmentReservation? @relation("R_ConditionSnapshot_reservation_id", fields: [reservationId], references: [id])
-  unit                EquipmentUnit         @relation("R_ConditionSnapshot_unit_id", fields: [unitId], references: [id])
-  package             Package?              @relation("R_ConditionSnapshot_package_id", fields: [packageId], references: [id])
-  takenByUser         User                  @relation("R_ConditionSnapshot_taken_by", fields: [takenBy], references: [id])
-  userConfirmedByUser User?                 @relation("R_ConditionSnapshot_user_confirmed_by", fields: [userConfirmedBy], references: [id])
+  order       RentalOrder          @relation("R_ConditionSnapshot_order_id", fields: [orderId], references: [id])
+  assignment  RentalUnitAssignment @relation("R_ConditionSnapshot_assignment_id", fields: [assignmentId], references: [id])
+  unit        EquipmentUnit        @relation("R_ConditionSnapshot_unit_id", fields: [unitId], references: [id])
+  package     Package?             @relation("R_ConditionSnapshot_package_id", fields: [packageId], references: [id])
+  takenByUser User                 @relation("R_ConditionSnapshot_taken_by", fields: [takenBy], references: [id])
 
+  @@unique([assignmentId, snapshotStage])
   @@index([unitId, createdAt])
   @@index([orderId, snapshotStage])
-  @@index([reservationId, snapshotStage])
   @@map("condition_snapshots")
 }
 
+/// Logistics performs PRELIMINARY classification; FINAL is used only for deep review.
+/// Application/DB guards must prevent Logistics from directly confirming LOST.
 model ReturnInspection {
-  id            String           @id @default(uuid()) @db.Uuid
-  orderId       String           @map("order_id") @db.Uuid
-  reservationId String           @map("reservation_id") @db.Uuid
-  unitId        String           @map("unit_id") @db.Uuid
-  inspectorId   String           @map("inspector_id") @db.Uuid
-  stage         InspectionStage
-  status        InspectionStatus
-  damageFee     Decimal          @default(0) @map("damage_fee") @db.Decimal(12, 2)
-  notes         String?
-  evidenceUrls  Json?            @map("evidence_urls")
-  version       Int              @default(1)
-  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String                  @id @default(uuid()) @db.Uuid
+  orderId      String                  @map("order_id") @db.Uuid
+  assignmentId String                  @map("assignment_id") @db.Uuid
+  unitId       String                  @map("unit_id") @db.Uuid
+  inspectorId  String                  @map("inspector_id") @db.Uuid
+  stage        InspectionStage
+  outcome      ReturnInspectionOutcome
+  receivedAt   DateTime?               @map("received_at") @db.Timestamptz(6)
+  notes        String?
+  evidenceIds  Json?                   @map("evidence_ids")
+  version      Int                     @default(1)
+  createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  order       RentalOrder          @relation("R_ReturnInspection_order_id", fields: [orderId], references: [id])
-  reservation EquipmentReservation @relation("R_ReturnInspection_reservation_id", fields: [reservationId], references: [id])
-  unit        EquipmentUnit        @relation("R_ReturnInspection_unit_id", fields: [unitId], references: [id])
-  inspector   User                 @relation("R_ReturnInspection_inspector_id", fields: [inspectorId], references: [id])
+  order      RentalOrder          @relation("R_ReturnInspection_order_id", fields: [orderId], references: [id])
+  assignment RentalUnitAssignment @relation("R_ReturnInspection_assignment_id", fields: [assignmentId], references: [id])
+  unit       EquipmentUnit        @relation("R_ReturnInspection_unit_id", fields: [unitId], references: [id])
+  inspector  User                 @relation("R_ReturnInspection_inspector_id", fields: [inspectorId], references: [id])
 
   rentalExceptionCasesViaInspectionId    RentalExceptionCase[]    @relation("R_RentalExceptionCase_inspection_id")
   rentalAssessmentReviewsViaInspectionId RentalAssessmentReview[] @relation("R_RentalAssessmentReview_inspection_id")
   depositSettlementItemsViaInspectionId  DepositSettlementItem[]  @relation("R_DepositSettlementItem_inspection_id")
 
-  @@unique([reservationId, stage])
+  @@unique([assignmentId, stage])
   @@index([orderId, stage])
   @@index([unitId, createdAt])
+  @@index([outcome])
   @@map("return_inspections")
 }
 
 model RentalExceptionCase {
   id           String                    @id @default(uuid()) @db.Uuid
   orderId      String                    @map("order_id") @db.Uuid
+  assignmentId String?                   @map("assignment_id") @db.Uuid
+  unitId       String?                   @map("unit_id") @db.Uuid
   inspectionId String?                   @map("inspection_id") @db.Uuid
   caseType     RentalExceptionType       @map("case_type")
   status       RentalExceptionCaseStatus @default(OPEN)
   openedBy     String?                   @map("opened_by") @db.Uuid
   assignedTo   String?                   @map("assigned_to") @db.Uuid
   reason       String
-  evidenceUrls Json?                     @map("evidence_urls")
+  evidenceIds  Json?                     @map("evidence_ids")
   resolution   String?
   approvalRef  String?                   @map("approval_ref") @db.VarChar(180)
   dueAt        DateTime?                 @map("due_at") @db.Timestamptz(6)
@@ -2063,14 +2158,18 @@ model RentalExceptionCase {
   createdAt    DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order          RentalOrder       @relation("R_RentalExceptionCase_order_id", fields: [orderId], references: [id])
-  inspection     ReturnInspection? @relation("R_RentalExceptionCase_inspection_id", fields: [inspectionId], references: [id])
-  openedByUser   User?             @relation("R_RentalExceptionCase_opened_by", fields: [openedBy], references: [id])
-  assignedToUser User?             @relation("R_RentalExceptionCase_assigned_to", fields: [assignedTo], references: [id])
+  order          RentalOrder           @relation("R_RentalExceptionCase_order_id", fields: [orderId], references: [id])
+  assignment     RentalUnitAssignment? @relation("R_RentalExceptionCase_assignment_id", fields: [assignmentId], references: [id])
+  unit           EquipmentUnit?        @relation("R_RentalExceptionCase_unit_id", fields: [unitId], references: [id])
+  inspection     ReturnInspection?     @relation("R_RentalExceptionCase_inspection_id", fields: [inspectionId], references: [id])
+  openedByUser   User?                 @relation("R_RentalExceptionCase_opened_by", fields: [openedBy], references: [id])
+  assignedToUser User?                 @relation("R_RentalExceptionCase_assigned_to", fields: [assignedTo], references: [id])
 
   rentalAssessmentReviewsViaExceptionCaseId RentalAssessmentReview[] @relation("R_RentalAssessmentReview_exception_case_id")
 
   @@index([orderId, status])
+  @@index([assignmentId, status])
+  @@index([unitId, status])
   @@index([caseType, status])
   @@index([assignedTo, status])
   @@map("rental_exception_cases")
@@ -2096,16 +2195,16 @@ model RentalAssessmentReview {
   @@map("rental_assessment_reviews")
 }
 
+/// Order-level aggregate for deposit accounting. Actual progress is tracked independently per unit below.
 model DepositSettlement {
   id             String                    @id @default(uuid()) @db.Uuid
   orderId        String                    @unique @map("order_id") @db.Uuid
   rentalPolicyId String                    @map("rental_policy_id") @db.Uuid
-  /// Prevents duplicate settlement decision/refund initiation
   idempotencyKey String                    @unique @map("idempotency_key") @db.VarChar(200)
   totalDeposit   Decimal                   @map("total_deposit") @db.Decimal(12, 2)
   totalDeduction Decimal                   @default(0) @map("total_deduction") @db.Decimal(12, 2)
-  refundAmount   Decimal                   @map("refund_amount") @db.Decimal(12, 2)
-  status         DepositSettlementStatus   @default(HELD)
+  refundAmount   Decimal                   @default(0) @map("refund_amount") @db.Decimal(12, 2)
+  status         DepositSettlementStatus   @default(OPEN)
   outcome        DepositSettlementOutcome?
   reason         String?
   policySnapshot Json                      @map("policy_snapshot")
@@ -2122,95 +2221,116 @@ model DepositSettlement {
   depositSettlementItemsViaSettlementId DepositSettlementItem[] @relation("R_DepositSettlementItem_settlement_id")
   refundsViaDepositSettlementId         Refund[]                @relation("R_Refund_deposit_settlement_id")
 
+  @@index([status])
   @@map("deposit_settlements")
 }
 
+/// Per-unit deposit state. NORMAL units may refund independently while ISSUE/MISSING units remain under review.
 model DepositSettlementItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  settlementId    String   @map("settlement_id") @db.Uuid
-  unitId          String   @map("unit_id") @db.Uuid
-  inspectionId    String?  @map("inspection_id") @db.Uuid
-  deductionAmount Decimal  @default(0) @map("deduction_amount") @db.Decimal(12, 2)
+  id              String                    @id @default(uuid()) @db.Uuid
+  settlementId    String                    @map("settlement_id") @db.Uuid
+  assignmentId    String                    @unique @map("assignment_id") @db.Uuid
+  unitId          String                    @map("unit_id") @db.Uuid
+  inspectionId    String?                   @map("inspection_id") @db.Uuid
+  depositAmount   Decimal                   @map("deposit_amount") @db.Decimal(12, 2)
+  deductionAmount Decimal                   @default(0) @map("deduction_amount") @db.Decimal(12, 2)
+  refundAmount    Decimal                   @default(0) @map("refund_amount") @db.Decimal(12, 2)
+  status          DepositItemStatus         @default(HELD)
+  outcome         DepositSettlementOutcome?
   reason          String?
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  approvedBy      String?                   @map("approved_by") @db.Uuid
+  approvedAt      DateTime?                 @map("approved_at") @db.Timestamptz(6)
+  settledAt       DateTime?                 @map("settled_at") @db.Timestamptz(6)
+  version         Int                       @default(1)
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  settlement DepositSettlement @relation("R_DepositSettlementItem_settlement_id", fields: [settlementId], references: [id])
-  unit       EquipmentUnit     @relation("R_DepositSettlementItem_unit_id", fields: [unitId], references: [id])
-  inspection ReturnInspection? @relation("R_DepositSettlementItem_inspection_id", fields: [inspectionId], references: [id])
+  settlement     DepositSettlement    @relation("R_DepositSettlementItem_settlement_id", fields: [settlementId], references: [id])
+  assignment     RentalUnitAssignment @relation("R_DepositSettlementItem_assignment_id", fields: [assignmentId], references: [id])
+  unit           EquipmentUnit        @relation("R_DepositSettlementItem_unit_id", fields: [unitId], references: [id])
+  inspection     ReturnInspection?    @relation("R_DepositSettlementItem_inspection_id", fields: [inspectionId], references: [id])
+  approvedByUser User?                @relation("R_DepositSettlementItem_approved_by", fields: [approvedBy], references: [id])
+
+  refundViaDepositSettlementItemId Refund? @relation("R_Refund_deposit_settlement_item_id")
 
   @@unique([settlementId, unitId])
+  @@index([status])
+  @@index([approvedBy, status])
   @@map("deposit_settlement_items")
 }
 
 model MaintenanceRecord {
-  id                 String            @id @default(uuid()) @db.Uuid
-  unitId             String            @map("unit_id") @db.Uuid
-  warehouseId        String            @map("warehouse_id") @db.Uuid
-  staffId            String?           @map("staff_id") @db.Uuid
-  reason             String
-  cost               Decimal           @default(0) @db.Decimal(12, 2)
-  status             MaintenanceStatus @default(OPEN)
-  startAt            DateTime          @default(now()) @map("start_at") @db.Timestamptz(6)
-  completedAt        DateTime?         @map("completed_at") @db.Timestamptz(6)
-  notes              String?
-  beforeEvidenceUrls Json?             @map("before_evidence_urls")
-  afterEvidenceUrls  Json?             @map("after_evidence_urls")
-  version            Int               @default(1)
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String            @id @default(uuid()) @db.Uuid
+  unitId              String            @map("unit_id") @db.Uuid
+  inventoryLocationId String            @map("inventory_location_id") @db.Uuid
+  staffId             String?           @map("staff_id") @db.Uuid
+  reason              String
+  cost                Decimal           @default(0) @db.Decimal(12, 2)
+  status              MaintenanceStatus @default(OPEN)
+  startAt             DateTime          @default(now()) @map("start_at") @db.Timestamptz(6)
+  completedAt         DateTime?         @map("completed_at") @db.Timestamptz(6)
+  notes               String?
+  beforeEvidenceIds   Json?             @map("before_evidence_ids")
+  afterEvidenceIds    Json?             @map("after_evidence_ids")
+  version             Int               @default(1)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  unit      EquipmentUnit @relation("R_MaintenanceRecord_unit_id", fields: [unitId], references: [id])
-  warehouse Warehouse     @relation("R_MaintenanceRecord_warehouse_id", fields: [warehouseId], references: [id])
-  staff     User?         @relation("R_MaintenanceRecord_staff_id", fields: [staffId], references: [id])
+  unit              EquipmentUnit     @relation("R_MaintenanceRecord_unit_id", fields: [unitId], references: [id])
+  inventoryLocation InventoryLocation @relation("R_MaintenanceRecord_inventory_location_id", fields: [inventoryLocationId], references: [id])
+  staff             User?             @relation("R_MaintenanceRecord_staff_id", fields: [staffId], references: [id])
 
   @@index([unitId, status])
+  @@index([inventoryLocationId, status])
   @@index([staffId, status])
   @@map("maintenance_records")
 }
 
-/// Append-only custody audit: Warehouse -> Logistics -> User -> Logistics -> Warehouse. The service MUST update current aggregate status and insert this event in the same DB transaction; the event is audit/history, not a delayed trigger.
+/// Append-only custody audit: InventoryLocation -> Logistics -> User -> Logistics -> InventoryLocation.
+/// Aggregate state and this audit row must be written in the same database transaction.
 model CustodyEvent {
-  id                    String               @id @default(uuid()) @db.Uuid
-  /// One transfer command creates at most one custody transition
-  idempotencyKey        String               @unique @map("idempotency_key") @db.VarChar(200)
-  orderId               String               @map("order_id") @db.Uuid
-  packageId             String?              @map("package_id") @db.Uuid
-  unitId                String?              @map("unit_id") @db.Uuid
-  logisticsTaskId       String?              @map("logistics_task_id") @db.Uuid
-  eventType             CustodyEventType     @map("event_type")
-  fromActorType         CustodyActorType     @map("from_actor_type")
-  fromUserId            String?              @map("from_user_id") @db.Uuid
-  fromWarehouseId       String?              @map("from_warehouse_id") @db.Uuid
-  toActorType           CustodyActorType     @map("to_actor_type")
-  toUserId              String?              @map("to_user_id") @db.Uuid
-  toWarehouseId         String?              @map("to_warehouse_id") @db.Uuid
-  orderStatusBefore     RentalOrderStatus?   @map("order_status_before")
-  orderStatusAfter      RentalOrderStatus?   @map("order_status_after")
-  packageStatusBefore   PackageStatus?       @map("package_status_before")
-  packageStatusAfter    PackageStatus?       @map("package_status_after")
-  unitStatusBefore      EquipmentUnitStatus? @map("unit_status_before")
-  unitStatusAfter       EquipmentUnitStatus? @map("unit_status_after")
-  logisticsStatusBefore LogisticsTaskStatus? @map("logistics_status_before")
-  logisticsStatusAfter  LogisticsTaskStatus? @map("logistics_status_after")
-  performedBy           String               @map("performed_by") @db.Uuid
-  evidenceUrls          Json?                @map("evidence_urls")
-  note                  String?
-  occurredAt            DateTime             @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  id                      String               @id @default(uuid()) @db.Uuid
+  idempotencyKey          String               @unique @map("idempotency_key") @db.VarChar(200)
+  orderId                 String               @map("order_id") @db.Uuid
+  packageId               String?              @map("package_id") @db.Uuid
+  unitId                  String?              @map("unit_id") @db.Uuid
+  logisticsTaskId         String?              @map("logistics_task_id") @db.Uuid
+  eventType               CustodyEventType     @map("event_type")
+  fromActorType           CustodyActorType     @map("from_actor_type")
+  fromUserId              String?              @map("from_user_id") @db.Uuid
+  fromInventoryLocationId String?              @map("from_inventory_location_id") @db.Uuid
+  toActorType             CustodyActorType     @map("to_actor_type")
+  toUserId                String?              @map("to_user_id") @db.Uuid
+  toInventoryLocationId   String?              @map("to_inventory_location_id") @db.Uuid
+  orderStatusBefore       RentalOrderStatus?   @map("order_status_before")
+  orderStatusAfter        RentalOrderStatus?   @map("order_status_after")
+  packageStatusBefore     PackageStatus?       @map("package_status_before")
+  packageStatusAfter      PackageStatus?       @map("package_status_after")
+  unitStatusBefore        EquipmentUnitStatus? @map("unit_status_before")
+  unitStatusAfter         EquipmentUnitStatus? @map("unit_status_after")
+  logisticsStatusBefore   LogisticsTaskStatus? @map("logistics_status_before")
+  logisticsStatusAfter    LogisticsTaskStatus? @map("logistics_status_after")
+  performedBy             String               @map("performed_by") @db.Uuid
+  evidenceIds             Json?                @map("evidence_ids")
+  note                    String?
+  occurredAt              DateTime             @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
-  order           RentalOrder    @relation("R_CustodyEvent_order_id", fields: [orderId], references: [id])
-  package         Package?       @relation("R_CustodyEvent_package_id", fields: [packageId], references: [id])
-  unit            EquipmentUnit? @relation("R_CustodyEvent_unit_id", fields: [unitId], references: [id])
-  logisticsTask   LogisticsTask? @relation("R_CustodyEvent_logistics_task_id", fields: [logisticsTaskId], references: [id])
-  fromUser        User?          @relation("R_CustodyEvent_from_user_id", fields: [fromUserId], references: [id])
-  fromWarehouse   Warehouse?     @relation("R_CustodyEvent_from_warehouse_id", fields: [fromWarehouseId], references: [id])
-  toUser          User?          @relation("R_CustodyEvent_to_user_id", fields: [toUserId], references: [id])
-  toWarehouse     Warehouse?     @relation("R_CustodyEvent_to_warehouse_id", fields: [toWarehouseId], references: [id])
-  performedByUser User           @relation("R_CustodyEvent_performed_by", fields: [performedBy], references: [id])
+  order                 RentalOrder        @relation("R_CustodyEvent_order_id", fields: [orderId], references: [id])
+  package               Package?           @relation("R_CustodyEvent_package_id", fields: [packageId], references: [id])
+  unit                  EquipmentUnit?     @relation("R_CustodyEvent_unit_id", fields: [unitId], references: [id])
+  logisticsTask         LogisticsTask?     @relation("R_CustodyEvent_logistics_task_id", fields: [logisticsTaskId], references: [id])
+  fromUser              User?              @relation("R_CustodyEvent_from_user_id", fields: [fromUserId], references: [id])
+  fromInventoryLocation InventoryLocation? @relation("R_CustodyEvent_from_inventory_location_id", fields: [fromInventoryLocationId], references: [id])
+  toUser                User?              @relation("R_CustodyEvent_to_user_id", fields: [toUserId], references: [id])
+  toInventoryLocation   InventoryLocation? @relation("R_CustodyEvent_to_inventory_location_id", fields: [toInventoryLocationId], references: [id])
+  performedByUser       User               @relation("R_CustodyEvent_performed_by", fields: [performedBy], references: [id])
 
   @@index([orderId, occurredAt])
   @@index([packageId, occurredAt])
   @@index([unitId, occurredAt])
   @@index([logisticsTaskId, occurredAt])
+  @@index([fromInventoryLocationId, occurredAt])
+  @@index([toInventoryLocationId, occurredAt])
   @@map("custody_events")
 }
 
@@ -2536,30 +2656,32 @@ model PaymentWebhookEvent {
 }
 
 model Refund {
-  id                    String       @id @default(uuid()) @db.Uuid
-  paymentId             String       @map("payment_id") @db.Uuid
-  refundType            RefundType   @map("refund_type")
-  amount                Decimal      @db.Decimal(12, 2)
-  currency              String       @default("VND") @db.Char(3)
-  reason                String?
-  status                RefundStatus @default(PENDING)
-  idempotencyKey        String       @unique @map("idempotency_key") @db.VarChar(200)
-  refundTransactionRef  String?      @map("refund_transaction_ref") @db.VarChar(180)
-  depositSettlementId   String?      @map("deposit_settlement_id") @db.Uuid
-  bookingCancellationId String?      @map("booking_cancellation_id") @db.Uuid
-  rentalOrderId         String?      @map("rental_order_id") @db.Uuid
-  trailAccessId         String?      @map("trail_access_id") @db.Uuid
-  providerPayload       Json?        @map("provider_payload")
-  refundedAt            DateTime?    @map("refunded_at") @db.Timestamptz(6)
-  version               Int          @default(1)
-  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                      String       @id @default(uuid()) @db.Uuid
+  paymentId               String       @map("payment_id") @db.Uuid
+  refundType              RefundType   @map("refund_type")
+  amount                  Decimal      @db.Decimal(12, 2)
+  currency                String       @default("VND") @db.Char(3)
+  reason                  String?
+  status                  RefundStatus @default(PENDING)
+  idempotencyKey          String       @unique @map("idempotency_key") @db.VarChar(200)
+  refundTransactionRef    String?      @map("refund_transaction_ref") @db.VarChar(180)
+  depositSettlementId     String?      @map("deposit_settlement_id") @db.Uuid
+  depositSettlementItemId String?      @unique @map("deposit_settlement_item_id") @db.Uuid
+  bookingCancellationId   String?      @map("booking_cancellation_id") @db.Uuid
+  rentalOrderId           String?      @map("rental_order_id") @db.Uuid
+  trailAccessId           String?      @map("trail_access_id") @db.Uuid
+  providerPayload         Json?        @map("provider_payload")
+  refundedAt              DateTime?    @map("refunded_at") @db.Timestamptz(6)
+  version                 Int          @default(1)
+  createdAt               DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  payment             Payment              @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
-  depositSettlement   DepositSettlement?   @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
-  bookingCancellation BookingCancellation? @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id])
-  rentalOrder         RentalOrder?         @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
-  trailAccess         TrailAccess?         @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
+  payment               Payment                @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
+  depositSettlement     DepositSettlement?     @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
+  depositSettlementItem DepositSettlementItem? @relation("R_Refund_deposit_settlement_item_id", fields: [depositSettlementItemId], references: [id])
+  bookingCancellation   BookingCancellation?   @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id])
+  rentalOrder           RentalOrder?           @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
+  trailAccess           TrailAccess?           @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
 
   @@index([paymentId, status])
   @@index([refundTransactionRef])

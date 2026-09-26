@@ -17,7 +17,7 @@ export class AuthBootstrapUseCase {
     avatarUrl?: string
     role?: string
   }) {
-    const existing = await this.userRepository.findByAuthId(body.authUserId)
+    const existing = await this.userRepository.findByEmailOrAuthId(body.email, body.authUserId)
 
     if (existing) {
       return existing
