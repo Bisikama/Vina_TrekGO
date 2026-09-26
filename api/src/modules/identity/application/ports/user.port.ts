@@ -8,7 +8,6 @@ export interface IUserRepository {
     email: string
     fullName: string
     phone?: string
-    cccd?: string
     avatar?: string
     avatarUrl?: string
     role?: UserRole | string
@@ -22,4 +21,6 @@ export interface IUserRepository {
   findById(id: string): Promise<User | null>
 
   deleteByAuthId(authUserId: string): Promise<void>
+
+  findByEmail(email: string): Promise<User | null>
 }

@@ -12,7 +12,6 @@ export class PrismaUserAdapter implements IUserRepository {
     email: string
     fullName: string
     phone?: string
-    cccd?: string
     avatar?: string
     avatarUrl?: string
     role?: UserRole | string
@@ -62,6 +61,11 @@ export class PrismaUserAdapter implements IUserRepository {
   async deleteByAuthId(authUserId: string): Promise<void> {
     await this.prisma.user.delete({
       where: { authUserId },
+    })
+  }
+  async findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
     })
   }
 }
