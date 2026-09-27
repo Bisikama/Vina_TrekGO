@@ -34,7 +34,11 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
       if (onSuccess) {
         onSuccess();
       } else {
-        window.location.href = "/";
+        if (activeTab === "admin") {
+          window.location.href = "/admin";
+        } else {
+          window.location.href = "/";
+        }
       }
     }
   };
@@ -315,7 +319,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
               if (result) {
                 document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
                 if (onSuccess) onSuccess();
-                else window.location.href = "/";
+                else window.location.href = "/admin";
               }
             }}
             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
