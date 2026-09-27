@@ -476,12 +476,21 @@ export function StaffOrderPickingDetail({
                 </button>
               </div>
 
-              {completed && (
-                <div className="mt-3 rounded-lg bg-emerald-100 p-3 text-xs font-bold text-emerald-900">
-                  Đã nghiệm thu đủ thiết bị. Đơn hàng sẵn
-                  sàng chuyển sang bước Đóng gói & QA.
-                </div>
-              )}
+             {completed && (
+  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-emerald-100 p-3 text-xs font-bold text-emerald-900">
+    <span>
+      Đã nghiệm thu đủ thiết bị. Đơn hàng sẵn sàng chuyển
+      sang bước Đóng gói & QA.
+    </span>
+
+    <Link
+      href={`/staff/orders/${orderId}/packing`}
+      className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-black text-white"
+    >
+      Tiếp tục đóng gói →
+    </Link>
+  </div>
+)}
             </div>
           </section>
 
