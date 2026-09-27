@@ -1,0 +1,2715 @@
+Project TrekGo_Production_Locked_v3 {
+  database_type: 'PostgreSQL'
+  Note: '''
+  TrekGo locked logical schema for PostgreSQL.
+
+  Design rules locked in this version:
+  - Supabase Auth identity is mapped through USERS.auth_user_id.
+  - Leader types are explicit: EXPERT and COMMUNITY.
+  - Trips only consume verified SYSTEM_TRAILS. PERSONAL_TRAILS remain user-owned recordings/drafts and may be submitted for review.
+  - A Trip may have multiple trail plans; exactly one current plan is represented by TRIP_ACTIVE_TRAIL_PLANS.
+  - Trip pickup/vehicle metadata is unified in TRIP_TRANSPORTS; no separate trip-pickup/vehicle mapping tables.
+  - Public participation uses BOOKINGS/BOOKING_PARTICIPANTS. Private participation uses TRIP_MEMBERS.
+  - Rental supports both PUBLIC_BOOKING and PRIVATE_MEMBER contexts with explicit XOR constraints.
+  - Equipment physical state and future-time reservation state are separate state machines.
+  - Reservation occupied window includes operational buffers; rental billing window remains tied to Trip dates.
+  - Equipment handover requires condition evidence and recipient confirmation.
+  - Business policies are versioned by domain: BOOKING_POLICIES, RENTAL_POLICIES, GPS_POLICIES.
+  - Business-operation idempotency keys are stored on the operation record; outbox deduplication keys are separate.
+  - Custody transfer updates and CUSTODY_EVENTS append must commit atomically in one transaction.
+  - Deposit settlement is separated from payment refund execution.
+  - Optimistic version columns are present on mutable aggregate roots/tasks used by API expectedVersion contracts.
+  - Financial snapshots are immutable historical values after payment confirmation.
+
+  PostgreSQL-only constraints that DBML cannot fully represent (partial indexes, exclusion constraints,
+  and selected cross-row/cross-table rules) are documented at the end of this file and should be
+  implemented in migrations before production deployment.
+  '''
+}
+
+// =========================================================
+// TREKGO DOMAIN MAP
+// =========================================================
+// DOMAIN A - BOOKING: Identity/Leader + Trail/Trip/Transport + Booking/Participant
+// DOMAIN B - RENTAL: Rental/Inventory + Warehouse/Logistics + Return/Deposit
+// DOMAIN C - GPS: GPS Session/Location + Deviation + Checkpoint Execution + Weather
+// SHARED: Payment/Refund + Notification/Audit + technical configuration
+// =========================================================
+
+// =========================================================
+// ENUMS - IDENTITY / LEADER
+// =========================================================
+
+Enum user_role {
+  USER
+  LEADER
+  STAFF_WAREHOUSE
+  STAFF_LOGISTICS
+  ADMIN
+}
+
+Enum user_status {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DEACTIVATED
+}
+
+Enum leader_type {
+  EXPERT
+  COMMUNITY
+}
+
+Enum verification_status {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+Enum application_status {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+Enum test_result {
+  PASS
+  FAIL
+}
+
+Enum certificate_status {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+// =========================================================
+// ENUMS - TRAIL / TRIP / BOOKING / TRANSPORT
+// =========================================================
+
+Enum record_status {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+Enum difficulty_level {
+  EASY
+  MEDIUM
+  HARD
+  EXTREME
+}
+
+Enum trail_access_source {
+  PURCHASE
+  ADMIN_GRANT
+  PROMOTION
+}
+
+Enum trail_access_status {
+  PENDING_PAYMENT
+  ACTIVE
+  FAILED
+  REFUNDED
+  REVOKED
+}
+
+Enum personal_trail_visibility {
+  PRIVATE
+  SHARED
+}
+
+Enum trail_submission_status {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+Enum trip_type {
+  PUBLIC
+  PRIVATE
+}
+
+Enum trip_status {
+  DRAFT
+  OPEN
+  FULL
+  CLOSED
+  CANCEL_PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  INTERRUPTED
+}
+
+Enum cancellation_request_status {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+Enum invite_status {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+Enum trip_member_role {
+  HOST
+  MEMBER
+}
+
+Enum trip_member_status {
+  ACTIVE
+  LEFT
+  REMOVED
+  COMPLETED
+  NO_SHOW
+}
+
+Enum attendance_status {
+  NOT_MARKED
+  PRESENT
+  ABSENT
+  LATE
+}
+
+Enum booking_status {
+  PENDING_PAYMENT
+  CONFIRMED
+  PARTIAL_CHECKIN
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  EXPIRED
+}
+
+Enum participant_status {
+  ACTIVE
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+Enum checkin_status {
+  NOT_CHECKED_IN
+  CHECKED_IN
+  NO_SHOW
+}
+
+Enum checkin_method {
+  QR
+  MANUAL
+}
+
+Enum trip_checkpoint_status {
+  PENDING
+  REACHED
+  COMPLETED
+  SKIPPED
+  OVERRIDDEN
+}
+
+Enum mission_status {
+  LOCKED
+  UNLOCKED
+  SUBMITTED
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+Enum transport_source_type {
+  SYSTEM_FLEET
+  THIRD_PARTY
+  SELF_ARRANGED
+}
+
+Enum vehicle_status {
+  PLANNED
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  CANCELLED
+}
+
+// =========================================================
+// ENUMS - RENTAL / INVENTORY / WAREHOUSE / LOGISTICS
+// =========================================================
+
+Enum rental_product_status {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+Enum deposit_policy_type {
+  FIXED
+  PERCENT_REPLACEMENT_VALUE
+}
+
+Enum equipment_unit_status {
+  AVAILABLE
+  PICKED
+  PACKED
+  RENTED
+  RETURN_PENDING
+  CLEANING
+  MAINTENANCE
+  DAMAGED
+  LOST
+  RETIRED
+}
+
+Enum equipment_condition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+  LOST
+}
+
+Enum rental_context_type {
+  PUBLIC_BOOKING
+  PRIVATE_MEMBER
+}
+
+Enum rental_quote_status {
+  ACTIVE
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+Enum rental_handover_mode {
+  TRIP_PICKUP
+  WAREHOUSE_PICKUP
+}
+
+Enum rental_order_status {
+  PENDING_PAYMENT
+  PAID
+  PREPARING
+  READY_FOR_HANDOVER
+  ACTIVE
+  RETURN_PENDING
+  INSPECTED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+Enum rental_order_exception_status {
+  NONE
+  ACTION_REQUIRED
+  OVERDUE
+  RETURN_INCOMPLETE
+}
+
+Enum rental_financial_status {
+  UNPAID
+  PAYMENT_PENDING
+  PAID
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  SETTLED
+}
+
+Enum reservation_status {
+  HELD
+  CONFIRMED
+  RELEASED
+  EXPIRED
+  CLOSED
+  CANCELLED
+}
+
+Enum package_status {
+  OPEN
+  PACKED
+  READY
+  TRANSFERRED_TO_LOGISTICS
+  HANDED_OVER
+  RETURNING
+  RETURNED_TO_WAREHOUSE
+  CLOSED
+  CANCELLED
+}
+
+Enum warehouse_task_status {
+  OPEN
+  PICKING
+  CONDITION_CAPTURED
+  PACKED
+  READY
+  TRANSFERRED
+  RETURN_RECEIVED
+  CLOSED
+  BLOCKED
+  CANCELLED
+}
+
+Enum logistics_task_type {
+  HANDOVER
+  RETURN
+}
+
+Enum logistics_task_status {
+  SCHEDULED
+  PACKAGE_RECEIVED
+  USER_VERIFIED
+  HANDED_OVER
+  COLLECTING
+  RETURNED
+  WAREHOUSE_RECEIVED
+  NO_SHOW
+  REFUSED
+  CLOSED
+  BLOCKED
+  CANCELLED
+}
+
+Enum snapshot_stage {
+  PRE_HANDOVER
+  HANDOVER
+  RETURN_PRELIMINARY
+  RETURN_FINAL
+}
+
+Enum inspection_stage {
+  PRELIMINARY
+  FINAL
+}
+
+Enum inspection_status {
+  NORMAL
+  DAMAGED
+  LOST
+}
+
+Enum deposit_settlement_status {
+  HELD
+  REVIEW_REQUIRED
+  REFUND_PENDING
+  REFUND_FAILED
+  SETTLED
+}
+
+Enum deposit_settlement_outcome {
+  FULL_REFUND
+  PARTIAL_REFUND
+  FULL_DEDUCTION
+}
+
+Enum maintenance_status {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+Enum custody_actor_type {
+  WAREHOUSE
+  LOGISTICS
+  USER
+  SYSTEM
+}
+
+Enum custody_event_type {
+  WAREHOUSE_TO_LOGISTICS
+  LOGISTICS_TO_USER
+  USER_TO_LOGISTICS
+  LOGISTICS_TO_WAREHOUSE
+  INTERNAL_TRANSFER
+}
+
+Enum rental_exception_type {
+  DAMAGE_DISPUTE
+  OVERDUE
+  RETURN_INCOMPLETE
+  PAYMENT_MISMATCH
+  REFUND_FAILURE
+  OTHER
+}
+
+Enum rental_exception_case_status {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+  CLOSED
+}
+
+// =========================================================
+// ENUMS - GPS / WEATHER / FINANCE / INFRASTRUCTURE
+// =========================================================
+
+Enum gps_session_status {
+  ACTIVE
+  PAUSED
+  STOPPED
+}
+
+Enum deviation_status {
+  DEVIATED
+  RECOVERED
+}
+
+Enum weather_risk_level {
+  LOW
+  MEDIUM
+  HIGH
+  SEVERE
+  UNKNOWN
+}
+
+Enum invoice_type {
+  BOOKING
+  TRAIL_ACCESS
+  RENTAL
+}
+
+Enum invoice_status {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+  EXPIRED
+}
+
+Enum payment_status {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+Enum refund_status {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+Enum refund_type {
+  FULL
+  PARTIAL
+  DEPOSIT
+  BOOKING_CANCELLATION
+  RENTAL_CANCELLATION
+  TRAIL_ACCESS
+}
+
+Enum event_status {
+  PENDING
+  PUBLISHED
+  PROCESSED
+  FAILED
+}
+
+Enum notification_status {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+// =========================================================
+// DOMAIN A - BOOKING / IDENTITY / USER / LEADER
+// =========================================================
+
+Table USERS {
+  id uuid [pk]
+  auth_user_id uuid [not null, unique, note: 'Supabase Auth user id']
+  email varchar(320) [not null, unique]
+  full_name varchar(150) [not null]
+  phone varchar(30)
+  avatar_url text
+  role user_role [not null, default: 'USER']
+  status user_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deactivated_at timestamptz
+
+  indexes {
+    role
+    status
+    created_at
+  }
+}
+
+Table LEADER_PROFILES {
+  user_id uuid [pk, ref: - USERS.id]
+  leader_type leader_type [not null]
+  verify_status verification_status [not null, default: 'NOT_SUBMITTED']
+  completed_trip_count int [not null, default: 0]
+  experience_years int [not null, default: 0]
+  verified_by uuid [ref: >? USERS.id]
+  verified_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `completed_trip_count >= 0` [name: 'chk_leader_completed_trip_count']
+    `experience_years >= 0` [name: 'chk_leader_experience_years']
+  }
+}
+
+Table LEADER_APPLICATIONS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  requested_type leader_type [not null]
+  status application_status [not null, default: 'DRAFT']
+  motivation text
+  experience_summary text
+  submitted_at timestamptz
+  reviewed_by uuid [ref: >? USERS.id]
+  reviewed_at timestamptz
+  rejection_reason text
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status)
+    (status, submitted_at)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_leader_application_version']
+  }
+}
+
+Table LEADER_TESTS {
+  id uuid [pk]
+  code varchar(80) [not null, unique]
+  title varchar(200) [not null]
+  description text
+  max_score decimal(8,2) [not null]
+  passing_score decimal(8,2) [not null]
+  duration_minutes int
+  max_attempts int
+  status record_status [not null, default: 'ACTIVE']
+  version int [not null, default: 1]
+  created_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (status, code)
+  }
+
+  checks {
+    `max_score > 0` [name: 'chk_leader_test_max_score']
+    `passing_score >= 0 AND passing_score <= max_score` [name: 'chk_leader_test_passing_score']
+    `duration_minutes IS NULL OR duration_minutes > 0` [name: 'chk_leader_test_duration']
+    `max_attempts IS NULL OR max_attempts > 0` [name: 'chk_leader_test_max_attempts']
+    `version > 0` [name: 'chk_leader_test_version']
+  }
+
+  Note: 'Test definition/catalog. Authentication is not duplicated here; attempt ownership flows through USERS.id -> USERS.auth_user_id -> Supabase Auth.'
+}
+
+Table LEADER_TEST_ATTEMPTS {
+  id uuid [pk]
+  test_id uuid [not null, ref: > LEADER_TESTS.id]
+  user_id uuid [not null, ref: > USERS.id, note: 'Normalized link to Supabase identity via USERS.auth_user_id']
+  application_id uuid [ref: >? LEADER_APPLICATIONS.id]
+  attempt_no int [not null]
+  test_version_snapshot int [not null]
+  passing_score_snapshot decimal(8,2) [not null]
+  score decimal(8,2) [not null]
+  max_score decimal(8,2) [not null]
+  result test_result [not null]
+  started_at timestamptz
+  completed_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, test_id, attempt_no) [unique]
+    (user_id, completed_at)
+    (application_id, completed_at)
+  }
+
+  checks {
+    `attempt_no > 0` [name: 'chk_leader_test_attempt_no']
+    `test_version_snapshot > 0` [name: 'chk_leader_test_attempt_version']
+    `max_score > 0` [name: 'chk_leader_test_attempt_max_score']
+    `passing_score_snapshot >= 0 AND passing_score_snapshot <= max_score` [name: 'chk_leader_test_attempt_passing_score']
+    `score >= 0 AND score <= max_score` [name: 'chk_leader_test_attempt_score']
+    `started_at IS NULL OR completed_at >= started_at` [name: 'chk_leader_test_attempt_dates']
+  }
+}
+
+Table LEADER_CERTIFICATES {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  application_id uuid [ref: >? LEADER_APPLICATIONS.id]
+  certificate_type varchar(100) [not null]
+  certificate_number varchar(100)
+  issuer varchar(200)
+  file_url text [not null]
+  issued_at date
+  expires_at date
+  status certificate_status [not null, default: 'PENDING']
+  verified_by uuid [ref: >? USERS.id]
+  verified_at timestamptz
+  rejection_reason text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status)
+    expires_at
+  }
+
+  checks {
+    `expires_at IS NULL OR issued_at IS NULL OR expires_at >= issued_at` [name: 'chk_certificate_dates']
+  }
+}
+
+// =========================================================
+// DOMAIN A - BOOKING / DESTINATION / TRAIL / CHECKPOINT / ACCESS
+// =========================================================
+
+Table DESTINATIONS {
+  id uuid [pk]
+  name varchar(200) [not null]
+  description text
+  region varchar(150)
+  center_lat decimal(10,7)
+  center_lng decimal(10,7)
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    name
+    (region, status)
+  }
+
+  checks {
+    `center_lat IS NULL OR center_lat BETWEEN -90 AND 90` [name: 'chk_destination_lat']
+    `center_lng IS NULL OR center_lng BETWEEN -180 AND 180` [name: 'chk_destination_lng']
+  }
+}
+
+Table PICKUP_POINTS {
+  id uuid [pk]
+  destination_id uuid [ref: >? DESTINATIONS.id]
+  code varchar(50) [not null, unique]
+  name varchar(200) [not null]
+  address text [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  note text
+  status record_status [not null, default: 'ACTIVE']
+  created_by uuid [not null, ref: > USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (destination_id, status)
+    name
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_pickup_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_pickup_lng']
+  }
+}
+
+Table PERSONAL_TRAILS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  destination_id uuid [ref: >? DESTINATIONS.id]
+  title varchar(200) [not null]
+  description text
+  difficulty difficulty_level
+  distance_km decimal(8,2)
+  elevation_gain_m int
+  route_geojson jsonb [not null]
+  visibility personal_trail_visibility [not null, default: 'PRIVATE']
+  status record_status [not null, default: 'ACTIVE']
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+
+  indexes {
+    (user_id, status)
+    (destination_id, status)
+  }
+
+  checks {
+    `distance_km IS NULL OR distance_km >= 0` [name: 'chk_personal_trail_distance']
+    `elevation_gain_m IS NULL OR elevation_gain_m >= 0` [name: 'chk_personal_trail_elevation']
+    `version > 0` [name: 'chk_personal_trail_version']
+  }
+}
+
+Table TRAIL_SUBMISSIONS {
+  id uuid [pk]
+  personal_trail_id uuid [not null, ref: > PERSONAL_TRAILS.id]
+  submitted_by uuid [not null, ref: > USERS.id]
+  status trail_submission_status [not null, default: 'DRAFT']
+  submission_note text
+  reviewed_by uuid [ref: >? USERS.id]
+  reviewed_at timestamptz
+  review_note text
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (personal_trail_id, status)
+    (status, created_at)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_trail_submission_version']
+  }
+}
+
+Table SYSTEM_TRAILS {
+  id uuid [pk]
+  destination_id uuid [not null, ref: > DESTINATIONS.id]
+  source_submission_id uuid [ref: >? TRAIL_SUBMISSIONS.id]
+  code varchar(50) [not null, unique]
+  name varchar(200) [not null]
+  description text
+  difficulty difficulty_level [not null]
+  distance_km decimal(8,2) [not null]
+  elevation_gain_m int
+  estimated_duration_minutes int
+  route_geojson jsonb [not null]
+  price decimal(12,2) [not null, default: 0]
+  status record_status [not null, default: 'ACTIVE']
+  created_by uuid [not null, ref: > USERS.id]
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+
+  indexes {
+    (destination_id, difficulty, status)
+    name
+  }
+
+  checks {
+    `distance_km > 0` [name: 'chk_system_trail_distance']
+    `elevation_gain_m IS NULL OR elevation_gain_m >= 0` [name: 'chk_system_trail_elevation']
+    `estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0` [name: 'chk_system_trail_duration']
+    `price >= 0` [name: 'chk_system_trail_price']
+    `version > 0` [name: 'chk_system_trail_version']
+  }
+}
+
+Table TRAIL_ACCESSES {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  system_trail_id uuid [not null, ref: > SYSTEM_TRAILS.id]
+  source_type trail_access_source [not null, default: 'PURCHASE']
+  price_snapshot decimal(12,2) [not null, default: 0]
+  status trail_access_status [not null, default: 'PENDING_PAYMENT']
+  purchased_at timestamptz
+  activated_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, system_trail_id) [unique]
+    (user_id, status)
+  }
+
+  checks {
+    `price_snapshot >= 0` [name: 'chk_trail_access_price']
+  }
+}
+
+Table CHECKPOINTS {
+  id uuid [pk]
+  destination_id uuid [not null, ref: > DESTINATIONS.id]
+  code varchar(50) [unique]
+  name varchar(200) [not null]
+  description text
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  default_radius_meters int [not null, default: 50]
+  checkpoint_type varchar(50)
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (destination_id, status)
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_checkpoint_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_checkpoint_lng']
+    `default_radius_meters > 0` [name: 'chk_checkpoint_radius']
+  }
+}
+
+Table TRAIL_CHECKPOINTS {
+  id uuid [pk]
+  system_trail_id uuid [not null, ref: > SYSTEM_TRAILS.id]
+  checkpoint_id uuid [not null, ref: > CHECKPOINTS.id]
+  sequence int [not null]
+  is_required boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (system_trail_id, sequence) [unique]
+    (system_trail_id, checkpoint_id) [unique]
+  }
+
+  checks {
+    `sequence > 0` [name: 'chk_trail_checkpoint_sequence']
+  }
+}
+
+Table PERSONAL_CHECKPOINTS {
+  id uuid [pk]
+  personal_trail_id uuid [not null, ref: > PERSONAL_TRAILS.id]
+  name varchar(200) [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  sequence int [not null]
+  radius_meters int [not null, default: 50]
+  info text
+  image_urls jsonb
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (personal_trail_id, sequence) [unique]
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_personal_checkpoint_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_personal_checkpoint_lng']
+    `sequence > 0` [name: 'chk_personal_checkpoint_sequence']
+    `radius_meters > 0` [name: 'chk_personal_checkpoint_radius']
+  }
+}
+
+Table TRAIL_RECORDINGS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  title varchar(200)
+  status varchar(30) [not null]
+  started_at timestamptz [not null]
+  ended_at timestamptz
+  processed_geojson jsonb
+  distance_km decimal(8,2)
+  elevation_gain_m int
+  created_personal_trail_id uuid [ref: >? PERSONAL_TRAILS.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, started_at)
+    status
+  }
+
+  checks {
+    `ended_at IS NULL OR ended_at >= started_at` [name: 'chk_trail_recording_dates']
+    `distance_km IS NULL OR distance_km >= 0` [name: 'chk_trail_recording_distance']
+    `elevation_gain_m IS NULL OR elevation_gain_m >= 0` [name: 'chk_trail_recording_elevation']
+  }
+}
+
+// =========================================================
+// DOMAIN A - BOOKING / TRIP / PRIVATE MEMBERSHIP / TRANSPORT
+// =========================================================
+
+Table TRIPS {
+  id uuid [pk]
+  trip_type trip_type [not null]
+  title varchar(220) [not null]
+  description text
+  destination_id uuid [not null, ref: > DESTINATIONS.id]
+  creator_id uuid [not null, ref: > USERS.id]
+  leader_id uuid [ref: >? USERS.id, note: 'Required for PUBLIC; null for PRIVATE self-guided Trip']
+  start_at timestamptz [not null]
+  end_at timestamptz [not null]
+  min_pax int [not null, default: 1]
+  max_pax int [not null]
+  price_per_pax decimal(12,2) [note: 'Required for PUBLIC; null/0 for PRIVATE']
+  status trip_status [not null, default: 'DRAFT']
+  published_at timestamptz
+  started_at timestamptz
+  completed_at timestamptz
+  cancelled_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_type, status, start_at)
+    (destination_id, start_at)
+    (leader_id, start_at, end_at)
+    (creator_id, start_at)
+  }
+
+  checks {
+    `end_at > start_at` [name: 'chk_trip_dates']
+    `min_pax > 0` [name: 'chk_trip_min_pax']
+    `max_pax >= min_pax` [name: 'chk_trip_max_pax']
+    `price_per_pax IS NULL OR price_per_pax >= 0` [name: 'chk_trip_price']
+    `version > 0` [name: 'chk_trip_version']
+    `((trip_type = 'PUBLIC' AND leader_id IS NOT NULL AND price_per_pax IS NOT NULL) OR (trip_type = 'PRIVATE' AND leader_id IS NULL AND (price_per_pax IS NULL OR price_per_pax = 0)))` [name: 'chk_trip_type_requirements']
+  }
+}
+
+Table TRIP_TRAIL_PLANS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  system_trail_id uuid [not null, ref: > SYSTEM_TRAILS.id]
+  sequence int [not null]
+  snapshot_name varchar(200) [not null]
+  snapshot_difficulty difficulty_level [not null]
+  snapshot_geojson jsonb [not null]
+  snapshot_distance_km decimal(8,2)
+  snapshot_elevation_gain_m int
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, sequence) [unique]
+    (trip_id, id) [unique]
+    (trip_id, system_trail_id)
+  }
+
+  checks {
+    `sequence > 0` [name: 'chk_trip_trail_plan_sequence']
+    `snapshot_distance_km IS NULL OR snapshot_distance_km >= 0` [name: 'chk_trip_trail_plan_distance']
+    `snapshot_elevation_gain_m IS NULL OR snapshot_elevation_gain_m >= 0` [name: 'chk_trip_trail_plan_elevation']
+  }
+
+  Note: 'Trip plans consume verified SYSTEM_TRAILS only. Snapshot fields preserve the route used by the Trip even if the master trail changes later.'
+}
+
+Table TRIP_ACTIVE_TRAIL_PLANS {
+  trip_id uuid [pk, ref: - TRIPS.id]
+  trail_plan_id uuid [not null]
+  changed_by uuid [not null, ref: > USERS.id]
+  changed_at timestamptz [not null, default: `now()`]
+  version int [not null, default: 1]
+
+  checks {
+    `version > 0` [name: 'chk_active_trail_plan_version']
+  }
+}
+
+Ref: TRIP_TRAIL_PLANS.(trip_id, id) - TRIP_ACTIVE_TRAIL_PLANS.(trip_id, trail_plan_id)
+
+Table TRIP_TRAIL_SWITCHES {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  from_plan_id uuid [ref: >? TRIP_TRAIL_PLANS.id]
+  to_plan_id uuid [not null, ref: > TRIP_TRAIL_PLANS.id]
+  reason text
+  actor_id uuid [not null, ref: > USERS.id]
+  switched_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, switched_at)
+  }
+}
+
+Table TRIP_CHECKPOINTS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  source_checkpoint_id uuid [ref: >? CHECKPOINTS.id]
+  name varchar(200) [not null]
+  description text
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  sequence int [not null]
+  is_required boolean [not null, default: false]
+  radius_meters int [not null]
+  mission_title varchar(200)
+  mission_description text
+  mission_type varchar(50)
+  reward_points int [not null, default: 0]
+  is_enabled boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, sequence) [unique]
+    (trip_id, is_required)
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_trip_checkpoint_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_trip_checkpoint_lng']
+    `sequence > 0` [name: 'chk_trip_checkpoint_sequence']
+    `radius_meters > 0` [name: 'chk_trip_checkpoint_radius']
+    `reward_points >= 0` [name: 'chk_trip_checkpoint_reward']
+  }
+
+  Note: 'Snapshot of checkpoint definitions selected for a Trip. Required checkpoints drive Trip completion; GPS execution events are stored separately.'
+}
+
+Table TRIP_CHECKPOINT_PROGRESS {
+  id uuid [pk]
+  trip_checkpoint_id uuid [not null, unique, ref: - TRIP_CHECKPOINTS.id]
+  status trip_checkpoint_status [not null, default: 'PENDING']
+  reached_at timestamptz
+  completed_at timestamptz
+  updated_by uuid [ref: >? USERS.id]
+  override_reason text
+  override_evidence_urls jsonb
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table TRANSPORT_PROVIDERS {
+  id uuid [pk]
+  name varchar(200) [not null]
+  contact_name varchar(150)
+  phone varchar(30)
+  email varchar(320)
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (name, status)
+  }
+}
+
+Table TRIP_TRANSPORTS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  pickup_point_id uuid [not null, ref: > PICKUP_POINTS.id]
+  return_point_id uuid [ref: >? PICKUP_POINTS.id, note: 'Null means return to pickup_point_id']
+  sequence int [not null]
+  source_type transport_source_type [not null, default: 'SYSTEM_FLEET']
+  provider_id uuid [ref: >? TRANSPORT_PROVIDERS.id]
+  vehicle_type varchar(80) [not null]
+  seat_capacity int [not null]
+  plate_number varchar(30)
+  driver_name varchar(150)
+  driver_phone varchar(30)
+  provider_name varchar(200)
+  meeting_at timestamptz [not null]
+  departure_at timestamptz
+  return_at timestamptz
+  status vehicle_status [not null, default: 'PLANNED']
+  note text
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, sequence) [unique]
+    (trip_id, pickup_point_id, status)
+    plate_number
+  }
+
+  checks {
+    `sequence > 0` [name: 'chk_trip_transport_sequence']
+    `seat_capacity > 0` [name: 'chk_trip_transport_capacity']
+    `departure_at IS NULL OR departure_at >= meeting_at` [name: 'chk_trip_transport_departure']
+    `return_at IS NULL OR departure_at IS NULL OR return_at >= departure_at` [name: 'chk_trip_transport_return']
+    `version > 0` [name: 'chk_trip_transport_version']
+  }
+
+  Note: 'Unified transport table. One Trip can have many rows/vehicles and many pickup points. Transport cost is intentionally not stored here.'
+}
+
+Table TRIP_CANCELLATION_REQUESTS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  requested_by uuid [not null, ref: > USERS.id]
+  reason text [not null]
+  evidence_urls jsonb
+  status cancellation_request_status [not null, default: 'PENDING']
+  reviewed_by uuid [ref: >? USERS.id]
+  review_note text
+  requested_at timestamptz [not null, default: `now()`]
+  reviewed_at timestamptz
+  version int [not null, default: 1]
+
+  indexes {
+    (trip_id, status)
+    (status, requested_at)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_trip_cancellation_version']
+  }
+}
+
+Table PRIVATE_TRIP_INVITES {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  code varchar(120) [not null, unique]
+  max_uses int
+  used_count int [not null, default: 0]
+  status invite_status [not null, default: 'ACTIVE']
+  expires_at timestamptz [not null]
+  created_by uuid [not null, ref: > USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+  revoked_at timestamptz
+
+  indexes {
+    (trip_id, status)
+    expires_at
+  }
+
+  checks {
+    `max_uses IS NULL OR max_uses > 0` [name: 'chk_private_invite_max_uses']
+    `used_count >= 0` [name: 'chk_private_invite_used_count']
+    `max_uses IS NULL OR used_count <= max_uses` [name: 'chk_private_invite_usage']
+  }
+}
+
+Table TRIP_MEMBERS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  joined_by_invite_id uuid [ref: >? PRIVATE_TRIP_INVITES.id]
+  pickup_point_id uuid [ref: >? PICKUP_POINTS.id]
+  role trip_member_role [not null, default: 'MEMBER']
+  status trip_member_status [not null, default: 'ACTIVE']
+  joined_at timestamptz [not null, default: `now()`]
+  left_at timestamptz
+  attendance_status attendance_status [not null, default: 'NOT_MARKED']
+  attended_at timestamptz
+  attendance_marked_by uuid [ref: >? USERS.id]
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, user_id) [unique]
+    (user_id, status)
+    (trip_id, status)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_trip_member_version']
+  }
+}
+
+Table BOOKING_POLICIES {
+  id uuid [pk]
+  policy_code varchar(80) [not null]
+  version_no int [not null]
+  hold_ttl_minutes int [not null]
+  cancellation_rules jsonb [not null, note: 'Versioned cancellation/refund rules; detailed thresholds remain business-configurable']
+  no_show_rules jsonb
+  participant_rules jsonb
+  effective_from timestamptz [not null]
+  effective_to timestamptz
+  is_active boolean [not null, default: true]
+  created_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (policy_code, version_no) [unique]
+    (is_active, effective_from)
+  }
+
+  checks {
+    `version_no > 0` [name: 'chk_booking_policy_version']
+    `hold_ttl_minutes > 0` [name: 'chk_booking_policy_hold_ttl']
+    `effective_to IS NULL OR effective_to > effective_from` [name: 'chk_booking_policy_effective_dates']
+  }
+
+  Note: 'Immutable policy version after it becomes effective. BOOKINGS also stores a snapshot for historical audit.'
+}
+
+Table BOOKINGS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  pickup_point_id uuid [not null, ref: > PICKUP_POINTS.id]
+  booking_policy_id uuid [not null, ref: > BOOKING_POLICIES.id]
+  status booking_status [not null, default: 'PENDING_PAYMENT']
+  participant_count int [not null]
+  price_per_pax_snapshot decimal(12,2) [not null]
+  subtotal_amount decimal(12,2) [not null]
+  discount_amount decimal(12,2) [not null, default: 0]
+  insurance_amount decimal(12,2) [not null, default: 0, note: 'Optional insurance component when used by the Trip']
+  total_amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  policy_snapshot jsonb [not null]
+  confirmation_idempotency_key varchar(200) [unique, note: 'Set when payment confirmation is applied to Booking']
+  expires_at timestamptz [not null]
+  confirmed_at timestamptz
+  cancelled_at timestamptz
+  completed_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, status)
+    (user_id, status)
+    (trip_id, user_id)
+    booking_policy_id
+    expires_at
+  }
+
+  checks {
+    `participant_count > 0` [name: 'chk_booking_participant_count']
+    `price_per_pax_snapshot >= 0` [name: 'chk_booking_price_snapshot']
+    `subtotal_amount >= 0` [name: 'chk_booking_subtotal']
+    `discount_amount >= 0` [name: 'chk_booking_discount']
+    `insurance_amount >= 0` [name: 'chk_booking_insurance']
+    `total_amount >= 0` [name: 'chk_booking_total']
+    `total_amount = subtotal_amount - discount_amount + insurance_amount` [name: 'chk_booking_total_formula']
+    `version > 0` [name: 'chk_booking_version']
+  }
+
+  Note: 'PENDING_PAYMENT represents a capacity hold until expires_at. One active booking per user/trip is enforced with a PostgreSQL partial unique index.'
+}
+
+Table BOOKING_PARTICIPANTS {
+  id uuid [pk]
+  booking_id uuid [not null, ref: > BOOKINGS.id]
+  user_id uuid [ref: >? USERS.id, note: 'Nullable for non-account participant']
+  full_name varchar(150) [not null]
+  phone varchar(30)
+  date_of_birth date
+  id_document_no varchar(80)
+  emergency_contact_name varchar(150)
+  emergency_contact_phone varchar(30)
+  status participant_status [not null, default: 'ACTIVE']
+  checkin_code varchar(160) [not null, unique]
+  checkin_status checkin_status [not null, default: 'NOT_CHECKED_IN']
+  checkin_method checkin_method
+  checked_in_at timestamptz
+  checked_in_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (booking_id, status)
+    (user_id, status)
+  }
+}
+
+Table BOOKING_CANCELLATIONS {
+  id uuid [pk]
+  booking_id uuid [not null, ref: > BOOKINGS.id]
+  cancelled_by uuid [ref: >? USERS.id]
+  reason text
+  policy_snapshot jsonb [not null]
+  refundable_amount decimal(12,2) [not null, default: 0]
+  cancelled_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (booking_id, cancelled_at)
+  }
+
+  checks {
+    `refundable_amount >= 0` [name: 'chk_booking_cancellation_refund']
+  }
+}
+
+// =========================================================
+// DOMAIN B - THUE DO / RENTAL / INVENTORY / WAREHOUSE / LOGISTICS / DEPOSIT
+// =========================================================
+
+Table BOOKING_OUTBOX_EVENTS {
+  id uuid [pk]
+  deduplication_key varchar(220) [not null, unique, note: 'Identity of an integration event; different from request idempotency_key']
+  event_type varchar(140) [not null]
+  aggregate_type varchar(100) [not null]
+  aggregate_id uuid [not null]
+  payload jsonb [not null]
+  status event_status [not null, default: 'PENDING']
+  retry_count int [not null, default: 0]
+  last_error text
+  created_at timestamptz [not null, default: `now()`]
+  published_at timestamptz
+  processed_at timestamptz
+
+  indexes {
+    (status, created_at)
+    (aggregate_type, aggregate_id, created_at)
+    event_type
+  }
+
+  checks {
+    `retry_count >= 0` [name: 'chk_booking_outbox_retry_count']
+  }
+}
+
+Table WAREHOUSES {
+  id uuid [pk]
+  code varchar(60) [not null, unique]
+  name varchar(160) [not null]
+  address text [not null]
+  latitude decimal(10,7)
+  longitude decimal(10,7)
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `latitude IS NULL OR latitude BETWEEN -90 AND 90` [name: 'chk_warehouse_lat']
+    `longitude IS NULL OR longitude BETWEEN -180 AND 180` [name: 'chk_warehouse_lng']
+  }
+}
+
+Table RENTAL_CATEGORIES {
+  id uuid [pk]
+  name varchar(120) [not null]
+  slug varchar(140) [not null, unique]
+  description text
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table RENTAL_PRODUCTS {
+  id uuid [pk]
+  category_id uuid [not null, ref: > RENTAL_CATEGORIES.id]
+  sku varchar(80) [not null, unique]
+  name varchar(200) [not null]
+  description text
+  daily_price decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  replacement_value decimal(12,2) [not null]
+  deposit_policy_type deposit_policy_type [not null, default: 'FIXED']
+  deposit_value decimal(12,2) [not null]
+  usage_group varchar(80)
+  capacity int
+  max_per_participant int
+  max_per_group int
+  images jsonb
+  specifications jsonb
+  status rental_product_status [not null, default: 'ACTIVE']
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category_id, status)
+    name
+  }
+
+  checks {
+    `daily_price >= 0` [name: 'chk_rental_product_daily_price']
+    `replacement_value >= 0` [name: 'chk_rental_product_replacement_value']
+    `deposit_value >= 0` [name: 'chk_rental_product_deposit_value']
+    `capacity IS NULL OR capacity > 0` [name: 'chk_rental_product_capacity']
+    `max_per_participant IS NULL OR max_per_participant > 0` [name: 'chk_rental_product_max_participant']
+    `max_per_group IS NULL OR max_per_group > 0` [name: 'chk_rental_product_max_group']
+    `version > 0` [name: 'chk_rental_product_version']
+  }
+}
+
+Table EQUIPMENT_UNITS {
+  id uuid [pk]
+  product_id uuid [not null, ref: > RENTAL_PRODUCTS.id]
+  home_warehouse_id uuid [not null, ref: > WAREHOUSES.id]
+  current_warehouse_id uuid [ref: >? WAREHOUSES.id]
+  asset_code varchar(100) [not null, unique]
+  qr_code varchar(180) [not null, unique]
+  serial_number varchar(120)
+  status equipment_unit_status [not null, default: 'AVAILABLE']
+  condition equipment_condition [not null, default: 'GOOD']
+  acquired_at date
+  retired_at date
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (product_id, status, condition)
+    (current_warehouse_id, status)
+    status
+  }
+
+  checks {
+    `version > 0` [name: 'chk_equipment_unit_version']
+    `retired_at IS NULL OR acquired_at IS NULL OR retired_at >= acquired_at` [name: 'chk_equipment_unit_dates']
+  }
+
+  Note: 'Physical lifecycle only. Future reservations do not change AVAILABLE to RESERVED.'
+}
+
+Table RENTAL_POLICIES {
+  id uuid [pk]
+  policy_code varchar(80) [not null]
+  version_no int [not null]
+  quote_ttl_minutes int [not null]
+  cutoff_hours_before_trip int [not null]
+  prep_buffer_minutes int [not null, default: 0]
+  return_buffer_minutes int [not null, default: 0]
+  quantity_rules jsonb [not null]
+  cancellation_rules jsonb [not null]
+  damage_deduction_rules jsonb [not null]
+  effective_from timestamptz [not null]
+  effective_to timestamptz
+  is_active boolean [not null, default: true]
+  created_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (policy_code, version_no) [unique]
+    (is_active, effective_from)
+  }
+
+  checks {
+    `version_no > 0` [name: 'chk_rental_policy_version']
+    `quote_ttl_minutes > 0` [name: 'chk_rental_policy_quote_ttl']
+    `cutoff_hours_before_trip >= 0` [name: 'chk_rental_policy_cutoff']
+    `prep_buffer_minutes >= 0` [name: 'chk_rental_policy_prep_buffer']
+    `return_buffer_minutes >= 0` [name: 'chk_rental_policy_return_buffer']
+    `effective_to IS NULL OR effective_to > effective_from` [name: 'chk_rental_policy_effective_dates']
+  }
+
+  Note: 'Versioned rental business policy. Quotes/orders persist policy snapshot so later rule changes never rewrite historical financial decisions.'
+}
+
+Table RENTAL_PRODUCT_PRICE_HISTORY {
+  id uuid [pk]
+  product_id uuid [not null, ref: > RENTAL_PRODUCTS.id]
+  daily_price decimal(12,2) [not null]
+  replacement_value decimal(12,2) [not null]
+  deposit_policy_type deposit_policy_type [not null]
+  deposit_value decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  effective_from timestamptz [not null]
+  effective_to timestamptz
+  changed_by uuid [ref: >? USERS.id]
+  reason text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (product_id, effective_from)
+  }
+
+  checks {
+    `daily_price >= 0` [name: 'chk_rental_price_history_daily_price']
+    `replacement_value >= 0` [name: 'chk_rental_price_history_replacement']
+    `deposit_value >= 0` [name: 'chk_rental_price_history_deposit']
+    `effective_to IS NULL OR effective_to > effective_from` [name: 'chk_rental_price_history_effective_dates']
+  }
+
+  Note: 'Tracks admin price/deposit changes. RENTAL_QUOTE_LINES is not the price-history table; it snapshots the price actually offered to one user at one point in time.'
+}
+
+Table RENTAL_QUOTES {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  context_type rental_context_type [not null]
+  booking_id uuid [ref: >? BOOKINGS.id]
+  member_id uuid [ref: >? TRIP_MEMBERS.id]
+  context_version int [not null]
+  rental_policy_id uuid [not null, ref: > RENTAL_POLICIES.id]
+  rental_start_at timestamptz [not null]
+  rental_end_at timestamptz [not null]
+  rental_fee decimal(12,2) [not null]
+  total_deposit decimal(12,2) [not null]
+  total_amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  policy_snapshot jsonb [not null]
+  status rental_quote_status [not null, default: 'ACTIVE']
+  expires_at timestamptz [not null]
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status)
+    (trip_id, status)
+    rental_policy_id
+    expires_at
+  }
+
+  Note: 'Quote is a time-limited price offer. It freezes product price/deposit/policy through RENTAL_QUOTE_LINES; later catalog price changes do not alter this quote.'
+
+  checks {
+    `rental_end_at > rental_start_at` [name: 'chk_rental_quote_dates']
+    `rental_fee >= 0` [name: 'chk_rental_quote_fee']
+    `total_deposit >= 0` [name: 'chk_rental_quote_deposit']
+    `total_amount = rental_fee + total_deposit` [name: 'chk_rental_quote_total']
+    `context_version > 0` [name: 'chk_rental_quote_context_version']
+    `version > 0` [name: 'chk_rental_quote_version']
+    `((context_type = 'PUBLIC_BOOKING' AND booking_id IS NOT NULL AND member_id IS NULL) OR (context_type = 'PRIVATE_MEMBER' AND booking_id IS NULL AND member_id IS NOT NULL))` [name: 'chk_rental_quote_context']
+  }
+}
+
+Table RENTAL_QUOTE_LINES {
+  id uuid [pk]
+  quote_id uuid [not null, ref: > RENTAL_QUOTES.id]
+  product_id uuid [not null, ref: > RENTAL_PRODUCTS.id]
+  quantity int [not null]
+  daily_price_snapshot decimal(12,2) [not null]
+  deposit_snapshot decimal(12,2) [not null]
+  charged_days int [not null]
+  line_rental_fee decimal(12,2) [not null]
+  line_deposit decimal(12,2) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (quote_id, product_id) [unique]
+  }
+
+  checks {
+    `quantity > 0` [name: 'chk_rental_quote_line_quantity']
+    `daily_price_snapshot >= 0` [name: 'chk_rental_quote_line_price']
+    `deposit_snapshot >= 0` [name: 'chk_rental_quote_line_deposit']
+    `charged_days > 0` [name: 'chk_rental_quote_line_days']
+    `line_rental_fee >= 0` [name: 'chk_rental_quote_line_fee']
+    `line_deposit >= 0` [name: 'chk_rental_quote_line_deposit_total']
+  }
+}
+
+Table RENTAL_ORDERS {
+  id uuid [pk]
+  quote_id uuid [not null, unique, ref: - RENTAL_QUOTES.id]
+  rental_policy_id uuid [not null, ref: > RENTAL_POLICIES.id]
+  user_id uuid [not null, ref: > USERS.id]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  context_type rental_context_type [not null]
+  booking_id uuid [ref: >? BOOKINGS.id]
+  member_id uuid [ref: >? TRIP_MEMBERS.id]
+  recipient_participant_id uuid [ref: >? BOOKING_PARTICIPANTS.id]
+  recipient_member_id uuid [ref: >? TRIP_MEMBERS.id]
+  handover_mode rental_handover_mode [not null]
+  pickup_point_id uuid [ref: >? PICKUP_POINTS.id]
+  pickup_warehouse_id uuid [ref: >? WAREHOUSES.id]
+  context_version_snapshot int [not null]
+  rental_start_at timestamptz [not null]
+  rental_end_at timestamptz [not null]
+  occupied_start_at timestamptz [not null]
+  occupied_end_at timestamptz [not null]
+  status rental_order_status [not null, default: 'PENDING_PAYMENT']
+  exception_status rental_order_exception_status [not null, default: 'NONE']
+  financial_status rental_financial_status [not null, default: 'UNPAID']
+  rental_fee decimal(12,2) [not null]
+  total_deposit decimal(12,2) [not null]
+  total_amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  policy_snapshot jsonb [not null]
+  expires_at timestamptz [not null]
+  paid_at timestamptz
+  cancelled_at timestamptz
+  completed_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status)
+    (trip_id, status)
+    rental_policy_id
+    (booking_id, status)
+    (member_id, status)
+    expires_at
+  }
+
+  checks {
+    `rental_end_at > rental_start_at` [name: 'chk_rental_order_dates']
+    `occupied_end_at > occupied_start_at` [name: 'chk_rental_order_occupied_dates']
+    `occupied_start_at <= rental_start_at AND occupied_end_at >= rental_end_at` [name: 'chk_rental_order_occupied_contains_rental']
+    `rental_fee >= 0` [name: 'chk_rental_order_fee']
+    `total_deposit >= 0` [name: 'chk_rental_order_deposit']
+    `total_amount = rental_fee + total_deposit` [name: 'chk_rental_order_total']
+    `context_version_snapshot > 0` [name: 'chk_rental_order_context_version']
+    `version > 0` [name: 'chk_rental_order_version']
+    `((context_type = 'PUBLIC_BOOKING' AND booking_id IS NOT NULL AND member_id IS NULL AND recipient_participant_id IS NOT NULL AND recipient_member_id IS NULL) OR (context_type = 'PRIVATE_MEMBER' AND booking_id IS NULL AND member_id IS NOT NULL AND recipient_participant_id IS NULL AND recipient_member_id IS NOT NULL))` [name: 'chk_rental_order_context']
+    `((handover_mode = 'TRIP_PICKUP' AND pickup_point_id IS NOT NULL AND pickup_warehouse_id IS NULL) OR (handover_mode = 'WAREHOUSE_PICKUP' AND pickup_point_id IS NULL AND pickup_warehouse_id IS NOT NULL))` [name: 'chk_rental_order_handover_mode']
+  }
+
+  Note: 'Rental billing dates come from Trip. occupied_* includes operational preparation/return/cleaning buffers and is the window used for reservation overlap.'
+}
+
+Table RENTAL_ORDER_LINES {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  product_id uuid [not null, ref: > RENTAL_PRODUCTS.id]
+  quantity int [not null]
+  daily_price_snapshot decimal(12,2) [not null]
+  deposit_snapshot decimal(12,2) [not null]
+  replacement_value_snapshot decimal(12,2) [not null]
+  charged_days int [not null]
+  line_rental_fee decimal(12,2) [not null]
+  line_deposit decimal(12,2) [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, product_id) [unique]
+  }
+
+  checks {
+    `quantity > 0` [name: 'chk_rental_order_line_quantity']
+    `daily_price_snapshot >= 0` [name: 'chk_rental_order_line_price']
+    `deposit_snapshot >= 0` [name: 'chk_rental_order_line_deposit']
+    `replacement_value_snapshot >= 0` [name: 'chk_rental_order_line_replacement']
+    `charged_days > 0` [name: 'chk_rental_order_line_days']
+    `line_rental_fee >= 0` [name: 'chk_rental_order_line_fee']
+    `line_deposit >= 0` [name: 'chk_rental_order_line_deposit_total']
+  }
+}
+
+Table EQUIPMENT_RESERVATIONS {
+  id uuid [pk]
+  rental_order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  rental_order_line_id uuid [not null, ref: > RENTAL_ORDER_LINES.id]
+  unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  idempotency_key varchar(200) [not null, unique, note: 'Prevents duplicate reservation creation on retry']
+  occupied_start_at timestamptz [not null]
+  occupied_end_at timestamptz [not null]
+  status reservation_status [not null, default: 'HELD']
+  hold_expires_at timestamptz
+  reserved_at timestamptz [not null, default: `now()`]
+  confirmed_at timestamptz
+  released_at timestamptz
+  closed_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (rental_order_id, unit_id) [unique]
+    (unit_id, occupied_start_at, occupied_end_at)
+    (unit_id, status)
+    hold_expires_at
+  }
+
+  checks {
+    `occupied_end_at > occupied_start_at` [name: 'chk_reservation_occupied_dates']
+    `version > 0` [name: 'chk_reservation_version']
+    `status <> 'HELD' OR hold_expires_at IS NOT NULL` [name: 'chk_reservation_hold_expiry']
+  }
+
+  Note: 'Only HELD (while TTL valid) and CONFIRMED block overlap. PostgreSQL EXCLUDE USING gist enforces atomic no-overlap.'
+}
+
+Table PACKAGES {
+  id uuid [pk]
+  package_code varchar(120) [not null, unique]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  status package_status [not null, default: 'OPEN']
+  sealed_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, status)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_package_version']
+  }
+}
+
+Table PACKAGE_ITEMS {
+  id uuid [pk]
+  package_id uuid [not null, ref: > PACKAGES.id]
+  reservation_id uuid [not null, unique, ref: - EQUIPMENT_RESERVATIONS.id]
+  equipment_unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  added_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (package_id, equipment_unit_id) [unique]
+  }
+}
+
+Table WAREHOUSE_TASKS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  warehouse_id uuid [not null, ref: > WAREHOUSES.id]
+  package_id uuid [ref: >? PACKAGES.id]
+  staff_id uuid [ref: >? USERS.id]
+  status warehouse_task_status [not null, default: 'OPEN']
+  deadline timestamptz
+  started_at timestamptz
+  completed_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, status)
+    (warehouse_id, status, deadline)
+    (staff_id, status)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_warehouse_task_version']
+  }
+}
+
+Table LOGISTICS_TASKS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  package_id uuid [not null, ref: > PACKAGES.id]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  pickup_point_id uuid [not null, ref: > PICKUP_POINTS.id]
+  staff_id uuid [ref: >? USERS.id]
+  task_type logistics_task_type [not null]
+  status logistics_task_status [not null, default: 'SCHEDULED']
+  scheduled_at timestamptz
+  package_received_at timestamptz
+  recipient_verified_at timestamptz
+  handover_at timestamptz
+  returned_at timestamptz
+  warehouse_received_at timestamptz
+  no_show_reason text
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (staff_id, status, scheduled_at)
+    (trip_id, task_type, status)
+    (order_id, task_type)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_logistics_task_version']
+  }
+}
+
+Table HANDOVER_CONFIRMATIONS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  package_id uuid [not null, ref: > PACKAGES.id]
+  logistics_task_id uuid [not null, ref: > LOGISTICS_TASKS.id]
+  recipient_user_id uuid [not null, ref: > USERS.id]
+  idempotency_key varchar(200) [not null, unique, note: 'Same handover request returns the same result instead of applying twice']
+  token_hash varchar(255) [not null, unique]
+  package_version_snapshot int [not null]
+  expires_at timestamptz [not null]
+  confirmed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, created_at)
+    (logistics_task_id, created_at)
+  }
+
+  checks {
+    `package_version_snapshot > 0` [name: 'chk_handover_package_version']
+  }
+
+  Note: 'One-time recipient confirmation. Server validates expiry, package version and exact units before committing handover.'
+}
+
+Table CONDITION_SNAPSHOTS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  reservation_id uuid [ref: >? EQUIPMENT_RESERVATIONS.id]
+  unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  package_id uuid [ref: >? PACKAGES.id]
+  snapshot_stage snapshot_stage [not null]
+  condition equipment_condition [not null]
+  notes text
+  accessories jsonb
+  image_urls jsonb
+  taken_by uuid [not null, ref: > USERS.id]
+  user_confirmed_by uuid [ref: >? USERS.id]
+  user_confirmed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (unit_id, created_at)
+    (order_id, snapshot_stage)
+    (reservation_id, snapshot_stage)
+  }
+}
+
+Table RETURN_INSPECTIONS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  reservation_id uuid [not null, ref: > EQUIPMENT_RESERVATIONS.id]
+  unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  inspector_id uuid [not null, ref: > USERS.id]
+  stage inspection_stage [not null]
+  status inspection_status [not null]
+  damage_fee decimal(12,2) [not null, default: 0]
+  notes text
+  evidence_urls jsonb
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, stage)
+    (unit_id, created_at)
+    (reservation_id, stage) [unique]
+  }
+
+  checks {
+    `damage_fee >= 0` [name: 'chk_return_inspection_damage_fee']
+    `version > 0` [name: 'chk_return_inspection_version']
+  }
+}
+
+Table RENTAL_EXCEPTION_CASES {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  inspection_id uuid [ref: >? RETURN_INSPECTIONS.id]
+  case_type rental_exception_type [not null]
+  status rental_exception_case_status [not null, default: 'OPEN']
+  opened_by uuid [ref: >? USERS.id]
+  assigned_to uuid [ref: >? USERS.id]
+  reason text [not null]
+  evidence_urls jsonb
+  resolution text
+  approval_ref varchar(180)
+  due_at timestamptz
+  resolved_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, status)
+    (case_type, status)
+    (assigned_to, status)
+  }
+
+  checks {
+    `version > 0` [name: 'chk_rental_exception_version']
+  }
+}
+
+Table RENTAL_ASSESSMENT_REVIEWS {
+  id uuid [pk]
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  inspection_id uuid [not null, ref: > RETURN_INSPECTIONS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  exception_case_id uuid [not null, ref: > RENTAL_EXCEPTION_CASES.id]
+  reason text [not null]
+  evidence_urls jsonb
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (inspection_id, user_id) [unique]
+    (order_id, created_at)
+  }
+}
+
+Table DEPOSIT_SETTLEMENTS {
+  id uuid [pk]
+  order_id uuid [not null, unique, ref: - RENTAL_ORDERS.id]
+  rental_policy_id uuid [not null, ref: > RENTAL_POLICIES.id]
+  idempotency_key varchar(200) [not null, unique, note: 'Prevents duplicate settlement decision/refund initiation']
+  total_deposit decimal(12,2) [not null]
+  total_deduction decimal(12,2) [not null, default: 0]
+  refund_amount decimal(12,2) [not null]
+  status deposit_settlement_status [not null, default: 'HELD']
+  outcome deposit_settlement_outcome
+  reason text
+  policy_snapshot jsonb [not null]
+  settled_by uuid [ref: >? USERS.id]
+  settled_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `total_deposit >= 0` [name: 'chk_deposit_total']
+    `total_deduction >= 0 AND total_deduction <= total_deposit` [name: 'chk_deposit_deduction']
+    `refund_amount >= 0 AND refund_amount = total_deposit - total_deduction` [name: 'chk_deposit_refund']
+    `version > 0` [name: 'chk_deposit_settlement_version']
+    `status <> 'SETTLED' OR outcome IS NOT NULL` [name: 'chk_deposit_settled_outcome']
+  }
+}
+
+Table DEPOSIT_SETTLEMENT_ITEMS {
+  id uuid [pk]
+  settlement_id uuid [not null, ref: > DEPOSIT_SETTLEMENTS.id]
+  unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  inspection_id uuid [ref: >? RETURN_INSPECTIONS.id]
+  deduction_amount decimal(12,2) [not null, default: 0]
+  reason text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (settlement_id, unit_id) [unique]
+  }
+
+  checks {
+    `deduction_amount >= 0` [name: 'chk_deposit_item_deduction']
+  }
+}
+
+Table MAINTENANCE_RECORDS {
+  id uuid [pk]
+  unit_id uuid [not null, ref: > EQUIPMENT_UNITS.id]
+  warehouse_id uuid [not null, ref: > WAREHOUSES.id]
+  staff_id uuid [ref: >? USERS.id]
+  reason text [not null]
+  cost decimal(12,2) [not null, default: 0]
+  status maintenance_status [not null, default: 'OPEN']
+  start_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+  notes text
+  before_evidence_urls jsonb
+  after_evidence_urls jsonb
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (unit_id, status)
+    (staff_id, status)
+  }
+
+  checks {
+    `cost >= 0` [name: 'chk_maintenance_cost']
+    `completed_at IS NULL OR completed_at >= start_at` [name: 'chk_maintenance_dates']
+    `version > 0` [name: 'chk_maintenance_version']
+  }
+}
+
+Table CUSTODY_EVENTS {
+  id uuid [pk]
+  idempotency_key varchar(200) [not null, unique, note: 'One transfer command creates at most one custody transition']
+  order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  package_id uuid [ref: >? PACKAGES.id]
+  unit_id uuid [ref: >? EQUIPMENT_UNITS.id]
+  logistics_task_id uuid [ref: >? LOGISTICS_TASKS.id]
+  event_type custody_event_type [not null]
+
+  from_actor_type custody_actor_type [not null]
+  from_user_id uuid [ref: >? USERS.id]
+  from_warehouse_id uuid [ref: >? WAREHOUSES.id]
+  to_actor_type custody_actor_type [not null]
+  to_user_id uuid [ref: >? USERS.id]
+  to_warehouse_id uuid [ref: >? WAREHOUSES.id]
+
+  order_status_before rental_order_status
+  order_status_after rental_order_status
+  package_status_before package_status
+  package_status_after package_status
+  unit_status_before equipment_unit_status
+  unit_status_after equipment_unit_status
+  logistics_status_before logistics_task_status
+  logistics_status_after logistics_task_status
+
+  performed_by uuid [not null, ref: > USERS.id]
+  evidence_urls jsonb
+  note text
+  occurred_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, occurred_at)
+    (package_id, occurred_at)
+    (unit_id, occurred_at)
+    (logistics_task_id, occurred_at)
+  }
+
+  Note: 'Append-only custody audit: Warehouse -> Logistics -> User -> Logistics -> Warehouse. The service MUST update current aggregate status and insert this event in the same DB transaction; the event is audit/history, not a delayed trigger.'
+}
+
+// =========================================================
+// DOMAIN C - GPS / CHECKPOINT EXECUTION / WEATHER
+// =========================================================
+
+Table RENTAL_OUTBOX_EVENTS {
+  id uuid [pk]
+  deduplication_key varchar(220) [not null, unique]
+  event_type varchar(140) [not null]
+  aggregate_type varchar(100) [not null]
+  aggregate_id uuid [not null]
+  payload jsonb [not null]
+  status event_status [not null, default: 'PENDING']
+  retry_count int [not null, default: 0]
+  last_error text
+  created_at timestamptz [not null, default: `now()`]
+  published_at timestamptz
+  processed_at timestamptz
+
+  indexes {
+    (status, created_at)
+    (aggregate_type, aggregate_id, created_at)
+    event_type
+  }
+
+  checks {
+    `retry_count >= 0` [name: 'chk_rental_outbox_retry_count']
+  }
+}
+
+Table GPS_POLICIES {
+  id uuid [pk]
+  policy_code varchar(80) [not null]
+  version_no int [not null]
+  max_accepted_accuracy_m decimal(8,2)
+  sync_interval_seconds int [not null]
+  deviation_threshold_m decimal(10,2) [not null]
+  deviation_consecutive_samples int [not null]
+  default_checkpoint_radius_m int [not null]
+  raw_location_retention_days int [not null]
+  effective_from timestamptz [not null]
+  effective_to timestamptz
+  is_active boolean [not null, default: true]
+  created_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (policy_code, version_no) [unique]
+    (is_active, effective_from)
+  }
+
+  checks {
+    `version_no > 0` [name: 'chk_gps_policy_version']
+    `max_accepted_accuracy_m IS NULL OR max_accepted_accuracy_m > 0` [name: 'chk_gps_policy_accuracy']
+    `sync_interval_seconds > 0` [name: 'chk_gps_policy_sync']
+    `deviation_threshold_m > 0` [name: 'chk_gps_policy_deviation']
+    `deviation_consecutive_samples > 0` [name: 'chk_gps_policy_consecutive']
+    `default_checkpoint_radius_m > 0` [name: 'chk_gps_policy_checkpoint_radius']
+    `raw_location_retention_days > 0` [name: 'chk_gps_policy_retention']
+    `effective_to IS NULL OR effective_to > effective_from` [name: 'chk_gps_policy_effective_dates']
+  }
+
+  Note: 'Versioned GPS runtime policy. A GPS session references the policy version used during that session.'
+}
+
+Table GPS_SESSIONS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  gps_policy_id uuid [not null, ref: > GPS_POLICIES.id]
+  status gps_session_status [not null, default: 'ACTIVE']
+  started_at timestamptz [not null]
+  ended_at timestamptz
+  device_id varchar(180)
+  actual_path_geojson jsonb
+  total_distance_meters decimal(12,2)
+  sample_count int [not null, default: 0]
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, trip_id)
+    (trip_id, status)
+    gps_policy_id
+  }
+
+  checks {
+    `ended_at IS NULL OR ended_at >= started_at` [name: 'chk_gps_session_dates']
+    `total_distance_meters IS NULL OR total_distance_meters >= 0` [name: 'chk_gps_session_distance']
+    `sample_count >= 0` [name: 'chk_gps_session_sample_count']
+    `version > 0` [name: 'chk_gps_session_version']
+  }
+
+  Note: 'PostgreSQL partial unique index limits a user to at most one ACTIVE/PAUSED session per Trip.'
+}
+
+Table GPS_LOCATIONS {
+  id bigint [pk, increment]
+  session_id uuid [not null, ref: > GPS_SESSIONS.id]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  accuracy_m decimal(7,2)
+  speed_mps decimal(7,2)
+  heading_deg decimal(6,2)
+  altitude_m decimal(8,2)
+  recorded_at timestamptz [not null]
+  received_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (session_id, recorded_at)
+    recorded_at
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_gps_location_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_gps_location_lng']
+    `accuracy_m IS NULL OR accuracy_m >= 0` [name: 'chk_gps_location_accuracy']
+    `speed_mps IS NULL OR speed_mps >= 0` [name: 'chk_gps_location_speed']
+    `heading_deg IS NULL OR heading_deg BETWEEN 0 AND 360` [name: 'chk_gps_location_heading']
+  }
+
+  Note: 'CHECK constraints reject physically invalid samples: latitude [-90,90], longitude [-180,180], non-negative accuracy/speed, heading [0,360]. Raw data retention follows GPS_POLICIES; durable summary remains in GPS_SESSIONS/TRIP_ACTUAL_ROUTES.'
+}
+
+Table ROUTE_DEVIATION_EVENTS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  session_id uuid [not null, ref: > GPS_SESSIONS.id]
+  status deviation_status [not null, default: 'DEVIATED']
+  start_at timestamptz [not null]
+  recovered_at timestamptz
+  max_deviation_distance_m decimal(10,2)
+  last_latitude decimal(10,7)
+  last_longitude decimal(10,7)
+  threshold_m_snapshot decimal(10,2)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, status, start_at)
+    (user_id, start_at)
+    (session_id, start_at)
+  }
+
+  checks {
+    `recovered_at IS NULL OR recovered_at >= start_at` [name: 'chk_route_deviation_dates']
+    `max_deviation_distance_m IS NULL OR max_deviation_distance_m >= 0` [name: 'chk_route_deviation_distance']
+    `last_latitude IS NULL OR last_latitude BETWEEN -90 AND 90` [name: 'chk_route_deviation_lat']
+    `last_longitude IS NULL OR last_longitude BETWEEN -180 AND 180` [name: 'chk_route_deviation_lng']
+    `threshold_m_snapshot IS NULL OR threshold_m_snapshot > 0` [name: 'chk_route_deviation_threshold']
+  }
+}
+
+Table CHECKPOINT_EVENTS {
+  id uuid [pk]
+  idempotency_key varchar(220) [not null, unique, note: 'Deduplicates checkpoint-arrival retries from mobile/GPS service']
+  trip_id uuid [not null, ref: > TRIPS.id]
+  trip_checkpoint_id uuid [not null, ref: > TRIP_CHECKPOINTS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  session_id uuid [ref: >? GPS_SESSIONS.id]
+  role_at_event user_role [not null]
+  arrival_latitude decimal(10,7)
+  arrival_longitude decimal(10,7)
+  distance_to_checkpoint_m decimal(10,2)
+  arrival_at timestamptz [not null]
+  mission_status mission_status [not null, default: 'LOCKED']
+  mission_answer text
+  evidence_urls jsonb
+  completed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, trip_checkpoint_id, user_id)
+    (user_id, arrival_at)
+  }
+
+  checks {
+    `arrival_latitude IS NULL OR arrival_latitude BETWEEN -90 AND 90` [name: 'chk_checkpoint_event_lat']
+    `arrival_longitude IS NULL OR arrival_longitude BETWEEN -180 AND 180` [name: 'chk_checkpoint_event_lng']
+    `distance_to_checkpoint_m IS NULL OR distance_to_checkpoint_m >= 0` [name: 'chk_checkpoint_event_distance']
+    `completed_at IS NULL OR completed_at >= arrival_at` [name: 'chk_checkpoint_event_completed_at']
+  }
+}
+
+Table TRIP_ACTUAL_ROUTES {
+  id uuid [pk]
+  trip_id uuid [not null, unique, ref: - TRIPS.id]
+  source_session_id uuid [ref: >? GPS_SESSIONS.id]
+  route_geojson jsonb [not null]
+  total_distance_meters decimal(12,2)
+  generated_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `total_distance_meters IS NULL OR total_distance_meters >= 0` [name: 'chk_actual_route_distance']
+  }
+}
+
+Table WEATHER_SNAPSHOTS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  trip_checkpoint_id uuid [ref: >? TRIP_CHECKPOINTS.id]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  provider varchar(100) [not null]
+  temperature_c decimal(5,2)
+  humidity_percent decimal(5,2)
+  wind_speed_mps decimal(7,2)
+  rain_probability_percent decimal(5,2)
+  weather_condition varchar(120)
+  risk_level weather_risk_level [not null, default: 'UNKNOWN']
+  risk_summary text
+  observed_at timestamptz [not null]
+  expires_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, observed_at)
+    (trip_checkpoint_id, observed_at)
+  }
+
+  checks {
+    `latitude BETWEEN -90 AND 90` [name: 'chk_weather_lat']
+    `longitude BETWEEN -180 AND 180` [name: 'chk_weather_lng']
+    `humidity_percent IS NULL OR humidity_percent BETWEEN 0 AND 100` [name: 'chk_weather_humidity']
+    `wind_speed_mps IS NULL OR wind_speed_mps >= 0` [name: 'chk_weather_wind']
+    `rain_probability_percent IS NULL OR rain_probability_percent BETWEEN 0 AND 100` [name: 'chk_weather_rain_probability']
+    `expires_at IS NULL OR expires_at >= observed_at` [name: 'chk_weather_expiry']
+  }
+}
+
+// =========================================================
+// SHARED - INVOICE / PAYMENT / REFUND
+// =========================================================
+
+Table GPS_OUTBOX_EVENTS {
+  id uuid [pk]
+  deduplication_key varchar(220) [not null, unique]
+  event_type varchar(140) [not null]
+  aggregate_type varchar(100) [not null]
+  aggregate_id uuid [not null]
+  payload jsonb [not null]
+  status event_status [not null, default: 'PENDING']
+  retry_count int [not null, default: 0]
+  last_error text
+  created_at timestamptz [not null, default: `now()`]
+  published_at timestamptz
+  processed_at timestamptz
+
+  indexes {
+    (status, created_at)
+    (aggregate_type, aggregate_id, created_at)
+    event_type
+  }
+
+  checks {
+    `retry_count >= 0` [name: 'chk_gps_outbox_retry_count']
+  }
+
+  Note: 'Outbox tables are split by team/domain ownership for readability. deduplication_key belongs to event publication; idempotency_key belongs to a business command/operation.'
+}
+
+Table INVOICES {
+  id uuid [pk]
+  invoice_no varchar(80) [not null, unique]
+  user_id uuid [not null, ref: > USERS.id]
+  invoice_type invoice_type [not null]
+  booking_id uuid [ref: >? BOOKINGS.id]
+  rental_order_id uuid [ref: >? RENTAL_ORDERS.id]
+  trail_access_id uuid [ref: >? TRAIL_ACCESSES.id]
+  subtotal_amount decimal(12,2) [not null]
+  discount_amount decimal(12,2) [not null, default: 0]
+  total_amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  status invoice_status [not null, default: 'DRAFT']
+  expires_at timestamptz
+  paid_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status)
+    (invoice_type, status)
+    booking_id
+    rental_order_id
+    trail_access_id
+  }
+
+  checks {
+    `subtotal_amount >= 0` [name: 'chk_invoice_subtotal']
+    `discount_amount >= 0` [name: 'chk_invoice_discount']
+    `total_amount >= 0 AND total_amount = subtotal_amount - discount_amount` [name: 'chk_invoice_total']
+    `version > 0` [name: 'chk_invoice_version']
+    `((invoice_type = 'BOOKING' AND booking_id IS NOT NULL AND rental_order_id IS NULL AND trail_access_id IS NULL) OR (invoice_type = 'RENTAL' AND booking_id IS NULL AND rental_order_id IS NOT NULL AND trail_access_id IS NULL) OR (invoice_type = 'TRAIL_ACCESS' AND booking_id IS NULL AND rental_order_id IS NULL AND trail_access_id IS NOT NULL))` [name: 'chk_invoice_business_source']
+  }
+}
+
+Table INVOICE_LINES {
+  id uuid [pk]
+  invoice_id uuid [not null, ref: > INVOICES.id]
+  line_code varchar(80) [not null]
+  description varchar(255) [not null]
+  quantity decimal(12,2) [not null, default: 1]
+  unit_amount decimal(12,2) [not null]
+  line_amount decimal(12,2) [not null]
+  reference_type varchar(80)
+  reference_id uuid
+  metadata jsonb
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (invoice_id, line_code)
+    (reference_type, reference_id)
+  }
+
+  checks {
+    `quantity > 0` [name: 'chk_invoice_line_quantity']
+    `unit_amount >= 0` [name: 'chk_invoice_line_unit_amount']
+    `line_amount >= 0` [name: 'chk_invoice_line_amount']
+  }
+}
+
+Table PAYMENTS {
+  id uuid [pk]
+  invoice_id uuid [not null, ref: > INVOICES.id]
+  amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  transaction_ref varchar(180)
+  payment_gateway varchar(80) [not null]
+  status payment_status [not null, default: 'PENDING']
+  idempotency_key varchar(200) [not null, unique]
+  gateway_payload jsonb
+  paid_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (invoice_id, status)
+    transaction_ref
+  }
+
+  checks {
+    `amount > 0` [name: 'chk_payment_amount']
+    `version > 0` [name: 'chk_payment_version']
+  }
+}
+
+Table PAYMENT_WEBHOOK_EVENTS {
+  id uuid [pk]
+  payment_gateway varchar(80) [not null]
+  provider_event_id varchar(220) [not null]
+  payment_id uuid [ref: >? PAYMENTS.id]
+  payload jsonb [not null]
+  processed boolean [not null, default: false]
+  processed_at timestamptz
+  error_message text
+  received_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (payment_gateway, provider_event_id) [unique]
+    (processed, received_at)
+  }
+}
+
+Table REFUNDS {
+  id uuid [pk]
+  payment_id uuid [not null, ref: > PAYMENTS.id]
+  refund_type refund_type [not null]
+  amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'VND']
+  reason text
+  status refund_status [not null, default: 'PENDING']
+  idempotency_key varchar(200) [not null, unique]
+  refund_transaction_ref varchar(180)
+  deposit_settlement_id uuid [ref: >? DEPOSIT_SETTLEMENTS.id]
+  booking_cancellation_id uuid [ref: >? BOOKING_CANCELLATIONS.id]
+  rental_order_id uuid [ref: >? RENTAL_ORDERS.id]
+  trail_access_id uuid [ref: >? TRAIL_ACCESSES.id]
+  provider_payload jsonb
+  refunded_at timestamptz
+  version int [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (payment_id, status)
+    refund_transaction_ref
+    deposit_settlement_id
+    booking_cancellation_id
+    rental_order_id
+  }
+
+  checks {
+    `amount > 0` [name: 'chk_refund_amount']
+    `version > 0` [name: 'chk_refund_version']
+  }
+}
+
+// =========================================================
+// GAMIFICATION / REVIEWS
+// =========================================================
+
+Table RANKS {
+  id uuid [pk]
+  code varchar(50) [not null, unique]
+  name varchar(120) [not null]
+  min_points int [not null]
+  max_points int
+  description text
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `min_points >= 0` [name: 'chk_rank_min_points']
+    `max_points IS NULL OR max_points >= min_points` [name: 'chk_rank_max_points']
+  }
+}
+
+Table USER_RANKS {
+  user_id uuid [pk, ref: - USERS.id]
+  rank_id uuid [not null, ref: > RANKS.id]
+  current_points int [not null, default: 0]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `current_points >= 0` [name: 'chk_user_rank_points']
+  }
+}
+
+Table POINT_TRANSACTIONS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  points int [not null]
+  transaction_type varchar(80) [not null]
+  reference_type varchar(80)
+  reference_id uuid
+  description text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+    (reference_type, reference_id)
+  }
+}
+
+Table BADGES {
+  id uuid [pk]
+  code varchar(80) [not null, unique]
+  name varchar(150) [not null]
+  icon_url text
+  required_condition jsonb
+  status record_status [not null, default: 'ACTIVE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table USER_BADGES {
+  user_id uuid [not null, ref: > USERS.id]
+  badge_id uuid [not null, ref: > BADGES.id]
+  trip_id uuid [ref: >? TRIPS.id]
+  unlocked_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, badge_id) [pk]
+    (user_id, unlocked_at)
+  }
+}
+
+Table TRIP_REVIEWS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  booking_id uuid [ref: >? BOOKINGS.id]
+  member_id uuid [ref: >? TRIP_MEMBERS.id]
+  rating int [not null]
+  comment text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, user_id) [unique]
+    (trip_id, rating)
+  }
+
+  checks {
+    `rating BETWEEN 1 AND 5` [name: 'chk_trip_review_rating']
+    `((booking_id IS NOT NULL AND member_id IS NULL) OR (booking_id IS NULL AND member_id IS NOT NULL))` [name: 'chk_trip_review_context']
+  }
+}
+
+Table LEADER_REVIEWS {
+  id uuid [pk]
+  trip_id uuid [not null, ref: > TRIPS.id]
+  leader_id uuid [not null, ref: > USERS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  rating int [not null]
+  comment text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trip_id, leader_id, user_id) [unique]
+    (leader_id, rating)
+  }
+
+  checks {
+    `rating BETWEEN 1 AND 5` [name: 'chk_leader_review_rating']
+  }
+}
+
+Table RENTAL_REVIEWS {
+  id uuid [pk]
+  rental_order_id uuid [not null, ref: > RENTAL_ORDERS.id]
+  user_id uuid [not null, ref: > USERS.id]
+  product_id uuid [not null, ref: > RENTAL_PRODUCTS.id]
+  rating int [not null]
+  comment text
+  verified_usage boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (rental_order_id, product_id, user_id) [unique]
+    (product_id, rating)
+  }
+
+  checks {
+    `rating BETWEEN 1 AND 5` [name: 'chk_rental_review_rating']
+  }
+}
+
+// =========================================================
+// SHARED - CONFIG / NOTIFICATION / AUDIT
+// =========================================================
+
+Table SYSTEM_CONFIGS {
+  id uuid [pk]
+  config_key varchar(160) [not null, unique]
+  group_name varchar(100) [not null]
+  value jsonb [not null]
+  value_type varchar(30) [not null]
+  description text
+  is_active boolean [not null, default: true]
+  updated_by uuid [ref: >? USERS.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (group_name, is_active)
+  }
+
+  Note: 'Technical/non-business configuration only. Business rules belong to BOOKING_POLICIES, RENTAL_POLICIES, GPS_POLICIES.'
+}
+
+Table NOTIFICATIONS {
+  id uuid [pk]
+  user_id uuid [not null, ref: > USERS.id]
+  title varchar(220) [not null]
+  content text [not null]
+  notification_type varchar(100) [not null]
+  reference_type varchar(80)
+  reference_id uuid
+  status notification_status [not null, default: 'UNREAD']
+  read_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, status, created_at)
+    (reference_type, reference_id)
+  }
+}
+
+Table AUDIT_LOGS {
+  id bigint [pk, increment]
+  user_id uuid [ref: >? USERS.id]
+  action varchar(120) [not null]
+  entity_type varchar(100) [not null]
+  entity_id uuid
+  old_values jsonb
+  new_values jsonb
+  request_id varchar(120)
+  ip_address varchar(64)
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (entity_type, entity_id, created_at)
+    (user_id, created_at)
+    request_id
+  }
+}
+
+// =========================================================
+// REQUIRED POSTGRESQL-ONLY MIGRATION RULES
+// =========================================================
+// DBML cannot fully encode the following. They are part of this locked design
+// and MUST be implemented in Prisma/PostgreSQL migrations:
+//
+// 1) Active booking uniqueness
+//    Partial UNIQUE on BOOKINGS(trip_id, user_id) for active states such as
+//    PENDING_PAYMENT, CONFIRMED, PARTIAL_CHECKIN, CHECKED_IN.
+//
+// 2) Booking capacity concurrency
+//    Capacity hold/confirm must execute transactionally using row lock or
+//    optimistic version on TRIPS/BOOKINGS. Never perform SELECT-then-INSERT
+//    without concurrency protection.
+//
+// 3) Rental reservation no-overlap
+//    CREATE EXTENSION IF NOT EXISTS btree_gist;
+//    EXCLUDE USING gist (
+//      unit_id WITH =,
+//      tstzrange(occupied_start_at, occupied_end_at, '[)') WITH &&
+//    ) WHERE (status IN ('HELD','CONFIRMED'));
+//    HELD must additionally be considered blocking only while hold_expires_at
+//    has not expired; timeout worker transitions expired holds to EXPIRED.
+//
+// 4) One active GPS session per user/trip
+//    Partial UNIQUE on GPS_SESSIONS(user_id, trip_id)
+//    WHERE status IN ('ACTIVE','PAUSED').
+//
+// 5) Leader overlapping Trip protection
+//    For non-cancelled Public Trips, prevent the same leader from being assigned
+//    to overlapping [start_at,end_at) windows (EXCLUDE or transactional check).
+//
+// 6) Active trail plan switch integrity
+//    TRIP_ACTIVE_TRAIL_PLANS composite FK already ensures active plan belongs to
+//    the same Trip. TRIP_TRAIL_SWITCHES.from_plan_id/to_plan_id must also be
+//    service-validated as plans of trip_id in one transaction.
+//
+// 7) Public/Private role/difficulty rules
+//    - PUBLIC creation requires an approved LEADER profile.
+//    - EXPERT may lead HARD/EXTREME according to policy.
+//    - COMMUNITY permissions are policy-controlled (MVP Easy/Medium baseline).
+//    - PRIVATE creator is the HOST and uses verified SYSTEM_TRAILS only;
+//      difficulty permissions are validated by service/config.
+//
+// 8) Trip transport integrity
+//    - TRIP_TRANSPORTS is the only Trip transport table.
+//    - A Trip may have multiple rows/vehicles and multiple pickup points.
+//    - Booking/TripMember pickup_point_id is validated against configured TRIP_TRANSPORTS for that Trip.
+//    - Vehicle price/cost is intentionally out of scope for this schema.
+//
+// 9) Trip/checkpoint completion
+//    COMPLETED only when all enabled required TRIP_CHECKPOINTS satisfy the
+//    completion rule or have an authorized override with evidence/audit.
+//
+// 10) Rental aggregate validation
+//    - quote/order context foreign rows must belong to the same user/trip.
+//    - recipient must belong to the selected Booking/Private Trip.
+//    - pickup_point_id must belong to trip_id.
+//    - reservation line/unit product must match RENTAL_ORDER_LINES.product_id.
+//    - PACKAGE_ITEMS equipment_unit_id must equal its reservation.unit_id.
+//
+// 11) Equipment lifecycle/custody
+//    DAMAGED/LOST/MAINTENANCE/RETIRED units cannot be allocated to new holds.
+//    A unit returns to AVAILABLE only after warehouse receipt, FINAL inspection,
+//    and CLEANING/readiness completion where required.
+//
+// 12) Idempotency - mandatory protected operations
+//    - Booking confirm: BOOKINGS.confirmation_idempotency_key + state/version guard.
+//    - Reservation: EQUIPMENT_RESERVATIONS.idempotency_key + no-overlap exclusion.
+//    - Payment: PAYMENTS.idempotency_key + PAYMENT_WEBHOOK_EVENTS(provider,event_id).
+//    - Handover/custody: HANDOVER_CONFIRMATIONS.idempotency_key and CUSTODY_EVENTS.idempotency_key.
+//    - Checkpoint arrival: CHECKPOINT_EVENTS.idempotency_key.
+//    - Refund: REFUNDS.idempotency_key.
+//    - Deposit settlement: DEPOSIT_SETTLEMENTS.idempotency_key + UNIQUE(order_id).
+//    Outbox deduplication_key is separate from request/business-operation idempotency.
+//    Late payment success for EXPIRED/CANCELLED rental orders creates reconciliation/refund
+//    and must not revive/re-reserve inventory.
+//
+// 13) Deposit allocation
+//    Sum(DEPOSIT_SETTLEMENT_ITEMS.deduction_amount) must equal the settlement's
+//    total_deduction before SETTLED. Refund is considered completed only from
+//    REFUNDS.status = SUCCEEDED, not merely from DEPOSIT_SETTLEMENTS decision.
+//
+// 14) Review eligibility
+//    Trip/Leader/Rental reviews are accepted only from eligible completed
+//    participants/users and verified rental usage, enforced at service layer.
+//
+// 15) GPS retention/partitioning
+//    GPS_LOCATIONS should use retention/partitioning appropriate to expected
+//    volume; durable summary remains in GPS_SESSIONS/TRIP_ACTUAL_ROUTES.
