@@ -5,6 +5,7 @@ import { AccessTokenGuard } from './guards/access-token.guard'
 import { ApiKeyGuard } from './guards/api-key.guard'
 import { APP_GUARD } from '@nestjs/core'
 import { AuthenticationGuard } from './guards/authentication.guard'
+import { RolesGuard } from './guards/roles.guard'
 
 @Global()
 @Module({
@@ -17,8 +18,11 @@ import { AuthenticationGuard } from './guards/authentication.guard'
       provide: APP_GUARD,
       useClass: AuthenticationGuard,
     },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
   ],
   exports: [PrismaService, SupabaseService],
 })
 export class SharedModule {}
-

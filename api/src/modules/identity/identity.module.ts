@@ -10,6 +10,9 @@ import { I_USER_REPOSITORY } from './application/ports/user.port'
 import { PrismaUserAdapter } from './infrastructure/adapters/prisma-user.adapter'
 import { I_IDENTITY_PROVIDER } from './application/ports/identity.port'
 import { SupabaseIdentityAdapter } from './infrastructure/adapters/supabase-identity.adapter'
+import { AuthForgotPasswordUseCase } from './application/use-cases/auth-forgot-password.use-case'
+import { AuthVerifyOtpUseCase } from './application/use-cases/auth-verify-otp.use-case'
+import { AuthResendOtpUseCase } from './application/use-cases/auth-resend-otp.use-case'
 
 @Module({
   controllers: [AuthController],
@@ -20,6 +23,9 @@ import { SupabaseIdentityAdapter } from './infrastructure/adapters/supabase-iden
     AuthRefreshUseCase,
     AuthLogoutUseCase,
     GetProfileUseCase,
+    AuthForgotPasswordUseCase,
+    AuthVerifyOtpUseCase,
+    AuthResendOtpUseCase,
     {
       provide: I_USER_REPOSITORY,
       useClass: PrismaUserAdapter,

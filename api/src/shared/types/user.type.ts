@@ -6,7 +6,6 @@ export interface ActiveUserData {
   email: string
   fullName?: string
   phone?: string | null
-  cccd?: string | null
   role: UserRole | string
   status: UserStatus | string
   avatar?: string | null
