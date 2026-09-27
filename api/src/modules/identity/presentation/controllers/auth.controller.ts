@@ -60,8 +60,8 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Tạo hoặc đồng bộ profile thành công' })
   @ApiResponse({ status: 400, description: 'Dữ liệu đầu vào không hợp lệ (Zod Validation)' })
   @Post('bootstrap')
-  async bootstrap(@Body(new ZodValidationPipe(BootstrapSchema)) body: BootstrapDto) {
-    return await this.authBootstrapUseCase.execute(body)
+  async bootstrap(@Body(new ZodValidationPipe(BootstrapSchema)) body: BootstrapDto, @ActiveUser() actor: ActiveUserData) {
+    return await this.authBootstrapUseCase.execute({ ...body, authUserId: actor.authUserId, email: actor.email, role: UserRole.USER })
   }
 
   @Auth([AuthType.Bearer])

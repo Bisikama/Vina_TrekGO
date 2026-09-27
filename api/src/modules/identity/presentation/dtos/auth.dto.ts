@@ -14,7 +14,7 @@ export const RegisterSchema = z.object({
     .optional()
     .nullable(),
   avatar: z.string().trim().url('Đường dẫn ảnh đại diện không hợp lệ').optional().nullable(),
-  role: z.nativeEnum(UserRole).optional().default(UserRole.USER),
+  role: z.literal(UserRole.USER).optional().default(UserRole.USER),
 })
 
 export class RegisterDto {
@@ -109,7 +109,7 @@ export const BootstrapSchema = z.object({
   fullName: z.string().trim().optional(),
   phone: z.string().trim().optional().nullable(),
   avatar: z.string().trim().optional().nullable(),
-  role: z.nativeEnum(UserRole).optional().default(UserRole.USER),
+  role: z.literal(UserRole.USER).optional().default(UserRole.USER),
 })
 
 export class BootstrapDto {
