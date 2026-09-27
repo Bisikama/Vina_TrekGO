@@ -15,24 +15,24 @@ export const UpcomingTripHero = () => {
         {/* Left Side: Image */}
         <div className="w-full md:w-5/12 relative h-64 md:h-auto">
           <Image 
-            src="https://images.unsplash.com/photo-1544885834-8b63a2327de8?q=80&w=1000&auto=format&fit=crop" 
-            alt="Tà Xùa View" 
+            src="/hero-trekking.jpg" 
+            alt="Núi Bà Đen View" 
             fill
             className="object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
           
           <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
-            <span className="bg-white/90 backdrop-blur text-gray-900 px-3 py-1 rounded-full text-[10px] font-bold">Cung đường mã số: TX-2865</span>
-            <span className="bg-amber-400 text-black px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">3N2Đ • Cắm trại</span>
+            <span className="bg-white/90 backdrop-blur text-gray-900 px-3 py-1 rounded-full text-[10px] font-bold">Cung đường mã số: BD-0986</span>
+            <span className="bg-emerald-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">1 Ngày • Leo dốc</span>
           </div>
 
           <div className="absolute bottom-4 left-4 text-white">
             <div className="flex items-center gap-1.5 text-[11px] font-medium mb-1 opacity-90">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-              Tỷ lệ săn mây thành công dự báo 85%
+              Thời tiết lý tưởng, nắng ráo quang mây
             </div>
-            <h3 className="text-2xl font-black tracking-tight">Đỉnh Gió Tà Xùa • 2.865m</h3>
+            <h3 className="text-2xl font-black tracking-tight">Núi Bà Đen • 986m</h3>
           </div>
         </div>
 
@@ -61,10 +61,10 @@ export const UpcomingTripHero = () => {
 
           <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-2 font-medium">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-            Khởi hành: Thứ Sáu, 29/11/2024 • Kết thúc: Chủ Nhật, 01/12/2024
+            Khởi hành: Thứ Bảy hàng tuần • Kết thúc: Trong ngày
           </div>
           <h3 className="text-[22px] font-extrabold text-gray-900 leading-tight mb-6 tracking-tight">
-            Tà Xùa - Săn Mây & Thử Thách Biển Trời Đại Ngàn (3N2Đ)
+            Núi Bà Đen - Nóc Nhà Nam Bộ & Cung Đường Cột Điện (1 Ngày)
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">

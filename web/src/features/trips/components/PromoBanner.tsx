@@ -22,11 +22,11 @@ export const PromoBanner = () => {
         </div>
         
         <h2 className="text-3xl md:text-4xl font-black text-white leading-tight mb-4 max-w-lg tracking-tight">
-          Chinh Phục Sống Lưng Khủng Long Tà Xùa
+          Chinh Phục Núi Bà Đen - Nóc Nhà Nam Bộ
         </h2>
         
         <p className="text-gray-300 text-[13px] md:text-sm max-w-md mb-8 leading-relaxed font-medium">
-          Đón bình minh trên biển mây cuồn cuộn ở độ cao 2.865m. Chương trình trekking được trang bị trạm hỗ trợ y tế thực địa và bảo hiểm chuyên dụng lên tới 100.000.000đ.
+          Chạm chóp mốc 986m ngắm toàn cảnh đồng bằng Tây Ninh và chiêm bái Đại tượng Phật Bà. Chương trình trekking được trang bị trạm hỗ trợ y tế thực địa và bảo hiểm chuyên dụng lên tới 100.000.000đ.
         </p>
         
         <div className="flex flex-wrap gap-3">

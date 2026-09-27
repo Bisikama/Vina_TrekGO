@@ -77,16 +77,16 @@ export const RecommendedRoutes = () => {
   const routes: RouteProps[] = [
     {
       id: "tx-khunglong",
-      name: "Tà Xùa - Sống Lưng Khủng Long",
-      location: "Bắc Yên, Sơn La",
-      elevation: "2.865m",
-      distance: "14.5 km",
-      days: "3N - 2Đ",
-      difficultyInfo: "Trung bình",
+      name: "Núi Bà Đen - Cung Đường Cột Điện",
+      location: "Tây Ninh",
+      elevation: "986m",
+      distance: "4.5 km",
+      days: "1 Ngày",
+      difficultyInfo: "Trung bình khá",
       rating: "4.9",
-      reviewsCount: 158,
-      imageUrl: "https://images.unsplash.com/photo-1544885834-8b63a2327de8?q=80&w=600&auto=format&fit=crop",
-      tag: { text: "Trung bình", colorClass: "bg-white text-gray-800" }
+      reviewsCount: 348,
+      imageUrl: "/hero-trekking.jpg",
+      tag: { text: "Nóc nhà Nam Bộ", colorClass: "bg-emerald-600 text-white font-bold" }
     },
     {
       id: "laothan",

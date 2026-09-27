@@ -5,7 +5,7 @@ import Image from "next/image";
 
 export const UserHeader = () => {
   return (
-    <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
       {/* Top thin bar */}
       <div className="bg-[#F8FAFC] py-1.5 px-4 sm:px-6 lg:px-8 border-b border-gray-100 flex justify-between items-center text-[10px] text-gray-500 font-medium">
         <div className="flex items-center gap-4">
@@ -21,7 +21,7 @@ export const UserHeader = () => {
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
-            Fansipan 15°C, Gió nhẹ
+            Bà Đen 28°C, Nắng đẹp
           </span>
           <span className="hidden sm:flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -96,7 +96,7 @@ export const UserHeader = () => {
       <div className="bg-[#154B36] text-white py-2 px-4 sm:px-6 lg:px-8 flex justify-between items-center text-[11px] font-medium">
         <div className="flex items-center gap-2">
           <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold border border-emerald-500/30">GPS TRACKING ON</span>
-          <span className="hidden sm:inline opacity-90">Thời tiết vùng núi Tây Bắc: 16°C • Độ ẩm 78% • Gió nhẹ, nắng mỏng Tà Xùa</span>
+          <span className="hidden sm:inline opacity-90">Thời tiết Núi Bà Đen (Tây Ninh): 28°C • Độ ẩm 65% • Nắng ráo, mây quang đãng</span>
         </div>
         <div className="flex items-center gap-4 opacity-90">
           <span className="flex items-center gap-1.5">

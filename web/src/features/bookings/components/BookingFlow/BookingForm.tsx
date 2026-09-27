@@ -3,6 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+export const BookingForm = ({
+  onEquipmentCostChange,
+}: {
+  onEquipmentCostChange?: (cost: number) => void;
+}) => {
   useEffect(() => {
     if (onEquipmentCostChange) {
       onEquipmentCostChange(0);
