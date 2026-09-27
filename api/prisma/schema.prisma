@@ -15,7 +15,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // =========================================================
@@ -1082,12 +1081,34 @@ model TrailRecording {
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user                 User           @relation("R_TrailRecording_user_id", fields: [userId], references: [id])
-  createdPersonalTrail PersonalTrail? @relation("R_TrailRecording_created_personal_trail_id", fields: [createdPersonalTrailId], references: [id])
+  user                 User                  @relation("R_TrailRecording_user_id", fields: [userId], references: [id])
+  createdPersonalTrail PersonalTrail?        @relation("R_TrailRecording_created_personal_trail_id", fields: [createdPersonalTrailId], references: [id])
+  points               TrailRecordingPoint[] @relation("R_TrailRecordingPoint_recording_id")
 
   @@index([userId, startedAt])
   @@index([status])
   @@map("trail_recordings")
+}
+
+
+model TrailRecordingPoint {
+  id             BigInt   @id @default(autoincrement())
+  recordingId    String   @map("recording_id") @db.Uuid
+  clientSampleId String   @map("client_sample_id") @db.Uuid
+  latitude       Decimal  @db.Decimal(10, 7)
+  longitude      Decimal  @db.Decimal(10, 7)
+  accuracyM      Decimal? @map("accuracy_m") @db.Decimal(7, 2)
+  speedMps       Decimal? @map("speed_mps") @db.Decimal(7, 2)
+  headingDeg     Decimal? @map("heading_deg") @db.Decimal(6, 2)
+  altitudeM      Decimal? @map("altitude_m") @db.Decimal(8, 2)
+  recordedAt     DateTime @map("recorded_at") @db.Timestamptz(6)
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  recording TrailRecording @relation("R_TrailRecordingPoint_recording_id", fields: [recordingId], references: [id])
+
+  @@unique([recordingId, clientSampleId])
+  @@index([recordingId, recordedAt])
+  @@map("trail_recording_points")
 }
 
 // =========================================================
@@ -1166,9 +1187,10 @@ model TripTrailPlan {
   trip        Trip        @relation("R_TripTrailPlan_trip_id", fields: [tripId], references: [id])
   systemTrail SystemTrail @relation("R_TripTrailPlan_system_trail_id", fields: [systemTrailId], references: [id])
 
-  tripTrailSwitchsViaFromPlanId              TripTrailSwitch[]    @relation("R_TripTrailSwitch_from_plan_id")
-  tripTrailSwitchsViaToPlanId                TripTrailSwitch[]    @relation("R_TripTrailSwitch_to_plan_id")
-  tripActiveTrailPlanViaTripIdAndTrailPlanId TripActiveTrailPlan? @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id")
+  tripTrailSwitchsViaFromPlanId              TripTrailSwitch[]       @relation("R_TripTrailSwitch_from_plan_id")
+  tripTrailSwitchsViaToPlanId                TripTrailSwitch[]       @relation("R_TripTrailSwitch_to_plan_id")
+  tripActiveTrailPlanViaTripIdAndTrailPlanId TripActiveTrailPlan?    @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id")
+  routeDeviationEventsViaTripTrailPlanId     RouteDeviationEvent[]  @relation("R_RouteDeviationEvent_trip_trail_plan_id")
 
   @@unique([tripId, sequence])
   @@unique([tripId, id])
@@ -2418,9 +2440,10 @@ model GpsSession {
 
 /// CHECK constraints reject physically invalid samples: latitude [-90,90], longitude [-180,180], non-negative accuracy/speed, heading [0,360]. Raw data retention follows GPS_POLICIES; durable summary remains in GPS_SESSIONS/TRIP_ACTUAL_ROUTES.
 model GpsLocation {
-  id         BigInt   @id @default(autoincrement())
-  sessionId  String   @map("session_id") @db.Uuid
-  latitude   Decimal  @db.Decimal(10, 7)
+  id             BigInt   @id @default(autoincrement())
+  sessionId      String   @map("session_id") @db.Uuid
+  clientSampleId String   @map("client_sample_id") @db.Uuid
+  latitude       Decimal  @db.Decimal(10, 7)
   longitude  Decimal  @db.Decimal(10, 7)
   accuracyM  Decimal? @map("accuracy_m") @db.Decimal(7, 2)
   speedMps   Decimal? @map("speed_mps") @db.Decimal(7, 2)
@@ -2431,6 +2454,7 @@ model GpsLocation {
 
   session GpsSession @relation("R_GpsLocation_session_id", fields: [sessionId], references: [id])
 
+  @@unique([sessionId, clientSampleId])
   @@index([sessionId, recordedAt])
   @@index([recordedAt])
   @@map("gps_locations")
@@ -2441,6 +2465,7 @@ model RouteDeviationEvent {
   tripId                String          @map("trip_id") @db.Uuid
   userId                String          @map("user_id") @db.Uuid
   sessionId             String          @map("session_id") @db.Uuid
+  tripTrailPlanId       String          @map("trip_trail_plan_id") @db.Uuid
   status                DeviationStatus @default(DEVIATED)
   startAt               DateTime        @map("start_at") @db.Timestamptz(6)
   recoveredAt           DateTime?       @map("recovered_at") @db.Timestamptz(6)
@@ -2451,13 +2476,15 @@ model RouteDeviationEvent {
   createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trip    Trip       @relation("R_RouteDeviationEvent_trip_id", fields: [tripId], references: [id])
-  user    User       @relation("R_RouteDeviationEvent_user_id", fields: [userId], references: [id])
-  session GpsSession @relation("R_RouteDeviationEvent_session_id", fields: [sessionId], references: [id])
+  trip          Trip          @relation("R_RouteDeviationEvent_trip_id", fields: [tripId], references: [id])
+  user          User          @relation("R_RouteDeviationEvent_user_id", fields: [userId], references: [id])
+  session       GpsSession    @relation("R_RouteDeviationEvent_session_id", fields: [sessionId], references: [id])
+  tripTrailPlan TripTrailPlan @relation("R_RouteDeviationEvent_trip_trail_plan_id", fields: [tripTrailPlanId], references: [id])
 
   @@index([tripId, status, startAt])
   @@index([userId, startAt])
   @@index([sessionId, startAt])
+  @@index([tripTrailPlanId, startAt])
   @@map("route_deviation_events")
 }
 
@@ -2485,7 +2512,7 @@ model CheckpointEvent {
   user           User           @relation("R_CheckpointEvent_user_id", fields: [userId], references: [id])
   session        GpsSession?    @relation("R_CheckpointEvent_session_id", fields: [sessionId], references: [id])
 
-  @@index([tripId, tripCheckpointId, userId])
+  @@unique([tripId, tripCheckpointId, userId])
   @@index([userId, arrivalAt])
   @@map("checkpoint_events")
 }
