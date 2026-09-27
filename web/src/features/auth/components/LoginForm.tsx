@@ -64,7 +64,7 @@ export const LoginForm = () => {
             htmlFor="password" 
             className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
           >
-            Password <span className="text-xs text-zinc-400 font-normal">(demo: password123)</span>
+            Password
           </label>
           <input
             id="password"

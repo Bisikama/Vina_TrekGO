@@ -1,4 +1,5 @@
 import { LoginForm } from "@/features/auth";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -14,6 +15,7 @@ export default function Home() {
 
       <div className="w-full max-w-md">
         <LoginForm />
+        <Link href="/leader/public-trips" className="block mt-6 text-center text-indigo-300 underline">Quản lý Public Trip của Leader</Link>
       </div>
     </main>
   );

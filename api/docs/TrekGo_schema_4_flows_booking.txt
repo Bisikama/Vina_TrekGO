@@ -1,0 +1,1210 @@
+TREKGO — SCHEMA HIỆN TẠI CHO 4 FLOW TRIP VÀ BOOKING
+Nguồn: api/prisma/schema.prisma
+Ngày xuất: 2026-09-24
+
+PHẠM VI
+F1. Leader tạo Public Trip: User/LeaderProfile → Trip DRAFT → checkpoint + System Trail plan → OPEN.
+F2. User tạo Private Trip: User → PersonalTrail của mình hoặc TrailAccess ACTIVE → Trip → TripMember HOST → Invite.
+F3. User mua chỗ Public Trip: Trip OPEN → Booking PENDING_PAYMENT + Participant → Invoice/Payment → CONFIRMED.
+F4. User tham gia Private Trip bằng mã: PrivateTripInvite → kiểm tra hạn/lượt/capacity → TripMember ACTIVE.
+Các mũi tên mô tả nghiệp vụ; không phải mọi bước đã được schema hoặc service cưỡng chế.
+
+CÁCH ĐỌC
+- Mỗi field hiển thị: tên cột DB | nguyên khai báo field Prisma (kiểu, NULL, default, thuộc tính).
+- Dấu ? = nullable. @id = khóa chính. @unique/@@unique = duy nhất. @@index = index thường.
+- @map đổi tên field sang cột DB; @@map là tên bảng DB.
+- String @db.Uuid = UUID; Int = integer; Boolean = boolean; Json = jsonb.
+- String không có @db.* mặc định là text với PostgreSQL.
+- DateTime @db.Timestamptz(6) = thời gian có múi giờ; @db.Date = ngày.
+- @default(uuid()) được Prisma sinh; không mặc nhiên là DEFAULT UUID trong PostgreSQL.
+- @updatedAt do Prisma xử lý, không phải database trigger.
+- Quan hệ FK được giữ nguyên khai báo Prisma ở mục riêng.
+- Không liệt kê inverse relation fields (mảng/quan hệ ngược) vì chúng không phải cột DB.
+- Đây là bản tra cứu, không phải file schema.prisma độc lập có thể chạy migration.
+- Bảng dùng chung có thể còn FK tới domain ngoài phạm vi; vẫn giữ đủ cột hiện hữu.
+- Không bao gồm GPS runtime, kho/rental, xét duyệt Leader chi tiết, review hoặc gamification.
+
+LƯU Ý NGẮN VỀ SCHEMA HIỆN TẠI
+1. TripTrailPlan bắt buộc systemTrailId: flow Private dùng PersonalTrail chưa có liên kết plan tương ứng.
+2. Trip chưa có pickupPointId và chưa có TripPickupPoint; điểm đón hiện nằm ở Booking/Member/Transport.
+3. LeaderProfile vẫn có LeaderType EXPERT/COMMUNITY; tài liệu v2 dùng một role LEADER, không phân tier cho MVP.
+4. Chưa có BookingIdempotencyRequest hoặc BookingInboxEvent; confirmationIdempotencyKey không thay cho key tạo hold.
+5. Comment nhắc CHECK/partial unique/EXCLUDE nhưng không xem đó là constraint đã triển khai. Cần kiểm tra migration/DB thực tế.
+6. UNIQUE(tripId,userId) ở TripMember áp dụng cả bản ghi LEFT/REMOVED: tham gia lại cần xử lý bản ghi hiện có.
+7. PersonalTrailVisibility có SHARED trong schema; không mặc nhiên cho phép public Personal Trail theo tài liệu.
+
+DANH MỤC BẢNG
+01. users (User) — F1, F2, F3, F4
+02. leader_profiles (LeaderProfile) — F1 (hỗ trợ)
+03. destinations (Destination) — F1, F2
+04. pickup_points (PickupPoint) — F1, F2, F3, F4
+05. personal_trails (PersonalTrail) — F2
+06. system_trails (SystemTrail) — F1, F2
+07. trail_accesses (TrailAccess) — F2 (điều kiện)
+08. checkpoints (Checkpoint) — F1, F2
+09. trail_checkpoints (TrailCheckpoint) — F1, F2
+10. personal_checkpoints (PersonalCheckpoint) — F2
+11. trips (Trip) — F1, F2, F3, F4
+12. trip_trail_plans (TripTrailPlan) — F1; F2 còn thiếu liên kết personal trail
+13. trip_active_trail_plans (TripActiveTrailPlan) — F1, F2
+14. trip_checkpoints (TripCheckpoint) — F1, F2
+15. transport_providers (TransportProvider) — F1, F3 (hỗ trợ)
+16. trip_transports (TripTransport) — F1, F3 (hỗ trợ)
+17. trip_cancellation_requests (TripCancellationRequest) — F1 (nhánh hủy)
+18. private_trip_invites (PrivateTripInvite) — F2, F4
+19. trip_members (TripMember) — F2, F4
+20. booking_policies (BookingPolicy) — F3
+21. bookings (Booking) — F3
+22. booking_participants (BookingParticipant) — F3
+23. booking_cancellations (BookingCancellation) — F3 (nhánh hủy)
+24. booking_outbox_events (BookingOutboxEvent) — F1–F4 (tích hợp theo implementation)
+25. invoices (Invoice) — F3; F2 khi mua TrailAccess
+26. invoice_lines (InvoiceLine) — F3; F2 khi mua TrailAccess
+27. payments (Payment) — F3; F2 khi mua TrailAccess
+28. payment_webhook_events (PaymentWebhookEvent) — F3; F2 khi mua TrailAccess
+29. refunds (Refund) — F3 (nhánh hoàn tiền)
+
+CHI TIẾT CÁC BẢNG
+
+========================================================================================
+BẢNG: users
+PRISMA MODEL: User
+FLOW: F1, F2, F3, F4
+NOTE: Tài khoản và role; xác định Leader, chủ Trip và người tham gia.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String     @id @default(uuid()) @db.Uuid
+auth_user_id | authUserId    String     @unique @map("auth_user_id") @db.Uuid
+email | email         String     @unique @db.VarChar(320)
+full_name | fullName      String     @map("full_name") @db.VarChar(150)
+phone | phone         String?    @db.VarChar(30)
+avatar_url | avatarUrl     String?    @map("avatar_url")
+role | role          UserRole   @default(USER)
+status | status        UserStatus @default(ACTIVE)
+created_at | createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+deactivated_at | deactivatedAt DateTime?  @map("deactivated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+(Không có FK khai báo trên bảng này.)
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([role])
+@@index([status])
+@@index([createdAt])
+@@map("users")
+
+========================================================================================
+BẢNG: leader_profiles
+PRISMA MODEL: LeaderProfile
+FLOW: F1 (hỗ trợ)
+NOTE: Hồ sơ xác minh Leader; không phải bảng đăng ký chuyến đi.
+
+FIELDS (cột DB | khai báo Prisma):
+user_id | userId             String             @id @map("user_id") @db.Uuid
+leader_type | leaderType         LeaderType         @map("leader_type")
+verify_status | verifyStatus       VerificationStatus @default(NOT_SUBMITTED) @map("verify_status")
+completed_trip_count | completedTripCount Int                @default(0) @map("completed_trip_count")
+experience_years | experienceYears    Int                @default(0) @map("experience_years")
+verified_by | verifiedBy         String?            @map("verified_by") @db.Uuid
+verified_at | verifiedAt         DateTime?          @map("verified_at") @db.Timestamptz(6)
+created_at | createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+user           User  @relation("R_LeaderProfile_user_id", fields: [userId], references: [id])
+verifiedByUser User? @relation("R_LeaderProfile_verified_by", fields: [verifiedBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@map("leader_profiles")
+
+========================================================================================
+BẢNG: destinations
+PRISMA MODEL: Destination
+FLOW: F1, F2
+NOTE: Danh mục điểm đến để chọn khi tạo Trip.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id          String       @id @default(uuid()) @db.Uuid
+name | name        String       @db.VarChar(200)
+description | description String?
+region | region      String?      @db.VarChar(150)
+center_lat | centerLat   Decimal?     @map("center_lat") @db.Decimal(10, 7)
+center_lng | centerLng   Decimal?     @map("center_lng") @db.Decimal(10, 7)
+status | status      RecordStatus @default(ACTIVE)
+created_at | createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+(Không có FK khai báo trên bảng này.)
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([name])
+@@index([region, status])
+@@map("destinations")
+
+========================================================================================
+BẢNG: pickup_points
+PRISMA MODEL: PickupPoint
+FLOW: F1, F2, F3, F4
+NOTE: Danh mục điểm đón; Booking/Member/Transport tham chiếu.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String       @id @default(uuid()) @db.Uuid
+destination_id | destinationId String?      @map("destination_id") @db.Uuid
+code | code          String       @unique @db.VarChar(50)
+name | name          String       @db.VarChar(200)
+address | address       String
+latitude | latitude      Decimal      @db.Decimal(10, 7)
+longitude | longitude     Decimal      @db.Decimal(10, 7)
+note | note          String?
+status | status        RecordStatus @default(ACTIVE)
+created_by | createdBy     String       @map("created_by") @db.Uuid
+created_at | createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+destination   Destination? @relation("R_PickupPoint_destination_id", fields: [destinationId], references: [id])
+createdByUser User         @relation("R_PickupPoint_created_by", fields: [createdBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([destinationId, status])
+@@index([name])
+@@map("pickup_points")
+
+========================================================================================
+BẢNG: personal_trails
+PRISMA MODEL: PersonalTrail
+FLOW: F2
+NOTE: Cung đường cá nhân thuộc User, phục vụ tạo Private Trip theo tài liệu.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id             String                  @id @default(uuid()) @db.Uuid
+user_id | userId         String                  @map("user_id") @db.Uuid
+destination_id | destinationId  String?                 @map("destination_id") @db.Uuid
+title | title          String                  @db.VarChar(200)
+description | description    String?
+difficulty | difficulty     DifficultyLevel?
+distance_km | distanceKm     Decimal?                @map("distance_km") @db.Decimal(8, 2)
+elevation_gain_m | elevationGainM Int?                    @map("elevation_gain_m")
+route_geojson | routeGeojson   Json                    @map("route_geojson")
+visibility | visibility     PersonalTrailVisibility @default(PRIVATE)
+status | status         RecordStatus            @default(ACTIVE)
+version | version        Int                     @default(1)
+created_at | createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+archived_at | archivedAt     DateTime?               @map("archived_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+user        User         @relation("R_PersonalTrail_user_id", fields: [userId], references: [id])
+destination Destination? @relation("R_PersonalTrail_destination_id", fields: [destinationId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([userId, status])
+@@index([destinationId, status])
+@@map("personal_trails")
+
+========================================================================================
+BẢNG: system_trails
+PRISMA MODEL: SystemTrail
+FLOW: F1, F2
+NOTE: Cung đường hệ thống: Leader chọn cho Public; User dùng cho Private khi có quyền truy cập.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                       String          @id @default(uuid()) @db.Uuid
+destination_id | destinationId            String          @map("destination_id") @db.Uuid
+source_submission_id | sourceSubmissionId       String?         @map("source_submission_id") @db.Uuid
+code | code                     String          @unique @db.VarChar(50)
+name | name                     String          @db.VarChar(200)
+description | description              String?
+difficulty | difficulty               DifficultyLevel
+distance_km | distanceKm               Decimal         @map("distance_km") @db.Decimal(8, 2)
+elevation_gain_m | elevationGainM           Int?            @map("elevation_gain_m")
+estimated_duration_minutes | estimatedDurationMinutes Int?            @map("estimated_duration_minutes")
+route_geojson | routeGeojson             Json            @map("route_geojson")
+price | price                    Decimal         @default(0) @db.Decimal(12, 2)
+status | status                   RecordStatus    @default(ACTIVE)
+created_by | createdBy                String          @map("created_by") @db.Uuid
+version | version                  Int             @default(1)
+created_at | createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt                DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+archived_at | archivedAt               DateTime?       @map("archived_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+destination      Destination      @relation("R_SystemTrail_destination_id", fields: [destinationId], references: [id])
+sourceSubmission TrailSubmission? @relation("R_SystemTrail_source_submission_id", fields: [sourceSubmissionId], references: [id])
+createdByUser    User             @relation("R_SystemTrail_created_by", fields: [createdBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([destinationId, difficulty, status])
+@@index([name])
+@@map("system_trails")
+
+========================================================================================
+BẢNG: trail_accesses
+PRISMA MODEL: TrailAccess
+FLOW: F2 (điều kiện)
+NOTE: Quyền dùng System Trail của User; ACTIVE là điều kiện chọn trail đó cho Private Trip.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String            @id @default(uuid()) @db.Uuid
+user_id | userId        String            @map("user_id") @db.Uuid
+system_trail_id | systemTrailId String            @map("system_trail_id") @db.Uuid
+source_type | sourceType    TrailAccessSource @default(PURCHASE) @map("source_type")
+price_snapshot | priceSnapshot Decimal           @default(0) @map("price_snapshot") @db.Decimal(12, 2)
+status | status        TrailAccessStatus @default(PENDING_PAYMENT)
+purchased_at | purchasedAt   DateTime?         @map("purchased_at") @db.Timestamptz(6)
+activated_at | activatedAt   DateTime?         @map("activated_at") @db.Timestamptz(6)
+revoked_at | revokedAt     DateTime?         @map("revoked_at") @db.Timestamptz(6)
+created_at | createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+user        User        @relation("R_TrailAccess_user_id", fields: [userId], references: [id])
+systemTrail SystemTrail @relation("R_TrailAccess_system_trail_id", fields: [systemTrailId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([userId, systemTrailId])
+@@index([userId, status])
+@@map("trail_accesses")
+
+========================================================================================
+BẢNG: checkpoints
+PRISMA MODEL: Checkpoint
+FLOW: F1, F2
+NOTE: Danh mục checkpoint master để tạo kế hoạch chuyến đi.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                  String       @id @default(uuid()) @db.Uuid
+destination_id | destinationId       String       @map("destination_id") @db.Uuid
+code | code                String?      @unique @db.VarChar(50)
+name | name                String       @db.VarChar(200)
+description | description         String?
+latitude | latitude            Decimal      @db.Decimal(10, 7)
+longitude | longitude           Decimal      @db.Decimal(10, 7)
+default_radius_meters | defaultRadiusMeters Int          @default(50) @map("default_radius_meters")
+checkpoint_type | checkpointType      String?      @map("checkpoint_type") @db.VarChar(50)
+status | status              RecordStatus @default(ACTIVE)
+created_at | createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+destination Destination @relation("R_Checkpoint_destination_id", fields: [destinationId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([destinationId, status])
+@@map("checkpoints")
+
+========================================================================================
+BẢNG: trail_checkpoints
+PRISMA MODEL: TrailCheckpoint
+FLOW: F1, F2
+NOTE: Gắn checkpoint vào System Trail và lưu thứ tự.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String   @id @default(uuid()) @db.Uuid
+system_trail_id | systemTrailId String   @map("system_trail_id") @db.Uuid
+checkpoint_id | checkpointId  String   @map("checkpoint_id") @db.Uuid
+sequence | sequence      Int
+is_required | isRequired    Boolean  @default(false) @map("is_required")
+created_at | createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+systemTrail SystemTrail @relation("R_TrailCheckpoint_system_trail_id", fields: [systemTrailId], references: [id])
+checkpoint  Checkpoint  @relation("R_TrailCheckpoint_checkpoint_id", fields: [checkpointId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([systemTrailId, sequence])
+@@unique([systemTrailId, checkpointId])
+@@map("trail_checkpoints")
+
+========================================================================================
+BẢNG: personal_checkpoints
+PRISMA MODEL: PersonalCheckpoint
+FLOW: F2
+NOTE: Checkpoint thuộc cung đường cá nhân.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id              String   @id @default(uuid()) @db.Uuid
+personal_trail_id | personalTrailId String   @map("personal_trail_id") @db.Uuid
+name | name            String   @db.VarChar(200)
+latitude | latitude        Decimal  @db.Decimal(10, 7)
+longitude | longitude       Decimal  @db.Decimal(10, 7)
+sequence | sequence        Int
+radius_meters | radiusMeters    Int      @default(50) @map("radius_meters")
+info | info            String?
+image_urls | imageUrls       Json?    @map("image_urls")
+created_at | createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+personalTrail PersonalTrail @relation("R_PersonalCheckpoint_personal_trail_id", fields: [personalTrailId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([personalTrailId, sequence])
+@@map("personal_checkpoints")
+
+========================================================================================
+BẢNG: trips
+PRISMA MODEL: Trip
+FLOW: F1, F2, F3, F4
+NOTE: Chuyến đi dùng chung; tripType phân biệt PUBLIC và PRIVATE, lưu lịch và capacity.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String     @id @default(uuid()) @db.Uuid
+trip_type | tripType      TripType   @map("trip_type")
+title | title         String     @db.VarChar(220)
+description | description   String?
+destination_id | destinationId String     @map("destination_id") @db.Uuid
+creator_id | creatorId     String     @map("creator_id") @db.Uuid
+leader_id | leaderId      String?    @map("leader_id") @db.Uuid
+start_at | startAt       DateTime   @map("start_at") @db.Timestamptz(6)
+end_at | endAt         DateTime   @map("end_at") @db.Timestamptz(6)
+min_pax | minPax        Int        @default(1) @map("min_pax")
+max_pax | maxPax        Int        @map("max_pax")
+price_per_pax | pricePerPax   Decimal?   @map("price_per_pax") @db.Decimal(12, 2)
+status | status        TripStatus @default(DRAFT)
+published_at | publishedAt   DateTime?  @map("published_at") @db.Timestamptz(6)
+started_at | startedAt     DateTime?  @map("started_at") @db.Timestamptz(6)
+completed_at | completedAt   DateTime?  @map("completed_at") @db.Timestamptz(6)
+cancelled_at | cancelledAt   DateTime?  @map("cancelled_at") @db.Timestamptz(6)
+version | version       Int        @default(1)
+created_at | createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+destination Destination @relation("R_Trip_destination_id", fields: [destinationId], references: [id])
+creator     User        @relation("R_Trip_creator_id", fields: [creatorId], references: [id])
+leader      User?       @relation("R_Trip_leader_id", fields: [leaderId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([tripType, status, startAt])
+@@index([destinationId, startAt])
+@@index([leaderId, startAt, endAt])
+@@index([creatorId, startAt])
+@@map("trips")
+
+========================================================================================
+BẢNG: trip_trail_plans
+PRISMA MODEL: TripTrailPlan
+FLOW: F1; F2 còn thiếu liên kết personal trail
+NOTE: Lưu kế hoạch trail và snapshot cho Trip. Hiện systemTrailId bắt buộc, chưa hỗ trợ tham chiếu PersonalTrail.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                     String          @id @default(uuid()) @db.Uuid
+trip_id | tripId                 String          @map("trip_id") @db.Uuid
+system_trail_id | systemTrailId          String          @map("system_trail_id") @db.Uuid
+sequence | sequence               Int
+snapshot_name | snapshotName           String          @map("snapshot_name") @db.VarChar(200)
+snapshot_difficulty | snapshotDifficulty     DifficultyLevel @map("snapshot_difficulty")
+snapshot_geojson | snapshotGeojson        Json            @map("snapshot_geojson")
+snapshot_distance_km | snapshotDistanceKm     Decimal?        @map("snapshot_distance_km") @db.Decimal(8, 2)
+snapshot_elevation_gain_m | snapshotElevationGainM Int?            @map("snapshot_elevation_gain_m")
+created_at | createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip        Trip        @relation("R_TripTrailPlan_trip_id", fields: [tripId], references: [id])
+systemTrail SystemTrail @relation("R_TripTrailPlan_system_trail_id", fields: [systemTrailId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([tripId, sequence])
+@@unique([tripId, id])
+@@index([tripId, systemTrailId])
+@@map("trip_trail_plans")
+
+========================================================================================
+BẢNG: trip_active_trail_plans
+PRISMA MODEL: TripActiveTrailPlan
+FLOW: F1, F2
+NOTE: Chọn một trail plan đang dùng của Trip; composite FK bảo đảm plan thuộc đúng Trip.
+
+FIELDS (cột DB | khai báo Prisma):
+trip_id | tripId      String   @id @map("trip_id") @db.Uuid
+trail_plan_id | trailPlanId String   @map("trail_plan_id") @db.Uuid
+changed_by | changedBy   String   @map("changed_by") @db.Uuid
+changed_at | changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+version | version     Int      @default(1)
+
+QUAN HỆ FK:
+trip          Trip          @relation("R_TripActiveTrailPlan_trip_id", fields: [tripId], references: [id])
+changedByUser User          @relation("R_TripActiveTrailPlan_changed_by", fields: [changedBy], references: [id])
+tripTrailPlan TripTrailPlan @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id", fields: [tripId, trailPlanId], references: [tripId, id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([tripId, trailPlanId], map: "uq_trip_active_trail_plan_trip_plan")
+@@map("trip_active_trail_plans")
+
+========================================================================================
+BẢNG: trip_checkpoints
+PRISMA MODEL: TripCheckpoint
+FLOW: F1, F2
+NOTE: Snapshot checkpoint của Trip, thứ tự và cờ bắt buộc; sourceCheckpointId chỉ tham chiếu checkpoint master.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                 String   @id @default(uuid()) @db.Uuid
+trip_id | tripId             String   @map("trip_id") @db.Uuid
+source_checkpoint_id | sourceCheckpointId String?  @map("source_checkpoint_id") @db.Uuid
+name | name               String   @db.VarChar(200)
+description | description        String?
+latitude | latitude           Decimal  @db.Decimal(10, 7)
+longitude | longitude          Decimal  @db.Decimal(10, 7)
+sequence | sequence           Int
+is_required | isRequired         Boolean  @default(false) @map("is_required")
+radius_meters | radiusMeters       Int      @map("radius_meters")
+mission_title | missionTitle       String?  @map("mission_title") @db.VarChar(200)
+mission_description | missionDescription String?  @map("mission_description")
+mission_type | missionType        String?  @map("mission_type") @db.VarChar(50)
+reward_points | rewardPoints       Int      @default(0) @map("reward_points")
+is_enabled | isEnabled          Boolean  @default(true) @map("is_enabled")
+created_at | createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip             Trip        @relation("R_TripCheckpoint_trip_id", fields: [tripId], references: [id])
+sourceCheckpoint Checkpoint? @relation("R_TripCheckpoint_source_checkpoint_id", fields: [sourceCheckpointId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([tripId, sequence])
+@@index([tripId, isRequired])
+@@map("trip_checkpoints")
+
+========================================================================================
+BẢNG: transport_providers
+PRISMA MODEL: TransportProvider
+FLOW: F1, F3 (hỗ trợ)
+NOTE: Danh mục nhà cung cấp xe; được TripTransport tham chiếu.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id          String       @id @default(uuid()) @db.Uuid
+name | name        String       @db.VarChar(200)
+contact_name | contactName String?      @map("contact_name") @db.VarChar(150)
+phone | phone       String?      @db.VarChar(30)
+email | email       String?      @db.VarChar(320)
+status | status      RecordStatus @default(ACTIVE)
+created_at | createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+(Không có FK khai báo trên bảng này.)
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([name, status])
+@@map("transport_providers")
+
+========================================================================================
+BẢNG: trip_transports
+PRISMA MODEL: TripTransport
+FLOW: F1, F3 (hỗ trợ)
+NOTE: Metadata xe, điểm đón/trả, tài xế của Trip; Admin quản lý, không phải điều phối xe.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String              @id @default(uuid()) @db.Uuid
+trip_id | tripId        String              @map("trip_id") @db.Uuid
+pickup_point_id | pickupPointId String              @map("pickup_point_id") @db.Uuid
+return_point_id | returnPointId String?             @map("return_point_id") @db.Uuid
+sequence | sequence      Int
+source_type | sourceType    TransportSourceType @default(SYSTEM_FLEET) @map("source_type")
+provider_id | providerId    String?             @map("provider_id") @db.Uuid
+vehicle_type | vehicleType   String              @map("vehicle_type") @db.VarChar(80)
+seat_capacity | seatCapacity  Int                 @map("seat_capacity")
+plate_number | plateNumber   String?             @map("plate_number") @db.VarChar(30)
+driver_name | driverName    String?             @map("driver_name") @db.VarChar(150)
+driver_phone | driverPhone   String?             @map("driver_phone") @db.VarChar(30)
+provider_name | providerName  String?             @map("provider_name") @db.VarChar(200)
+meeting_at | meetingAt     DateTime            @map("meeting_at") @db.Timestamptz(6)
+departure_at | departureAt   DateTime?           @map("departure_at") @db.Timestamptz(6)
+return_at | returnAt      DateTime?           @map("return_at") @db.Timestamptz(6)
+status | status        VehicleStatus       @default(PLANNED)
+note | note          String?
+version | version       Int                 @default(1)
+created_at | createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt     DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip        Trip               @relation("R_TripTransport_trip_id", fields: [tripId], references: [id])
+pickupPoint PickupPoint        @relation("R_TripTransport_pickup_point_id", fields: [pickupPointId], references: [id])
+returnPoint PickupPoint?       @relation("R_TripTransport_return_point_id", fields: [returnPointId], references: [id])
+provider    TransportProvider? @relation("R_TripTransport_provider_id", fields: [providerId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([tripId, sequence])
+@@index([tripId, pickupPointId, status])
+@@index([plateNumber])
+@@map("trip_transports")
+
+========================================================================================
+BẢNG: trip_cancellation_requests
+PRISMA MODEL: TripCancellationRequest
+FLOW: F1 (nhánh hủy)
+NOTE: Leader gửi yêu cầu hủy Public Trip để Admin xét duyệt.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id           String                    @id @default(uuid()) @db.Uuid
+trip_id | tripId       String                    @map("trip_id") @db.Uuid
+requested_by | requestedBy  String                    @map("requested_by") @db.Uuid
+reason | reason       String
+evidence_urls | evidenceUrls Json?                     @map("evidence_urls")
+status | status       CancellationRequestStatus @default(PENDING)
+reviewed_by | reviewedBy   String?                   @map("reviewed_by") @db.Uuid
+review_note | reviewNote   String?                   @map("review_note")
+requested_at | requestedAt  DateTime                  @default(now()) @map("requested_at") @db.Timestamptz(6)
+reviewed_at | reviewedAt   DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+version | version      Int                       @default(1)
+
+QUAN HỆ FK:
+trip            Trip  @relation("R_TripCancellationRequest_trip_id", fields: [tripId], references: [id])
+requestedByUser User  @relation("R_TripCancellationRequest_requested_by", fields: [requestedBy], references: [id])
+reviewedByUser  User? @relation("R_TripCancellationRequest_reviewed_by", fields: [reviewedBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([tripId, status])
+@@index([status, requestedAt])
+@@map("trip_cancellation_requests")
+
+========================================================================================
+BẢNG: private_trip_invites
+PRISMA MODEL: PrivateTripInvite
+FLOW: F2, F4
+NOTE: Mã mời nhiều lượt dùng, giới hạn lượt, hạn dùng và trạng thái thu hồi.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id        String       @id @default(uuid()) @db.Uuid
+trip_id | tripId    String       @map("trip_id") @db.Uuid
+code | code      String       @unique @db.VarChar(120)
+max_uses | maxUses   Int?         @map("max_uses")
+used_count | usedCount Int          @default(0) @map("used_count")
+status | status    InviteStatus @default(ACTIVE)
+expires_at | expiresAt DateTime     @map("expires_at") @db.Timestamptz(6)
+created_by | createdBy String       @map("created_by") @db.Uuid
+created_at | createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+revoked_at | revokedAt DateTime?    @map("revoked_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip          Trip @relation("R_PrivateTripInvite_trip_id", fields: [tripId], references: [id])
+createdByUser User @relation("R_PrivateTripInvite_created_by", fields: [createdBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([tripId, status])
+@@index([expiresAt])
+@@map("private_trip_invites")
+
+========================================================================================
+BẢNG: trip_members
+PRISMA MODEL: TripMember
+FLOW: F2, F4
+NOTE: Thành viên Private Trip, gồm HOST/MEMBER, nguồn mã mời và điểm danh; không phải đơn mua vé.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                 String           @id @default(uuid()) @db.Uuid
+trip_id | tripId             String           @map("trip_id") @db.Uuid
+user_id | userId             String           @map("user_id") @db.Uuid
+joined_by_invite_id | joinedByInviteId   String?          @map("joined_by_invite_id") @db.Uuid
+pickup_point_id | pickupPointId      String?          @map("pickup_point_id") @db.Uuid
+role | role               TripMemberRole   @default(MEMBER)
+status | status             TripMemberStatus @default(ACTIVE)
+joined_at | joinedAt           DateTime         @default(now()) @map("joined_at") @db.Timestamptz(6)
+left_at | leftAt             DateTime?        @map("left_at") @db.Timestamptz(6)
+attendance_status | attendanceStatus   AttendanceStatus @default(NOT_MARKED) @map("attendance_status")
+attended_at | attendedAt         DateTime?        @map("attended_at") @db.Timestamptz(6)
+attendance_marked_by | attendanceMarkedBy String?          @map("attendance_marked_by") @db.Uuid
+version | version            Int              @default(1)
+created_at | createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip                   Trip               @relation("R_TripMember_trip_id", fields: [tripId], references: [id])
+user                   User               @relation("R_TripMember_user_id", fields: [userId], references: [id])
+joinedByInvite         PrivateTripInvite? @relation("R_TripMember_joined_by_invite_id", fields: [joinedByInviteId], references: [id])
+pickupPoint            PickupPoint?       @relation("R_TripMember_pickup_point_id", fields: [pickupPointId], references: [id])
+attendanceMarkedByUser User?              @relation("R_TripMember_attendance_marked_by", fields: [attendanceMarkedBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([tripId, userId])
+@@index([userId, status])
+@@index([tripId, status])
+@@map("trip_members")
+
+========================================================================================
+BẢNG: booking_policies
+PRISMA MODEL: BookingPolicy
+FLOW: F3
+NOTE: Chính sách thời gian giữ chỗ, hủy, no-show và participant theo phiên bản.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                String    @id @default(uuid()) @db.Uuid
+policy_code | policyCode        String    @map("policy_code") @db.VarChar(80)
+version_no | versionNo         Int       @map("version_no")
+hold_ttl_minutes | holdTtlMinutes    Int       @map("hold_ttl_minutes")
+cancellation_rules | cancellationRules Json      @map("cancellation_rules")
+no_show_rules | noShowRules       Json?     @map("no_show_rules")
+participant_rules | participantRules  Json?     @map("participant_rules")
+effective_from | effectiveFrom     DateTime  @map("effective_from") @db.Timestamptz(6)
+effective_to | effectiveTo       DateTime? @map("effective_to") @db.Timestamptz(6)
+is_active | isActive          Boolean   @default(true) @map("is_active")
+created_by | createdBy         String?   @map("created_by") @db.Uuid
+created_at | createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+createdByUser User? @relation("R_BookingPolicy_created_by", fields: [createdBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([policyCode, versionNo])
+@@index([isActive, effectiveFrom])
+@@map("booking_policies")
+
+========================================================================================
+BẢNG: bookings
+PRISMA MODEL: Booking
+FLOW: F3
+NOTE: Đơn giữ/mua chỗ Public Trip, số người, giá và policy snapshot, TTL và trạng thái.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                         String        @id @default(uuid()) @db.Uuid
+trip_id | tripId                     String        @map("trip_id") @db.Uuid
+user_id | userId                     String        @map("user_id") @db.Uuid
+pickup_point_id | pickupPointId              String        @map("pickup_point_id") @db.Uuid
+booking_policy_id | bookingPolicyId            String        @map("booking_policy_id") @db.Uuid
+status | status                     BookingStatus @default(PENDING_PAYMENT)
+participant_count | participantCount           Int           @map("participant_count")
+price_per_pax_snapshot | pricePerPaxSnapshot        Decimal       @map("price_per_pax_snapshot") @db.Decimal(12, 2)
+subtotal_amount | subtotalAmount             Decimal       @map("subtotal_amount") @db.Decimal(12, 2)
+discount_amount | discountAmount             Decimal       @default(0) @map("discount_amount") @db.Decimal(12, 2)
+insurance_amount | insuranceAmount            Decimal       @default(0) @map("insurance_amount") @db.Decimal(12, 2)
+total_amount | totalAmount                Decimal       @map("total_amount") @db.Decimal(12, 2)
+currency | currency                   String        @default("VND") @db.Char(3)
+policy_snapshot | policySnapshot             Json          @map("policy_snapshot")
+confirmation_idempotency_key | confirmationIdempotencyKey String?       @unique @map("confirmation_idempotency_key") @db.VarChar(200)
+expires_at | expiresAt                  DateTime      @map("expires_at") @db.Timestamptz(6)
+confirmed_at | confirmedAt                DateTime?     @map("confirmed_at") @db.Timestamptz(6)
+cancelled_at | cancelledAt                DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+completed_at | completedAt                DateTime?     @map("completed_at") @db.Timestamptz(6)
+version | version                    Int           @default(1)
+created_at | createdAt                  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt                  DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+trip          Trip          @relation("R_Booking_trip_id", fields: [tripId], references: [id])
+user          User          @relation("R_Booking_user_id", fields: [userId], references: [id])
+pickupPoint   PickupPoint   @relation("R_Booking_pickup_point_id", fields: [pickupPointId], references: [id])
+bookingPolicy BookingPolicy @relation("R_Booking_booking_policy_id", fields: [bookingPolicyId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([tripId, status])
+@@index([userId, status])
+@@index([tripId, userId])
+@@index([bookingPolicyId])
+@@index([expiresAt])
+@@map("bookings")
+
+========================================================================================
+BẢNG: booking_participants
+PRISMA MODEL: BookingParticipant
+FLOW: F3
+NOTE: Từng người đi thuộc booking, thông tin liên hệ và check-in; userId có thể NULL.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                    String            @id @default(uuid()) @db.Uuid
+booking_id | bookingId             String            @map("booking_id") @db.Uuid
+user_id | userId                String?           @map("user_id") @db.Uuid
+full_name | fullName              String            @map("full_name") @db.VarChar(150)
+phone | phone                 String?           @db.VarChar(30)
+date_of_birth | dateOfBirth           DateTime?         @map("date_of_birth") @db.Date
+id_document_no | idDocumentNo          String?           @map("id_document_no") @db.VarChar(80)
+emergency_contact_name | emergencyContactName  String?           @map("emergency_contact_name") @db.VarChar(150)
+emergency_contact_phone | emergencyContactPhone String?           @map("emergency_contact_phone") @db.VarChar(30)
+status | status                ParticipantStatus @default(ACTIVE)
+checkin_code | checkinCode           String            @unique @map("checkin_code") @db.VarChar(160)
+checkin_status | checkinStatus         CheckinStatus     @default(NOT_CHECKED_IN) @map("checkin_status")
+checkin_method | checkinMethod         CheckinMethod?    @map("checkin_method")
+checked_in_at | checkedInAt           DateTime?         @map("checked_in_at") @db.Timestamptz(6)
+checked_in_by | checkedInBy           String?           @map("checked_in_by") @db.Uuid
+created_at | createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+booking         Booking @relation("R_BookingParticipant_booking_id", fields: [bookingId], references: [id])
+user            User?   @relation("R_BookingParticipant_user_id", fields: [userId], references: [id])
+checkedInByUser User?   @relation("R_BookingParticipant_checked_in_by", fields: [checkedInBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([bookingId, status])
+@@index([userId, status])
+@@map("booking_participants")
+
+========================================================================================
+BẢNG: booking_cancellations
+PRISMA MODEL: BookingCancellation
+FLOW: F3 (nhánh hủy)
+NOTE: Ghi nhận hủy booking và số tiền đủ điều kiện hoàn; không phải giao dịch refund thực tế.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id               String   @id @default(uuid()) @db.Uuid
+booking_id | bookingId        String   @map("booking_id") @db.Uuid
+cancelled_by | cancelledBy      String?  @map("cancelled_by") @db.Uuid
+reason | reason           String?
+policy_snapshot | policySnapshot   Json     @map("policy_snapshot")
+refundable_amount | refundableAmount Decimal  @default(0) @map("refundable_amount") @db.Decimal(12, 2)
+cancelled_at | cancelledAt      DateTime @default(now()) @map("cancelled_at") @db.Timestamptz(6)
+created_at | createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+booking         Booking @relation("R_BookingCancellation_booking_id", fields: [bookingId], references: [id])
+cancelledByUser User?   @relation("R_BookingCancellation_cancelled_by", fields: [cancelledBy], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([bookingId, cancelledAt])
+@@map("booking_cancellations")
+
+========================================================================================
+BẢNG: booking_outbox_events
+PRISMA MODEL: BookingOutboxEvent
+FLOW: F1–F4 (tích hợp theo implementation)
+NOTE: Lưu event phát ra để xử lý tích hợp/retry; aggregateId là tham chiếu logic, không có FK.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id               String      @id @default(uuid()) @db.Uuid
+deduplication_key | deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
+event_type | eventType        String      @map("event_type") @db.VarChar(140)
+aggregate_type | aggregateType    String      @map("aggregate_type") @db.VarChar(100)
+aggregate_id | aggregateId      String      @map("aggregate_id") @db.Uuid
+payload | payload          Json
+status | status           EventStatus @default(PENDING)
+retry_count | retryCount       Int         @default(0) @map("retry_count")
+last_error | lastError        String?     @map("last_error")
+created_at | createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+published_at | publishedAt      DateTime?   @map("published_at") @db.Timestamptz(6)
+processed_at | processedAt      DateTime?   @map("processed_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+(Không có FK khai báo trên bảng này.)
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([status, createdAt])
+@@index([aggregateType, aggregateId, createdAt])
+@@index([eventType])
+@@map("booking_outbox_events")
+
+========================================================================================
+BẢNG: invoices
+PRISMA MODEL: Invoice
+FLOW: F3; F2 khi mua TrailAccess
+NOTE: Hóa đơn dùng chung. Booking dùng bookingId; mua quyền trail dùng trailAccessId.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id             String        @id @default(uuid()) @db.Uuid
+invoice_no | invoiceNo      String        @unique @map("invoice_no") @db.VarChar(80)
+user_id | userId         String        @map("user_id") @db.Uuid
+invoice_type | invoiceType    InvoiceType   @map("invoice_type")
+booking_id | bookingId      String?       @map("booking_id") @db.Uuid
+rental_order_id | rentalOrderId  String?       @map("rental_order_id") @db.Uuid
+trail_access_id | trailAccessId  String?       @map("trail_access_id") @db.Uuid
+subtotal_amount | subtotalAmount Decimal       @map("subtotal_amount") @db.Decimal(12, 2)
+discount_amount | discountAmount Decimal       @default(0) @map("discount_amount") @db.Decimal(12, 2)
+total_amount | totalAmount    Decimal       @map("total_amount") @db.Decimal(12, 2)
+currency | currency       String        @default("VND") @db.Char(3)
+status | status         InvoiceStatus @default(DRAFT)
+expires_at | expiresAt      DateTime?     @map("expires_at") @db.Timestamptz(6)
+paid_at | paidAt         DateTime?     @map("paid_at") @db.Timestamptz(6)
+version | version        Int           @default(1)
+created_at | createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+user        User         @relation("R_Invoice_user_id", fields: [userId], references: [id])
+booking     Booking?     @relation("R_Invoice_booking_id", fields: [bookingId], references: [id])
+rentalOrder RentalOrder? @relation("R_Invoice_rental_order_id", fields: [rentalOrderId], references: [id])
+trailAccess TrailAccess? @relation("R_Invoice_trail_access_id", fields: [trailAccessId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([userId, status])
+@@index([invoiceType, status])
+@@index([bookingId])
+@@index([rentalOrderId])
+@@index([trailAccessId])
+@@map("invoices")
+
+========================================================================================
+BẢNG: invoice_lines
+PRISMA MODEL: InvoiceLine
+FLOW: F3; F2 khi mua TrailAccess
+NOTE: Chi tiết các dòng tiền trên hóa đơn.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id            String   @id @default(uuid()) @db.Uuid
+invoice_id | invoiceId     String   @map("invoice_id") @db.Uuid
+line_code | lineCode      String   @map("line_code") @db.VarChar(80)
+description | description   String   @db.VarChar(255)
+quantity | quantity      Decimal  @default(1) @db.Decimal(12, 2)
+unit_amount | unitAmount    Decimal  @map("unit_amount") @db.Decimal(12, 2)
+line_amount | lineAmount    Decimal  @map("line_amount") @db.Decimal(12, 2)
+reference_type | referenceType String?  @map("reference_type") @db.VarChar(80)
+reference_id | referenceId   String?  @map("reference_id") @db.Uuid
+metadata | metadata      Json?
+created_at | createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+invoice Invoice @relation("R_InvoiceLine_invoice_id", fields: [invoiceId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([invoiceId, lineCode])
+@@index([referenceType, referenceId])
+@@map("invoice_lines")
+
+========================================================================================
+BẢNG: payments
+PRISMA MODEL: Payment
+FLOW: F3; F2 khi mua TrailAccess
+NOTE: Lần thanh toán thuộc hóa đơn; có key chống tạo payment trùng.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id             String        @id @default(uuid()) @db.Uuid
+invoice_id | invoiceId      String        @map("invoice_id") @db.Uuid
+amount | amount         Decimal       @db.Decimal(12, 2)
+currency | currency       String        @default("VND") @db.Char(3)
+transaction_ref | transactionRef String?       @map("transaction_ref") @db.VarChar(180)
+payment_gateway | paymentGateway String        @map("payment_gateway") @db.VarChar(80)
+status | status         PaymentStatus @default(PENDING)
+idempotency_key | idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(200)
+gateway_payload | gatewayPayload Json?         @map("gateway_payload")
+paid_at | paidAt         DateTime?     @map("paid_at") @db.Timestamptz(6)
+version | version        Int           @default(1)
+created_at | createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+invoice Invoice @relation("R_Payment_invoice_id", fields: [invoiceId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([invoiceId, status])
+@@index([transactionRef])
+@@map("payments")
+
+========================================================================================
+BẢNG: payment_webhook_events
+PRISMA MODEL: PaymentWebhookEvent
+FLOW: F3; F2 khi mua TrailAccess
+NOTE: Lưu webhook cổng thanh toán, chống trùng theo gateway và providerEventId.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id              String    @id @default(uuid()) @db.Uuid
+payment_gateway | paymentGateway  String    @map("payment_gateway") @db.VarChar(80)
+provider_event_id | providerEventId String    @map("provider_event_id") @db.VarChar(220)
+payment_id | paymentId       String?   @map("payment_id") @db.Uuid
+payload | payload         Json
+processed | processed       Boolean   @default(false)
+processed_at | processedAt     DateTime? @map("processed_at") @db.Timestamptz(6)
+error_message | errorMessage    String?   @map("error_message")
+received_at | receivedAt      DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+payment Payment? @relation("R_PaymentWebhookEvent_payment_id", fields: [paymentId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@unique([paymentGateway, providerEventId])
+@@index([processed, receivedAt])
+@@map("payment_webhook_events")
+
+========================================================================================
+BẢNG: refunds
+PRISMA MODEL: Refund
+FLOW: F3 (nhánh hoàn tiền)
+NOTE: Giao dịch hoàn tiền thuộc Payment; liên kết quyết định hủy qua bookingCancellationId.
+
+FIELDS (cột DB | khai báo Prisma):
+id | id                    String       @id @default(uuid()) @db.Uuid
+payment_id | paymentId             String       @map("payment_id") @db.Uuid
+refund_type | refundType            RefundType   @map("refund_type")
+amount | amount                Decimal      @db.Decimal(12, 2)
+currency | currency              String       @default("VND") @db.Char(3)
+reason | reason                String?
+status | status                RefundStatus @default(PENDING)
+idempotency_key | idempotencyKey        String       @unique @map("idempotency_key") @db.VarChar(200)
+refund_transaction_ref | refundTransactionRef  String?      @map("refund_transaction_ref") @db.VarChar(180)
+deposit_settlement_id | depositSettlementId   String?      @map("deposit_settlement_id") @db.Uuid
+booking_cancellation_id | bookingCancellationId String?      @map("booking_cancellation_id") @db.Uuid
+rental_order_id | rentalOrderId         String?      @map("rental_order_id") @db.Uuid
+trail_access_id | trailAccessId         String?      @map("trail_access_id") @db.Uuid
+provider_payload | providerPayload       Json?        @map("provider_payload")
+refunded_at | refundedAt            DateTime?    @map("refunded_at") @db.Timestamptz(6)
+version | version               Int          @default(1)
+created_at | createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+updated_at | updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+QUAN HỆ FK:
+payment             Payment              @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
+depositSettlement   DepositSettlement?   @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
+bookingCancellation BookingCancellation? @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id])
+rentalOrder         RentalOrder?         @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
+trailAccess         TrailAccess?         @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
+
+RÀNG BUỘC / INDEX / TÊN BẢNG:
+@@index([paymentId, status])
+@@index([refundTransactionRef])
+@@index([depositSettlementId])
+@@index([bookingCancellationId])
+@@index([rentalOrderId])
+@@map("refunds")
+
+========================================================================================
+ENUM HỖ TRỢ (28 enum được các field phía trên sử dụng)
+Giữ nguyên giá trị và tên PostgreSQL @@map từ schema.
+
+enum UserRole {
+  USER
+  LEADER
+  STAFF_WAREHOUSE
+  STAFF_LOGISTICS
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DEACTIVATED
+
+  @@map("user_status")
+}
+
+enum LeaderType {
+  EXPERT
+  COMMUNITY
+
+  @@map("leader_type")
+}
+
+enum VerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("verification_status")
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+
+  @@map("record_status")
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+  EXTREME
+
+  @@map("difficulty_level")
+}
+
+enum PersonalTrailVisibility {
+  PRIVATE
+  SHARED
+
+  @@map("personal_trail_visibility")
+}
+
+enum TrailAccessSource {
+  PURCHASE
+  ADMIN_GRANT
+  PROMOTION
+
+  @@map("trail_access_source")
+}
+
+enum TrailAccessStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  FAILED
+  REFUNDED
+  REVOKED
+
+  @@map("trail_access_status")
+}
+
+enum TripType {
+  PUBLIC
+  PRIVATE
+
+  @@map("trip_type")
+}
+
+enum TripStatus {
+  DRAFT
+  OPEN
+  FULL
+  CLOSED
+  CANCEL_PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  INTERRUPTED
+
+  @@map("trip_status")
+}
+
+enum TransportSourceType {
+  SYSTEM_FLEET
+  THIRD_PARTY
+  SELF_ARRANGED
+
+  @@map("transport_source_type")
+}
+
+enum VehicleStatus {
+  PLANNED
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  CANCELLED
+
+  @@map("vehicle_status")
+}
+
+enum CancellationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+
+  @@map("cancellation_request_status")
+}
+
+enum InviteStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+
+  @@map("invite_status")
+}
+
+enum TripMemberRole {
+  HOST
+  MEMBER
+
+  @@map("trip_member_role")
+}
+
+enum TripMemberStatus {
+  ACTIVE
+  LEFT
+  REMOVED
+  COMPLETED
+  NO_SHOW
+
+  @@map("trip_member_status")
+}
+
+enum AttendanceStatus {
+  NOT_MARKED
+  PRESENT
+  ABSENT
+  LATE
+
+  @@map("attendance_status")
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PARTIAL_CHECKIN
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  EXPIRED
+
+  @@map("booking_status")
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+
+  @@map("participant_status")
+}
+
+enum CheckinStatus {
+  NOT_CHECKED_IN
+  CHECKED_IN
+  NO_SHOW
+
+  @@map("checkin_status")
+}
+
+enum CheckinMethod {
+  QR
+  MANUAL
+
+  @@map("checkin_method")
+}
+
+enum EventStatus {
+  PENDING
+  PUBLISHED
+  PROCESSED
+  FAILED
+
+  @@map("event_status")
+}
+
+enum InvoiceType {
+  BOOKING
+  TRAIL_ACCESS
+  RENTAL
+
+  @@map("invoice_type")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+  EXPIRED
+
+  @@map("invoice_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXPIRED
+
+  @@map("payment_status")
+}
+
+enum RefundType {
+  FULL
+  PARTIAL
+  DEPOSIT
+  BOOKING_CANCELLATION
+  RENTAL_CANCELLATION
+  TRAIL_ACCESS
+
+  @@map("refund_type")
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+
+  @@map("refund_status")
+}
+
+HẾT — 29 bảng, 370 cột, 28 enum.
+
