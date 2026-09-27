@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  ConflictException,
-  UnprocessableEntityException,
-} from '@nestjs/common'
+import { Inject, Injectable, ConflictException, UnprocessableEntityException } from '@nestjs/common'
 import { I_IDENTITY_PROVIDER } from '../ports/identity.port'
 import type { IIdentityProvider } from '../ports/identity.port'
 import { I_USER_REPOSITORY } from '../ports/user.port'
@@ -22,60 +17,29 @@ export class AuthRegisterUseCase {
     email: string
     password?: string
     fullName?: string
-    name?: string
     phone?: string
-    cccd?: string
     avatar?: string
     role?: string
   }) {
     if (!body.email) {
       throw new UnprocessableEntityException('Email là bắt buộc')
     }
+    
 
     const password = body.password || 'TrekGo@123456'
-    
-    // 1. Tạo tài khoản trên Identity Provider (Supabase)
-    const identityUser = await this.identityProvider.createUser({
+
+    // 1. Đăng ký trên Supabase Auth (Supabase tự động gửi mã OTP qua email)
+    const identityUser = await this.identityProvider.signUp({
       email: body.email,
       password,
-      fullName: body.fullName || body.name,
+      fullName: body.fullName,
       phone: body.phone,
     })
 
-    const authUserId = identityUser.id
-
-    // 2. Tạo hồ sơ người dùng trong Database (Postgres)
-    try {
-      const user = await this.userRepository.create({
-        authUserId,
-        email: body.email,
-        fullName: body.fullName || body.name || body.email.split('@')[0],
-        phone: body.phone,
-        cccd: body.cccd,
-        avatar: body.avatar,
-        role: body.role ?? UserRole.USER,
-        status: UserStatus.ACTIVE,
-      })
-
-      // 3. Đăng nhập để lấy token
-      const signInData = await this.identityProvider.signInWithPassword(body.email, password)
-
-      return {
-        user,
-        accessToken: signInData.session.accessToken,
-        refreshToken: signInData.session.refreshToken,
-        expiresIn: signInData.session.expiresIn,
-        expiresAt: signInData.session.expiresAt,
-        tokenType: signInData.session.tokenType,
-      }
-    } catch (error) {
-      // Rollback: Xóa user trên Identity Provider nếu lưu DB thất bại
-      await this.identityProvider.deleteUser(authUserId)
-
-      if (isUniqueConstraintPrismaError(error)) {
-        throw new ConflictException('Email hoặc số CCCD đã tồn tại trong hệ thống')
-      }
-      throw error
+    return {
+      message: 'Mã xác thực OTP đã được gửi đến email của bạn. Vui lòng xác thực để kích hoạt tài khoản.',
+      email: body.email,
+      userId: identityUser.id,
     }
   }
 }
