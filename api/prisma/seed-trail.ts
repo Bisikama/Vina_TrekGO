@@ -39,24 +39,61 @@ async function main() {
   console.log('✅ Đã tạo Destination:', destination.name)
 
   // 3. Toạ độ 3D chuẩn [Kinh độ (Lng), Vĩ độ (Lat), Cao độ (Alt mét)]
-  // Tuyến đường leo thực tế men theo đường Cột Điện (từ ~45m lên đỉnh 986m)
+  // Tuyến đường leo thực tế mượt mà uốn lượn men theo đường Cột Điện (từ ~42m lên đỉnh 986m)
   const cotDienCoordinates = [
-    [106.1785, 11.3652, 45.0],   // Cột 1 - Điểm xuất phát chân núi
-    [106.1778, 11.3668, 85.0],   // Cột 10
-    [106.1765, 11.3685, 160.0],  // Cột 25 - Bắt đầu dốc đá
-    [106.1752, 11.3705, 275.0],  // Cột 40
-    [106.1738, 11.3725, 410.0],  // Cột 50
-    [106.1731, 11.3742, 535.0],  // Cột 55 - Trạm tiếp nước / Nghỉ chân giữa núi
-    [106.1720, 11.3765, 680.0],  // Cột 75 - Dốc trơn trượt
-    [106.1712, 11.3790, 820.0],  // Cột 95 - Gió mạnh
-    [106.1705, 11.3815, 915.0],  // Cột 110 - Gần chạm đỉnh
-    [106.1698, 11.3838, 986.0],  // Cột 117 - Cột mốc đỉnh Núi Bà Đen 986m
+    [106.1798, 11.3645, 42.0],  // Điểm gửi xe & Cổng bắt đầu
+    [106.1792, 11.3653, 50.0],  // Cột 1 - Cột xuất phát
+    [106.1788, 11.3661, 62.0],  // Cột 5 - Đường đất đỏ
+    [106.1784, 11.3669, 85.0],  // Cột 10
+    [106.1779, 11.3676, 110.0], // Cột 15
+    [106.1774, 11.3683, 140.0], // Cột 20
+    [106.1768, 11.3690, 175.0], // Cột 25 - Vườn chuối / Đá tảng
+    [106.1762, 11.3698, 220.0], // Cột 30
+    [106.1757, 11.3706, 260.0], // Cột 35 - Đoạn dốc đá đầu tiên
+    [106.1751, 11.3713, 310.0], // Cột 40
+    [106.1746, 11.3721, 365.0], // Cột 45
+    [106.1740, 11.3730, 420.0], // Cột 50 - Vách đá dốc 45 độ
+    [106.1736, 11.3737, 475.0], // Cột 53
+    [106.1731, 11.3745, 535.0], // Cột 55 - Trạm tiếp nước / Điểm ngắm cảnh giữa núi
+    [106.1727, 11.3753, 590.0], // Cột 60 - Rừng trúc
+    [106.1724, 11.3761, 645.0], // Cột 65
+    [106.1720, 11.3770, 710.0], // Cột 72 - Bãi đá dốc đứng
+    [106.1717, 11.3778, 765.0], // Cột 80
+    [106.1713, 11.3786, 815.0], // Cột 88
+    [106.1710, 11.3795, 860.0], // Cột 95 - Đoạn lộng gió nhìn toàn cảnh TP Tây Ninh
+    [106.1706, 11.3804, 905.0], // Cột 102
+    [106.1703, 11.3813, 935.0], // Cột 108
+    [106.1700, 11.3822, 960.0], // Cột 114 - Lên sàn bê tông
+    [106.1698, 11.3830, 978.0], // Cột 116
+    [106.1695, 11.3838, 986.0], // Cột 117 - Cột mốc đỉnh Núi Bà Đen 986m
   ]
 
-  // 4. Tạo SystemTrail: Cung đường Cột Điện
+  const geoJsonData = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {
+          name: 'Cung đường Cột Điện - Núi Bà Đen',
+          stroke: '#FF3D00',
+          strokeWidth: 5,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: cotDienCoordinates,
+        },
+      },
+    ],
+  }
+
+  // 4. Tạo hoặc Cập nhật SystemTrail: Cung đường Cột Điện
   const trail = await prisma.systemTrail.upsert({
     where: { code: 'TRAIL_BADEN_COTDIEN' },
-    update: {},
+    update: {
+      routeGeojson: geoJsonData,
+      distanceKm: 4.5,
+      elevationGainM: 944,
+    },
     create: {
       id: 'c1000000-0000-0000-0000-000000000001',
       destinationId: destination.id,
@@ -66,30 +103,14 @@ async function main() {
       description: 'Cung trekking phổ biến và rõ đường nhất tại Núi Bà Đen, men theo đường dây điện từ Cột 1 đến Cột 117 trên đỉnh núi.',
       difficulty: DifficultyLevel.MEDIUM,
       distanceKm: 4.5,
-      elevationGainM: 941,
+      elevationGainM: 944,
       estimatedDurationMinutes: 240, // 4 tiếng
       price: 0,
       status: 'ACTIVE',
-      routeGeojson: {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            properties: {
-              name: 'Đường mòn Cột Điện',
-              stroke: '#FF5722',
-              strokeWidth: 4,
-            },
-            geometry: {
-              type: 'LineString',
-              coordinates: cotDienCoordinates,
-            },
-          },
-        ],
-      },
+      routeGeojson: geoJsonData,
     },
   })
-  console.log('✅ Đã tạo SystemTrail:', trail.name)
+  console.log('✅ Đã cập nhật SystemTrail:', trail.name)
 
   // 5. (Khuyến nghị) Tạo 3 Checkpoint chính dọc theo cung này
   const cpStart = await prisma.checkpoint.upsert({
