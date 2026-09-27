@@ -25,7 +25,7 @@ enum UserRole {
   USER
   LEADER
   STAFF_INVENTORY
-  STAFF_LOGISTICS
+  STAFF_DELIVERY
   ADMIN
 
   @@map("user_role")
@@ -1091,7 +1091,6 @@ model TrailRecording {
   @@map("trail_recordings")
 }
 
-
 model TrailRecordingPoint {
   id             BigInt   @id @default(autoincrement())
   recordingId    String   @map("recording_id") @db.Uuid
@@ -1193,10 +1192,10 @@ model TripTrailPlan {
   trip        Trip        @relation("R_TripTrailPlan_trip_id", fields: [tripId], references: [id])
   systemTrail SystemTrail @relation("R_TripTrailPlan_system_trail_id", fields: [systemTrailId], references: [id])
 
-  tripTrailSwitchsViaFromPlanId              TripTrailSwitch[]       @relation("R_TripTrailSwitch_from_plan_id")
-  tripTrailSwitchsViaToPlanId                TripTrailSwitch[]       @relation("R_TripTrailSwitch_to_plan_id")
-  tripActiveTrailPlanViaTripIdAndTrailPlanId TripActiveTrailPlan?    @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id")
-  routeDeviationEventsViaTripTrailPlanId     RouteDeviationEvent[]  @relation("R_RouteDeviationEvent_trip_trail_plan_id")
+  tripTrailSwitchsViaFromPlanId              TripTrailSwitch[]     @relation("R_TripTrailSwitch_from_plan_id")
+  tripTrailSwitchsViaToPlanId                TripTrailSwitch[]     @relation("R_TripTrailSwitch_to_plan_id")
+  tripActiveTrailPlanViaTripIdAndTrailPlanId TripActiveTrailPlan?  @relation("R_TripActiveTrailPlan_trip_id_trail_plan_id")
+  routeDeviationEventsViaTripTrailPlanId     RouteDeviationEvent[] @relation("R_RouteDeviationEvent_trip_trail_plan_id")
 
   @@unique([tripId, sequence])
   @@unique([tripId, id])
@@ -2451,13 +2450,13 @@ model GpsLocation {
   sessionId      String   @map("session_id") @db.Uuid
   clientSampleId String   @map("client_sample_id") @db.Uuid
   latitude       Decimal  @db.Decimal(10, 7)
-  longitude  Decimal  @db.Decimal(10, 7)
-  accuracyM  Decimal? @map("accuracy_m") @db.Decimal(7, 2)
-  speedMps   Decimal? @map("speed_mps") @db.Decimal(7, 2)
-  headingDeg Decimal? @map("heading_deg") @db.Decimal(6, 2)
-  altitudeM  Decimal? @map("altitude_m") @db.Decimal(8, 2)
-  recordedAt DateTime @map("recorded_at") @db.Timestamptz(6)
-  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  longitude      Decimal  @db.Decimal(10, 7)
+  accuracyM      Decimal? @map("accuracy_m") @db.Decimal(7, 2)
+  speedMps       Decimal? @map("speed_mps") @db.Decimal(7, 2)
+  headingDeg     Decimal? @map("heading_deg") @db.Decimal(6, 2)
+  altitudeM      Decimal? @map("altitude_m") @db.Decimal(8, 2)
+  recordedAt     DateTime @map("recorded_at") @db.Timestamptz(6)
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
 
   session GpsSession @relation("R_GpsLocation_session_id", fields: [sessionId], references: [id])
 

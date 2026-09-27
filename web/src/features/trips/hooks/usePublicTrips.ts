@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { useAuthStore } from '@/features/auth';
+import { useAuth, useAuthStore } from '@/features/auth';
 import { tripsApi } from '../services/trips.api';
 import type { Option, Readiness, Trail, Trip, TripInput } from '../types/trip.types';
 
 export const usePublicTrips = () => {
-  const token = useAuthStore(s => s.token);
-  const user = useAuthStore(s => s.user);
+  const { accessToken: token, user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [busy, setBusy] = useState(false);

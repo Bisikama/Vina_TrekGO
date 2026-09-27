@@ -2,7 +2,7 @@ import { apiClient } from '@/lib/axios';
 import { useAuthStore } from '@/features/auth';
 import type { Option, Readiness, Trail, Trip, TripInput } from '../types/trip.types';
 
-const config = () => ({ headers: { Authorization: `Bearer ${useAuthStore.getState().token}` } });
+const config = () => ({ headers: { Authorization: `Bearer ${useAuthStore.getState().accessToken}` } });
 const base = '/api/v1/leader/public-trips';
 export const tripsApi = {
   list: async (page = 1) => (await apiClient.get<Trip[]>(base, { ...config(), params: { page, pageSize: 20 } })).data,
