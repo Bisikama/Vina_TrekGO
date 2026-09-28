@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import Image from 'next/image';
 
@@ -44,6 +46,16 @@ export const AdminHeader = () => {
             <Image src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=100&auto=format&fit=crop" alt="Admin" fill className="rounded-full object-cover" />
             <div className="absolute -bottom-1 -right-1 bg-green-700 text-white text-[8px] font-bold px-1 rounded-sm border border-white">SUPER ADMIN</div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              document.cookie = "mock_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+              window.location.href = "/public/login";
+            }}
+            className="ml-2 cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"
+          >
+            Đăng xuất
+          </button>
         </div>
       </div>
     </header>

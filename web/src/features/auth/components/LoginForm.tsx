@@ -15,7 +15,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"trekker" | "leader" | "warehouse" | "admin">("trekker");
+  const [activeTab, setActiveTab] = useState<"trekker" | "leader" | "warehouse" | "delivery" | "admin">("trekker");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +36,12 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
       } else {
         if (activeTab === "admin") {
           window.location.href = "/admin";
+        } else if (activeTab === "leader") {
+          window.location.href = "/leader";
+        } else if (activeTab === "warehouse") {
+          window.location.href = "/staff/work-queue";
+        } else if (activeTab === "delivery") {
+          window.location.href = "/delivery";
         } else {
           window.location.href = "/";
         }
@@ -78,7 +84,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
         <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">
           Chọn cổng phân quyền truy cập
         </label>
-        <div className="grid grid-cols-4 gap-2 bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#E2E8F0]">
+        <div className="grid grid-cols-5 gap-2 bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#E2E8F0]">
           <button
             type="button"
             onClick={() => setActiveTab("trekker")}
@@ -106,6 +112,20 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
             <span className="text-xs font-semibold">Leader</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("delivery")}
+            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
+              activeTab === "delivery" 
+                ? "bg-[#154B36] text-white shadow-md" 
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="text-xs font-semibold text-center leading-tight">Vận<br/>chuyển</span>
           </button>
           <button
             type="button"
@@ -289,7 +309,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
               if (result) {
                 document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
                 if (onSuccess) onSuccess();
-                else window.location.href = "/";
+                else window.location.href = "/leader";
               }
             }}
             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
@@ -304,12 +324,27 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
               if (result) {
                 document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
                 if (onSuccess) onSuccess();
-                else window.location.href = "/";
+                else window.location.href = "/staff/work-queue";
               }
             }}
             className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
           >
             Kho
+          </button>
+          <button 
+            type="button"
+            onClick={async () => { 
+              setEmail("delivery@example.com"); setPassword("123456"); setActiveTab("delivery");
+              const result = await login({ email: "delivery@example.com", password: "123456" });
+              if (result) {
+                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
+                if (onSuccess) onSuccess();
+                else window.location.href = "/delivery";
+              }
+            }}
+            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
+          >
+            Vận chuyển
           </button>
           <button 
             type="button"
