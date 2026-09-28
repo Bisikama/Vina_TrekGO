@@ -48,10 +48,10 @@ function view(row: Row): TripView {
       isEnabled: c.isEnabled,
     })),
     trails: row.tripTrailPlansViaTripId.map((t) => ({
-      systemTrailId: t.systemTrailId,
+      systemTrailId: t.systemTrailId ?? (() => { throw new Error('Public trip requires system trail'); })(),
       sequence: t.sequence,
       snapshotName: t.snapshotName,
-      snapshotDifficulty: t.snapshotDifficulty,
+      snapshotDifficulty: t.snapshotDifficulty ?? (() => { throw new Error('Public trip requires trail difficulty'); })(),
       snapshotGeojson: t.snapshotGeojson as Json,
       snapshotDistanceKm: t.snapshotDistanceKm?.toString() ?? null,
       snapshotElevationGainM: t.snapshotElevationGainM,
