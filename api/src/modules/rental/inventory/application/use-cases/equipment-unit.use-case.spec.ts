@@ -421,9 +421,9 @@ describe('Equipment Unit Use Cases', () => {
           id: 'unit-1',
           status,
           currentInventoryLocation: { id: 'loc-1' },
-        } as unknown as EquipmentUnitView)
+        })
         mockEquipmentUnitPort.startMaintenance.mockResolvedValue(
-          mockMaintenanceResult as unknown as ChangeMaintenancePortResult,
+          mockMaintenanceResult,
         )
 
         const res = await changeMaintenanceUseCase.execute('unit-1', {
@@ -451,7 +451,7 @@ describe('Equipment Unit Use Cases', () => {
         id: 'unit-1',
         status: 'RENTED',
         currentInventoryLocation: { id: 'loc-1' },
-      } as unknown as EquipmentUnitView)
+      })
       await expect(
         changeMaintenanceUseCase.execute('unit-1', {
           action: 'START',
@@ -469,7 +469,7 @@ describe('Equipment Unit Use Cases', () => {
           id: 'unit-1',
           status,
           currentInventoryLocation: { id: 'loc-1' },
-        } as unknown as EquipmentUnitView)
+        })
         await expect(
           changeMaintenanceUseCase.execute('unit-1', {
             action: 'START',
@@ -486,7 +486,7 @@ describe('Equipment Unit Use Cases', () => {
         id: 'unit-1',
         status: 'AVAILABLE',
         currentInventoryLocation: null,
-      } as unknown as EquipmentUnitView)
+      })
       await expect(
         changeMaintenanceUseCase.execute('unit-1', {
           action: 'START',
@@ -501,7 +501,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({
         id: 'unit-1',
         status: 'MAINTENANCE',
-      } as unknown as EquipmentUnitView)
+      })
       const completeMockResult = {
         unit: { id: 'unit-1', status: 'AVAILABLE', condition: 'NEW' },
         maintenance: {
@@ -515,7 +515,7 @@ describe('Equipment Unit Use Cases', () => {
         },
       }
       mockEquipmentUnitPort.completeMaintenance.mockResolvedValue(
-        completeMockResult as unknown as ChangeMaintenancePortResult,
+        completeMockResult,
       )
 
       const res = await changeMaintenanceUseCase.execute('unit-1', {
@@ -535,7 +535,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({
         id: 'unit-1',
         status: 'MAINTENANCE',
-      } as unknown as EquipmentUnitView)
+      })
       const completeMockResult = {
         unit: { id: 'unit-1', status: 'DAMAGED', condition: 'DAMAGED' },
         maintenance: {
@@ -549,7 +549,7 @@ describe('Equipment Unit Use Cases', () => {
         },
       }
       mockEquipmentUnitPort.completeMaintenance.mockResolvedValue(
-        completeMockResult as unknown as ChangeMaintenancePortResult,
+        completeMockResult,
       )
 
       const res = await changeMaintenanceUseCase.execute('unit-1', {
@@ -564,7 +564,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({
         id: 'unit-1',
         status: 'MAINTENANCE',
-      } as unknown as EquipmentUnitView)
+      })
       const completeMockResult = {
         unit: { id: 'unit-1', status: 'LOST', condition: 'LOST' },
         maintenance: {
@@ -578,7 +578,7 @@ describe('Equipment Unit Use Cases', () => {
         },
       }
       mockEquipmentUnitPort.completeMaintenance.mockResolvedValue(
-        completeMockResult as unknown as ChangeMaintenancePortResult,
+        completeMockResult,
       )
 
       const res = await changeMaintenanceUseCase.execute('unit-1', {
@@ -605,7 +605,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({
         id: 'unit-1',
         status: 'MAINTENANCE',
-      } as unknown as EquipmentUnitView)
+      })
       mockEquipmentUnitPort.completeMaintenance.mockRejectedValue(
         AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_NOT_ACTIVE),
       )
@@ -624,7 +624,7 @@ describe('Equipment Unit Use Cases', () => {
         id: 'unit-1',
         status: 'AVAILABLE',
         currentInventoryLocation: { id: 'loc-1' },
-      } as unknown as EquipmentUnitView)
+      })
       mockEquipmentUnitPort.startMaintenance.mockRejectedValue(
         AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_STATE_CONFLICT),
       )
@@ -644,7 +644,7 @@ describe('Equipment Unit Use Cases', () => {
         id: 'unit-1',
         status: 'AVAILABLE',
         currentInventoryLocation: { id: 'loc-1' },
-      } as unknown as EquipmentUnitView)
+      })
       mockEquipmentUnitPort.startMaintenance.mockRejectedValue(AppError.fromCode(RENTAL_ERROR_CODES.VERSION_CONFLICT))
 
       await expect(
@@ -661,7 +661,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({
         id: 'unit-1',
         status: 'AVAILABLE',
-      } as unknown as EquipmentUnitView)
+      })
       await expect(
         changeMaintenanceUseCase.execute('unit-1', {
           action: 'COMPLETE',

@@ -83,8 +83,8 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
         code: unit.currentInventoryLocation.code,
         name: unit.currentInventoryLocation.name,
       } : null,
-      status: unit.status as EquipmentUnitStatusValue,
-      condition: unit.condition as EquipmentConditionValue,
+      status: unit.status,
+      condition: unit.condition,
       expectedReadyAt: unit.expectedReadyAt ? unit.expectedReadyAt.toISOString() : null,
       acquiredAt: unit.acquiredAt ? unit.acquiredAt.toISOString().split('T')[0] : null,
       retiredAt: unit.retiredAt ? unit.retiredAt.toISOString().split('T')[0] : null,
@@ -98,7 +98,7 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
     // Lọc cơ sở, không bao gồm status để đếm tổng
     const baseWhere: Prisma.EquipmentUnitWhereInput = {};
     if (productId) baseWhere.productId = productId;
-    if (condition) baseWhere.condition = condition as EquipmentCondition;
+    if (condition) baseWhere.condition = condition;
     if (inventoryLocationId) {
       baseWhere.currentInventoryLocationId = inventoryLocationId;
     }
@@ -115,7 +115,7 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
     // Lọc dữ liệu trả về, bao gồm status
     const itemsWhere: Prisma.EquipmentUnitWhereInput = { ...baseWhere };
     if (status) {
-      itemsWhere.status = status as EquipmentUnitStatus;
+      itemsWhere.status = status;
     }
 
     const skip = (page - 1) * pageSize;
@@ -216,8 +216,8 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
           assetCode: payload.assetCode,
           qrCode: payload.qrCode,
           serialNumber: payload.serialNumber,
-          status: payload.status as EquipmentUnitStatus,
-          condition: payload.condition as EquipmentCondition,
+          status: payload.status,
+          condition: payload.condition,
           acquiredAt: payload.acquiredAt ? new Date(payload.acquiredAt) : undefined,
         },
         select: this.getExplicitSelect(),
@@ -242,13 +242,13 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
               assetCode: payload.assetCode,
               qrCode: payload.qrCode,
               serialNumber: payload.serialNumber,
-              status: payload.status as EquipmentUnitStatus,
-              condition: payload.condition as EquipmentCondition,
+              status: payload.status,
+              condition: payload.condition,
               acquiredAt: payload.acquiredAt ? new Date(payload.acquiredAt) : undefined,
             },
             select: this.getExplicitSelect(),
           });
-          units.push(unit as unknown as EquipmentUnitWithRelations);
+          units.push(unit);
         }
         return units;
       });
@@ -439,8 +439,8 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
             status: 'MAINTENANCE',
           },
           data: {
-            condition: payload.resultingCondition as EquipmentCondition,
-            status: targetStatus as EquipmentUnitStatus,
+            condition: payload.resultingCondition,
+            status: targetStatus,
             version: { increment: 1 },
           },
           select: this.getExplicitSelect(),

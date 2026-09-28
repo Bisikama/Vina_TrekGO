@@ -707,11 +707,12 @@ enum MediaC2paStatus {
 model MediaAsset {
   id          String  @id @default(uuid()) @db.Uuid
   ownerUserId String? @map("owner_user_id") @db.Uuid
+  owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
 
   provider     MediaProvider
   scope        MediaScope
   resourceType MediaResourceType @map("resource_type")
-  status       MediaStatus
+  status       MediaStatus       @default(PENDING_UPLOAD)
 
   providerAssetId  String? @unique @map("provider_asset_id")
   providerPublicId String? @unique @map("provider_public_id")
@@ -732,14 +733,14 @@ model MediaAsset {
   sha256         String?
   perceptualHash String? @map("perceptual_hash")
 
-  captureSource    MediaCaptureSource @map("capture_source")
+  captureSource    MediaCaptureSource @default(UNKNOWN) @map("capture_source")
   clientCapturedAt DateTime?          @map("client_captured_at") @db.Timestamptz(6)
   exifCapturedAt   DateTime?          @map("exif_captured_at") @db.Timestamptz(6)
 
   exifMetadata Json? @map("exif_metadata")
 
-  c2paStatus        MediaC2paStatus       @map("c2pa_status")
-  provenanceStatus  MediaProvenanceStatus @map("provenance_status")
+  c2paStatus        MediaC2paStatus       @default(NOT_CHECKED) @map("c2pa_status")
+  provenanceStatus  MediaProvenanceStatus @default(UNKNOWN) @map("provenance_status")
   provenanceReasons Json?                 @map("provenance_reasons")
 
   uploadIntentExpiresAt DateTime? @map("upload_intent_expires_at") @db.Timestamptz(6)
@@ -843,6 +844,7 @@ model User {
   systemConfigsViaUpdatedBy              SystemConfig[]              @relation("R_SystemConfig_updated_by")
   notificationsViaUserId                 Notification[]              @relation("R_Notification_user_id")
   auditLogsViaUserId                     AuditLog[]                  @relation("R_AuditLog_user_id")
+  mediaAssetsViaOwnerUserId              MediaAsset[]                @relation("R_MediaAsset_owner_user_id")
 
   @@index([role])
   @@index([status])
@@ -1026,7 +1028,7 @@ model PickupPoint {
 }
 
 model PersonalTrail {
-  tripTrailPlans TripTrailPlan[] @relation("PrivateTripPersonalTrail")
+  tripTrailPlans TripTrailPlan[]         @relation("PrivateTripPersonalTrail")
   id             String                  @id @default(uuid()) @db.Uuid
   userId         String                  @map("user_id") @db.Uuid
   destinationId  String?                 @map("destination_id") @db.Uuid
@@ -1177,17 +1179,17 @@ model TrailCheckpoint {
 
 model PersonalCheckpoint {
   tripCheckpoints TripCheckpoint[] @relation("PrivateTripPersonalCheckpoint")
-  id              String   @id @default(uuid()) @db.Uuid
-  personalTrailId String   @map("personal_trail_id") @db.Uuid
-  name            String   @db.VarChar(200)
-  latitude        Decimal  @db.Decimal(10, 7)
-  longitude       Decimal  @db.Decimal(10, 7)
+  id              String           @id @default(uuid()) @db.Uuid
+  personalTrailId String           @map("personal_trail_id") @db.Uuid
+  name            String           @db.VarChar(200)
+  latitude        Decimal          @db.Decimal(10, 7)
+  longitude       Decimal          @db.Decimal(10, 7)
   sequence        Int
-  radiusMeters    Int      @default(50) @map("radius_meters")
+  radiusMeters    Int              @default(50) @map("radius_meters")
   info            String?
-  imageUrls       Json?    @map("image_urls")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  imageUrls       Json?            @map("image_urls")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   personalTrail PersonalTrail @relation("R_PersonalCheckpoint_personal_trail_id", fields: [personalTrailId], references: [id])
 
@@ -1303,22 +1305,22 @@ model Trip {
 
 /// Trip plans consume verified SYSTEM_TRAILS only. Snapshot fields preserve the route used by the Trip even if the master trail changes later.
 model TripTrailPlan {
-  sourceTrailVersion     Int?            @map("source_trail_version")
-  snapshotCheckpointIds  Json?           @map("snapshot_checkpoint_ids")
-  id                     String          @id @default(uuid()) @db.Uuid
-  tripId                 String          @map("trip_id") @db.Uuid
-  systemTrailId          String?         @map("system_trail_id") @db.Uuid
-  personalTrailId        String?         @map("personal_trail_id") @db.Uuid
+  sourceTrailVersion     Int?             @map("source_trail_version")
+  snapshotCheckpointIds  Json?            @map("snapshot_checkpoint_ids")
+  id                     String           @id @default(uuid()) @db.Uuid
+  tripId                 String           @map("trip_id") @db.Uuid
+  systemTrailId          String?          @map("system_trail_id") @db.Uuid
+  personalTrailId        String?          @map("personal_trail_id") @db.Uuid
   sequence               Int
-  snapshotName           String          @map("snapshot_name") @db.VarChar(200)
+  snapshotName           String           @map("snapshot_name") @db.VarChar(200)
   snapshotDifficulty     DifficultyLevel? @map("snapshot_difficulty")
-  snapshotGeojson        Json            @map("snapshot_geojson")
-  snapshotDistanceKm     Decimal?        @map("snapshot_distance_km") @db.Decimal(8, 2)
-  snapshotElevationGainM Int?            @map("snapshot_elevation_gain_m")
-  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  snapshotGeojson        Json             @map("snapshot_geojson")
+  snapshotDistanceKm     Decimal?         @map("snapshot_distance_km") @db.Decimal(8, 2)
+  snapshotElevationGainM Int?             @map("snapshot_elevation_gain_m")
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  trip        Trip        @relation("R_TripTrailPlan_trip_id", fields: [tripId], references: [id])
-  systemTrail SystemTrail? @relation("R_TripTrailPlan_system_trail_id", fields: [systemTrailId], references: [id], onDelete: Restrict)
+  trip          Trip           @relation("R_TripTrailPlan_trip_id", fields: [tripId], references: [id])
+  systemTrail   SystemTrail?   @relation("R_TripTrailPlan_system_trail_id", fields: [systemTrailId], references: [id], onDelete: Restrict)
   personalTrail PersonalTrail? @relation("PrivateTripPersonalTrail", fields: [personalTrailId], references: [id], onDelete: Restrict)
 
   tripTrailSwitchsViaFromPlanId              TripTrailSwitch[]     @relation("R_TripTrailSwitch_from_plan_id")
@@ -1369,25 +1371,25 @@ model TripTrailSwitch {
 
 /// Snapshot of checkpoint definitions selected for a Trip. Required checkpoints drive Trip completion; GPS execution events are stored separately.
 model TripCheckpoint {
-  sourcePersonalCheckpointId String? @map("source_personal_checkpoint_id") @db.Uuid
-  sourcePersonalCheckpoint PersonalCheckpoint? @relation("PrivateTripPersonalCheckpoint", fields: [sourcePersonalCheckpointId], references: [id], onDelete: Restrict)
-  id                 String   @id @default(uuid()) @db.Uuid
-  tripId             String   @map("trip_id") @db.Uuid
-  sourceCheckpointId String?  @map("source_checkpoint_id") @db.Uuid
-  name               String   @db.VarChar(200)
-  description        String?
-  latitude           Decimal  @db.Decimal(10, 7)
-  longitude          Decimal  @db.Decimal(10, 7)
-  sequence           Int
-  isRequired         Boolean  @default(false) @map("is_required")
-  radiusMeters       Int      @map("radius_meters")
-  missionTitle       String?  @map("mission_title") @db.VarChar(200)
-  missionDescription String?  @map("mission_description")
-  missionType        String?  @map("mission_type") @db.VarChar(50)
-  rewardPoints       Int      @default(0) @map("reward_points")
-  isEnabled          Boolean  @default(true) @map("is_enabled")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sourcePersonalCheckpointId String?             @map("source_personal_checkpoint_id") @db.Uuid
+  sourcePersonalCheckpoint   PersonalCheckpoint? @relation("PrivateTripPersonalCheckpoint", fields: [sourcePersonalCheckpointId], references: [id], onDelete: Restrict)
+  id                         String              @id @default(uuid()) @db.Uuid
+  tripId                     String              @map("trip_id") @db.Uuid
+  sourceCheckpointId         String?             @map("source_checkpoint_id") @db.Uuid
+  name                       String              @db.VarChar(200)
+  description                String?
+  latitude                   Decimal             @db.Decimal(10, 7)
+  longitude                  Decimal             @db.Decimal(10, 7)
+  sequence                   Int
+  isRequired                 Boolean             @default(false) @map("is_required")
+  radiusMeters               Int                 @map("radius_meters")
+  missionTitle               String?             @map("mission_title") @db.VarChar(200)
+  missionDescription         String?             @map("mission_description")
+  missionType                String?             @map("mission_type") @db.VarChar(50)
+  rewardPoints               Int                 @default(0) @map("reward_points")
+  isEnabled                  Boolean             @default(true) @map("is_enabled")
+  createdAt                  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   trip             Trip        @relation("R_TripCheckpoint_trip_id", fields: [tripId], references: [id])
   sourceCheckpoint Checkpoint? @relation("R_TripCheckpoint_source_checkpoint_id", fields: [sourceCheckpointId], references: [id])

@@ -14,20 +14,59 @@ export interface MediaAssetView {
   resourceType: MediaResourceTypeValue;
   status: MediaStatusValue;
   mimeType: string | null;
-  sizeBytes: bigint | null;
+  sizeBytes: number | null;
   width: number | null;
   height: number | null;
   durationMs: number | null;
   captureSource: MediaCaptureSourceValue;
   provenanceStatus: MediaProvenanceStatusValue;
   readyAt: Date | null;
+  uploadIntentExpiresAt: Date | null;
+  providerPublicId: string | null;
+  deliveryType: string;
 }
 
 export interface FindMediaAssetByIdInput {
   id: string;
 }
 
+export interface CreatePendingUploadInput {
+  id: string;
+  ownerUserId: string;
+  scope: MediaScopeValue;
+  resourceType: MediaResourceTypeValue;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  captureSource: MediaCaptureSourceValue;
+  clientCapturedAt?: Date;
+  providerPublicId: string;
+  deliveryType: string;
+  uploadIntentExpiresAt: Date;
+}
+
+export interface MarkReadyInput {
+  id: string;
+  ownerUserId: string;
+  providerAssetId: string;
+  providerPublicId: string;
+  format: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  secureUrl: string;
+  uploadedAt: Date | null;
+}
+
+export interface FindOwnedMediaAssetByIdInput {
+  id: string;
+  ownerUserId: string;
+}
+
 export interface MediaAssetPort {
   findById(input: FindMediaAssetByIdInput): Promise<MediaAssetView | null>;
-  // Future: create(...), updateStatus(...), etc. will be added when needed.
+  findOwnedById(input: FindOwnedMediaAssetByIdInput): Promise<MediaAssetView | null>;
+  createPendingUpload(input: CreatePendingUploadInput): Promise<MediaAssetView>;
+  markReady(input: MarkReadyInput): Promise<MediaAssetView>;
 }

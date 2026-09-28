@@ -51,5 +51,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_NOT_FOUND]: { status: 404, message: 'Media asset not found', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_SCOPE]: { status: 422, message: 'Invalid media scope', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_RESOURCE_TYPE]: { status: 422, message: 'Invalid media resource type', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_FILE_TOO_LARGE]: { status: 413, message: 'Media file too large', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_MIME_TYPE]: { status: 422, message: 'Unsupported media MIME type', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_UPLOAD_EXPIRED]: { status: 410, message: 'Media upload intent expired', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_UPLOAD_SIGNATURE_INVALID]: { status: 422, message: 'Invalid upload signature', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH]: { status: 409, message: 'Provider metadata mismatch', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_INVALID_STATE]: { status: 409, message: 'Invalid media state for this operation', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR]: { status: 502, message: 'Media provider error', retryable: true },
 };
