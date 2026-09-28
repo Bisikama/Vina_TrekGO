@@ -26,6 +26,10 @@ const envConfigSchema = z.object({
   ACCESS_TOKEN_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_SECRET: z.string().default(''),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_SIGNATURE_ALGORITHM: z.string().optional(),
 })
 
 

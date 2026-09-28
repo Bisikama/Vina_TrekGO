@@ -1,5 +1,6 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
+import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -39,4 +40,9 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RENTAL_ERROR_CODES.BATCH_ASSET_CODE_DUPLICATE]: { status: 400, message: 'Duplicate asset codes provided in batch', retryable: false },
   [RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_NOT_ACTIVE]: { status: 409, message: 'Equipment maintenance is not active', retryable: false },
   [RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_STATE_CONFLICT]: { status: 409, message: 'Multiple active maintenance records found', retryable: false },
+  // --- MEDIA ---
+  [MEDIA_ERROR_CODES.MEDIA_NOT_FOUND]: { status: 404, message: 'Media asset not found', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_INVALID_SCOPE]: { status: 422, message: 'Invalid media scope', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_INVALID_RESOURCE_TYPE]: { status: 422, message: 'Invalid media resource type', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR]: { status: 502, message: 'Media provider error', retryable: true },
 };
