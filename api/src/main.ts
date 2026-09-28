@@ -2,10 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import envConfig from './shared/config';
+import { GlobalErrorFilter } from './shared/errors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api/v1');
+  app.useGlobalFilters(new GlobalErrorFilter());
 
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
