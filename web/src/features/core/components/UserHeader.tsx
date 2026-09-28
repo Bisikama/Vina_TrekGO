@@ -112,53 +112,9 @@ export const UserHeader = () => {
             Khám phá
           </Link>
 
-          <Link
-            href="/trips"
-            className="whitespace-nowrap hover:text-[#1B5E41]"
-          >
-            Chuyến đi
-          </Link>
-
-          <Link
-            href="/my-trips"
-            className="whitespace-nowrap hover:text-[#1B5E41]"
-          >
-            Chuyến đi của tôi
-          </Link>
-
-          <Link
-            href="/my-routes"
-            className="whitespace-nowrap hover:text-[#1B5E41]"
-          >
-            Cung đường của tôi
-          </Link>
-
-          {/* Chỉ có trong UserHeader */}
-          <Link
-            href="/rentals?bookingId=booking_001"
-            className="flex items-center gap-1.5 whitespace-nowrap hover:text-[#1B5E41]"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v8a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 7V5h4v2"
-              />
-            </svg>
-
-            Thuê thiết bị
-          </Link>
-
-          <Link
-            href="/leader-registration"
-            className="flex items-center gap-1 whitespace-nowrap hover:text-[#1B5E41]"
-          >
+          <Link href="/my-trips" className="hover:text-[#1B5E41]">Chuyến đi của tôi</Link>
+          <Link href="/routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
+          <Link href="/leader-registration" className="flex items-center gap-1 hover:text-[#1B5E41]">
             Trở thành Leader
 
             <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] leading-none text-black">
