@@ -49,7 +49,7 @@ export const UserHeader = () => {
           <Link href="/trips" className="hover:text-[#1B5E41]">Chuyến đi</Link>
 
           <Link href="/my-trips" className="hover:text-[#1B5E41]">Chuyến đi của tôi</Link>
-          <Link href="/my-routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
+          <Link href="/routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
           <Link href="/leader-registration" className="flex items-center gap-1 hover:text-[#1B5E41]">
             Trở thành Leader
             <span className="bg-amber-400 text-[9px] px-1.5 py-0.5 rounded text-black leading-none">PRO</span>
