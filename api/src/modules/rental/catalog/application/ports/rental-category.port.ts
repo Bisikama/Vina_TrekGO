@@ -5,6 +5,7 @@ export interface RentalCategoryView {
   name: string;
   slug: string;
   description: string | null;
+  status: string;
 }
 
 export interface ListRentalCategoriesParams {
@@ -24,4 +25,5 @@ export interface PaginatedResult<T> {
 
 export interface RentalCategoryPort {
   listActiveCategories(params: ListRentalCategoriesParams): Promise<{ items: RentalCategoryView[]; total: number }>;
+  getCategoryById(id: string): Promise<RentalCategoryView | null>;
 }

@@ -10,6 +10,7 @@ export class GlobalErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<any>();
     
     let code: string = COMMON_ERROR_CODES.INTERNAL_ERROR;
     let message: string = 'Internal server error';
@@ -49,9 +50,9 @@ export class GlobalErrorFilter implements ExceptionFilter {
         retryable,
       },
       meta: {
-        requestId: randomUUID(), // In a real app, grab from request if tracking exists
+        requestId: request.id || request.headers['x-request-id'] || randomUUID(),
         serverTime: new Date().toISOString(),
-        contractVersion: '1.0',
+        contractVersion: '0.2.0-final-flow',
       },
     });
   }

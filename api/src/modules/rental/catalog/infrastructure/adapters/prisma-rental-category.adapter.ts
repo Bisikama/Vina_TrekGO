@@ -29,6 +29,7 @@ export class PrismaRentalCategoryAdapter implements RentalCategoryPort {
           name: true,
           slug: true,
           description: true,
+          status: true,
         },
       }),
       this.prisma.rentalCategory.count({ where }),
@@ -38,5 +39,19 @@ export class PrismaRentalCategoryAdapter implements RentalCategoryPort {
       items,
       total,
     };
+  }
+
+  async getCategoryById(id: string): Promise<RentalCategoryView | null> {
+    const category = await this.prisma.rentalCategory.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        status: true,
+      },
+    });
+    return category;
   }
 }

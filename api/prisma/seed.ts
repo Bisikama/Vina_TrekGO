@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { seedCategories } from './seeds/category.seed';
+import { seedInventoryLocations } from './seeds/inventory-location.seed';
 
 const prisma = new PrismaClient();
 
@@ -7,6 +8,7 @@ async function main() {
   console.log('Start seeding database...');
   
   await seedCategories(prisma);
+  await seedInventoryLocations(prisma);
   
   // Có thể thêm các seeders khác ở đây trong tương lai. Ví dụ:
   // await seedRentalProducts(prisma);
