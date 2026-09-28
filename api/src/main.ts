@@ -5,6 +5,7 @@ import envConfig from './shared/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.setGlobalPrefix('api/v1');
 
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
