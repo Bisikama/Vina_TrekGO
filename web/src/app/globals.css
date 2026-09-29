@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F7F7F4;
+  --foreground: #1F2937;
+  --primary: #2F6B4F;
+  --primary-dark: #1F4A36;
+  --primary-deep: #125238;
+  --accent: #F59E0B;
+  --surface: #FFFFFF;
+  --border: #E5E7EB;
+  --text-muted: #6B7280;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary-green: #2F6B4F;
+  --color-primary-dark: #1F4A36;
+  --color-primary-deep: #125238;
+  --color-accent-amber: #F59E0B;
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Custom design tokens from DESIGN.md */
+.bg-canvas {
+  background-color: #F7F7F4;
+}
+
+.bg-forest-primary {
+  background-color: #2F6B4F;
+}
+
+.bg-forest-dark {
+  background-color: #1F4A36;
+}
+
+.text-forest-primary {
+  color: #2F6B4F;
+}
+
+.text-forest-dark {
+  color: #1F4A36;
+}
+
+.bg-amber-accent {
+  background-color: #F59E0B;
+}
+
+.text-amber-accent {
+  color: #F59E0B;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
