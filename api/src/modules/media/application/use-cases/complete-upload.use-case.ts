@@ -52,6 +52,13 @@ export class CompleteUploadUseCase {
       });
     }
 
+    if (!asset.providerPublicId || !asset.deliveryType) {
+      throw new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE,
+        message: 'Cannot complete upload for asset missing provider metadata',
+      });
+    }
+
     const now = new Date();
     const expiresAt = asset.uploadIntentExpiresAt;
     if (expiresAt && now > expiresAt) {
@@ -75,9 +82,8 @@ export class CompleteUploadUseCase {
       });
     }
 
-    // Verify Public ID match
     const providerPublicId = asset.providerPublicId;
-    if (providerPublicId && providerPublicId !== input.publicId) {
+    if (providerPublicId !== input.publicId) {
       throw new AppError({
         code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH,
         message: 'Public ID mismatch',
@@ -88,7 +94,7 @@ export class CompleteUploadUseCase {
     const metadata = await this.mediaStoragePort.getAssetMetadata({
       publicId: input.publicId,
       resourceType: asset.resourceType,
-      deliveryType: asset.deliveryType as 'upload' | 'authenticated',
+      deliveryType: asset.deliveryType,
     });
 
     if (!metadata) {
