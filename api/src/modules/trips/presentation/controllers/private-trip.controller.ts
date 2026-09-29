@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { z } from 'zod'
@@ -48,6 +48,7 @@ export class PrivateTripController {
     return this.trips.update(a, id, input)
   }
   @Post('private-trips/:id/invitations')
+  @Header('Cache-Control', 'no-store')
   @doc(privateInviteSchema)
   invite(
     @ActiveUser() a: Actor,
@@ -57,6 +58,8 @@ export class PrivateTripController {
     return this.trips.invite(a, id, input.expectedVersion, input.expiresAt)
   }
   @Post('private-trips/:id/invitations/revoke')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
   @doc(privateVersionSchema)
   revoke(
     @ActiveUser() a: Actor,
