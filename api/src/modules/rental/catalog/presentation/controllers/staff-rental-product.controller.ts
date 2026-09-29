@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Patch, Body, Query, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { AuthType } from 'src/shared/constants/auth.constant';
@@ -13,6 +13,7 @@ import { ListStaffRentalProductsSchema, type ListStaffRentalProductsDto } from '
 import { ChangeRentalProductStatusSchema, type ChangeRentalProductStatusDto } from '../dtos/change-rental-product-status.dto';
 import { CreateRentalProductSchema, type CreateRentalProductDto } from '../dtos/create-rental-product.dto';
 import { UpdateRentalProductSchema, type UpdateRentalProductDto } from '../dtos/update-rental-product.dto';
+import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper';
 
 @ApiTags('Staff Rental Catalog')
 @ApiBearerAuth()
@@ -27,19 +28,49 @@ export class StaffRentalProductController {
     private readonly updateRentalProductUseCase: UpdateRentalProductUseCase,
   ) {}
 
-  @ApiOperation({ summary: 'Lấy danh sách sản phẩm thuê (staff)' })
-  @ApiResponse({ status: 200, description: 'Danh sách sản phẩm kèm phân trang, hỗ trợ lọc theo trạng thái' })
-  @ApiQuery({ name: 'status', required: false, description: 'Lọc theo trạng thái (ACTIVE, INACTIVE, ARCHIVED)', example: 'ACTIVE' })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiOperation({ 
+    summary: 'Lấy danh sách sản phẩm thuê (staff)',
+    description: `
+Danh sách toàn bộ sản phẩm thuê dành cho nhân viên quản lý.
+- Hiển thị cả các sản phẩm INACTIVE và ARCHIVED.
+- Hỗ trợ lọc theo trạng thái và phân trang.
+`
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách sản phẩm kèm phân trang, hỗ trợ lọc theo trạng thái',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            items: { type: 'array', items: { type: 'object' } },
+            pagination: { type: 'object', properties: { page: { type: 'number' }, pageSize: { type: 'number' }, totalItems: { type: 'number' }, totalPages: { type: 'number' } } }
+          }
+        }
+      }
+    }
+  })
+  @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'], description: 'Lọc theo trạng thái (ACTIVE, INACTIVE, ARCHIVED)', example: 'ACTIVE' })
+  @ApiQuery({ name: 'page', required: false, type: Number, minimum: 1, default: 1, example: 1 })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, minimum: 1, maximum: 100, default: 20, example: 20 })
   @Get()
   async listProducts(@Query(new ZodValidationPipe(ListStaffRentalProductsSchema)) query: ListStaffRentalProductsDto) {
     return this.listStaffRentalProductsUseCase.execute(query);
   }
 
-  @ApiOperation({ summary: 'Thay đổi trạng thái sản phẩm thuê (staff)' })
-  @ApiResponse({ status: 200, description: 'Trạng thái đã được cập nhật' })
-  @ApiResponse({ status: 409, description: 'Lỗi phiên bản (VERSION_CONFLICT)' })
+  @ApiOperation({ 
+    summary: 'Thay đổi trạng thái sản phẩm thuê (staff)',
+    description: `
+Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARCHIVED).
+- Yêu cầu \`expectedVersion\` để kiểm soát đồng thời.
+- Archive một sản phẩm đồng nghĩa với việc sản phẩm đó không còn public nữa.
+`
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'RentalProduct UUID', example: '11111111-1111-4111-8111-111111111111' })
+  @ApiResponse({ status: 200, description: 'Trạng thái đã được cập nhật', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'number' } } } } } })
+  @ApiErrorResponse(409, 'Conflict', 'VERSION_CONFLICT', 'Mismatched version')
   @ApiBody({
     schema: {
       type: 'object',
@@ -62,9 +93,16 @@ export class StaffRentalProductController {
     });
   }
 
-  @ApiOperation({ summary: 'Tạo mới sản phẩm thuê (staff)' })
-  @ApiResponse({ status: 201, description: 'Sản phẩm thuê được tạo thành công' })
-  @ApiResponse({ status: 409, description: 'SKU đã tồn tại' })
+  @ApiOperation({ 
+    summary: 'Tạo mới sản phẩm thuê (staff)',
+    description: `
+Tạo một sản phẩm (catalog item) mới.
+- Khởi tạo mặc định ở trạng thái INACTIVE. 
+- Chỉ sau khi hoàn thiện thông tin, nhân viên mới chuyển sang ACTIVE để public.
+`
+  })
+  @ApiResponse({ status: 201, description: 'Sản phẩm thuê được tạo thành công', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' } } } } } })
+  @ApiErrorResponse(409, 'Conflict', 'RENTAL_PRODUCT_SKU_EXISTS', 'SKU already exists')
   @ApiBody({
     schema: {
       type: 'object',
@@ -95,9 +133,17 @@ export class StaffRentalProductController {
     return this.createRentalProductUseCase.execute(body);
   }
 
-  @ApiOperation({ summary: 'Cập nhật thông tin sản phẩm thuê (staff)' })
-  @ApiResponse({ status: 200, description: 'Sản phẩm thuê được cập nhật thành công' })
-  @ApiResponse({ status: 409, description: 'Lỗi phiên bản (VERSION_CONFLICT)' })
+  @ApiOperation({ 
+    summary: 'Cập nhật thông tin sản phẩm thuê (staff)',
+    description: `
+Cập nhật các thuộc tính của sản phẩm.
+- Hỗ trợ optimistic locking thông qua \`expectedVersion\`.
+- Lưu ý: imageMediaIds thay thế hoàn toàn mảng cũ bằng mảng mới (nếu gửi lên).
+`
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'RentalProduct UUID', example: '11111111-1111-4111-8111-111111111111' })
+  @ApiResponse({ status: 200, description: 'Sản phẩm thuê được cập nhật thành công', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'number' } } } } } })
+  @ApiErrorResponse(409, 'Conflict', 'VERSION_CONFLICT', 'Mismatched version')
   @ApiBody({
     schema: {
       type: 'object',
