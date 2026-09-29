@@ -10,6 +10,12 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.INVITE_RATE_LIMITED]: { status: 429, message: 'Too many invite requests; retry later', retryable: true },
+  [B.CAPACITY_CONFLICT]: { status: 409, message: 'Trip has no remaining slots', retryable: false },
+  [B.MEMBERSHIP_VERSION_CONFLICT]: { status: 409, message: 'Reload membership before retrying', retryable: false },
+  [B.INVITE_USAGE_LIMIT_REACHED]: { status: 409, message: 'Invite usage limit reached', retryable: false },
+  [B.INVITE_EXPIRED]: { status: 410, message: 'Invite has expired', retryable: false },
+  [B.INVITE_REVOKED]: { status: 410, message: 'Invite has been revoked', retryable: false },
   [B.TRAIL_ACCESS_REQUIRED]: { status: 403, message: 'Active trail access required', retryable: false },
   [B.LEADER_CANNOT_CREATE_PRIVATE_TRIP]: { status: 403, message: 'Leaders cannot create private trips', retryable: false },
   [B.NOT_FOUND]: { status: 404, message: 'Resource not found', retryable: false },

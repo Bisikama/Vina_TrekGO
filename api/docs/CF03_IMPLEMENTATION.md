@@ -4,7 +4,7 @@
 
 - Create directly OPEN; require >= 1 checkpoint in source trail order, no duplicate IDs.
 - Only an ACTIVE USER may create/manage; no LEADER, ADMIN or staff bypass.
-- Creator is Host via Trip.creatorId. Creation does not insert TripMember, Booking or Payment. Joining and eligibility are CF04, not CF03. Host membership/seat treatment remains for CF04; capacity enforcement here never permits fewer slots than existing ACTIVE TripMember rows.
+- Updated by CF04: creator is Host via Trip.creatorId; creation atomically inserts one HOST/ACTIVE TripMember, counted in capacity. No Booking or Payment is created. Host cannot leave or remove self. Private Trip rental is disabled for everyone in MVP, including Host.
 - Personal source must belong to the current user, be ACTIVE and not archived. System source requires ACTIVE, non-revoked TrailAccess and active, non-archived trail. No copying trails into user ownership.
 - Source snapshot is immutable in CF03 updates; changing route while executing belongs to execution flow. Personal trail without destination requires an explicit active destination; pickup must belong to it. Optional personal difficulty remains null instead of inventing a value.
 - Required checkpoints are selected from the source trail, server snapshots coordinates/content in source order. Future source edits do not alter existing snapshots.
@@ -40,7 +40,7 @@ Create payload: `{type:"PERSONAL"|"SYSTEM",trailRef,destinationId,title,descript
 ## Downstream boundary
 
 PRIVATE_TRIP_UPDATED and PRIVATE_TRIP_CANCELLED are inserted into BookingOutboxEvent in the same transaction, with tripId, creatorId, old/new time windows, status, version and optional cancellation reason. Unique deduplicationKey = eventType:tripId:version.
-Events are persisted PENDING, not claimed delivered. Rental/GPS consumer/dispatcher is an integration dependency outside this change. CF03 does not silently change reservations, issue refunds or start GPS. Events are written even when no dependency exists so consumers can safely no-op.
+Events are persisted PENDING, not claimed delivered. GPS/Notification consumer/dispatcher is an integration dependency outside this change. CF03 does not issue refunds or start GPS. Private rental is disabled in MVP; membership events must not grant rental eligibility. Events are written even when no dependency exists so consumers can safely no-op.
 
 ## Web and verification
 

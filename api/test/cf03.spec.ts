@@ -111,12 +111,12 @@ if (url) {
   })
   const create = async () =>
     (await service.create(actor, input)) as { id: string; version: number; status: string; creatorId: string }
-  it('creates OPEN personal snapshots without bookings or memberships and keeps them private', async () => {
+  it('creates OPEN personal snapshots with one HOST, no bookings, and keeps them private', async () => {
     const trip = await create()
     expect(trip.status).toBe('OPEN')
     expect(trip.creatorId).toBe(actor.id)
     expect(await db.booking.count({ where: { tripId: trip.id } })).toBe(0)
-    expect(await db.tripMember.count({ where: { tripId: trip.id } })).toBe(0)
+    expect(await db.tripMember.count({ where: { tripId: trip.id, userId: actor.id, role: 'HOST', status: 'ACTIVE' } })).toBe(1)
     expect(await db.trip.count({ where: { id: trip.id, tripType: 'PUBLIC' } })).toBe(0)
     const plan = await db.tripTrailPlan.findFirstOrThrow({ where: { tripId: trip.id } })
     expect(plan.personalTrailId).toBe(input.trailRef)
