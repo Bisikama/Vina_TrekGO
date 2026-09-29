@@ -6,6 +6,14 @@ import envConfig from './shared/config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Bật CORS cho phép Frontend (http://localhost:5000) gọi API
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Accept,Authorization,x-api-key',
+  });
+
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
     .setTitle('Trekking API')

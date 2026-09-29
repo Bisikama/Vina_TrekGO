@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export const UserHeader = () => {
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-100 bg-white">
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
       {/* Top thin bar */}
       <div className="flex items-center justify-between border-b border-gray-100 bg-[#F8FAFC] px-4 py-1.5 text-[10px] font-medium text-gray-500 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
@@ -35,21 +35,8 @@ export const UserHeader = () => {
 
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <svg
-              className="h-3.5 w-3.5 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
-              />
-            </svg>
-
-            Fansipan 15°C, Gió nhẹ
+            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+            Bà Đen 28°C, Nắng đẹp
           </span>
 
           <span className="hidden items-center gap-1.5 sm:flex">
@@ -253,14 +240,8 @@ export const UserHeader = () => {
       {/* Tracking Sub-bar */}
       <div className="flex items-center justify-between bg-[#154B36] px-4 py-2 text-[11px] font-medium text-white sm:px-6 lg:px-8">
         <div className="flex items-center gap-2">
-          <span className="rounded border border-emerald-500/30 bg-emerald-500/20 px-1.5 py-0.5 font-bold text-emerald-300">
-            GPS TRACKING ON
-          </span>
-
-          <span className="hidden opacity-90 sm:inline">
-            Thời tiết vùng núi Tây Bắc: 16°C • Độ ẩm 78% • Gió
-            nhẹ, nắng mỏng Tà Xùa
-          </span>
+          <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold border border-emerald-500/30">GPS TRACKING ON</span>
+          <span className="hidden sm:inline opacity-90">Thời tiết Núi Bà Đen (Tây Ninh): 28°C • Độ ẩm 65% • Nắng ráo, mây quang đãng</span>
         </div>
 
         <div className="flex items-center gap-4 opacity-90">
