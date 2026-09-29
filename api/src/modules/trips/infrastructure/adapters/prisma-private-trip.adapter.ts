@@ -125,6 +125,9 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
           status: 'OPEN',
         },
       })
+      await tx.tripMember.create({
+        data: { tripId: trip.id, userId, role: 'HOST', status: 'ACTIVE', pickupPointId: trip.pickupPointId },
+      })
       await tx.tripTrailPlan.create({
         data: {
           tripId: trip.id,
@@ -224,6 +227,19 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
   }
   invite(userId: string, id: string, version: number, expiresAt?: string) {
     return this.transaction(userId, id, async (tx) => {
+      const configuredOrigin = process.env.WEB_APP_ORIGIN
+      if (!configuredOrigin && process.env.NODE_ENV === 'production')
+        fail(C.INTERNAL_ERROR, 'Invite link origin is not configured')
+      const origin = new URL(configuredOrigin || 'http://localhost:3001')
+      if (
+        !['http:', 'https:'].includes(origin.protocol) ||
+        origin.username ||
+        origin.password ||
+        origin.pathname !== '/' ||
+        origin.search ||
+        origin.hash
+      )
+        fail(C.INTERNAL_ERROR, 'Invalid invite link origin configuration')
       const trip = await this.owned(tx, userId, id, version)
       const expiry = expiresAt
         ? new Date(expiresAt)
@@ -244,17 +260,25 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         },
       })
       const next = await tx.trip.update({ where: { id }, data: { version: { increment: 1 } } })
-      return { inviteCode: invite.code, expiresAt: invite.expiresAt, status: invite.status, tripVersion: next.version }
+      return {
+        inviteId: invite.id,
+        inviteCode: invite.code,
+        inviteUrl: `${origin.origin}/invite/${invite.code}`,
+        expiresAt: invite.expiresAt,
+        status: invite.status,
+        tripVersion: next.version,
+      }
     })
   }
   revoke(userId: string, id: string, version: number) {
     return this.transaction(userId, id, async (tx) => {
-      await this.owned(tx, userId, id, version)
-      await tx.privateTripInvite.updateMany({
+      const trip = await this.owned(tx, userId, id, version)
+      const revoked = await tx.privateTripInvite.updateMany({
         where: { tripId: id, status: 'ACTIVE' },
         data: { status: 'REVOKED', revokedAt: new Date() },
       })
-      return tx.trip.update({ where: { id }, data: { version: { increment: 1 } } })
+      const next = revoked.count ? await tx.trip.update({ where: { id }, data: { version: { increment: 1 } } }) : trip
+      return { tripId: id, revokedCount: revoked.count, tripVersion: next.version }
     })
   }
   read(userId: string, id?: string, page = 1) {

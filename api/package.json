@@ -19,7 +19,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:cf01": "jest --config ./test/jest-cf01.json --runInBand",
-    "test:cf03": "jest --config ./test/jest-cf01.json --testRegex cf03.spec.ts$ --runInBand"
+    "test:cf03": "jest --config ./test/jest-cf01.json --testRegex cf03.spec.ts$ --runInBand",
+    "test:cf04": "jest --config ./test/jest-cf01.json --testRegex cf04.spec.ts$ --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

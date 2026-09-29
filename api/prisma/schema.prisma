@@ -1371,6 +1371,7 @@ model TripCancellationRequest {
 }
 
 model PrivateTripInvite {
+  // Partial unique ACTIVE invite per trip is enforced by CF04 SQL migration.
   id        String       @id @default(uuid()) @db.Uuid
   tripId    String       @map("trip_id") @db.Uuid
   code      String       @unique @db.VarChar(120)
@@ -1393,6 +1394,7 @@ model PrivateTripInvite {
 }
 
 model TripMember {
+  // Partial unique HOST per trip is enforced by CF04 SQL migration; HOST counts toward capacity.
   id                 String           @id @default(uuid()) @db.Uuid
   tripId             String           @map("trip_id") @db.Uuid
   userId             String           @map("user_id") @db.Uuid
