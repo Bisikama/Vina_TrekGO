@@ -3,7 +3,7 @@ import { PrismaService } from '../../../../shared/services/prisma.service';
 import { MediaAssetPort, MediaAssetView, FindMediaAssetByIdInput, FindOwnedMediaAssetByIdInput, CreatePendingUploadInput, MarkReadyInput } from '../../application/ports/media-asset.port';
 import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
-import { MediaScopeValue, MediaResourceTypeValue, MediaStatusValue, MediaCaptureSourceValue, MediaProvenanceStatusValue } from '../../application/ports/media-asset.port';
+import { MediaScopeValue, MediaResourceTypeValue, MediaStatusValue, MediaCaptureSourceValue, MediaProvenanceStatusValue, MediaDeliveryType } from '../../application/ports/media-asset.port';
 
 const mediaAssetSelect = {
   id: true,
@@ -61,7 +61,7 @@ export class PrismaMediaAssetAdapter implements MediaAssetPort {
       readyAt: raw.readyAt,
       uploadIntentExpiresAt: raw.uploadIntentExpiresAt,
       providerPublicId: raw.providerPublicId,
-      deliveryType: raw.deliveryType || 'upload',
+      deliveryType: raw.deliveryType as MediaDeliveryType | null,
     };
   }
 

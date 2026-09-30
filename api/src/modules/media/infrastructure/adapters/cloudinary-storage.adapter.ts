@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { MediaStoragePort, CreateUploadIntentInput, CreateProviderUploadIntentResult, VerifyUploadResponseInput, GetAssetMetadataInput, ProviderAssetMetadata } from '../../application/ports/media-storage.port';
 import { AppError } from '../../../../shared/errors/app-error';
@@ -11,7 +12,7 @@ interface CloudinaryError {
 }
 
 function isCloudinaryError(error: unknown): error is CloudinaryError {
-  return typeof error === 'object' && error !== null;
+  return typeof error === 'object' && error !== null && ('http_code' in error || 'message' in error);
 }
 
 @Injectable()
@@ -23,9 +24,17 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
     const apiKey = envConfig.CLOUDINARY_API_KEY;
     const apiSecret = envConfig.CLOUDINARY_API_SECRET;
 
-    if (!envConfig.MEDIA_ENABLED || !cloudName || !apiKey || !apiSecret) {
-      this.logger.warn('Cloudinary configuration is missing or Media is disabled. Media upload will not work.');
+    if (!envConfig.MEDIA_ENABLED) {
+      this.logger.log('Media is disabled. Cloudinary will not be initialized.');
       return;
+    }
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error('Cloudinary credentials are required when MEDIA_ENABLED is true');
+    }
+
+    if (envConfig.CLOUDINARY_SIGNATURE_ALGORITHM !== 'sha256') {
+      throw new Error('Cloudinary signature algorithm must be exactly sha256');
     }
 
     cloudinary.config({
@@ -67,15 +76,22 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   verifyUploadResponse(input: VerifyUploadResponseInput): Promise<boolean> {
     try {
-      // @ts-expect-error cloudinary types missing verify_api_response_signature
-      const isValid = cloudinary.utils.verify_api_response_signature(
-        input.publicId,
-        input.version,
-        input.signature
+      const expectedSignature = cloudinary.utils.api_sign_request(
+        { public_id: input.publicId, version: input.version },
+        envConfig.CLOUDINARY_API_SECRET!
       );
+      
+      const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+      const providedBuffer = Buffer.from(input.signature, 'utf8');
+      
+      if (expectedBuffer.length !== providedBuffer.length) {
+        return Promise.resolve(false);
+      }
+      
+      const isValid = crypto.timingSafeEqual(expectedBuffer, providedBuffer);
       return Promise.resolve(isValid);
     } catch (err) {
-      this.logger.error('Failed to verify Cloudinary upload response signature', err);
+      this.logger.error('Failed to verify Cloudinary upload response signature');
       return Promise.resolve(false);
     }
   }
@@ -114,7 +130,7 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
           // Do not expose raw Cloudinary error message down to the API consumer, only log it
         });
       } else {
-        this.logger.error(`Unknown error fetching Cloudinary asset metadata for ${input.publicId}`, error);
+        this.logger.error(`Unknown error fetching Cloudinary asset metadata for ${input.publicId}`);
       }
 
       throw new AppError({

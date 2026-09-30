@@ -7,6 +7,7 @@ export type MediaScopeValue = 'RENTAL_PRODUCT' | 'CONDITION_EVIDENCE' | 'RETURN_
 export type MediaCaptureSourceValue = 'CAMERA' | 'GALLERY' | 'FILE' | 'SYSTEM' | 'UNKNOWN';
 export type MediaProvenanceStatusValue = 'DIRECT_CAPTURE' | 'METADATA_CONSISTENT' | 'METADATA_MISSING' | 'SUSPICIOUS' | 'UNKNOWN';
 export type MediaC2paStatusValue = 'NOT_CHECKED' | 'NOT_PRESENT' | 'VERIFIED' | 'INVALID' | 'UNSUPPORTED';
+export type MediaDeliveryType = 'upload' | 'authenticated';
 
 export interface MediaAssetView {
   id: string;
@@ -23,7 +24,7 @@ export interface MediaAssetView {
   readyAt: Date | null;
   uploadIntentExpiresAt: Date | null;
   providerPublicId: string | null;
-  deliveryType: string;
+  deliveryType: MediaDeliveryType | null;
 }
 
 export interface FindMediaAssetByIdInput {
@@ -41,7 +42,7 @@ export interface CreatePendingUploadInput {
   captureSource: MediaCaptureSourceValue;
   clientCapturedAt?: Date;
   providerPublicId: string;
-  deliveryType: string;
+  deliveryType: MediaDeliveryType;
   uploadIntentExpiresAt: Date;
 }
 

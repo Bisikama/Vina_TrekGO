@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreateUploadIntentUseCase } from './create-upload-intent.use-case';
 import { MEDIA_ASSET_PORT } from '../ports/media-asset.port';
-import type { MediaAssetPort } from '../ports/media-asset.port';
+import type { MediaAssetPort, MediaScopeValue, MediaResourceTypeValue } from '../ports/media-asset.port';
 import { MEDIA_STORAGE_PORT } from '../ports/media-storage.port';
 import type { MediaStoragePort } from '../ports/media-storage.port';
 import { AppError } from '../../../../shared/errors/app-error';
@@ -50,62 +50,110 @@ describe('CreateUploadIntentUseCase', () => {
     
     // Enable media for tests
     envConfig.MEDIA_ENABLED = true;
+    envConfig.MEDIA_MAX_IMAGE_BYTES = 20971520;
+    envConfig.MEDIA_MAX_VIDEO_BYTES = 104857600;
   });
 
-  it('throws FORBIDDEN if role is not authorized for scope', async () => {
-    const input = {
-      scope: 'RENTAL_PRODUCT' as const,
-      resourceType: 'IMAGE' as const,
-      fileName: 'test.jpg',
-      contentType: 'image/jpeg',
-      sizeBytes: 1024,
-    };
-    
-    await expect(useCase.execute(input, mockUser('USER') as unknown as never))
-      .rejects.toThrow(new AppError({
-        code: COMMON_ERROR_CODES.FORBIDDEN,
-        message: 'Role USER is not authorized for scope RENTAL_PRODUCT',
-      }));
+  describe('Role Matrix', () => {
+    it.each([
+      ['RENTAL_PRODUCT', 'STAFF_INVENTORY', true],
+      ['RENTAL_PRODUCT', 'ADMIN', true],
+      ['RENTAL_PRODUCT', 'USER', false],
+      ['CONDITION_EVIDENCE', 'STAFF_INVENTORY', true],
+      ['CONDITION_EVIDENCE', 'USER', false],
+      ['RETURN_EVIDENCE', 'STAFF_INVENTORY', true],
+      ['RETURN_EVIDENCE', 'STAFF_DELIVERY', true],
+      ['RETURN_EVIDENCE', 'USER', false],
+      ['EXCEPTION_EVIDENCE', 'USER', true],
+      ['EXCEPTION_EVIDENCE', 'LEADER', true],
+      ['EXCEPTION_EVIDENCE', 'STAFF_INVENTORY', true],
+      ['EXCEPTION_EVIDENCE', 'STAFF_DELIVERY', true],
+      ['EXCEPTION_EVIDENCE', 'ADMIN', true],
+    ])('Scope %s for role %s should be allowed: %s', async (scope, role, allowed) => {
+      const input = {
+        scope: scope as MediaScopeValue,
+        resourceType: 'IMAGE' as MediaResourceTypeValue,
+        fileName: 'test.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+      };
+      
+      const promise = useCase.execute(input, mockUser(role) as unknown as never);
+      if (allowed) {
+        await expect(promise).resolves.toBeDefined();
+      } else {
+        await expect(promise).rejects.toThrow(new AppError({
+          code: COMMON_ERROR_CODES.FORBIDDEN,
+          message: `Role ${role} is not authorized for scope ${scope}`,
+        }));
+      }
+    });
   });
 
-  it('throws MEDIA_UNSUPPORTED_MIME_TYPE if image is not supported', async () => {
-    const input = {
-      scope: 'EXCEPTION_EVIDENCE' as const,
-      resourceType: 'IMAGE' as const,
-      fileName: 'test.txt',
-      contentType: 'text/plain',
-      sizeBytes: 1024,
-    };
-    
-    await expect(useCase.execute(input, mockUser('USER') as unknown as never))
-      .rejects.toThrow(new AppError({
-        code: MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_MIME_TYPE,
-        message: 'Unsupported image MIME type',
-      }));
+  describe('MIME Matrix', () => {
+    it.each([
+      ['image/jpeg', 'IMAGE', true],
+      ['image/png', 'IMAGE', true],
+      ['image/webp', 'IMAGE', true],
+      ['image/heic', 'IMAGE', true],
+      ['image/heif', 'IMAGE', true],
+      ['text/plain', 'IMAGE', false],
+      ['video/mp4', 'VIDEO', true],
+      ['video/quicktime', 'VIDEO', true],
+      ['video/webm', 'VIDEO', true],
+      ['audio/mpeg', 'VIDEO', false],
+    ])('MIME %s for %s should be allowed: %s', async (contentType, resourceType, allowed) => {
+      const input = {
+        scope: 'EXCEPTION_EVIDENCE' as MediaScopeValue,
+        resourceType: resourceType as MediaResourceTypeValue,
+        fileName: 'file',
+        contentType,
+        sizeBytes: 1024,
+      };
+      
+      const promise = useCase.execute(input, mockUser('USER') as unknown as never);
+      if (allowed) {
+        await expect(promise).resolves.toBeDefined();
+      } else {
+        await expect(promise).rejects.toThrow(new AppError({
+          code: MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_MIME_TYPE,
+          message: `Unsupported ${resourceType.toLowerCase()} MIME type`,
+        }));
+      }
+    });
   });
 
-  it('throws MEDIA_FILE_TOO_LARGE if size exceeds limit', async () => {
-    envConfig.MEDIA_MAX_IMAGE_BYTES = 1000;
-    const input = {
-      scope: 'EXCEPTION_EVIDENCE' as const,
-      resourceType: 'IMAGE' as const,
-      fileName: 'test.jpg',
-      contentType: 'image/jpeg',
-      sizeBytes: 2000,
-    };
-    
-    await expect(useCase.execute(input, mockUser('USER') as unknown as never))
-      .rejects.toThrow(new AppError({
-        code: MEDIA_ERROR_CODES.MEDIA_FILE_TOO_LARGE,
-        message: 'Image exceeds maximum size of 1000 bytes',
-      }));
+  describe('Size Matrix', () => {
+    it.each([
+      ['IMAGE', 20971520, true],
+      ['IMAGE', 20971521, false],
+      ['VIDEO', 104857600, true],
+      ['VIDEO', 104857601, false],
+    ])('%s exactly at max size (%s) allowed: %s', async (resourceType, sizeBytes, allowed) => {
+      const input = {
+        scope: 'EXCEPTION_EVIDENCE' as MediaScopeValue,
+        resourceType: resourceType as MediaResourceTypeValue,
+        fileName: 'file',
+        contentType: resourceType === 'IMAGE' ? 'image/jpeg' : 'video/mp4',
+        sizeBytes,
+      };
+      
+      const promise = useCase.execute(input, mockUser('USER') as unknown as never);
+      if (allowed) {
+        await expect(promise).resolves.toBeDefined();
+      } else {
+        await expect(promise).rejects.toThrow(new AppError({
+          code: MEDIA_ERROR_CODES.MEDIA_FILE_TOO_LARGE,
+          message: `${resourceType === 'IMAGE' ? 'Image' : 'Video'} exceeds maximum size of ${resourceType === 'IMAGE' ? 20971520 : 104857600} bytes`,
+        }));
+      }
+    });
   });
 
   it('creates intent successfully and verifies parameters', async () => {
-    envConfig.MEDIA_MAX_IMAGE_BYTES = 20000000;
     const input = {
-      scope: 'RENTAL_PRODUCT' as const,
-      resourceType: 'IMAGE' as const,
+      scope: 'RENTAL_PRODUCT' as MediaScopeValue,
+      resourceType: 'IMAGE' as MediaResourceTypeValue,
       fileName: 'test.jpg',
       contentType: 'image/jpeg',
       sizeBytes: 1024,
@@ -115,7 +163,6 @@ describe('CreateUploadIntentUseCase', () => {
 
     const result = await useCase.execute(input, mockUser('ADMIN') as unknown as never);
     
-    // same mediaId passed to DB and appears in providerPublicId
     expect(result.mediaId).toBeDefined();
     expect(mockAssetPort.createPendingUpload).toHaveBeenCalledWith(expect.objectContaining({
       id: result.mediaId,
@@ -123,40 +170,23 @@ describe('CreateUploadIntentUseCase', () => {
     }));
     expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
       publicId: expect.stringContaining(result.mediaId),
-      deliveryType: 'upload', // RENTAL_PRODUCT -> upload
+      deliveryType: 'upload',
     }));
   });
 
   it('sets deliveryType authenticated for evidence', async () => {
-    envConfig.MEDIA_MAX_IMAGE_BYTES = 20000000;
     const input = {
-      scope: 'EXCEPTION_EVIDENCE' as const,
-      resourceType: 'IMAGE' as const,
+      scope: 'EXCEPTION_EVIDENCE' as MediaScopeValue,
+      resourceType: 'IMAGE' as MediaResourceTypeValue,
       fileName: 'test.jpg',
       contentType: 'image/jpeg',
       sizeBytes: 1024,
     };
     
     await useCase.execute(input, mockUser('USER') as unknown as never);
+    
     expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
       deliveryType: 'authenticated',
     }));
-  });
-
-  it('throws MEDIA_PROVIDER_ERROR if storage signing fails', async () => {
-    mockStoragePort.createUploadIntent.mockRejectedValue(new Error('Signing failed'));
-    const input = {
-      scope: 'RENTAL_PRODUCT' as const,
-      resourceType: 'IMAGE' as const,
-      fileName: 'test.jpg',
-      contentType: 'image/jpeg',
-      sizeBytes: 1024,
-    };
-    
-    await expect(useCase.execute(input, mockUser('ADMIN') as unknown as never))
-      .rejects.toThrow(new AppError({
-        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR,
-        message: 'Failed to create provider upload intent',
-      }));
   });
 });

@@ -65,18 +65,18 @@ describe('CompleteUploadUseCase', () => {
   });
 
   it('throws MEDIA_INVALID_STATE if asset is not PENDING_UPLOAD or READY', async () => {
-    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'ARCHIVED' } as unknown as never);
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'REJECTED' } as unknown as never);
     
     await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
       .rejects.toThrow(new AppError({
         code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE,
-        message: 'Cannot complete upload for asset in ARCHIVED state',
+        message: 'Cannot complete upload for asset in REJECTED state',
       }));
   });
 
   it('throws MEDIA_UPLOAD_EXPIRED if intent expired', async () => {
     const expiredDate = new Date(Date.now() - 10000);
-    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', uploadIntentExpiresAt: expiredDate } as unknown as never);
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', uploadIntentExpiresAt: expiredDate, providerPublicId: 'p1', deliveryType: 'upload' } as unknown as never);
     
     await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
       .rejects.toThrow(new AppError({
@@ -86,7 +86,7 @@ describe('CompleteUploadUseCase', () => {
   });
 
   it('throws MEDIA_UPLOAD_SIGNATURE_INVALID if signature fails', async () => {
-    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD' } as unknown as never);
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', deliveryType: 'upload' } as unknown as never);
     mockStoragePort.verifyUploadResponse.mockResolvedValue(false);
     
     await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
@@ -96,14 +96,70 @@ describe('CompleteUploadUseCase', () => {
       }));
   });
 
+  it('throws MEDIA_INVALID_STATE if missing stored providerPublicId', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: null, deliveryType: 'upload' } as unknown as never);
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE,
+        message: 'Cannot complete upload for asset missing provider metadata',
+      }));
+  });
+
+  it('throws MEDIA_INVALID_STATE if missing stored deliveryType', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', deliveryType: null } as unknown as never);
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE,
+        message: 'Cannot complete upload for asset missing provider metadata',
+      }));
+  });
+
+  it('throws MEDIA_PROVIDER_ERROR if provider lookup failure', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', deliveryType: 'upload' } as unknown as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockRejectedValue(new AppError({ code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR, message: 'Provider lookup failed' }));
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR,
+        message: 'Provider lookup failed',
+      }));
+  });
+
+  it('throws MEDIA_PROVIDER_MISMATCH if canonical provider asset missing', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', deliveryType: 'upload' } as unknown as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockResolvedValue(null);
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH,
+        message: 'Provider asset not found in storage',
+      }));
+  });
+
   it('throws MEDIA_PROVIDER_MISMATCH if publicId does not match intent', async () => {
-    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'expected-id' } as unknown as never);
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'expected-id', deliveryType: 'upload' } as unknown as never);
     mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
     
     await expect(useCase.execute('some-uuid', { publicId: 'wrong-id', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
       .rejects.toThrow(new AppError({
         code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH,
         message: 'Public ID mismatch',
+      }));
+  });
+
+  it('throws MEDIA_PROVIDER_MISMATCH if canonical publicId mismatch', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload' } as unknown as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockResolvedValue({ providerPublicId: 'wrong-p1', resourceType: 'IMAGE', deliveryType: 'upload' } as unknown as never);
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, { id: 'u1', role: 'USER' } as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH,
+        message: 'Canonical public ID mismatch',
       }));
   });
 
@@ -177,6 +233,19 @@ describe('CompleteUploadUseCase', () => {
       secureUrl: 'https://url',
       uploadedAt: date,
     }));
+  });
+
+  it('throws MEDIA_FILE_TOO_LARGE if canonical bytes exceed VIDEO limit', async () => {
+    envConfig.MEDIA_MAX_VIDEO_BYTES = 1000;
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload' } as unknown as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockResolvedValue({ providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload', bytes: 2000 } as unknown as never);
+    
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, { id: 'u1', role: 'USER' } as unknown as never))
+      .rejects.toThrow(new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_FILE_TOO_LARGE,
+        message: 'Uploaded file size exceeds the allowed limit',
+      }));
   });
 
   it('completes upload successfully for VIDEO', async () => {
