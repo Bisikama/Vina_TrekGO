@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:cf01": "jest --config ./test/jest-cf01.json --runInBand",
     "test:cf03": "jest --config ./test/jest-cf01.json --testRegex cf03.spec.ts$ --runInBand",
-    "g:hex": "ts-node scripts/gen-hex.ts"
+    "g:hex": "ts-node scripts/gen-hex.ts",
+    "test:cf04": "jest --config ./test/jest-cf01.json --testRegex cf04.spec.ts$ --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -32,6 +33,7 @@
     "@prisma/client": "6.3.1",
     "@supabase/supabase-js": "^2.116.0",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.11.0",
     "dotenv": "^17.4.2",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",

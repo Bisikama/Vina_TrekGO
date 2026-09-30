@@ -40,6 +40,6 @@ import { RENTAL_PRODUCT_PORT } from './application/ports/rental-product.port';
       useClass: PrismaRentalProductAdapter,
     },
   ],
-  exports: [],
+  exports: [RENTAL_PRODUCT_PORT],
 })
 export class CatalogModule {}

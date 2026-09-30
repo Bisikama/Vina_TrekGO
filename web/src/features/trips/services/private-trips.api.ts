@@ -26,5 +26,8 @@ export const privateTripsApi = {
   update: async (trip: PrivateTrip, input: PrivateInput) => (await apiClient.patch<PrivateTrip>(`${base}/${trip.id}`, { ...input, expectedVersion: trip.version })).data,
   cancel: async (trip: PrivateTrip, reason: string) => (await apiClient.post<PrivateTrip>(`${base}/${trip.id}/cancel`, { expectedVersion: trip.version, reason })).data,
   invite: async (trip: PrivateTrip, expiresAt?: string) => (await apiClient.post<{ inviteCode: string; expiresAt: string; tripVersion: number }>(`${base}/${trip.id}/invitations`, { expectedVersion: trip.version, expiresAt })).data,
-  revoke: async (trip: PrivateTrip) => (await apiClient.post<PrivateTrip>(`${base}/${trip.id}/invitations/revoke`, { expectedVersion: trip.version })).data,
+  revoke: async (trip: PrivateTrip): Promise<PrivateTrip> => {
+    const { data } = await apiClient.post<{ tripId: string; revokedCount: number; tripVersion: number }>(`${base}/${trip.id}/invitations/revoke`, { expectedVersion: trip.version });
+    return { ...trip, version: data.tripVersion };
+  },
 };
