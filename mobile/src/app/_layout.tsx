@@ -15,18 +15,22 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 
 SplashScreen.preventAutoHideAsync();
 
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+
 export default function RootLayout() {
   const colorScheme =
     useColorScheme();
 
   return (
-    <ThemeProvider
-      value={
-        colorScheme === 'dark'
-          ? DarkTheme
-          : DefaultTheme
-      }
-    >
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#000' : '#FFF' }} edges={['top']}>
+        <ThemeProvider
+          value={
+            colorScheme === 'dark'
+              ? DarkTheme
+              : DefaultTheme
+          }
+        >
       <AnimatedSplashOverlay />
 
       <Stack
@@ -52,6 +56,8 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </ThemeProvider>
+        </ThemeProvider>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
