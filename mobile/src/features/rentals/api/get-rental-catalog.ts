@@ -1,176 +1,323 @@
-import { ApiClientError, getJson } from '@/services/api-client';
 import type {
   RentalCatalogData,
   RentalCategory,
-  RentalEligibility,
-  RentalProduct,
   RentalRecommendation,
 } from '@/features/rentals/types/rental-catalog';
+import type { RentalProductDetail } from '@/features/rentals/types/rental-product-detail';
 
-type JsonRecord = Record<string, unknown>;
+const tentCategory = {
+  id: 'tent',
+  name: 'Lều & Tăng',
+} satisfies RentalCategory;
 
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+const sleepingCategory = {
+  id: 'sleeping',
+  name: 'Túi ngủ & Đệm',
+} satisfies RentalCategory;
 
-function requireRecord(value: unknown, field: string): JsonRecord {
-  if (!isRecord(value)) throw invalidContract(field);
-  return value;
-}
+const poleCategory = {
+  id: 'pole',
+  name: 'Gậy leo núi',
+} satisfies RentalCategory;
 
-function requireArray(value: unknown, field: string): unknown[] {
-  if (!Array.isArray(value)) throw invalidContract(field);
-  return value;
-}
+const safetyCategory = {
+  id: 'safety',
+  name: 'Đèn & GPS cứu hộ',
+} satisfies RentalCategory;
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw invalidContract(field);
-  return value;
-}
+const categories: RentalCategory[] = [
+  tentCategory,
+  sleepingCategory,
+  poleCategory,
+  safetyCategory,
+];
 
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw invalidContract(field);
-  return value;
-}
-
-function invalidContract(field: string) {
-  return new ApiClientError({
-    code: 'INVALID_API_CONTRACT',
-    message: `Response thiếu hoặc sai field ${field}.`,
-  });
-}
-
-function getData(payload: unknown): JsonRecord {
-  return requireRecord(requireRecord(payload, 'response').data, 'data');
-}
-
-function parseEligibility(payload: unknown): RentalEligibility {
-  const data = getData(payload);
-  const trip = requireRecord(data.trip, 'data.trip');
-
-  if (typeof data.eligible !== 'boolean') throw invalidContract('data.eligible');
-
-  return {
-    bookingId: requireString(data.bookingId, 'data.bookingId'),
-    eligible: data.eligible,
-    reason: data.reason == null ? null : requireString(data.reason, 'data.reason'),
-    trip: {
-      id: requireString(trip.id, 'data.trip.id'),
-      name: requireString(trip.name, 'data.trip.name'),
-      startAt: requireString(trip.startAt, 'data.trip.startAt'),
-      endAt: requireString(trip.endAt, 'data.trip.endAt'),
-      timezone: requireString(trip.timezone, 'data.trip.timezone'),
+export const rentalDemoProducts: RentalProductDetail[] = [
+  {
+    id: 'prod_tent_4',
+    sku: 'NH-CP2-GREEN',
+    name: 'Lều dã ngoại 2 người Naturehike Cloud Peak 2',
+    category: tentCategory,
+    description:
+      'Lều hai lớp chuyên dụng cho địa hình núi cao, cản gió cấp 8 và phù hợp hành trình Fansipan hoặc Bạch Mộc Lương Tử.',
+    dailyPrice: 120_000,
+    depositPolicy: {
+      type: 'FIXED',
+      amount: 800_000,
+      referenceValue: null,
+      percentage: null,
     },
-    rentalCutoffAt: requireString(data.rentalCutoffAt, 'data.rentalCutoffAt'),
-  };
+    currency: 'VND',
+    status: 'ACTIVE',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=1200&q=85',
+      'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=1200&q=85',
+    ],
+    spec: {
+      capacityPeople: 2,
+      weightKg: 2.4,
+      season: '3 mùa',
+      material: 'Polyester 20D phủ silicone',
+      waterproof: true,
+    },
+    recommendationTags: [
+      'VFRS chuẩn hoá',
+      'Bắt buộc Fansipan',
+      'Cản gió cấp 8',
+    ],
+  },
+  {
+    id: 'prod_sleeping_bag_1',
+    sku: 'DF-DOWN-M5',
+    name: 'Túi ngủ lông vũ Desert Fox -5°C',
+    category: sleepingCategory,
+    description:
+      'Túi ngủ lông vũ giữ nhiệt dành cho đêm lạnh và môi trường có độ ẩm cao, kèm túi nén chống nước.',
+    dailyPrice: 95_000,
+    depositPolicy: {
+      type: 'FIXED',
+      amount: 500_000,
+      referenceValue: null,
+      percentage: null,
+    },
+    currency: 'VND',
+    status: 'ACTIVE',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?auto=format&fit=crop&w=1200&q=85',
+    ],
+    spec: {
+      weightKg: 1.35,
+      season: '4 mùa',
+      material: 'Lông vũ 90/10',
+      comfortTemperature: '-5°C',
+      waterproof: true,
+    },
+    recommendationTags: [
+      'Giữ nhiệt',
+      'Chống ẩm sương muối',
+    ],
+  },
+  {
+    id: 'prod_poles_1',
+    sku: 'BD-TRAIL-PRO',
+    name: 'Gậy Carbon Black Diamond Trail Pro Shock',
+    category: poleCategory,
+    description:
+      'Bộ hai gậy carbon siêu nhẹ, giảm chấn khi xuống dốc đá và sử dụng khóa FlickLock Pro chắc chắn.',
+    dailyPrice: 45_000,
+    depositPolicy: {
+      type: 'FIXED',
+      amount: 300_000,
+      referenceValue: null,
+      percentage: null,
+    },
+    currency: 'VND',
+    status: 'ACTIVE',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=85',
+    ],
+    spec: {
+      weightKg: 0.48,
+      material: 'Carbon',
+      size: 'Điều chỉnh 68–140 cm',
+      shockAbsorption: true,
+    },
+    recommendationTags: [
+      'Giảm chấn dốc đá',
+      'Siêu nhẹ',
+    ],
+  },
+  {
+    id: 'prod_gps_1',
+    sku: 'GARMIN-IR-MINI2',
+    name: 'Định vị vệ tinh Garmin inReach Mini 2',
+    category: safetyCategory,
+    description:
+      'Thiết bị định vị vệ tinh tích hợp gửi tín hiệu SOS và chia sẻ vị trí cho hành trình ngoài vùng phủ sóng.',
+    dailyPrice: 180_000,
+    depositPolicy: {
+      type: 'FIXED',
+      amount: 2_500_000,
+      referenceValue: null,
+      percentage: null,
+    },
+    currency: 'VND',
+    status: 'ACTIVE',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&w=1200&q=85',
+    ],
+    spec: {
+      weightKg: 0.1,
+      batteryLife: 'Tối đa 14 ngày',
+      waterproof: true,
+      satelliteNetwork: 'Iridium',
+    },
+    recommendationTags: [
+      'Bảo hộ cứu nạn',
+      'SOS toàn cầu 24/7',
+    ],
+  },
+  {
+    id: 'prod_headlamp_1',
+    sku: 'NH-HL-350',
+    name: 'Đèn pin đội đầu Naturehike 350lm',
+    category: safetyCategory,
+    description:
+      'Đèn đội đầu chống nước, sử dụng pin sạc Type-C và có chế độ ánh sáng đỏ dùng trong khu cắm trại.',
+    dailyPrice: 35_000,
+    depositPolicy: {
+      type: 'FIXED',
+      amount: 250_000,
+      referenceValue: null,
+      percentage: null,
+    },
+    currency: 'VND',
+    status: 'ACTIVE',
+    imageUrls: [
+      'https://images.unsplash.com/photo-1517825738774-7de9363ef735?auto=format&fit=crop&w=1200&q=85',
+    ],
+    spec: {
+      weightKg: 0.09,
+      brightness: '350 lumen',
+      batteryLife: '8–16 giờ',
+      waterproof: true,
+    },
+    recommendationTags: [
+      'Di chuyển ban đêm',
+      'Pin sạc Type-C',
+    ],
+  },
+];
+
+export const rentalDemoStock: Record<
+  string,
+  number
+> = {
+  prod_tent_4: 5,
+  prod_sleeping_bag_1: 2,
+  prod_poles_1: 12,
+  prod_gps_1: 3,
+  prod_headlamp_1: 8,
+};
+
+export const rentalDemoRecommendations: RentalRecommendation[] =
+  [
+    {
+      productId: 'prod_tent_4',
+      reasons: [
+        'Phù hợp hành trình 3 ngày 2 đêm',
+        'Cản gió tốt ở khu vực cao trên 2.000m',
+      ],
+      source: 'RULE',
+    },
+    {
+      productId: 'prod_sleeping_bag_1',
+      reasons: [
+        'Dự báo nhiệt độ ban đêm thấp',
+        'Phù hợp lán nghỉ ở độ cao lớn',
+      ],
+      source: 'RULE',
+    },
+    {
+      productId: 'prod_poles_1',
+      reasons: [
+        'Hỗ trợ cân bằng trên đường dốc',
+        'Giảm áp lực đầu gối khi xuống núi',
+      ],
+      source: 'RULE',
+    },
+    {
+      productId: 'prod_gps_1',
+      reasons: [
+        'Tuyến có đoạn mất sóng điện thoại',
+        'Tăng khả năng liên lạc khi khẩn cấp',
+      ],
+      source: 'RULE',
+    },
+  ];
+
+function createAbortError() {
+  const error = new Error(
+    'Yêu cầu đã bị huỷ.',
+  );
+
+  error.name = 'AbortError';
+
+  return error;
 }
 
-function parseCategory(value: unknown): RentalCategory {
-  const category = requireRecord(value, 'category');
-  return {
-    id: requireString(category.id, 'category.id'),
-    name: requireString(category.name, 'category.name'),
-  };
-}
+export async function waitForRentalDemo(
+  signal?: AbortSignal,
+) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 
-function parseCategories(payload: unknown): RentalCategory[] {
-  return requireArray(getData(payload).items, 'data.items').map(parseCategory);
-}
-
-function parseProduct(value: unknown): RentalProduct {
-  const product = requireRecord(value, 'product');
-  const depositPolicy = requireRecord(product.depositPolicy, 'product.depositPolicy');
-  const imageUrls = requireArray(product.imageUrls, 'product.imageUrls');
-
-  return {
-    id: requireString(product.id, 'product.id'),
-    name: requireString(product.name, 'product.name'),
-    description: requireString(product.description, 'product.description'),
-    category: parseCategory(product.category),
-    dailyPrice: requireNumber(product.dailyPrice, 'product.dailyPrice'),
-    depositAmount: requireNumber(depositPolicy.amount, 'product.depositPolicy.amount'),
-    currency: requireString(product.currency, 'product.currency'),
-    imageUrl: imageUrls.length ? requireString(imageUrls[0], 'product.imageUrls[0]') : null,
-    spec: requireRecord(product.spec, 'product.spec'),
-  };
-}
-
-function parseProducts(payload: unknown): RentalProduct[] {
-  return requireArray(getData(payload).items, 'data.items').map(parseProduct);
-}
-
-function parseRecommendations(payload: unknown): RentalRecommendation[] {
-  return requireArray(getData(payload).recommendations, 'data.recommendations').map((value) => {
-    const recommendation = requireRecord(value, 'recommendation');
-    const source = requireString(recommendation.source, 'recommendation.source');
-    if (source !== 'RULE' && source !== 'AI') throw invalidContract('recommendation.source');
-
-    return {
-      productId: requireString(recommendation.productId, 'recommendation.productId'),
-      reasons: requireArray(recommendation.reasons, 'recommendation.reasons').map((reason) =>
-        requireString(reason, 'recommendation.reason'),
-      ),
-      source,
-    };
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 280);
   });
-}
 
-function parseAvailableCount(payload: unknown) {
-  return requireNumber(getData(payload).availableCount, 'data.availableCount');
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 }
 
 export async function getRentalCatalog(
   bookingId: string,
   signal?: AbortSignal,
 ): Promise<RentalCatalogData> {
-  const eligibility = parseEligibility(
-    await getJson(`/api/v1/bookings/${encodeURIComponent(bookingId)}/rental-eligibility`, {
-      signal,
-    }),
-  );
+  await waitForRentalDemo(signal);
 
-  if (!eligibility.eligible) {
-    return { eligibility, categories: [], items: [] };
-  }
-
-  const [productsPayload, categoriesPayload, recommendationsPayload] = await Promise.all([
-    getJson('/api/v1/rental-products', { signal }),
-    getJson('/api/v1/rental-categories', { signal }),
-    getJson(`/api/v1/bookings/${encodeURIComponent(bookingId)}/rental-recommendations`, {
-      query: { limit: 6 },
-      signal,
-    }),
-  ]);
-
-  const products = parseProducts(productsPayload);
-  const categories = parseCategories(categoriesPayload);
-  const recommendations = parseRecommendations(recommendationsPayload);
-  const recommendationByProduct = new Map(
-    recommendations.map((recommendation) => [recommendation.productId, recommendation]),
-  );
-
-  const availability = await Promise.all(
-    products.map(async (product) => ({
-      productId: product.id,
-      availableCount: parseAvailableCount(
-        await getJson('/api/v1/rentals/availability', {
-          query: { bookingId, productId: product.id },
-          signal,
-        }),
+  const recommendationByProduct =
+    new Map(
+      rentalDemoRecommendations.map(
+        (recommendation) => [
+          recommendation.productId,
+          recommendation,
+        ],
       ),
-    })),
-  );
-  const availabilityByProduct = new Map(
-    availability.map((item) => [item.productId, item.availableCount]),
-  );
+    );
 
   return {
-    eligibility,
+    eligibility: {
+      bookingId,
+      eligible: true,
+      reason: null,
+      trip: {
+        id: 'trip_fansipan_3n2d',
+        name: 'Chinh phục Đỉnh Fansipan 3N2Đ',
+        startAt:
+          '2026-11-18T06:00:00+07:00',
+        endAt:
+          '2026-11-20T17:00:00+07:00',
+        timezone: 'Asia/Ho_Chi_Minh',
+      },
+      rentalCutoffAt:
+        '2026-11-17T18:00:00+07:00',
+    },
+
     categories,
-    items: products.map((product) => ({
-      ...product,
-      availableCount: availabilityByProduct.get(product.id) ?? 0,
-      recommendation: recommendationByProduct.get(product.id) ?? null,
-    })),
+
+    items: rentalDemoProducts.map(
+      (product) => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        dailyPrice: product.dailyPrice,
+        depositAmount:
+          product.depositPolicy.amount,
+        currency: product.currency,
+        imageUrl:
+          product.imageUrls[0] ?? null,
+        spec: product.spec,
+        availableCount:
+          rentalDemoStock[product.id] ?? 0,
+        recommendation:
+          recommendationByProduct.get(
+            product.id,
+          ) ?? null,
+      }),
+    ),
   };
 }

@@ -7,11 +7,11 @@ import {
 
 import * as SplashScreen from 'expo-splash-screen';
 
-import {
-  useColorScheme,
-} from 'react-native';
+import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+
+import { SessionProvider } from '@/features/session/providers/session-provider';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,38 +20,48 @@ export default function RootLayout() {
     useColorScheme();
 
   return (
-    <ThemeProvider
-      value={
-        colorScheme === 'dark'
-          ? DarkTheme
-          : DefaultTheme
-      }
-    >
-      <AnimatedSplashOverlay />
-
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
+    <SessionProvider>
+      <ThemeProvider
+        value={
+          colorScheme === 'dark'
+            ? DarkTheme
+            : DefaultTheme
+        }
       >
-        <Stack.Screen name="(tabs)" />
+        <AnimatedSplashOverlay />
 
-        <Stack.Screen
-          name="rental-products/[id]"
-          options={{
-            animation:
-              'slide_from_right',
+        <Stack
+          screenOptions={{
+            headerShown: false,
           }}
-        />
+        >
+          <Stack.Screen name="(tabs)" />
 
-        <Stack.Screen
-          name="bookings/[bookingId]/rentals"
-          options={{
-            animation:
-              'slide_from_right',
-          }}
-        />
-      </Stack>
-    </ThemeProvider>
+          <Stack.Screen
+            name="sos"
+            options={{
+              animation:
+                'slide_from_bottom',
+            }}
+          />
+
+          <Stack.Screen
+            name="rental-products/[id]"
+            options={{
+              animation:
+                'slide_from_right',
+            }}
+          />
+
+          <Stack.Screen
+            name="bookings/[bookingId]/rentals"
+            options={{
+              animation:
+                'slide_from_right',
+            }}
+          />
+        </Stack>
+      </ThemeProvider>
+    </SessionProvider>
   );
 }

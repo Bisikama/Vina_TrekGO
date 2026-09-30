@@ -11,18 +11,33 @@ export const Colors = {
     surfaceElevated: '#FFFFFF',
     textSecondary: '#657168',
     border: '#DCE4DE',
-    primary: '#176B3A',
-    primaryMuted: '#9AC7A8',
-    primarySurface: '#E7F4EB',
+
+    primary: '#1B4332',
+    primaryDark: '#081C15',
+    primaryMuted: '#95C1A5',
+    primarySurface: '#E5F1E9',
     onPrimary: '#FFFFFF',
-    onPrimaryMuted: '#DDF4E5',
+    onPrimaryMuted: '#D8F3DC',
     primaryDivider: 'rgba(255,255,255,0.35)',
-    success: '#176B3A',
-    successSurface: '#E7F4EB',
+
+    trailOrange: '#E76F51',
+    trailOrangeSurface: '#FCEBE6',
+    highlight: '#F4A261',
+
+    teal: '#2A9D8F',
+    tealSurface: '#E4F4F2',
+
+    warning: '#B66D00',
+    warningSurface: '#FFF2D9',
+
+    success: '#1B4332',
+    successSurface: '#E5F1E9',
+
     danger: '#B42318',
     dangerSurface: '#FEECEB',
     onDanger: '#FFFFFF',
   },
+
   dark: {
     text: '#F1F6F2',
     background: '#0C120E',
@@ -31,21 +46,37 @@ export const Colors = {
     surfaceElevated: '#121A15',
     textSecondary: '#AAB7AD',
     border: '#2C3930',
-    primary: '#55B879',
+
+    primary: '#74C69D',
+    primaryDark: '#081C15',
     primaryMuted: '#397B50',
     primarySurface: '#173522',
     onPrimary: '#07130B',
     onPrimaryMuted: '#C9ECD5',
     primaryDivider: 'rgba(7,19,11,0.35)',
+
+    trailOrange: '#F08A70',
+    trailOrangeSurface: '#3A211B',
+    highlight: '#F4A261',
+
+    teal: '#63C9BC',
+    tealSurface: '#123733',
+
+    warning: '#F5B942',
+    warningSurface: '#3A2C12',
+
     success: '#68C889',
     successSurface: '#173522',
+
     danger: '#FF8A80',
     dangerSurface: '#3B1D1B',
     onDanger: '#2B0906',
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor =
+  keyof typeof Colors.light &
+  keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
   ios: {
@@ -54,12 +85,14 @@ export const Fonts = Platform.select({
     rounded: 'ui-rounded',
     mono: 'ui-monospace',
   },
+
   default: {
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
   },
+
   web: {
     sans: 'var(--font-display)',
     serif: 'var(--font-serif)',
@@ -84,5 +117,10 @@ export const Radius = {
   pill: 999,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+export const BottomTabInset =
+  Platform.select({
+    ios: 50,
+    android: 80,
+  }) ?? 0;
+
 export const MaxContentWidth = 800;

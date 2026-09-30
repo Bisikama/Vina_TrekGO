@@ -1,181 +1,1230 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
+import { AppSymbol } from '@/components/app-symbol';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  Radius,
+  Spacing,
+} from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { Collapsible } from '@/screens/explore/components/collapsible';
 
-export function ExploreScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
+type Trail = {
+  id: string;
+  name: string;
+  region: string;
+  location: string;
+  imageUrl: string;
+  badge: string;
+  difficulty: string;
+  rating: number;
+  reviewCount: number;
+  distance: string;
+  elevation: string;
+  duration: string;
+  signalLabel: string;
+  verified: boolean;
+  hasSos: boolean;
+  warning: string | null;
+  supportLabel: string;
+};
+
+const trails: Trail[] = [
+  {
+    id: 'trail_lao_than',
+    name: 'Đỉnh Lảo Thẩn (2.860m)',
+    region: 'Tọa độ Bát Xát',
+    location:
+      'Xã Y Tý, Huyện Bát Xát, Tỉnh Lào Cai',
+    imageUrl:
+      'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=85',
+    badge: 'VFRS CHUẨN ĐỘI',
+    difficulty: 'Cấp 2/5 · Vừa phải',
+    rating: 4.9,
+    reviewCount: 380,
+    distance: '15.2 km',
+    elevation: '+1.420m',
+    duration: '2N1Đ',
+    signalLabel: '4G 85%',
+    verified: true,
+    hasSos: false,
+    warning: null,
+    supportLabel:
+      'Đã đồng bộ GPS offline',
+  },
+  {
+    id: 'trail_bach_moc',
+    name: 'Bạch Mộc Lương Tử (3.046m)',
+    region: 'Đỉnh Kỳ Quan San',
+    location:
+      'Bản Dền Sung, Xã Sàng Ma Sáo, Lào Cai',
+    imageUrl:
+      'https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=1200&q=85',
+    badge: 'VFRS THẨM ĐỊNH',
+    difficulty: 'Cấp 4/5 · Khắc nghiệt',
+    rating: 4.8,
+    reviewCount: 215,
+    distance: '30.0 km',
+    elevation: '+2.100m',
+    duration: '3N2Đ',
+    signalLabel: 'Điểm cắm 2.100m',
+    verified: true,
+    hasSos: false,
+    warning:
+      'Yêu cầu gậy leo núi, sức bền và không sợ độ cao.',
+    supportLabel:
+      'Suối nước cách 4.2 km',
+  },
+  {
+    id: 'trail_fansipan',
+    name: 'Fansipan · Sống Lưng Trâu',
+    region: 'Hoàng Liên Sơn',
+    location:
+      'Trạm Tôn / Cát Cát, VQG Hoàng Liên, Sa Pa',
+    imageUrl:
+      'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85',
+    badge: 'VFRS GIÁM SÁT',
+    difficulty: 'Cấp 4/5 · Kỹ thuật',
+    rating: 4.9,
+    reviewCount: 520,
+    distance: '22.0 km',
+    elevation: '+1.950m',
+    duration: '3N2Đ',
+    signalLabel: '03 trạm SOS',
+    verified: true,
+    hasSos: true,
+    warning: null,
+    supportLabel:
+      'Hỗ trợ offline topo',
+  },
+];
+
+function FilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{
+        selected,
+      }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.filterChip,
+        {
+          backgroundColor: selected
+            ? theme.primary
+            : theme.surfaceElevated,
+          borderColor: selected
+            ? theme.primary
+            : theme.border,
+        },
+        pressed && styles.pressed,
+      ]}
+    >
+      <ThemedText
+        type="smallBold"
+        style={{
+          color: selected
+            ? theme.onPrimary
+            : theme.text,
+        }}
+      >
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function TrailCard({
+  trail,
+}: {
+  trail: Trail;
+}) {
+  const theme = useTheme();
+  const router = useRouter();
+
+  const metrics = [
+    ['Cự ly', trail.distance],
+    ['Độ dốc', trail.elevation],
+    ['Thời lượng', trail.duration],
+    [
+      trail.hasSos
+        ? 'Trạm SOS'
+        : 'Tín hiệu',
+      trail.signalLabel,
+    ],
+  ];
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
+    <ThemedView
+      type="surfaceElevated"
+      style={[
+        styles.card,
+        {
+          borderColor: theme.border,
+        },
+      ]}
+    >
+      <View style={styles.hero}>
+        <Image
+          source={trail.imageUrl}
+          style={styles.heroImage}
+          contentFit="cover"
+          transition={180}
+        />
+
+        <View style={styles.heroShade} />
+
+        <View style={styles.badgeRow}>
+          <View
+            style={[
+              styles.badge,
+              {
+                backgroundColor:
+                  theme.primary,
+              },
+            ]}
+          >
+            <ThemedText
+              style={styles.badgeText}
+            >
+              {trail.badge}
+            </ThemedText>
+          </View>
+
+          <View
+            style={[
+              styles.badge,
+              {
+                backgroundColor:
+                  theme.trailOrange,
+              },
+            ]}
+          >
+            <ThemedText
+              style={styles.badgeText}
+            >
+              {trail.difficulty}
+            </ThemedText>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Lưu ${trail.name}`}
+          onPress={() =>
+            Alert.alert(
+              'Đã lưu cung đường',
+              trail.name,
+            )
+          }
+          style={({ pressed }) => [
+            styles.bookmark,
+            pressed && styles.pressed,
+          ]}
+        >
+          <AppSymbol
+            name={{
+              ios: 'bookmark',
+              android:
+                'bookmark_border',
+              web: 'bookmark',
+            }}
+            color="#FFFFFF"
+            size={21}
+          />
+        </Pressable>
+
+        <View style={styles.heroText}>
+          <ThemedText
+            style={styles.region}
+          >
+            {trail.region.toUpperCase()}
           </ThemedText>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
-
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
+          <View style={styles.titleRow}>
+            <ThemedText
+              style={styles.trailName}
+            >
+              {trail.name}
             </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
+            <View
+              style={styles.ratingBadge}
+            >
+              <ThemedText
+                style={styles.ratingText}
+              >
+                ★ {trail.rating} (
+                {trail.reviewCount})
               </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.cardBody}>
+        <View style={styles.locationRow}>
+          <AppSymbol
+            name={{
+              ios: 'mappin.and.ellipse',
+              android: 'location_on',
+              web: 'location_on',
+            }}
+            color={theme.primary}
+            size={18}
+          />
+
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.locationText}
+          >
+            {trail.location}
+          </ThemedText>
+        </View>
+
+        {trail.warning ? (
+          <View
+            style={[
+              styles.warning,
+              {
+                backgroundColor:
+                  theme.dangerSurface,
+              },
+            ]}
+          >
+            <ThemedText
+              type="smallBold"
+              themeColor="danger"
+            >
+              ⚠ {trail.warning}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <View
+          style={[
+            styles.metrics,
+            {
+              backgroundColor:
+                theme.backgroundElement,
+            },
+          ]}
+        >
+          {metrics.map(
+            ([label, value]) => (
+              <View
+                key={label}
+                style={styles.metricItem}
+              >
+                <ThemedText
+                  type="small"
+                  themeColor="textSecondary"
+                  style={styles.metricLabel}
+                >
+                  {label.toUpperCase()}
+                </ThemedText>
+
+                <ThemedText
+                  type="smallBold"
+                  style={{
+                    color:
+                      theme.primary,
+                  }}
+                >
+                  {value}
+                </ThemedText>
+              </View>
+            ),
+          )}
+        </View>
+
+        <View style={styles.cardFooter}>
+          <View style={styles.supportRow}>
+            <AppSymbol
+              name={{
+                ios: 'arrow.down.circle',
+                android:
+                  'download_for_offline',
+                web: 'download',
+              }}
+              color={theme.primary}
+              size={17}
+            />
+
+            <ThemedText
+              type="smallBold"
+              themeColor="primary"
+            >
+              {trail.supportLabel}
+            </ThemedText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+           onPress={() =>
+  router.push({
+    pathname: '/trails/[id]',
+    params: {
+      id: trail.id,
+    },
+  })
+}
+            style={({ pressed }) => [
+              styles.detailButton,
+              {
+                backgroundColor:
+                  theme.primary,
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            <ThemedText
+              style={{
+                color:
+                  theme.onPrimary,
+                fontWeight: '900',
+              }}
+            >
+              CHI TIẾT →
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </ThemedView>
+  );
+}
+
+function MapPreview({
+  visibleTrails,
+}: {
+  visibleTrails: Trail[];
+}) {
+  const theme = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.mapPanel,
+        {
+          backgroundColor:
+            theme.tealSurface,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.mapRoute,
+          {
+            borderColor: theme.teal,
+          },
+        ]}
+      />
+
+      {visibleTrails.map(
+        (trail, index) => (
+          <View
+            key={trail.id}
+            style={[
+              styles.mapPin,
+              {
+                backgroundColor:
+                  trail.hasSos
+                    ? theme.danger
+                    : theme.primary,
+
+                left: `${
+                  18 + index * 27
+                }%`,
+
+                top: `${
+                  18 +
+                  (index % 2) * 34
+                }%`,
+              },
+            ]}
+          >
+            <ThemedText
+              style={styles.mapPinText}
+            >
+              {index + 1}
+            </ThemedText>
+          </View>
+        ),
+      )}
+
+      <View style={styles.mapCaption}>
+        <ThemedText
+          style={styles.mapTitle}
+        >
+          Bản đồ cung đường Tây Bắc
+        </ThemedText>
+
+        <ThemedText
+          type="small"
+          themeColor="textSecondary"
+        >
+          Bản demo vị trí — chưa sử dụng
+          GPS thật.
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
+export function ExploreScreen() {
+  const theme = useTheme();
+
+  const [query, setQuery] =
+    useState('');
+
+  const [mode, setMode] =
+    useState<'list' | 'map'>(
+      'list',
+    );
+
+  const [
+    verifiedOnly,
+    setVerifiedOnly,
+  ] = useState(true);
+
+  const [sosOnly, setSosOnly] =
+    useState(false);
+
+  const visibleTrails = useMemo(
+    () => {
+      const keyword = query
+        .trim()
+        .toLocaleLowerCase('vi');
+
+      return trails.filter(
+        (trail) => {
+          const matchesQuery =
+            !keyword ||
+            `${trail.name} ${trail.region} ${trail.location}`
+              .toLocaleLowerCase(
+                'vi',
+              )
+              .includes(keyword);
+
+          return (
+            matchesQuery &&
+            (!verifiedOnly ||
+              trail.verified) &&
+            (!sosOnly ||
+              trail.hasSos)
+          );
+        },
+      );
+    },
+    [
+      query,
+      sosOnly,
+      verifiedOnly,
+    ],
+  );
+
+  return (
+    <ThemedView style={styles.screen}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={[
+          'top',
+          'left',
+          'right',
+        ]}
+      >
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+          contentContainerStyle={
+            styles.content
+          }
+        >
+          <View style={styles.header}>
+            <View>
+              <ThemedText
+                type="smallBold"
+                themeColor="primary"
+              >
+                VINA_TREKGO TRAILS
+              </ThemedText>
+
+              <ThemedText
+                style={styles.pageTitle}
+              >
+                Khám phá cung đường
+              </ThemedText>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Hồ sơ cá nhân"
+              onPress={() =>
+                Alert.alert(
+                  'Hồ sơ',
+                  'Mở tab Cá nhân để xem hồ sơ Trekker.',
+                )
+              }
+              style={({ pressed }) => [
+                styles.profileButton,
+                {
+                  backgroundColor:
+                    theme.primary,
+                },
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <AppSymbol
+                name={{
+                  ios: 'person.fill',
+                  android: 'person',
+                  web: 'person',
+                }}
+                color={theme.onPrimary}
+                size={20}
               />
-            </ThemedView>
-          </Collapsible>
+            </Pressable>
+          </View>
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+          <View
+            style={[
+              styles.searchBox,
+              {
+                backgroundColor:
+                  theme.backgroundElement,
+                borderColor:
+                  theme.border,
+              },
+            ]}
+          >
+            <AppSymbol
+              name={{
+                ios: 'magnifyingglass',
+                android: 'search',
+                web: 'search',
+              }}
+              color={theme.primary}
+              size={20}
+            />
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Tìm theo tên đỉnh, tỉnh hoặc khu vực"
+              placeholderTextColor={
+                theme.textSecondary
+              }
+              style={[
+                styles.searchInput,
+                {
+                  color: theme.text,
+                },
+              ]}
+            />
 
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/screens/explore/components/collapsible.tsx</ThemedText>{' '}
-              component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
+            {query ? (
+              <Pressable
+                onPress={() =>
+                  setQuery('')
+                }
+              >
+                <AppSymbol
+                  name={{
+                    ios: 'xmark.circle.fill',
+                    android: 'cancel',
+                    web: 'cancel',
+                  }}
+                  color={
+                    theme.textSecondary
+                  }
+                  size={19}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <View
+            style={[
+              styles.modeSwitch,
+              {
+                backgroundColor:
+                  theme.backgroundElement,
+              },
+            ]}
+          >
+            <Pressable
+              onPress={() =>
+                setMode('list')
+              }
+              style={[
+                styles.modeButton,
+                mode === 'list' && {
+                  backgroundColor:
+                    theme.surfaceElevated,
+                },
+              ]}
+            >
+              <AppSymbol
+                name={{
+                  ios: 'list.bullet',
+                  android: 'view_list',
+                  web: 'list',
+                }}
+                color={
+                  mode === 'list'
+                    ? theme.primary
+                    : theme.textSecondary
+                }
+                size={18}
+              />
+
+              <ThemedText
+                type="smallBold"
+                style={{
+                  color:
+                    mode === 'list'
+                      ? theme.primary
+                      : theme.textSecondary,
+                }}
+              >
+                Danh sách
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() =>
+                setMode('map')
+              }
+              style={[
+                styles.modeButton,
+                mode === 'map' && {
+                  backgroundColor:
+                    theme.surfaceElevated,
+                },
+              ]}
+            >
+              <AppSymbol
+                name={{
+                  ios: 'map.fill',
+                  android: 'map',
+                  web: 'map',
+                }}
+                color={
+                  mode === 'map'
+                    ? theme.primary
+                    : theme.textSecondary
+                }
+                size={18}
+              />
+
+              <ThemedText
+                type="smallBold"
+                style={{
+                  color:
+                    mode === 'map'
+                      ? theme.primary
+                      : theme.textSecondary,
+                }}
+              >
+                Bản đồ (Live GPS)
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={
+              styles.filters
+            }
+          >
+            <FilterChip
+              label="Độ khó: Cấp 2–4"
+              selected
+              onPress={() =>
+                undefined
+              }
+            />
+
+            <FilterChip
+              label="Đã thẩm định VFRS"
+              selected={verifiedOnly}
+              onPress={() =>
+                setVerifiedOnly(
+                  (current) =>
+                    !current,
+                )
+              }
+            />
+
+            <FilterChip
+              label="Có trạm SOS"
+              selected={sosOnly}
+              onPress={() =>
+                setSosOnly(
+                  (current) =>
+                    !current,
+                )
+              }
+            />
+          </ScrollView>
+
+          <View style={styles.resultRow}>
+            <ThemedText
+              style={styles.resultCount}
+            >
+              {visibleTrails.length}{' '}
+              cung đường
             </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+            >
+              Tây Bắc · Phổ biến nhất
+            </ThemedText>
+          </View>
+
+          {mode === 'map' ? (
+            <MapPreview
+              visibleTrails={
+                visibleTrails
+              }
+            />
+          ) : visibleTrails.length ? (
+            <View
+              style={styles.cardList}
+            >
+              {visibleTrails.map(
+                (trail) => (
+                  <TrailCard
+                    key={trail.id}
+                    trail={trail}
+                  />
+                ),
+              )}
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.emptyState,
+                {
+                  borderColor:
+                    theme.border,
+                },
+              ]}
+            >
+              <ThemedText
+                style={styles.emptyTitle}
+              >
+                Không tìm thấy cung đường
+              </ThemedText>
+
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+              >
+                Hãy xoá từ khoá hoặc thay
+                đổi bộ lọc đang chọn.
+              </ThemedText>
+            </View>
+          )}
+
+          <View
+            style={[
+              styles.offlineBanner,
+              {
+                backgroundColor:
+                  theme.primarySurface,
+              },
+            ]}
+          >
+            <View style={styles.offlineText}>
+              <ThemedText type="smallBold">
+                Bản đồ ngoại tuyến sẵn sàng
+              </ThemedText>
+
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+              >
+                Ba cung đường đã có gói dữ
+                liệu GPS demo.
+              </ThemedText>
+            </View>
+
+            <Pressable
+              onPress={() =>
+                Alert.alert(
+                  'Đã tải bản đồ demo',
+                  'Gói dữ liệu ngoại tuyến đã sẵn sàng.',
+                )
+              }
+              style={({ pressed }) => [
+                styles.downloadButton,
+                {
+                  backgroundColor:
+                    theme.primary,
+                },
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <ThemedText
+                type="smallBold"
+                style={{
+                  color:
+                    theme.onPrimary,
+                }}
+              >
+                TẢI VỀ
+              </ThemedText>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  screen: {
     flex: 1,
   },
-  contentContainer: {
+  safeArea: {
+    flex: 1,
+  },
+  content: {
+    padding: Spacing.three,
+    paddingBottom: Spacing.five,
+    gap: Spacing.three,
+  },
+  header: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pageTitle: {
+    marginTop: 2,
+    fontSize: 25,
+    lineHeight: 31,
+    fontWeight: '900',
+  },
+  profileButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
+  searchBox: {
+    minHeight: 52,
+    paddingHorizontal: Spacing.three,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+    gap: Spacing.two,
   },
-  centerText: {
+  searchInput: {
+    flex: 1,
+    minHeight: 50,
+    fontSize: 14,
+  },
+  modeSwitch: {
+    padding: 4,
+    borderRadius: Radius.medium,
+    flexDirection: 'row',
+  },
+  modeButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  filters: {
+    gap: Spacing.two,
+  },
+  filterChip: {
+    minHeight: 38,
+    paddingHorizontal: 13,
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  resultCount: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '900',
+  },
+  cardList: {
+    gap: Spacing.three,
+  },
+  card: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+  },
+  hero: {
+    height: 210,
+    position: 'relative',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroShade: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor:
+      'rgba(3,20,12,0.3)',
+  },
+  badgeRow: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 56,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  badge: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 5,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '900',
+  },
+  bookmark: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor:
+      'rgba(8,28,21,0.74)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroText: {
+    position: 'absolute',
+    left: 13,
+    right: 13,
+    bottom: 13,
+    gap: 3,
+  },
+  region: {
+    color: '#9FE8D9',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  trailName: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 23,
+    lineHeight: 28,
+    fontWeight: '900',
+  },
+  ratingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor:
+      'rgba(8,28,21,0.7)',
+  },
+  ratingText: {
+    color: '#9FE8D9',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  cardBody: {
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  locationText: {
+    flex: 1,
+  },
+  warning: {
+    padding: 11,
+    borderRadius: 10,
+  },
+  metrics: {
+    paddingVertical: 11,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    flexDirection: 'row',
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  metricLabel: {
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: '800',
     textAlign: 'center',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  supportRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  detailButton: {
+    minHeight: 43,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPanel: {
+    height: 440,
+    overflow: 'hidden',
+    position: 'relative',
+    borderRadius: Radius.large,
+  },
+  mapRoute: {
+    position: 'absolute',
+    left: 45,
+    top: 70,
+    width: 270,
+    height: 210,
+    borderWidth: 4,
+    borderRadius: 100,
+    transform: [
+      {
+        rotate: '-12deg',
+      },
+    ],
+    opacity: 0.45,
+  },
+  mapPin: {
+    position: 'absolute',
+    width: 38,
+    height: 38,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPinText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  mapCaption: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor:
+      'rgba(255,255,255,0.92)',
+  },
+  mapTitle: {
+    color: '#081C15',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  emptyState: {
+    minHeight: 180,
+    padding: Spacing.four,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+  },
+  emptyTitle: {
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: '800',
+  },
+  offlineBanner: {
+    padding: Spacing.three,
+    borderRadius: Radius.medium,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  offlineText: {
+    flex: 1,
+    gap: 2,
+  },
+  downloadButton: {
+    minHeight: 42,
+    paddingHorizontal: 13,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
   },
 });
