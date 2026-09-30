@@ -210,7 +210,7 @@ export function LeaderCreateTripStepOne() {
 
                   <input
                     className={inputClass}
-                    defaultValue="Chinh phục Sống Lưng Khủng Long Tà Xùa - Săn Biển Mây Đại Ngàn (3N2Đ)"
+                    defaultValue="Chinh phục Đỉnh Núi Bà Đen 986m - Cung Đường Cột Điện (1N)"
                   />
 
                   <span className="mt-1 block text-right text-xs text-slate-400">
@@ -326,10 +326,10 @@ export function LeaderCreateTripStepOne() {
                     <textarea
                       rows={8}
                       className="w-full resize-y bg-[#f8fafc] p-4 text-sm leading-6 text-slate-800 outline-none"
-                      defaultValue={`Khám phá vẻ đẹp kỳ vĩ của Tà Xùa – thiên đường mây Tây Bắc. Hành trình đưa đoàn vượt qua Sống Lưng Khủng Long hiểm trở nhưng hùng tráng, cắm trại đêm ngắm sao và đón bình minh rực rỡ giữa mây bồng bềnh.
+                      defaultValue={`Khám phá vẻ đẹp kỳ vĩ của Núi Bà Đen – nóc nhà Nam Bộ ở độ cao 986m. Hành trình men theo đường dây điện 117 cột huyền thoại, vượt qua rừng nguyên sinh, thung lũng đá và chạm chóp kim loại ngắm biển mây Tây Ninh.
 
-• Cung đường: Bắc Yên – Bản Công Tra – Sống Lưng Khủng Long – Đỉnh Gió.
-• Yêu cầu thể lực: Tốt, từng tham gia ít nhất một chuyến trekking dài ngày.`}
+• Cung đường: Chân núi – Cột 55 – Cột 100 – Đỉnh Bà Đen.
+• Yêu cầu thể lực: Tốt, chuẩn bị đủ nước và giày leo núi có độ bám cao.`}
                     />
                   </div>
                 </label>
@@ -750,13 +750,12 @@ export function LeaderCreateTripStepOne() {
                 </div>
 
                 <h2 className="mt-4 font-bold leading-6 text-slate-950">
-                  Chinh phục Sống Lưng Khủng Long Tà Xùa –
-                  Săn Biển Mây Đại Ngàn
+                  Chinh phục Đỉnh Núi Bà Đen 986m – Cung Đường Cột Điện
                 </h2>
 
                 <div className="mt-3 space-y-2 text-xs text-slate-500">
-                  <p>▣ 05/12/2024 – 07/12/2024</p>
-                  <p>⌖ Bến xe Mỹ Đình, Hà Nội</p>
+                  <p>▣ 05/12/2024 (1 Ngày)</p>
+                  <p>⌖ Chân núi Bà Đen, TP. Tây Ninh</p>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">

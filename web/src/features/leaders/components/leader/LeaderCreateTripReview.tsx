@@ -2,52 +2,34 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { TripRouteReviewMap } from "./TripRouteReviewMap";
 
 const checkpoints = [
   {
     id: 1,
     km: "Km 0.0",
-    name: "Chân bản Công Tra",
-    description:
-      "Trạm kiểm lâm khai báo đoàn & đối soát bảo hiểm VFRS",
-    eta: "08:30 Ngày 1",
+    name: "Cột số 1 (Chân núi)",
+    description: "Trạm tiếp tế nước, gửi xe và khởi động khai báo đoàn",
+    eta: "07:30 Ngày 1",
     required: true,
   },
   {
     id: 2,
-    km: "Km 4.2",
-    name: "Rừng trúc & Mỏm Đầu Rùa",
+    km: "Km 3.8",
+    name: "Cột số 100 (Dốc đá cao)",
     description:
-      "Trạm tiếp nước sạch, điểm dừng ăn trưa tăng cường năng lượng",
-    eta: "11:30 Ngày 1",
+      "Vách đá dốc cao gồ ghề, kiểm tra an toàn gậy và đo nhịp tim",
+    eta: "11:00 Ngày 1",
     required: true,
-  },
-  {
-    id: 3,
-    km: "Km 8.5",
-    name: "Lán nghỉ Sống Lưng Khủng Long",
-    description:
-      "Hạ trại nghỉ đêm, đo SpO2 tim mạch và kiểm tra y tế",
-    eta: "16:00 Ngày 1",
-    required: false,
     important: true,
   },
   {
-    id: 4,
-    km: "Km 12.0",
-    name: "Đỉnh Gió Tà Xùa",
+    id: 3,
+    km: "Km 3.8",
+    name: "Đỉnh Núi Bà Đen - Chóp 986m",
     description:
-      "Điểm ngắm bình minh biển mây & đối soát số lượng thành viên",
-    eta: "06:15 Ngày 2",
-    required: true,
-  },
-  {
-    id: 5,
-    km: "Km 14.5",
-    name: "Bản Háng Đồng",
-    description:
-      "Kết thúc cung đi bộ, xe trung chuyển đón đoàn về thị trấn Bắc Yên",
-    eta: "13:30 Ngày 2",
+      "Chạm chóp mốc nóc nhà Nam Bộ, chiêm bái Phật Bà & Check-in",
+    eta: "11:45 Ngày 1",
     required: true,
   },
 ];
@@ -248,14 +230,11 @@ export function LeaderCreateTripReview() {
 
                 <div>
                   <h3 className="text-xl font-bold text-slate-950">
-                    Chinh phục Sống Lưng Khủng Long Tà Xùa
-                    – Săn Biển Mây Đại Ngàn (3N2Đ)
+                    Chinh phục Đỉnh Núi Bà Đen 986m – Cung Đường Cột Điện (1N)
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Hành trình đi ngoài vượt sống núi Háng
-                    Đồng với độ cao 2.650m, trải nghiệm cắm
-                    trại đêm giữa sương mù Tây Bắc.
+                    Chinh phục Nóc nhà Nam Bộ ở độ cao 986m theo cung đường Cột Điện huyền thoại, săn mây Tây Ninh và trải nghiệm thảm thực vật đa dạng.
                   </p>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -269,7 +248,7 @@ export function LeaderCreateTripReview() {
                       </strong>
 
                       <span className="text-xs text-slate-500">
-                        3 ngày 2 đêm
+                        1 ngày
                       </span>
                     </div>
 
@@ -306,8 +285,7 @@ export function LeaderCreateTripReview() {
                     <strong className="text-slate-900">
                       ⌖ Điểm tập kết:
                     </strong>{" "}
-                    20:30 tại Bến xe Mỹ Đình, Cổng số 2, Nam
-                    Từ Liêm, Hà Nội.
+                    07:00 tại Chân núi Bà Đen, Cổng Cột Điện, TP. Tây Ninh.
                   </div>
                 </div>
               </div>
@@ -341,13 +319,12 @@ export function LeaderCreateTripReview() {
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 p-4">
                 <div>
                   <strong className="text-sm text-slate-950">
-                    ⌁ Cung đường: Sống Lưng Khủng Long Tà
-                    Xùa
+                    ⌁ Cung đường: Núi Bà Đen - Cung Đường Cột Điện
                   </strong>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Mã quản lý: #VFRS-TR-042 • Huyện Bắc
-                    Yên, Sơn La
+                    Mã quản lý: #VFRS-TR-BADEN • TP. Tây
+                    Ninh, Tây Ninh
                   </p>
                 </div>
 
@@ -358,10 +335,10 @@ export function LeaderCreateTripReview() {
 
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
-                  ["Tổng cự ly", "14.5 km"],
-                  ["Độ dốc cực đại", "16.8%"],
-                  ["Cao độ đỉnh", "2.650m"],
-                  ["Dự kiến leo", "~14 giờ"],
+                  ["Tổng cự ly", "4.5 km"],
+                  ["Độ dốc TB", "94.2%"],
+                  ["Cao độ đỉnh", "986m"],
+                  ["Dự kiến leo", "~5 giờ"],
                 ].map(([label, value]) => (
                   <div
                     key={label}
@@ -378,92 +355,35 @@ export function LeaderCreateTripReview() {
                 ))}
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-xl border border-emerald-100 bg-emerald-50">
-                <div className="relative h-52">
-                  <svg
-                    viewBox="0 0 800 220"
-                    className="h-full w-full"
-                    aria-label="Bản đồ tuyến đường xem trước"
-                  >
-                    <path
-                      d="M0 40 C150 10 220 90 360 40 S640 20 800 80"
-                      fill="none"
-                      stroke="#cbd5e1"
-                      strokeWidth="2"
-                    />
+              <TripRouteReviewMap trailCode="TRAIL_BADEN_COTDIEN" />
 
-                    <path
-                      d="M0 140 C160 80 260 190 440 120 S670 100 800 160"
-                      fill="none"
-                      stroke="#cbd5e1"
-                      strokeWidth="2"
-                    />
-
-                    <polyline
-                      points="60,185 210,155 365,115 535,45 730,175"
-                      fill="none"
-                      stroke="#125238"
-                      strokeWidth="7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-
-                    {[60, 210, 365, 535, 730].map(
-                      (x, index) => (
-                        <circle
-                          key={x}
-                          cx={x}
-                          cy={
-                            [185, 155, 115, 45, 175][index]
-                          }
-                          r="10"
-                          fill={
-                            index === 3
-                              ? "#f59e0b"
-                              : "#125238"
-                          }
-                        />
-                      ),
-                    )}
-                  </svg>
-
-                  <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#125238] shadow">
-                    ● Lộ trình GPS nạp thành công
-                  </span>
-
-                  <span className="absolute right-4 top-4 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow">
-                    Chân bản Công Tra → Bản Háng Đồng
-                  </span>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>Chân núi: 42m</span>
+                  <span className="font-semibold text-slate-700">Trắc diện cao độ tuyến Cột Điện</span>
+                  <span className="font-bold text-red-600">Đỉnh: 986m</span>
                 </div>
 
-                <div className="bg-white p-4">
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Min: 1.470m</span>
-                    <span>Biểu đồ cao độ thực tế</span>
-                    <span>Max: 2.650m</span>
-                  </div>
+                <svg
+                  viewBox="0 0 800 90"
+                  className="mt-2 h-20 w-full"
+                  aria-label="Biểu đồ cao độ Núi Bà Đen"
+                >
+                  <polyline
+                    points="0,85 200,68 450,42 650,22 800,8"
+                    fill="none"
+                    stroke="#125238"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
 
-                  <svg
-                    viewBox="0 0 800 90"
-                    className="mt-2 h-20 w-full"
-                    aria-label="Biểu đồ cao độ"
-                  >
-                    <polyline
-                      points="0,78 160,65 320,48 480,10 620,38 800,75"
-                      fill="none"
-                      stroke="#125238"
-                      strokeWidth="5"
-                      strokeLinecap="round"
-                    />
-
-                    <circle
-                      cx="480"
-                      cy="10"
-                      r="7"
-                      fill="#f59e0b"
-                    />
-                  </svg>
-                </div>
+                  <circle
+                    cx="800"
+                    cy="8"
+                    r="6"
+                    fill="#dc2626"
+                  />
+                </svg>
               </div>
             </section>
 
@@ -475,12 +395,12 @@ export function LeaderCreateTripReview() {
                   </p>
 
                   <h2 className="mt-1 text-lg font-bold text-slate-950">
-                    5 Trạm kiểm soát an toàn
+                    {checkpoints.length} Trạm kiểm soát an toàn
                   </h2>
                 </div>
 
                 <span className="rounded-full bg-[#125238] px-3 py-1 text-xs font-bold text-white">
-                  5/5 Hợp lệ
+                  {checkpoints.length}/{checkpoints.length} Hợp lệ
                 </span>
               </div>
 

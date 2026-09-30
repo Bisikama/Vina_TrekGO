@@ -27,15 +27,15 @@ type Checkpoint = {
 
 const routeOptions: RouteOption[] = [
   {
-    id: "VFRS-TR-042",
-    name: "Sống Lưng Khủng Long Tà Xùa",
-    location: "Huyện Bắc Yên, Tỉnh Sơn La",
-    distance: "14.5 km",
-    completionRate: "16.8%",
-    duration: "2N1Đ",
-    difficulty: "Cấp 3 – Vừa phải",
+    id: "VFRS-TR-BADEN",
+    name: "Núi Bà Đen - Cung Đường Cột Điện",
+    location: "Thành phố Tây Ninh, Tỉnh Tây Ninh",
+    distance: "4.5 km",
+    completionRate: "94.2%",
+    duration: "1 Ngày (4 - 6 giờ)",
+    difficulty: "Cấp 2 – Vừa phải",
     imageUrl:
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=700&q=80",
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
   },
   {
     id: "VFRS-TR-067",
@@ -64,48 +64,39 @@ const routeOptions: RouteOption[] = [
 const initialCheckpoints: Checkpoint[] = [
   {
     id: 1,
-    name: "Điểm xuất phát: Chân bản Công Tra",
+    name: "Điểm xuất phát: Cột số 1 (Chân núi)",
     km: "Km 0.0",
-    elevation: "1.250m",
-    eta: "08:30 Ngày 1",
-    note: "Trạm kiểm lâm & Điểm danh quân số",
+    elevation: "42m",
+    eta: "07:30 Ngày 1",
+    note: "Gửi xe, tiếp tế nước & Điểm danh quân số",
     required: true,
   },
   {
     id: 2,
-    name: "Trạm nghỉ 1: Rừng trúc & Mỏm Đầu Rùa",
-    km: "Km 4.2",
-    elevation: "1.780m",
-    eta: "11:30 Ngày 1",
-    note: "Tiếp nước sạch & Ăn trưa dã ngoại",
+    name: "Trạm nghỉ 1: Cột 55 (Lưng chừng núi)",
+    km: "Km 2.3",
+    elevation: "535m",
+    eta: "09:30 Ngày 1",
+    note: "Tiếp nước sạch, trạm nghỉ bóng râm & sơ cứu",
     required: true,
   },
   {
     id: 3,
-    name: "Lán nghỉ đêm Sống Lưng Khủng Long",
-    km: "Km 8.5",
-    elevation: "2.100m",
-    eta: "16:00 Ngày 1",
-    note: "Hạ trại, sơ cứu y tế, sóng bộ đàm VFRS",
+    name: "Dốc đá cao: Cột 100",
+    km: "Km 3.8",
+    elevation: "820m",
+    eta: "11:00 Ngày 1",
+    note: "Vượt dốc đá gồ ghề, kiểm tra an toàn gậy leo núi",
     required: true,
     highlighted: true,
   },
   {
     id: 4,
-    name: "Đỉnh Gió Tà Xùa – Mốc săn mây",
-    km: "Km 12.0",
-    elevation: "2.650m",
-    eta: "06:15 Ngày 2",
-    note: "Đón bình minh & Check-in đỉnh",
-    required: true,
-  },
-  {
-    id: 5,
-    name: "Điểm kết thúc: Bản Háng Đồng",
-    km: "Km 14.5",
-    elevation: "1.400m",
-    eta: "13:30 Ngày 2",
-    note: "Bàn giao xe trung chuyển & Hoàn thành chuyến",
+    name: "Đỉnh Núi Bà Đen - Chóp inox 986m",
+    km: "Km 4.5",
+    elevation: "986m",
+    eta: "11:45 Ngày 1",
+    note: "Chạm chóp nóc nhà Nam Bộ, chiêm bái Phật Bà & Check-in",
     required: true,
   },
 ];
@@ -114,7 +105,7 @@ export function LeaderCreateTripStepTwo() {
   const router = useRouter();
 
   const [selectedRouteId, setSelectedRouteId] =
-    useState("VFRS-TR-042");
+    useState("VFRS-TR-BADEN");
 
   const [checkpoints, setCheckpoints] =
     useState<Checkpoint[]>(initialCheckpoints);
@@ -375,16 +366,16 @@ export function LeaderCreateTripStepTwo() {
                     <input
                       className="w-full bg-transparent text-sm outline-none"
                       placeholder="Tìm cung đường, địa phương..."
-                      defaultValue="Sống Lưng Khủng Long Tà Xùa"
+                      defaultValue="Núi Bà Đen - Cung Đường Cột Điện"
                     />
                   </label>
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {[
-                      "Tây Bắc",
-                      "Đông Bắc",
-                      "Tây Nguyên",
-                      "Độ khó Cấp 3",
+                      "Đông Nam Bộ",
+                      "Tây Ninh",
+                      "Núi Bà Đen",
+                      "Độ khó Cấp 2",
                     ].map((filter, index) => (
                       <span
                         key={filter}
@@ -615,159 +606,23 @@ export function LeaderCreateTripStepTwo() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-950">
-                  Bản đồ Lộ trình & Trắc diện cao độ
+                  Tổng quan Núi Bà Đen
                 </h2>
 
-                <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold">
-                  Địa hình
+                <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">
+                  986m Peak
                 </span>
               </div>
 
-              <div className="relative mt-4 h-72 overflow-hidden rounded-xl bg-[#eaf1ff]">
-                <svg
-                  viewBox="0 0 360 250"
-                  className="h-full w-full"
-                  aria-label="Bản đồ cung đường mô phỏng"
-                >
-                  <path
-                    d="M0 45 C70 20 120 80 190 45 S300 15 360 50"
-                    fill="none"
-                    stroke="#c8d6e8"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d="M0 100 C90 60 140 130 220 85 S300 70 360 105"
-                    fill="none"
-                    stroke="#c8d6e8"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d="M0 170 C80 120 150 190 230 150 S310 140 360 170"
-                    fill="none"
-                    stroke="#c8d6e8"
-                    strokeWidth="1"
-                  />
-
-                  <polyline
-                    points="25,215 95,185 170,135 245,70 325,205"
-                    fill="none"
-                    stroke="#125238"
-                    strokeWidth="5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  <circle
-                    cx="25"
-                    cy="215"
-                    r="8"
-                    fill="#125238"
-                  />
-                  <circle
-                    cx="95"
-                    cy="185"
-                    r="7"
-                    fill="#2f6b4f"
-                  />
-                  <circle
-                    cx="170"
-                    cy="135"
-                    r="10"
-                    fill="#f59e0b"
-                  />
-                  <circle
-                    cx="245"
-                    cy="70"
-                    r="13"
-                    fill="#dc2626"
-                  />
-                  <circle
-                    cx="325"
-                    cy="205"
-                    r="8"
-                    fill="#125238"
-                  />
-
-                  <text
-                    x="12"
-                    y="239"
-                    fontSize="11"
-                    fill="#334155"
-                  >
-                    CP1 0km
-                  </text>
-
-                  <text
-                    x="72"
-                    y="174"
-                    fontSize="11"
-                    fill="#334155"
-                  >
-                    CP2 4.2km
-                  </text>
-
-                  <text
-                    x="140"
-                    y="118"
-                    fontSize="11"
-                    fill="#92400e"
-                  >
-                    CP3 8.5km
-                  </text>
-
-                  <text
-                    x="218"
-                    y="48"
-                    fontSize="11"
-                    fill="#991b1b"
-                  >
-                    Đỉnh 2.650m
-                  </text>
-
-                  <text
-                    x="305"
-                    y="229"
-                    fontSize="11"
-                    fill="#334155"
-                  >
-                    CP5
-                  </text>
-                </svg>
-
+              <div className="relative mt-4 h-48 overflow-hidden rounded-xl bg-slate-900">
+                <img
+                  src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80"
+                  alt="Núi Bà Đen"
+                  className="h-full w-full object-cover opacity-80"
+                />
                 <span className="absolute bottom-3 left-3 rounded-md bg-[#125238] px-2 py-1 text-[10px] font-bold text-white">
-                  ● GPS Tracking VFRS sẵn sàng
+                  ● Tuyến Cột Điện - GPS 3D Ready
                 </span>
-              </div>
-
-              <div className="mt-4 h-32 rounded-xl bg-slate-50 p-3">
-                <svg
-                  viewBox="0 0 360 100"
-                  className="h-full w-full"
-                  aria-label="Biểu đồ cao độ mô phỏng"
-                >
-                  <polyline
-                    points="0,90 75,72 150,45 230,10 285,35 360,88"
-                    fill="none"
-                    stroke="#125238"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  />
-
-                  <line
-                    x1="0"
-                    y1="92"
-                    x2="360"
-                    y2="92"
-                    stroke="#cbd5e1"
-                  />
-
-                  <circle
-                    cx="230"
-                    cy="10"
-                    r="6"
-                    fill="#dc2626"
-                  />
-                </svg>
               </div>
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
@@ -785,7 +640,7 @@ export function LeaderCreateTripStepTwo() {
                     Độ cao đỉnh
                   </span>
                   <strong className="block text-sm text-red-600">
-                    2.650m
+                    986m
                   </strong>
                 </div>
 
@@ -809,7 +664,7 @@ export function LeaderCreateTripStepTwo() {
                     Thời gian
                   </span>
                   <strong className="block text-sm">
-                    ~14 giờ
+                    ~5 giờ
                   </strong>
                 </div>
               </div>
@@ -822,18 +677,16 @@ export function LeaderCreateTripStepTwo() {
 
               <div className="mt-4 space-y-4 text-xs leading-5 text-slate-600">
                 <p>
-                  ⚠ <strong>Check-in bắt buộc CP3:</strong>{" "}
-                  Toàn đoàn phải hoàn thành trước 18:00 ngày
-                  đầu tiên.
+                  ⚠ <strong>Check-in bắt buộc CP3 (Cột 100):</strong>{" "}
+                  Toàn đoàn phải hoàn thành trước 11:30 ngày đầu tiên.
                 </p>
 
                 <p>
-                  ◉ <strong>Đoạn Sống Lưng:</strong> bắt buộc
-                  liên lạc bộ đàm VHF 144.500MHz.
+                  ◉ <strong>Đoạn Vách đá Cột 100 - Đỉnh núi:</strong> chú ý bám đá tảng vững vàng, kiểm tra giày và gậy leo núi khi thời tiết mưa ẩm.
                 </p>
 
                 <p>
-                  ☎ Cứu hộ phản ứng nhanh:{" "}
+                  ☎ Cứu hộ phản ứng nhanh Núi Bà Đen:{" "}
                   <strong className="text-red-600">
                     1800-9988
                   </strong>

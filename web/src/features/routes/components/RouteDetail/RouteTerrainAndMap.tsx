@@ -96,16 +96,22 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
   useEffect(() => {
     async function fetchTrailList() {
       try {
-        const res = await apiClient.get<SystemTrailSummary[]>("/system-trails");
+        const res = await apiClient.get<SystemTrailSummary[]>("/api/v1/system-trails");
         if (res.data && res.data.length > 0) {
           setAvailableTrails(res.data);
           const match = res.data.find(
-            (t) => t.code.toLowerCase() === route.id.toLowerCase() || t.id === route.id
+            (t) =>
+              t.code.toLowerCase() === route.id.toLowerCase() ||
+              t.id === route.id ||
+              (route.id.includes("ba-den") && t.code.includes("BADEN")) ||
+              t.name.toLowerCase().includes("bà đen")
           );
           if (match) {
             setSelectedTrailCode(match.code);
           } else {
-            setSelectedTrailCode(res.data[0].code);
+            // Ưu tiên trail Bà Đen nếu không tìm thấy match chính xác
+            const baDenTrail = res.data.find((t) => t.code.includes("BADEN"));
+            setSelectedTrailCode(baDenTrail ? baDenTrail.code : res.data[0].code);
           }
         }
       } catch (err) {
@@ -126,7 +132,7 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
 
       try {
         const res = await apiClient.get<SystemTrailDetailResponse>(
-          `/system-trails/${encodeURIComponent(selectedTrailCode)}`
+          `/api/v1/system-trails/${encodeURIComponent(selectedTrailCode)}`
         );
         if (!isCancelled) {
           setTrailData(res.data);
