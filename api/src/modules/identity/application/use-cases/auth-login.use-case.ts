@@ -8,7 +8,8 @@ import { I_IDENTITY_PROVIDER } from '../ports/identity.port'
 import type { IIdentityProvider } from '../ports/identity.port'
 import { I_USER_REPOSITORY } from '../ports/user.port'
 import type { IUserRepository } from '../ports/user.port'
-import { UserRole, UserStatus } from 'src/shared/constants'
+import { UserRole as AppUserRole, UserStatus as AppUserStatus } from 'src/shared/constants'
+import { UserRole as PrismaUserRole, UserStatus as PrismaUserStatus } from '@prisma/client'
 
 @Injectable()
 export class AuthLoginUseCase {
@@ -44,12 +45,12 @@ export class AuthLoginUseCase {
         authUserId: identityUser.id,
         email: body.email,
         fullName: body.email.split('@')[0],
-        status: UserStatus.ACTIVE,
-        role: UserRole.USER,
+        status: PrismaUserStatus.ACTIVE,
+        role: PrismaUserRole.USER,
       })
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
+    if (user.status !== PrismaUserStatus.ACTIVE) {
       throw new UnauthorizedException('Tài khoản đã bị tạm khóa')
     }
 

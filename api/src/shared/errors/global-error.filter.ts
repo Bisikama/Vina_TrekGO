@@ -15,7 +15,7 @@ export class GlobalErrorFilter implements ExceptionFilter {
     let code: string = COMMON_ERROR_CODES.INTERNAL_ERROR;
     let message: string = 'Internal server error';
     let status: number = 500;
-    let details: Record<string, any> | undefined = undefined;
+    let details: Record<string, unknown> | undefined = undefined;
     let retryable: boolean = false;
 
     if (exception instanceof AppError) {
