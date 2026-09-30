@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 import { seedCategories } from './seeds/category.seed';
 import { seedInventoryLocations } from './seeds/inventory-location.seed';
 
+import { seedUsers } from './seeds/user.seed';
+import { seedRentalProducts } from './seeds/rental-product.seed';
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -10,9 +13,8 @@ async function main() {
   await seedCategories(prisma);
   await seedInventoryLocations(prisma);
   
-  // Có thể thêm các seeders khác ở đây trong tương lai. Ví dụ:
-  // await seedRentalProducts(prisma);
-  // await seedUsers(prisma);
+  await seedUsers(prisma);
+  await seedRentalProducts(prisma);
   
   console.log('All seeding finished.');
 }

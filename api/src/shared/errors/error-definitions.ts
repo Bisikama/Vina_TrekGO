@@ -64,4 +64,8 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH]: { status: 409, message: 'Provider metadata mismatch', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_STATE]: { status: 409, message: 'Invalid media state for this operation', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR]: { status: 502, message: 'Media provider error', retryable: true },
+  [MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_FORMAT]: { status: 422, message: 'Unsupported media format', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
+  [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
 };
