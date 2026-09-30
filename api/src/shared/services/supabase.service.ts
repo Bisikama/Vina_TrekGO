@@ -57,7 +57,7 @@ export class SupabaseService {
         })
       }
 
-      this.supabaseClient = createClient(supabaseUrl, (serviceKey || anonKey)!, {
+      this.supabaseClient = createClient(supabaseUrl, (serviceKey || anonKey), {
         auth: {
           autoRefreshToken: false,
           persistSession: false,

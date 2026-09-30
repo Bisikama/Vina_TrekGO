@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common'
+import { PrivateInviteRateGuard } from './presentation/private-invite-rate.guard'
+import { PrivateMembershipController } from './presentation/controllers/private-membership.controller'
+import { PrivateMembershipUseCase } from './application/use-cases/private-membership.use-case'
+import { PrivateMembershipPort } from './application/private-membership.port'
+import { PrismaPrivateMembershipAdapter } from './infrastructure/adapters/prisma-private-membership.adapter'
 import { PrivateTripController } from './presentation/controllers/private-trip.controller'
 import { PrivateTripUseCase } from './application/use-cases/private-trip.use-case'
 import { PrivateTripPort } from './application/private-trip.port'
@@ -24,6 +29,7 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
     PublicTripController,
     PrivateTripController,
     TripNavigationController,
+    PrivateMembershipController,
   ],
   providers: [
     PublicTripUseCase,
@@ -33,6 +39,11 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
     { provide: PrivateTripPort, useClass: PrismaPrivateTripAdapter },
     { provide: TRIP_STORE, useClass: PrismaTripAdapter },
     { provide: NavigationContextPort, useClass: PrismaNavigationContextAdapter },
+    PrivateMembershipUseCase,
+    PrivateInviteRateGuard,
+    { provide: PrivateMembershipPort, useClass: PrismaPrivateMembershipAdapter },
+    { provide: PrivateTripPort, useClass: PrismaPrivateTripAdapter },
+    { provide: TRIP_STORE, useClass: PrismaTripAdapter },
   ],
 })
 export class TripsModule {}

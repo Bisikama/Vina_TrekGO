@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/shared/services/prisma.service';
-import { RecordStatus } from '@prisma/client';
+import { RecordStatus, Prisma, type InventoryLocation } from '@prisma/client';
 import type {
   InventoryLocationPort,
   InventoryLocationView,
@@ -11,7 +11,7 @@ import type {
 export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
   constructor(private readonly prisma: PrismaService) {}
 
-  private mapToView(location: any): InventoryLocationView {
+  private mapToView(location: Prisma.InventoryLocationGetPayload<{ select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, status: true } }>): InventoryLocationView {
     return {
       id: location.id,
       code: location.code,
@@ -28,7 +28,7 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
-    const where: any = {};
+    const where: Prisma.InventoryLocationWhereInput = {};
 
     if (status) {
       where.status = status as RecordStatus;
