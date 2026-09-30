@@ -16,6 +16,11 @@ import {
   PublicTripController,
   TripOptionsController,
 } from './presentation/controllers/public-trip.controller'
+import { TripNavigationController } from './presentation/controllers/trip-navigation.controller'
+import { GetNavigationContextUseCase } from './application/use-cases/get-navigation-context.use-case'
+import { SwitchTrailUseCase } from './application/use-cases/switch-trail.use-case'
+import { NavigationContextPort } from './application/port/navigation-context.port'
+import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma-navigation-context.adapter'
 
 @Module({
   controllers: [
@@ -23,16 +28,20 @@ import {
     TripOptionsController,
     PublicTripController,
     PrivateTripController,
+    TripNavigationController,
     PrivateMembershipController,
   ],
   providers: [
     PublicTripUseCase,
     PrivateTripUseCase,
+    GetNavigationContextUseCase,
+    SwitchTrailUseCase,
+    { provide: PrivateTripPort, useClass: PrismaPrivateTripAdapter },
+    { provide: TRIP_STORE, useClass: PrismaTripAdapter },
+    { provide: NavigationContextPort, useClass: PrismaNavigationContextAdapter },
     PrivateMembershipUseCase,
     PrivateInviteRateGuard,
     { provide: PrivateMembershipPort, useClass: PrismaPrivateMembershipAdapter },
-    { provide: PrivateTripPort, useClass: PrismaPrivateTripAdapter },
-    { provide: TRIP_STORE, useClass: PrismaTripAdapter },
   ],
 })
 export class TripsModule {}
