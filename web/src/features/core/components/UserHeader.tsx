@@ -142,10 +142,9 @@ export const UserHeader = () => {
             Thuê thiết bị
           </Link>
 
-          <Link
-            href="/leader-registration"
-            className="flex items-center gap-1 whitespace-nowrap hover:text-[#1B5E41]"
-          >
+          <Link href="/my-trips" className="hover:text-[#1B5E41]">Chuyến đi của tôi</Link>
+          <Link href="/routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
+          <Link href="/leader-registration" className="flex items-center gap-1 hover:text-[#1B5E41]">
             Trở thành Leader
 
             <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] leading-none text-black">

@@ -1,20 +1,18 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ScheduleModule } from '@nestjs/schedule';
+
 import { SharedModule } from './shared/shared.module';
 import { IdentityModule } from './modules/identity/identity.module';
-<<<<<<< HEAD
+import { RentalModule } from './modules/rental/rental.module';
 import { TripsModule } from './modules/trips/trips.module';
-
-@Module({
-  imports: [SharedModule, IdentityModule, TripsModule],
-=======
 import { SystemTrailModule } from './modules/system-trail/system-trail.module';
+import { GeoModule } from './modules/geo/geo.module';
+import { MediaModule } from './modules/media/media.module';
+
 
 @Module({
-  imports: [SharedModule, IdentityModule, SystemTrailModule],
->>>>>>> origin/test/MapLibra
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [SharedModule, IdentityModule, TripsModule, RentalModule, SystemTrailModule, GeoModule, MediaModule, ScheduleModule.forRoot()],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

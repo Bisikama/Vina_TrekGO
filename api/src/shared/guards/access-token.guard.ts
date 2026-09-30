@@ -8,7 +8,8 @@ import {
 import { SupabaseService } from '../services/supabase.service'
 import { PrismaService } from '../services/prisma.service'
 import { REQUEST_USER_KEY } from '../constants/auth.constant'
-import { UserStatus } from '../constants'
+import { UserStatus as AppUserStatus } from '../constants'
+import { UserStatus as PrismaUserStatus } from '@prisma/client'
 
 /**
  * AccessTokenGuard - Pure Supabase Flow
@@ -46,7 +47,7 @@ export class AccessTokenGuard implements CanActivate {
         },
       })
 
-      if (trekGoUser && trekGoUser.status !== UserStatus.ACTIVE) {
+      if (trekGoUser && trekGoUser.status !== PrismaUserStatus.ACTIVE) {
         throw new ForbiddenException('Tài khoản đã bị tạm khóa')
       }
 
