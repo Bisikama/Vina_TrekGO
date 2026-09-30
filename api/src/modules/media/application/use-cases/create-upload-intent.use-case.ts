@@ -7,6 +7,7 @@ import { MEDIA_ASSET_PORT, MediaScopeValue, MediaResourceTypeValue, MediaCapture
 import type { MediaAssetPort } from '../ports/media-asset.port';
 import { MEDIA_STORAGE_PORT } from '../ports/media-storage.port';
 import type { MediaStoragePort } from '../ports/media-storage.port';
+import { MediaPolicyService } from '../policies/media.policy';
 import envConfig from '../../../../shared/config';
 import type { ActiveUserData } from '../../../../shared/types/user.type';
 
@@ -25,6 +26,7 @@ export class CreateUploadIntentUseCase {
   constructor(
     @Inject(MEDIA_ASSET_PORT) private readonly mediaAssetPort: MediaAssetPort,
     @Inject(MEDIA_STORAGE_PORT) private readonly mediaStoragePort: MediaStoragePort,
+    private readonly mediaPolicyService: MediaPolicyService,
   ) {}
 
   async execute(dto: CreateUploadIntentUseCaseInput, activeUser: ActiveUserData) {
@@ -39,8 +41,16 @@ export class CreateUploadIntentUseCase {
     this.checkMimeType(dto.contentType, dto.resourceType);
     this.checkSize(dto.sizeBytes, dto.resourceType);
 
+    const policy = this.mediaPolicyService.getScopePolicy(dto.scope);
+    if (!policy.allowedResourceTypes.includes(dto.resourceType)) {
+      throw new AppError({
+        code: MEDIA_ERROR_CODES.MEDIA_INVALID_RESOURCE_TYPE,
+        message: `Resource type ${dto.resourceType} is not allowed for scope ${dto.scope}`,
+      });
+    }
+
     const mediaId = randomUUID();
-    const deliveryType = this.getDeliveryType(dto.scope);
+    const deliveryType = policy.deliveryType;
     const publicId = `trekgo/${dto.scope.toLowerCase().replace(/_/g, '-')}/${mediaId}`;
     
     const now = new Date();
@@ -60,6 +70,7 @@ export class CreateUploadIntentUseCase {
       providerPublicId: publicId,
       deliveryType,
       uploadIntentExpiresAt,
+      retentionUntil: new Date(now.getTime() + envConfig.MEDIA_PENDING_UPLOAD_RETENTION_HOURS * 3600 * 1000),
     });
 
     try {
@@ -142,12 +153,5 @@ export class CreateUploadIntentUseCase {
         message: `Video exceeds maximum size of ${envConfig.MEDIA_MAX_VIDEO_BYTES} bytes`,
       });
     }
-  }
-
-  private getDeliveryType(scope: MediaScopeValue): 'upload' | 'authenticated' {
-    if (scope === 'RENTAL_PRODUCT') {
-      return 'upload';
-    }
-    return 'authenticated';
   }
 }
