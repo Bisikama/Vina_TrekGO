@@ -4,7 +4,10 @@ import { RecordStatus, Prisma, type InventoryLocation } from '@prisma/client';
 import type {
   InventoryLocationPort,
   InventoryLocationView,
+  InventoryLocationListView,
   ListInventoryLocationsParams,
+  CreateInventoryLocationInput,
+  UpdateInventoryLocationInput,
 } from '../../application/ports/inventory-location.port';
 
 @Injectable()
@@ -23,7 +26,16 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     };
   }
 
-  async listLocations(params: ListInventoryLocationsParams): Promise<{ items: InventoryLocationView[]; total: number }> {
+  private mapToListView(location: Prisma.InventoryLocationGetPayload<{ select: { id: true, code: true, name: true, status: true } }>): InventoryLocationListView {
+    return {
+      id: location.id,
+      code: location.code,
+      name: location.name,
+      status: location.status,
+    };
+  }
+
+  async listLocations(params: ListInventoryLocationsParams): Promise<{ items: InventoryLocationListView[]; total: number }> {
     const { page, pageSize, search, status } = params;
     const skip = (page - 1) * pageSize;
     const take = pageSize;
@@ -51,9 +63,6 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
           id: true,
           code: true,
           name: true,
-          address: true,
-          latitude: true,
-          longitude: true,
           status: true,
         },
       }),
@@ -61,7 +70,7 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     ]);
 
     return {
-      items: items.map(item => this.mapToView(item)),
+      items: items.map(item => this.mapToListView(item)),
       total,
     };
   }
@@ -81,6 +90,46 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     });
 
     if (!location) return null;
+    return this.mapToView(location);
+  }
+
+  async getLocationByCode(code: string): Promise<InventoryLocationView | null> {
+    const location = await this.prisma.inventoryLocation.findUnique({
+      where: { code },
+      select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, status: true },
+    });
+    if (!location) return null;
+    return this.mapToView(location);
+  }
+
+  async createLocation(data: CreateInventoryLocationInput): Promise<InventoryLocationView> {
+    const location = await this.prisma.inventoryLocation.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        status: (data.status as RecordStatus) || RecordStatus.ACTIVE,
+      },
+      select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, status: true },
+    });
+    return this.mapToView(location);
+  }
+
+  async updateLocation(id: string, data: UpdateInventoryLocationInput): Promise<InventoryLocationView> {
+    const location = await this.prisma.inventoryLocation.update({
+      where: { id },
+      data: {
+        code: data.code,
+        name: data.name,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        status: data.status as RecordStatus,
+      },
+      select: { id: true, code: true, name: true, address: true, latitude: true, longitude: true, status: true },
+    });
     return this.mapToView(location);
   }
 }

@@ -4,6 +4,8 @@ import { SharedModule } from 'src/shared/shared.module';
 import { InventoryLocationController } from './presentation/controllers/inventory-location.controller';
 import { ListInventoryLocationsUseCase } from './application/use-cases/list-inventory-locations.use-case';
 import { GetInventoryLocationUseCase } from './application/use-cases/get-inventory-location.use-case';
+import { CreateInventoryLocationUseCase } from './application/use-cases/create-inventory-location.use-case';
+import { UpdateInventoryLocationUseCase } from './application/use-cases/update-inventory-location.use-case';
 import { INVENTORY_LOCATION_PORT } from './application/ports/inventory-location.port';
 import { PrismaInventoryLocationAdapter } from './infrastructure/adapters/prisma-inventory-location.adapter';
 import { CatalogModule } from '../catalog/catalog.module';
@@ -28,6 +30,8 @@ import { PrismaEquipmentUnitAdapter } from './infrastructure/adapters/prisma-equ
   providers: [
     ListInventoryLocationsUseCase,
     GetInventoryLocationUseCase,
+    CreateInventoryLocationUseCase,
+    UpdateInventoryLocationUseCase,
     ListEquipmentUnitsUseCase,
     CreateEquipmentUnitUseCase,
     GetEquipmentUnitUseCase,

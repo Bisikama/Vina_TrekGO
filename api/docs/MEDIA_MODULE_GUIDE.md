@@ -67,5 +67,35 @@ Module đã cung cấp API test riêng trên Swagger để giúp dev/tester uplo
    - Gọi lại `Complete Upload`.
    - Trả về Full JSON bao gồm Metadata, SHA-256, Exif và Provenance.
 
+## 8. Hướng dẫn tích hợp Media Module cho các Domain khác (Booking, GPS, v.v.)
+Module `Media` là một **Foundation Module (Module nền tảng)** được thiết kế để sử dụng chung cho toàn bộ dự án. Bất kỳ Domain nào cần tính năng tải ảnh/video đều có thể (và bắt buộc phải) gọi đến Media Module thay vì tự viết lại logic giao tiếp với Cloudinary.
+
+Để tích hợp Media Module vào Domain mới (Ví dụ: Domain Booking muốn thêm ảnh bìa chuyến đi `TRIP_EVIDENCE`), bạn chỉ cần làm 3 bước:
+
+### Bước 1: Định nghĩa thêm `Scope` (Phạm vi sử dụng)
+1. Mở file `src/modules/media/presentation/dto/create-upload-intent.dto.ts`.
+2. Thêm tên Scope mới vào Enum validation của Zod:
+   ```typescript
+   scope: z.enum(['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'TRIP_EVIDENCE'] as const)
+   ```
+3. Khai báo kiểu dữ liệu tương ứng trong port nếu cần (VD: `MediaScopeValue`).
+
+### Bước 2: Cấu hình chính sách cho Scope mới
+1. Mở file `src/modules/media/application/policies/media.policy.ts`.
+2. Khai báo quy tắc giới hạn (Policies) cho Scope mới. Ví dụ:
+   ```typescript
+   TRIP_EVIDENCE: {
+     allowedResourceTypes: ['IMAGE', 'VIDEO'],
+     requiresProvenance: true, // Nếu cần phân tích Exif, SHA-256 để chống giả mạo
+     deliveryType: 'authenticated', // Bảo mật, cần token để truy xuất
+   }
+   ```
+   *Lưu ý: Nếu chỉ là ảnh Thumbnail public thì để `deliveryType: 'upload'` và `requiresProvenance: false`.*
+
+### Bước 3: Domain lưu trữ ID liên kết
+Trong Database của Domain mới (Ví dụ bảng `Trip`), bạn chỉ cần tạo cột kiểu chuỗi (hoặc UUID) để lưu lại giá trị `mediaId`.
+- **Luồng Client:** Client gọi API của `Media` -> Lấy được `mediaId` -> Client gọi API `CreateTrip` của Domain Booking truyền kèm `coverMediaId: mediaId`.
+- **Luồng Server:** Module Booking chỉ lưu ID. Khi cần hiển thị, Client sẽ gọi API `GET /api/v1/media/{mediaId}/delivery` của module Media để lấy URL hiển thị (Media module sẽ tự xử lý cấp token xem ảnh bảo mật nếu cần). Hai Domain hoàn toàn độc lập và giao tiếp lỏng lẻo thông qua `mediaId`.
+
 ---
 **TrekGO Media Architecture v1.0 - VinaTrek Project.**

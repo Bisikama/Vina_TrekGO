@@ -39,6 +39,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY]: { status: 422, message: 'Invalid deposit policy', retryable: false },
   [RENTAL_ERROR_CODES.VERSION_CONFLICT]: { status: 409, message: 'Version conflict. The resource was updated by another transaction.', retryable: true },
   [RENTAL_ERROR_CODES.INVENTORY_LOCATION_NOT_FOUND]: { status: 404, message: 'Inventory location not found', retryable: false },
+  [RENTAL_ERROR_CODES.INVENTORY_LOCATION_CODE_EXISTS]: { status: 400, message: 'Mã điểm giao nhận đã tồn tại', retryable: false },
   [RENTAL_ERROR_CODES.INVENTORY_LOCATION_INACTIVE]: { status: 422, message: 'Inventory location is inactive', retryable: false },
   
   [RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_FOUND]: { status: 404, message: 'Equipment unit not found', retryable: false },

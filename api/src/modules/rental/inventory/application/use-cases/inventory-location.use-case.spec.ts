@@ -14,6 +14,13 @@ const mockLocationView = {
   status: 'ACTIVE',
 }
 
+const mockLocationListView = {
+  id: 'loc-1',
+  code: 'INV-HCM-01',
+  name: 'Kho HCM Chính',
+  status: 'ACTIVE',
+}
+
 const mockPort = {
   listLocations: jest.fn(),
   getLocationById: jest.fn(),
@@ -40,7 +47,7 @@ describe('InventoryLocation Use Cases', () => {
 
   describe('List Locations', () => {
     it('should calculate pagination and forward params', async () => {
-      mockPort.listLocations.mockResolvedValue({ items: [mockLocationView], total: 1 })
+      mockPort.listLocations.mockResolvedValue({ items: [mockLocationListView], total: 1 })
       const params = { page: 2, pageSize: 20, search: 'HCM', status: 'INACTIVE' }
 
       const result = await listLocationsUseCase.execute(params)
