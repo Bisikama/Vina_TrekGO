@@ -509,41 +509,43 @@ function TripCard({
               color: theme.warning,
             };
 
-  function handlePrimaryAction() {
-    if (trip.status === 'in-progress') {
-      router.push({
-        pathname: '/trails/[id]',
-        params: {
-          id: trip.trailId,
-        },
-      });
+ function handlePrimaryAction() {
+  if (trip.status === 'upcoming') {
+    router.push({
+      pathname: '/trips/[id]',
+      params: {
+        id: trip.id,
+      },
+    });
 
-      return;
-    }
-
-    if (trip.status === 'completed') {
-      Alert.alert(
-        'Đánh giá chuyến đi',
-        `Màn đánh giá cho “${trip.name}” sẽ được nối tiếp ở cụm User Mobile sau.`,
-      );
-
-      return;
-    }
-
-    if (trip.status === 'cancelled') {
-      Alert.alert(
-        'Chi tiết hoàn tiền',
-        'Hoàn tiền thành công • 2.450.000 ₫ • 25/07/2026',
-      );
-
-      return;
-    }
-
-    Alert.alert(
-      'Chuẩn bị chuyến đi',
-      'Thanh toán đã hoàn tất. Hãy kiểm tra checklist và có mặt đúng giờ tại điểm tập trung.',
-    );
+    return;
   }
+
+  if (trip.status === 'in-progress') {
+    router.push({
+      pathname: '/trails/[id]',
+      params: {
+        id: trip.trailId,
+      },
+    });
+
+    return;
+  }
+
+  if (trip.status === 'completed') {
+    Alert.alert(
+      'Đánh giá chuyến đi',
+      `Màn đánh giá cho “${trip.name}” sẽ được nối tiếp ở cụm User Mobile sau.`,
+    );
+
+    return;
+  }
+
+  Alert.alert(
+    'Chi tiết hoàn tiền',
+    'Hoàn tiền thành công • 2.450.000 ₫ • 25/07/2026',
+  );
+}
 
   const actionLabel =
     trip.status === 'in-progress'
@@ -552,7 +554,7 @@ function TripCard({
         ? 'Đánh giá chuyến đi'
         : trip.status === 'cancelled'
           ? 'Xem hoàn tiền'
-          : 'Xem checklist chuẩn bị';
+         : 'Xem chi tiết chuyến đi';
 
   return (
     <ThemedView
