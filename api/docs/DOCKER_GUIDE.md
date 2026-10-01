@@ -1,4 +1,15 @@
 # 🐳 HƯỚNG DẪN SỬ DỤNG DOCKER - TREKGO API
+# Note: Mọi người chỉ cần chạy lệnh này cho lần đầu tiên chạy Docker tài liệu bênh dưới dành riêng cho việc luyện tập docker
+```powershell
+docker compose up -d --build
+```
+# Chỉ cần chạy lệnh trên là đã có image và container rồi
+
+
+
+
+
+
 
 Tài liệu này hướng dẫn chi tiết cách vận hành TrekGo Backend API bằng Docker, bao gồm: khởi chạy lần đầu, quy trình làm việc hằng ngày, và cập nhật container khi có code mới.
 
@@ -29,6 +40,7 @@ Tài liệu này hướng dẫn chi tiết cách vận hành TrekGo Backend API 
 Thực hiện 2 bước sau:
 
 ### Bước 2.1: Build Docker Image
+
 Chạy lệnh đóng gói mã nguồn thành Docker image (tên tag: `trekgo-api`):
 ```powershell
 docker build -t trekgo-api .
