@@ -1,20 +1,6 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/api/v1": {
-      "get": {
-        "operationId": "AppController_getHello",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "App"
-        ]
-      }
-    },
     "/api/v1/auth/bootstrap": {
       "post": {
         "description": "Sau khi user đăng ký/đăng nhập qua Supabase Auth SDK, gọi endpoint này để tạo hoặc lấy profile TrekGo",
@@ -1384,6 +1370,96 @@
         ]
       }
     },
+    "/api/v1/trips/{tripId}/navigation-context": {
+      "get": {
+        "operationId": "TripNavigationController_getContext",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "description": "UUID của chuyến đi (Trip ID)",
+            "schema": {
+              "format": "uuid",
+              "example": "d3b07384-d113-494d-9c32-b7b5f54316d2",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "RC-API-101 Lấy dữ liệu context hành trình & GeoJSON bản đồ 3D",
+        "tags": [
+          "Trip Navigation"
+        ]
+      }
+    },
+    "/api/v1/trips/{tripId}/switch-trail": {
+      "post": {
+        "operationId": "TripNavigationController_switchTrail",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "description": "UUID của chuyến đi (Trip ID)",
+            "schema": {
+              "format": "uuid",
+              "example": "d3b07384-d113-494d-9c32-b7b5f54316d2",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "toPlanId"
+                ],
+                "properties": {
+                  "toPlanId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID của plan dự phòng cần chuyển sang",
+                    "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Lý do đổi đường",
+                    "example": "Mưa lớn sạt lở đoạn Km5, chuyển sang cung đường tránh số 2"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "RC-FR-103 Leader chuyển đổi sang cung đường dự phòng",
+        "tags": [
+          "Trip Navigation"
+        ]
+      }
+    },
     "/api/v1/private-trip-invitations/{code}": {
       "get": {
         "operationId": "PrivateMembershipController_preview",
@@ -1876,7 +1952,7 @@
                     "code": "RENTAL_PRODUCT_NOT_FOUND",
                     "message": "Product not found or not active",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.191Z",
+                    "timestamp": "2026-10-01T16:03:38.143Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2134,7 +2210,7 @@
                     "code": "RENTAL_PRODUCT_SKU_EXISTS",
                     "message": "SKU already exists",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.285Z",
+                    "timestamp": "2026-10-01T16:03:38.293Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2251,7 +2327,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.285Z",
+                    "timestamp": "2026-10-01T16:03:38.292Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2420,7 +2496,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.285Z",
+                    "timestamp": "2026-10-01T16:03:38.293Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2508,6 +2584,79 @@
         "tags": [
           "Staff Inventory Locations"
         ]
+      },
+      "post": {
+        "operationId": "InventoryLocationController_createLocation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "example": "HCM-01",
+                    "description": "Mã điểm giao nhận"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Kho HCM Quận 1",
+                    "description": "Tên điểm giao nhận"
+                  },
+                  "address": {
+                    "type": "string",
+                    "example": "123 Đường Lê Lợi, Quận 1, TP.HCM",
+                    "description": "Địa chỉ cụ thể"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "example": 10.776889,
+                    "description": "Vĩ độ (optional)"
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "example": 106.700806,
+                    "description": "Kinh độ (optional)"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "INACTIVE",
+                      "ARCHIVED"
+                    ],
+                    "example": "ACTIVE",
+                    "description": "Trạng thái (optional, default: ACTIVE)"
+                  }
+                },
+                "required": [
+                  "code",
+                  "name",
+                  "address"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tạo thành công"
+          },
+          "400": {
+            "description": "Mã điểm giao nhận đã tồn tại"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới điểm giao nhận (Admin)",
+        "tags": [
+          "Staff Inventory Locations"
+        ]
       }
     },
     "/api/v1/staff/inventory-locations/{id}": {
@@ -2541,6 +2690,84 @@
           }
         ],
         "summary": "Lấy thông tin chi tiết một địa điểm kho",
+        "tags": [
+          "Staff Inventory Locations"
+        ]
+      },
+      "patch": {
+        "operationId": "InventoryLocationController_updateLocation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "InventoryLocation UUID",
+            "schema": {
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "example": "HCM-01-UPDATED",
+                    "description": "Mã điểm giao nhận"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Kho HCM Quận 1 (Mới)",
+                    "description": "Tên điểm giao nhận"
+                  },
+                  "address": {
+                    "type": "string",
+                    "example": "456 Đường Lê Lợi, Quận 1, TP.HCM",
+                    "description": "Địa chỉ cụ thể"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "example": 10.776889
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "example": 106.700806
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "INACTIVE",
+                      "ARCHIVED"
+                    ],
+                    "example": "INACTIVE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công"
+          },
+          "400": {
+            "description": "Mã điểm giao nhận đã tồn tại"
+          },
+          "404": {
+            "description": "Không tìm thấy điểm giao nhận"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật điểm giao nhận (Admin)",
         "tags": [
           "Staff Inventory Locations"
         ]
@@ -2860,7 +3087,7 @@
                     "code": "VALIDATION_ERROR",
                     "message": "Validation failed",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2903,7 +3130,7 @@
                     "code": "RENTAL_PRODUCT_NOT_FOUND",
                     "message": "Product not found",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2946,7 +3173,7 @@
                     "code": "EQUIPMENT_ASSET_CODE_EXISTS",
                     "message": "Asset code exists",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2989,7 +3216,7 @@
                     "code": "RENTAL_PRODUCT_ARCHIVED",
                     "message": "Product is archived",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3208,7 +3435,7 @@
                     "code": "BATCH_ASSET_CODE_COUNT_MISMATCH",
                     "message": "Asset codes count does not match quantity",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3251,7 +3478,7 @@
                     "code": "EQUIPMENT_ASSET_CODE_EXISTS",
                     "message": "One or more asset codes exist",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3378,7 +3605,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_FOUND",
                     "message": "One or more units not found",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.587Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3477,7 +3704,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_FOUND",
                     "message": "Unit not found",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.588Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3610,7 +3837,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.588Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3798,7 +4025,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_MAINTAINABLE",
                     "message": "Unit is not maintainable or rented",
                     "details": {},
-                    "timestamp": "2026-09-29T16:40:43.588Z",
+                    "timestamp": "2026-10-01T16:03:38.894Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3814,6 +4041,594 @@
         "summary": "Chuyển trạng thái bảo trì thiết bị",
         "tags": [
           "Staff Equipment Units"
+        ]
+      }
+    },
+    "/api/v1/bookings/{bookingId}/rental-eligibility": {
+      "get": {
+        "description": "\nRB-API-101.\n- Booking phải thuộc USER hiện tại.\n- Booking/Trip chưa đủ điều kiện vẫn trả HTTP 200 với eligible=false.\n- Không dùng participantCount làm quota thuê.\n- cutoff/contextVersion do server trả về; FE không tự tính.\n",
+        "operationId": "RentalBookingController_getEligibility",
+        "parameters": [
+          {
+            "name": "bookingId",
+            "required": true,
+            "in": "path",
+            "description": "Booking UUID của USER hiện tại",
+            "schema": {
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kết quả eligibility của Booking"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "FORBIDDEN",
+                    "message": "Booking không thuộc USER hiện tại",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.360Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "BOOKING_NOT_FOUND",
+                    "message": "Không tìm thấy Booking",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.360Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kiểm tra Booking có đủ điều kiện thuê thiết bị",
+        "tags": [
+          "Rental Ordering - Booking"
+        ]
+      }
+    },
+    "/api/v1/bookings/{bookingId}/rental-recommendations": {
+      "get": {
+        "description": "\nRB-API-104.\nP0 dùng rule-based recommendation. Score chỉ dùng để xếp hạng/giải thích,\nkhông được quyết định eligibility, availability, price, deposit hoặc quantity.\n",
+        "operationId": "RentalBookingController_getRecommendations",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "description": "Lọc candidate theo Rental Category",
+            "schema": {
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "bookingId",
+            "required": true,
+            "in": "path",
+            "description": "Booking UUID",
+            "schema": {
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Danh sách gợi ý rule-based"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "FORBIDDEN",
+                    "message": "Booking không thuộc USER hiện tại",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.361Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "BOOKING_NOT_RENTAL_ELIGIBLE",
+                    "message": "Booking/Trip không đủ điều kiện thuê",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.361Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy gợi ý thiết bị theo Trip",
+        "tags": [
+          "Rental Ordering - Booking"
+        ]
+      }
+    },
+    "/api/v1/rentals/availability": {
+      "get": {
+        "description": "\nRB-API-102.\n- Server derive occupiedWindow từ Trip/logistics + RentalPolicy.\n- Không có maxPerParticipant/maxPerGroup.\n- availableCount là snapshot tham khảo; B2 phải recheck trong transaction.\n",
+        "operationId": "RentalOperationController_getAvailability",
+        "parameters": [
+          {
+            "name": "productId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "bookingId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Availability snapshot theo occupied window"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "RENTAL_PRODUCT_NOT_FOUND",
+                    "message": "Không tìm thấy product ACTIVE",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.390Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "BOOKING_NOT_RENTAL_ELIGIBLE",
+                    "message": "Booking/Trip không đủ điều kiện thuê",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.390Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kiểm tra số lượng thiết bị còn theo Booking/time window",
+        "tags": [
+          "Rental Ordering"
+        ]
+      }
+    },
+    "/api/v1/rentals/quote": {
+      "post": {
+        "description": "\nRB-API-103.\n- Giá, cọc, chargedDays và currency do server tính.\n- Quote chỉ snapshot giá/policy/context; KHÔNG giữ quantity và KHÔNG assign EquipmentUnit.\n- Product trùng trong request được server gộp quantity deterministic.\n",
+        "operationId": "RentalOperationController_createQuote",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "items"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "recipientParticipantId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "productId",
+                        "quantity"
+                      ],
+                      "properties": {
+                        "productId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quote snapshot theo contract v0.2.0-final-flow"
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "INSUFFICIENT_AVAILABLE_QUANTITY",
+                    "message": "Quantity vượt availableCount hiện tại",
+                    "details": {},
+                    "timestamp": "2026-10-01T16:03:39.391Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo báo giá thuê thiết bị",
+        "tags": [
+          "Rental Ordering"
+        ]
+      }
+    },
+    "/api/v1/system-trails": {
+      "get": {
+        "description": "Dùng cho màn hình chọn cung đường hoặc tìm kiếm cung đường trekking",
+        "operationId": "SystemTrailController_getTrails",
+        "parameters": [
+          {
+            "name": "destinationId",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo ID địa danh",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SystemTrailSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy danh sách các cung đường hệ thống",
+        "tags": [
+          "System Trails"
+        ]
+      }
+    },
+    "/api/v1/system-trails/{idOrCode}": {
+      "get": {
+        "description": "Trả về toạ độ GeoJSON 3D, danh sách checkpoints và thông số camera/bounds sẵn sàng cho MapLibre",
+        "operationId": "SystemTrailController_getTrailDetail",
+        "parameters": [
+          {
+            "name": "idOrCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemTrailDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy dữ liệu chi tiết cung đường để render MapLibre 3D",
+        "tags": [
+          "System Trails"
+        ]
+      }
+    },
+    "/api/v1/geo/trips/{tripId}/map-state": {
+      "get": {
+        "operationId": "TripMapStateController_getMapState",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "description": "UUID của chuyến đi",
+            "schema": {
+              "format": "uuid",
+              "example": "d3b07384-d113-494d-9c32-b7b5f54316d2",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "RC-API-102 Lấy trạng thái GPS session, vị trí gần nhất, lệch đường và tiến độ",
+        "tags": [
+          "Geo & Map Tracking"
         ]
       }
     },
@@ -4277,19 +5092,103 @@
             "in": "path",
             "description": "ID của Media Asset",
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Yêu cầu xóa thành công."
+            "description": "Yêu cầu xóa thành công hoặc idempotent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "data": {
+                      "success": true
+                    },
+                    "meta": {
+                      "requestId": "uuid",
+                      "serverTime": "2023-10-01T12:00:00.000Z",
+                      "contractVersion": "0.2.0-final-flow"
+                    }
+                  }
+                }
+              }
+            }
           },
-          "400": {
-            "description": "Không thể xóa do Media đang được tham chiếu bởi các Entity khác."
+          "403": {
+            "description": "Không có quyền xóa media này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_FORBIDDEN",
+                      "message": "Forbidden"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
-            "description": "Không tìm thấy Media hoặc không có quyền."
+            "description": "Không tìm thấy Media.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_NOT_FOUND",
+                      "message": "Not found"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Không thể xóa do Media đang được tham chiếu, chưa hết hạn lưu trữ hoặc trạng thái không hợp lệ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_INVALID_STATE",
+                      "message": "Cannot delete referenced media"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Lỗi từ nhà cung cấp dịch vụ lưu trữ (có thể thử lại).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_PROVIDER_ERROR",
+                      "message": "Provider deletion failed",
+                      "retryable": true
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4302,59 +5201,11 @@
           "Media"
         ]
       }
-    },
-    "/api/v1/dev/media/upload-test": {
-      "post": {
-        "description": "Use this endpoint to simulate the full intent + upload + complete flow.",
-        "operationId": "DevMediaController_uploadTest",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "ownerUserId": {
-                    "type": "string",
-                    "default": "ed49b4af-58eb-4143-b266-b518eff8e505"
-                  },
-                  "scope": {
-                    "type": "string",
-                    "default": "RENTAL_PRODUCT"
-                  },
-                  "resourceType": {
-                    "type": "string",
-                    "default": "IMAGE"
-                  },
-                  "captureSource": {
-                    "type": "string",
-                    "default": "UNKNOWN"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "DEV ONLY: Test end-to-end file upload to Cloudinary",
-        "tags": [
-          "Dev / Test"
-        ]
-      }
     }
   },
   "info": {
     "title": "Trekking API",
-    "description": "API docs",
+    "description": "Tài liệu API cho hệ thống Trekking Tour & E-Commerce",
     "version": "1.0",
     "contact": {}
   },
@@ -4365,12 +5216,16 @@
       "bearer": {
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "type": "http"
+        "type": "http",
+        "name": "Authorization",
+        "description": "Nhập access token",
+        "in": "header"
       },
       "x-api-key": {
         "type": "apiKey",
         "in": "header",
-        "name": "x-api-key"
+        "name": "x-api-key",
+        "description": "Nhập secret API key cho internal endpoints"
       }
     },
     "schemas": {
@@ -4541,6 +5396,248 @@
         },
         "required": [
           "email"
+        ]
+      },
+      "SystemTrailSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "c1000000-0000-0000-0000-000000000001"
+          },
+          "code": {
+            "type": "string",
+            "example": "TRAIL_BADEN_COTDIEN"
+          },
+          "name": {
+            "type": "string",
+            "example": "Cung đường Cột Điện - Đỉnh Núi Bà Đen"
+          },
+          "description": {
+            "type": "object",
+            "example": "Cung trekking phổ biến và rõ đường nhất tại Núi Bà Đen"
+          },
+          "difficulty": {
+            "type": "string",
+            "example": "MEDIUM"
+          },
+          "distanceKm": {
+            "type": "number",
+            "example": 4.5,
+            "description": "Độ dài cung đường tính bằng km"
+          },
+          "elevationGainM": {
+            "type": "object",
+            "example": 941,
+            "description": "Độ cao dốc leo tích lũy tính bằng mét"
+          },
+          "estimatedDurationMinutes": {
+            "type": "object",
+            "example": 240,
+            "description": "Thời gian ước tính hoàn thành (phút)"
+          },
+          "destination": {
+            "type": "object",
+            "example": {
+              "id": "d1000000-0000-0000-0000-000000000001",
+              "name": "Núi Bà Đen - Tây Ninh",
+              "region": "SOUTH",
+              "centerLat": 11.3789,
+              "centerLng": 106.1712
+            }
+          },
+          "checkpointCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Số lượng trạm dừng checkpoint trên tuyến"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "difficulty",
+          "distanceKm",
+          "destination",
+          "checkpointCount"
+        ]
+      },
+      "CheckpointItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "cp-uuid-1"
+          },
+          "code": {
+            "type": "object",
+            "example": "CP_BADEN_START"
+          },
+          "name": {
+            "type": "string",
+            "example": "Cột số 1 - Chân núi (Điểm xuất phát)"
+          },
+          "description": {
+            "type": "object",
+            "example": "Điểm gửi xe và bắt đầu cung đường Cột Điện"
+          },
+          "sequence": {
+            "type": "number",
+            "example": 1
+          },
+          "isRequired": {
+            "type": "boolean",
+            "example": true
+          },
+          "latitude": {
+            "type": "number",
+            "example": 11.3652
+          },
+          "longitude": {
+            "type": "number",
+            "example": 106.1785
+          },
+          "radiusMeters": {
+            "type": "number",
+            "example": 40,
+            "description": "Bán kính tính bằng mét"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sequence",
+          "isRequired",
+          "latitude",
+          "longitude",
+          "radiusMeters"
+        ]
+      },
+      "SystemTrailDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "c1000000-0000-0000-0000-000000000001"
+          },
+          "code": {
+            "type": "string",
+            "example": "TRAIL_BADEN_COTDIEN"
+          },
+          "name": {
+            "type": "string",
+            "example": "Cung đường Cột Điện - Đỉnh Núi Bà Đen"
+          },
+          "description": {
+            "type": "object",
+            "example": "Cung trekking phổ biến và rõ đường nhất tại Núi Bà Đen"
+          },
+          "difficulty": {
+            "type": "string",
+            "example": "MEDIUM"
+          },
+          "distanceKm": {
+            "type": "number",
+            "example": 4.5,
+            "description": "Độ dài cung đường tính bằng km"
+          },
+          "elevationGainM": {
+            "type": "object",
+            "example": 941,
+            "description": "Độ cao dốc leo tích lũy tính bằng mét"
+          },
+          "estimatedDurationMinutes": {
+            "type": "object",
+            "example": 240,
+            "description": "Thời gian ước tính hoàn thành (phút)"
+          },
+          "destination": {
+            "type": "object",
+            "example": {
+              "id": "d1000000-0000-0000-0000-000000000001",
+              "name": "Núi Bà Đen - Tây Ninh",
+              "region": "SOUTH",
+              "centerLat": 11.3789,
+              "centerLng": 106.1712
+            }
+          },
+          "checkpointCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Số lượng trạm dừng checkpoint trên tuyến"
+          },
+          "routeGeojson": {
+            "type": "object",
+            "description": "Đối tượng GeoJSON (LineString) để MapLibre render polyline 3D",
+            "example": {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "Đường mòn Cột Điện",
+                    "stroke": "#FF5722",
+                    "strokeWidth": 4
+                  },
+                  "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                      [
+                        106.1785,
+                        11.3652,
+                        45
+                      ],
+                      [
+                        106.1698,
+                        11.3838,
+                        986
+                      ]
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckpointItemDto"
+            }
+          },
+          "bounds": {
+            "type": "object",
+            "description": "Bounding box để gọi map.fitBounds([[minLng, minLat], [maxLng, maxLat]])",
+            "example": {
+              "minLng": 106.1698,
+              "minLat": 11.3652,
+              "maxLng": 106.1785,
+              "maxLat": 11.3838
+            }
+          },
+          "initialCamera": {
+            "type": "object",
+            "description": "Góc nhìn camera 3D tối ưu ban đầu cho MapLibre",
+            "example": {
+              "center": [
+                106.1741,
+                11.3745
+              ],
+              "zoom": 13.5,
+              "pitch": 60,
+              "bearing": -20
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "difficulty",
+          "distanceKm",
+          "destination",
+          "checkpointCount",
+          "routeGeojson",
+          "checkpoints"
         ]
       }
     }

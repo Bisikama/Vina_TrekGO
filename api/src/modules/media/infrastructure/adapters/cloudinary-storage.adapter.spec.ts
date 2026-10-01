@@ -90,17 +90,17 @@ describe('CloudinaryStorageAdapter', () => {
 
   describe('verifyUploadResponse', () => {
     it('returns true if signature matches', async () => {
-      (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue('correct-sig');
+      const crypto = require('crypto');
+      const expectedSignature = crypto.createHash('sha1').update('public_id=test&version=1secret').digest('hex');
       const result = await adapter.verifyUploadResponse({
         publicId: 'test',
         version: 1,
-        signature: 'correct-sig',
+        signature: expectedSignature,
       });
       expect(result).toBe(true);
     });
 
     it('returns false if signature does not match', async () => {
-      (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue('expected-sig');
       const result = await adapter.verifyUploadResponse({
         publicId: 'test',
         version: 1,

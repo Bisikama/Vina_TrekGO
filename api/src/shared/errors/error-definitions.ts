@@ -2,6 +2,7 @@ import { COMMON_ERROR_CODES } from './codes/common.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
+import { RENTAL_ORDERING_ERROR_CODES as RT } from './codes/rental-ordering.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -22,6 +23,8 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [B.INVALID_STATE_TRANSITION]: { status: 409, message: 'Operation requires an OPEN trip before start', retryable: false },
   [B.INVALID_TRAIL_FOR_TRIP_TYPE]: { status: 422, message: 'Invalid trail or checkpoint context', retryable: false },
   [B.PRIVATE_TRIP_VERSION_CONFLICT]: { status: 409, message: 'Reload the trip before retrying', retryable: false },
+  
+  
   // Common
   [COMMON_ERROR_CODES.VALIDATION_ERROR]: { status: 400, message: 'Validation failed', retryable: false },
   [COMMON_ERROR_CODES.UNAUTHENTICATED]: { status: 401, message: 'Unauthenticated access', retryable: false },
@@ -54,6 +57,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RENTAL_ERROR_CODES.BATCH_ASSET_CODE_DUPLICATE]: { status: 400, message: 'Duplicate asset codes provided in batch', retryable: false },
   [RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_NOT_ACTIVE]: { status: 409, message: 'Equipment maintenance is not active', retryable: false },
   [RENTAL_ERROR_CODES.EQUIPMENT_MAINTENANCE_STATE_CONFLICT]: { status: 409, message: 'Multiple active maintenance records found', retryable: false },
+  
   // --- MEDIA ---
   [MEDIA_ERROR_CODES.MEDIA_NOT_FOUND]: { status: 404, message: 'Media asset not found', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_SCOPE]: { status: 422, message: 'Invalid media scope', retryable: false },
@@ -69,4 +73,13 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
+
+  // Rental B1 - Rental Ordering
+  [RT.BOOKING_NOT_FOUND]: { status: 404, message: 'Booking not found', retryable: false },
+  [RT.BOOKING_NOT_RENTAL_ELIGIBLE]: { status: 422, message: 'Booking or Trip is not eligible for rental', retryable: false },
+  [RT.RENTAL_CUTOFF_PASSED]: { status: 422, message: 'Rental cutoff has passed', retryable: false },
+  [RT.EQUIPMENT_NOT_AVAILABLE]: { status: 409, message: 'Equipment is not available for the requested window', retryable: false },
+  [RT.INSUFFICIENT_AVAILABLE_QUANTITY]: { status: 422, message: 'Requested quantity exceeds current availability', retryable: false },
+  [RT.RENTAL_RECIPIENT_INVALID]: { status: 422, message: 'Rental recipient is invalid for this Booking', retryable: false },
+  [RT.RENTAL_POLICY_NOT_CONFIGURED]: { status: 500, message: 'No effective RentalPolicy is configured', retryable: false },
 };
