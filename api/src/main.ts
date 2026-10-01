@@ -9,6 +9,14 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalErrorFilter());
 
+  // Bật CORS cho phép Frontend gọi API
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Accept,Authorization,x-api-key',
+  });
+
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
     .setTitle('Trekking API')

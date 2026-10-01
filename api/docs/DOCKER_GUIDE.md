@@ -35,17 +35,20 @@ docker build -t trekgo-api .
 ```
 
 ### Bước 2.2: Tạo và khởi chạy Container
-Tạo container chạy ngầm (`-d`), mở cổng `3000` và mount trực tiếp file `.env`:
+Tạo container chạy ngầm (`-d`), mở cổng `3000` và mount trực tiếp file `.env` bằng cờ `--mount` (chuẩn nhất trên Windows, không bị lỗi dấu hai chấm ổ đĩa hay Git Bash):
 ```powershell
 # Trên PowerShell (Windows):
-docker run -d --name trekgo-api -p 3000:3000 -v ${PWD}/.env:/app/.env trekgo-api
+docker run -d --name trekgo-api -p 3000:3000 --mount type=bind,source="$PWD\.env",target=/app/.env trekgo-api
 
-# Trên Git Bash hoặc Linux/macOS:
-docker run -d --name trekgo-api -p 3000:3000 -v $(pwd)/.env:/app/.env trekgo-api
+# Trên Git Bash (Windows):
+docker run -d --name trekgo-api -p 3000:3000 --mount type=bind,source="$(pwd)/.env",target=/app/.env trekgo-api
+
+# Hoặc dùng đường dẫn tuyệt đối trực tiếp:
+docker run -d --name trekgo-api -p 3000:3000 --mount type=bind,source="C:\Users\Admin\Documents\tuHocNestJs\Vina_TrekGO\api\.env",target=/app/.env trekgo-api
 ```
 
-> **💡 Tại sao dùng `-v` mount file `.env`?**  
-> Việc mount trực tiếp giúp thư viện `dotenv` trong ứng dụng tự động xử lý chuẩn xác các chuỗi có dấu ngoặc kép `"` trong `.env` (tránh lỗi định dạng URL của Supabase/Database) và tự động nhận cấu hình mới mỗi khi bạn sửa file `.env`.
+> **💡 Tại sao dùng `--mount` thay vì `-v`?**  
+> Trên hệ điều hành Windows, cờ `-v` dùng dấu hai chấm `:` để ngăn cách `source:dest`. Do đường dẫn Windows có sẵn ký tự ổ đĩa (ví dụ `C:\...`), Docker CLI dễ bị nhầm lẫn dấu `:` và tự động biến mount thành một Docker anonymous volume rỗng. Dùng `--mount type=bind` tách biệt rõ `source` và `target`, đảm bảo file `.env` được đọc chính xác 100% trên mọi terminal (PowerShell, CMD, Git Bash).
 
 ### Bước 2.3: Kiểm tra kết quả
 - **Xem log khởi động:**
@@ -92,13 +95,13 @@ docker rm -f trekgo-api
 # 2. Build lại image mới chứa code mới nhất
 docker build -t trekgo-api .
 
-# 3. Chạy lại container mới
-docker run -d --name trekgo-api -p 3000:3000 -v ${PWD}/.env:/app/.env trekgo-api
+# 3. Chạy lại container mới (PowerShell hoặc Git Bash)
+docker run -d --name trekgo-api -p 3000:3000 --mount type=bind,source="$PWD\.env",target=/app/.env trekgo-api
 ```
 
 ### ⚡ Mẹo chạy nhanh trong 1 dòng lệnh (PowerShell):
 ```powershell
-docker rm -f trekgo-api; docker build -t trekgo-api .; docker run -d --name trekgo-api -p 3000:3000 -v ${PWD}/.env:/app/.env trekgo-api
+docker rm -f trekgo-api; docker build -t trekgo-api .; docker run -d --name trekgo-api -p 3000:3000 --mount type=bind,source="$PWD\.env",target=/app/.env trekgo-api
 ```
 
 ---
