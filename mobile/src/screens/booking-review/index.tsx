@@ -115,7 +115,9 @@ function RadioOption({
           <View
             style={[
               styles.radioInner,
-              { backgroundColor: theme.primary },
+              {
+                backgroundColor: theme.primary,
+              },
             ]}
           />
         ) : null}
@@ -182,7 +184,10 @@ function CostRow({
 function BankTransferCard() {
   const theme = useTheme();
 
-  function copyValue(label: string, value: string) {
+  function copyValue(
+    label: string,
+    value: string,
+  ) {
     Alert.alert(
       'Đã sao chép',
       `${label}: ${value}`,
@@ -221,7 +226,9 @@ function BankTransferCard() {
         <View
           style={[
             styles.bankLogo,
-            { backgroundColor: theme.primary },
+            {
+              backgroundColor: theme.primary,
+            },
           ]}
         >
           <ThemedText
@@ -422,12 +429,14 @@ export function BookingReviewScreen({
       return;
     }
 
-    Alert.alert(
-      'Đã xác nhận thanh toán',
-      `Hệ thống demo đã ghi nhận ${formatMoney(
-        payableAmount,
-      )} cho chuyến ${tripId}.`,
-    );
+    router.replace({
+      pathname: '/bookings/success',
+      params: {
+        tripId,
+        bookingId: 'BKG-VTG-2026-0892',
+        amount: String(payableAmount),
+      },
+    });
   }
 
   return (
@@ -882,7 +891,9 @@ export function BookingReviewScreen({
             type="surfaceElevated"
             style={[
               styles.methodPlaceholder,
-              { borderColor: theme.border },
+              {
+                borderColor: theme.border,
+              },
             ]}
           >
             <AppSymbol
@@ -918,7 +929,9 @@ export function BookingReviewScreen({
           type="surfaceElevated"
           style={[
             styles.commitmentCard,
-            { borderColor: theme.border },
+            {
+              borderColor: theme.border,
+            },
           ]}
         >
           <View style={styles.sectionHeading}>
@@ -932,9 +945,7 @@ export function BookingReviewScreen({
               size={19}
             />
 
-            <ThemedText
-              style={styles.sectionTitle}
-            >
+            <ThemedText style={styles.sectionTitle}>
               Cam kết bảo vệ quyền lợi Escrow VFRS
             </ThemedText>
           </View>
