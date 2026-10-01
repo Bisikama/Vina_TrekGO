@@ -94,10 +94,12 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   verifyUploadResponse(input: VerifyUploadResponseInput): Promise<boolean> {
     try {
-      const expectedSignature = cloudinary.utils.api_sign_request(
-        { public_id: input.publicId, version: input.version },
-        envConfig.CLOUDINARY_API_SECRET!
-      );
+      /*
+        * Note: Cloudinary trả về a SHA-1 signature trong upload response, 
+        * bất kể signature_algorithm được cấu hình,xác minh rõ ràng bằng SHA-1.
+       */
+      const stringToSign = `public_id=${input.publicId}&version=${input.version}${envConfig.CLOUDINARY_API_SECRET!}`;
+      const expectedSignature = crypto.createHash('sha1').update(stringToSign).digest('hex');
       
       const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
       const providedBuffer = Buffer.from(input.signature, 'utf8');
