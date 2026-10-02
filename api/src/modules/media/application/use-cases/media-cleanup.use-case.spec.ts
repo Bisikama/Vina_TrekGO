@@ -23,7 +23,7 @@ describe('MediaCleanupUseCase', () => {
 
     mockRefPort = {
       hasActiveReferences: jest.fn(),
-    } as unknown as jest.Mocked<MediaReferencePort>;
+    };
 
     useCase = new MediaCleanupUseCase(mockAssetPort, mockStoragePort, mockRefPort);
     

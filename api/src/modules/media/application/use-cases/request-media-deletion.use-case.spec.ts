@@ -44,7 +44,7 @@ describe('RequestMediaDeletionUseCase', () => {
 
     mediaReferencePort = {
       hasActiveReferences: jest.fn(),
-    } as unknown as jest.Mocked<MediaReferencePort>;
+    };
 
     mediaStoragePort = {
       deleteAsset: jest.fn(),
