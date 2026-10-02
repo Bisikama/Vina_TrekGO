@@ -127,9 +127,6 @@ export class CreateSystemTrailRequestDto implements CreateSystemTrailDto {
   })
   routeGeojson!: any
 
-  @ApiPropertyOptional({ type: [TrailCheckpointInputDto], description: 'Danh sách checkpoints theo thứ tự' })
-  checkpoints?: TrailCheckpointInputDto[]
-
   @ApiPropertyOptional({ enum: RecordStatus, default: RecordStatus.ACTIVE })
   status?: RecordStatus
 }

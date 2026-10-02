@@ -83,7 +83,7 @@ export class SystemTrailController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Tạo mới cung đường hệ thống',
-    description: 'Yêu cầu quyền ADMIN. Hỗ trợ kèm danh sách Checkpoint theo thứ tự sequence.',
+    description: 'Yêu cầu quyền ADMIN.',
   })
   @ApiBody({ type: CreateSystemTrailRequestDto })
   @ApiResponse({ status: 201, description: 'Tạo thành công', type: SystemTrailDetailDto })
