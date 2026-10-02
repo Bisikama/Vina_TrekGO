@@ -1,5 +1,8 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import {
+  type Href,
+  useRouter,
+} from 'expo-router';
 import type { SymbolViewProps } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import {
@@ -532,14 +535,16 @@ function TripCard({
     return;
   }
 
-  if (trip.status === 'completed') {
-    Alert.alert(
-      'Đánh giá chuyến đi',
-      `Màn đánh giá cho “${trip.name}” sẽ được nối tiếp ở cụm User Mobile sau.`,
-    );
+ if (trip.status === 'completed') {
+  router.push({
+    pathname: '/trips/[id]/review',
+    params: {
+      id: trip.id,
+    },
+  } as unknown as Href);
 
-    return;
-  }
+  return;
+}
 
   Alert.alert(
     'Chi tiết hoàn tiền',

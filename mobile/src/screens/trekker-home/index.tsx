@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 
 import {
+  type Href,
   useRouter,
 } from 'expo-router';
 
@@ -425,7 +426,7 @@ function QuickActions() {
       icon: '🆘',
       color: theme.dangerSurface,
       onPress: () =>
-        router.push('/sos'),
+        router.push('/sos' as Href),
     },
   ] as const;
 

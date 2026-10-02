@@ -1,5 +1,8 @@
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import {
+  type Href,
+  useRouter,
+} from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
@@ -625,6 +628,15 @@ function ServicesSection() {
     'Túi cứu thương dã ngoại, máy đo SpO2 và bộ đàm vệ tinh',
   ];
 
+  function openRentalCatalog() {
+    router.push({
+      pathname: '/trip-rentals',
+      params: {
+        bookingId: 'booking_001',
+      },
+    } as unknown as Href);
+  }
+
   return (
     <View style={styles.sectionBlock}>
       <ThemedText style={styles.sectionTitle}>
@@ -729,17 +741,10 @@ function ServicesSection() {
             </ThemedText>
 
             <Pressable
-  accessibilityRole="button"
-  accessibilityLabel="Xem danh mục kho đồ thuê"
-  onPress={() =>
-    router.push({
-      pathname: '/trip-rentals',
-      params: {
-        bookingId: 'booking_001',
-      },
-    })
-  }
->
+              accessibilityRole="button"
+              accessibilityLabel="Xem danh mục kho đồ thuê"
+              onPress={openRentalCatalog}
+            >
               <ThemedText
                 type="smallBold"
                 style={{
