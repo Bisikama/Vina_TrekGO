@@ -4,8 +4,7 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Giả lập lấy token từ cookie (Trong thực tế sẽ check token thật)
-  const token = request.cookies.get('mock_token')?.value;
+  const token = request.cookies.get('vina_trekgo_access_token')?.value;
 
   // Các route không cần đăng nhập
   const isPublicPath = path.startsWith('/public') || path === '/';

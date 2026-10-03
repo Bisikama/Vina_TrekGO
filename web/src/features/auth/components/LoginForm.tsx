@@ -6,16 +6,16 @@ import { useLogin } from "../hooks/useLogin";
 
 interface LoginFormProps {
   onSuccess?: () => void;
+  onSwitchToRegister?: () => void;
 }
 
-export const LoginForm = ({ onSuccess }: LoginFormProps) => {
+export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => {
   const { login, isLoading, error: apiError } = useLogin();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"trekker" | "leader" | "warehouse" | "delivery" | "admin">("trekker");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,23 +28,10 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
 
     const result = await login({ email, password });
     if (result) {
-      // Set mock cookie for middleware to read
-      document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-      
       if (onSuccess) {
         onSuccess();
       } else {
-        if (activeTab === "admin") {
-          window.location.href = "/admin";
-        } else if (activeTab === "leader") {
-          window.location.href = "/leader";
-        } else if (activeTab === "warehouse") {
-          window.location.href = "/staff/work-queue";
-        } else if (activeTab === "delivery") {
-          window.location.href = "/delivery";
-        } else {
-          window.location.href = "/";
-        }
+        window.location.href = "/";
       }
     }
   };
@@ -59,7 +46,13 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
             href="/public/register-leader"
             className="font-bold text-[#154B36] hover:underline cursor-pointer underline-offset-4"
           >
-            Đăng ký kiểm định
+            {onSwitchToRegister ? (
+              <button type="button" onClick={onSwitchToRegister} className="font-bold text-[#154B36] hover:underline cursor-pointer underline-offset-4">
+                Đăng ký kiểm định
+              </button>
+            ) : (
+              "Đăng ký kiểm định"
+            )}
           </Link>
         </span>
       </div>
@@ -78,86 +71,6 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
       <p className="text-sm text-gray-600 mb-8 max-w-[90%] leading-relaxed">
         Truy cập tài khoản Trekker, Leader, Quản lý kho hoặc Điều hành viên
       </p>
-
-      {/* Role Tabs */}
-      <div className="mb-8">
-        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">
-          Chọn cổng phân quyền truy cập
-        </label>
-        <div className="grid grid-cols-5 gap-2 bg-[#F8FAFC] p-1.5 rounded-2xl border border-[#E2E8F0]">
-          <button
-            type="button"
-            onClick={() => setActiveTab("trekker")}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
-              activeTab === "trekker" 
-                ? "bg-[#154B36] text-white shadow-md" 
-                : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-            <span className="text-xs font-semibold">Trekker</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("leader")}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
-              activeTab === "leader" 
-                ? "bg-[#154B36] text-white shadow-md" 
-                : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            <span className="text-xs font-semibold">Leader</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("delivery")}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
-              activeTab === "delivery" 
-                ? "bg-[#154B36] text-white shadow-md" 
-                : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span className="text-xs font-semibold text-center leading-tight">Vận<br/>chuyển</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("warehouse")}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
-              activeTab === "warehouse" 
-                ? "bg-[#154B36] text-white shadow-md" 
-                : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-            <span className="text-xs font-semibold text-center leading-tight">Kho<br/>thiết bị</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("admin")}
-            className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-all ${
-              activeTab === "admin" 
-                ? "bg-[#154B36] text-white shadow-md" 
-                : "text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <svg className="w-5 h-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span className="text-xs font-semibold">Điều hành</span>
-          </button>
-        </div>
-      </div>
-
       {/* Alert Error Box */}
       {(validationError || apiError) && (
         <div className="mb-6 p-4 bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl text-[#B91C1C] flex items-start gap-3 relative">
@@ -282,88 +195,6 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
         </button>
       </form>
 
-      {/* Quick Mock Login Accounts (Development only) */}
-      <div className="mt-8 border border-dashed border-gray-300 rounded-xl p-4 bg-gray-50/50">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 text-center">Tài khoản thử nghiệm nhanh</p>
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button 
-            type="button"
-            onClick={async () => { 
-              setEmail("trekker@example.com"); setPassword("123456"); setActiveTab("trekker");
-              const result = await login({ email: "trekker@example.com", password: "123456" });
-              if (result) {
-                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-                if (onSuccess) onSuccess();
-                else window.location.href = "/";
-              }
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
-          >
-            Trekker
-          </button>
-          <button 
-            type="button"
-            onClick={async () => { 
-              setEmail("leader@example.com"); setPassword("123456"); setActiveTab("leader");
-              const result = await login({ email: "leader@example.com", password: "123456" });
-              if (result) {
-                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-                if (onSuccess) onSuccess();
-                else window.location.href = "/leader";
-              }
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
-          >
-            Leader
-          </button>
-          <button 
-            type="button"
-            onClick={async () => { 
-              setEmail("warehouse@example.com"); setPassword("123456"); setActiveTab("warehouse");
-              const result = await login({ email: "warehouse@example.com", password: "123456" });
-              if (result) {
-                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-                if (onSuccess) onSuccess();
-                else window.location.href = "/staff/work-queue";
-              }
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
-          >
-            Kho
-          </button>
-          <button 
-            type="button"
-            onClick={async () => { 
-              setEmail("delivery@example.com"); setPassword("123456"); setActiveTab("delivery");
-              const result = await login({ email: "delivery@example.com", password: "123456" });
-              if (result) {
-                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-                if (onSuccess) onSuccess();
-                else window.location.href = "/delivery";
-              }
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
-          >
-            Vận chuyển
-          </button>
-          <button 
-            type="button"
-            onClick={async () => { 
-              setEmail("admin@example.com"); setPassword("123456"); setActiveTab("admin");
-              const result = await login({ email: "admin@example.com", password: "123456" });
-              if (result) {
-                document.cookie = "mock_token=valid_mock_token; path=/; max-age=3600";
-                if (onSuccess) onSuccess();
-                else window.location.href = "/admin";
-              }
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-[#154B36] hover:text-white hover:border-[#154B36] transition-colors"
-          >
-            Điều hành
-          </button>
-        </div>
-      </div>
-
       {/* Footer Signup Link */}
       <div className="mt-8 text-center text-[13px] font-medium text-gray-700">
         Chưa có tài khoản Trekking System?{" "}
@@ -396,4 +227,3 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
     </div>
   );
 };
-

@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useAuthStore } from "@/features/auth";
 
 export const UserHeader = () => {
+  const logout = useAuthStore((state) => state.logout);
+
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
       {/* Top thin bar */}
@@ -224,9 +227,7 @@ export const UserHeader = () => {
             <button
               type="button"
               onClick={() => {
-                document.cookie =
-                  "mock_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-
+                logout();
                 window.location.href = "/public/login";
               }}
               className="cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"

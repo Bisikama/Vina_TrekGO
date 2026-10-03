@@ -2,8 +2,11 @@
 
 import React from 'react';
 import Image from 'next/image';
+import { useAuthStore } from "@/features/auth";
 
 export const AdminHeader = () => {
+  const logout = useAuthStore((state) => state.logout);
+
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-40 shrink-0">
       <div className="flex items-center gap-4 text-[13px] font-medium text-gray-600">
@@ -49,7 +52,7 @@ export const AdminHeader = () => {
           <button
             type="button"
             onClick={() => {
-              document.cookie = "mock_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+              logout();
               window.location.href = "/public/login";
             }}
             className="ml-2 cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"

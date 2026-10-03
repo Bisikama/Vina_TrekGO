@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/features/auth";
@@ -8,8 +8,6 @@ import { useAuthStore } from "@/features/auth";
 export default function PublicLandingPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const [selectedDestination, setSelectedDestination] = useState("Tất cả điểm đến");
-  const [selectedDifficulty, setSelectedDifficulty] = useState("Tất cả độ khó");
 
   const openLogin = () => {
     router.push("/public/login");
@@ -99,9 +97,13 @@ export default function PublicLandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#2F6B4F] text-white flex items-center justify-center font-black text-xl shadow-md">
-              🌲
-            </div>
+            <Image
+              src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
+              alt="VinaTrekGO"
+              width={48}
+              height={48}
+              className="h-10 w-10 rounded-xl object-cover shadow-md"
+            />
             <div className="flex flex-col">
               <span className="font-extrabold text-xl tracking-tight text-[#125238]">
                 VinaTrek<span className="text-[#F59E0B]">GO</span>
@@ -121,7 +123,7 @@ export default function PublicLandingPage() {
               Cung Đường Trek
             </a>
             <a href="#gear" className="hover:text-[#2F6B4F] transition">
-              Thuê Thiết Bị
+              Trang Bị Trekking
             </a>
             <a href="#safety" className="hover:text-[#2F6B4F] transition">
               Cứu Hộ SOS
@@ -136,7 +138,7 @@ export default function PublicLandingPage() {
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3 bg-[#F8F9FF] p-1.5 pl-3 rounded-lg border border-[#E5E7EB]">
                 <span className="text-xs font-semibold text-[#1F2937]">
-                  👋 {user.name}
+                  {user.name}
                 </span>
                 <button
                   onClick={logout}
@@ -210,7 +212,6 @@ export default function PublicLandingPage() {
                   className="px-6 py-3.5 bg-[#F59E0B] hover:bg-[#855300] text-white font-bold text-sm rounded-xl shadow-lg transition flex items-center gap-2 cursor-pointer"
                 >
                   <span>Gia Nhập Ngay</span>
-                  <span>🚀</span>
                 </button>
               )}
             </div>
@@ -230,60 +231,6 @@ export default function PublicLandingPage() {
                 <p className="text-xs text-gray-300 font-medium">Giám Sát GPS 24/7</p>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 🟢 QUICK SEARCH / FILTER BAR */}
-      <section className="relative z-20 -mt-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-        <div className="bg-white rounded-2xl shadow-xl border border-[#E5E7EB] p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#1F2937] mb-1">
-              📍 Điểm Đến
-            </label>
-            <select
-              value={selectedDestination}
-              onChange={(e) => setSelectedDestination(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F7F7F4] border border-[#E5E7EB] rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#2F6B4F] outline-none"
-            >
-              <option>Tất cả điểm đến</option>
-              <option>Lào Cai (Fansipan, Kỳ Quan San)</option>
-              <option>Sơn La (Tà Xùa, Chiềng Đi)</option>
-              <option>Hà Giang (Mã Pí Lèng, Tây Côn Lĩnh)</option>
-              <option>Lâm Đồng - Bình Thuận (Tà Năng)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#1F2937] mb-1">
-              🏔️ Cấp Độ Khó
-            </label>
-            <select
-              value={selectedDifficulty}
-              onChange={(e) => setSelectedDifficulty(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#F7F7F4] border border-[#E5E7EB] rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#2F6B4F] outline-none"
-            >
-              <option>Tất cả độ khó</option>
-              <option>Dễ (Người mới tập)</option>
-              <option>Trung bình (Trải nghiệm)</option>
-              <option>Khó / Thử thách (Chuyên nghiệp)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#1F2937] mb-1">
-              📅 Ngày Khởi Hành
-            </label>
-            <input
-              type="date"
-              className="w-full px-3.5 py-2.5 bg-[#F7F7F4] border border-[#E5E7EB] rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#2F6B4F] outline-none"
-            />
-          </div>
-
-          <div>
-            <button className="w-full py-2.5 px-4 bg-[#2F6B4F] hover:bg-[#1F4A36] text-white font-bold rounded-lg shadow transition text-sm flex items-center justify-center gap-2 cursor-pointer h-[42px]">
-              🔍 Tìm Cung Đường
-            </button>
           </div>
         </div>
       </section>
@@ -324,16 +271,16 @@ export default function PublicLandingPage() {
                 <div className="absolute top-3 right-3">
                   {trail.difficultyType === "hard" ? (
                     <span className="bg-[#FEE2E2] text-[#991B1B] text-xs font-bold px-2.5 py-1 rounded-full border border-red-200">
-                      🔥 {trail.difficulty}
+                      {trail.difficulty}
                     </span>
                   ) : (
                     <span className="bg-[#FEF3C7] text-[#92400E] text-xs font-bold px-2.5 py-1 rounded-full border border-amber-200">
-                      ⚡ {trail.difficulty}
+                      {trail.difficulty}
                     </span>
                   )}
                 </div>
                 <div className="absolute bottom-2 left-3 bg-black/60 backdrop-blur-xs text-white text-[11px] font-semibold px-2 py-0.5 rounded">
-                  ★ {trail.rating}
+                  {trail.rating}
                 </div>
               </div>
 
@@ -341,7 +288,7 @@ export default function PublicLandingPage() {
               <div className="p-5 flex-1 flex flex-col justify-between">
                 <div>
                   <span className="text-xs font-semibold text-[#6B7280]">
-                    📍 {trail.location}
+                    {trail.location}
                   </span>
                   <h3 className="text-base font-bold text-[#1F2937] mt-1 group-hover:text-[#2F6B4F] transition">
                     {trail.title}
@@ -386,35 +333,32 @@ export default function PublicLandingPage() {
       {/* 🟢 GEAR RENTAL & UTILITY SECTION */}
       <section id="gear" className="py-16 bg-white border-y border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#855300] bg-[#FEF3C7] px-3 py-1 rounded-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+            <div className="flex flex-col">
+              <span className="inline-flex self-start text-xs font-bold uppercase tracking-wider text-[#855300] bg-[#FEF3C7] px-3 py-1 rounded-full">
                 Dịch Vụ Đi Kèm
               </span>
               <h2 className="text-3xl font-extrabold text-[#1F2937] mt-3">
-                Thuê Thiết Bị Trekking Chuẩn Tác Chiến
+                Trang Bị Trekking Chuẩn Tác Chiến
               </h2>
-              <p className="mt-3 text-sm text-[#6B7280] leading-relaxed">
+              <p className="mt-3 text-sm text-[#6B7280] leading-relaxed lg:w-[calc(200%+3rem)] lg:max-w-none">
                 Không cần bỏ ra hàng chục triệu sắm sửa thiết bị. VinaTrekGO cung cấp đầy đủ lều trại chống nước, gậy trekking carbon, túi ngủ giữ nhiệt, đèn pin siêu sáng và bộ đàm định vị.
               </p>
 
               <div className="mt-6 space-y-3">
                 <div className="flex items-start gap-3 p-3 bg-[#F7F7F4] rounded-lg border border-[#E5E7EB]">
-                  <span className="text-xl">⛺</span>
                   <div>
                     <h4 className="text-sm font-bold text-[#1F2937]">Lều Trại 2-4 Người Chịu Gió Bão</h4>
                     <p className="text-xs text-[#6B7280]">Kháng nước 3,000mm, trọng lượng nhẹ chuẩn outdoor chuyên nghiệp.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-[#F7F7F4] rounded-lg border border-[#E5E7EB]">
-                  <span className="text-xl">🎒</span>
                   <div>
                     <h4 className="text-sm font-bold text-[#1F2937]">Balo Trekking Chợ Lực 45L-65L</h4>
                     <p className="text-xs text-[#6B7280]">Đệm lưng thoáng khí, đai hông phân bổ lực tối ưu.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-[#F7F7F4] rounded-lg border border-[#E5E7EB]">
-                  <span className="text-xl">📡</span>
                   <div>
                     <h4 className="text-sm font-bold text-[#1F2937]">Bộ Đàm VHF & Đèn Đầu SOS</h4>
                     <p className="text-xs text-[#6B7280]">Kết nối liên tục với Trạm điều hành cứu hộ rừng quốc gia.</p>
@@ -427,30 +371,26 @@ export default function PublicLandingPage() {
                   onClick={openLogin}
                   className="px-6 py-3 bg-[#2F6B4F] hover:bg-[#1F4A36] text-white font-bold text-sm rounded-xl shadow-md transition cursor-pointer"
                 >
-                  Thuê Thiết Bị Ngay ➔
+                  Xem Trang Bị Ngay ➔
                 </button>
               </div>
             </div>
 
             {/* Feature visual grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 lg:mt-[130px] lg:h-[210px]">
               <div className="p-6 bg-[#F8F9FF] rounded-2xl border border-[#E5E7EB] text-center shadow-xs">
-                <div className="text-4xl mb-2">🧭</div>
                 <h4 className="font-bold text-[#1F2937] text-sm">Porter Bản Địa</h4>
                 <p className="text-xs text-[#6B7280] mt-1">Thông thuộc từng vách đá, am hiểu thời tiết vùng cao.</p>
               </div>
               <div className="p-6 bg-[#F8F9FF] rounded-2xl border border-[#E5E7EB] text-center shadow-xs">
-                <div className="text-4xl mb-2">🍲</div>
                 <h4 className="font-bold text-[#1F2937] text-sm">Ăn Uống Nóng Nổi</h4>
                 <p className="text-xs text-[#6B7280] mt-1">Thực đơn đầy đủ calo, gà nướng lợn bản giữa rừng.</p>
               </div>
               <div className="p-6 bg-[#F8F9FF] rounded-2xl border border-[#E5E7EB] text-center shadow-xs">
-                <div className="text-4xl mb-2">🩹</div>
                 <h4 className="font-bold text-[#1F2937] text-sm">Y Tế & Bảo Hiểm</h4>
                 <p className="text-xs text-[#6B7280] mt-1">Bảo hiểm du lịch mạo hiểm tối đa 100.000.000đ/vụ.</p>
               </div>
               <div className="p-6 bg-[#F8F9FF] rounded-2xl border border-[#E5E7EB] text-center shadow-xs">
-                <div className="text-4xl mb-2">📸</div>
                 <h4 className="font-bold text-[#1F2937] text-sm">Chụp Ảnh Săn Mây</h4>
                 <p className="text-xs text-[#6B7280] mt-1">Hỗ trợ nhiếp ảnh gia ghi lại những khoảnh khắc để đời.</p>
               </div>
@@ -490,7 +430,13 @@ export default function PublicLandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8 text-sm">
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-2xl">🌲</span>
+              <Image
+                src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
+                alt="VinaTrekGO"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-lg object-cover"
+              />
               <span className="font-extrabold text-xl text-white">VinaTrekGO</span>
             </div>
             <p className="text-xs text-gray-400 leading-relaxed">

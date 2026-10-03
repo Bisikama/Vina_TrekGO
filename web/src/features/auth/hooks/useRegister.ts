@@ -2,8 +2,7 @@
 
 import { useState, ChangeEvent, FormEvent } from "react";
 import { registerApi } from "../services/auth.api";
-import { useAuthStore } from "../store/authStore";
-import { AuthResponse, RegisterPayload } from "../types/auth.types";
+import { RegisterPayload, RegisterResponse } from "../types/auth.types";
 import { AxiosError } from "axios";
 
 export const useRegister = () => {
@@ -12,15 +11,12 @@ export const useRegister = () => {
     password: "",
     fullName: "",
     phone: "",
-    cccd: "",
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<AuthResponse | null>(null);
+  const [data, setData] = useState<RegisterResponse | null>(null);
 
-  const setAuth = useAuthStore((state) => state.setAuth);
-
-  const register = async (payload?: RegisterPayload): Promise<AuthResponse | null> => {
+  const register = async (payload?: RegisterPayload): Promise<RegisterResponse | null> => {
     const payloadToSubmit = payload || formData;
     setIsLoading(true);
     setError(null);
@@ -28,7 +24,6 @@ export const useRegister = () => {
     try {
       const response = await registerApi(payloadToSubmit);
       setData(response);
-      setAuth(response.user, response.accessToken, response.refreshToken);
       return response;
     } catch (err: unknown) {
       let errorMessage = "Đã xảy ra lỗi không xác định khi đăng ký.";
@@ -59,7 +54,7 @@ export const useRegister = () => {
   };
 
   const reset = () => {
-    setFormData({ email: "", password: "", fullName: "", phone: "", cccd: "" });
+    setFormData({ email: "", password: "", fullName: "", phone: "" });
     setError(null);
     setData(null);
     setIsLoading(false);
