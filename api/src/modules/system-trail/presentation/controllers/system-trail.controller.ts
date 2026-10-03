@@ -6,7 +6,8 @@ import { GetSystemTrailsUseCase } from '../../application/use-cases/get-system-t
 import { GetSystemTrailDetailUseCase } from '../../application/use-cases/get-system-trail-detail.use-case'
 import { SystemTrailDetailDto, SystemTrailSummaryDto } from '../dtos/system-trail.dto'
 
-@ApiTags('System Trails (Map 3D)')
+
+@ApiTags('System Trails')
 @Controller('system-trails')
 export class SystemTrailController {
   constructor(

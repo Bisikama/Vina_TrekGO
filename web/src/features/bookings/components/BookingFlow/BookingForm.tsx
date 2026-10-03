@@ -115,30 +115,30 @@ export const BookingForm = ({
             </span>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-4">
           {/* Form fields for member 2... */}
           <div className="col-span-2">
-             <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3">
-               <svg className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-               <div>
-                  <h5 className="text-sm font-medium text-blue-900">Cam kết an toàn & Bảo hộ y tế VFRS</h5>
-                  <div className="mt-2 space-y-2">
-                    <label className="flex items-start gap-2">
-                      <input type="checkbox" defaultChecked className="mt-1 rounded text-green-600 focus:ring-green-500" />
-                      <span className="text-sm text-gray-700">Tôi xác nhận tất cả thành viên có đủ điều kiện thể lực tham gia trek cấp độ Trung bình (3/5) và đồng ý quy chuẩn bảo hộ VFRS.</span>
-                    </label>
-                    <label className="flex items-start gap-2">
-                      <input type="checkbox" defaultChecked className="mt-1 rounded text-green-600 focus:ring-green-500" />
-                      <span className="text-sm text-gray-700">Tuân thủ tuyệt đối chỉ dẫn của Leader Hoàng Nam và Porter bản địa trong suốt quá trình di chuyển qua vách núi hẹp.</span>
-                    </label>
-                  </div>
-               </div>
-             </div>
+            <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3">
+              <svg className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div>
+                <h5 className="text-sm font-medium text-blue-900">Cam kết an toàn & Bảo hộ y tế VFRS</h5>
+                <div className="mt-2 space-y-2">
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox" defaultChecked className="mt-1 rounded text-green-600 focus:ring-green-500" />
+                    <span className="text-sm text-gray-700">Tôi xác nhận tất cả thành viên có đủ điều kiện thể lực tham gia trek cấp độ Trung bình (3/5) và đồng ý quy chuẩn bảo hộ VFRS.</span>
+                  </label>
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox" defaultChecked className="mt-1 rounded text-green-600 focus:ring-green-500" />
+                    <span className="text-sm text-gray-700">Tuân thủ tuyệt đối chỉ dẫn của Leader Hoàng Nam và Porter bản địa trong suốt quá trình di chuyển qua vách núi hẹp.</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      
+
 
       <div className="flex justify-between mt-6">
         <button className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 flex items-center gap-2">

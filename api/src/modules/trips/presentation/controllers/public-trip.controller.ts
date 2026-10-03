@@ -29,7 +29,7 @@ const bodyDoc = (schema: z.ZodType) => ApiBody({ schema: z.toJSONSchema(schema) 
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
 @Roles(UserRole.LEADER)
-@Controller('api/v1/leader/public-trips')
+@Controller('leader/public-trips')
 export class LeaderPublicTripController {
   constructor(private readonly trips: PublicTripUseCase) {}
   @Post()
@@ -89,7 +89,7 @@ export class LeaderPublicTripController {
 @Auth([AuthType.Bearer])
 @Roles(UserRole.LEADER)
 @UseFilters(TripErrorFilter)
-@Controller('api/v1')
+@Controller()
 export class TripOptionsController {
   constructor(private readonly trips: PublicTripUseCase) {}
   @Get('leaders/me/schedule-conflicts')
@@ -118,7 +118,7 @@ export class TripOptionsController {
 }
 @ApiTags('Public Trips')
 @Auth([AuthType.None])
-@Controller('api/v1/public-trips')
+@Controller('public-trips')
 @UseFilters(TripErrorFilter)
 export class PublicTripController {
   constructor(private readonly trips: PublicTripUseCase) {}
