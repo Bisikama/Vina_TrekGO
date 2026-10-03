@@ -255,7 +255,7 @@ describe('CloudinaryStorageAdapter', () => {
         return mockStream;
       }) } as any;
 
-      const result = await adapter.simulateDevUpload!({ publicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', buffer: Buffer.from('test') });
+      const result = await adapter.simulateDevUpload({ publicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', buffer: Buffer.from('test') });
       expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(expect.objectContaining({ type: 'upload' }), expect.any(Function));
       expect(result.publicId).toBe('p1');
     });
@@ -267,7 +267,7 @@ describe('CloudinaryStorageAdapter', () => {
         return mockStream;
       }) } as any;
 
-      const result = await adapter.simulateDevUpload!({ publicId: 'p1', resourceType: 'VIDEO', deliveryType: 'authenticated', buffer: Buffer.from('test') });
+      const result = await adapter.simulateDevUpload({ publicId: 'p1', resourceType: 'VIDEO', deliveryType: 'authenticated', buffer: Buffer.from('test') });
       expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(expect.objectContaining({ type: 'authenticated', resource_type: 'video' }), expect.any(Function));
       expect(result.publicId).toBe('p1');
     });
