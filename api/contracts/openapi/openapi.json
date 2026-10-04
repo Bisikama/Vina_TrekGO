@@ -1952,7 +1952,7 @@
                     "code": "RENTAL_PRODUCT_NOT_FOUND",
                     "message": "Product not found or not active",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.143Z",
+                    "timestamp": "2026-10-04T09:44:37.919Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2210,7 +2210,7 @@
                     "code": "RENTAL_PRODUCT_SKU_EXISTS",
                     "message": "SKU already exists",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.293Z",
+                    "timestamp": "2026-10-04T09:44:38.114Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2327,7 +2327,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.292Z",
+                    "timestamp": "2026-10-04T09:44:38.114Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -2496,7 +2496,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.293Z",
+                    "timestamp": "2026-10-04T09:44:38.115Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3087,7 +3087,7 @@
                     "code": "VALIDATION_ERROR",
                     "message": "Validation failed",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3130,7 +3130,7 @@
                     "code": "RENTAL_PRODUCT_NOT_FOUND",
                     "message": "Product not found",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3173,7 +3173,7 @@
                     "code": "EQUIPMENT_ASSET_CODE_EXISTS",
                     "message": "Asset code exists",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3216,7 +3216,7 @@
                     "code": "RENTAL_PRODUCT_ARCHIVED",
                     "message": "Product is archived",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3435,7 +3435,7 @@
                     "code": "BATCH_ASSET_CODE_COUNT_MISMATCH",
                     "message": "Asset codes count does not match quantity",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3478,7 +3478,7 @@
                     "code": "EQUIPMENT_ASSET_CODE_EXISTS",
                     "message": "One or more asset codes exist",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3605,7 +3605,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_FOUND",
                     "message": "One or more units not found",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3704,7 +3704,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_FOUND",
                     "message": "Unit not found",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -3837,7 +3837,7 @@
                     "code": "VERSION_CONFLICT",
                     "message": "Mismatched version",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4025,7 +4025,7 @@
                     "code": "EQUIPMENT_UNIT_NOT_MAINTAINABLE",
                     "message": "Unit is not maintainable or rented",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:38.894Z",
+                    "timestamp": "2026-10-04T09:44:38.746Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4099,7 +4099,7 @@
                     "code": "FORBIDDEN",
                     "message": "Booking không thuộc USER hiện tại",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.360Z",
+                    "timestamp": "2026-10-04T09:44:39.214Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4142,7 +4142,7 @@
                     "code": "BOOKING_NOT_FOUND",
                     "message": "Không tìm thấy Booking",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.360Z",
+                    "timestamp": "2026-10-04T09:44:39.214Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4236,7 +4236,7 @@
                     "code": "FORBIDDEN",
                     "message": "Booking không thuộc USER hiện tại",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.361Z",
+                    "timestamp": "2026-10-04T09:44:39.214Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4279,7 +4279,7 @@
                     "code": "BOOKING_NOT_RENTAL_ELIGIBLE",
                     "message": "Booking/Trip không đủ điều kiện thuê",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.361Z",
+                    "timestamp": "2026-10-04T09:44:39.214Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4360,7 +4360,7 @@
                     "code": "RENTAL_PRODUCT_NOT_FOUND",
                     "message": "Không tìm thấy product ACTIVE",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.390Z",
+                    "timestamp": "2026-10-04T09:44:39.241Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4403,7 +4403,7 @@
                     "code": "BOOKING_NOT_RENTAL_ELIGIBLE",
                     "message": "Booking/Trip không đủ điều kiện thuê",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.390Z",
+                    "timestamp": "2026-10-04T09:44:39.241Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4513,7 +4513,7 @@
                     "code": "INSUFFICIENT_AVAILABLE_QUANTITY",
                     "message": "Quantity vượt availableCount hiện tại",
                     "details": {},
-                    "timestamp": "2026-10-01T16:03:39.391Z",
+                    "timestamp": "2026-10-04T09:44:39.242Z",
                     "path": "/api/v1/resource"
                   }
                 }
@@ -4534,9 +4534,65 @@
     },
     "/api/v1/system-trails": {
       "get": {
-        "description": "Dùng cho màn hình chọn cung đường hoặc tìm kiếm cung đường trekking",
+        "description": "Hỗ trợ lọc theo điểm đến (destinationId), độ khó (difficulty), khoảng cách và tìm kiếm tên/mã",
         "operationId": "SystemTrailController_getTrails",
         "parameters": [
+          {
+            "name": "maxDistance",
+            "required": false,
+            "in": "query",
+            "description": "Khoảng cách tối đa (km)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minDistance",
+            "required": false,
+            "in": "query",
+            "description": "Khoảng cách tối thiểu (km)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo trạng thái",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "difficulty",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo độ khó",
+            "schema": {
+              "enum": [
+                "EASY",
+                "MEDIUM",
+                "HARD",
+                "EXTREME"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "Tìm theo tên hoặc mã cung đường",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "destinationId",
             "required": false,
@@ -4544,6 +4600,26 @@
             "description": "Lọc theo ID địa danh",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Số bản ghi trên mỗi trang",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Trang hiện tại",
+            "schema": {
+              "example": 1,
+              "type": "number"
             }
           }
         ],
@@ -4553,16 +4629,49 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SystemTrailSummaryDto"
-                  }
+                  "$ref": "#/components/schemas/PaginatedSystemTrailResponseDto"
                 }
               }
             }
           }
         },
-        "summary": "Lấy danh sách các cung đường hệ thống",
+        "summary": "Lấy danh sách các cung đường hệ thống (có phân trang)",
+        "tags": [
+          "System Trails"
+        ]
+      },
+      "post": {
+        "description": "Yêu cầu quyền ADMIN.",
+        "operationId": "SystemTrailController_createTrail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSystemTrailRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tạo thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemTrailDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới cung đường hệ thống",
         "tags": [
           "System Trails"
         ]
@@ -4577,6 +4686,7 @@
             "name": "idOrCode",
             "required": true,
             "in": "path",
+            "description": "UUID hoặc Mã cung đường (VD: TRAIL_BADEN_COTDIEN)",
             "schema": {
               "type": "string"
             }
@@ -4595,6 +4705,85 @@
           }
         },
         "summary": "Lấy dữ liệu chi tiết cung đường để render MapLibre 3D",
+        "tags": [
+          "System Trails"
+        ]
+      }
+    },
+    "/api/v1/system-trails/{id}": {
+      "patch": {
+        "description": "Yêu cầu quyền ADMIN. Nếu sửa toạ độ hoặc checkpoints sẽ tự động tăng version.",
+        "operationId": "SystemTrailController_updateTrail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "SystemTrail UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSystemTrailRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemTrailDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật cung đường hệ thống",
+        "tags": [
+          "System Trails"
+        ]
+      },
+      "delete": {
+        "description": "Yêu cầu quyền ADMIN. Kiểm tra an toàn người dùng mua bản đồ và tour liên kết.",
+        "operationId": "SystemTrailController_deleteTrail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "SystemTrail UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vô hiệu hóa thành công"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vô hiệu hóa cung đường (chuyển sang INACTIVE)",
         "tags": [
           "System Trails"
         ]
@@ -5201,6 +5390,469 @@
           "Media"
         ]
       }
+    },
+    "/api/v1/checkpoints": {
+      "get": {
+        "description": "Hỗ trợ lọc theo điểm đến (destinationId), loại trạm (checkpointType), trạng thái và từ khóa tìm kiếm (name, code)",
+        "operationId": "CheckpointController_getCheckpoints",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo trạng thái",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "Tìm theo tên hoặc mã điểm mốc",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "checkpointType",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo phân loại trạm",
+            "schema": {
+              "enum": [
+                "START",
+                "CAMPSITE",
+                "SUMMIT",
+                "WATER_SOURCE",
+                "VIEWPOINT",
+                "END"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "destinationId",
+            "required": true,
+            "in": "query",
+            "description": "UUID của địa danh (Destination) - Bắt buộc",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Số bản ghi trên mỗi trang",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Trang hiện tại",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedCheckpointResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy danh sách điểm mốc / trạm dừng chân trekking (có phân trang)",
+        "tags": [
+          "Checkpoints"
+        ]
+      },
+      "post": {
+        "description": "Yêu cầu quyền ADMIN và token xác thực hợp lệ",
+        "operationId": "CheckpointController_createCheckpoint",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCheckpointRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tạo thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới điểm mốc checkpoint (Chỉ dành cho Admin)",
+        "tags": [
+          "Checkpoints"
+        ]
+      }
+    },
+    "/api/v1/checkpoints/{id}": {
+      "get": {
+        "operationId": "CheckpointController_getCheckpointDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Checkpoint UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy thông tin chi tiết điểm mốc checkpoint theo ID",
+        "tags": [
+          "Checkpoints"
+        ]
+      },
+      "patch": {
+        "description": "Yêu cầu quyền ADMIN và token xác thực hợp lệ",
+        "operationId": "CheckpointController_updateCheckpoint",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Checkpoint UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCheckpointRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật điểm mốc checkpoint (Chỉ dành cho Admin)",
+        "tags": [
+          "Checkpoints"
+        ]
+      },
+      "delete": {
+        "description": "Chuyển trạng thái sang INACTIVE nếu không có cung đường hoặc chuyến đi nào đang liên kết",
+        "operationId": "CheckpointController_deleteCheckpoint",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Checkpoint UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vô hiệu hóa thành công"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vô hiệu hóa điểm mốc checkpoint (Chỉ dành cho Admin)",
+        "tags": [
+          "Checkpoints"
+        ]
+      }
+    },
+    "/api/v1/destinations": {
+      "get": {
+        "description": "Hỗ trợ phân trang, tìm kiếm theo từ khóa và lọc theo khu vực (region)",
+        "operationId": "DestinationController_getDestinations",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo trạng thái",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo vùng miền",
+            "schema": {
+              "enum": [
+                "NORTH",
+                "CENTRAL",
+                "SOUTH"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "Tìm kiếm theo tên hoặc mô tả",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Số bản ghi trên mỗi trang",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Trang hiện tại",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedDestinationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy danh sách các điểm đến / địa danh trekking (có phân trang)",
+        "tags": [
+          "Destinations"
+        ]
+      },
+      "post": {
+        "operationId": "DestinationController_createDestination",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDestinationRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tạo thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo mới một điểm đến / địa danh",
+        "tags": [
+          "Destinations"
+        ]
+      }
+    },
+    "/api/v1/destinations/{id}": {
+      "get": {
+        "operationId": "DestinationController_getDestinationDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Destination UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lấy chi tiết điểm đến trekking theo ID",
+        "tags": [
+          "Destinations"
+        ]
+      },
+      "patch": {
+        "operationId": "DestinationController_updateDestination",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Destination UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDestinationRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cập nhật thông tin điểm đến",
+        "tags": [
+          "Destinations"
+        ]
+      },
+      "delete": {
+        "operationId": "DestinationController_deleteDestination",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Destination UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vô hiệu hóa thành công"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vô hiệu hóa điểm đến (chuyển trạng thái sang INACTIVE)",
+        "tags": [
+          "Destinations"
+        ]
+      }
     }
   },
   "info": {
@@ -5419,6 +6071,12 @@
           },
           "difficulty": {
             "type": "string",
+            "enum": [
+              "EASY",
+              "MEDIUM",
+              "HARD",
+              "EXTREME"
+            ],
             "example": "MEDIUM"
           },
           "distanceKm": {
@@ -5436,6 +6094,20 @@
             "example": 240,
             "description": "Thời gian ước tính hoàn thành (phút)"
           },
+          "price": {
+            "type": "number",
+            "example": 0,
+            "description": "Giá bản đồ số (VND)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "example": "ACTIVE"
+          },
           "destination": {
             "type": "object",
             "example": {
@@ -5450,6 +6122,16 @@
             "type": "number",
             "example": 3,
             "description": "Số lượng trạm dừng checkpoint trên tuyến"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
           }
         },
         "required": [
@@ -5458,8 +6140,65 @@
           "name",
           "difficulty",
           "distanceKm",
+          "price",
+          "status",
           "destination",
           "checkpointCount"
+        ]
+      },
+      "PaginationMetaDto": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "example": 1,
+            "description": "Trang hiện tại"
+          },
+          "pageSize": {
+            "type": "number",
+            "example": 20,
+            "description": "Số bản ghi trên mỗi trang"
+          },
+          "totalItems": {
+            "type": "number",
+            "example": 12,
+            "description": "Tổng số bản ghi"
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 1,
+            "description": "Tổng số trang"
+          }
+        },
+        "required": [
+          "page",
+          "pageSize",
+          "totalItems",
+          "totalPages"
+        ]
+      },
+      "PaginatedSystemTrailResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Danh sách các cung đường hệ thống",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemTrailSummaryDto"
+            }
+          },
+          "pagination": {
+            "description": "Thông tin phân trang",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaginationMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "pagination"
         ]
       },
       "CheckpointItemDto": {
@@ -5534,6 +6273,12 @@
           },
           "difficulty": {
             "type": "string",
+            "enum": [
+              "EASY",
+              "MEDIUM",
+              "HARD",
+              "EXTREME"
+            ],
             "example": "MEDIUM"
           },
           "distanceKm": {
@@ -5551,6 +6296,20 @@
             "example": 240,
             "description": "Thời gian ước tính hoàn thành (phút)"
           },
+          "price": {
+            "type": "number",
+            "example": 0,
+            "description": "Giá bản đồ số (VND)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "example": "ACTIVE"
+          },
           "destination": {
             "type": "object",
             "example": {
@@ -5565,6 +6324,21 @@
             "type": "number",
             "example": 3,
             "description": "Số lượng trạm dừng checkpoint trên tuyến"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "version": {
+            "type": "number",
+            "example": 1,
+            "description": "Phiên bản lộ trình cung đường"
           },
           "routeGeojson": {
             "type": "object",
@@ -5634,11 +6408,642 @@
           "name",
           "difficulty",
           "distanceKm",
+          "price",
+          "status",
           "destination",
           "checkpointCount",
+          "version",
           "routeGeojson",
           "checkpoints"
         ]
+      },
+      "CreateSystemTrailRequestDto": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001",
+            "description": "UUID điểm đến"
+          },
+          "code": {
+            "type": "string",
+            "example": "TRAIL_BADEN_COTDIEN",
+            "description": "Mã cung đường duy nhất"
+          },
+          "name": {
+            "type": "string",
+            "example": "Cung đường Cột Điện - Đỉnh Núi Bà Đen",
+            "description": "Tên cung đường"
+          },
+          "description": {
+            "type": "object",
+            "example": "Cung trekking phổ biến và rõ đường nhất tại Núi Bà Đen"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "EASY",
+              "MEDIUM",
+              "HARD",
+              "EXTREME"
+            ],
+            "example": "MEDIUM"
+          },
+          "distanceKm": {
+            "type": "number",
+            "example": 4.5,
+            "description": "Độ dài cung đường (km)"
+          },
+          "elevationGainM": {
+            "type": "object",
+            "example": 941,
+            "description": "Độ cao dốc leo tích lũy (mét)"
+          },
+          "estimatedDurationMinutes": {
+            "type": "object",
+            "example": 240,
+            "description": "Thời gian ước tính hoàn thành (phút)"
+          },
+          "price": {
+            "type": "number",
+            "example": 0,
+            "description": "Giá bản đồ số (VND)"
+          },
+          "routeGeojson": {
+            "type": "object",
+            "description": "Đối tượng GeoJSON (LineString / FeatureCollection)",
+            "example": {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "Đường mòn Cột Điện"
+                  },
+                  "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                      [
+                        106.1785,
+                        11.3652,
+                        45
+                      ],
+                      [
+                        106.1698,
+                        11.3838,
+                        986
+                      ]
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "default": "ACTIVE"
+          }
+        },
+        "required": [
+          "destinationId",
+          "code",
+          "name",
+          "difficulty",
+          "distanceKm",
+          "routeGeojson"
+        ]
+      },
+      "TrailCheckpointInputDto": {
+        "type": "object",
+        "properties": {
+          "checkpointId": {
+            "type": "string",
+            "example": "cp100000-0000-0000-0000-000000000001",
+            "description": "UUID của Checkpoint"
+          },
+          "sequence": {
+            "type": "number",
+            "example": 1,
+            "description": "Thứ tự trạm dừng trong cung đường"
+          },
+          "isRequired": {
+            "type": "boolean",
+            "example": true,
+            "default": false,
+            "description": "Có bắt buộc đi qua không"
+          }
+        },
+        "required": [
+          "checkpointId",
+          "sequence"
+        ]
+      },
+      "UpdateSystemTrailRequestDto": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001"
+          },
+          "code": {
+            "type": "string",
+            "example": "TRAIL_BADEN_COTDIEN"
+          },
+          "name": {
+            "type": "string",
+            "example": "Cung đường Cột Điện - Đỉnh Núi Bà Đen"
+          },
+          "description": {
+            "type": "object",
+            "example": "Mô tả cập nhật"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "EASY",
+              "MEDIUM",
+              "HARD",
+              "EXTREME"
+            ]
+          },
+          "distanceKm": {
+            "type": "number",
+            "example": 5
+          },
+          "elevationGainM": {
+            "type": "object",
+            "example": 950
+          },
+          "estimatedDurationMinutes": {
+            "type": "object",
+            "example": 250
+          },
+          "price": {
+            "type": "number",
+            "example": 50000
+          },
+          "routeGeojson": {
+            "type": "object",
+            "description": "GeoJSON cập nhật"
+          },
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrailCheckpointInputDto"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ]
+          }
+        }
+      },
+      "CheckpointDestinationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001"
+          },
+          "name": {
+            "type": "string",
+            "example": "Fansipan"
+          },
+          "region": {
+            "type": "object",
+            "example": "NORTH"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "CheckpointResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "c1000000-0000-0000-0000-000000000001",
+            "description": "UUID điểm mốc"
+          },
+          "destinationId": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001",
+            "description": "UUID điểm đến"
+          },
+          "code": {
+            "type": "object",
+            "example": "FAN-CP-2800",
+            "description": "Mã định danh trạm"
+          },
+          "name": {
+            "type": "string",
+            "example": "Trạm dừng chân 2.800m",
+            "description": "Tên trạm"
+          },
+          "description": {
+            "type": "object",
+            "example": "Điểm hạ trại và tiếp nước chính"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 22.3155,
+            "description": "Vĩ độ GPS"
+          },
+          "longitude": {
+            "type": "number",
+            "example": 103.7745,
+            "description": "Kinh độ GPS"
+          },
+          "defaultRadiusMeters": {
+            "type": "number",
+            "example": 50,
+            "description": "Bán kính quét geofence (mét)"
+          },
+          "checkpointType": {
+            "type": "string",
+            "enum": [
+              "START",
+              "CAMPSITE",
+              "SUMMIT",
+              "WATER_SOURCE",
+              "VIEWPOINT",
+              "END"
+            ],
+            "example": "CAMPSITE"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "example": "ACTIVE"
+          },
+          "destination": {
+            "description": "Thông tin địa danh liên kết",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CheckpointDestinationDto"
+              }
+            ]
+          },
+          "trailCount": {
+            "type": "number",
+            "example": 2,
+            "description": "Số lượng cung đường đang đi qua trạm này"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "destinationId",
+          "name",
+          "latitude",
+          "longitude",
+          "defaultRadiusMeters",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PaginatedCheckpointResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Danh sách các điểm mốc checkpoint",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckpointResponseDto"
+            }
+          },
+          "pagination": {
+            "description": "Thông tin phân trang",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaginationMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "pagination"
+        ]
+      },
+      "CreateCheckpointRequestDto": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001",
+            "description": "UUID của điểm đến (Destination)"
+          },
+          "code": {
+            "type": "object",
+            "example": "FAN-CP-2800",
+            "description": "Mã định danh duy nhất của trạm dừng chân"
+          },
+          "name": {
+            "type": "string",
+            "example": "Trạm dừng chân 2.800m",
+            "description": "Tên trạm dừng chân / điểm mốc"
+          },
+          "description": {
+            "type": "object",
+            "example": "Điểm hạ trại và tiếp nước chính trước khi lên đỉnh Fansipan",
+            "description": "Mô tả chi tiết về điểm mốc"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 22.3155,
+            "description": "Vĩ độ GPS (-90 đến 90)"
+          },
+          "longitude": {
+            "type": "number",
+            "example": 103.7745,
+            "description": "Kinh độ GPS (-180 đến 180)"
+          },
+          "defaultRadiusMeters": {
+            "type": "number",
+            "example": 50,
+            "default": 50,
+            "description": "Bán kính nhận diện geofence quét check-in (mét)"
+          },
+          "checkpointType": {
+            "type": "string",
+            "enum": [
+              "START",
+              "CAMPSITE",
+              "SUMMIT",
+              "WATER_SOURCE",
+              "VIEWPOINT",
+              "END"
+            ],
+            "example": "CAMPSITE",
+            "description": "Phân loại trạm dừng chân"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "default": "ACTIVE",
+            "description": "Trạng thái hoạt động"
+          }
+        },
+        "required": [
+          "destinationId",
+          "name",
+          "latitude",
+          "longitude"
+        ]
+      },
+      "UpdateCheckpointRequestDto": {
+        "type": "object",
+        "properties": {
+          "destinationId": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001",
+            "description": "UUID của điểm đến mới"
+          },
+          "code": {
+            "type": "object",
+            "example": "FAN-CP-2800-REV1",
+            "description": "Mã định danh trạm dừng chân"
+          },
+          "name": {
+            "type": "string",
+            "example": "Lán nghỉ 2.800m (Trạm Fansipan)",
+            "description": "Tên trạm dừng chân"
+          },
+          "description": {
+            "type": "object",
+            "example": "Đã bổ sung thêm khu vực cắm trại và nguồn nước",
+            "description": "Mô tả chi tiết"
+          },
+          "latitude": {
+            "type": "number",
+            "example": 22.3156,
+            "description": "Vĩ độ GPS"
+          },
+          "longitude": {
+            "type": "number",
+            "example": 103.7746,
+            "description": "Kinh độ GPS"
+          },
+          "defaultRadiusMeters": {
+            "type": "number",
+            "example": 60,
+            "description": "Bán kính nhận diện geofence (mét)"
+          },
+          "checkpointType": {
+            "type": "string",
+            "enum": [
+              "START",
+              "CAMPSITE",
+              "SUMMIT",
+              "WATER_SOURCE",
+              "VIEWPOINT",
+              "END"
+            ],
+            "example": "CAMPSITE",
+            "description": "Phân loại trạm dừng chân"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "description": "Trạng thái hoạt động"
+          }
+        }
+      },
+      "DestinationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "d1000000-0000-0000-0000-000000000001",
+            "description": "UUID điểm đến"
+          },
+          "name": {
+            "type": "string",
+            "example": "Núi Bà Đen",
+            "description": "Tên địa danh"
+          },
+          "description": {
+            "type": "object",
+            "example": "Nóc nhà Đông Nam Bộ, cao 986m"
+          },
+          "region": {
+            "type": "object",
+            "example": "SOUTH"
+          },
+          "centerLat": {
+            "type": "object",
+            "example": 11.3789,
+            "description": "Vĩ độ tâm bản đồ"
+          },
+          "centerLng": {
+            "type": "object",
+            "example": 106.1712,
+            "description": "Kinh độ tâm bản đồ"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "example": "ACTIVE"
+          },
+          "trailCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Số lượng cung đường trực thuộc"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-03-01T08:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PaginatedDestinationResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Danh sách các điểm đến",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DestinationResponseDto"
+            }
+          },
+          "pagination": {
+            "description": "Thông tin phân trang",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaginationMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "pagination"
+        ]
+      },
+      "CreateDestinationRequestDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Tà Xùa",
+            "description": "Tên địa danh trekking"
+          },
+          "description": {
+            "type": "object",
+            "example": "Thiên đường săn mây Bắc Yên, Sơn La"
+          },
+          "region": {
+            "type": "object",
+            "example": "NORTH"
+          },
+          "centerLat": {
+            "type": "object",
+            "example": 21.2833,
+            "description": "Vĩ độ"
+          },
+          "centerLng": {
+            "type": "object",
+            "example": 104.3833,
+            "description": "Kinh độ"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "default": "ACTIVE"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateDestinationRequestDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Tà Xùa - Sơn La",
+            "description": "Tên địa danh"
+          },
+          "description": {
+            "type": "object",
+            "example": "Thiên đường săn mây Bắc Yên"
+          },
+          "region": {
+            "type": "object",
+            "example": "NORTH"
+          },
+          "centerLat": {
+            "type": "object",
+            "example": 21.2833
+          },
+          "centerLng": {
+            "type": "object",
+            "example": 104.3833
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ]
+          }
+        }
       }
     }
   }
