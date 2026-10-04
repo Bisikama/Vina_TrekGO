@@ -4,8 +4,8 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Giả lập lấy token từ cookie (Trong thực tế sẽ check token thật)
-  const token = request.cookies.get('mock_token')?.value;
+  const token = request.cookies.get('vina_trekgo_access_token')?.value;
+  const role = request.cookies.get('vina_trekgo_role')?.value?.toUpperCase();
 
   // Các route không cần đăng nhập
   const isPublicPath = path.startsWith('/public') || path === '/';
@@ -15,9 +15,29 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/public/login', request.url));
   }
 
+  if (token && role) {
+    const dashboardByRole: Record<string, string> = {
+      USER: '/dashboard',
+      LEADER: '/leader',
+      ADMIN: '/admin',
+      STAFF: '/staff',
+      STAFF_INVENTORY: '/staff',
+      STAFF_DELIVERY: '/delivery',
+    };
+    const allowedDashboard = dashboardByRole[role];
+    const dashboardPaths = ['/dashboard', '/leader', '/admin', '/staff', '/delivery'];
+
+    if (allowedDashboard && dashboardPaths.some((dashboardPath) => path === dashboardPath || path.startsWith(`${dashboardPath}/`))) {
+      const isAllowed = path === allowedDashboard || path.startsWith(`${allowedDashboard}/`);
+      if (!isAllowed) {
+        return NextResponse.redirect(new URL(allowedDashboard, request.url));
+      }
+    }
+  }
+
   // Nếu đã đăng nhập mà cố vào lại trang login/register thì đá về trang chủ
   if (token && (path === '/public/login' || path === '/public/register')) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return NextResponse.next();

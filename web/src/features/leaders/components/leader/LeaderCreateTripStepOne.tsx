@@ -12,6 +12,42 @@ type CancellationPolicy =
 
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
+const mockPickupPoints = [
+  {
+    id: "my-dinh-gate-2",
+    name: "Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội",
+    latitude: "21.0285",
+    longitude: "105.7784",
+    marker: "Cổng số 2 – Xe trung chuyển 16 chỗ",
+  },
+  {
+    id: "cau-giay-park",
+    name: "Cổng chính Công viên Cầu Giấy, Hà Nội",
+    latitude: "21.0307",
+    longitude: "105.7952",
+    marker: "Cổng chính – Điểm đón đoàn",
+  },
+  {
+    id: "hoa-lac-stop",
+    name: "Trạm nghỉ Hòa Lạc, Thạch Thất, Hà Nội",
+    latitude: "21.0068",
+    longitude: "105.5254",
+    marker: "Khu đón khách – Bãi xe phía Đông",
+  },
+] as const;
+
+function dateInputValue(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function nextMeetingTime() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() + 60);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes(),
+  ).padStart(2, "0")}`;
+}
 
 function FieldLabel({
   children,
@@ -72,15 +108,55 @@ export function LeaderCreateTripStepOne() {
     useState<CancellationPolicy>("flexible");
 
   const [capacity, setCapacity] = useState(15);
+  const [price, setPrice] = useState("2850000");
   const [difficulty, setDifficulty] = useState(3);
-  const [saved, setSaved] = useState(false);
+  const [startDate, setStartDate] = useState(() => dateInputValue(new Date()));
+  const [endDate, setEndDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return dateInputValue(tomorrow);
+  });
+  const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
+  const [pickupPointId, setPickupPointId] = useState(mockPickupPoints[0].id);
+  const [dateError, setDateError] = useState("");
+  const selectedPickup =
+    mockPickupPoints.find((point) => point.id === pickupPointId) ??
+    mockPickupPoints[0];
 
-  function handleSaveDraft() {
-    setSaved(true);
-
-    window.setTimeout(() => {
-      setSaved(false);
-    }, 2500);
+  function handleContinue() {
+    const today = dateInputValue(new Date());
+    if (startDate < today) {
+      setDateError("Ngày khởi hành không được là ngày trong quá khứ.");
+      return;
+    }
+    if (endDate < startDate) {
+      setDateError("Ngày kết thúc phải từ ngày khởi hành trở đi.");
+      return;
+    }
+    if (startDate === today) {
+      const now = new Date();
+      const [hours, minutes] = meetingTime.split(":").map(Number);
+      const meeting = new Date();
+      meeting.setHours(hours, minutes, 0, 0);
+      if (meeting <= now) {
+        setDateError("Giờ tập trung hôm nay phải lớn hơn thời gian hiện tại.");
+        return;
+      }
+    }
+    setDateError("");
+    window.sessionStorage.setItem(
+      "leader-create-trip-draft",
+      JSON.stringify({
+        name: "Chinh phục Sống Lưng Khủng Long Tà Xùa - Săn Biển Mây Đại Ngàn",
+        startDate,
+        endDate,
+        pickupName: selectedPickup.name,
+        place: selectedPickup.name.split(",")[0],
+        price,
+        capacity,
+      }),
+    );
+    router.push("/leader/create-trip/route");
   }
 
   return (
@@ -125,13 +201,6 @@ export function LeaderCreateTripStepOne() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700 hover:bg-slate-200"
-            >
-              ▣ Lưu nháp
-            </button>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -384,7 +453,23 @@ export function LeaderCreateTripStepOne() {
                   <input
                     type="date"
                     className={inputClass}
-                    defaultValue="2024-05-12"
+                    value={startDate}
+                    min={dateInputValue(new Date())}
+                    onChange={(event) => {
+                      const nextStartDate = event.target.value;
+                      const today = dateInputValue(new Date());
+                      if (nextStartDate < today) {
+                        setDateError(
+                          "Ngày khởi hành không được là ngày trong quá khứ.",
+                        );
+                        return;
+                      }
+                      setStartDate(nextStartDate);
+                      setDateError("");
+                      if (endDate < nextStartDate) {
+                        setEndDate(nextStartDate);
+                      }
+                    }}
                   />
                 </label>
 
@@ -396,9 +481,26 @@ export function LeaderCreateTripStepOne() {
                   <input
                     type="date"
                     className={inputClass}
-                    defaultValue="2024-07-12"
+                    value={endDate}
+                    min={startDate}
+                    onChange={(event) => {
+                      const nextEndDate = event.target.value;
+                      if (nextEndDate < startDate) {
+                        setDateError(
+                          "Ngày kết thúc phải từ ngày khởi hành trở đi.",
+                        );
+                        return;
+                      }
+                      setEndDate(nextEndDate);
+                      setDateError("");
+                    }}
                   />
                 </label>
+                {dateError && (
+                  <p className="text-sm text-red-600 md:col-span-2" role="alert">
+                    {dateError}
+                  </p>
+                )}
 
                 <div className="rounded-xl bg-emerald-50 p-3 md:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -423,7 +525,11 @@ export function LeaderCreateTripStepOne() {
                   <input
                     type="time"
                     className={inputClass}
-                    defaultValue="20:30"
+                    value={meetingTime}
+                    onChange={(event) => {
+                      setMeetingTime(event.target.value);
+                      setDateError("");
+                    }}
                   />
                 </label>
 
@@ -432,49 +538,19 @@ export function LeaderCreateTripStepOne() {
                     Địa điểm tập kết tập trung
                   </FieldLabel>
 
-                  <input
+                  <select
                     className={inputClass}
-                    defaultValue="Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội"
-                  />
+                    value={pickupPointId}
+                    onChange={(event) => setPickupPointId(event.target.value)}
+                  >
+                    {mockPickupPoints.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
-                <div className="md:col-span-2">
-                  <div className="rounded-xl border border-blue-100 bg-[#eef3fb] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-slate-500">
-                          Tọa độ GPS điểm tập kết
-                        </p>
-
-                        <strong className="mt-1 block text-sm text-slate-900">
-                          21.0285° N, 105.7784° E
-                        </strong>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700"
-                        >
-                          Chỉnh sửa ghim
-                        </button>
-
-                        <button
-                          type="button"
-                          className="rounded-lg bg-[#125238] px-3 py-2 text-xs font-bold text-white"
-                        >
-                          Mở Google Maps
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex h-28 items-center justify-center rounded-lg border border-dashed border-blue-300 bg-blue-50">
-                      <span className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
-                        ● Cổng số 2 – Xe trung chuyển 16 chỗ
-                      </span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </FormCard>
 
@@ -536,7 +612,10 @@ export function LeaderCreateTripStepOne() {
                   <div className="relative">
                     <input
                       className={`${inputClass} pr-16`}
-                      defaultValue="2.850.000"
+                      value={Number(price).toLocaleString("vi-VN")}
+                      onChange={(event) =>
+                        setPrice(event.target.value.replace(/\D/g, ""))
+                      }
                     />
 
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
@@ -697,19 +776,7 @@ export function LeaderCreateTripStepOne() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={handleSaveDraft}
-                  className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700"
-                >
-                  ▣ Lưu bản nháp
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    router.push(
-                      "/leader/create-trip/route",
-                    )
-                  }
+                  onClick={handleContinue}
                   className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
                 >
                   Tiếp tục: Chọn cung đường →
@@ -802,36 +869,10 @@ export function LeaderCreateTripStepOne() {
               </ul>
             </section>
 
-            <section className="rounded-2xl bg-[#125238] p-5 text-white shadow-md">
-              <h2 className="font-bold">
-                Trợ giúp Tạo Tour
-              </h2>
-
-              <p className="mt-2 text-xs leading-5 text-emerald-100">
-                Cần hỗ trợ xác nhận cung đường, thuê Porter
-                hoặc chuẩn hóa giấy phép khu rừng?
-              </p>
-
-              <div className="mt-4 flex items-center justify-between">
-                <strong>0988.771.234</strong>
-
-                <button
-                  type="button"
-                  className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#125238]"
-                >
-                  Gọi ngay
-                </button>
-              </div>
-            </section>
           </aside>
         </div>
       </div>
 
-      {saved && (
-        <div className="fixed bottom-6 right-6 z-[80] rounded-xl bg-[#125238] px-5 py-4 text-sm font-semibold text-white shadow-2xl">
-          ✓ Đã lưu bản nháp chuyến đi.
-        </div>
-      )}
     </main>
   );
 }

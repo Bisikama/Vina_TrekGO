@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { TripData } from "../../data/mockTripsData";
+import { addMockBooking } from "@/features/leaders/data/mockLeaderTripStore";
 
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const [participants, setParticipants] = useState(2);
+  const [booked, setBooked] = useState(false);
   const isFullyBooked = trip.slots.booked >= trip.slots.total;
   
   return (
@@ -79,6 +81,12 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
         </div>
 
         <a 
+          onClick={() => {
+            if (!isFullyBooked) {
+              addMockBooking(trip.id, participants);
+              setBooked(true);
+            }
+          }}
           href={`/bookings/${trip.id}`}
           className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
             isFullyBooked 
@@ -86,7 +94,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
             : 'bg-[#1B5E41] hover:bg-[#154B36] text-white shadow-md shadow-emerald-900/10'
           }`}
         >
-          {isFullyBooked ? 'Đã hết chỗ' : 'Đặt chuyến đi này'}
+          {booked ? 'Đã ghi nhận đặt mock' : isFullyBooked ? 'Đã hết chỗ' : 'Đặt chuyến đi này'}
           {!isFullyBooked && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>}
         </a>
 

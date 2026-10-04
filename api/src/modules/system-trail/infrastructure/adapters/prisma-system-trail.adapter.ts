@@ -1,49 +1,101 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/shared/services/prisma.service'
+import { RecordStatus } from '@prisma/client'
 import {
   ISystemTrailRepository,
   SystemTrailSummary,
   SystemTrailDetail,
   CheckpointDetail,
+  CreateSystemTrailData,
+  UpdateSystemTrailData,
+  GetSystemTrailsFilter,
+  PaginatedResult,
+  SystemTrailRelatedCounts,
 } from '../../application/ports/system-trail.port'
 
 @Injectable()
 export class PrismaSystemTrailAdapter implements ISystemTrailRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(destinationId?: string): Promise<SystemTrailSummary[]> {
-    const trails = await this.prisma.systemTrail.findMany({
-      where: {
-        status: 'ACTIVE',
-        ...(destinationId ? { destinationId } : {}),
-      },
-      include: {
-        destination: true,
-        _count: {
-          select: { trailCheckpointsViaSystemTrailId: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+  async findAll(filter?: GetSystemTrailsFilter): Promise<PaginatedResult<SystemTrailSummary>> {
+    const page = filter?.page ?? 1
+    const pageSize = filter?.pageSize ?? 20
+    const skip = (page - 1) * pageSize
 
-    return trails.map((t) => ({
-      id: t.id,
-      code: t.code,
-      name: t.name,
-      description: t.description,
-      difficulty: t.difficulty,
-      distanceKm: Number(t.distanceKm),
-      elevationGainM: t.elevationGainM,
-      estimatedDurationMinutes: t.estimatedDurationMinutes,
-      destination: {
-        id: t.destination.id,
-        name: t.destination.name,
-        region: t.destination.region,
-        centerLat: t.destination.centerLat ? Number(t.destination.centerLat) : null,
-        centerLng: t.destination.centerLng ? Number(t.destination.centerLng) : null,
+    const where: any = {
+      status: filter?.status ?? RecordStatus.ACTIVE,
+    }
+
+    if (filter?.destinationId) {
+      where.destinationId = filter.destinationId
+    }
+
+    if (filter?.difficulty) {
+      where.difficulty = filter.difficulty
+    }
+
+    if (filter?.keyword) {
+      where.OR = [
+        { name: { contains: filter.keyword, mode: 'insensitive' } },
+        { code: { contains: filter.keyword, mode: 'insensitive' } },
+        { description: { contains: filter.keyword, mode: 'insensitive' } },
+      ]
+    }
+
+    if (filter?.minDistance !== undefined || filter?.maxDistance !== undefined) {
+      where.distanceKm = {}
+      if (filter.minDistance !== undefined) where.distanceKm.gte = filter.minDistance
+      if (filter.maxDistance !== undefined) where.distanceKm.lte = filter.maxDistance
+    }
+
+    const [total, trails] = await Promise.all([
+      this.prisma.systemTrail.count({ where }),
+      this.prisma.systemTrail.findMany({
+        where,
+        include: {
+          destination: true,
+          _count: {
+            select: { trailCheckpointsViaSystemTrailId: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ])
+
+    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
+
+    return {
+      items: trails.map((t) => ({
+        id: t.id,
+        code: t.code,
+        name: t.name,
+        description: t.description,
+        difficulty: t.difficulty,
+        distanceKm: Number(t.distanceKm),
+        elevationGainM: t.elevationGainM,
+        estimatedDurationMinutes: t.estimatedDurationMinutes,
+        price: Number(t.price),
+        status: t.status,
+        destination: {
+          id: t.destination.id,
+          name: t.destination.name,
+          region: t.destination.region,
+          centerLat: t.destination.centerLat ? Number(t.destination.centerLat) : null,
+          centerLng: t.destination.centerLng ? Number(t.destination.centerLng) : null,
+        },
+        checkpointCount: t._count.trailCheckpointsViaSystemTrailId,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+      pagination: {
+        page,
+        pageSize,
+        totalItems: total,
+        totalPages,
       },
-      checkpointCount: t._count.trailCheckpointsViaSystemTrailId,
-    }))
+    }
   }
 
   async findByIdOrCode(idOrCode: string): Promise<SystemTrailDetail | null> {
@@ -52,7 +104,6 @@ export class PrismaSystemTrailAdapter implements ISystemTrailRepository {
     const trail = await this.prisma.systemTrail.findFirst({
       where: {
         ...(isUuid ? { id: idOrCode } : { code: idOrCode }),
-        status: 'ACTIVE',
       },
       include: {
         destination: true,
@@ -98,6 +149,9 @@ export class PrismaSystemTrailAdapter implements ISystemTrailRepository {
       distanceKm: Number(trail.distanceKm),
       elevationGainM: trail.elevationGainM,
       estimatedDurationMinutes: trail.estimatedDurationMinutes,
+      price: Number(trail.price),
+      status: trail.status,
+      version: trail.version,
       destination: {
         id: trail.destination.id,
         name: trail.destination.name,
@@ -110,6 +164,181 @@ export class PrismaSystemTrailAdapter implements ISystemTrailRepository {
       checkpoints,
       bounds,
       initialCamera,
+      createdAt: trail.createdAt,
+      updatedAt: trail.updatedAt,
+    }
+  }
+
+  async findByCode(code: string): Promise<SystemTrailSummary | null> {
+    const t = await this.prisma.systemTrail.findUnique({
+      where: { code: code.trim().toUpperCase() },
+      include: {
+        destination: true,
+        _count: {
+          select: { trailCheckpointsViaSystemTrailId: true },
+        },
+      },
+    })
+
+    if (!t) return null
+
+    return {
+      id: t.id,
+      code: t.code,
+      name: t.name,
+      description: t.description,
+      difficulty: t.difficulty,
+      distanceKm: Number(t.distanceKm),
+      elevationGainM: t.elevationGainM,
+      estimatedDurationMinutes: t.estimatedDurationMinutes,
+      price: Number(t.price),
+      status: t.status,
+      destination: {
+        id: t.destination.id,
+        name: t.destination.name,
+        region: t.destination.region,
+        centerLat: t.destination.centerLat ? Number(t.destination.centerLat) : null,
+        centerLng: t.destination.centerLng ? Number(t.destination.centerLng) : null,
+      },
+      checkpointCount: t._count.trailCheckpointsViaSystemTrailId,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+    }
+  }
+
+  async validateDestination(destinationId: string): Promise<boolean> {
+    const d = await this.prisma.destination.findUnique({
+      where: { id: destinationId, status: RecordStatus.ACTIVE },
+    })
+    return !!d
+  }
+
+  async validateCheckpoints(destinationId: string, checkpointIds: string[]): Promise<boolean> {
+    if (checkpointIds.length === 0) return true
+    const uniqueIds = Array.from(new Set(checkpointIds))
+    const count = await this.prisma.checkpoint.count({
+      where: {
+        id: { in: uniqueIds },
+        destinationId,
+        status: RecordStatus.ACTIVE,
+      },
+    })
+    return count === uniqueIds.length
+  }
+
+  async create(data: CreateSystemTrailData): Promise<SystemTrailDetail> {
+    const created = await this.prisma.$transaction(async (tx) => {
+      const trail = await tx.systemTrail.create({
+        data: {
+          destinationId: data.destinationId,
+          code: data.code.trim().toUpperCase(),
+          name: data.name.trim(),
+          description: data.description,
+          difficulty: data.difficulty,
+          distanceKm: data.distanceKm,
+          elevationGainM: data.elevationGainM,
+          estimatedDurationMinutes: data.estimatedDurationMinutes,
+          price: data.price ?? 0,
+          routeGeojson: data.routeGeojson,
+          status: data.status ?? RecordStatus.ACTIVE,
+          createdBy: data.createdBy,
+          version: 1,
+        },
+      })
+
+      if (data.checkpoints && data.checkpoints.length > 0) {
+        await tx.trailCheckpoint.createMany({
+          data: data.checkpoints.map((cp) => ({
+            systemTrailId: trail.id,
+            checkpointId: cp.checkpointId,
+            sequence: cp.sequence,
+            isRequired: cp.isRequired ?? false,
+          })),
+        })
+      }
+
+      return trail
+    })
+
+    const detail = await this.findByIdOrCode(created.id)
+    return detail!
+  }
+
+  async update(id: string, data: UpdateSystemTrailData): Promise<SystemTrailDetail> {
+    const isRouteOrCheckpointsChanged = data.routeGeojson !== undefined || data.checkpoints !== undefined
+
+    await this.prisma.$transaction(async (tx) => {
+      const updateData: any = {
+        ...(data.destinationId !== undefined ? { destinationId: data.destinationId } : {}),
+        ...(data.code !== undefined ? { code: data.code.trim().toUpperCase() } : {}),
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.difficulty !== undefined ? { difficulty: data.difficulty } : {}),
+        ...(data.distanceKm !== undefined ? { distanceKm: data.distanceKm } : {}),
+        ...(data.elevationGainM !== undefined ? { elevationGainM: data.elevationGainM } : {}),
+        ...(data.estimatedDurationMinutes !== undefined ? { estimatedDurationMinutes: data.estimatedDurationMinutes } : {}),
+        ...(data.price !== undefined ? { price: data.price } : {}),
+        ...(data.routeGeojson !== undefined ? { routeGeojson: data.routeGeojson } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+      }
+
+      if (isRouteOrCheckpointsChanged) {
+        updateData.version = { increment: 1 }
+      }
+
+      await tx.systemTrail.update({
+        where: { id },
+        data: updateData,
+      })
+
+      if (data.checkpoints !== undefined) {
+        await tx.trailCheckpoint.deleteMany({
+          where: { systemTrailId: id },
+        })
+
+        if (data.checkpoints.length > 0) {
+          await tx.trailCheckpoint.createMany({
+            data: data.checkpoints.map((cp) => ({
+              systemTrailId: id,
+              checkpointId: cp.checkpointId,
+              sequence: cp.sequence,
+              isRequired: cp.isRequired ?? false,
+            })),
+          })
+        }
+      }
+    })
+
+    const updated = await this.findByIdOrCode(id)
+    return updated!
+  }
+
+  async softDelete(id: string): Promise<void> {
+    await this.prisma.systemTrail.update({
+      where: { id },
+      data: {
+        status: RecordStatus.INACTIVE,
+        archivedAt: new Date(),
+      },
+    })
+  }
+
+  async countRelated(id: string): Promise<SystemTrailRelatedCounts> {
+    const counts = await this.prisma.systemTrail.findUnique({
+      where: { id },
+      select: {
+        _count: {
+          select: {
+            trailAccesssViaSystemTrailId: true,
+            tripTrailPlansViaSystemTrailId: true,
+          },
+        },
+      },
+    })
+
+    return {
+      accesses: counts?._count.trailAccesssViaSystemTrailId ?? 0,
+      trips: counts?._count.tripTrailPlansViaSystemTrailId ?? 0,
     }
   }
 

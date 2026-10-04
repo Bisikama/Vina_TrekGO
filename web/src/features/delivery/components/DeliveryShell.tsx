@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useAuthStore } from "@/features/auth";
 
 const navigation = [
   {
@@ -55,6 +56,7 @@ export function DeliveryShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const logout = useAuthStore((state) => state.logout);
 
   return (
     <div className="min-h-screen bg-[#f4f7fd] text-slate-900">
@@ -146,7 +148,7 @@ export function DeliveryShell({
             <button
               type="button"
               onClick={() => {
-                document.cookie = "mock_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+                logout();
                 window.location.href = "/public/login";
               }}
               className="ml-2 cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"

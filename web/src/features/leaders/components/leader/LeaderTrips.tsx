@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  readCreatedLeaderTrip,
+  type CreatedLeaderTrip,
+} from "../../data/mockLeaderTripStore";
 
 type TripStatus =
   | "draft"
@@ -171,16 +175,50 @@ function formatCurrency(value: number) {
 }
 
 export function LeaderTrips() {
+  const [createdTrip, setCreatedTrip] =
+    useState<CreatedLeaderTrip | null>(null);
   const [activeTab, setActiveTab] = useState<
     "all" | TripStatus
   >("all");
 
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const refresh = () => setCreatedTrip(readCreatedLeaderTrip());
+    refresh();
+    window.addEventListener("trekgo-mock-db-change", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("trekgo-mock-db-change", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  const allTrips = useMemo<LeaderTrip[]>(() => {
+    if (!createdTrip) return trips;
+    return [
+      {
+        id: createdTrip.id || "TRK-MOCK",
+        name: createdTrip.name,
+        subtitle: "Chuyến đi mock vừa tạo",
+        routeName: createdTrip.name,
+        province: createdTrip.place,
+        duration: "2N1Đ",
+        startDate: createdTrip.date,
+        endDate: createdTrip.date,
+        registered: 0,
+        capacity: 15,
+        status: "open",
+        revenue: 0,
+        imageUrl: createdTrip.image,
+      },
+      ...trips,
+    ];
+  }, [createdTrip]);
 
   const visibleTrips = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    return trips.filter((trip) => {
+    return allTrips.filter((trip) => {
       const matchesTab =
         activeTab === "all" || trip.status === activeTab;
 
@@ -192,14 +230,14 @@ export function LeaderTrips() {
 
       return matchesTab && matchesSearch;
     });
-  }, [activeTab, search]);
+  }, [activeTab, allTrips, search]);
 
   function getCount(value: "all" | TripStatus) {
     if (value === "all") {
-      return trips.length;
+      return allTrips.length;
     }
 
-    return trips.filter((trip) => trip.status === value).length;
+    return allTrips.filter((trip) => trip.status === value).length;
   }
 
   return (
@@ -223,7 +261,7 @@ export function LeaderTrips() {
             </div>
 
             <Link
-              href="/leader/public-trips"
+              href="/leader/create-trip"
               className="inline-flex h-11 items-center justify-center rounded-xl bg-[#e76f51] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#d85f43]"
             >
               ＋ Tạo chuyến đi mới

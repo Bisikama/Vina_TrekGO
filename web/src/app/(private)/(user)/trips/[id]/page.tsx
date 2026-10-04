@@ -1,39 +1,30 @@
-import { mockTripsData } from "@/features/trips/data/mockTripsData";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { mockTripsData, TripData } from "@/features/trips/data/mockTripsData";
+import { createdTripToTripData, readCreatedLeaderTrip } from "@/features/leaders/data/mockLeaderTripStore";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
-import { notFound } from "next/navigation";
-import { Metadata } from "next";
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
+export default function TripDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [trip, setTrip] = useState<TripData | null>(null);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const resolvedParams = await params;
-  const trip = mockTripsData.find((t) => t.id === resolvedParams.id);
-  
-  if (!trip) {
-    return {
-      title: "Không tìm thấy chuyến đi",
+  useEffect(() => {
+    const refresh = () => {
+      const created = readCreatedLeaderTrip();
+      const dynamicTrip = created?.id === id ? createdTripToTripData(created) : null;
+      setTrip(dynamicTrip || mockTripsData.find((item) => item.id === id) || null);
     };
-  }
+    refresh();
+    window.addEventListener("trekgo-mock-db-change", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("trekgo-mock-db-change", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [id]);
 
-  return {
-    title: `${trip.title} - Trekking System`,
-    description: trip.description,
-  };
-}
-
-export default async function TripDetailPage({ params }: Props) {
-  const resolvedParams = await params;
-  const trip = mockTripsData.find((t) => t.id === resolvedParams.id);
-
-  if (!trip) {
-    notFound();
-  }
-
-  // If the trip doesn't have detailed data yet (for mock purposes, only trip-1 has full data in our mockTripsData)
-  // we could potentially show a message or just render what we have.
-  // TripDetailClient handles missing optional fields gracefully.
-
+  if (!trip) return <div className="p-10 text-center">Không tìm thấy chuyến đi</div>;
   return <TripDetailClient trip={trip} />;
 }

@@ -104,20 +104,28 @@ const initialCheckpoints: Checkpoint[] = [
 export function LeaderCreateTripStepTwo() {
   const router = useRouter();
 
-  const [selectedRouteId, setSelectedRouteId] =
-    useState("VFRS-TR-BADEN");
+  const [selectedRouteId, setSelectedRouteId] = useState("VFRS-TR-042");
 
   const [checkpoints, setCheckpoints] =
     useState<Checkpoint[]>(initialCheckpoints);
 
   const [saved, setSaved] = useState(false);
-  const [createCustomRoute, setCreateCustomRoute] =
-    useState(false);
+  const [createCustomRoute, setCreateCustomRoute] = useState(false);
 
   const selectedRoute =
-    routeOptions.find(
-      (route) => route.id === selectedRouteId,
-    ) ?? routeOptions[0];
+    routeOptions.find((route) => route.id === selectedRouteId) ??
+    routeOptions[0];
+
+  function selectRoute(routeId: string) {
+    setSelectedRouteId(routeId);
+    const route = routeOptions.find((item) => item.id === routeId);
+    if (route) {
+      window.sessionStorage.setItem(
+        "leader-create-trip-route",
+        JSON.stringify(route),
+      );
+    }
+  }
 
   function toggleCheckpoint(id: number) {
     setCheckpoints((current) =>
@@ -191,17 +199,15 @@ export function LeaderCreateTripStepTwo() {
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              Chọn cung đường đã xác minh và thiết lập các
-              checkpoint an toàn cho đoàn.
+              Chọn cung đường đã xác minh và thiết lập các checkpoint an toàn
+              cho đoàn.
             </p>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <button
               type="button"
-              onClick={() =>
-                router.push("/leader/create-trip")
-              }
+              onClick={() => router.push("/leader/create-trip")}
               className="rounded-xl bg-emerald-50 p-4 text-left text-[#125238]"
             >
               <div className="flex items-center gap-3">
@@ -210,12 +216,8 @@ export function LeaderCreateTripStepTwo() {
                 </span>
 
                 <div>
-                  <p className="text-[10px] font-bold uppercase">
-                    Bước 1
-                  </p>
-                  <strong className="text-sm">
-                    Thông tin cơ bản
-                  </strong>
+                  <p className="text-[10px] font-bold uppercase">Bước 1</p>
+                  <strong className="text-sm">Thông tin cơ bản</strong>
                   <p className="text-xs">Đã hoàn thành</p>
                 </div>
               </div>
@@ -231,9 +233,7 @@ export function LeaderCreateTripStepTwo() {
                   <p className="text-[10px] font-bold uppercase">
                     Bước 2 đang thực hiện
                   </p>
-                  <strong className="text-sm">
-                    Cung đường & Trạm dừng
-                  </strong>
+                  <strong className="text-sm">Cung đường & Trạm dừng</strong>
                 </div>
               </div>
             </div>
@@ -245,12 +245,8 @@ export function LeaderCreateTripStepTwo() {
                 </span>
 
                 <div>
-                  <p className="text-[10px] font-bold uppercase">
-                    Bước 3
-                  </p>
-                  <strong className="text-sm">
-                    Xem lại & Công khai
-                  </strong>
+                  <p className="text-[10px] font-bold uppercase">Bước 3</p>
+                  <strong className="text-sm">Xem lại & Công khai</strong>
                 </div>
               </div>
             </div>
@@ -266,8 +262,8 @@ export function LeaderCreateTripStepTwo() {
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  Sử dụng kho dữ liệu GPS đã xác minh hoặc
-                  tự vẽ cung đường độc lập.
+                  Sử dụng kho dữ liệu GPS đã xác minh hoặc tự vẽ cung đường độc
+                  lập.
                 </p>
               </div>
 
@@ -300,8 +296,8 @@ export function LeaderCreateTripStepTwo() {
                   </div>
 
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    Dữ liệu trắc diện, nguồn nước và tọa độ
-                    cứu hộ đã được chuẩn hóa.
+                    Dữ liệu trắc diện, nguồn nước và tọa độ cứu hộ đã được chuẩn
+                    hóa.
                   </p>
                 </button>
 
@@ -333,8 +329,7 @@ export function LeaderCreateTripStepTwo() {
                   </div>
 
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    Nhập GPX/KML hoặc số hóa thủ công các
-                    điểm mốc và waypoint.
+                    Nhập GPX/KML hoặc số hóa thủ công các điểm mốc và waypoint.
                   </p>
                 </button>
               </div>
@@ -392,16 +387,13 @@ export function LeaderCreateTripStepTwo() {
 
                   <div className="mt-5 space-y-3">
                     {routeOptions.map((route) => {
-                      const selected =
-                        selectedRouteId === route.id;
+                      const selected = selectedRouteId === route.id;
 
                       return (
                         <button
                           key={route.id}
                           type="button"
-                          onClick={() =>
-                            setSelectedRouteId(route.id)
-                          }
+                          onClick={() => selectRoute(route.id)}
                           className={`flex w-full flex-col gap-4 rounded-xl border p-3 text-left transition sm:flex-row ${
                             selected
                               ? "border-[#2f6b4f] bg-emerald-50"
@@ -497,8 +489,7 @@ export function LeaderCreateTripStepTwo() {
                   </div>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Thiết lập các mốc kiểm soát đoàn, ETA và
-                    trạm bắt buộc.
+                    Thiết lập các mốc kiểm soát đoàn, ETA và trạm bắt buộc.
                   </p>
                 </div>
 
@@ -522,9 +513,7 @@ export function LeaderCreateTripStepTwo() {
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <span className="cursor-grab text-slate-400">
-                        ⠿
-                      </span>
+                      <span className="cursor-grab text-slate-400">⠿</span>
 
                       <span
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-white ${
@@ -543,27 +532,21 @@ export function LeaderCreateTripStepTwo() {
 
                         <div className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
                           <div>
-                            <span className="text-slate-400">
-                              Khoảng cách
-                            </span>
+                            <span className="text-slate-400">Khoảng cách</span>
                             <strong className="block text-slate-900">
                               {checkpoint.km}
                             </strong>
                           </div>
 
                           <div>
-                            <span className="text-slate-400">
-                              Cao độ
-                            </span>
+                            <span className="text-slate-400">Cao độ</span>
                             <strong className="block text-slate-900">
                               {checkpoint.elevation}
                             </strong>
                           </div>
 
                           <div>
-                            <span className="text-slate-400">
-                              ETA dự kiến
-                            </span>
+                            <span className="text-slate-400">ETA dự kiến</span>
                             <strong className="block text-slate-900">
                               {checkpoint.eta}
                             </strong>
@@ -577,21 +560,15 @@ export function LeaderCreateTripStepTwo() {
 
                       <button
                         type="button"
-                        onClick={() =>
-                          toggleCheckpoint(checkpoint.id)
-                        }
+                        onClick={() => toggleCheckpoint(checkpoint.id)}
                         className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                          checkpoint.required
-                            ? "bg-[#125238]"
-                            : "bg-slate-300"
+                          checkpoint.required ? "bg-[#125238]" : "bg-slate-300"
                         }`}
                         aria-label="Đổi trạng thái bắt buộc"
                       >
                         <span
                           className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                            checkpoint.required
-                              ? "left-6"
-                              : "left-1"
+                            checkpoint.required ? "left-6" : "left-1"
                           }`}
                         />
                       </button>
@@ -627,9 +604,7 @@ export function LeaderCreateTripStepTwo() {
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 <div className="rounded-lg bg-slate-50 p-2">
-                  <span className="text-[10px] text-slate-400">
-                    Tổng cự ly
-                  </span>
+                  <span className="text-[10px] text-slate-400">Tổng cự ly</span>
                   <strong className="block text-sm">
                     {selectedRoute.distance}
                   </strong>
@@ -639,9 +614,7 @@ export function LeaderCreateTripStepTwo() {
                   <span className="text-[10px] text-slate-400">
                     Độ cao đỉnh
                   </span>
-                  <strong className="block text-sm text-red-600">
-                    986m
-                  </strong>
+                  <strong className="block text-sm text-red-600">986m</strong>
                 </div>
 
                 <div className="rounded-lg bg-slate-50 p-2">
@@ -650,22 +623,16 @@ export function LeaderCreateTripStepTwo() {
                   </span>
                   <strong className="block text-sm">
                     {
-                      checkpoints.filter(
-                        (checkpoint) =>
-                          checkpoint.required,
-                      ).length
+                      checkpoints.filter((checkpoint) => checkpoint.required)
+                        .length
                     }
                     /{checkpoints.length}
                   </strong>
                 </div>
 
                 <div className="rounded-lg bg-slate-50 p-2">
-                  <span className="text-[10px] text-slate-400">
-                    Thời gian
-                  </span>
-                  <strong className="block text-sm">
-                    ~5 giờ
-                  </strong>
+                  <span className="text-[10px] text-slate-400">Thời gian</span>
+                  <strong className="block text-sm">~5 giờ</strong>
                 </div>
               </div>
             </section>
@@ -677,19 +644,19 @@ export function LeaderCreateTripStepTwo() {
 
               <div className="mt-4 space-y-4 text-xs leading-5 text-slate-600">
                 <p>
-                  ⚠ <strong>Check-in bắt buộc CP3 (Cột 100):</strong>{" "}
-                  Toàn đoàn phải hoàn thành trước 11:30 ngày đầu tiên.
+                  ⚠ <strong>Check-in bắt buộc CP3 (Cột 100):</strong> Toàn đoàn
+                  phải hoàn thành trước 11:30 ngày đầu tiên.
                 </p>
 
                 <p>
-                  ◉ <strong>Đoạn Vách đá Cột 100 - Đỉnh núi:</strong> chú ý bám đá tảng vững vàng, kiểm tra giày và gậy leo núi khi thời tiết mưa ẩm.
+                  ◉ <strong>Đoạn Vách đá Cột 100 - Đỉnh núi:</strong> chú ý bám
+                  đá tảng vững vàng, kiểm tra giày và gậy leo núi khi thời tiết
+                  mưa ẩm.
                 </p>
 
                 <p>
                   ☎ Cứu hộ phản ứng nhanh Núi Bà Đen:{" "}
-                  <strong className="text-red-600">
-                    1800-9988
-                  </strong>
+                  <strong className="text-red-600">1800-9988</strong>
                 </p>
               </div>
             </section>
@@ -699,9 +666,7 @@ export function LeaderCreateTripStepTwo() {
         <footer className="sticky bottom-0 z-30 mt-6 flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center">
           <button
             type="button"
-            onClick={() =>
-              router.push("/leader/create-trip")
-            }
+            onClick={() => router.push("/leader/create-trip")}
             className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700"
           >
             ← Quay lại Bước 1
@@ -722,11 +687,7 @@ export function LeaderCreateTripStepTwo() {
 
             <button
               type="button"
-              onClick={() =>
-                router.push(
-                  "/leader/create-trip/review",
-                )
-              }
+              onClick={() => router.push("/leader/create-trip/review")}
               className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
             >
               Tiếp tục: Xem lại & Công khai →

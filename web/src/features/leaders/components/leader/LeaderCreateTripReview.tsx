@@ -1,8 +1,32 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { saveCreatedLeaderTrip } from "../../data/mockLeaderTripStore";
 import { TripRouteReviewMap } from "./TripRouteReviewMap";
+
+type SelectedRoute = {
+  id: string;
+  name: string;
+  location: string;
+  distance: string;
+  completionRate: string;
+  duration: string;
+  difficulty: string;
+  imageUrl: string;
+};
+
+const defaultRoute: SelectedRoute = {
+  id: "VFRS-TR-042",
+  name: "Sống Lưng Khủng Long Tà Xùa",
+  location: "Huyện Bắc Yên, Tỉnh Sơn La",
+  distance: "14.5 km",
+  completionRate: "16.8%",
+  duration: "2N1Đ",
+  difficulty: "Cấp 3 – Vừa phải",
+  imageUrl:
+    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=700&q=80",
+};
 
 const checkpoints = [
   {
@@ -51,6 +75,21 @@ export function LeaderCreateTripReview() {
 
   const [published, setPublished] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [selectedRoute, setSelectedRoute] =
+    useState<SelectedRoute>(defaultRoute);
+
+  useEffect(() => {
+    const storedRoute = window.sessionStorage.getItem(
+      "leader-create-trip-route",
+    );
+    if (!storedRoute) return;
+    try {
+      const route = JSON.parse(storedRoute) as SelectedRoute;
+      if (route.id && route.name) setSelectedRoute(route);
+    } catch {
+      window.sessionStorage.removeItem("leader-create-trip-route");
+    }
+  }, []);
 
   function saveDraft() {
     setSaved(true);
@@ -63,6 +102,34 @@ export function LeaderCreateTripReview() {
   function publishTrip() {
     setShowPublishModal(false);
     setPublished(true);
+    const draft = window.sessionStorage.getItem(
+      "leader-create-trip-draft",
+    );
+    const draftData = draft
+      ? (JSON.parse(draft) as {
+          name?: string;
+          startDate?: string;
+          place?: string;
+          price?: string;
+          capacity?: number;
+        })
+      : {};
+    saveCreatedLeaderTrip({
+      id: `TRK-MOCK-${Date.now().toString().slice(-6)}`,
+      name: draftData.name || selectedRoute.name,
+      place: draftData.place || selectedRoute.location,
+      date: draftData.startDate
+        ? new Date(`${draftData.startDate}T00:00:00`).toLocaleDateString(
+            "vi-VN",
+          )
+        : "Chưa xác định",
+      fill: `0/${draftData.capacity || 15}`,
+      progress: 0,
+      status: "Đang mở đăng ký",
+      image: selectedRoute.imageUrl,
+      price: Number(draftData.price?.replace(/\D/g, "")) || 2850000,
+      capacity: draftData.capacity || 15,
+    });
   }
 
   return (
@@ -231,6 +298,8 @@ export function LeaderCreateTripReview() {
                 <div>
                   <h3 className="text-xl font-bold text-slate-950">
                     Chinh phục Đỉnh Núi Bà Đen 986m – Cung Đường Cột Điện (1N)
+                    {selectedRoute.name} – Săn Biển Mây Đại Ngàn (
+                    {selectedRoute.duration})
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -319,12 +388,13 @@ export function LeaderCreateTripReview() {
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 p-4">
                 <div>
                   <strong className="text-sm text-slate-950">
-                    ⌁ Cung đường: Núi Bà Đen - Cung Đường Cột Điện
+                    ⌁ Cung đường: {selectedRoute.name}
                   </strong>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Mã quản lý: #VFRS-TR-BADEN • TP. Tây
-                    Ninh, Tây Ninh
+                    Mã quản lý: #{selectedRoute.id} •{" "}
+                    {selectedRoute.location} • {selectedRoute.distance} •{" "}
+                    {selectedRoute.duration}
                   </p>
                 </div>
 
@@ -463,34 +533,6 @@ export function LeaderCreateTripReview() {
                 ))}
               </div>
 
-              <div className="mt-4 grid gap-3 rounded-xl bg-[#eef3fb] p-4 text-xs sm:grid-cols-3">
-                <div>
-                  <span className="text-slate-500">
-                    Quy chuẩn liên lạc
-                  </span>
-                  <strong className="block">
-                    VFRS Mountain
-                  </strong>
-                </div>
-
-                <div>
-                  <span className="text-slate-500">
-                    Tần số VHF
-                  </span>
-                  <strong className="block text-[#125238]">
-                    144.500 MHz
-                  </strong>
-                </div>
-
-                <div>
-                  <span className="text-slate-500">
-                    Thiết bị dự phòng
-                  </span>
-                  <strong className="block">
-                    2 máy bộ đàm UHF
-                  </strong>
-                </div>
-              </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
@@ -634,7 +676,7 @@ export function LeaderCreateTripReview() {
               >
                 {published
                   ? "✓ Chuyến đi đã công khai"
-                  : "🚀 Công khai chuyến đi ngay"}
+                  : "Công khai chuyến đi ngay"}
               </button>
 
               <button
@@ -700,10 +742,6 @@ export function LeaderCreateTripReview() {
       {showPublishModal && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-5 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-[#125238]">
-              🚀
-            </div>
-
             <h2 className="mt-4 text-xl font-bold text-slate-950">
               Công khai chuyến đi ngay?
             </h2>
