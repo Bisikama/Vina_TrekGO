@@ -1,11 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TripCard } from "./TripCard";
 import { mockTripsData } from "../data/mockTripsData";
+import { createdTripToTripData, readCreatedLeaderTrip } from "@/features/leaders/data/mockLeaderTripStore";
 
 export const TripListPage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [trips, setTrips] = useState(mockTripsData);
+
+  useEffect(() => {
+    const refresh = () => {
+      const created = readCreatedLeaderTrip();
+      setTrips(created?.id ? [createdTripToTripData(created), ...mockTripsData] : mockTripsData);
+    };
+    refresh();
+    window.addEventListener("trekgo-mock-db-change", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("trekgo-mock-db-change", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   return (
     <div className="bg-[#F7F7F4] min-h-screen">
@@ -189,7 +205,7 @@ export const TripListPage = () => {
 
         {/* Grid of Trips */}
         <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-          {mockTripsData.map(trip => (
+          {trips.map(trip => (
             <TripCard key={trip.id} trip={trip} />
           ))}
         </div>

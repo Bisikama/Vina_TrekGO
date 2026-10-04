@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useAuthStore } from "@/features/auth";
 
 type NavItem = {
   label: string;
@@ -23,11 +24,6 @@ const leaderItems: NavItem[] = [
     label: "Tạo chuyến đi mới",
     href: "/leader/create-trip",
     icon: "⊕",
-  },
-  {
-    label: "Cung đường của tôi",
-    href: "/my-routes",
-    icon: "⌁",
   },
 ];
 
@@ -116,6 +112,13 @@ export function LeaderShell({
 }: {
   children: ReactNode;
 }) {
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/public/login";
+  };
+
   return (
     <div className="min-h-screen bg-[#f3f6fc] text-slate-950">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-[#f5f7fd] lg:flex lg:flex-col">
@@ -178,7 +181,13 @@ export function LeaderShell({
               </p>
             </div>
 
-            <span className="text-slate-500">⇥</span>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-100 hover:text-red-700"
+            >
+              Đăng xuất
+            </button>
           </div>
         </div>
       </aside>
@@ -227,6 +236,14 @@ export function LeaderShell({
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-white">
               ♙
             </span>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100 hover:text-red-700"
+            >
+              Đăng xuất
+            </button>
           </div>
         </header>
 

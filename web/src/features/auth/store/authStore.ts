@@ -16,14 +16,21 @@ interface AuthState {
 }
 
 const AUTH_COOKIE = "vina_trekgo_access_token";
+const ROLE_COOKIE = "vina_trekgo_role";
 
-const setAuthCookie = (accessToken: string | null) => {
+const setAuthCookies = (accessToken: string | null, role: string | null) => {
   if (typeof document === "undefined") return;
 
   if (accessToken) {
     document.cookie = `${AUTH_COOKIE}=${encodeURIComponent(accessToken)}; path=/; max-age=3600; samesite=lax`;
   } else {
     document.cookie = `${AUTH_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
+  }
+
+  if (role) {
+    document.cookie = `${ROLE_COOKIE}=${encodeURIComponent(role)}; path=/; max-age=3600; samesite=lax`;
+  } else {
+    document.cookie = `${ROLE_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
   }
 };
 
@@ -36,7 +43,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
-        setAuthCookie(accessToken);
+        setAuthCookies(accessToken, user.role ?? null);
         set({
           user,
           accessToken,
@@ -46,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setTokens: (accessToken, refreshToken) => {
-        setAuthCookie(accessToken);
+        setAuthCookies(accessToken, useAuthStore.getState().user?.role ?? null);
         set({
           accessToken,
           refreshToken,
@@ -57,7 +64,7 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
 
       logout: () => {
-        setAuthCookie(null);
+        setAuthCookies(null, null);
         set({
           user: null,
           accessToken: null,
@@ -77,7 +84,7 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.accessToken) {
-          setAuthCookie(state.accessToken);
+          setAuthCookies(state.accessToken, state.user?.role ?? null);
         }
       },
     }

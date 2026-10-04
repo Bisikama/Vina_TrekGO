@@ -3,8 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { useEffect } from "react";
+import {
+  readCreatedLeaderTrip,
+  type CreatedLeaderTrip,
+} from "../../data/mockLeaderTripStore";
 
-const trips = [
+const trips: CreatedLeaderTrip[] = [
   {
     name: "Chinh phục Sống Lưng Khủng Long",
     place: "Tà Xùa",
@@ -114,6 +119,20 @@ function Metric({
 export function LeaderDashboard() {
   const [candidates, setCandidates] =
     useState(initialCandidates);
+  const [createdTrip, setCreatedTrip] =
+    useState<CreatedLeaderTrip | null>(null);
+
+  useEffect(() => {
+    const refresh = () => setCreatedTrip(readCreatedLeaderTrip());
+    refresh();
+    window.addEventListener("trekgo-mock-db-change", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("trekgo-mock-db-change", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  const visibleTrips = createdTrip ? [createdTrip, ...trips] : trips;
 
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
@@ -175,7 +194,7 @@ export function LeaderDashboard() {
           </button>
 
           <Link
-            href="/leader/public-trips"
+            href="/leader/create-trip"
             className="rounded-lg bg-[#125238] px-5 py-2 text-sm font-bold text-white"
           >
             ⊕ Tạo chuyến đi mới
@@ -233,7 +252,7 @@ export function LeaderDashboard() {
             </div>
 
             <div className="space-y-3">
-              {trips.map((trip) => (
+              {visibleTrips.map((trip) => (
                 <article
                   key={trip.name}
                   className="grid gap-3 rounded-xl bg-[#edf2fc] p-3 md:grid-cols-[120px_1fr_auto] md:items-center"
@@ -281,9 +300,12 @@ export function LeaderDashboard() {
                   </div>
 
                   <div className="flex gap-2 md:flex-col">
-                    <button className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white">
+                    <Link
+                      href={`/leader/trips/${trip.id ?? "legacy-trip"}`}
+                      className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white"
+                    >
                       Quản lý đoàn
-                    </button>
+                    </Link>
 
                     <button className="rounded-lg bg-[#dce7f7] px-4 py-2 text-xs">
                       Lịch trình

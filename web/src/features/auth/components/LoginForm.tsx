@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useLogin } from "../hooks/useLogin";
+import { getDashboardForRole } from "../utils/role-routing";
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -31,7 +32,7 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
       if (onSuccess) {
         onSuccess();
       } else {
-        window.location.href = "/";
+        window.location.href = getDashboardForRole(result.user.role);
       }
     }
   };

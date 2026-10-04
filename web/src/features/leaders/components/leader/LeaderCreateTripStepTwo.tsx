@@ -113,8 +113,9 @@ const initialCheckpoints: Checkpoint[] = [
 export function LeaderCreateTripStepTwo() {
   const router = useRouter();
 
-  const [selectedRouteId, setSelectedRouteId] =
-    useState("VFRS-TR-042");
+  const [selectedRouteId, setSelectedRouteId] = useState(
+    "VFRS-TR-042",
+  );
 
   const [checkpoints, setCheckpoints] =
     useState<Checkpoint[]>(initialCheckpoints);
@@ -127,6 +128,17 @@ export function LeaderCreateTripStepTwo() {
     routeOptions.find(
       (route) => route.id === selectedRouteId,
     ) ?? routeOptions[0];
+
+  function selectRoute(routeId: string) {
+    setSelectedRouteId(routeId);
+    const route = routeOptions.find((item) => item.id === routeId);
+    if (route) {
+      window.sessionStorage.setItem(
+        "leader-create-trip-route",
+        JSON.stringify(route),
+      );
+    }
+  }
 
   function toggleCheckpoint(id: number) {
     setCheckpoints((current) =>
@@ -408,9 +420,7 @@ export function LeaderCreateTripStepTwo() {
                         <button
                           key={route.id}
                           type="button"
-                          onClick={() =>
-                            setSelectedRouteId(route.id)
-                          }
+                          onClick={() => selectRoute(route.id)}
                           className={`flex w-full flex-col gap-4 rounded-xl border p-3 text-left transition sm:flex-row ${
                             selected
                               ? "border-[#2f6b4f] bg-emerald-50"
@@ -737,37 +747,6 @@ export function LeaderCreateTripStepTwo() {
                 <span className="absolute bottom-3 left-3 rounded-md bg-[#125238] px-2 py-1 text-[10px] font-bold text-white">
                   ● GPS Tracking VFRS sẵn sàng
                 </span>
-              </div>
-
-              <div className="mt-4 h-32 rounded-xl bg-slate-50 p-3">
-                <svg
-                  viewBox="0 0 360 100"
-                  className="h-full w-full"
-                  aria-label="Biểu đồ cao độ mô phỏng"
-                >
-                  <polyline
-                    points="0,90 75,72 150,45 230,10 285,35 360,88"
-                    fill="none"
-                    stroke="#125238"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  />
-
-                  <line
-                    x1="0"
-                    y1="92"
-                    x2="360"
-                    y2="92"
-                    stroke="#cbd5e1"
-                  />
-
-                  <circle
-                    cx="230"
-                    cy="10"
-                    r="6"
-                    fill="#dc2626"
-                  />
-                </svg>
               </div>
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">

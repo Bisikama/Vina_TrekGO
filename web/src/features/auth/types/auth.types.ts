@@ -2,6 +2,9 @@ export enum UserRole {
   USER = 'USER',
   LEADER = 'LEADER',
   ADMIN = 'ADMIN',
+  STAFF_INVENTORY = 'STAFF_INVENTORY',
+  STAFF_DELIVERY = 'STAFF_DELIVERY',
+  /** @deprecated Use the API role matching the staff team instead. */
   STAFF = 'STAFF',
 }
 
