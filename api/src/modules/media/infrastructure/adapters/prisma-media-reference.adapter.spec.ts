@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import { PrismaMediaReferenceAdapter } from './prisma-media-reference.adapter';
 import { PrismaService } from '../../../../shared/services/prisma.service';
 

@@ -3,6 +3,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
 import envConfig from '../../../../shared/config';
+import * as crypto from 'crypto';
+import * as https from 'https';
 
 jest.mock('cloudinary', () => ({
   v2: {
@@ -90,7 +92,6 @@ describe('CloudinaryStorageAdapter', () => {
 
   describe('verifyUploadResponse', () => {
     it('returns true if signature matches', async () => {
-      const crypto = require('crypto');
       const expectedSignature = crypto.createHash('sha1').update('public_id=test&version=1secret').digest('hex');
       const result = await adapter.verifyUploadResponse({
         publicId: 'test',
@@ -196,7 +197,6 @@ describe('CloudinaryStorageAdapter', () => {
   describe('openOriginalStream', () => {
     it('creates stream url with sign_url depending on delivery type', async () => {
       cloudinary.url = jest.fn().mockReturnValue('https://example.com/test');
-      const https = require('https');
       jest.spyOn(https, 'get').mockImplementation((url, cb: any) => {
         cb({ statusCode: 200, on: jest.fn() });
         return { on: jest.fn() };
