@@ -2,6 +2,7 @@ import axios from "axios";
 
 import { apiClient } from "@/lib/axios";
 import type {
+  CreateRentalQuoteInput,
   RentalAvailability,
   RentalCatalogData,
   RentalCategory,
@@ -10,8 +11,8 @@ import type {
   RentalPagination,
   RentalProduct,
   RentalProductDetailData,
-  RentalRecommendation,
-  RentalTripSummary,
+  RentalQuote,
+  RentalRecommendationsData,
 } from "@/features/rentals/types/rental";
 
 type ApiEnvelope<T> = {
@@ -64,15 +65,6 @@ type ApiRentalProduct = {
 
 const PRODUCT_FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=85";
-
-const MOCK_TRIP_SUMMARY: RentalTripSummary = {
-  tripId: "trip_001",
-  name: "Tà Năng – Phan Dũng",
-  durationDays: 3,
-  difficulty: "Trung bình – Khó",
-  weatherSummary:
-    "Ban ngày 22–26°C, ban đêm 14–17°C, có khả năng mưa nhẹ.",
-};
 
 function isRecord(
   value: unknown,
@@ -139,15 +131,9 @@ function getProductImages(product: ApiRentalProduct) {
       value.startsWith("https://"),
   );
 
-  if (directUrls.length > 0) {
-    return directUrls;
-  }
-
-  /*
-   * BE hiện trả imageMediaIds thay vì URL ảnh hoàn chỉnh.
-   * Tạm dùng ảnh dự phòng cho tới khi nối Media Delivery API.
-   */
-  return [PRODUCT_FALLBACK_IMAGE];
+  return directUrls.length > 0
+    ? directUrls
+    : [PRODUCT_FALLBACK_IMAGE];
 }
 
 function mapProduct(
@@ -179,7 +165,7 @@ function mapProduct(
   };
 }
 
-function getApiErrorMessage(
+export function getRentalApiErrorMessage(
   error: unknown,
   fallback: string,
 ) {
@@ -205,89 +191,24 @@ function getApiErrorMessage(
       return "Yêu cầu đã được hủy.";
     }
 
+    if (error.response?.status === 401) {
+      return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    }
+
+    if (error.response?.status === 403) {
+      return "Bạn không có quyền thao tác với booking này.";
+    }
+
     if (error.message) {
       return error.message;
     }
   }
 
-  if (
-    error instanceof Error &&
-    error.message
-  ) {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
   return fallback;
-}
-
-/*
- * Các hàm mock bên dưới chỉ phục vụ những endpoint được mô tả
- * trong tài liệu nhưng chưa tồn tại trong source API/OpenAPI.
- */
-
-function createMockEligibility(
-  bookingId: string,
-): RentalEligibility {
-  return {
-    bookingId,
-    eligible: true,
-    reason: null,
-    trip: {
-      id: "trip_001",
-      name: "Tà Năng – Phan Dũng",
-      startAt: "2026-10-10T01:00:00Z",
-      endAt: "2026-10-12T10:00:00Z",
-      timezone: "Asia/Ho_Chi_Minh",
-    },
-    rentalCutoffAt: "2026-10-09T00:00:00Z",
-  };
-}
-
-function createStableMockCount(productId: string) {
-  const hash = [...productId].reduce(
-    (total, character) =>
-      total + character.charCodeAt(0),
-    0,
-  );
-
-  return 4 + (hash % 17);
-}
-
-function createMockAvailability(
-  productId: string,
-  bookingId: string,
-): RentalAvailability {
-  return {
-    bookingId,
-    productId,
-    availableCount:
-      createStableMockCount(productId),
-    rentalWindow: {
-      occupiedFrom: "2026-10-09T12:00:00Z",
-      occupiedUntil: "2026-10-12T12:00:00Z",
-    },
-    checkedAt: new Date().toISOString(),
-  };
-}
-
-function createMockRecommendation(
-  product: RentalProduct,
-): RentalRecommendation | null {
-  const tags = product.recommendationTags ?? [];
-
-  if (tags.length === 0) {
-    return null;
-  }
-
-  return {
-    productId: product.id,
-    reasons: [
-      `Phù hợp với chuyến đi dựa trên: ${tags.join(
-        ", ",
-      )}.`,
-    ],
-    source: "RULE",
-  };
 }
 
 export async function getRentalCategories(
@@ -300,10 +221,7 @@ export async function getRentalCategories(
     const response = await apiClient.get<unknown>(
       "/api/v1/rental-categories",
       {
-        params: {
-          page: 1,
-          pageSize: 100,
-        },
+        params: { page: 1, pageSize: 100 },
         signal,
       },
     );
@@ -318,7 +236,7 @@ export async function getRentalCategories(
     };
   } catch (error) {
     throw new Error(
-      getApiErrorMessage(
+      getRentalApiErrorMessage(
         error,
         "Không thể tải danh mục thiết bị thuê.",
       ),
@@ -344,11 +262,9 @@ export async function getRentalProducts(
       {
         params: {
           page: options?.page ?? 1,
-          pageSize: options?.pageSize ?? 100,
-          search:
-            options?.search?.trim() || undefined,
-          categoryId:
-            options?.categoryId || undefined,
+          pageSize: options?.pageSize ?? 24,
+          search: options?.search?.trim() || undefined,
+          categoryId: options?.categoryId || undefined,
         },
         signal: options?.signal,
       },
@@ -364,9 +280,141 @@ export async function getRentalProducts(
     };
   } catch (error) {
     throw new Error(
-      getApiErrorMessage(
+      getRentalApiErrorMessage(
         error,
         "Không thể tải danh sách thiết bị thuê.",
+      ),
+    );
+  }
+}
+
+export async function getRentalProduct(
+  productId: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.get<unknown>(
+      `/api/v1/rental-products/${encodeURIComponent(
+        productId,
+      )}`,
+      { signal },
+    );
+
+    return mapProduct(
+      unwrapApiData<ApiRentalProduct>(response.data),
+    );
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể tải thông tin sản phẩm thuê.",
+      ),
+    );
+  }
+}
+
+export async function getRentalEligibility(
+  bookingId: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.get<unknown>(
+      `/api/v1/bookings/${encodeURIComponent(
+        bookingId,
+      )}/rental-eligibility`,
+      { signal },
+    );
+
+    return unwrapApiData<RentalEligibility>(response.data);
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể kiểm tra điều kiện thuê thiết bị.",
+      ),
+    );
+  }
+}
+
+export async function getRentalAvailability(
+  bookingId: string,
+  productId: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.get<unknown>(
+      "/api/v1/rentals/availability",
+      {
+        params: { bookingId, productId },
+        signal,
+      },
+    );
+
+    return unwrapApiData<RentalAvailability>(
+      response.data,
+    );
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể kiểm tra số lượng thiết bị khả dụng.",
+      ),
+    );
+  }
+}
+
+export async function getRentalRecommendations(
+  bookingId: string,
+  options?: {
+    categoryId?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  },
+) {
+  try {
+    const response = await apiClient.get<unknown>(
+      `/api/v1/bookings/${encodeURIComponent(
+        bookingId,
+      )}/rental-recommendations`,
+      {
+        params: {
+          categoryId: options?.categoryId || undefined,
+          limit: options?.limit ?? 24,
+        },
+        signal: options?.signal,
+      },
+    );
+
+    return unwrapApiData<RentalRecommendationsData>(
+      response.data,
+    );
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể tải gợi ý thiết bị cho chuyến đi.",
+      ),
+    );
+  }
+}
+
+export async function createRentalQuote(
+  input: CreateRentalQuoteInput,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.post<unknown>(
+      "/api/v1/rentals/quote",
+      input,
+      { signal },
+    );
+
+    return unwrapApiData<RentalQuote>(response.data);
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể tạo báo giá thuê thiết bị.",
       ),
     );
   }
@@ -376,37 +424,67 @@ export async function getRentalCatalog(
   bookingId: string,
   signal?: AbortSignal,
 ): Promise<RentalCatalogData> {
-  const [categoryResult, productResult] =
+  const [eligibility, categoryResult, productResult] =
     await Promise.all([
+      getRentalEligibility(bookingId, signal),
       getRentalCategories(signal),
       getRentalProducts({
         page: 1,
-        pageSize: 100,
+        pageSize: 24,
         signal,
       }),
     ]);
 
-  const eligibility =
-    createMockEligibility(bookingId);
+  if (!eligibility.eligible) {
+    return {
+      eligibility,
+      categories: categoryResult.items,
+      items: productResult.items.map((product) => ({
+        ...product,
+        availableCount: 0,
+        recommendation: null,
+      })),
+      pagination: productResult.pagination,
+    };
+  }
+
+  const recommendationResult =
+    await getRentalRecommendations(bookingId, {
+      limit: Math.min(productResult.items.length || 1, 50),
+      signal,
+    });
+
+  const recommendationMap = new Map(
+    recommendationResult.recommendations.map((item) => [
+      item.productId,
+      item,
+    ]),
+  );
+
+  const availabilityItems = await Promise.all(
+    productResult.items.map((product) =>
+      getRentalAvailability(
+        bookingId,
+        product.id,
+        signal,
+      ),
+    ),
+  );
+
+  const availabilityMap = new Map(
+    availabilityItems.map((item) => [item.productId, item]),
+  );
 
   return {
     eligibility,
     categories: categoryResult.items,
-    items: productResult.items.map((product) => {
-      const availability =
-        createMockAvailability(
-          product.id,
-          bookingId,
-        );
-
-      return {
-        ...product,
-        availableCount:
-          availability.availableCount,
-        recommendation:
-          createMockRecommendation(product),
-      };
-    }),
+    items: productResult.items.map((product) => ({
+      ...product,
+      availableCount:
+        availabilityMap.get(product.id)?.availableCount ?? 0,
+      recommendation:
+        recommendationMap.get(product.id) ?? null,
+    })),
     pagination: productResult.pagination,
   };
 }
@@ -416,41 +494,39 @@ export async function getRentalProductDetail(
   bookingId: string,
   signal?: AbortSignal,
 ): Promise<RentalProductDetailData> {
-  try {
-    const response = await apiClient.get<unknown>(
-      `/api/v1/rental-products/${encodeURIComponent(
-        productId,
-      )}`,
-      {
-        signal,
-      },
-    );
+  const [product, eligibility] = await Promise.all([
+    getRentalProduct(productId, signal),
+    getRentalEligibility(bookingId, signal),
+  ]);
 
-    const apiProduct =
-      unwrapApiData<ApiRentalProduct>(
-        response.data,
-      );
-
-    const product = mapProduct(apiProduct);
-
-    return {
-      product,
-      availability: createMockAvailability(
-        product.id,
-        bookingId,
-      ),
-      recommendation:
-        createMockRecommendation(product),
-      tripSummary: {
-        ...MOCK_TRIP_SUMMARY,
-      },
-    };
-  } catch (error) {
+  if (!eligibility.eligible) {
     throw new Error(
-      getApiErrorMessage(
-        error,
-        "Không thể tải thông tin sản phẩm thuê.",
-      ),
+      eligibility.reason ??
+        "Booking hiện tại chưa đủ điều kiện thuê thiết bị.",
     );
   }
+
+  const [availability, recommendationResult] =
+    await Promise.all([
+      getRentalAvailability(
+        bookingId,
+        productId,
+        signal,
+      ),
+      getRentalRecommendations(bookingId, {
+        limit: 50,
+        signal,
+      }),
+    ]);
+
+  return {
+    product,
+    eligibility,
+    availability,
+    recommendation:
+      recommendationResult.recommendations.find(
+        (item) => item.productId === productId,
+      ) ?? null,
+    tripSummary: recommendationResult.tripSummary,
+  };
 }

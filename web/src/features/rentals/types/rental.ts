@@ -1,17 +1,38 @@
 export type RentalTrip = {
   id: string;
   name: string;
+  status?: string;
   startAt: string;
   endAt: string;
   timezone: string;
+};
+
+export type RentalRecipientOption = {
+  id: string;
+  displayName: string;
+  userId: string | null;
+  status: string;
+};
+
+export type RentalLogisticsPoint = {
+  id: string;
+  name: string;
+  address: string;
+  scheduledAt: string;
 };
 
 export type RentalEligibility = {
   bookingId: string;
   eligible: boolean;
   reason: string | null;
+  recipientOptions: RentalRecipientOption[];
   trip: RentalTrip;
+  pickup: RentalLogisticsPoint | null;
+  dropoff: RentalLogisticsPoint | null;
   rentalCutoffAt: string;
+  contextVersion: number;
+  existingOpenOrderId: string | null;
+  allowedActions: string[];
 };
 
 export type RentalPagination = {
@@ -38,6 +59,7 @@ export type RentalDepositPolicy = {
 
 export type RentalRecommendation = {
   productId: string;
+  score: number;
   reasons: string[];
   source: "RULE" | "AI";
 };
@@ -79,6 +101,12 @@ export type RentalTripSummary = {
   weatherSummary: string | null;
 };
 
+export type RentalRecommendationsData = {
+  tripSummary: RentalTripSummary;
+  recommendations: RentalRecommendation[];
+  generatedAt: string;
+};
+
 export type RentalCatalogItem = RentalProduct & {
   availableCount: number;
   recommendation: RentalRecommendation | null;
@@ -93,9 +121,58 @@ export type RentalCatalogData = {
 
 export type RentalProductDetailData = {
   product: RentalProduct;
+  eligibility: RentalEligibility;
   availability: RentalAvailability;
   recommendation: RentalRecommendation | null;
   tripSummary: RentalTripSummary;
+};
+
+export type CreateRentalQuoteInput = {
+  bookingId: string;
+  recipientParticipantId?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+};
+
+export type RentalQuote = {
+  id: string;
+  bookingId: string;
+  recipient: {
+    participantId: string;
+    displayName: string;
+  };
+  chargedDays: number;
+  items: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+    availableCount: number;
+    dailyPrice: number;
+    feeAmount: number;
+    depositPerUnit: number;
+    depositAmount: number;
+  }>;
+  amounts: {
+    feeAmount: number;
+    depositAmount: number;
+    totalAmount: number;
+    currency: string;
+  };
+  pickup: {
+    id: string;
+    name: string;
+    scheduledAt: string;
+  };
+  dropoff: {
+    id: string;
+    name: string;
+    scheduledAt: string;
+  };
+  expiresAt: string;
+  contextVersion: number;
+  policyVersion: string;
 };
 
 export type StaffRentalProductStatus =
