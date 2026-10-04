@@ -1,5 +1,5 @@
-import { DeliveryList } from "@/features/delivery/components/DeliveryList";
+import { redirect } from "next/navigation";
 
 export default function DeliveryPage() {
-  return <DeliveryList />;
+  redirect("/delivery/tasks");
 }
