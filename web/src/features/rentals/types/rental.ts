@@ -14,9 +14,19 @@ export type RentalEligibility = {
   rentalCutoffAt: string;
 };
 
+export type RentalPagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
 export type RentalCategory = {
   id: string;
   name: string;
+  slug?: string;
+  description?: string | null;
+  status?: string;
 };
 
 export type RentalDepositPolicy = {
@@ -41,7 +51,10 @@ export type RentalProduct = {
   dailyPrice: number;
   depositPolicy: RentalDepositPolicy;
   currency: string;
+  replacementValue?: number;
   status?: string;
+  version?: number;
+  imageMediaIds?: string[];
   imageUrls: string[];
   spec: Record<string, unknown>;
   recommendationTags?: string[];
@@ -75,6 +88,7 @@ export type RentalCatalogData = {
   eligibility: RentalEligibility;
   categories: RentalCategory[];
   items: RentalCatalogItem[];
+  pagination: RentalPagination;
 };
 
 export type RentalProductDetailData = {

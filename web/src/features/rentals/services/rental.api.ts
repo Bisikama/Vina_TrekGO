@@ -1,268 +1,71 @@
+import axios from "axios";
+
+import { apiClient } from "@/lib/axios";
 import type {
   RentalAvailability,
   RentalCatalogData,
   RentalCategory,
+  RentalDepositPolicy,
   RentalEligibility,
+  RentalPagination,
   RentalProduct,
   RentalProductDetailData,
   RentalRecommendation,
   RentalTripSummary,
 } from "@/features/rentals/types/rental";
 
-const categories: RentalCategory[] = [
-  {
-    id: "tent",
-    name: "Lều cắm trại",
-  },
-  {
-    id: "sleep",
-    name: "Túi ngủ & Nệm",
-  },
-  {
-    id: "trekking",
-    name: "Gậy trekking",
-  },
-  {
-    id: "backpack",
-    name: "Balo dã ngoại",
-  },
-  {
-    id: "electronic",
-    name: "Thiết bị điện tử",
-  },
-  {
-    id: "clothing",
-    name: "Trang phục",
-  },
-];
-
-const products: RentalProduct[] = [
-  {
-    id: "prod_tent_4",
-    sku: "NH-CU2P-GRN",
-    name: "Lều siêu nhẹ Cloud Up 2 Pro",
-    category: categories[0],
-    description:
-      "Lều hai người siêu nhẹ, khung nhôm chắc chắn và lớp phủ chống mưa. Phù hợp cho các chuyến trekking từ 2 đến 4 ngày.",
-    dailyPrice: 120000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 1000000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=1200&q=85",
-      "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?auto=format&fit=crop&w=1200&q=85",
-    ],
-    spec: {
-      sức_chứa: "2 người",
-      trọng_lượng: "1.7 kg",
-      chống_nước: "PU 4000 mm",
-      khung: "Nhôm 7001",
-    },
-    recommendationTags: [
-      "mưa nhẹ",
-      "trekking dài ngày",
-    ],
-  },
-  {
-    id: "prod_sleeping_bag_1",
-    sku: "NH-SB-CWB2",
-    name: "Túi ngủ lông vũ CWB200",
-    category: categories[1],
-    description:
-      "Túi ngủ lông vũ gọn nhẹ, giữ ấm tốt trong điều kiện núi cao và dễ dàng nén gọn trong balo.",
-    dailyPrice: 75000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 600000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?auto=format&fit=crop&w=1200&q=85",
-    ],
-    spec: {
-      nhiệt_độ_thoải_mái: "5°C",
-      nhiệt_độ_giới_hạn: "0°C",
-      trọng_lượng: "910 g",
-      chất_liệu: "Lông vũ 90/10",
-    },
-    recommendationTags: [
-      "núi cao",
-      "thời tiết lạnh",
-    ],
-  },
-  {
-    id: "prod_poles_1",
-    sku: "BD-POLE-CRB",
-    name: "Gậy leo núi Trail Pro Shock",
-    category: categories[2],
-    description:
-      "Gậy trekking có hệ thống giảm chấn, khóa chắc chắn và điều chỉnh chiều dài nhanh khi thay đổi địa hình.",
-    dailyPrice: 50000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 450000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=85",
-    ],
-    spec: {
-      số_lượng: "1 cặp",
-      chiều_dài: "65–140 cm",
-      trọng_lượng: "490 g/cặp",
-      tay_cầm: "EVA chống trượt",
-    },
-    recommendationTags: [
-      "đường dốc",
-      "địa hình đá",
-    ],
-  },
-  {
-    id: "prod_backpack_1",
-    sku: "OSP-ATM-65",
-    name: "Balo trợ lực Atmos AG 65L",
-    category: categories[3],
-    description:
-      "Balo trợ lực dung tích lớn với hệ thống lưng thoáng khí, phù hợp cho hành trình nhiều ngày.",
-    dailyPrice: 95000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 1200000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=1200&q=85",
-    ],
-    spec: {
-      dung_tích: "65 L",
-      tải_trọng_khuyến_nghị: "15–23 kg",
-      trọng_lượng: "2.1 kg",
-      áo_mưa: "Có",
-    },
-    recommendationTags: [
-      "3 ngày 2 đêm",
-      "mang nhiều vật dụng",
-    ],
-  },
-  {
-    id: "prod_headlamp_1",
-    sku: "BD-HL-ST45",
-    name: "Đèn pin đội đầu Storm 450",
-    category: categories[4],
-    description:
-      "Đèn đội đầu chống nước với nhiều chế độ sáng, phù hợp di chuyển ban đêm và xử lý tình huống khẩn cấp.",
-    dailyPrice: 40000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 350000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85",
-    ],
-    spec: {
-      độ_sáng: "450 lumen",
-      chống_nước: "IP67",
-      thời_lượng_pin: "5–100 giờ",
-      chế_độ_đỏ: "Có",
-    },
-    recommendationTags: [
-      "đi đêm",
-      "cắm trại",
-    ],
-  },
-  {
-    id: "prod_jacket_1",
-    sku: "TNF-GTX-01",
-    name: "Áo khoác chống nước Gore-Tex",
-    category: categories[5],
-    description:
-      "Áo khoác chống mưa và cản gió, thiết kế thoáng khí cho hoạt động trekking trong thời tiết thay đổi.",
-    dailyPrice: 85000,
-    depositPolicy: {
-      type: "FIXED",
-      amount: 900000,
-      referenceValue: null,
-      percentage: null,
-    },
-    currency: "VND",
-    status: "ACTIVE",
-    imageUrls: [
-  "https://www.mountain-equipment.com/cdn/shop/files/HamishFrost_2023_Makalu___Nanda_Devi_455_-_Square.jpg?height=1080&v=1746801076&width=1080",
-],
-    spec: {
-      kích_cỡ: "M / L / XL",
-      chống_nước: "28.000 mm",
-      thoáng_khí: "RET < 6",
-      mũ_trùm: "Có thể điều chỉnh",
-    },
-    recommendationTags: [
-      "mưa",
-      "gió mạnh",
-    ],
-  },
-];
-
-const availableCountByProduct: Record<string, number> = {
-  prod_tent_4: 8,
-  prod_sleeping_bag_1: 14,
-  prod_poles_1: 20,
-  prod_backpack_1: 6,
-  prod_headlamp_1: 18,
-  prod_jacket_1: 9,
+type ApiEnvelope<T> = {
+  data: T;
 };
 
-const recommendations: RentalRecommendation[] = [
-  {
-    productId: "prod_tent_4",
-    reasons: [
-      "Phù hợp với hành trình Tà Năng – Phan Dũng 3 ngày 2 đêm.",
-      "Khả năng chống mưa tốt trong điều kiện thời tiết dự kiến.",
-    ],
-    source: "RULE",
-  },
-  {
-    productId: "prod_sleeping_bag_1",
-    reasons: [
-      "Nhiệt độ ban đêm dự kiến xuống thấp.",
-      "Trọng lượng nhẹ, phù hợp hành trình dài.",
-    ],
-    source: "AI",
-  },
-  {
-    productId: "prod_poles_1",
-    reasons: [
-      "Tuyến đường có nhiều đoạn dốc và đá trơn.",
-    ],
-    source: "RULE",
-  },
-  {
-    productId: "prod_headlamp_1",
-    reasons: [
-      "Lịch trình có hoạt động trước bình minh.",
-    ],
-    source: "RULE",
-  },
-];
+type ApiPagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
 
-const tripSummary: RentalTripSummary = {
+type ApiPaginatedResult<T> = {
+  items: T[];
+  pagination: ApiPagination;
+};
+
+type ApiRentalCategory = {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string | null;
+  status?: string;
+};
+
+type ApiDepositPolicy = {
+  type: string;
+  amount?: number | string | null;
+  referenceValue?: number | string | null;
+  percentage?: number | string | null;
+};
+
+type ApiRentalProduct = {
+  id: string;
+  sku?: string;
+  name: string;
+  category: ApiRentalCategory;
+  description?: string | null;
+  dailyPrice: number | string;
+  depositPolicy: ApiDepositPolicy;
+  currency?: string;
+  replacementValue?: number | string;
+  status?: string;
+  version?: number;
+  imageMediaIds?: string[];
+  spec?: Record<string, unknown> | null;
+  recommendationTags?: string[];
+};
+
+const PRODUCT_FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=85";
+
+const MOCK_TRIP_SUMMARY: RentalTripSummary = {
   tripId: "trip_001",
   name: "Tà Năng – Phan Dũng",
   durationDays: 3,
@@ -271,7 +74,158 @@ const tripSummary: RentalTripSummary = {
     "Ban ngày 22–26°C, ban đêm 14–17°C, có khả năng mưa nhẹ.",
 };
 
-function createEligibility(
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function unwrapApiData<T>(payload: unknown): T {
+  if (
+    isRecord(payload) &&
+    "data" in payload &&
+    payload.data !== undefined
+  ) {
+    return (payload as ApiEnvelope<T>).data;
+  }
+
+  return payload as T;
+}
+
+function toNumber(
+  value: number | string | null | undefined,
+  fallback = 0,
+) {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function mapCategory(
+  category: ApiRentalCategory,
+): RentalCategory {
+  return {
+    id: category.id,
+    name: category.name,
+    slug: category.slug,
+    description: category.description ?? null,
+    status: category.status,
+  };
+}
+
+function mapDepositPolicy(
+  policy: ApiDepositPolicy | undefined,
+): RentalDepositPolicy {
+  return {
+    type: policy?.type ?? "FIXED",
+    amount: toNumber(policy?.amount),
+    referenceValue:
+      policy?.referenceValue === undefined ||
+      policy.referenceValue === null
+        ? null
+        : toNumber(policy.referenceValue),
+    percentage:
+      policy?.percentage === undefined ||
+      policy.percentage === null
+        ? null
+        : toNumber(policy.percentage),
+  };
+}
+
+function getProductImages(product: ApiRentalProduct) {
+  const directUrls = (product.imageMediaIds ?? []).filter(
+    (value) =>
+      value.startsWith("http://") ||
+      value.startsWith("https://"),
+  );
+
+  if (directUrls.length > 0) {
+    return directUrls;
+  }
+
+  /*
+   * BE hiện trả imageMediaIds thay vì URL ảnh hoàn chỉnh.
+   * Tạm dùng ảnh dự phòng cho tới khi nối Media Delivery API.
+   */
+  return [PRODUCT_FALLBACK_IMAGE];
+}
+
+function mapProduct(
+  product: ApiRentalProduct,
+): RentalProduct {
+  return {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    category: mapCategory(product.category),
+    description: product.description ?? "",
+    dailyPrice: toNumber(product.dailyPrice),
+    depositPolicy: mapDepositPolicy(
+      product.depositPolicy,
+    ),
+    currency: product.currency ?? "VND",
+    replacementValue:
+      product.replacementValue === undefined
+        ? undefined
+        : toNumber(product.replacementValue),
+    status: product.status,
+    version: product.version,
+    imageMediaIds: [...(product.imageMediaIds ?? [])],
+    imageUrls: getProductImages(product),
+    spec: product.spec ?? {},
+    recommendationTags: [
+      ...(product.recommendationTags ?? []),
+    ],
+  };
+}
+
+function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+) {
+  if (axios.isAxiosError(error)) {
+    const responseData: unknown = error.response?.data;
+
+    if (isRecord(responseData)) {
+      const apiError = responseData.error;
+
+      if (
+        isRecord(apiError) &&
+        typeof apiError.message === "string"
+      ) {
+        return apiError.message;
+      }
+
+      if (typeof responseData.message === "string") {
+        return responseData.message;
+      }
+    }
+
+    if (error.code === "ERR_CANCELED") {
+      return "Yêu cầu đã được hủy.";
+    }
+
+    if (error.message) {
+      return error.message;
+    }
+  }
+
+  if (
+    error instanceof Error &&
+    error.message
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+/*
+ * Các hàm mock bên dưới chỉ phục vụ những endpoint được mô tả
+ * trong tài liệu nhưng chưa tồn tại trong source API/OpenAPI.
+ */
+
+function createMockEligibility(
   bookingId: string,
 ): RentalEligibility {
   return {
@@ -289,7 +243,17 @@ function createEligibility(
   };
 }
 
-function createAvailability(
+function createStableMockCount(productId: string) {
+  const hash = [...productId].reduce(
+    (total, character) =>
+      total + character.charCodeAt(0),
+    0,
+  );
+
+  return 4 + (hash % 17);
+}
+
+function createMockAvailability(
   productId: string,
   bookingId: string,
 ): RentalAvailability {
@@ -297,7 +261,7 @@ function createAvailability(
     bookingId,
     productId,
     availableCount:
-      availableCountByProduct[productId] ?? 0,
+      createStableMockCount(productId),
     rentalWindow: {
       occupiedFrom: "2026-10-09T12:00:00Z",
       occupiedUntil: "2026-10-12T12:00:00Z",
@@ -306,72 +270,144 @@ function createAvailability(
   };
 }
 
-function cloneProduct(
+function createMockRecommendation(
   product: RentalProduct,
-): RentalProduct {
+): RentalRecommendation | null {
+  const tags = product.recommendationTags ?? [];
+
+  if (tags.length === 0) {
+    return null;
+  }
+
   return {
-    ...product,
-    category: { ...product.category },
-    depositPolicy: { ...product.depositPolicy },
-    imageUrls: [...product.imageUrls],
-    spec: { ...product.spec },
-    recommendationTags: [
-      ...(product.recommendationTags ?? []),
+    productId: product.id,
+    reasons: [
+      `Phù hợp với chuyến đi dựa trên: ${tags.join(
+        ", ",
+      )}.`,
     ],
+    source: "RULE",
   };
 }
 
-function createAbortError() {
-  const error = new Error("Request was aborted.");
-  error.name = "AbortError";
-  return error;
+export async function getRentalCategories(
+  signal?: AbortSignal,
+): Promise<{
+  items: RentalCategory[];
+  pagination: RentalPagination;
+}> {
+  try {
+    const response = await apiClient.get<unknown>(
+      "/api/v1/rental-categories",
+      {
+        params: {
+          page: 1,
+          pageSize: 100,
+        },
+        signal,
+      },
+    );
+
+    const result = unwrapApiData<
+      ApiPaginatedResult<ApiRentalCategory>
+    >(response.data);
+
+    return {
+      items: result.items.map(mapCategory),
+      pagination: result.pagination,
+    };
+  } catch (error) {
+    throw new Error(
+      getApiErrorMessage(
+        error,
+        "Không thể tải danh mục thiết bị thuê.",
+      ),
+    );
+  }
 }
 
-function simulateRequest(
-  signal?: AbortSignal,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(createAbortError());
-      return;
-    }
+export async function getRentalProducts(
+  options?: {
+    search?: string;
+    categoryId?: string;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+  },
+): Promise<{
+  items: RentalProduct[];
+  pagination: RentalPagination;
+}> {
+  try {
+    const response = await apiClient.get<unknown>(
+      "/api/v1/rental-products",
+      {
+        params: {
+          page: options?.page ?? 1,
+          pageSize: options?.pageSize ?? 100,
+          search:
+            options?.search?.trim() || undefined,
+          categoryId:
+            options?.categoryId || undefined,
+        },
+        signal: options?.signal,
+      },
+    );
 
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", handleAbort);
-      resolve();
-    }, 250);
+    const result = unwrapApiData<
+      ApiPaginatedResult<ApiRentalProduct>
+    >(response.data);
 
-    function handleAbort() {
-      clearTimeout(timer);
-      reject(createAbortError());
-    }
-
-    signal?.addEventListener("abort", handleAbort, {
-      once: true,
-    });
-  });
+    return {
+      items: result.items.map(mapProduct),
+      pagination: result.pagination,
+    };
+  } catch (error) {
+    throw new Error(
+      getApiErrorMessage(
+        error,
+        "Không thể tải danh sách thiết bị thuê.",
+      ),
+    );
+  }
 }
 
 export async function getRentalCatalog(
   bookingId: string,
   signal?: AbortSignal,
 ): Promise<RentalCatalogData> {
-  await simulateRequest(signal);
+  const [categoryResult, productResult] =
+    await Promise.all([
+      getRentalCategories(signal),
+      getRentalProducts({
+        page: 1,
+        pageSize: 100,
+        signal,
+      }),
+    ]);
+
+  const eligibility =
+    createMockEligibility(bookingId);
 
   return {
-    eligibility: createEligibility(bookingId),
-    categories: categories.map((category) => ({
-      ...category,
-    })),
-    items: products.map((product) => ({
-      ...cloneProduct(product),
-      availableCount:
-        availableCountByProduct[product.id] ?? 0,
-      recommendation:
-        recommendations.find(
-          (item) => item.productId === product.id,
-        ) ?? null,
-    })),
+    eligibility,
+    categories: categoryResult.items,
+    items: productResult.items.map((product) => {
+      const availability =
+        createMockAvailability(
+          product.id,
+          bookingId,
+        );
+
+      return {
+        ...product,
+        availableCount:
+          availability.availableCount,
+        recommendation:
+          createMockRecommendation(product),
+      };
+    }),
+    pagination: productResult.pagination,
   };
 }
 
@@ -380,26 +416,41 @@ export async function getRentalProductDetail(
   bookingId: string,
   signal?: AbortSignal,
 ): Promise<RentalProductDetailData> {
-  await simulateRequest(signal);
+  try {
+    const response = await apiClient.get<unknown>(
+      `/api/v1/rental-products/${encodeURIComponent(
+        productId,
+      )}`,
+      {
+        signal,
+      },
+    );
 
-  const product = products.find(
-    (item) => item.id === productId,
-  );
+    const apiProduct =
+      unwrapApiData<ApiRentalProduct>(
+        response.data,
+      );
 
-  if (!product) {
-    throw new Error("Không tìm thấy sản phẩm thuê.");
+    const product = mapProduct(apiProduct);
+
+    return {
+      product,
+      availability: createMockAvailability(
+        product.id,
+        bookingId,
+      ),
+      recommendation:
+        createMockRecommendation(product),
+      tripSummary: {
+        ...MOCK_TRIP_SUMMARY,
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      getApiErrorMessage(
+        error,
+        "Không thể tải thông tin sản phẩm thuê.",
+      ),
+    );
   }
-
-  return {
-    product: cloneProduct(product),
-    availability: createAvailability(
-      productId,
-      bookingId,
-    ),
-    recommendation:
-      recommendations.find(
-        (item) => item.productId === productId,
-      ) ?? null,
-    tripSummary: { ...tripSummary },
-  };
 }
