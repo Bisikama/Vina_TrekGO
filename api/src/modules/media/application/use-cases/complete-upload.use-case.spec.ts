@@ -1,17 +1,23 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { CompleteUploadUseCase } from './complete-upload.use-case';
 import { MEDIA_ASSET_PORT } from '../ports/media-asset.port';
 import type { MediaAssetPort } from '../ports/media-asset.port';
 import { MEDIA_STORAGE_PORT } from '../ports/media-storage.port';
 import type { MediaStoragePort } from '../ports/media-storage.port';
+import { MEDIA_PROVENANCE_PORT } from '../ports/media-provenance.port';
+import type { MediaProvenancePort } from '../ports/media-provenance.port';
 import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
+import { MediaPolicyService } from '../policies/media.policy';
 import envConfig from '../../../../shared/config';
 
 describe('CompleteUploadUseCase', () => {
   let useCase: CompleteUploadUseCase;
   let mockAssetPort: jest.Mocked<MediaAssetPort>;
   let mockStoragePort: jest.Mocked<MediaStoragePort>;
+  let mockProvenancePort: jest.Mocked<MediaProvenancePort>;
+  let mockPolicyService: jest.Mocked<MediaPolicyService>;
 
   const mockUser = (role: string) => ({
     id: 'u1',
@@ -25,19 +31,35 @@ describe('CompleteUploadUseCase', () => {
     mockAssetPort = {
       createPendingUpload: jest.fn(),
       findOwnedById: jest.fn(),
-      markReady: jest.fn().mockResolvedValue({} as unknown as never),
+      markReadyFromProcessing: jest.fn().mockResolvedValue({}),
+      markRejectedFromProcessing: jest.fn().mockResolvedValue({}),
+      claimForProcessing: jest.fn().mockImplementation(async (input: import('../ports/media-asset.port').ClaimForProcessingInput) => {
+        const result = await mockAssetPort.findOwnedById({ id: input.id, ownerUserId: input.ownerUserId });
+        if (!result) throw new Error('Mock error: not found');
+        return { ...result, status: 'PROCESSING' };
+      }),
+      revertProcessingToPending: jest.fn().mockResolvedValue({}),
     } as unknown as jest.Mocked<MediaAssetPort>;
     mockStoragePort = {
       createUploadIntent: jest.fn(),
       verifyUploadResponse: jest.fn(),
       getAssetMetadata: jest.fn(),
     } as unknown as jest.Mocked<MediaStoragePort>;
+    mockPolicyService = {
+      getScopePolicy: jest.fn(),
+      validateProviderMetadata: jest.fn(),
+    } as unknown as jest.Mocked<MediaPolicyService>;
+    mockProvenancePort = {
+      analyzeEvidence: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CompleteUploadUseCase,
         { provide: MEDIA_ASSET_PORT, useValue: mockAssetPort },
         { provide: MEDIA_STORAGE_PORT, useValue: mockStoragePort },
+        { provide: MEDIA_PROVENANCE_PORT, useValue: mockProvenancePort },
+        { provide: MediaPolicyService, useValue: mockPolicyService },
       ],
     }).compile();
 
@@ -59,7 +81,7 @@ describe('CompleteUploadUseCase', () => {
     const asset = { status: 'READY' };
     mockAssetPort.findOwnedById.mockResolvedValue(asset as unknown as never);
     
-    const result = await useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never);
+    const result = await useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER'));
     expect(result).toBe(asset);
     expect(mockStoragePort.verifyUploadResponse).not.toHaveBeenCalled();
   });
@@ -128,15 +150,15 @@ describe('CompleteUploadUseCase', () => {
       }));
   });
 
-  it('throws MEDIA_PROVIDER_MISMATCH if canonical provider asset missing', async () => {
+  it('throws MEDIA_PROVIDER_ERROR if canonical provider asset missing', async () => {
     mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', deliveryType: 'upload' } as unknown as never);
     mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
     mockStoragePort.getAssetMetadata.mockResolvedValue(null);
     
     await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, mockUser('USER') as unknown as never))
       .rejects.toThrow(new AppError({
-        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_MISMATCH,
-        message: 'Provider asset not found in storage',
+        code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR,
+        message: 'Provider asset metadata temporary lookup failure',
       }));
   });
 
@@ -203,7 +225,7 @@ describe('CompleteUploadUseCase', () => {
   it('completes upload successfully for IMAGE and verifies markReady receives all fields', async () => {
     envConfig.MEDIA_MAX_IMAGE_BYTES = 2000;
     mockAssetPort.findOwnedById.mockResolvedValueOnce({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload' } as unknown as never).mockResolvedValueOnce({ status: 'READY', providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload' } as unknown as never);
-    mockAssetPort.markReady.mockResolvedValue({ status: 'READY' } as unknown as never);
+    mockAssetPort.markReadyFromProcessing.mockResolvedValue({ status: 'READY' } as unknown as never);
     mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
     const date = new Date('2023-01-01T00:00:00Z');
     mockStoragePort.getAssetMetadata.mockResolvedValue({
@@ -222,7 +244,7 @@ describe('CompleteUploadUseCase', () => {
     
     const result = await useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, { id: 'u1', role: 'USER' } as unknown as never);
     expect(result.status).toBe('READY');
-    expect(mockAssetPort.markReady).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockAssetPort.markReadyFromProcessing).toHaveBeenCalledWith(expect.objectContaining({
       providerAssetId: 'a1',
       providerPublicId: 'p1',
       format: 'jpg',
@@ -251,11 +273,29 @@ describe('CompleteUploadUseCase', () => {
   it('completes upload successfully for VIDEO', async () => {
     envConfig.MEDIA_MAX_VIDEO_BYTES = 5000;
     mockAssetPort.findOwnedById.mockResolvedValueOnce({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload' } as unknown as never).mockResolvedValueOnce({ status: 'READY', providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload' } as unknown as never);
-    mockAssetPort.markReady.mockResolvedValue({ status: 'READY' } as unknown as never);
+    mockAssetPort.markReadyFromProcessing.mockResolvedValue({ status: 'READY' } as unknown as never);
     mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
     mockStoragePort.getAssetMetadata.mockResolvedValue({ providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload', bytes: 1000 } as unknown as never);
     
     const result = await useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, { id: 'u1', role: 'USER' } as unknown as never);
     expect(result.status).toBe('READY');
+  });
+
+  it('marks REJECTED if policy validation fails', async () => {
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload' } as unknown as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockResolvedValue({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', bytes: 1000 } as unknown as never);
+    
+    const policyError = new AppError({ code: MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS, message: 'Invalid dims' });
+    mockPolicyService.validateProviderMetadata.mockImplementation(() => { throw policyError; });
+
+    await expect(useCase.execute('some-uuid', { publicId: 'p1', version: 1, signature: 'sig' }, { id: 'u1', role: 'USER' } as unknown as never))
+      .rejects.toThrow(policyError);
+
+    expect(mockAssetPort.markRejectedFromProcessing).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'some-uuid',
+      ownerUserId: 'u1',
+      reason: 'Invalid dims'
+    }));
   });
 });

@@ -1,9 +1,12 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/require-await */
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreateUploadIntentUseCase } from './create-upload-intent.use-case';
 import { MEDIA_ASSET_PORT } from '../ports/media-asset.port';
 import type { MediaAssetPort, MediaScopeValue, MediaResourceTypeValue } from '../ports/media-asset.port';
 import { MEDIA_STORAGE_PORT } from '../ports/media-storage.port';
 import type { MediaStoragePort } from '../ports/media-storage.port';
+import { MediaPolicyService } from '../policies/media.policy';
 import { AppError } from '../../../../shared/errors/app-error';
 import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
@@ -41,6 +44,7 @@ describe('CreateUploadIntentUseCase', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreateUploadIntentUseCase,
+        MediaPolicyService,
         { provide: MEDIA_ASSET_PORT, useValue: mockAssetPort },
         { provide: MEDIA_STORAGE_PORT, useValue: mockStoragePort },
       ],
@@ -78,7 +82,7 @@ describe('CreateUploadIntentUseCase', () => {
         sizeBytes: 1024,
       };
       
-      const promise = useCase.execute(input, mockUser(role) as unknown as never);
+      const promise = useCase.execute(input, mockUser(role));
       if (allowed) {
         await expect(promise).resolves.toBeDefined();
       } else {
@@ -111,7 +115,7 @@ describe('CreateUploadIntentUseCase', () => {
         sizeBytes: 1024,
       };
       
-      const promise = useCase.execute(input, mockUser('USER') as unknown as never);
+      const promise = useCase.execute(input, mockUser('USER'));
       if (allowed) {
         await expect(promise).resolves.toBeDefined();
       } else {
@@ -138,7 +142,7 @@ describe('CreateUploadIntentUseCase', () => {
         sizeBytes,
       };
       
-      const promise = useCase.execute(input, mockUser('USER') as unknown as never);
+      const promise = useCase.execute(input, mockUser('USER'));
       if (allowed) {
         await expect(promise).resolves.toBeDefined();
       } else {
@@ -161,7 +165,7 @@ describe('CreateUploadIntentUseCase', () => {
     
     mockAssetPort.createPendingUpload.mockImplementation(async (data) => ({ id: data.id, status: 'PENDING_UPLOAD' } as unknown as never));
 
-    const result = await useCase.execute(input, mockUser('ADMIN') as unknown as never);
+    const result = await useCase.execute(input, mockUser('ADMIN'));
     
     expect(result.mediaId).toBeDefined();
     expect(mockAssetPort.createPendingUpload).toHaveBeenCalledWith(expect.objectContaining({
@@ -183,7 +187,7 @@ describe('CreateUploadIntentUseCase', () => {
       sizeBytes: 1024,
     };
     
-    await useCase.execute(input, mockUser('USER') as unknown as never);
+    await useCase.execute(input, mockUser('USER'));
     
     expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
       deliveryType: 'authenticated',

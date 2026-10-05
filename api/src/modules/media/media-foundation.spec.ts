@@ -8,6 +8,11 @@ import { PrismaService } from '../../shared/services/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
+jest.mock('@nestjs/schedule', () => ({
+  Cron: jest.fn(() => () => {}),
+  CronExpression: {},
+}));
+
 describe('Media Foundation', () => {
   describe('Architecture', () => {
     it('application files do not import @prisma/client or cloudinary', () => {
@@ -120,9 +125,9 @@ describe('Media Foundation', () => {
         scope: 'RENTAL_PRODUCT',
       });
 
-      await expect(adapter.markReady({
+      await expect(adapter.markReadyFromProcessing({
         id: '123', ownerUserId: 'u1', providerAssetId: 'p1', providerPublicId: 'pub1',
-        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date()
+        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date(), retentionUntil: new Date()
       })).rejects.toThrow(/Cannot complete upload for asset in REJECTED state/);
 
       // Explicitly assert atomic update requirements
@@ -130,7 +135,7 @@ describe('Media Foundation', () => {
         where: {
           id: '123',
           ownerUserId: 'u1',
-          status: 'PENDING_UPLOAD',
+          status: 'PROCESSING',
         },
         data: expect.objectContaining({
           status: 'READY',
@@ -148,9 +153,9 @@ describe('Media Foundation', () => {
         scope: 'RENTAL_PRODUCT',
       });
 
-      const result = await adapter.markReady({
+      const result = await adapter.markReadyFromProcessing({
         id: '123', ownerUserId: 'u1', providerAssetId: 'p1', providerPublicId: 'pub1',
-        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date()
+        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date(), retentionUntil: new Date()
       });
 
       expect(result.status).toBe('READY');

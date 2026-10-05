@@ -75,7 +75,7 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
     ]);
 
     return {
-      items: items.map(this.mapToView),
+      items: items.map(item => this.mapToView(item)),
       total,
     };
   }
@@ -112,7 +112,7 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
     ]);
 
     return {
-      items: items.map(this.mapToView),
+      items: items.map(item => this.mapToView(item)),
       total,
     };
   }

@@ -1,13 +1,17 @@
-import { Controller, Post, Body, Param, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { CreateUploadIntentUseCase } from '../application/use-cases/create-upload-intent.use-case';
 import { CompleteUploadUseCase } from '../application/use-cases/complete-upload.use-case';
+import { GetMediaDeliveryUseCase } from '../application/use-cases/get-media-delivery.use-case';
+import { RequestMediaDeletionUseCase } from '../application/use-cases/request-media-deletion.use-case';
 import { CreateUploadIntentDto } from './dto/create-upload-intent.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
+import { GetMediaDeliveryDto, getMediaDeliverySchema } from './dto/get-media-delivery.dto';
+import type { GetMediaDeliveryDto as GetMediaDeliveryDtoType } from './dto/get-media-delivery.dto';
 import { ActiveUser } from '../../../shared/decorators/active-user.decorator';
 import type { ActiveUserData } from '../../../shared/types/user.type';
 import { Auth } from '../../../shared/decorators/auth.decorator';
 import { AuthType } from '../../../shared/constants/auth.constant';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { ZodValidationPipe } from '../../../shared/pipes/zod-validation.pipe';
 import { createUploadIntentSchema } from './dto/create-upload-intent.dto';
 import { completeUploadSchema } from './dto/complete-upload.dto';
@@ -20,6 +24,8 @@ export class MediaController {
   constructor(
     private readonly createUploadIntentUseCase: CreateUploadIntentUseCase,
     private readonly completeUploadUseCase: CompleteUploadUseCase,
+    private readonly getMediaDeliveryUseCase: GetMediaDeliveryUseCase,
+    private readonly requestMediaDeletionUseCase: RequestMediaDeletionUseCase,
   ) {}
 
   @Post('upload-intents')
@@ -194,5 +200,95 @@ Lưu ý Idempotent: Nếu media đã ở trạng thái READY, API vẫn trả v�
     @ActiveUser() user: ActiveUserData,
   ) {
     return this.completeUploadUseCase.execute(id, dto, user);
+  }
+
+  @Auth([AuthType.Bearer, AuthType.None]) // Allow public access (AuthType.None allows public)
+  @Get(':id/delivery')
+  @ApiOperation({
+    summary: 'Lấy URL phân phối Media',
+    description: `
+Lấy URL đã tối ưu hóa cho mục đích hiển thị (Catalog) hoặc bằng chứng (Evidence).
+Đối với Catalog, API này có thể được gọi mà không cần token.
+Đối với Evidence, bắt buộc phải có token và quyền truy cập.
+`
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiQuery({ name: 'variant', required: true, enum: ['CATALOG_THUMBNAIL', 'CATALOG_CARD', 'CATALOG_DETAIL', 'EVIDENCE_THUMBNAIL', 'EVIDENCE_PREVIEW', 'VIDEO_PREVIEW'] })
+  @ApiQuery({ name: 'format', required: false, enum: ['AUTO', 'WEBP', 'JPEG'] })
+  @ApiResponse({
+    status: 200,
+    description: 'Thành công',
+    schema: {
+      example: {
+        data: {
+          mediaId: 'uuid',
+          variant: 'CATALOG_CARD',
+          resourceType: 'IMAGE',
+          url: 'https://...',
+          expiresAt: null,
+          format: 'AUTO'
+        },
+        meta: {
+          requestId: 'uuid'
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 401, description: 'Chưa xác thực (Yêu cầu đối với Evidence).' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy media.' })
+  async getDeliveryUrl(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(getMediaDeliverySchema)) dto: GetMediaDeliveryDtoType,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.getMediaDeliveryUseCase.execute({ mediaId: id, ...dto }, user);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Xóa tài nguyên Media (Hard Delete Request)',
+    description: `
+      Yêu cầu xóa vĩnh viễn một Media Asset.
+      
+      Quy trình:
+      1. Kiểm tra quyền sở hữu.
+      2. Kiểm tra xem Media có đang được sử dụng trong các Entity khác không (sản phẩm, đơn hàng, ...).
+      3. Chuyển trạng thái sang DELETE_PENDING.
+      4. Xóa file vật lý trên Cloudinary.
+      5. Cập nhật thành DELETED (tombstone) trong CSDL.
+    `,
+  })
+  @ApiParam({ name: 'id', description: 'ID của Media Asset', type: 'string', format: 'uuid' })
+  @ApiResponse({
+    status: 200,
+    description: 'Yêu cầu xóa thành công hoặc idempotent.',
+    schema: { example: { data: { success: true }, meta: { requestId: 'uuid', serverTime: '2023-10-01T12:00:00.000Z', contractVersion: '0.2.0-final-flow' } } }
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Không có quyền xóa media này.',
+    schema: { example: { error: { code: 'MEDIA_FORBIDDEN', message: 'Forbidden' }, meta: { requestId: 'uuid' } } }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Không tìm thấy Media.',
+    schema: { example: { error: { code: 'MEDIA_NOT_FOUND', message: 'Not found' }, meta: { requestId: 'uuid' } } }
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Không thể xóa do Media đang được tham chiếu, chưa hết hạn lưu trữ hoặc trạng thái không hợp lệ.',
+    schema: { example: { error: { code: 'MEDIA_INVALID_STATE', message: 'Cannot delete referenced media' }, meta: { requestId: 'uuid' } } }
+  })
+  @ApiResponse({
+    status: 502,
+    description: 'Lỗi từ nhà cung cấp dịch vụ lưu trữ (có thể thử lại).',
+    schema: { example: { error: { code: 'MEDIA_PROVIDER_ERROR', message: 'Provider deletion failed', retryable: true }, meta: { requestId: 'uuid' } } }
+  })
+  async deleteMedia(@Param('id', new ParseUUIDPipe()) id: string, @ActiveUser() user: ActiveUserData): Promise<void> {
+    await this.requestMediaDeletionUseCase.execute({
+      assetId: id,
+      requesterUser: { id: user.id, role: user.role },
+    });
   }
 }

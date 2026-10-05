@@ -155,4 +155,121 @@ describe('CloudinaryStorageAdapter', () => {
         .rejects.toThrow(new AppError({ code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR, message: 'Provider lookup failed' }));
     });
   });
+
+  describe('ensureDerivatives', () => {
+    it('returns immediately for upload deliveryType', async () => {
+      cloudinary.uploader = { explicit: jest.fn() } as any;
+      await adapter.ensureDerivatives({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', variants: ['EVIDENCE_PREVIEW'] });
+      expect(cloudinary.uploader.explicit).not.toHaveBeenCalled();
+    });
+
+    it('generates derivatives for IMAGE authenticated', async () => {
+      cloudinary.uploader = { explicit: jest.fn().mockResolvedValue({}) } as any;
+      await adapter.ensureDerivatives({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'authenticated', variants: ['EVIDENCE_PREVIEW'] });
+      expect(cloudinary.uploader.explicit).toHaveBeenCalledWith('p1', expect.objectContaining({ type: 'authenticated', resource_type: 'image', eager: expect.any(Array) }));
+    });
+
+    it('generates derivatives for VIDEO authenticated', async () => {
+      cloudinary.uploader = { explicit: jest.fn().mockResolvedValue({}) } as any;
+      await adapter.ensureDerivatives({ providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'authenticated', variants: ['VIDEO_PREVIEW'] });
+      expect(cloudinary.uploader.explicit).toHaveBeenCalledWith('p1', expect.objectContaining({ type: 'authenticated', resource_type: 'video', eager: expect.any(Array) }));
+    });
+  });
+
+  describe('createDeliveryUrl', () => {
+    beforeEach(() => {
+      cloudinary.url = jest.fn().mockImplementation((id, opts) => `https://res.cloudinary.com/cloud/${opts.resource_type}/${opts.type}/${id}`);
+    });
+
+    it('creates public catalog URL', async () => {
+      const result = await adapter.createDeliveryUrl({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', variant: 'CATALOG_CARD' });
+      expect(result.url).toBe('https://res.cloudinary.com/cloud/image/upload/p1');
+    });
+
+    it('creates signed authenticated Evidence URL', async () => {
+      const result = await adapter.createDeliveryUrl({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'authenticated', variant: 'EVIDENCE_PREVIEW' });
+      expect(result.url).toBe('https://res.cloudinary.com/cloud/image/authenticated/p1');
+      expect(cloudinary.url).toHaveBeenCalledWith('p1', expect.objectContaining({ sign_url: true }));
+    });
+  });
+
+  describe('openOriginalStream', () => {
+    it('creates stream url with sign_url depending on delivery type', async () => {
+      cloudinary.url = jest.fn().mockReturnValue('https://example.com/test');
+      const https = require('https');
+      jest.spyOn(https, 'get').mockImplementation((url, cb: any) => {
+        cb({ statusCode: 200, on: jest.fn() });
+        return { on: jest.fn() };
+      });
+      await adapter.openOriginalStream({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'authenticated' });
+      expect(cloudinary.url).toHaveBeenCalledWith('p1', expect.objectContaining({ sign_url: true }));
+    });
+  });
+
+  describe('getImageAnalysis', () => {
+    it('calls explicit with phash and media_metadata true', async () => {
+      cloudinary.uploader = { explicit: jest.fn().mockResolvedValue({ phash: 'abc', image_metadata: { DateTimeOriginal: '2023' } }) } as any;
+      const result = await adapter.getImageAnalysis({ providerPublicId: 'p1', deliveryType: 'authenticated' });
+      expect(cloudinary.uploader.explicit).toHaveBeenCalledWith('p1', expect.objectContaining({ phash: true, media_metadata: true }));
+      expect(result.perceptualHash).toBe('abc');
+      expect(result.mediaMetadata?.dateTimeOriginal).toBe('2023');
+    });
+  });
+
+  describe('deleteAsset', () => {
+    beforeEach(() => {
+      cloudinary.uploader = { destroy: jest.fn().mockResolvedValue({ result: 'ok' }) } as any;
+    });
+
+    it('deletes IMAGE upload', async () => {
+      await adapter.deleteAsset({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', invalidate: true });
+      expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('p1', { resource_type: 'image', type: 'upload', invalidate: true });
+    });
+
+    it('deletes IMAGE authenticated', async () => {
+      await adapter.deleteAsset({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'authenticated', invalidate: false });
+      expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('p1', { resource_type: 'image', type: 'authenticated', invalidate: false });
+    });
+
+    it('deletes VIDEO authenticated', async () => {
+      await adapter.deleteAsset({ providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'authenticated', invalidate: true });
+      expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('p1', { resource_type: 'video', type: 'authenticated', invalidate: true });
+    });
+
+    it('is idempotent on not-found', async () => {
+      cloudinary.uploader.destroy = jest.fn().mockResolvedValue({ result: 'not found' });
+      await expect(adapter.deleteAsset({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', invalidate: true })).resolves.not.toThrow();
+    });
+
+    it('throws AppError on provider failure', async () => {
+      cloudinary.uploader.destroy = jest.fn().mockRejectedValue(new Error('Provider fail'));
+      await expect(adapter.deleteAsset({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', invalidate: true })).rejects.toThrow(AppError);
+    });
+  });
+
+  describe('simulateDevUpload', () => {
+    it('passes upload type', async () => {
+      const mockStream = { end: jest.fn() };
+      cloudinary.uploader = { upload_stream: jest.fn((opts, cb) => {
+        cb(null, { public_id: 'p1', version: 1, signature: 'sig' });
+        return mockStream;
+      }) } as any;
+
+      const result = await adapter.simulateDevUpload({ publicId: 'p1', resourceType: 'IMAGE', deliveryType: 'upload', buffer: Buffer.from('test') });
+      expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(expect.objectContaining({ type: 'upload' }), expect.any(Function));
+      expect(result.publicId).toBe('p1');
+    });
+
+    it('passes authenticated type', async () => {
+      const mockStream = { end: jest.fn() };
+      cloudinary.uploader = { upload_stream: jest.fn((opts, cb) => {
+        cb(null, { public_id: 'p1', version: 1, signature: 'sig' });
+        return mockStream;
+      }) } as any;
+
+      const result = await adapter.simulateDevUpload({ publicId: 'p1', resourceType: 'VIDEO', deliveryType: 'authenticated', buffer: Buffer.from('test') });
+      expect(cloudinary.uploader.upload_stream).toHaveBeenCalledWith(expect.objectContaining({ type: 'authenticated', resource_type: 'video' }), expect.any(Function));
+      expect(result.publicId).toBe('p1');
+    });
+  });
 });

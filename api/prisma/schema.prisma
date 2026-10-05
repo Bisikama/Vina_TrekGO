@@ -79,6 +79,17 @@ enum RecordStatus {
   @@map("record_status")
 }
 
+enum CheckpointType {
+  START
+  CAMPSITE
+  SUMMIT
+  WATER_SOURCE
+  VIEWPOINT
+  END
+
+  @@map("checkpoint_type")
+}
+
 enum DifficultyLevel {
   EASY
   MEDIUM
@@ -1199,7 +1210,7 @@ model Checkpoint {
   latitude            Decimal      @db.Decimal(10, 7)
   longitude           Decimal      @db.Decimal(10, 7)
   defaultRadiusMeters Int          @default(50) @map("default_radius_meters")
-  checkpointType      String?      @map("checkpoint_type") @db.VarChar(50)
+  checkpointType      CheckpointType? @map("checkpoint_type")
   status              RecordStatus @default(ACTIVE)
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
