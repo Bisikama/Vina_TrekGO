@@ -1,0 +1,259 @@
+TREKGO - PHẦN PAYMENT ĐỂ BỔ SUNG ERD
+Ngày đối chiếu: 04/10/2026
+Nguồn: api/prisma/schema.prisma và hai migration payment ngày 04/10/2026.
+Đây là schema đích trong repository; migration mới chưa áp dụng lên DB chung.
+
+QUY ƯỚC
+PK: khóa chính; FK: khóa ngoại; UQ: unique. NULL: không bắt buộc.
+Tên snake_case là tên cột/bảng vật lý; tên trong ngoặc là tên field Prisma.
+Các trường quan hệ object/list của Prisma không phải cột, không vẽ thành thuộc tính.
+Tất cả tiền Decimal(12,2); các timestamp dùng timestamptz(6).
+
+8 BẢNG THUỘC PHẦN PAYMENT
+
+Invoice / invoices
+  revision_no (revisionNo): Int; NULL
+  supersedes_invoice_id (supersedesInvoiceId): Uuid; NULL; FK
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  invoice_no (invoiceNo): VarChar(80); NOT NULL; UQ
+  user_id (userId): Uuid; NOT NULL; FK
+  invoice_type (invoiceType): InvoiceType; NOT NULL
+  booking_id (bookingId): Uuid; NULL; FK
+  rental_order_id (rentalOrderId): Uuid; NULL; FK
+  trail_access_id (trailAccessId): Uuid; NULL; FK
+  subtotal_amount (subtotalAmount): Decimal(12, 2); NOT NULL
+  discount_amount (discountAmount): Decimal(12, 2); NOT NULL; default 0
+  total_amount (totalAmount): Decimal(12, 2); NOT NULL
+  currency (currency): Char(3); NOT NULL; default "VND"
+  status (status): InvoiceStatus; NOT NULL; default DRAFT
+  expires_at (expiresAt): Timestamptz(6); NULL
+  paid_at (paidAt): Timestamptz(6); NULL
+  version (version): Int; NOT NULL; default 1
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  updated_at (updatedAt): Timestamptz(6); NOT NULL; default now()
+  @@unique([bookingId, revisionNo])
+  FK theo Prisma:
+    supersedesInvoice   Invoice?      @relation("InvoiceRevisions", fields: [supersedesInvoiceId], references: [id], onDelete: Restrict)
+    user        User         @relation("R_Invoice_user_id", fields: [userId], references: [id])
+    booking     Booking?     @relation("R_Invoice_booking_id", fields: [bookingId], references: [id], onDelete: Restrict)
+    rentalOrder RentalOrder? @relation("R_Invoice_rental_order_id", fields: [rentalOrderId], references: [id])
+    trailAccess TrailAccess? @relation("R_Invoice_trail_access_id", fields: [trailAccessId], references: [id])
+
+InvoiceLine / invoice_lines
+  metadata (metadata): Json; NULL
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  invoice_id (invoiceId): Uuid; NOT NULL; FK
+  line_code (lineCode): VarChar(80); NOT NULL
+  description (description): VarChar(255); NOT NULL
+  quantity (quantity): Decimal(12, 2); NOT NULL; default 1
+  unit_amount (unitAmount): Decimal(12, 2); NOT NULL
+  line_amount (lineAmount): Decimal(12, 2); NOT NULL
+  reference_type (referenceType): VarChar(80); NULL
+  reference_id (referenceId): Uuid; NULL
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  FK theo Prisma:
+    invoice Invoice @relation("R_InvoiceLine_invoice_id", fields: [invoiceId], references: [id])
+
+Payment / payments
+  provider_environment (providerEnvironment): PaymentEnvironment; NULL
+  merchant_account_key (merchantAccountKey): VarChar(100); NULL
+  merchant_request_ref (merchantRequestRef): VarChar(180); NULL
+  request_hash (requestHash): Char(64); NULL
+  request_hash_version (requestHashVersion): Int; NULL
+  payment_method (paymentMethod): VarChar(80); NULL
+  checkout_data (checkoutData): Json; NULL
+  expires_at (expiresAt): Timestamptz(6); NULL
+  reconcile_status (reconcileStatus): PaymentReconcileStatus; NOT NULL; default IDLE
+  last_checked_at (lastCheckedAt): Timestamptz(6); NULL
+  next_retry_at (nextRetryAt): Timestamptz(6); NULL
+  lease_until (leaseUntil): Timestamptz(6); NULL
+  lease_token (leaseToken): Uuid; NULL
+  retry_count (retryCount): Int; NOT NULL; default 0
+  last_error_code (lastErrorCode): VarChar(100); NULL
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  invoice_id (invoiceId): Uuid; NOT NULL; FK
+  amount (amount): Decimal(12, 2); NOT NULL
+  currency (currency): Char(3); NOT NULL; default "VND"
+  transaction_ref (transactionRef): VarChar(180); NULL
+  payment_gateway (paymentGateway): VarChar(80); NOT NULL
+  status (status): PaymentStatus; NOT NULL; default PENDING
+  idempotency_key (idempotencyKey): VarChar(200); NOT NULL; UQ
+  gateway_payload (gatewayPayload): Json; NULL
+  paid_at (paidAt): Timestamptz(6); NULL
+  version (version): Int; NOT NULL; default 1
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  updated_at (updatedAt): Timestamptz(6); NOT NULL; default now()
+  @@unique([id, invoiceId])
+  @@unique([paymentGateway, providerEnvironment, merchantAccountKey, merchantRequestRef], map: "uq_payments_merchant_request")
+  @@unique([paymentGateway, providerEnvironment, merchantAccountKey, transactionRef], map: "uq_payments_provider_transaction")
+  FK theo Prisma:
+    invoice Invoice @relation("R_Payment_invoice_id", fields: [invoiceId], references: [id])
+
+Refund / refunds
+  reason (reason): String; NULL
+  reason_code (reasonCode): VarChar(80); NULL
+  business_action_id (businessActionId): VarChar(200); NULL
+  request_hash (requestHash): Char(64); NULL
+  request_hash_version (requestHashVersion): Int; NULL
+  payment_gateway (paymentGateway): VarChar(80); NULL
+  provider_environment (providerEnvironment): PaymentEnvironment; NULL
+  merchant_account_key (merchantAccountKey): VarChar(100); NULL
+  merchant_refund_ref (merchantRefundRef): VarChar(180); NULL
+  reconcile_status (reconcileStatus): PaymentReconcileStatus; NOT NULL; default IDLE
+  last_checked_at (lastCheckedAt): Timestamptz(6); NULL
+  next_retry_at (nextRetryAt): Timestamptz(6); NULL
+  lease_until (leaseUntil): Timestamptz(6); NULL
+  lease_token (leaseToken): Uuid; NULL
+  retry_count (retryCount): Int; NOT NULL; default 0
+  last_error_code (lastErrorCode): VarChar(100); NULL
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  payment_id (paymentId): Uuid; NOT NULL; FK
+  purpose (purpose): RefundPurpose; NOT NULL
+  amount (amount): Decimal(12, 2); NOT NULL
+  currency (currency): Char(3); NOT NULL; default "VND"
+  status (status): RefundStatus; NOT NULL; default PENDING
+  idempotency_key (idempotencyKey): VarChar(200); NOT NULL; UQ
+  refund_transaction_ref (refundTransactionRef): VarChar(180); NULL
+  deposit_settlement_id (depositSettlementId): Uuid; NULL; FK
+  deposit_settlement_item_id (depositSettlementItemId): Uuid; NULL; FK, UQ
+  booking_cancellation_id (bookingCancellationId): Uuid; NULL; FK
+  rental_order_id (rentalOrderId): Uuid; NULL; FK
+  trail_access_id (trailAccessId): Uuid; NULL; FK
+  provider_payload (providerPayload): Json; NULL
+  refunded_at (refundedAt): Timestamptz(6); NULL
+  version (version): Int; NOT NULL; default 1
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  updated_at (updatedAt): Timestamptz(6); NOT NULL; default now()
+  @@unique([paymentId, businessActionId])
+  @@unique([paymentGateway, providerEnvironment, merchantAccountKey, merchantRefundRef], map: "uq_refunds_merchant_request")
+  @@unique([paymentGateway, providerEnvironment, merchantAccountKey, refundTransactionRef], map: "uq_refunds_provider_transaction")
+  FK theo Prisma:
+    payment               Payment                @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
+    depositSettlement     DepositSettlement?     @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
+    depositSettlementItem DepositSettlementItem? @relation("R_Refund_deposit_settlement_item_id", fields: [depositSettlementItemId], references: [id])
+    bookingCancellation   BookingCancellation?   @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id], onDelete: Restrict)
+    rentalOrder           RentalOrder?           @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
+    trailAccess           TrailAccess?           @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
+
+PaymentApplication / payment_applications
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  payment_id (paymentId): Uuid; NOT NULL; FK, UQ
+  invoice_id (invoiceId): Uuid; NOT NULL; FK
+  status (status): PaymentApplicationStatus; NOT NULL; default PENDING
+  reason_code (reasonCode): VarChar(80); NULL
+  applied_at (appliedAt): Timestamptz(6); NULL
+  decided_at (decidedAt): Timestamptz(6); NULL
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  updated_at (updatedAt): Timestamptz(6); NOT NULL; default now()
+  @@unique([paymentId, invoiceId])
+  FK theo Prisma:
+    payment Payment @relation(fields: [paymentId, invoiceId], references: [id, invoiceId], onDelete: Restrict)
+    invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+PaymentWebhookEvent / payment_webhook_events
+  payload (payload): Json; NOT NULL
+  provider_environment (providerEnvironment): PaymentEnvironment; NULL
+  merchant_account_key (merchantAccountKey): VarChar(100); NULL
+  event_kind (eventKind): PaymentWebhookKind; NULL
+  refund_id (refundId): Uuid; NULL; FK
+  payload_hash (payloadHash): Char(64); NULL
+  processing_status (processingStatus): PaymentWebhookProcessingStatus; NULL
+  verified_at (verifiedAt): Timestamptz(6); NULL
+  attempt_count (attemptCount): Int; NOT NULL; default 0
+  next_retry_at (nextRetryAt): Timestamptz(6); NULL
+  lease_until (leaseUntil): Timestamptz(6); NULL
+  lease_token (leaseToken): Uuid; NULL
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  payment_gateway (paymentGateway): VarChar(80); NOT NULL
+  provider_event_id (providerEventId): VarChar(220); NOT NULL
+  payment_id (paymentId): Uuid; NULL; FK
+  processed (processed): Boolean; NOT NULL; default false
+  processed_at (processedAt): Timestamptz(6); NULL
+  error_message (errorMessage): String; NULL
+  received_at (receivedAt): Timestamptz(6); NOT NULL; default now()
+  @@unique([paymentGateway, providerEnvironment, merchantAccountKey, providerEventId], map: "uq_payment_webhooks_provider_event")
+  FK theo Prisma:
+    refund              Refund?                         @relation(fields: [refundId], references: [id], onDelete: Restrict)
+    payment Payment? @relation("R_PaymentWebhookEvent_payment_id", fields: [paymentId], references: [id])
+
+PaymentOutboxEvent / payment_outbox_events
+  payload (payload): Json; NOT NULL
+  id (id): Uuid; NOT NULL; PK; default uuid()
+  deduplication_key (deduplicationKey): VarChar(220); NOT NULL; UQ
+  event_type (eventType): VarChar(140); NOT NULL
+  aggregate_type (aggregateType): VarChar(100); NOT NULL
+  aggregate_id (aggregateId): Uuid; NOT NULL
+  status (status): EventStatus; NOT NULL; default PENDING
+  retry_count (retryCount): Int; NOT NULL; default 0
+  last_error (lastError): String; NULL
+  next_retry_at (nextRetryAt): Timestamptz(6); NULL
+  lease_until (leaseUntil): Timestamptz(6); NULL
+  lease_token (leaseToken): Uuid; NULL
+  created_at (createdAt): Timestamptz(6); NOT NULL; default now()
+  published_at (publishedAt): Timestamptz(6); NULL
+  processed_at (processedAt): Timestamptz(6); NULL
+  FK theo Prisma:
+
+PaymentConsumerReceipt / payment_consumer_receipts
+  event_id (eventId): Uuid; NOT NULL; PK, FK
+  consumer_name (consumerName): VarChar(100); NOT NULL; PK
+  processed_at (processedAt): Timestamptz(6); NOT NULL; default now()
+  @@id([eventId, consumerName])
+  FK theo Prisma:
+    event        PaymentOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+QUAN HỆ NỘI BỘ - KÝ HIỆU A -> B: A LÀ CHA, B GIỮ FK
+Invoice 1 -> 0..N InvoiceLine: invoice_lines.invoice_id.
+Invoice 1 -> 0..N Payment: payments.invoice_id.
+Payment 1 -> 0..N Refund: refunds.payment_id.
+Payment 1 -> 0..1 PaymentApplication: payment_applications.payment_id UNIQUE.
+Invoice 1 -> 0..N PaymentApplication: payment_applications.invoice_id; chỉ tối đa 1 APPLIED.
+PaymentApplication(payment_id,invoice_id) -> Payment(id,invoice_id): FK kép, không phải hai FK độc lập.
+Payment 0..1 <- mỗi PaymentWebhookEvent; Payment có 0..N event. payment_id nullable.
+Refund 0..1 <- mỗi PaymentWebhookEvent; Refund có 0..N event. refund_id nullable.
+Invoice 0..1 predecessor <- mỗi Invoice mới; một Invoice cũ có 0..N successors theo FK hiện tại.
+PaymentOutboxEvent 1 -> 0..N PaymentConsumerReceipt: event_id.
+PaymentConsumerReceipt có PK kép (event_id,consumer_name).
+PaymentOutboxEvent.aggregate_id không có FK tới Payment/Refund; chỉ là tham chiếu mềm.
+InvoiceLine.reference_id cũng là tham chiếu mềm, không nối như FK thật.
+
+NỐI VÀO CÁC BẢNG ĐÃ VẼ
+User 1 -> 0..N Invoice qua user_id NOT NULL.
+Booking 1 -> 0..N Invoice qua booking_id NULL.
+RentalOrder 1 -> 0..N Invoice qua rental_order_id NULL.
+TrailAccess 1 -> 0..N Invoice qua trail_access_id NULL.
+Mỗi Invoice bắt buộc đúng một trong ba nguồn Booking/RentalOrder/TrailAccess, khớp invoice_type (XOR).
+BookingCancellation 1 -> 0..N Refund qua booking_cancellation_id NULL.
+RentalOrder 1 -> 0..N Refund qua rental_order_id NULL.
+TrailAccess 1 -> 0..N Refund qua trail_access_id NULL.
+DepositSettlement 1 -> 0..N Refund qua deposit_settlement_id NULL.
+DepositSettlementItem 1 -> 0..1 Refund qua deposit_settlement_item_id NULL + UNIQUE.
+Mỗi Refund luôn có một Payment. Các nguồn khác phụ thuộc purpose; DEPOSIT có thể có cả settlement và item.
+TECHNICAL_REVERSAL: mọi FK nguồn nghiệp vụ null; payment_id vẫn bắt buộc.
+BookingCancellation mới có trip_cancellation_request_id NULL -> TripCancellationRequest.id;
+một TripCancellationRequest có 0..N BookingCancellation. Thêm source và idempotency_key NULL UNIQUE vào bảng cancellation đã vẽ.
+
+GHI CHÚ CONSTRAINT NGOÀI ĐƯỜNG NỐI ERD
+1. Một Invoice tối đa một Payment PENDING/PROCESSING, nhưng được có nhiều SUCCEEDED để lưu thu trùng thật.
+2. Một Invoice tối đa một PaymentApplication APPLIED; không biến quan hệ Invoice-Application thành 1:1.
+3. Một Booking tối đa một Invoice DRAFT/PENDING_PAYMENT; lịch sử vẫn là 1:N.
+4. Unique (booking_id,revision_no); revision_no nullable cho legacy.
+5. Provider references unique theo gateway + environment + merchant + reference, không unique reference riêng.
+6. Webhook unique theo gateway + environment + merchant + provider_event_id; legacy không scope có unique riêng.
+7. Refund unique (payment_id,business_action_id); retry cùng quyết định không tạo bản ghi hoàn mới.
+8. Chưa có PaymentAllocation, RefundAllocation hoặc RefundAttempt trong schema hiện tại.
+9. Các trường metadata provider nullable để giữ dữ liệu cũ; không tự vẽ thành NOT NULL.
+10. Schema lưu dữ liệu không tự đảm bảo tổng refund <= payment; service phải khóa/kiểm tra trong transaction.
+
+ENUM DÙNG TRONG 8 BẢNG
+EventStatus: PENDING, PUBLISHED, PROCESSED, FAILED
+InvoiceStatus: DRAFT, PENDING_PAYMENT, PAID, PARTIALLY_REFUNDED, REFUNDED, CANCELLED, EXPIRED
+InvoiceType: BOOKING, TRAIL_ACCESS, RENTAL
+PaymentApplicationStatus: PENDING, APPLIED, REJECTED
+PaymentEnvironment: MOCK, SANDBOX, PRODUCTION
+PaymentReconcileStatus: IDLE, SCHEDULED, RUNNING, NEEDS_REVIEW, RESOLVED
+PaymentStatus: PENDING, PROCESSING, SUCCEEDED, FAILED, CANCELLED, EXPIRED
+PaymentWebhookKind: PAYMENT, REFUND
+PaymentWebhookProcessingStatus: RECEIVED, PROCESSING, PROCESSED, RETRY, NEEDS_REVIEW
+RefundPurpose: DEPOSIT, BOOKING_CANCELLATION, RENTAL_CANCELLATION, TRAIL_ACCESS, TECHNICAL_REVERSAL
+RefundStatus: PENDING, PROCESSING, SUCCEEDED, FAILED, CANCELLED
