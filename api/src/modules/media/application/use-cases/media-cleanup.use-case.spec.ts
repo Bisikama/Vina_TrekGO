@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { MediaCleanupUseCase } from './media-cleanup.use-case';
 import { MediaAssetPort, MediaAssetView } from '../ports/media-asset.port';
 import { MediaStoragePort } from '../ports/media-storage.port';

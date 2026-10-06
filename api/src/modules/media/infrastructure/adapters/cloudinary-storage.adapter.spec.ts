@@ -196,6 +196,7 @@ describe('CloudinaryStorageAdapter', () => {
   describe('openOriginalStream', () => {
     it('creates stream url with sign_url depending on delivery type', async () => {
       cloudinary.url = jest.fn().mockReturnValue('https://example.com/test');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const https = require('https');
       jest.spyOn(https, 'get').mockImplementation((url, cb: any) => {
         cb({ statusCode: 200, on: jest.fn() });
