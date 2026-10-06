@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseFilters } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { z } from 'zod'
 import { Auth } from '../../../../shared/decorators/auth.decorator'
@@ -102,6 +102,14 @@ export class TripOptionsController {
     return this.trips.options(actor, 'destinations', parse(pageSchema, query))
   }
   @Get('leader/trip-options/pickup-points')
+  @ApiQuery({
+    name: 'destinationId',
+    required: true,
+    description: 'ID địa điểm lấy từ GET /api/v1/leader/trip-options/destinations',
+    schema: { type: 'string', format: 'uuid' },
+  })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 100000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } })
   pickups(@ActiveUser() actor: Actor, @Query() query: unknown) {
     const p = parse(pageSchema, query)
     return this.trips.options(actor, 'pickups', p, p.destinationId)
