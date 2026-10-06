@@ -2,25 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { TripCard } from "./TripCard";
-import { mockTripsData } from "../data/mockTripsData";
-import { createdTripToTripData, readCreatedLeaderTrip } from "@/features/leaders/data/mockLeaderTripStore";
+import { mockTripsData, type TripData } from "../data/mockTripsData";
+import { listPublicTrips } from "../services";
+import type { PublicTripItem } from "../types/public-trips";
+
+function publicTripToTripData(trip: PublicTripItem): TripData {
+  const startAt = new Date(trip.startAt);
+  const endAt = new Date(trip.endAt);
+  const startDay = startAt.getDate().toString().padStart(2, "0");
+  const endDay = endAt.getDate().toString().padStart(2, "0");
+  const year = startAt.getFullYear().toString();
+  const duration = Math.max(1, Math.ceil((endAt.getTime() - startAt.getTime()) / (1000 * 60 * 60 * 24)));
+  
+  return {
+    id: trip.id,
+    duration: `${duration} ngày`,
+    difficulty: { level: "medium", label: "Trung bình", color: "bg-blue-100 text-blue-700" },
+    isVFRSVerified: true,
+    location: { name: "Khu vực leo núi", distance: "Cung đường thực tế" },
+    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop",
+    date: { start: startDay, end: endDay, year },
+    status: { label: trip.status === 'OPEN' ? 'Đang mở đăng ký' : trip.status, color: "text-emerald-600" },
+    title: trip.title,
+    description: trip.description || "Chuyến đi tuyệt vời cùng Vina TrekGO",
+    leader: { name: "Leader", avatar: "/images/avatars/avatar-1.png", badge: "WFA Certified", experience: "Kinh nghiệm chuyên nghiệp", rating: 5, totalTrips: 10, porters: 0 },
+    slots: { booked: 0, total: trip.capacity || 15, statusText: "Còn chỗ" },
+    price: Number(trip.price) || 0,
+    action: { label: "Xem chi tiết", variant: "primary" as const },
+  };
+}
 
 export const TripListPage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [trips, setTrips] = useState(mockTripsData);
+  const [trips, setTrips] = useState<TripData[]>([]);
 
   useEffect(() => {
-    const refresh = () => {
-      const created = readCreatedLeaderTrip();
-      setTrips(created?.id ? [createdTripToTripData(created), ...mockTripsData] : mockTripsData);
+    const fetchTrips = async () => {
+      try {
+        const data = await listPublicTrips({ page: 1, pageSize: 20 });
+        const mapped = data.map(publicTripToTripData);
+        setTrips(mapped);
+      } catch (err) {
+        console.error("Failed to fetch public trips:", err);
+        setTrips(mockTripsData); // Fallback to mock data if API fails
+      }
     };
-    refresh();
-    window.addEventListener("trekgo-mock-db-change", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("trekgo-mock-db-change", refresh);
-      window.removeEventListener("storage", refresh);
-    };
+    fetchTrips();
   }, []);
 
   return (
@@ -185,7 +212,7 @@ export const TripListPage = () => {
         {/* Results Info & Tags */}
         <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
           <div className="flex items-center gap-2 text-sm">
-            <span className="font-bold text-gray-900">Hiển thị 6 trên 38 chuyến đi phù hợp</span>
+            <span className="font-bold text-gray-900">Hiển thị {trips.length} chuyến đi phù hợp</span>
             <div className="hidden md:flex items-center gap-2 ml-2">
               <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium flex items-center gap-1">Tây Bắc & Miền Bắc <button className="hover:text-blue-900">&times;</button></span>
               <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium flex items-center gap-1">Độ khó: Trung bình <button className="hover:text-blue-900">&times;</button></span>

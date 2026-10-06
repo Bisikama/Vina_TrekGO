@@ -6,6 +6,7 @@ import {
   StepTwoOverviewMap,
   type SystemTrailDetail,
 } from "./StepTwoOverviewMap";
+
 import {
   useLeaderTrailSuggestions,
   useLeaderTripDetail,
@@ -122,9 +123,23 @@ export function LeaderCreateTripStepTwo() {
     try {
       let currentVersion = trip.version;
       if (selectedCheckpointIds.length > 0) {
+        const trailCps = selectedTrailSuggestion?.checkpointIds || [];
+        const sortedCheckpoints = [...selectedCheckpointIds].sort((a, b) => {
+          const idxA = trailCps.indexOf(a);
+          const idxB = trailCps.indexOf(b);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return 0;
+        });
+
+        const validCheckpoints = trailCps.length > 0 
+          ? sortedCheckpoints.filter(id => trailCps.includes(id)) 
+          : sortedCheckpoints;
+
         const cpRes = await apiSetCheckpoints(tripId, {
           expectedVersion: currentVersion,
-          checkpointIds: selectedCheckpointIds,
+          checkpointIds: validCheckpoints,
         });
         currentVersion = cpRes.version;
       }
@@ -163,9 +178,24 @@ export function LeaderCreateTripStepTwo() {
 
     try {
       let currentVersion = trip.version;
+      
+      const trailCps = selectedTrailSuggestion?.checkpointIds || [];
+      const sortedCheckpoints = [...selectedCheckpointIds].sort((a, b) => {
+        const idxA = trailCps.indexOf(a);
+        const idxB = trailCps.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+
+      const validCheckpoints = trailCps.length > 0 
+        ? sortedCheckpoints.filter(id => trailCps.includes(id)) 
+        : sortedCheckpoints;
+
       const cpRes = await apiSetCheckpoints(tripId, {
         expectedVersion: currentVersion,
-        checkpointIds: selectedCheckpointIds,
+        checkpointIds: validCheckpoints,
       });
       currentVersion = cpRes.version;
 
@@ -318,24 +348,13 @@ export function LeaderCreateTripStepTwo() {
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-1">
                 <button
                   type="button"
-                  onClick={() => setCreateCustomRoute(false)}
-                  className={`rounded-xl border p-4 text-left ${
-                    !createCustomRoute
-                      ? "border-[#2f6b4f] bg-emerald-50"
-                      : "border-slate-200 bg-white"
-                  }`}
+                  className="rounded-xl border border-[#2f6b4f] bg-emerald-50 p-4 text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`h-4 w-4 rounded-full border-4 ${
-                        !createCustomRoute
-                          ? "border-[#125238]"
-                          : "border-slate-300"
-                      }`}
-                    />
+                    <span className="h-4 w-4 rounded-full border-4 border-[#125238]" />
 
                     <strong className="text-sm text-slate-900">
                       Cung đường đã thẩm định
@@ -350,61 +369,9 @@ export function LeaderCreateTripStepTwo() {
                     Dữ liệu trắc diện, nguồn nước và tọa độ cứu hộ đã được chuẩn hóa.
                   </p>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCreateCustomRoute(true)}
-                  className={`rounded-xl border p-4 text-left ${
-                    createCustomRoute
-                      ? "border-[#2f6b4f] bg-emerald-50"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-4 w-4 rounded-full border-4 ${
-                        createCustomRoute
-                          ? "border-[#125238]"
-                          : "border-slate-300"
-                      }`}
-                    />
-
-                    <strong className="text-sm text-slate-900">
-                      Tạo cung đường riêng
-                    </strong>
-
-                    <span className="ml-auto rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                      Tự thiết lập
-                    </span>
-                  </div>
-
-                  <p className="mt-3 text-xs leading-5 text-slate-500">
-                    Nhập GPX/KML hoặc số hóa thủ công các điểm mốc và waypoint.
-                  </p>
-                </button>
               </div>
 
-              {createCustomRoute ? (
-                <div className="mt-5 rounded-xl border border-dashed border-[#2f6b4f] bg-emerald-50 p-8 text-center">
-                  <div className="text-3xl">⇧</div>
 
-                  <h3 className="mt-3 font-bold text-slate-950">
-                    Tải dữ liệu cung đường
-                  </h3>
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    Kéo thả tệp GPX hoặc KML vào đây.
-                  </p>
-
-                  <button
-                    type="button"
-                    className="mt-4 rounded-xl bg-[#125238] px-5 py-3 text-sm font-bold text-white"
-                  >
-                    Chọn tệp GPX/KML
-                  </button>
-                </div>
-              ) : (
-                <>
                   <label className="mt-5 flex h-12 items-center gap-3 rounded-xl bg-[#eef3fb] px-4">
                     <span>⌕</span>
 
@@ -512,8 +479,6 @@ export function LeaderCreateTripStepTwo() {
                       })
                     )}
                   </div>
-                </>
-              )}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
@@ -541,7 +506,9 @@ export function LeaderCreateTripStepTwo() {
                     Đang tải danh sách checkpoint của điểm đến...
                   </div>
                 ) : (
-                  destinationCheckpoints.map((checkpoint, idx) => {
+                  destinationCheckpoints
+                    .filter(cp => !selectedTrailSuggestion || selectedTrailSuggestion.checkpointIds.includes(cp.id))
+                    .map((checkpoint, idx) => {
                     const isSelected = selectedCheckpointIds.includes(checkpoint.id);
 
                     return (
@@ -633,7 +600,7 @@ export function LeaderCreateTripStepTwo() {
                 onTrailLoaded={(detail) => setTrailDetail(detail)}
               />
 
-              <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg bg-slate-50 p-2">
                   <span className="text-[10px] text-slate-400">Tổng cự ly</span>
                   <strong className="block text-sm">
@@ -654,6 +621,17 @@ export function LeaderCreateTripStepTwo() {
                       ? `${trailDetail.elevationGainM}m`
                       : selectedTrailSuggestion?.elevationGainM
                       ? `${selectedTrailSuggestion.elevationGainM}m`
+                      : "--"}
+                  </strong>
+                </div>
+
+                <div className="rounded-lg bg-slate-50 p-2">
+                  <span className="text-[10px] text-slate-400">Độ khó</span>
+                  <strong className="block text-sm text-orange-600">
+                    {trailDetail?.difficulty
+                      ? trailDetail.difficulty
+                      : selectedTrailSuggestion?.difficulty
+                      ? selectedTrailSuggestion.difficulty
                       : "--"}
                   </strong>
                 </div>
