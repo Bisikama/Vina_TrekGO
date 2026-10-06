@@ -1,13 +1,13 @@
 export interface AppErrorParams {
   code: string;
   message?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   retryable?: boolean;
 }
 
 export class AppError extends Error {
   public readonly code: string;
-  public readonly details?: Record<string, any>;
+  public readonly details?: Record<string, unknown>;
   public readonly retryable?: boolean;
 
   constructor(params: AppErrorParams) {
@@ -21,7 +21,7 @@ export class AppError extends Error {
     Object.setPrototypeOf(this, AppError.prototype);
   }
 
-  static fromCode(code: string, overrides?: { message?: string; details?: Record<string, any> }) {
+  static fromCode(code: string, overrides?: { message?: string; details?: Record<string, unknown> }) {
     return new AppError({
       code,
       message: overrides?.message,

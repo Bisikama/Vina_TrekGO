@@ -14,8 +14,8 @@ export class PrismaUserAdapter implements IUserRepository {
     phone?: string
     avatar?: string
     avatarUrl?: string
-    role?: UserRole | string
-    status?: UserStatus | string
+    role?: UserRole
+    status?: UserStatus
   }): Promise<User> {
     return this.prisma.user.create({
       data: {

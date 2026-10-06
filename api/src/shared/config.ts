@@ -1,17 +1,10 @@
 import z from 'zod'
 import { config } from 'dotenv'
-import fs from 'fs'
-import path from 'path'
 
-// Kiểm tra file .env có tồn tại hay không
+// Load local overrides when available; deployments can supply process.env directly.
 config({
   path: '.env',
 })
-
-if (!fs.existsSync(path.resolve('.env'))) {
-  console.log('Không tìm thấy file env')
-  process.exit(1)
-}
 
 const envConfigSchema = z.object({
   PORT: z.coerce.number().default(3000),
@@ -31,14 +24,33 @@ const envConfigSchema = z.object({
   // M0.2+: When Media is enabled, these must be strictly required (remove .optional())
   // to fail fast and prevent broken uploads. API secret MUST NEVER be exposed.
   MEDIA_ENABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
-  MEDIA_MAX_IMAGE_BYTES: z.coerce.number().default(20 * 1024 * 1024), // 20 MB
-  MEDIA_MAX_VIDEO_BYTES: z.coerce.number().default(100 * 1024 * 1024), // 100 MB
+  MEDIA_DEV_UPLOAD_ENABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  MEDIA_MAX_IMAGE_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024), // 20 MB
+  MEDIA_MAX_VIDEO_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024), // 100 MB
+  MEDIA_PROVENANCE_TIME_TOLERANCE_MINUTES: z.coerce.number().int().nonnegative().default(30),
   
   MEDIA_PROVIDER: z.literal('CLOUDINARY').default('CLOUDINARY'),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
   CLOUDINARY_SIGNATURE_ALGORITHM: z.literal('sha256').default('sha256'),
+  
+  MEDIA_PENDING_UPLOAD_RETENTION_HOURS: z.coerce.number().int().positive().default(24),
+  MEDIA_REJECTED_RETENTION_HOURS: z.coerce.number().int().positive().default(48),
+  MEDIA_CATALOG_ORPHAN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  MEDIA_EVIDENCE_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  MEDIA_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().default(100),
+
+  // M0.3 Validation configurations
+  MEDIA_IMAGE_MIN_WIDTH: z.coerce.number().int().positive().default(320),
+  MEDIA_IMAGE_MIN_HEIGHT: z.coerce.number().int().positive().default(320),
+  MEDIA_IMAGE_MAX_WIDTH: z.coerce.number().int().positive().default(12000),
+  MEDIA_IMAGE_MAX_HEIGHT: z.coerce.number().int().positive().default(12000),
+  MEDIA_VIDEO_MAX_DURATION_SECONDS: z.coerce.number().int().positive().default(120),
+  MEDIA_VIDEO_MIN_WIDTH: z.coerce.number().int().positive().default(320),
+  MEDIA_VIDEO_MIN_HEIGHT: z.coerce.number().int().positive().default(240),
+  MEDIA_VIDEO_MAX_WIDTH: z.coerce.number().int().positive().default(7680),
+  MEDIA_VIDEO_MAX_HEIGHT: z.coerce.number().int().positive().default(4320),
 })
 .superRefine((data, ctx) => {
   if (data.MEDIA_ENABLED) {
@@ -57,7 +69,7 @@ const envConfigSchema = z.object({
 
 const configserver = envConfigSchema.safeParse(process.env)
 if (!configserver.success) {
-  console.error('Các giá trị khai báo trong .env không hợp lệ:', configserver.error.format())
+  console.error('Các biến môi trường cấu hình không hợp lệ:', configserver.error.format())
   process.exit(1)
 }
 

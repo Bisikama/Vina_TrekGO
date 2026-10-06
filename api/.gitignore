@@ -59,3 +59,11 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /fix
 fix
+
+# Agent Skills
+skills-lock.json
+
+# Test outputs
+jest.json
+jest_output.txt
+/docs

@@ -1,0 +1,216 @@
+import { Injectable, Logger } from '@nestjs/common'
+import { Interval } from '@nestjs/schedule'
+import { Prisma } from '@prisma/client'
+import { z } from 'zod'
+import { PrismaService } from '../../shared/services/prisma.service'
+import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
+import { PaymentsPort } from '../payments/payments.port'
+import { paymentHash } from '../payments/payment-utils'
+
+const policySchema = z
+  .object({
+    cancellationRules: z
+      .object({
+        version: z.literal(1),
+        tiers: z
+          .array(
+            z
+              .object({
+                minHoursBeforeStart: z.number().finite().nonnegative(),
+                refundPercent: z.number().finite().min(0).max(100),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
+  })
+  .passthrough()
+
+@Injectable()
+export class BookingCancellationService {
+  private running = false
+  private readonly logger = new Logger(BookingCancellationService.name)
+  constructor(
+    private readonly db: PrismaService,
+    private readonly payments: PaymentsPort,
+  ) {}
+
+  async cancel(input: {
+    bookingId: string
+    actorId: string
+    actorRole: string
+    idempotencyKey: string
+    reason: string
+  }) {
+    const key = paymentHash([input.actorId, 'booking-cancellation', input.idempotencyKey])
+    const requestHash = paymentHash({ bookingId: input.bookingId, reason: input.reason })
+    const cancellation = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`
+      const initial = await tx.booking.findUnique({ where: { id: input.bookingId } })
+      if (!initial) throw AppError.fromCode(B.NOT_FOUND)
+      await tx.$queryRaw`SELECT id FROM trips WHERE id = ${initial.tripId}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${input.bookingId}::uuid FOR UPDATE`
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, include: { trip: true } })
+      if (booking.tripId !== initial.tripId) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+      const source =
+        input.actorRole === 'ADMIN'
+          ? 'ADMIN'
+          : input.actorId === booking.trip.creatorId && booking.trip.status === 'CANCELLED'
+            ? 'ORGANIZER'
+            : input.actorId === booking.userId
+              ? 'USER'
+              : null
+      if (!source) throw AppError.fromCode('FORBIDDEN')
+      const existing = await tx.bookingCancellation.findUnique({ where: { idempotencyKey: key } })
+      if (existing) {
+        const saved = existing.policySnapshot as Prisma.JsonObject
+        const decision = saved.decision as Prisma.JsonObject | undefined
+        if (existing.bookingId !== booking.id || decision?.requestHash !== requestHash)
+          throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
+        return existing
+      }
+      const applied = await tx.paymentApplication.findFirst({
+        where: { status: 'APPLIED', invoice: { bookingId: booking.id } },
+        include: { payment: true },
+      })
+      if (!applied || booking.status !== 'CONFIRMED') throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${applied.invoiceId}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${applied.paymentId}::uuid FOR UPDATE`
+      const payment = await tx.payment.findUniqueOrThrow({ where: { id: applied.paymentId } })
+      if (
+        payment.status !== 'SUCCEEDED' ||
+        payment.reconcileStatus === 'NEEDS_REVIEW' ||
+        payment.currency !== 'VND' ||
+        (await tx.refund.findFirst({ where: { paymentId: payment.id, reconcileStatus: 'NEEDS_REVIEW' } }))
+      )
+        throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+      const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+      let percent = 100
+      if (source === 'USER') {
+        if (booking.trip.startAt <= now) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+        const parsed = policySchema.safeParse(booking.policySnapshot)
+        if (!parsed.success) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
+        const tiers = [...parsed.data.cancellationRules.tiers].sort(
+          (a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart,
+        )
+        if (new Set(tiers.map((t) => t.minHoursBeforeStart)).size !== tiers.length)
+          throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
+        const hours = (booking.trip.startAt.getTime() - now.getTime()) / 3600000
+        const tier = tiers.find((t) => hours >= t.minHoursBeforeStart)
+        if (!tier) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
+        percent = tier.refundPercent
+      }
+      const reserved = await tx.refund.aggregate({
+        where: { paymentId: payment.id, status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
+        _sum: { amount: true },
+      })
+      const refundableAmount = Prisma.Decimal.max(
+        0,
+        payment.amount
+          .mul(percent.toString())
+          .div(100)
+          .floor()
+          .minus(reserved._sum.amount ?? 0),
+      )
+      const record = await tx.bookingCancellation.create({
+        data: {
+          bookingId: booking.id,
+          source,
+          idempotencyKey: key,
+          cancelledBy: input.actorId,
+          reason: input.reason,
+          refundableAmount,
+          cancelledAt: now,
+          policySnapshot: {
+            original: booking.policySnapshot,
+            decision: {
+              requestHash,
+              source,
+              percent,
+              paymentId: payment.id,
+              collectedAmount: payment.amount.toFixed(),
+              refundableAmount: refundableAmount.toFixed(),
+            },
+          },
+        },
+      })
+      await tx.booking.update({
+        where: { id: booking.id },
+        data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } },
+      })
+      await tx.bookingOutboxEvent.create({
+        data: {
+          deduplicationKey: `booking-cancellation:${record.id}:v1`,
+          eventType: 'BOOKING_CANCELLED',
+          aggregateType: 'Booking',
+          aggregateId: booking.id,
+          payload: { schemaVersion: 1, cancellationId: record.id, bookingId: booking.id, paymentId: payment.id },
+        },
+      })
+      return record
+    })
+    return {
+      bookingId: cancellation.bookingId,
+      cancellationId: cancellation.id,
+      status: 'CANCELLED',
+      refundableAmount: cancellation.refundableAmount.toFixed(),
+      currency: 'VND',
+    }
+  }
+
+  async dispatch(cancellationId: string) {
+    const cancellation = await this.db.bookingCancellation.findUniqueOrThrow({ where: { id: cancellationId } })
+    const decision = (cancellation.policySnapshot as Prisma.JsonObject).decision as Prisma.JsonObject | undefined
+    if (!decision || typeof decision.paymentId !== 'string') throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+    const refund = cancellation.refundableAmount.isZero()
+      ? null
+      : await this.payments.requestRefund({
+          paymentId: decision.paymentId,
+          businessActionId: `booking-cancellation:${cancellation.id}`,
+          purpose: 'BOOKING_CANCELLATION',
+          amount: cancellation.refundableAmount.toFixed(),
+          idempotencyKey: `booking-cancellation:${cancellation.id}`,
+          source: { bookingCancellationId: cancellation.id },
+        })
+    await this.db.bookingOutboxEvent.updateMany({
+      where: { deduplicationKey: `booking-cancellation:${cancellation.id}:v1`, status: 'PENDING' },
+      data: { status: 'PROCESSED', processedAt: new Date(), lastError: null },
+    })
+    return refund
+  }
+
+  @Interval(2000)
+  async tick() {
+    if (this.running || process.env.PAYMENT_EVENTS_WORKER_ENABLED === 'false') return
+    this.running = true
+    try {
+      const events = await this.db.bookingOutboxEvent.findMany({
+        where: { eventType: 'BOOKING_CANCELLED', status: 'PENDING' },
+        orderBy: { createdAt: 'asc' },
+        take: 25,
+      })
+      for (const event of events) {
+        try {
+          const payload = event.payload as Prisma.JsonObject
+          if (typeof payload.cancellationId !== 'string') throw new Error('Invalid cancellation event')
+          await this.dispatch(payload.cancellationId)
+        } catch {
+          await this.db.bookingOutboxEvent.updateMany({
+            where: { id: event.id, status: 'PENDING', retryCount: event.retryCount },
+            data: {
+              retryCount: { increment: 1 },
+              status: event.retryCount >= 7 ? 'FAILED' : 'PENDING',
+              lastError: 'REFUND_RESERVATION_DEFERRED',
+            },
+          })
+          this.logger.warn(`Booking refund reservation deferred: ${event.id}`)
+        }
+      }
+    } catch {
+      this.logger.warn('Booking cancellation outbox unavailable; retrying on next tick')
+    } finally {
+      this.running = false
+    }
+  }
+}

@@ -8,6 +8,11 @@ import { PrismaService } from '../../shared/services/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
+jest.mock('@nestjs/schedule', () => ({
+  Cron: jest.fn(() => () => {}),
+  CronExpression: {},
+}));
+
 describe('Media Foundation', () => {
   describe('Architecture', () => {
     it('application files do not import @prisma/client or cloudinary', () => {
@@ -112,18 +117,31 @@ describe('Media Foundation', () => {
     it('throws MEDIA_INVALID_STATE if markReady affects 0 rows and asset is not READY', async () => {
       // Mock updateMany to return count 0
       prismaMock.mediaAsset.updateMany.mockResolvedValue({ count: 0 });
-      // Mock findUnique to return ARCHIVED state
+      // Mock findUnique to return REJECTED state
       prismaMock.mediaAsset.findUnique.mockResolvedValue({
         id: '123',
         ownerUserId: 'u1',
-        status: 'ARCHIVED',
+        status: 'REJECTED',
         scope: 'RENTAL_PRODUCT',
       });
 
-      await expect(adapter.markReady({
+      await expect(adapter.markReadyFromProcessing({
         id: '123', ownerUserId: 'u1', providerAssetId: 'p1', providerPublicId: 'pub1',
-        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date()
-      })).rejects.toThrow(/Cannot complete upload for asset in ARCHIVED state/);
+        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date(), retentionUntil: new Date()
+      })).rejects.toThrow(/Cannot complete upload for asset in REJECTED state/);
+
+      // Explicitly assert atomic update requirements
+      expect(prismaMock.mediaAsset.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: '123',
+          ownerUserId: 'u1',
+          status: 'PROCESSING',
+        },
+        data: expect.objectContaining({
+          status: 'READY',
+          version: { increment: 1 },
+        }),
+      });
     });
 
     it('returns existing asset idempotently if markReady affects 0 rows but asset is READY', async () => {
@@ -135,9 +153,9 @@ describe('Media Foundation', () => {
         scope: 'RENTAL_PRODUCT',
       });
 
-      const result = await adapter.markReady({
+      const result = await adapter.markReadyFromProcessing({
         id: '123', ownerUserId: 'u1', providerAssetId: 'p1', providerPublicId: 'pub1',
-        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date()
+        format: 'jpg', sizeBytes: 100, width: 10, height: 10, durationMs: null, secureUrl: 'url', uploadedAt: new Date(), retentionUntil: new Date()
       });
 
       expect(result.status).toBe('READY');
@@ -146,29 +164,97 @@ describe('Media Foundation', () => {
   });
 
   describe('CloudinaryStorageAdapter', () => {
-    it('missing configuration follows the projects accepted M0.1 behavior (warns but does not throw)', () => {
-      // In M0.1 it might just mock or safely initialize without crashing.
-      const adapter = new CloudinaryStorageAdapter();
-      const loggerSpy = jest.spyOn((adapter as any).logger, 'warn').mockImplementation(() => {});
-      
-      const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
-      // Note: the adapter imports the already-evaluated config.ts, so we can't easily change process.env and have it reflect.
-      // But we can mock the config module or just mock the values if it was a class property.
-      // Actually, since it imports `envConfig`, we can mutate `envConfig` temporarily.
-      // We already import envConfig from config at the top? No, we will just use process.env and let the mock handle it if we could, but we can't easily.
-      // We will use a dynamic import or just disable the lint line.
+    let adapter: CloudinaryStorageAdapter;
+    let envConfig: Record<string, unknown>;
+
+    beforeEach(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const envConfig = require('../../shared/config').default;
-      const originalCloudNameFromConfig = envConfig.CLOUDINARY_CLOUD_NAME;
+      envConfig = require('../../shared/config').default;
+      adapter = new CloudinaryStorageAdapter();
+    });
+
+    it('does not throw when disabled and missing credentials', () => {
+      const original = envConfig.MEDIA_ENABLED;
+      envConfig.MEDIA_ENABLED = false;
+      expect(() => adapter.onModuleInit()).not.toThrow();
+      envConfig.MEDIA_ENABLED = original;
+    });
+
+    it('initializes successfully when enabled with valid credentials', () => {
+      const origEnabled = envConfig.MEDIA_ENABLED;
+      const origCloud = envConfig.CLOUDINARY_CLOUD_NAME;
+      const origKey = envConfig.CLOUDINARY_API_KEY;
+      const origSecret = envConfig.CLOUDINARY_API_SECRET;
+      const origAlgo = envConfig.CLOUDINARY_SIGNATURE_ALGORITHM;
+
+      envConfig.MEDIA_ENABLED = true;
+      envConfig.CLOUDINARY_CLOUD_NAME = 'cloud';
+      envConfig.CLOUDINARY_API_KEY = 'key';
+      envConfig.CLOUDINARY_API_SECRET = 'secret';
+      envConfig.CLOUDINARY_SIGNATURE_ALGORITHM = 'sha256';
+
+      expect(() => adapter.onModuleInit()).not.toThrow();
+
+      envConfig.MEDIA_ENABLED = origEnabled;
+      envConfig.CLOUDINARY_CLOUD_NAME = origCloud;
+      envConfig.CLOUDINARY_API_KEY = origKey;
+      envConfig.CLOUDINARY_API_SECRET = origSecret;
+      envConfig.CLOUDINARY_SIGNATURE_ALGORITHM = origAlgo;
+    });
+
+    it('throws error when enabled but missing cloud name', () => {
+      const origEnabled = envConfig.MEDIA_ENABLED;
+      const origCloud = envConfig.CLOUDINARY_CLOUD_NAME;
+      
+      envConfig.MEDIA_ENABLED = true;
       envConfig.CLOUDINARY_CLOUD_NAME = undefined;
 
-      adapter.onModuleInit();
-      // Should instantiate and run init safely without throwing
-      expect(adapter).toBeDefined();
-      expect(loggerSpy).toHaveBeenCalled();
+      expect(() => adapter.onModuleInit()).toThrow('Cloudinary credentials are required when MEDIA_ENABLED is true');
+
+      envConfig.MEDIA_ENABLED = origEnabled;
+      envConfig.CLOUDINARY_CLOUD_NAME = origCloud;
+    });
+
+    it('throws error when enabled but missing api key', () => {
+      const origEnabled = envConfig.MEDIA_ENABLED;
+      const origKey = envConfig.CLOUDINARY_API_KEY;
       
-      envConfig.CLOUDINARY_CLOUD_NAME = originalCloudNameFromConfig;
-      loggerSpy.mockRestore();
+      envConfig.MEDIA_ENABLED = true;
+      envConfig.CLOUDINARY_API_KEY = undefined;
+
+      expect(() => adapter.onModuleInit()).toThrow('Cloudinary credentials are required when MEDIA_ENABLED is true');
+
+      envConfig.MEDIA_ENABLED = origEnabled;
+      envConfig.CLOUDINARY_API_KEY = origKey;
+    });
+
+    it('throws error when enabled but missing api secret', () => {
+      const origEnabled = envConfig.MEDIA_ENABLED;
+      const origSecret = envConfig.CLOUDINARY_API_SECRET;
+      
+      envConfig.MEDIA_ENABLED = true;
+      envConfig.CLOUDINARY_API_SECRET = undefined;
+
+      expect(() => adapter.onModuleInit()).toThrow('Cloudinary credentials are required when MEDIA_ENABLED is true');
+
+      envConfig.MEDIA_ENABLED = origEnabled;
+      envConfig.CLOUDINARY_API_SECRET = origSecret;
+    });
+
+    it('throws error when signature algorithm is not sha256', () => {
+      const origEnabled = envConfig.MEDIA_ENABLED;
+      const origAlgo = envConfig.CLOUDINARY_SIGNATURE_ALGORITHM;
+      
+      envConfig.MEDIA_ENABLED = true;
+      envConfig.CLOUDINARY_CLOUD_NAME = 'cloud';
+      envConfig.CLOUDINARY_API_KEY = 'key';
+      envConfig.CLOUDINARY_API_SECRET = 'secret';
+      envConfig.CLOUDINARY_SIGNATURE_ALGORITHM = 'sha1';
+
+      expect(() => adapter.onModuleInit()).toThrow('Cloudinary signature algorithm must be exactly sha256');
+
+      envConfig.MEDIA_ENABLED = origEnabled;
+      envConfig.CLOUDINARY_SIGNATURE_ALGORITHM = origAlgo;
     });
   });
 });

@@ -1,0 +1,275 @@
+TREKGO - ĐÁNH GIÁ VÀ BỔ SUNG SCHEMA THANH TOÁN
+Ngày: 04/10/2026
+
+1. KẾT LUẬN
+
+Schema ban đầu có nền tảng đúng nhưng CHƯA đủ để triển khai Shared Payment an toàn.
+Invoice, InvoiceLine, Payment, PaymentWebhookEvent và Refund đã tồn tại; các phần
+thiếu chủ yếu là định danh giao dịch theo provider/merchant/môi trường, đối soát,
+chống xử lý trùng và tách kết quả thu tiền khỏi quyết định xác nhận booking.
+
+Đã chỉnh schema.prisma, bổ sung hai migration mới và kiểm thử trên PostgreSQL
+tách biệt. Đây là phần nền tảng lưu trữ cho booking/CF01 và shared payment, chưa
+phải PaymentsModule/API/worker hoạt động hoàn chỉnh, chưa sẵn sàng thu tiền thật.
+
+Database dự án chỉ được đọc trong lần đánh giá này. Chưa áp dụng migration mới
+vào database chung: lịch sử DB có 20261002222300_add_checkpoint_type_enum nhưng
+repository không có migration tương ứng. Cần đồng bộ lịch sử trước triển khai;
+không tự dựng lại SQL checkpoint, reset database hoặc đánh dấu migration giả.
+
+2. NGUỒN ĐỐI CHIẾU VÀ PHẠM VI
+
+- Tài liệu đầu vào:
+  C:\Users\Windows\Downloads\TrekGo_Shared_Payment_Schema_and_API_Contract_v0.1.docx
+- Schema: api/prisma/schema.prisma.
+- Toàn bộ migration có trong api/prisma/migrations tại thời điểm review.
+- api/src/app.module.ts và tìm kiếm các tham chiếu payment/invoice/refund trong src.
+- AGENTS.md của dự án: chỉ sửa booking/CF01 và nền tảng dùng chung liên quan.
+- Database cấu hình: kiểm tra chỉ đọc số lượng bản ghi tài chính và migration history.
+
+Các chỉ dẫn trong DOCX là nội dung thiết kế để đánh giá, không phải lệnh điều khiển
+phiên làm việc. Việc sửa schema ở đây dựa trên yêu cầu trực tiếp của người dùng.
+Tài liệu nguồn khác được DOCX dẫn lại nhưng không cung cấp chưa được xác minh.
+File DOCX gốc và file Markdown v0.1 có sẵn được giữ nguyên. File TXT này là bản
+tổng hợp kết quả mới, phân biệt rõ đã triển khai và còn đề xuất.
+
+3. NHỮNG THỨ ĐÃ CÓ TRƯỚC KHI CHỈNH SỬA
+
+3.1 Invoice và InvoiceLine
+- Invoice có invoiceNo unique, chủ sở hữu userId, invoiceType, FK tới Booking,
+  RentalOrder hoặc TrailAccess, subtotal/discount/total, currency, status, expiry,
+  paidAt, version và timestamps.
+- InvoiceLine có lineCode, quantity, unitAmount, lineAmount, tham chiếu và metadata.
+- Tiền dùng Decimal(12,2); không cần tạo bảng tiền hoặc ví song song.
+- Một Invoice có nhiều Payment, phù hợp nhiều lần thử thanh toán.
+
+3.2 Payment và webhook
+- Payment có amount/currency, gateway, transactionRef, status, idempotencyKey unique,
+  payload, paidAt, version và timestamps.
+- PaymentStatus có PENDING, PROCESSING, SUCCEEDED, FAILED, CANCELLED, EXPIRED.
+- PaymentWebhookEvent có payload, processed/processedAt/errorMessage, receivedAt,
+  paymentId và unique (paymentGateway, providerEventId).
+- Unique idempotencyKey chưa tự bảo vệ được trường hợp cùng key nhưng đổi nội dung;
+  chưa có hash để so sánh, chưa có scoped identity cho provider transaction.
+
+3.3 Refund
+- Có quan hệ Payment, amount/currency, status, purpose, idempotencyKey unique,
+  refundTransactionRef, providerPayload, refundedAt và nguồn nghiệp vụ hoàn tiền.
+- depositSettlementItemId unique đang giới hạn một logical Refund trên mỗi item.
+- SQL cũ đã có ck_refunds_amount_positive và ck_refunds_purpose_source.
+  Không coi hai ràng buộc này là tính năng thiếu hoặc tạo bản sao.
+
+3.4 Booking và CF01
+- BookingPolicy có TTL và rule version; Booking có policySnapshot, giá snapshot,
+  insuranceAmount, expiresAt, version và confirmationIdempotencyKey unique.
+- BookingCancellation có số tiền được phép hoàn và policySnapshot.
+- BookingOutboxEvent đã có deduplicationKey unique.
+- SQL đã có uq_bookings_active_user_trip; không tạo lại index này.
+- TripCancellationRequest có trạng thái xét duyệt và previousTripStatus.
+- Các bảng Rental settlement/allocation nghiệp vụ và TrailAccess đã tồn tại theo
+  thiết kế riêng của team; chưa cần sửa các module đó cho bước nền tảng booking.
+
+3.5 Mức độ triển khai thực tế
+- AppModule chưa đăng ký PaymentsModule; các endpoint trong DOCX vẫn là đề xuất.
+- Schema có bảng không đồng nghĩa đã có checkout, verify webhook, reconcile,
+  hoàn tiền, chống hoàn vượt tổng hoặc consumer xác nhận booking.
+- Khi kiểm tra DB, invoices/payments/refunds/payment_webhook_events đều có 0 hàng.
+  Đây là ảnh chụp tại lúc kiểm tra, không phải bảo đảm dữ liệu luôn rỗng.
+
+4. NHỮNG THAY ĐỔI ĐÃ THỰC HIỆN TRONG REPOSITORY
+
+4.1 Định danh provider và đối soát
+- Payment thêm providerEnvironment (MOCK/SANDBOX/PRODUCTION), merchantAccountKey,
+  merchantRequestRef, requestHash, requestHashVersion, paymentMethod, checkoutData,
+  expiresAt, reconcileStatus, lastCheckedAt, nextRetryAt, leaseUntil, leaseToken,
+  retryCount và lastErrorCode.
+- Refund thêm scope tương ứng, merchantRefundRef, businessActionId, requestHash,
+  requestHashVersion, reasonCode và bộ trường đối soát tương tự Payment.
+- Unique provider reference có scope gateway + environment + merchant.
+- Unique (paymentId,businessActionId) chống tạo lại cùng quyết định hoàn với key khác.
+- Index phục vụ tìm hàng chờ đối soát và truy vấn theo trạng thái/thời gian.
+- CHECK không cho metadata bị điền dở dang: nhóm identity hoặc toàn bộ null cho
+  legacy, hoặc đủ trường bắt buộc; hash SHA-256 dạng hex thường, hash version > 0.
+- Retry counter không âm; leaseToken và leaseUntil phải cùng có hoặc cùng không có.
+
+4.2 Tách thu tiền và áp dụng vào booking
+- Thêm PaymentApplication với PENDING/APPLIED/REJECTED, reasonCode và thời điểm.
+- paymentId unique: mỗi Payment có một quyết định áp dụng.
+- Composite FK (paymentId,invoiceId) bảo đảm application trỏ đúng Invoice của Payment.
+- Partial unique invoiceId WHERE status='APPLIED': một Invoice chỉ nhận một Payment.
+- Vẫn cho phép nhiều Payment SUCCEEDED của các giao dịch thật khác nhau để lưu
+  bằng chứng thu trùng; khoản thừa có thể bị REJECTED và yêu cầu hoàn kỹ thuật.
+- CHECK trạng thái với timestamps/reasonCode tránh APPLIED thiếu thời điểm hoặc
+  REJECTED thiếu lý do. Việc chỉ áp dụng Payment đã SUCCEEDED vẫn thuộc service.
+
+4.3 Outbox và consumer receipt
+- Thêm PaymentOutboxEvent dùng EventStatus và cùng kiểu cấu trúc outbox hiện có,
+  bổ sung lịch retry và lease. Không thay BookingOutboxEvent, không thêm broker.
+- Thêm PaymentConsumerReceipt với khóa chính (eventId,consumerName).
+- Đây là khả năng lưu dữ liệu; phải viết worker và ghi receipt cùng transaction
+  với hiệu ứng nghiệp vụ mới đạt xử lý lặp an toàn. Không hứa exactly-once delivery.
+
+4.4 Webhook inbox
+- Thêm scope provider, eventKind PAYMENT/REFUND, refundId, payloadHash, verifiedAt,
+  processingStatus, attemptCount, nextRetryAt và lease.
+- Thay unique cũ bằng unique có scope để không chặn cùng event ID ở môi trường khác.
+- Bổ sung partial unique riêng cho event legacy không có scope, tránh mất khả năng
+  chống trùng do PostgreSQL cho phép nhiều NULL trong unique nhiều cột.
+- Giữ processed/processedAt để tương thích. CHECK yêu cầu trạng thái mới và các
+  trường cũ nhất quán; PROCESSED phải có processed=true và processedAt.
+- refundId chỉ được có trên event REFUND. Kiểm tra Refund thuộc đúng Payment,
+  xác thực chữ ký, merchant và số tiền vẫn phải làm trong service.
+
+4.5 Invoice booking và nguồn hủy
+- Invoice thêm revisionNo nullable và supersedesInvoiceId self-FK Restrict.
+- Unique (bookingId,revisionNo); chỉ một Invoice DRAFT/PENDING_PAYMENT cho Booking.
+- CHECK revision dương, không tự supersede chính mình; predecessor cần revision > 1.
+- BookingCancellation thêm source USER/ORGANIZER/ADMIN, idempotencyKey unique và
+  tripCancellationRequestId FK Restrict, cùng quan hệ ngược trên TripCancellationRequest.
+- source và idempotencyKey phải được cung cấp cùng nhau; tham chiếu trip cancellation
+  chỉ dùng với nguồn ORGANIZER hoặc ADMIN.
+- Đổi Invoice.booking và Refund.bookingCancellation sang onDelete Restrict để giữ
+  lịch sử tài chính booking. Không sửa chính sách FK của bảng Rental/Trail.
+
+4.6 Tiền, nguồn nghĩa vụ và hoàn kỹ thuật
+- Invoice CHECK đúng một business source và source khớp invoiceType.
+- Invoice CHECK subtotal/discount không âm, discount <= subtotal,
+  total = subtotal - discount; số tiền VND phải nguyên.
+- InvoiceLine CHECK quantity > 0, tiền không âm và lineAmount =
+  round(quantity * unitAmount, 2). Tổng các line vẫn do service kiểm tra.
+- Payment amount > 0, VND nguyên; Refund giữ CHECK amount > 0 đã có và thêm VND nguyên.
+- Thêm RefundPurpose.TECHNICAL_REVERSAL và mở rộng CHECK nguồn hoàn tiền tương ứng.
+- Giữ nguyên đủ bốn nhánh purpose cũ, bao gồm DEPOSIT có cả settlement và item.
+- Technical reversal không cần tạo BookingCancellation giả; mọi FK nguồn nghiệp vụ
+  phải null, có businessActionId và reasonCode hợp lệ.
+- Lý do được chấp nhận: LATE_PAYMENT, DUPLICATE_PAYMENT, DOMAIN_NOT_ELIGIBLE.
+
+5. NHỮNG ĐIỂM ĐƯỢC LÀM RÕ HOẶC ĐIỀU CHỈNH SO VỚI DOCX v0.1
+
+- Bổ sung DOMAIN_NOT_ELIGIBLE cho technical reversal. DOCX có lý do application này
+  nhưng phần hoàn kỹ thuật chỉ liệt kê late/duplicate; thiếu trường hợp Trip bị hủy
+  hoặc domain không còn nhận khoản thu dù chưa hết TTL.
+- Chọn composite FK thật cho PaymentApplication thay vì chỉ trông chờ service.
+- Bổ sung chống trùng webhook legacy khi chuyển sang unique có scope.
+- Nullable metadata là giai đoạn mở rộng có chủ đích. Không đặt mặc định SANDBOX,
+  không bịa requestHash hay đánh số revision cho lịch sử chưa đủ bằng chứng.
+- Không đặt requestHashVersion=1 tự động cho hàng cũ khi chưa có requestHash.
+- Unique thông thường cho transactionRef nullable có cùng hiệu quả chống trùng
+  reference khác NULL khi scope đã đầy đủ, đồng thời Prisma 6 biểu diễn được.
+- Tách migration thêm enum TECHNICAL_REVERSAL khỏi migration dùng giá trị enum đó,
+  để giá trị mới đã commit trước khi mở rộng CHECK.
+- Chỉ triển khai revision/open-invoice guard cho Booking. Revision của Rental/Trail,
+  allocation và chính sách FK riêng của hai domain đó vẫn cần team sở hữu triển khai.
+
+6. GIỚI HẠN VÀ CÁC BỔ SUNG CÒN CẦN LÀM
+
+6.1 Bắt buộc trước khi mở checkout
+- Viết PaymentsModule dùng Prisma/shared infrastructure hiện có; adapter mock trước.
+- New writer phải điền đủ scope, request hash/version, reference và booking revision.
+  DB hiện cho phép nhóm metadata toàn null để tương thích; vì vậy CHƯA chặn được
+  new writer viết như legacy. Sau khi backfill và chuyển writer, cần migration harden.
+- Chuẩn hóa key theo actor + operation; kiểm tra ownership trước replay; key cũ
+  cùng request trả cùng resource, khác payload trả conflict.
+- Lock Trip -> Booking -> Invoice -> Payment theo cùng thứ tự trên mọi đường liên quan.
+- Check Payment amount/currency bằng Invoice snapshot, Invoice owner đúng Booking,
+  predecessor cùng source/chủ sở hữu, revision tăng, không tạo vòng lịch sử.
+- Chỉ xác nhận application APPLIED khi Payment SUCCEEDED và Booking còn đủ điều kiện.
+  Guard ở Booking vẫn cần thiết vì một Booking có thể có nhiều Invoice revision.
+- Booking insurance tính một lần: Invoice subtotal = Booking subtotal + insurance;
+  discount trừ ở Invoice. Cần đồng bộ công thức với use case CF02.
+- InvoiceLine VND phải nguyên và tổng line bằng Invoice subtotal; CHECK một bảng
+  không kiểm tra được currency ở bảng cha hay tổng nhiều hàng.
+
+6.2 Webhook và đối soát
+- Bật raw body đúng transport boundary; xác thực signature bằng adapter thật.
+- Persist inbox trước ACK; callback/query kết quả phải dùng cùng state guard.
+- Timeout giữ PROCESSING/unresolved; không tự đánh FAILED để tạo giao dịch mới.
+- Tạo application PENDING và outbox cùng transaction ghi financial success.
+- Worker claim/reclaim lease và kiểm tra token khi commit; schema có lease chưa
+  có nghĩa worker đã an toàn khi chạy đồng thời.
+- Kiểm tra amount/currency, môi trường, merchant và reference trước áp dụng.
+- Không dùng redirect từ frontend làm bằng chứng thanh toán thành công.
+
+6.3 Hoàn tiền và chính sách nghiệp vụ
+- Lock Payment trước SUM refund PENDING + PROCESSING + SUCCEEDED; không hoàn vượt
+  tiền đã thu hoặc vượt quyết định domain. Schema đơn thuần chưa bảo vệ tổng này.
+- Đồng bộ Refund scope với Payment và kiểm tra mọi nguồn cancellation/settlement.
+- Technical reversal dùng businessActionId ổn định technical-reversal:{paymentId}.
+- Invoice refund status chỉ tính các khoản hoàn của Payment đã APPLIED; hoàn khoản
+  thu trùng không được làm Invoice hợp lệ thành REFUNDED.
+- Chốt cutoff TTL, xử lý CANCEL_PENDING và tỷ lệ hoàn organizer/user theo policy.
+- Không tự reset FAILED refund để retry. Nếu cần nhiều provider attempt cho cùng
+  logical Refund, phải bổ sung RefundAttempt; giữ unique settlement item hiện có.
+- Use case giá trị 0 cần chính sách riêng, không tạo Payment SUCCEEDED giả.
+
+6.4 Phối hợp team khác
+- PaymentAllocation/RefundAllocation cho Rental chưa được thêm ở lần này.
+- Rental tự quản lý reservation, deposit/deduction và settlement; Trail tự grant access.
+- Invoice source CHECK có thể chặn xóa RentalOrder/TrailAccess đang có Invoice dù
+  FK cũ vẫn là SET NULL. Cần thông báo tác động này khi rollout shared constraint;
+  không tự thay code xóa hoặc chính sách nghiệp vụ của hai team.
+- Không sửa auth, rental, trail, checkpoint, API error contract hay client.
+- Khi làm API payment: dùng AppError + ERROR_DEFINITIONS + GlobalErrorFilter và
+  ZodValidationPipe; frontend đọc response.data.error. CF01 filter/client chỉ migrate
+  cùng nhau nếu có yêu cầu thay đổi error handling tương ứng.
+
+7. MIGRATION VÀ TRIỂN KHAI
+
+Các file mới:
+- api/prisma/migrations/20261004090000_payment_reversal_purpose/migration.sql
+- api/prisma/migrations/20261004090100_booking_payment_foundation/migration.sql
+
+Migration đầu chỉ mở rộng enum. Migration thứ hai dùng transaction để thêm field,
+bảng, index và thay các constraint liên quan. Không xóa hàng, không rewrite migration
+cũ, không reset DB. Nếu migration thứ hai thất bại, enum mới có thể đã tồn tại;
+điều này không xóa lịch sử và cần xử lý migration failure theo quy trình triển khai.
+
+Các CHECK mới trên bảng cũ dùng NOT VALID: không quét/chỉnh dữ liệu lịch sử, nhưng
+INSERT/UPDATE sau migration vẫn phải hợp lệ. Đây KHÔNG phải chứng nhận dữ liệu cũ
+đã sạch. Unique index vẫn quét dữ liệu cũ; duplicate sẽ làm migration dừng, không
+tự xóa hay lựa chọn bản ghi thắng.
+
+Thứ tự triển khai đề nghị:
+1) Lấy migration checkpoint bị thiếu từ team sở hữu và đối chiếu drift/checksum.
+2) Kiểm tra duplicate open invoice/open payment, source sai, giá sai và metadata
+   legacy. Chuẩn bị xử lý dữ liệu có kiểm chứng nếu môi trường khác có hàng cũ.
+3) Áp dụng migration additive theo thứ tự, trong lịch triển khai phù hợp vì index
+   thông thường có thể khóa ghi. Không dùng db push/migrate reset thay migration.
+4) Triển khai writer mới, backfill có căn cứ, kiểm tra lại rồi VALIDATE CONSTRAINT.
+5) Siết NOT NULL/legacy policy bằng migration tiếp theo khi tất cả writer sẵn sàng.
+6) Chạy end-to-end mock/sandbox rồi mới quyết định mở provider thật.
+
+8. KẾT QUẢ KIỂM THỬ
+
+- prisma validate: đạt.
+- prisma generate: đạt.
+- npm run build (API): đạt.
+- test/verify-payment-migration.cjs trên PostgreSQL tách biệt: đạt 25 kiểm tra.
+  Chạy toàn bộ migration repository, tạo dữ liệu cũ trước hai migration mới,
+  kiểm tra dữ liệu được giữ nguyên và metadata cũ vẫn null.
+  Kiểm tra unique provider scope, webhook scope/legacy, nhiều khoản thu thành công,
+  một application APPLIED, composite FK, nguồn refund/technical reason, tiền VND,
+  invoice revision/open state, receipt dedup và hai checkout cạnh tranh.
+- So sánh cấu trúc DB test sau migration với schema.prisma bằng Prisma migrate diff:
+  không có thay đổi cấu trúc Prisma còn thiếu. CHECK/partial index được kiểm tra
+  riêng bằng SQL test vì Prisma 6 không biểu diễn đầy đủ các ràng buộc này.
+- npm run test:cf01: 1 test đạt, 13 test bị skip; không coi là đã kiểm tra đầy đủ
+  integration CF01. Không có API payment end-to-end vì module chưa được triển khai.
+- Không gọi provider, không thu/hoàn tiền thật, không ghi database chung.
+
+Chạy lại kiểm thử migration:
+  Chuẩn bị database localhost MỚI, RỖNG tên payment_test_<tên>.
+  Đặt PAYMENT_MIGRATION_TEST_URL trỏ tới database đó.
+  Tại api/, chạy: node test/verify-payment-migration.cjs
+  Script không đọc .env, không tự reset hay drop database; từ chối database không rỗng.
+
+9. DANH SÁCH FILE BÀN GIAO
+
+- api/prisma/schema.prisma: schema đã bổ sung.
+- Hai migration mới ở mục 7.
+- api/test/verify-payment-migration.cjs: kiểm thử migration/constraint tập trung.
+- api/docs/TrekGo_Payment_Schema_Review_2026-10-04.txt: báo cáo này.
+
+Đánh giá cuối: đã cải thiện nền tảng schema để tiếp tục xây dựng payment cho booking,
+nhưng chỉ được coi là sẵn sàng vận hành sau khi đồng bộ database, hoàn thiện service/
+worker và kiểm thử các invariant xuyên bảng cùng chính sách nghiệp vụ còn mở.

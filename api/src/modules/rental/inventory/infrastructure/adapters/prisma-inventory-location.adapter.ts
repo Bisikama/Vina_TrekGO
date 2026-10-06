@@ -61,7 +61,7 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     ]);
 
     return {
-      items: items.map(this.mapToView),
+      items: items.map(item => this.mapToView(item)),
       total,
     };
   }
