@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { RequestMediaDeletionUseCase } from './request-media-deletion.use-case';
 import { MediaAssetPort } from '../ports/media-asset.port';
 import { MediaReferencePort } from '../ports/media-reference.port';
