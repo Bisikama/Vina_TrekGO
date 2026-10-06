@@ -16,6 +16,144 @@ import { PrivateMembershipUseCase } from '../src/modules/trips/application/use-c
 import { PrismaPrivateMembershipAdapter } from '../src/modules/trips/infrastructure/adapters/prisma-private-membership.adapter'
 import { PrivateTripUseCase } from '../src/modules/trips/application/use-cases/private-trip.use-case'
 import { PrismaPrivateTripAdapter } from '../src/modules/trips/infrastructure/adapters/prisma-private-trip.adapter'
+import { PrivateMembershipController } from '../src/modules/trips/presentation/controllers/private-membership.controller'
+import { PrivateMembershipPort } from '../src/modules/trips/application/private-membership.port'
+import { REQUEST_USER_KEY } from '../src/shared/constants/auth.constant'
+
+describe('CF04 Swagger and HTTP inputs without external services', () => {
+  let app: INestApplication
+  const actor = { id: randomUUID(), role: 'USER', status: 'ACTIVE' }
+  const code = 'a'.repeat(43),
+    tripId = randomUUID(),
+    memberId = randomUUID()
+  const port = {
+    join: jest.fn().mockResolvedValue({ tripId, alreadyMember: false, tripVersion: 2 }),
+    preview: jest.fn().mockResolvedValue({ joinable: true }),
+    members: jest
+      .fn()
+      .mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, capacity: 5, activeMemberCount: 1 }),
+    remove: jest
+      .fn()
+      .mockResolvedValue({
+        tripId,
+        membershipId: memberId,
+        status: 'REMOVED',
+        memberVersion: 4,
+        tripVersion: 5,
+        changed: true,
+      }),
+    leave: jest
+      .fn()
+      .mockResolvedValue({
+        tripId,
+        membershipId: memberId,
+        status: 'LEFT',
+        memberVersion: 2,
+        tripVersion: 3,
+        changed: true,
+      }),
+  }
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      controllers: [PrivateMembershipController],
+      providers: [PrivateMembershipUseCase, { provide: PrivateMembershipPort, useValue: port }],
+    }).compile()
+    app = m.createNestApplication()
+    app.setGlobalPrefix('api/v1')
+    app.useGlobalFilters(new GlobalErrorFilter())
+    app.use((req: Record<string, unknown>, _res: unknown, next: () => void) => {
+      req[REQUEST_USER_KEY] = actor
+      next()
+    })
+    await app.init()
+  })
+  afterAll(async () => {
+    await app?.close()
+  })
+
+  it('documents six operations, public preview, invite code, paging and membership version', () => {
+    const d = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('CF04').addBearerAuth().build())
+    let count = 0
+    for (const [path, item] of Object.entries(d.paths)) {
+      for (const method of ['get', 'post', 'delete'] as const) {
+        const op = item[method]
+        if (!op) continue
+        count++
+        expect(op.summary).toBeTruthy()
+        expect((op.responses['200'] as any).content['application/json'].schema.type).toBe('object')
+        if (path.endsWith('/{code}') && method === 'get') expect(op.security ?? []).toEqual([])
+        else expect(op.security).toContainEqual({ bearer: [] })
+        for (const match of path.matchAll(/\{(\w+)\}/g)) {
+          const schema = match[1] === 'code' ? { pattern: '^[A-Za-z0-9_-]{32,120}$' } : { format: 'uuid' }
+          expect(op.parameters).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                name: match[1],
+                in: 'path',
+                required: true,
+                schema: expect.objectContaining(schema),
+              }),
+            ]),
+          )
+        }
+      }
+    }
+    expect(count).toBe(6)
+    const members = d.paths['/api/v1/private-trips/{id}/members'].get!
+    for (const [name, value] of [
+      ['page', 1],
+      ['pageSize', 20],
+      ['status', 'ACTIVE'],
+    ]) {
+      expect(members.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name, schema: expect.objectContaining({ default: value }) }),
+        ]),
+      )
+    }
+    expect(d.paths['/api/v1/private-trips/{id}/members/{memberId}'].delete!.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'expectedMemberVersion',
+          in: 'query',
+          required: true,
+          schema: expect.objectContaining({ minimum: 1, type: 'integer' }),
+        }),
+      ]),
+    )
+    expect((d.paths['/api/v1/private-trip-invitations/{code}/join'].post!.requestBody as any).required).toBe(false)
+  })
+
+  it('joins with empty body, rejects unexpected fields and malformed invitation codes', async () => {
+    const path = `/api/v1/private-trip-invitations/${code}/join`
+    await request(app.getHttpServer()).post(path).send({}).expect(200)
+    expect(port.join).toHaveBeenLastCalledWith(actor.id, code)
+    const bad = await request(app.getHttpServer()).post(path).send({ userId: actor.id }).expect(400)
+    expect(bad.body.error.code).toBe('VALIDATION_ERROR')
+    await request(app.getHttpServer()).get('/api/v1/private-trip-invitations/short').expect(400)
+    await request(app.getHttpServer())
+      .get(`/api/v1/private-trip-invitations/${code}`)
+      .expect(200)
+      .expect('Cache-Control', 'no-store')
+  })
+
+  it('parses membership filters and requires member version in the correct query/body location', async () => {
+    await request(app.getHttpServer())
+      .get(`/api/v1/private-trips/${tripId}/members`)
+      .query({ page: 2, pageSize: 5, status: 'ALL' })
+      .expect(200)
+    expect(port.members).toHaveBeenLastCalledWith(actor.id, tripId, { page: 2, pageSize: 5, status: 'ALL' })
+    const path = `/api/v1/private-trips/${tripId}/members/${memberId}`
+    await request(app.getHttpServer()).delete(path).send({ expectedMemberVersion: 3 }).expect(400)
+    await request(app.getHttpServer()).delete(path).query({ expectedMemberVersion: 3 }).expect(200)
+    expect(port.remove).toHaveBeenLastCalledWith(actor.id, tripId, memberId, 3)
+    await request(app.getHttpServer())
+      .post(`/api/v1/private-trips/${tripId}/leave`)
+      .send({ expectedMemberVersion: 1 })
+      .expect(200)
+    expect(port.leave).toHaveBeenLastCalledWith(actor.id, tripId, 1)
+  })
+})
 
 const url = process.env.CF04_TEST_DATABASE_URL
 if (url) {
