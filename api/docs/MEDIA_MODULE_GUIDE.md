@@ -1,6 +1,19 @@
 # TrekGO - Media Module Guide (Phase M0)
 
-Tài liệu này giải thích chi tiết cấu trúc, quy trình nghiệp vụ và cách chạy/test các API thuộc Media Module trong giai đoạn M0 của dự án TrekGO.
+Tài liệu này giải thích chi tiết cấu trúc, quy trình nghiệp vụ, mục đích sử dụng và cách chạy/test các API thuộc Media Module trong giai đoạn M0 của dự án TrekGO.
+
+## 0. Vai trò & Cách sử dụng Module (Dành cho Developer)
+Thư mục `media` đóng vai trò là **module trung tâm quản lý mọi file tĩnh (ảnh, video)** của toàn bộ dự án.
+
+**Tại sao lại có module này?**
+- **Tránh lặp code:** Mọi logic kết nối Cloudinary, bảo mật file, dọn dẹp rác đều được viết tập trung tại đây. Các module khác không cần phải tự xử lý file cồng kềnh.
+- **Tối ưu hiệu năng Server:** Áp dụng cơ chế **Direct Upload**. Server Backend không trực tiếp nhận file (giúp tránh nghẽn băng thông và sập server). Thay vào đó, Server chỉ cấp một URL Ủy Quyền (Signed URL), Frontend sẽ lấy URL này để đẩy file thẳng lên Cloud.
+
+**Cách Backend lưu trữ dữ liệu liên quan đến Media:**
+Các module Backend khác (như `rental`, `user`, `trail`) **không cần gọi API HTTP của module media**. Quy trình tích hợp chuẩn như sau:
+1. **Frontend -> Media API:** Client tự gọi API của module Media để upload file, sau khi thành công sẽ nhận lại một mã định danh (Ví dụ: `asset_123`).
+2. **Frontend -> Rental/User API:** Client gọi API tạo dữ liệu mới (ví dụ tạo sản phẩm) kèm theo mã ID của ảnh (Ví dụ: `{ "name": "Lều cắm trại", "imageAssetId": "asset_123" }`).
+3. **Lưu trữ:** Module Backend của nghiệp vụ đó (VD: `rental`) chỉ việc lấy chuỗi `asset_123` lưu vào Database. Việc bảo vệ đường dẫn, dọn dẹp ảnh rác hay thay đổi kích thước ảnh... module Media sẽ quản lý tất cả.
 
 ## 1. Kiến trúc tổng quan (M0.1)
 Media Module được xây dựng theo kiến trúc **Ports & Adapters (Hexagonal Architecture)** để đảm bảo không bị phụ thuộc chặt chẽ vào bất kỳ Provider nào (như Cloudinary hay AWS S3).
