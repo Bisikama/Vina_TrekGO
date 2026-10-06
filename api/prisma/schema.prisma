@@ -830,6 +830,7 @@ model MediaAsset {
 // =========================================================
 
 model User {
+  trailPurchaseRequests TrailPurchaseRequest[]
   id            String     @id @default(uuid()) @db.Uuid
   /// Supabase Auth user id
   authUserId    String     @unique @map("auth_user_id") @db.Uuid
@@ -1145,6 +1146,7 @@ model TrailSubmission {
 }
 
 model SystemTrail {
+  purchaseRequests TrailPurchaseRequest[]
   id                       String          @id @default(uuid()) @db.Uuid
   destinationId            String          @map("destination_id") @db.Uuid
   sourceSubmissionId       String?         @map("source_submission_id") @db.Uuid
@@ -1178,6 +1180,7 @@ model SystemTrail {
 }
 
 model TrailAccess {
+  purchaseRequests TrailPurchaseRequest[]
   id            String            @id @default(uuid()) @db.Uuid
   userId        String            @map("user_id") @db.Uuid
   systemTrailId String            @map("system_trail_id") @db.Uuid
@@ -2103,6 +2106,7 @@ model RentalOrder {
 }
 
 model RentalOrderLine {
+  paymentAllocations PaymentAllocation[]
   id                       String   @id @default(uuid()) @db.Uuid
   orderId                  String   @map("order_id") @db.Uuid
   productId                String   @map("product_id") @db.Uuid
@@ -2850,6 +2854,7 @@ model GpsOutboxEvent {
 // =========================================================
 
 model Invoice {
+  trailPurchaseRequests TrailPurchaseRequest[]
   /// Null identifies a legacy obligation until its revision history is verified.
   revisionNo          Int?          @map("revision_no")
   supersedesInvoiceId String?       @map("supersedes_invoice_id") @db.Uuid
@@ -2883,6 +2888,8 @@ model Invoice {
   paymentApplications      PaymentApplication[]
 
   @@unique([bookingId, revisionNo])
+  @@unique([trailAccessId, revisionNo])
+  @@unique([rentalOrderId, revisionNo])
   @@index([supersedesInvoiceId])
   @@index([userId, status])
   @@index([invoiceType, status])
@@ -2913,6 +2920,7 @@ model InvoiceLine {
 }
 
 model Payment {
+  allocations PaymentAllocation[]
   /// Expand phase: null metadata is legacy/unverified, never implicitly MOCK or SANDBOX.
   providerEnvironment PaymentEnvironment?    @map("provider_environment")
   merchantAccountKey  String?                @map("merchant_account_key") @db.VarChar(100)
@@ -2994,6 +3002,7 @@ model PaymentWebhookEvent {
 }
 
 model Refund {
+  allocations RefundAllocation[]
   /// Expand phase: new writers must supply verified scope and request identity.
   reasonCode          String?                @map("reason_code") @db.VarChar(80)
   businessActionId    String?                @map("business_action_id") @db.VarChar(200)
@@ -3057,6 +3066,71 @@ model Refund {
   @@index([bookingCancellationId])
   @@index([rentalOrderId])
   @@map("refunds")
+}
+
+enum PaymentAllocationComponent {
+  RENTAL_FEE
+  RENTAL_DEPOSIT
+  @@map("payment_allocation_component")
+}
+
+model PaymentAllocation {
+  id                String @id @default(uuid()) @db.Uuid
+  paymentId         String @map("payment_id") @db.Uuid
+  rentalOrderLineId  String @map("rental_order_line_id") @db.Uuid
+  component         PaymentAllocationComponent
+  amount            Decimal @db.Decimal(12, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  payment           Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  rentalOrderLine    RentalOrderLine @relation(fields: [rentalOrderLineId], references: [id], onDelete: Restrict)
+  refundAllocations RefundAllocation[]
+  @@unique([paymentId, rentalOrderLineId, component])
+  @@index([rentalOrderLineId])
+  @@map("payment_allocations")
+}
+
+model RefundAllocation {
+  id                  String @id @default(uuid()) @db.Uuid
+  refundId            String @map("refund_id") @db.Uuid
+  paymentAllocationId String @map("payment_allocation_id") @db.Uuid
+  amount              Decimal @db.Decimal(12, 2)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  refund              Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  paymentAllocation   PaymentAllocation @relation(fields: [paymentAllocationId], references: [id], onDelete: Restrict)
+  @@unique([refundId, paymentAllocationId])
+  @@index([paymentAllocationId])
+  @@map("refund_allocations")
+}
+
+/// Durable API replay for paid and free trail purchases; no fake zero-value Payment.
+model TrailPurchaseRequest {
+  id            String      @id @db.Char(64)
+  userId        String      @map("user_id") @db.Uuid
+  systemTrailId String      @map("system_trail_id") @db.Uuid
+  trailAccessId String      @map("trail_access_id") @db.Uuid
+  invoiceId     String?     @map("invoice_id") @db.Uuid
+  paymentMethod String      @map("payment_method") @db.VarChar(80)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  systemTrail   SystemTrail @relation(fields: [systemTrailId], references: [id], onDelete: Restrict)
+  trailAccess   TrailAccess @relation(fields: [trailAccessId], references: [id], onDelete: Restrict)
+  invoice       Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([trailAccessId])
+  @@map("trail_purchase_requests")
+}
+
+model MockPaymentOperation {
+  /// Simulator state, separate from the application's financial records and recovery queues.
+  id          String             @id @db.Char(64)
+  kind        PaymentWebhookKind
+  requestHash String             @map("request_hash") @db.Char(64)
+  request     Json
+  result      Json
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("mock_payment_operations")
 }
 
 /// Financial success and domain acceptance are separate facts.
