@@ -39,23 +39,18 @@ Response có `user`, `accessToken`, `refreshToken`, `expiresIn`, `expiresAt`, `t
 
 Khi chuyển Leader/User A/User B, đăng nhập lại và thay token trong Authorize. Token trong response login không tự thay token đã Authorize. Endpoint công khai không cần token. `GET /auth/me` có thể dùng để đối chiếu profile; nếu Swagger không gửi Authorization cho endpoint auth này, kiểm tra tên security scheme trong OpenAPI (các controller CF dùng tên `bearer`).
 
-### Giới hạn Swagger hiện tại
+### Trạng thái Swagger và đọc kết quả
 
-Endpoint `GET /leader/trip-options/pickup-points` đã khai báo đầy đủ ô query `destinationId` (bắt buộc, UUID), `page` và `pageSize` (tùy chọn). Khởi động lại API và tải lại Swagger để thấy thay đổi.
+CF01 đã khai báo đầy đủ query (phân trang, destinationId, thời gian kiểm tra lịch), path UUID, nhiệm vụ và schema response cho cả 17 endpoint. Khởi động lại API rồi tải lại trang Swagger sau khi cập nhật source.
 
-Body CF01/CF03/CF04 được khai báo từ Zod. Tuy nhiên, nhiều query ở CF01/CF03 nhận `unknown` hoặc kiểu TypeScript inline và **chưa khai báo `@ApiQuery`**, nên Swagger có thể không hiện ô nhập `destinationId`, phân trang, thời gian kiểm tra lịch. Schema response cũng chưa mô tả đầy đủ. Không hiểu việc thiếu ô nhập là API không nhận query.
+Phần Responses/Example Value là mô tả cấu trúc, không phải dữ liệu database. Để nhận dữ liệu thật phải bấm Try it out → Execute rồi xem **Server response**, HTTP status và **Response body**.
 
-Nếu Swagger không có ô query bắt buộc: dùng URL/query trong tài liệu với Postman/cURL hoặc gọi fetch từ DevTools trên trang Swagger. Ví dụ sau chỉ đọc dữ liệu; thay token và destination ID trước khi chạy:
+- HTTP 200 và body `[]`: request thành công nhưng không có bản ghi phù hợp ở trang này. Leader list chỉ lấy chuyến của tài khoản đang đăng nhập; public list chỉ lấy chuyến đã publish và OPEN/FULL.
+- 401/403: kiểm tra token Authorize, role ACTIVE và quyền sở hữu.
+- Failed to fetch/connection refused/loading không kết thúc: kiểm tra API đã chạy, đúng host/PORT và log server; chưa thể kết luận là danh sách rỗng.
+- Không có ô query hoặc schema CF01/CF03/CF04 sau khi cập nhật: restart tiến trình API rồi hard refresh Swagger; có thể đang mở bản server cũ.
 
-```js
-const query = new URLSearchParams({ destinationId: 'UUID_DIA_DIEM', page: '1', pageSize: '20' });
-const response = await fetch(`/api/v1/leader/trip-options/pickup-points?${query}`, {
-  headers: { Authorization: 'Bearer ACCESS_TOKEN' }
-});
-console.log(response.status, await response.json());
-```
-
-Với CF03 pickup, bỏ `pageSize` vì schema không nhận trường này. Với timestamp trong query, dùng `URLSearchParams` để dấu `+` của `+07:00` được mã hóa đúng.
+CF03 và CF04 cũng đã khai báo đầy đủ query/path và schema response cho 17 endpoint: CF03 có page (cố định 20 dòng/trang), status tương thích và destinationId bắt buộc cho pickup; CF04 có inviteCode, UUID trip/member, phân trang/trạng thái thành viên và expectedMemberVersion trong query của DELETE. POST join nhận {} hoặc bỏ body. Tất cả 34 endpoint CF01/CF03/CF04 có mô tả nhiệm vụ và response ngay trên Swagger. Khi đưa timestamp vào URL, dùng URLSearchParams để dấu + của múi giờ được mã hóa đúng.
 
 ## 3. Quy ước response và version
 
@@ -426,4 +421,4 @@ const details = apiError?.details ?? body?.issues;
 - `api/src/modules/trips/infrastructure/adapters/prisma-trip.adapter.ts`, `prisma-private-trip.adapter.ts`, `prisma-private-membership.adapter.ts`: response và thay đổi trạng thái/version.
 - `api/src/modules/trips/presentation/trip-error.filter.ts`, `private-invite-rate.guard.ts`, `api/src/shared/errors/`: lỗi và giới hạn lời mời.
 
-Tài liệu được kiểm tra theo controller/DTO/use-case/adapter; không khẳng định đã chạy end-to-end trên Swagger hoặc tạo dữ liệu test trong database.
+Tài liệu được đối chiếu controller/DTO/use-case/adapter. OpenAPI và HTTP input/response CF01/CF03/CF04 đã được kiểm tra với dữ liệu giả lập; không thay thế kiểm thử end-to-end với Supabase/database thật. Không tạo dữ liệu test trong database dự án.

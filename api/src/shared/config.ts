@@ -1,17 +1,10 @@
 import z from 'zod'
 import { config } from 'dotenv'
-import fs from 'fs'
-import path from 'path'
 
-// Kiểm tra file .env có tồn tại hay không
+// Load local overrides when available; deployments can supply process.env directly.
 config({
   path: '.env',
 })
-
-if (!fs.existsSync(path.resolve('.env'))) {
-  console.log('Không tìm thấy file env')
-  process.exit(1)
-}
 
 const envConfigSchema = z.object({
   PORT: z.coerce.number().default(3000),
@@ -76,7 +69,7 @@ const envConfigSchema = z.object({
 
 const configserver = envConfigSchema.safeParse(process.env)
 if (!configserver.success) {
-  console.error('Các giá trị khai báo trong .env không hợp lệ:', configserver.error.format())
+  console.error('Các biến môi trường cấu hình không hợp lệ:', configserver.error.format())
   process.exit(1)
 }
 
