@@ -10,6 +10,7 @@ import { GeoModule } from './modules/geo/geo.module'
 import { MediaModule } from './modules/media/media.module'
 import { CheckpointModule } from './modules/checkpoint/checkpoint.module'
 import { DestinationModule } from './modules/destination/destination.module'
+import { PaymentsModule } from './modules/payments/payments.module'
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { DestinationModule } from './modules/destination/destination.module'
     ScheduleModule.forRoot(),
     CheckpointModule,
     DestinationModule,
+    PaymentsModule,
   ],
   controllers: [],
   providers: [],
