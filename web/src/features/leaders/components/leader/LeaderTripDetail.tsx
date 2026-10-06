@@ -84,11 +84,16 @@ const initialMembers: Member[] = [
   },
 ];
 
+import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
+
 export function LeaderTripDetail({
   tripId,
 }: {
   tripId: string;
 }) {
+  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId });
+  const { cancelTrip, isSubmitting } = useLeaderTripMutations();
+
   const [members, setMembers] =
     useState(initialMembers);
 
@@ -132,6 +137,11 @@ export function LeaderTripDetail({
     setRemoveTarget(null);
   }
 
+  const tripTitle = trip?.title || `Chuyến đi #${tripId}`;
+  const startDateStr = trip?.startAt ? new Date(trip.startAt).toLocaleDateString("vi-VN") : "";
+  const endDateStr = trip?.endAt ? new Date(trip.endAt).toLocaleDateString("vi-VN") : "";
+  const statusLabel = trip?.status === "OPEN" ? "Đang mở bán" : trip?.status === "DRAFT" ? "Bản nháp" : trip?.status === "FULL" ? "Đã đủ chỗ" : trip?.status === "IN_PROGRESS" ? "Đang diễn ra" : trip?.status === "COMPLETED" ? "Đã hoàn thành" : trip?.status === "CANCELLED" ? "Đã hủy" : "Chuyến đi";
+
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -143,21 +153,20 @@ export function LeaderTripDetail({
 
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-              ● Đang mở bán
+              ● {statusLabel}
             </span>
 
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-              Cấp 3 · Vừa phải
+              Cấp {trip?.trails?.[0]?.snapshotDifficulty || "2"} · {trip?.trails?.[0]?.snapshotName || "Trekking Tour"}
             </span>
           </div>
 
           <h1 className="mt-3 text-3xl font-bold">
-            Chinh phục Sống Lưng Khủng Long Tà Xùa
+            {tripTitle}
           </h1>
 
           <p className="mt-2 text-sm text-slate-600">
-            3N2Đ · 23/11–25/11/2024 · Mã tour #
-            {tripId}
+            {startDateStr} {endDateStr ? `– ${endDateStr}` : ""} · Mã tour #{tripId}
           </p>
         </div>
 

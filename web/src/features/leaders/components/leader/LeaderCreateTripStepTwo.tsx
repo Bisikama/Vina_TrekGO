@@ -1,201 +1,211 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   StepTwoOverviewMap,
   type SystemTrailDetail,
 } from "./StepTwoOverviewMap";
-
-type RouteOption = {
-  id: string;
-  code: string;
-  name: string;
-  location: string;
-  distance: string;
-  completionRate: string;
-  duration: string;
-  difficulty: string;
-  imageUrl: string;
-};
-
-type Checkpoint = {
-  id: number;
-  name: string;
-  km: string;
-  elevation: string;
-  eta: string;
-  note: string;
-  required: boolean;
-  highlighted?: boolean;
-};
-
-const routeOptions: RouteOption[] = [
-  {
-    id: "TRAIL_BADEN_COTDIEN",
-    code: "TRAIL_BADEN_COTDIEN",
-    name: "Núi Bà Đen - Cung Đường Cột Điện",
-    location: "Thành phố Tây Ninh, Tỉnh Tây Ninh",
-    distance: "4.5 km",
-    completionRate: "94.2%",
-    duration: "1 Ngày (4 - 6 giờ)",
-    difficulty: "Cấp 2 – Vừa phải",
-    imageUrl:
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    id: "TRAIL_FANSIPAN_TRAM_TON",
-    code: "TRAIL_FANSIPAN_TRAM_TON",
-    name: "Đỉnh Fansipan – Cung Trạm Tôn",
-    location: "Bát Xát, Sa Pa, Lào Cai",
-    distance: "11.5 km",
-    completionRate: "9.8%",
-    duration: "2N1Đ",
-    difficulty: "Cấp 3 – Thử thách",
-    imageUrl:
-      "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?auto=format&fit=crop&w=700&q=80",
-  },
-  {
-    id: "TRAIL_FANSIPAN_TRANH_SAT_LO",
-    code: "TRAIL_FANSIPAN_TRANH_SAT_LO",
-    name: "Pu Ta Leng – Rừng Rêu Cổ Thụ",
-    location: "Tam Đường, Lai Châu",
-    distance: "35 km",
-    completionRate: "7.4%",
-    duration: "3N2Đ",
-    difficulty: "Cấp 4 – Thử thách",
-    imageUrl:
-      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=700&q=80",
-  },
-];
-
-const initialCheckpoints: Checkpoint[] = [
-  {
-    id: 1,
-    name: "Điểm xuất phát: Cột số 1 (Chân núi)",
-    km: "Km 0.0",
-    elevation: "42m",
-    eta: "07:30 Ngày 1",
-    note: "Gửi xe, tiếp tế nước & Điểm danh quân số",
-    required: true,
-  },
-  {
-    id: 2,
-    name: "Trạm nghỉ 1: Cột 55 (Lưng chừng núi)",
-    km: "Km 2.3",
-    elevation: "535m",
-    eta: "09:30 Ngày 1",
-    note: "Tiếp nước sạch, trạm nghỉ bóng râm & sơ cứu",
-    required: false,
-  },
-  {
-    id: 3,
-    name: "Dốc đá cao: Cột 100",
-    km: "Km 3.8",
-    elevation: "820m",
-    eta: "11:00 Ngày 1",
-    note: "Vượt dốc đá gồ ghề, kiểm tra an toàn gậy leo núi",
-    required: true,
-    highlighted: true,
-  },
-  {
-    id: 4,
-    name: "Đỉnh Núi Bà Đen - Chóp inox 986m",
-    km: "Km 4.5",
-    elevation: "986m",
-    eta: "11:45 Ngày 1",
-    note: "Chạm chóp nóc nhà Nam Bộ, chiêm bái Phật Bà & Check-in",
-    required: true,
-  },
-];
+import {
+  useLeaderTrailSuggestions,
+  useLeaderTripDetail,
+  useLeaderTripMutations,
+  useLeaderTripOptions,
+} from "../../hooks";
+import type { LeaderCheckpointOption, TrailSuggestion } from "../../types";
 
 export function LeaderCreateTripStepTwo() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tripIdFromParam = searchParams.get("tripId");
 
-  const [selectedRouteId, setSelectedRouteId] = useState("TRAIL_BADEN_COTDIEN");
-  const [trailDetail, setTrailDetail] = useState<SystemTrailDetail | null>(null);
-
-  const [checkpoints, setCheckpoints] =
-    useState<Checkpoint[]>(initialCheckpoints);
-
-  const [saved, setSaved] = useState(false);
-  const [createCustomRoute, setCreateCustomRoute] = useState(false);
+  const [tripId, setTripId] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedRoute = window.sessionStorage.getItem("leader-create-trip-route");
-    if (savedRoute) {
-      try {
-        const parsed = JSON.parse(savedRoute);
-        if (parsed.id) {
-          setSelectedRouteId(parsed.id);
-        }
-      } catch (err) {
-        console.error("Lỗi đọc route đã lưu:", err);
-      }
+    if (tripIdFromParam) {
+      setTripId(tripIdFromParam);
+    } else if (typeof window !== "undefined") {
+      const savedId = window.sessionStorage.getItem("leader-create-trip-id");
+      if (savedId) setTripId(savedId);
     }
-  }, []);
+  }, [tripIdFromParam]);
 
-  const selectedRoute =
-    routeOptions.find((route) => route.id === selectedRouteId) ??
-    routeOptions[0];
+  const { trip, isLoading: isLoadingTrip, refetch: refetchTrip } = useLeaderTripDetail({
+    tripId,
+  });
+  const { suggestions, isLoading: isLoadingSuggestions } = useLeaderTrailSuggestions({
+    tripId,
+  });
+  const { fetchCheckpoints } = useLeaderTripOptions();
+  const {
+    setCheckpoints: apiSetCheckpoints,
+    setTrails: apiSetTrails,
+    isSubmitting,
+  } = useLeaderTripMutations();
+
+  const [destinationCheckpoints, setDestinationCheckpoints] = useState<LeaderCheckpointOption[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("");
+  const [selectedCheckpointIds, setSelectedCheckpointIds] = useState<string[]>([]);
+  const [trailDetail, setTrailDetail] = useState<SystemTrailDetail | null>(null);
+
+  const [saved, setSaved] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [createCustomRoute, setCreateCustomRoute] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
+
+  // Load destination checkpoints when trip is loaded
+  useEffect(() => {
+    if (trip?.destinationId) {
+      fetchCheckpoints(trip.destinationId).then((cps) => {
+        setDestinationCheckpoints(cps);
+        if (trip.checkpoints && trip.checkpoints.length > 0) {
+          const ids = trip.checkpoints
+            .map((c) => c.sourceCheckpointId)
+            .filter((id): id is string => typeof id === "string");
+          setSelectedCheckpointIds(ids);
+        } else if (cps.length > 0) {
+          setSelectedCheckpointIds(cps.map((c) => c.id));
+        }
+      });
+    }
+  }, [trip?.destinationId, trip?.checkpoints, fetchCheckpoints]);
+
+  // Sync selected trail from suggestions or trip
+  useEffect(() => {
+    if (trip?.trails && trip.trails.length > 0) {
+      setSelectedRouteId(trip.trails[0].systemTrailId);
+    } else if (suggestions.length > 0 && !selectedRouteId) {
+      setSelectedRouteId(suggestions[0].id);
+    }
+  }, [trip?.trails, suggestions, selectedRouteId]);
+
+  const selectedTrailSuggestion = useMemo(() => {
+    return (
+      suggestions.find((s) => s.id === selectedRouteId) ??
+      suggestions[0] ??
+      null
+    );
+  }, [suggestions, selectedRouteId]);
 
   function selectRoute(routeId: string) {
     setSelectedRouteId(routeId);
-    const route = routeOptions.find((item) => item.id === routeId);
-    if (route) {
+    const suggestion = suggestions.find((s) => s.id === routeId);
+    if (suggestion) {
       window.sessionStorage.setItem(
         "leader-create-trip-route",
-        JSON.stringify(route),
+        JSON.stringify({
+          id: suggestion.id,
+          code: suggestion.id,
+          name: suggestion.name,
+          location: trip?.destinationId || "Điểm đến đã chọn",
+          distance: `${suggestion.distanceKm} km`,
+          completionRate: "95%",
+          duration: "1–2 ngày",
+          difficulty: suggestion.difficulty,
+          imageUrl:
+            "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
+        })
       );
     }
   }
 
-  function toggleCheckpoint(id: number) {
-    setCheckpoints((current) =>
-      current.map((checkpoint) =>
-        checkpoint.id === id
-          ? {
-              ...checkpoint,
-              required: !checkpoint.required,
-            }
-          : checkpoint,
-      ),
+  function toggleCheckpoint(id: string) {
+    setSelectedCheckpointIds((current) =>
+      current.includes(id) ? current.filter((cId) => cId !== id) : [...current, id]
     );
   }
 
-  function addCheckpoint() {
-    setCheckpoints((current) => [
-      ...current,
-      {
-        id: current.length + 1,
-        name: `Trạm dừng mới ${current.length + 1}`,
-        km: "Chưa đặt",
-        elevation: "Chưa đặt",
-        eta: "Chưa đặt",
-        note: "Bấm để cập nhật thông tin trạm dừng",
-        required: false,
-      },
-    ]);
+  async function handleSaveDraft() {
+    if (!tripId || !trip) return;
+    setErrorMsg("");
+
+    try {
+      let currentVersion = trip.version;
+      if (selectedCheckpointIds.length > 0) {
+        const cpRes = await apiSetCheckpoints(tripId, {
+          expectedVersion: currentVersion,
+          checkpointIds: selectedCheckpointIds,
+        });
+        currentVersion = cpRes.version;
+      }
+      if (selectedRouteId) {
+        await apiSetTrails(tripId, {
+          expectedVersion: currentVersion,
+          trailIds: [selectedRouteId],
+        });
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      refetchTrip();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Không thể lưu bản nháp.");
+    }
   }
 
-  function saveDraft() {
-    setSaved(true);
-    window.sessionStorage.setItem(
-      "leader-create-trip-route",
-      JSON.stringify(selectedRoute),
-    );
-    window.setTimeout(() => {
-      setSaved(false);
-    }, 2500);
+  async function handleContinue() {
+    if (!tripId || !trip) {
+      router.push("/leader/create-trip");
+      return;
+    }
+
+    if (selectedCheckpointIds.length === 0) {
+      setErrorMsg("Vui lòng chọn ít nhất 1 checkpoint bắt buộc cho chuyến đi.");
+      return;
+    }
+
+    if (!selectedRouteId) {
+      setErrorMsg("Vui lòng chọn cung đường System Trail cho chuyến đi.");
+      return;
+    }
+
+    setErrorMsg("");
+
+    try {
+      let currentVersion = trip.version;
+      const cpRes = await apiSetCheckpoints(tripId, {
+        expectedVersion: currentVersion,
+        checkpointIds: selectedCheckpointIds,
+      });
+      currentVersion = cpRes.version;
+
+      await apiSetTrails(tripId, {
+        expectedVersion: currentVersion,
+        trailIds: [selectedRouteId],
+      });
+
+      // Save summary in session storage for Step 3
+      if (selectedTrailSuggestion) {
+        window.sessionStorage.setItem(
+          "leader-create-trip-route",
+          JSON.stringify({
+            id: selectedTrailSuggestion.id,
+            code: selectedTrailSuggestion.id,
+            name: selectedTrailSuggestion.name,
+            location: "Khu vực điểm đến",
+            distance: `${selectedTrailSuggestion.distanceKm} km`,
+            completionRate: "95%",
+            duration: "1–2 ngày",
+            difficulty: selectedTrailSuggestion.difficulty,
+            imageUrl:
+              "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
+          })
+        );
+      }
+
+      router.push(`/leader/create-trip/review?tripId=${tripId}`);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Đã xảy ra lỗi khi lưu cung đường.");
+    }
   }
 
-  function handleContinue() {
-    window.sessionStorage.setItem(
-      "leader-create-trip-route",
-      JSON.stringify(selectedRoute),
+  const filteredSuggestions = useMemo(() => {
+    if (!searchKeyword.trim()) return suggestions;
+    const kw = searchKeyword.toLowerCase();
+    return suggestions.filter(
+      (s) => s.name.toLowerCase().includes(kw) || s.difficulty.toLowerCase().includes(kw)
     );
-    router.push("/leader/create-trip/review");
-  }
+  }, [suggestions, searchKeyword]);
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] px-5 py-6 lg:px-8">
@@ -208,7 +218,7 @@ export function LeaderCreateTripStepTwo() {
               Tạo chuyến đi mới
               <span className="mx-2">›</span>
               <strong className="text-[#125238]">
-                Bước 2: Cung đường & Trạm dừng
+                Bước 2: Cung đường &amp; Trạm dừng
               </strong>
             </div>
 
@@ -219,22 +229,23 @@ export function LeaderCreateTripStepTwo() {
 
               <button
                 type="button"
-                onClick={saveDraft}
+                disabled={isSubmitting}
+                onClick={handleSaveDraft}
                 className="rounded-xl bg-[#eef3fb] px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
               >
-                ▣ Lưu nháp
+                {isSubmitting ? "Đang lưu..." : "▣ Lưu nháp"}
               </button>
             </div>
           </div>
 
           <div className="mt-4">
             <h1 className="text-3xl font-bold text-slate-950">
-              Thiết lập Cung đường & Trạm dừng
+              Thiết lập Cung đường &amp; Trạm dừng
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
               Chọn cung đường đã xác minh và thiết lập các checkpoint an toàn
-              cho đoàn.
+              cho đoàn {trip ? `• ${trip.title}` : ""}.
             </p>
           </div>
 
@@ -267,7 +278,7 @@ export function LeaderCreateTripStepTwo() {
                   <p className="text-[10px] font-bold uppercase">
                     Bước 2 đang thực hiện
                   </p>
-                  <strong className="text-sm">Cung đường & Trạm dừng</strong>
+                  <strong className="text-sm">Cung đường &amp; Trạm dừng</strong>
                 </div>
               </div>
             </div>
@@ -280,24 +291,30 @@ export function LeaderCreateTripStepTwo() {
 
                 <div>
                   <p className="text-[10px] font-bold uppercase">Bước 3</p>
-                  <strong className="text-sm">Xem lại & Công khai</strong>
+                  <strong className="text-sm">Xem lại &amp; Công khai</strong>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
+        {errorMsg && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <strong className="font-bold">Lỗi: </strong>
+            {errorMsg}
+          </div>
+        )}
+
         <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
               <div className="mb-5">
                 <h2 className="text-lg font-bold text-slate-950">
-                  1. Lựa chọn Cung đường cho Chuyến đi
+                  1. Lựa chọn Cung đường cho Chuyến đi (System Trails)
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  Sử dụng kho dữ liệu GPS đã xác minh hoặc tự vẽ cung đường độc
-                  lập.
+                  Sử dụng kho dữ liệu GPS đã thẩm định và xác minh theo chuẩn VFRS.
                 </p>
               </div>
 
@@ -330,8 +347,7 @@ export function LeaderCreateTripStepTwo() {
                   </div>
 
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    Dữ liệu trắc diện, nguồn nước và tọa độ cứu hộ đã được chuẩn
-                    hóa.
+                    Dữ liệu trắc diện, nguồn nước và tọa độ cứu hộ đã được chuẩn hóa.
                   </p>
                 </button>
 
@@ -394,116 +410,107 @@ export function LeaderCreateTripStepTwo() {
 
                     <input
                       className="w-full bg-transparent text-sm outline-none"
-                      placeholder="Tìm cung đường, địa phương..."
-                      defaultValue="Núi Bà Đen - Cung Đường Cột Điện"
+                      placeholder="Tìm cung đường, cấp độ khó..."
+                      value={searchKeyword}
+                      onChange={(e) => setSearchKeyword(e.target.value)}
                     />
                   </label>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[
-                      "Đông Nam Bộ",
-                      "Tây Ninh",
-                      "Núi Bà Đen",
-                      "Độ khó Cấp 2",
-                    ].map((filter, index) => (
-                      <span
-                        key={filter}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          index === 0
-                            ? "bg-[#125238] text-white"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {filter}
-                      </span>
-                    ))}
-                  </div>
-
                   <div className="mt-5 space-y-3">
-                    {routeOptions.map((route) => {
-                      const selected = selectedRouteId === route.id;
+                    {isLoadingSuggestions ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                        Đang tải danh sách cung đường đề xuất từ hệ thống...
+                      </div>
+                    ) : filteredSuggestions.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                        Không tìm thấy cung đường khả dụng cho điểm đến này.
+                      </div>
+                    ) : (
+                      filteredSuggestions.map((suggestion) => {
+                        const selected = selectedRouteId === suggestion.id;
 
-                      return (
-                        <button
-                          key={route.id}
-                          type="button"
-                          onClick={() => selectRoute(route.id)}
-                          className={`flex w-full flex-col gap-4 rounded-xl border p-3 text-left transition sm:flex-row ${
-                            selected
-                              ? "border-[#2f6b4f] bg-emerald-50 shadow-sm"
-                              : "border-slate-200 bg-white hover:bg-slate-50"
-                          }`}
-                        >
-                          <div
-                            className="h-28 w-full shrink-0 rounded-lg bg-cover bg-center sm:w-44"
-                            style={{
-                              backgroundImage: `url("${route.imageUrl}")`,
-                            }}
+                        return (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => selectRoute(suggestion.id)}
+                            className={`flex w-full flex-col gap-4 rounded-xl border p-4 text-left transition sm:flex-row ${
+                              selected
+                                ? "border-[#2f6b4f] bg-emerald-50 shadow-sm"
+                                : "border-slate-200 bg-white hover:bg-slate-50"
+                            }`}
                           >
-                            <span className="m-2 inline-flex rounded bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">
-                              #{route.code || route.id}
-                            </span>
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex justify-between gap-3">
-                              <div>
-                                <h3 className="font-bold text-slate-950">
-                                  {route.name}
-                                </h3>
-
-                                <p className="mt-1 text-xs text-slate-500">
-                                  ⌖ {route.location}
-                                </p>
-                              </div>
-
-                              <span
-                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                                  selected
-                                    ? "bg-[#125238] text-white"
-                                    : "bg-slate-200 text-transparent"
-                                }`}
-                              >
-                                ✓
+                            <div
+                              className="h-28 w-full shrink-0 rounded-lg bg-cover bg-center sm:w-44"
+                              style={{
+                                backgroundImage: `url("https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80")`,
+                              }}
+                            >
+                              <span className="m-2 inline-flex rounded bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">
+                                #{suggestion.id.slice(0, 8)}
                               </span>
                             </div>
 
-                            <div className="mt-4 grid grid-cols-3 gap-2">
-                              <div>
-                                <span className="text-[10px] text-slate-400">
-                                  Cự ly
+                            <div className="min-w-0 flex-1">
+                              <div className="flex justify-between gap-3">
+                                <div>
+                                  <h3 className="font-bold text-slate-950">
+                                    {suggestion.name}
+                                  </h3>
+
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    ⌖ Đi qua {suggestion.coveredCheckpointIds?.length || 0} checkpoint
+                                  </p>
+                                </div>
+
+                                <span
+                                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                                    selected
+                                      ? "bg-[#125238] text-white"
+                                      : "bg-slate-200 text-transparent"
+                                  }`}
+                                >
+                                  ✓
                                 </span>
-                                <strong className="block text-xs">
-                                  {route.distance}
-                                </strong>
                               </div>
 
-                              <div>
-                                <span className="text-[10px] text-slate-400">
-                                  Độ dốc TB
-                                </span>
-                                <strong className="block text-xs">
-                                  {route.completionRate}
-                                </strong>
+                              <div className="mt-4 grid grid-cols-3 gap-2">
+                                <div>
+                                  <span className="text-[10px] text-slate-400">
+                                    Cự ly
+                                  </span>
+                                  <strong className="block text-xs">
+                                    {suggestion.distanceKm} km
+                                  </strong>
+                                </div>
+
+                                <div>
+                                  <span className="text-[10px] text-slate-400">
+                                    Độ dốc/Cao độ
+                                  </span>
+                                  <strong className="block text-xs">
+                                    {suggestion.elevationGainM ? `+${suggestion.elevationGainM}m` : "Chuẩn"}
+                                  </strong>
+                                </div>
+
+                                <div>
+                                  <span className="text-[10px] text-slate-400">
+                                    Độ khó
+                                  </span>
+                                  <strong className="block text-xs">
+                                    {suggestion.difficulty}
+                                  </strong>
+                                </div>
                               </div>
 
-                              <div>
-                                <span className="text-[10px] text-slate-400">
-                                  Thời lượng
-                                </span>
-                                <strong className="block text-xs">
-                                  {route.duration}
-                                </strong>
-                              </div>
+                              <span className="mt-3 inline-flex rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
+                                {suggestion.difficulty}
+                              </span>
                             </div>
-
-                            <span className="mt-3 inline-flex rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
-                              {route.difficulty}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </>
               )}
@@ -514,101 +521,92 @@ export function LeaderCreateTripStepTwo() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-bold text-slate-950">
-                      2. Trạm dừng & Checkpoints An toàn
+                      2. Trạm dừng &amp; Checkpoints An toàn
                     </h2>
 
                     <span className="rounded-full bg-[#125238] px-2 py-1 text-[10px] font-bold text-white">
-                      {checkpoints.length} MỐC
+                      {selectedCheckpointIds.length}/{destinationCheckpoints.length} MỐC ĐÃ CHỌN
                     </span>
                   </div>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Thiết lập các mốc kiểm soát đoàn, ETA và trạm bắt buộc.
+                    Chọn các mốc kiểm soát đoàn bắt buộc theo thứ tự hành trình.
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={addCheckpoint}
-                  className="rounded-xl bg-[#125238] px-4 py-2 text-xs font-bold text-white hover:bg-[#2f6b4f]"
-                >
-                  ＋ Thêm trạm
-                </button>
               </div>
 
               <div className="mt-5 space-y-3">
-                {checkpoints.map((checkpoint) => (
-                  <article
-                    key={checkpoint.id}
-                    className={`rounded-xl border p-4 ${
-                      checkpoint.highlighted
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-blue-100 bg-[#eef3fb]"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="cursor-grab text-slate-400">⠿</span>
+                {destinationCheckpoints.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                    Đang tải danh sách checkpoint của điểm đến...
+                  </div>
+                ) : (
+                  destinationCheckpoints.map((checkpoint, idx) => {
+                    const isSelected = selectedCheckpointIds.includes(checkpoint.id);
 
-                      <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-white ${
-                          checkpoint.highlighted
-                            ? "bg-orange-500"
-                            : "bg-[#2f6b4f]"
+                    return (
+                      <article
+                        key={checkpoint.id}
+                        className={`rounded-xl border p-4 transition ${
+                          isSelected
+                            ? "border-emerald-200 bg-emerald-50/50"
+                            : "border-slate-200 bg-[#f8fafc]"
                         }`}
                       >
-                        {checkpoint.id}
-                      </span>
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-white ${
+                              isSelected ? "bg-[#125238]" : "bg-slate-400"
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
 
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-bold text-slate-950">
-                          {checkpoint.name}
-                        </h3>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-slate-950">
+                              {checkpoint.name}
+                            </h3>
 
-                        <div className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
-                          <div>
-                            <span className="text-slate-400">Khoảng cách</span>
-                            <strong className="block text-slate-900">
-                              {checkpoint.km}
-                            </strong>
+                            <p className="mt-1 text-xs text-slate-600">
+                              {checkpoint.description || "Mốc kiểm soát vệ tinh an toàn"}
+                            </p>
+
+                            <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                              <div>
+                                <span className="text-slate-400">Tọa độ: </span>
+                                <strong className="text-slate-800">
+                                  {Number(checkpoint.latitude).toFixed(4)}, {Number(checkpoint.longitude).toFixed(4)}
+                                </strong>
+                              </div>
+
+                              <div>
+                                <span className="text-slate-400">Bán kính quét: </span>
+                                <strong className="text-slate-800">
+                                  {checkpoint.defaultRadiusMeters || 50}m
+                                </strong>
+                              </div>
+                            </div>
                           </div>
 
-                          <div>
-                            <span className="text-slate-400">Cao độ</span>
-                            <strong className="block text-slate-900">
-                              {checkpoint.elevation}
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span className="text-slate-400">ETA dự kiến</span>
-                            <strong className="block text-slate-900">
-                              {checkpoint.eta}
-                            </strong>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleCheckpoint(checkpoint.id)}
+                            className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                              isSelected ? "bg-[#125238]" : "bg-slate-300"
+                            }`}
+                            aria-label="Đổi trạng thái bắt buộc"
+                          >
+                            <span
+                              className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
+                                isSelected ? "left-6" : "left-1"
+                              }`}
+                            />
+                          </button>
                         </div>
-
-                        <span className="mt-3 inline-flex rounded-md bg-white/80 px-2 py-1 text-[10px] text-slate-600">
-                          {checkpoint.note}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleCheckpoint(checkpoint.id)}
-                        className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                          checkpoint.required ? "bg-[#125238]" : "bg-slate-300"
-                        }`}
-                        aria-label="Đổi trạng thái bắt buộc"
-                      >
-                        <span
-                          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                            checkpoint.required ? "left-6" : "left-1"
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </article>
-                ))}
+                      </article>
+                    );
+                  })
+                )}
               </div>
             </section>
           </div>
@@ -617,23 +615,21 @@ export function LeaderCreateTripStepTwo() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-950">
-                  {selectedRouteId === "TRAIL_BADEN_COTDIEN"
-                    ? "Tổng quan Núi Bà Đen"
-                    : `Tổng quan ${
-                        selectedRoute.name.split(" – ")[0].split(" - ")[0]
-                      }`}
+                  {selectedTrailSuggestion
+                    ? `Tổng quan ${selectedTrailSuggestion.name}`
+                    : "Tổng quan cung đường"}
                 </h2>
 
                 <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">
                   {trailDetail?.elevationGainM
                     ? `${trailDetail.elevationGainM}m Peak`
-                    : "986m Peak"}
+                    : "GPS Verified"}
                 </span>
               </div>
 
               {/* Bản đồ MapLibre 3D Terrain gọi API Backend */}
               <StepTwoOverviewMap
-                trailCode={selectedRouteId}
+                trailCode={selectedRouteId || "TRAIL_BADEN_COTDIEN"}
                 onTrailLoaded={(detail) => setTrailDetail(detail)}
               />
 
@@ -643,7 +639,9 @@ export function LeaderCreateTripStepTwo() {
                   <strong className="block text-sm">
                     {trailDetail?.distanceKm
                       ? `${trailDetail.distanceKm} km`
-                      : selectedRoute.distance}
+                      : selectedTrailSuggestion
+                      ? `${selectedTrailSuggestion.distanceKm} km`
+                      : "--"}
                   </strong>
                 </div>
 
@@ -654,7 +652,9 @@ export function LeaderCreateTripStepTwo() {
                   <strong className="block text-sm text-red-600">
                     {trailDetail?.elevationGainM
                       ? `${trailDetail.elevationGainM}m`
-                      : "986m"}
+                      : selectedTrailSuggestion?.elevationGainM
+                      ? `${selectedTrailSuggestion.elevationGainM}m`
+                      : "--"}
                   </strong>
                 </div>
 
@@ -663,11 +663,7 @@ export function LeaderCreateTripStepTwo() {
                     Trạm bắt buộc
                   </span>
                   <strong className="block text-sm">
-                    {
-                      checkpoints.filter((checkpoint) => checkpoint.required)
-                        .length
-                    }
-                    /{checkpoints.length}
+                    {selectedCheckpointIds.length}/{destinationCheckpoints.length}
                   </strong>
                 </div>
 
@@ -691,18 +687,17 @@ export function LeaderCreateTripStepTwo() {
 
               <div className="mt-4 space-y-4 text-xs leading-5 text-slate-600">
                 <p>
-                  ⚠ <strong>Check-in bắt buộc CP3 (Cột 100):</strong> Toàn đoàn
-                  phải hoàn thành trước 11:30 ngày đầu tiên.
+                  ⚠ <strong>Mốc kiểm soát bắt buộc:</strong> Toàn đoàn
+                  phải quét GPS và đồng bộ trạng thái tại mỗi checkpoint đã định.
                 </p>
 
                 <p>
-                  ◉ <strong>Đoạn Vách đá Cột 100 - Đỉnh núi:</strong> chú ý bám
-                  đá tảng vững vàng, kiểm tra giày và gậy leo núi khi thời tiết
-                  mưa ẩm.
+                  ◉ <strong>Định vị khẩn cấp SOS:</strong> Hệ thống kích hoạt
+                  giám sát thời gian thực khi bắt đầu chuyến đi.
                 </p>
 
                 <p>
-                  ☎ Cứu hộ phản ứng nhanh Núi Bà Đen:{" "}
+                  ☎ Cứu hộ phản ứng nhanh VFRS:{" "}
                   <strong className="text-red-600">1800-9988</strong>
                 </p>
               </div>
@@ -722,18 +717,20 @@ export function LeaderCreateTripStepTwo() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={saveDraft}
+              disabled={isSubmitting}
+              onClick={handleSaveDraft}
               className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700 hover:bg-slate-200"
             >
-              Lưu bản nháp
+              {isSubmitting ? "Đang lưu..." : "Lưu bản nháp"}
             </button>
 
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleContinue}
-              className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
+              className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f] disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              Tiếp tục: Xem lại & Công khai →
+              {isSubmitting ? "Đang xử lý..." : "Tiếp tục: Xem lại & Công khai →"}
             </button>
           </div>
         </footer>
@@ -741,7 +738,7 @@ export function LeaderCreateTripStepTwo() {
 
       {saved && (
         <div className="fixed bottom-24 right-6 z-[80] rounded-xl bg-[#125238] px-5 py-4 text-sm font-semibold text-white shadow-2xl">
-          ✓ Đã lưu bản nháp cung đường.
+          ✓ Đã lưu bản nháp cung đường và trạm dừng.
         </div>
       )}
     </main>

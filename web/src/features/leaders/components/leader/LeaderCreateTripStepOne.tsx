@@ -10,36 +10,7 @@ type CancellationPolicy = "flexible" | "standard" | "strict";
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
 
-const mockPickupPoints = [
-  {
-    id: "my-dinh-gate-2",
-    name: "Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội",
-    latitude: "21.0285",
-    longitude: "105.7784",
-    marker: "Cổng số 2 – Xe trung chuyển 16 chỗ",
-  },
-  {
-    id: "cau-giay-park",
-    name: "Cổng chính Công viên Cầu Giấy, Hà Nội",
-    latitude: "21.0307",
-    longitude: "105.7952",
-    marker: "Cổng chính – Điểm đón đoàn",
-  },
-  {
-    id: "hoa-lac-stop",
-    name: "Trạm nghỉ Hòa Lạc, Thạch Thất, Hà Nội",
-    latitude: "21.0068",
-    longitude: "105.5254",
-    marker: "Khu đón khách – Bãi xe phía Đông",
-  },
-  {
-    id: "tay-ninh-station",
-    name: "Bến xe Tây Ninh, Phường 3, TP. Tây Ninh",
-    latitude: "11.3123",
-    longitude: "106.0988",
-    marker: "Cổng chính Bến xe Tây Ninh",
-  },
-] as const;
+import { useLeaderTripMutations, useLeaderTripOptions } from "../../hooks";
 
 const difficultyLabels: Record<number, { name: string; detail: string }> = {
   1: { name: "Rất nhẹ", detail: "Dạo bộ rừng" },
@@ -108,12 +79,16 @@ function FormCard({
 
 export function LeaderCreateTripStepOne() {
   const router = useRouter();
+  const { destinations, fetchPickups, checkConflicts, isLoadingDestinations } = useLeaderTripOptions();
+  const { createDraft, updateTrip, isSubmitting } = useLeaderTripMutations();
 
+  const [destinationId, setDestinationId] = useState<string>("");
+  const [apiPickups, setApiPickups] = useState<Array<{ id: string; name: string }>>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState("");
 
-  const [visibility, setVisibility] = useState<Visibility>("private");
+  const [visibility, setVisibility] = useState<Visibility>("public");
   const [cancellationPolicy, setCancellationPolicy] =
     useState<CancellationPolicy>("flexible");
 
@@ -127,8 +102,10 @@ export function LeaderCreateTripStepOne() {
     return dateInputValue(tomorrow);
   });
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
-  const [pickupPointId, setPickupPointId] = useState<string>(mockPickupPoints[0].id);
+  const [pickupPointId, setPickupPointId] = useState<string>("");
   const [dateError, setDateError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [isFetchingPickups, setIsFetchingPickups] = useState(false);
 
   // Khôi phục bản nháp nếu đã lưu trước đó trong sessionStorage
   useEffect(() => {
@@ -147,16 +124,28 @@ export function LeaderCreateTripStepOne() {
         if (draft.startDate) setStartDate(draft.startDate);
         if (draft.endDate) setEndDate(draft.endDate);
         if (draft.meetingTime) setMeetingTime(draft.meetingTime);
-        if (draft.pickupPointId) setPickupPointId(draft.pickupPointId);
+        if (draft.destinationId) {
+          setDestinationId(draft.destinationId);
+          fetchPickups(draft.destinationId).then((pickups) => {
+            setApiPickups(pickups);
+            if (draft.pickupPointId) {
+              setPickupPointId(draft.pickupPointId);
+            } else if (pickups.length > 0) {
+              setPickupPointId(pickups[0].id);
+            }
+          });
+        }
       } catch (err) {
         console.error("Lỗi đọc draft:", err);
       }
     }
-  }, []);
+  }, [fetchPickups]);
 
-  const selectedPickup =
-    mockPickupPoints.find((point) => point.id === pickupPointId) ??
-    mockPickupPoints[0];
+  // Bỏ tự động load pickups, yêu cầu người dùng tự chọn Điểm đến trước
+
+  const selectedPickupName =
+    apiPickups.find((point) => point.id === pickupPointId)?.name ??
+    (destinationId ? "Điểm tập kết tại điểm đến" : "Chưa chọn điểm đón");
 
   const daysCount = Math.max(
     1,
@@ -170,9 +159,17 @@ export function LeaderCreateTripStepOne() {
   const durationText =
     nightsCount > 0 ? `${daysCount} ngày ${nightsCount} đêm` : `${daysCount} ngày`;
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!title.trim()) {
       setTitleError("Vui lòng nhập tiêu đề chuyến đi trước khi tiếp tục.");
+      return;
+    }
+    if (!destinationId) {
+      setDateError("Vui lòng chọn Điểm đến của chuyến đi.");
+      return;
+    }
+    if (!pickupPointId) {
+      setDateError("Vui lòng chọn Địa điểm tập kết đón đoàn.");
       return;
     }
     const today = dateInputValue(new Date());
@@ -196,27 +193,53 @@ export function LeaderCreateTripStepOne() {
     }
     setDateError("");
     setTitleError("");
+    setSubmitError("");
 
-    window.sessionStorage.setItem(
-      "leader-create-trip-draft",
-      JSON.stringify({
-        title: title.trim(),
-        name: title.trim(),
-        description: description.trim(),
-        visibility,
-        cancellationPolicy,
-        startDate,
-        endDate,
-        meetingTime,
+    try {
+      const startAt = new Date(`${startDate}T${meetingTime}:00`).toISOString();
+      const endAt = new Date(`${endDate}T23:59:59`).toISOString();
+      const cleanPrice = String(price).replace(/\D/g, "") || "1000000";
+
+      const createdTrip = await createDraft({
+        destinationId,
         pickupPointId,
-        pickupName: selectedPickup.name,
-        place: selectedPickup.name.split(",")[0],
-        price,
-        capacity,
-        difficulty,
-      }),
-    );
-    router.push("/leader/create-trip/route");
+        title: title.trim(),
+        description: description.trim() || null,
+        startAt,
+        endAt,
+        capacity: Number(capacity),
+        price: cleanPrice,
+      });
+
+      window.sessionStorage.setItem("leader-create-trip-id", createdTrip.id);
+      window.sessionStorage.setItem(
+        "leader-create-trip-draft",
+        JSON.stringify({
+          id: createdTrip.id,
+          version: createdTrip.version,
+          destinationId,
+          destinationName: destinations.find((d) => d.id === destinationId)?.name,
+          pickupPointId,
+          pickupName: selectedPickupName,
+          title: createdTrip.title,
+          name: createdTrip.title,
+          description: createdTrip.description,
+          visibility,
+          cancellationPolicy,
+          startDate,
+          endDate,
+          meetingTime,
+          price: cleanPrice,
+          capacity: createdTrip.capacity,
+          difficulty,
+        })
+      );
+
+      router.push(`/leader/create-trip/route?tripId=${createdTrip.id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Đã có lỗi xảy ra khi tạo chuyến đi nháp.";
+      setSubmitError(msg);
+    }
   }
 
   return (
@@ -560,6 +583,45 @@ export function LeaderCreateTripStepOne() {
                   </div>
                 </div>
 
+                <label className="md:col-span-2">
+                  <FieldLabel required>Điểm đến (Destination)</FieldLabel>
+
+                  <select
+                    className={inputClass}
+                    value={destinationId}
+                    onChange={async (event) => {
+                      const dId = event.target.value;
+                      setDestinationId(dId);
+                      if (dId) {
+                        try {
+                          setIsFetchingPickups(true);
+                          setApiPickups([]);
+                          setPickupPointId("");
+                          const pickups = await fetchPickups(dId);
+                          setApiPickups(pickups);
+                          if (pickups.length > 0) {
+                            setPickupPointId(pickups[0].id);
+                          }
+                        } catch {
+                          // Handle error
+                        } finally {
+                          setIsFetchingPickups(false);
+                        }
+                      } else {
+                        setApiPickups([]);
+                        setPickupPointId("");
+                      }
+                    }}
+                  >
+                    <option value="">-- Chọn điểm đến trekking từ hệ thống --</option>
+                    {destinations.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <label>
                   <FieldLabel required>Giờ tập trung</FieldLabel>
 
@@ -575,18 +637,28 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <label>
-                  <FieldLabel required>Địa điểm tập kết tập trung</FieldLabel>
+                  <FieldLabel required>Địa điểm tập kết đón đoàn</FieldLabel>
 
                   <select
                     className={inputClass}
                     value={pickupPointId}
                     onChange={(event) => setPickupPointId(event.target.value)}
                   >
-                    {mockPickupPoints.map((point) => (
-                      <option key={point.id} value={point.id}>
-                        {point.name}
+                    {apiPickups.length > 0 ? (
+                      apiPickups.map((point) => (
+                        <option key={point.id} value={point.id}>
+                          {point.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">
+                        {!destinationId 
+                          ? "Vui lòng chọn Điểm đến trước" 
+                          : isFetchingPickups 
+                            ? "Đang tải điểm đón..." 
+                            : "Không có điểm đón nào"}
                       </option>
-                    ))}
+                    )}
                   </select>
                 </label>
               </div>
@@ -763,6 +835,13 @@ export function LeaderCreateTripStepOne() {
               </label>
             </FormCard>
 
+            {submitError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <strong className="font-bold">Lỗi tạo chuyến: </strong>
+                {submitError}
+              </div>
+            )}
+
             <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
               <Link
                 href="/leader/trips"
@@ -774,10 +853,11 @@ export function LeaderCreateTripStepOne() {
               <div className="flex gap-3">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={handleContinue}
-                  className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
+                  className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f] disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  Tiếp tục: Chọn cung đường →
+                  {isSubmitting ? "Đang xử lý..." : "Tiếp tục: Chọn cung đường →"}
                 </button>
               </div>
             </div>
@@ -824,7 +904,7 @@ export function LeaderCreateTripStepOne() {
                     )}{" "}
                     ({durationText})
                   </p>
-                  <p>⌖ Điểm đón: {selectedPickup.name.split(",")[0]}</p>
+                  <p>⌖ Điểm đón: {selectedPickupName.split(",")[0]}</p>
                   <p className="font-semibold text-emerald-700">
                     ⌁ Cung đường: Chọn ở Bước 2
                   </p>
