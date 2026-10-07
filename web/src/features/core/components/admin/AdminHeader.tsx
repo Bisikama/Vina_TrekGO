@@ -46,7 +46,7 @@ export const AdminHeader = () => {
             <div className="text-[10px] font-medium text-gray-500">System Administrator</div>
           </div>
           <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm border-2 border-white shadow-sm relative">
-            <Image src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=100&auto=format&fit=crop" alt="Admin" fill className="rounded-full object-cover" />
+            <Image src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=100&auto=format&fit=crop" alt="Admin" fill sizes="36px" className="rounded-full object-cover" />
             <div className="absolute -bottom-1 -right-1 bg-green-700 text-white text-[8px] font-bold px-1 rounded-sm border border-white">SUPER ADMIN</div>
           </div>
           <button

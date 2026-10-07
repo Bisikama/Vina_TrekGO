@@ -6,7 +6,8 @@
     "dev": "next dev -p 5000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "download:dem": "node scripts/download-dem.mjs"
   },
   "dependencies": {
     "axios": "^1.20.0",
