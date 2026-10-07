@@ -5,49 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 type Visibility = "public" | "private";
-type CancellationPolicy = "flexible" | "standard" | "strict";
-
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
 
-const mockPickupPoints = [
-  {
-    id: "my-dinh-gate-2",
-    name: "Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội",
-    latitude: "21.0285",
-    longitude: "105.7784",
-    marker: "Cổng số 2 – Xe trung chuyển 16 chỗ",
-  },
-  {
-    id: "cau-giay-park",
-    name: "Cổng chính Công viên Cầu Giấy, Hà Nội",
-    latitude: "21.0307",
-    longitude: "105.7952",
-    marker: "Cổng chính – Điểm đón đoàn",
-  },
-  {
-    id: "hoa-lac-stop",
-    name: "Trạm nghỉ Hòa Lạc, Thạch Thất, Hà Nội",
-    latitude: "21.0068",
-    longitude: "105.5254",
-    marker: "Khu đón khách – Bãi xe phía Đông",
-  },
-  {
-    id: "tay-ninh-station",
-    name: "Bến xe Tây Ninh, Phường 3, TP. Tây Ninh",
-    latitude: "11.3123",
-    longitude: "106.0988",
-    marker: "Cổng chính Bến xe Tây Ninh",
-  },
-] as const;
+import { useLeaderTripMutations, useLeaderTripOptions } from "../../hooks";
 
-const difficultyLabels: Record<number, { name: string; detail: string }> = {
-  1: { name: "Rất nhẹ", detail: "Dạo bộ rừng" },
-  2: { name: "Nhẹ nhàng", detail: "Người mới" },
-  3: { name: "Vừa phải", detail: "6–8 giờ/tiếng" },
-  4: { name: "Thử thách", detail: "Dốc đứng" },
-  5: { name: "Chuyên gia", detail: "Đòi hỏi kỹ thuật" },
-};
+
 
 function dateInputValue(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
@@ -108,15 +71,16 @@ function FormCard({
 
 export function LeaderCreateTripStepOne() {
   const router = useRouter();
+  const { destinations, fetchPickups, checkConflicts, isLoadingDestinations } = useLeaderTripOptions();
+  const { createDraft, updateTrip, isSubmitting } = useLeaderTripMutations();
 
+  const [destinationId, setDestinationId] = useState<string>("");
+  const [apiPickups, setApiPickups] = useState<Array<{ id: string; name: string }>>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState("");
 
-  const [visibility, setVisibility] = useState<Visibility>("private");
-  const [cancellationPolicy, setCancellationPolicy] =
-    useState<CancellationPolicy>("flexible");
-
+  const [visibility, setVisibility] = useState<Visibility>("public");
   const [capacity, setCapacity] = useState(15);
   const [price, setPrice] = useState("2850000");
   const [difficulty, setDifficulty] = useState(3);
@@ -127,8 +91,10 @@ export function LeaderCreateTripStepOne() {
     return dateInputValue(tomorrow);
   });
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
-  const [pickupPointId, setPickupPointId] = useState<string>(mockPickupPoints[0].id);
+  const [pickupPointId, setPickupPointId] = useState<string>("");
   const [dateError, setDateError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [isFetchingPickups, setIsFetchingPickups] = useState(false);
 
   // Khôi phục bản nháp nếu đã lưu trước đó trong sessionStorage
   useEffect(() => {
@@ -140,23 +106,33 @@ export function LeaderCreateTripStepOne() {
         if (draft.name && !draft.title) setTitle(draft.name);
         if (draft.description) setDescription(draft.description);
         if (draft.visibility) setVisibility(draft.visibility);
-        if (draft.cancellationPolicy) setCancellationPolicy(draft.cancellationPolicy);
         if (draft.capacity) setCapacity(Number(draft.capacity));
         if (draft.price) setPrice(String(draft.price));
-        if (draft.difficulty) setDifficulty(Number(draft.difficulty));
         if (draft.startDate) setStartDate(draft.startDate);
         if (draft.endDate) setEndDate(draft.endDate);
         if (draft.meetingTime) setMeetingTime(draft.meetingTime);
-        if (draft.pickupPointId) setPickupPointId(draft.pickupPointId);
+        if (draft.destinationId) {
+          setDestinationId(draft.destinationId);
+          fetchPickups(draft.destinationId).then((pickups) => {
+            setApiPickups(pickups);
+            if (draft.pickupPointId) {
+              setPickupPointId(draft.pickupPointId);
+            } else if (pickups.length > 0) {
+              setPickupPointId(pickups[0].id);
+            }
+          });
+        }
       } catch (err) {
         console.error("Lỗi đọc draft:", err);
       }
     }
-  }, []);
+  }, [fetchPickups]);
 
-  const selectedPickup =
-    mockPickupPoints.find((point) => point.id === pickupPointId) ??
-    mockPickupPoints[0];
+  // Bỏ tự động load pickups, yêu cầu người dùng tự chọn Điểm đến trước
+
+  const selectedPickupName =
+    apiPickups.find((point) => point.id === pickupPointId)?.name ??
+    (destinationId ? "Điểm tập kết tại điểm đến" : "Chưa chọn điểm đón");
 
   const daysCount = Math.max(
     1,
@@ -170,9 +146,17 @@ export function LeaderCreateTripStepOne() {
   const durationText =
     nightsCount > 0 ? `${daysCount} ngày ${nightsCount} đêm` : `${daysCount} ngày`;
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!title.trim()) {
       setTitleError("Vui lòng nhập tiêu đề chuyến đi trước khi tiếp tục.");
+      return;
+    }
+    if (!destinationId) {
+      setDateError("Vui lòng chọn Điểm đến của chuyến đi.");
+      return;
+    }
+    if (!pickupPointId) {
+      setDateError("Vui lòng chọn Địa điểm tập kết đón đoàn.");
       return;
     }
     const today = dateInputValue(new Date());
@@ -196,27 +180,51 @@ export function LeaderCreateTripStepOne() {
     }
     setDateError("");
     setTitleError("");
+    setSubmitError("");
 
-    window.sessionStorage.setItem(
-      "leader-create-trip-draft",
-      JSON.stringify({
-        title: title.trim(),
-        name: title.trim(),
-        description: description.trim(),
-        visibility,
-        cancellationPolicy,
-        startDate,
-        endDate,
-        meetingTime,
+    try {
+      const startAt = new Date(`${startDate}T${meetingTime}:00`).toISOString();
+      const endAt = new Date(`${endDate}T23:59:59`).toISOString();
+      const cleanPrice = String(price).replace(/\D/g, "") || "1000000";
+
+      const createdTrip = await createDraft({
+        destinationId,
         pickupPointId,
-        pickupName: selectedPickup.name,
-        place: selectedPickup.name.split(",")[0],
-        price,
-        capacity,
-        difficulty,
-      }),
-    );
-    router.push("/leader/create-trip/route");
+        title: title.trim(),
+        description: description.trim() || null,
+        startAt,
+        endAt,
+        capacity: Number(capacity),
+        price: cleanPrice,
+      });
+
+      window.sessionStorage.setItem("leader-create-trip-id", createdTrip.id);
+      window.sessionStorage.setItem(
+        "leader-create-trip-draft",
+        JSON.stringify({
+          id: createdTrip.id,
+          version: createdTrip.version,
+          destinationId,
+          destinationName: destinations.find((d) => d.id === destinationId)?.name,
+          pickupPointId,
+          pickupName: selectedPickupName,
+          title: createdTrip.title,
+          name: createdTrip.title,
+          description: createdTrip.description,
+          visibility,
+          startDate,
+          endDate,
+          meetingTime,
+          price: cleanPrice,
+          capacity: createdTrip.capacity,
+        })
+      );
+
+      router.push(`/leader/create-trip/route?tripId=${createdTrip.id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Đã có lỗi xảy ra khi tạo chuyến đi nháp.";
+      setSubmitError(msg);
+    }
   }
 
   return (
@@ -452,37 +460,7 @@ export function LeaderCreateTripStepOne() {
                   </div>
                 </label>
 
-                <div>
-                  <FieldLabel>Ảnh bìa chuyến đi</FieldLabel>
 
-                  <div
-                    className="relative h-72 overflow-hidden rounded-2xl bg-cover bg-center"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,.05)), url("https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1400&q=80")',
-                    }}
-                  >
-                    <span className="absolute right-4 top-4 rounded-md bg-[#125238] px-2 py-1 text-xs font-bold text-white">
-                      1376 × 768 px
-                    </span>
-
-                    <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 p-4">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100"
-                      >
-                        ↻ Đổi ảnh bìa
-                      </button>
-
-                      <button
-                        type="button"
-                        className="rounded-lg bg-slate-950/70 px-3 py-2 text-xs font-bold text-white hover:bg-slate-950"
-                      >
-                        ⛶ Cắt tỉ lệ
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </FormCard>
 
@@ -502,17 +480,17 @@ export function LeaderCreateTripStepOne() {
                     min={dateInputValue(new Date())}
                     onChange={(event) => {
                       const nextStartDate = event.target.value;
+                      setStartDate(nextStartDate);
                       const today = dateInputValue(new Date());
-                      if (nextStartDate < today) {
+                      if (nextStartDate && nextStartDate < today) {
                         setDateError(
                           "Ngày khởi hành không được là ngày trong quá khứ.",
                         );
-                        return;
-                      }
-                      setStartDate(nextStartDate);
-                      setDateError("");
-                      if (endDate < nextStartDate) {
-                        setEndDate(nextStartDate);
+                      } else {
+                        setDateError("");
+                        if (nextStartDate && endDate < nextStartDate) {
+                          setEndDate(nextStartDate);
+                        }
                       }
                     }}
                   />
@@ -528,14 +506,14 @@ export function LeaderCreateTripStepOne() {
                     min={startDate}
                     onChange={(event) => {
                       const nextEndDate = event.target.value;
-                      if (nextEndDate < startDate) {
+                      setEndDate(nextEndDate);
+                      if (nextEndDate && nextEndDate < startDate) {
                         setDateError(
                           "Ngày kết thúc phải từ ngày khởi hành trở đi.",
                         );
-                        return;
+                      } else {
+                        setDateError("");
                       }
-                      setEndDate(nextEndDate);
-                      setDateError("");
                     }}
                   />
                 </label>
@@ -560,6 +538,45 @@ export function LeaderCreateTripStepOne() {
                   </div>
                 </div>
 
+                <label className="md:col-span-2">
+                  <FieldLabel required>Điểm đến (Destination)</FieldLabel>
+
+                  <select
+                    className={inputClass}
+                    value={destinationId}
+                    onChange={async (event) => {
+                      const dId = event.target.value;
+                      setDestinationId(dId);
+                      if (dId) {
+                        try {
+                          setIsFetchingPickups(true);
+                          setApiPickups([]);
+                          setPickupPointId("");
+                          const pickups = await fetchPickups(dId);
+                          setApiPickups(pickups);
+                          if (pickups.length > 0) {
+                            setPickupPointId(pickups[0].id);
+                          }
+                        } catch {
+                          // Handle error
+                        } finally {
+                          setIsFetchingPickups(false);
+                        }
+                      } else {
+                        setApiPickups([]);
+                        setPickupPointId("");
+                      }
+                    }}
+                  >
+                    <option value="">-- Chọn điểm đến trekking từ hệ thống --</option>
+                    {destinations.map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <label>
                   <FieldLabel required>Giờ tập trung</FieldLabel>
 
@@ -575,18 +592,28 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <label>
-                  <FieldLabel required>Địa điểm tập kết tập trung</FieldLabel>
+                  <FieldLabel required>Địa điểm tập kết đón đoàn</FieldLabel>
 
                   <select
                     className={inputClass}
                     value={pickupPointId}
                     onChange={(event) => setPickupPointId(event.target.value)}
                   >
-                    {mockPickupPoints.map((point) => (
-                      <option key={point.id} value={point.id}>
-                        {point.name}
+                    {apiPickups.length > 0 ? (
+                      apiPickups.map((point) => (
+                        <option key={point.id} value={point.id}>
+                          {point.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">
+                        {!destinationId 
+                          ? "Vui lòng chọn Điểm đến trước" 
+                          : isFetchingPickups 
+                            ? "Đang tải điểm đón..." 
+                            : "Không có điểm đón nào"}
                       </option>
-                    ))}
+                    )}
                   </select>
                 </label>
               </div>
@@ -658,110 +685,14 @@ export function LeaderCreateTripStepOne() {
                 </label>
               </div>
 
-              <div className="mt-6">
-                <FieldLabel required>Cấp độ thử thách</FieldLabel>
-
-                <div className="grid gap-2 md:grid-cols-5">
-                  {[1, 2, 3, 4, 5].map((lvl) => {
-                    const item = difficultyLabels[lvl];
-                    return (
-                      <button
-                        key={lvl}
-                        type="button"
-                        onClick={() => setDifficulty(lvl)}
-                        className={`rounded-xl border p-3 text-left transition ${
-                          difficulty === lvl
-                            ? "border-orange-400 bg-orange-50"
-                            : "border-slate-200 bg-white"
-                        }`}
-                      >
-                        <span className="text-[10px] font-bold uppercase text-slate-500">
-                          Cấp {lvl}
-                        </span>
-
-                        <strong className="mt-1 block text-sm text-slate-900">
-                          {item.name}
-                        </strong>
-
-                        <span className="mt-1 block text-[10px] text-slate-500">
-                          {item.detail}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </FormCard>
 
-            <FormCard
-              number={4}
-              title="Chính sách hủy tour & Bất khả kháng"
-              description="Minh bạch điều khoản tài chính theo chuẩn bảo hộ."
-            >
-              <div className="space-y-3">
-                {[
-                  {
-                    value: "flexible" as const,
-                    title: "Chính sách Linh hoạt",
-                    description:
-                      "Hoàn 100% trước ngày khởi hành 7 ngày; hoàn 50% nếu hủy trước 3 ngày.",
-                  },
-                  {
-                    value: "standard" as const,
-                    title: "Chính sách Tiêu chuẩn",
-                    description:
-                      "Hoàn 100% trước 14 ngày; hoàn 30% nếu hủy trước 5 ngày.",
-                  },
-                  {
-                    value: "strict" as const,
-                    title: "Chính sách Nghiêm ngặt",
-                    description:
-                      "Chỉ hoàn 80% nếu hủy trước 15 ngày; không hoàn sát thời điểm đi.",
-                  },
-                ].map((policy) => (
-                  <button
-                    key={policy.value}
-                    type="button"
-                    onClick={() => setCancellationPolicy(policy.value)}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
-                      cancellationPolicy === policy.value
-                        ? "border-[#2f6b4f] bg-emerald-50"
-                        : "border-slate-200 bg-white"
-                    }`}
-                  >
-                    <div className="flex gap-3">
-                      <span
-                        className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-4 ${
-                          cancellationPolicy === policy.value
-                            ? "border-[#125238]"
-                            : "border-slate-300"
-                        }`}
-                      />
-
-                      <div>
-                        <strong className="text-sm text-slate-900">
-                          {policy.title}
-                        </strong>
-
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          {policy.description}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+            {submitError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <strong className="font-bold">Lỗi tạo chuyến: </strong>
+                {submitError}
               </div>
-
-              <label className="mt-5 block">
-                <FieldLabel>Điều khoản bất khả kháng</FieldLabel>
-
-                <textarea
-                  rows={4}
-                  className="w-full rounded-xl border border-slate-200 bg-[#f6f8fc] p-4 text-sm leading-6 outline-none focus:border-[#2f6b4f]"
-                  defaultValue="Nếu có cảnh báo thời tiết bão lũ cấp độ 3 trở lên, đoàn sẽ tự động dời lịch sang tuần kế tiếp hoặc hoàn trả 100% kinh phí sau khi trừ chi phí phát sinh hợp lệ."
-                />
-              </label>
-            </FormCard>
+            )}
 
             <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
               <Link
@@ -774,85 +705,17 @@ export function LeaderCreateTripStepOne() {
               <div className="flex gap-3">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={handleContinue}
-                  className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
+                  className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f] disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  Tiếp tục: Chọn cung đường →
+                  {isSubmitting ? "Đang xử lý..." : "Tiếp tục: Chọn cung đường →"}
                 </button>
               </div>
             </div>
           </div>
 
           <aside className="sticky top-20 hidden space-y-5 xl:block">
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <strong className="text-sm text-slate-900">
-                  Xem trước thẻ chuyến
-                </strong>
-
-                <span className="text-xs text-[#125238]">Trekker View</span>
-              </div>
-
-              <div
-                className="h-44 bg-cover bg-center"
-                style={{
-                  backgroundImage:
-                    'url("https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80")',
-                }}
-              />
-
-              <div className="p-5">
-                <div className="flex gap-2">
-                  <span className="rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
-                    Cấp {difficulty} – {difficultyLabels[difficulty]?.name || "Vừa phải"}
-                  </span>
-
-                  <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-[#125238]">
-                    {visibility === "public" ? "Công khai" : "Riêng tư"}
-                  </span>
-                </div>
-
-                <h2 className="mt-4 font-bold leading-6 text-slate-950">
-                  {title.trim() ? title : "Tiêu đề chuyến đi (Chưa đặt tên)"}
-                </h2>
-
-                <div className="mt-3 space-y-2 text-xs text-slate-500">
-                  <p>
-                    ▣{" "}
-                    {new Date(startDate + "T00:00:00").toLocaleDateString(
-                      "vi-VN",
-                    )}{" "}
-                    ({durationText})
-                  </p>
-                  <p>⌖ Điểm đón: {selectedPickup.name.split(",")[0]}</p>
-                  <p className="font-semibold text-emerald-700">
-                    ⌁ Cung đường: Chọn ở Bước 2
-                  </p>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500">
-                      Chi phí trọn gói
-                    </span>
-
-                    <p className="font-bold text-[#125238]">
-                      {Number(price || 0).toLocaleString("vi-VN")}₫
-                      <span className="text-xs font-normal text-slate-500">
-                        /khách
-                      </span>
-                    </p>
-                  </div>
-
-                  <span className="text-xs text-slate-500">
-                    Còn trống
-                    <strong className="ml-1 text-slate-900">
-                      {capacity}/15
-                    </strong>
-                  </span>
-                </div>
-              </div>
-            </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="font-bold text-slate-950">

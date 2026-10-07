@@ -66,3 +66,4 @@ skills-lock.json
 # Test outputs
 jest.json
 jest_output.txt
+/docs

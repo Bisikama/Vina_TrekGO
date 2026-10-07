@@ -1,74 +1,309 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
-import { useAuth, useAuthStore } from '@/features/auth';
-import { tripsApi } from '../services/trips.api';
-import type { Option, Readiness, Trail, Trip, TripInput } from '../types/trip.types';
+import { useCallback, useEffect, useState } from "react";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import {
+  cancelLeaderTripRequest,
+  createLeaderPublicTrip,
+  getLeaderCheckpointOptions,
+  getLeaderDestinationOptions,
+  getLeaderPickupPointOptions,
+  getLeaderPublicTripDetail,
+  getLeaderTrailSuggestions,
+  getLeaderTripErrorMessage,
+  getLeaderTripReadiness,
+  listLeaderPublicTrips,
+  publishLeaderTrip,
+  setLeaderTripCheckpoints,
+  setLeaderTripTrails,
+  updateLeaderPublicTrip,
+} from "@/features/leaders/services/leader-public-trips.api";
+import type {
+  CreateLeaderPublicTripInput,
+  LeaderCheckpointOption,
+  LeaderTripView,
+  TrailSuggestion,
+  TripOptionItem,
+  TripReadinessResult,
+} from "@/features/leaders/types/leader-trips";
 
-export const usePublicTrips = () => {
-  const { accessToken: token, user } = useAuth();
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [trip, setTrip] = useState<Trip | null>(null);
+export function usePublicTrips() {
+  const { accessToken: token, user } = useAuthStore();
+
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [readiness, setReadiness] = useState<Readiness | null>(null);
-  const [destinations, setDestinations] = useState<Option[]>([]);
-  const [pickups, setPickups] = useState<Option[]>([]);
-  const [checkpoints, setCheckpoints] = useState<Option[]>([]);
-  const [trails, setTrails] = useState<Trail[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
   const [page, setPage] = useState(1);
   const [trailPage, setTrailPage] = useState(1);
-  const [loadedToken, setLoadedToken] = useState<string | null>(null);
 
-  const run = useCallback(async (work: () => Promise<void>) => {
-    setBusy(true); setError(''); setNotice('');
-    try { await work(); }
-    catch (e) {
-      if (axios.isAxiosError<{ message?: string; code?: string; issues?: { message: string }[] }>(e)) {
-        setError([e.response?.data?.message || e.message, ...(e.response?.data?.issues?.map(i => i.message) || [])].join(' '));
-        if (e.response?.status === 401) { useAuthStore.getState().logout(); setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'); }
-      } else setError(e instanceof Error ? e.message : 'Không thể thực hiện thao tác.');
-    } finally { setBusy(false); }
+  const [trips, setTrips] = useState<LeaderTripView[]>([]);
+  const [trip, setTrip] = useState<LeaderTripView | null>(null);
+
+  const [destinations, setDestinations] = useState<TripOptionItem[]>([]);
+  const [pickups, setPickups] = useState<TripOptionItem[]>([]);
+  const [checkpoints, setCheckpoints] = useState<LeaderCheckpointOption[]>([]);
+  const [trails, setTrails] = useState<TrailSuggestion[]>([]);
+  const [readiness, setReadiness] = useState<TripReadinessResult | null>(null);
+
+  // 1. Tải danh mục Destinations
+  const loadDestinations = useCallback(async () => {
+    try {
+      const data = await getLeaderDestinationOptions({ page: 1, pageSize: 100 });
+      setDestinations(data);
+    } catch {
+      // Ignored if offline/unauthorized
+    }
   }, []);
-  const allOptions = async (kind: 'destinations' | 'pickup-points' | 'checkpoints', destinationId?: string) => {
-    const result: Option[] = [];
-    for (let p = 1; ; p++) { const items = await tripsApi.options(kind, destinationId, p); result.push(...items); if (items.length < 100) return result; }
+
+  // 2. Tải danh sách trips của Leader
+  const loadTrips = useCallback(async (p = page) => {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await listLeaderPublicTrips({ page: p, pageSize: 20 });
+      setTrips(data);
+      setPage(p);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể tải danh sách chuyến đi."));
+    } finally {
+      setBusy(false);
+    }
+  }, [token, page]);
+
+  // 3. Tải Pickups và Checkpoints theo Destination
+  const loadDestination = useCallback(async (destId: string) => {
+    if (!destId) {
+      setPickups([]);
+      setCheckpoints([]);
+      return;
+    }
+    try {
+      const [pickupData, checkpointData] = await Promise.all([
+        getLeaderPickupPointOptions(destId, { page: 1, pageSize: 100 }),
+        getLeaderCheckpointOptions(destId, { page: 1, pageSize: 100 }),
+      ]);
+      setPickups(pickupData);
+      setCheckpoints(checkpointData);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể tải dữ liệu điểm đến."));
+    }
+  }, []);
+
+  // 4. Mở chi tiết 1 chuyến đi
+  const open = useCallback(async (id: string) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    setReadiness(null);
+    try {
+      const detail = await getLeaderPublicTripDetail(id);
+      setTrip(detail);
+      if (detail.destinationId) {
+        await loadDestination(detail.destinationId);
+      }
+      const suggestions = await getLeaderTrailSuggestions(id, { page: 1, pageSize: 20 });
+      setTrails(suggestions);
+      setTrailPage(1);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể tải chi tiết chuyến đi."));
+    } finally {
+      setBusy(false);
+    }
+  }, [loadDestination]);
+
+  // 5. Tải trang gợi ý trail tiếp theo
+  const suggestionsPage = useCallback(async (p: number) => {
+    if (!trip) return;
+    setBusy(true);
+    try {
+      const suggestions = await getLeaderTrailSuggestions(trip.id, { page: p, pageSize: 20 });
+      setTrails(suggestions);
+      setTrailPage(p);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể tải gợi ý cung đường."));
+    } finally {
+      setBusy(false);
+    }
+  }, [trip]);
+
+  // 6. Lưu thông tin chuyến đi (Tạo mới hoặc Cập nhật)
+  const save = async (data: CreateLeaderPublicTripInput) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      if (trip) {
+        const updated = await updateLeaderPublicTrip(trip.id, {
+          expectedVersion: trip.version,
+          ...data,
+        });
+        setTrip(updated);
+        setNotice("Đã lưu cập nhật thông tin chuyến đi thành công.");
+      } else {
+        const created = await createLeaderPublicTrip(data);
+        setTrip(created);
+        setNotice("Đã tạo chuyến đi nháp thành công.");
+        await open(created.id);
+      }
+      await loadTrips(page);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể lưu chuyến đi."));
+    } finally {
+      setBusy(false);
+    }
   };
+
+  // 7. Gán Checkpoints
+  const setCheckpointIds = async (ids: string[]) => {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await setLeaderTripCheckpoints(trip.id, {
+        expectedVersion: trip.version,
+        checkpointIds: ids,
+      });
+      setTrip(updated);
+      setNotice("Đã cập nhật danh sách checkpoint bắt buộc.");
+      const suggestions = await getLeaderTrailSuggestions(trip.id, { page: trailPage, pageSize: 20 });
+      setTrails(suggestions);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể cập nhật checkpoints."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 8. Gán Trails
+  const setTrailIds = async (ids: string[]) => {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await setLeaderTripTrails(trip.id, {
+        expectedVersion: trip.version,
+        trailIds: ids,
+      });
+      setTrip(updated);
+      setNotice("Đã cập nhật cung đường dự kiến.");
+      const suggestions = await getLeaderTrailSuggestions(trip.id, { page: trailPage, pageSize: 20 });
+      setTrails(suggestions);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể cập nhật cung đường."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 9. Kiểm tra tính sẵn sàng (Review)
+  const review = async () => {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await getLeaderTripReadiness(trip.id);
+      setReadiness(result);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể kiểm tra điều kiện xuất bản."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 10. Xuất bản (Publish)
+  const publish = async () => {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await publishLeaderTrip(trip.id, { expectedVersion: trip.version });
+      setTrip(updated);
+      setNotice("🎉 Xuất bản chuyến đi thành công! Chuyến đi đã mở nhận đăng ký.");
+      await loadTrips(page);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể xuất bản chuyến đi."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 11. Hủy chuyến đi (Cancel)
+  const cancel = async (cancelReason: string) => {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await cancelLeaderTripRequest(trip.id, {
+        expectedVersion: trip.version,
+        reason: cancelReason,
+      });
+      setTrip(updated);
+      setNotice("Đã gửi yêu cầu hủy chuyến đi.");
+      await loadTrips(page);
+    } catch (err: unknown) {
+      setError(getLeaderTripErrorMessage(err, "Không thể gửi yêu cầu hủy chuyến đi."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const newDraft = () => {
+    setTrip(null);
+    setReadiness(null);
+    setNotice(null);
+    setError(null);
+  };
+
+  const refresh = () => {
+    if (trip) {
+      open(trip.id);
+    } else {
+      loadTrips(page);
+    }
+  };
+
+  const listPage = (p: number) => {
+    loadTrips(p);
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    if (!token || user?.role !== 'LEADER') return;
-    void Promise.all([tripsApi.list(), allOptions('destinations')]).then(([items, options]) => {
-      if (cancelled) return;
-      setTrip(null); setReadiness(null); setTrails([]); setTrips(items); setDestinations(options); setPage(1); setError('');
-    }).catch((e: unknown) => {
-      if (!cancelled) setError(e instanceof Error ? e.message : 'Không thể tải danh sách chuyến.');
-    }).finally(() => { if (!cancelled) setLoadedToken(token); });
-    return () => { cancelled = true; };
-  }, [token, user?.role]);
-  const loadDestination = (destinationId: string) => run(async () => {
-    if (!destinationId) { setPickups([]); setCheckpoints([]); return; }
-    const [p, c] = await Promise.all([allOptions('pickup-points', destinationId), allOptions('checkpoints', destinationId)]);
-    setPickups(p); setCheckpoints(c);
-  });
-  const open = (id: string) => run(async () => {
-    const t = await tripsApi.detail(id);
-    const [p, c, suggestions] = await Promise.all([allOptions('pickup-points', t.destinationId), allOptions('checkpoints', t.destinationId), tripsApi.suggestions(id, 1)]);
-    setTrip(t); setPickups(p); setCheckpoints(c); setTrails(suggestions); setTrailPage(1); setReadiness(null);
-  });
-  const accept = async (t: Trip) => { setTrip(t); setReadiness(null); setTrips(await tripsApi.list(page)); };
-  const save = (input: TripInput) => run(async () => { const t = trip ? await tripsApi.update(trip.id, trip.version, input) : await tripsApi.create(input); await accept(t); setTrails(await tripsApi.suggestions(t.id, 1)); setTrailPage(1); setNotice('Đã lưu bản nháp.'); });
-  const setCheckpointIds = (ids: string[]) => run(async () => { if (!trip) return; await accept(await tripsApi.checkpoints(trip, ids)); setTrails(await tripsApi.suggestions(trip.id, 1)); setTrailPage(1); });
-  const setTrailIds = (ids: string[]) => run(async () => { if (!trip) return; await accept(await tripsApi.trails(trip, ids)); setTrails(await tripsApi.suggestions(trip.id, 1)); setTrailPage(1); });
-  return { user, token, trip, trips, busy: busy || (!!token && user?.role === 'LEADER' && loadedToken !== token), error, notice, readiness, destinations, pickups, checkpoints, trails, page, trailPage,
-    open, save, loadDestination, setCheckpointIds, setTrailIds,
-    newDraft: () => { setTrip(null); setPickups([]); setCheckpoints([]); setTrails([]); setReadiness(null); setError(''); setNotice(''); },
-    refresh: () => trip ? open(trip.id) : run(async () => setTrips(await tripsApi.list(page))),
-    listPage: (p: number) => run(async () => { setTrips(await tripsApi.list(p)); setPage(p); }),
-    suggestionsPage: (p: number) => run(async () => { if (trip) { setTrails(await tripsApi.suggestions(trip.id, p)); setTrailPage(p); } }),
-    review: () => run(async () => { if (trip) setReadiness(await tripsApi.readiness(trip.id)); }),
-    publish: () => run(async () => { if (trip) { await accept(await tripsApi.publish(trip)); setNotice('Trip đã OPEN và xuất hiện trong danh sách công khai.'); } }),
-    cancel: (reason: string) => run(async () => { if (trip) { await accept(await tripsApi.cancel(trip, reason)); setNotice('Đã gửi yêu cầu hủy, chờ Admin duyệt.'); } }),
+    loadDestinations();
+  }, [loadDestinations]);
+
+  useEffect(() => {
+    if (token) {
+      loadTrips(1);
+    }
+  }, [token, loadTrips]);
+
+  return {
+    token,
+    user,
+    busy,
+    error,
+    notice,
+    trips,
+    trip,
+    page,
+    trailPage,
+    destinations,
+    pickups,
+    checkpoints,
+    trails,
+    readiness,
+    listPage,
+    suggestionsPage,
+    newDraft,
+    open,
+    refresh,
+    loadDestination,
+    save,
+    setCheckpointIds,
+    setTrailIds,
+    review,
+    publish,
+    cancel,
   };
-};
+}

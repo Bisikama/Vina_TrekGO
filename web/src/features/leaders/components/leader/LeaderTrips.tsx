@@ -7,6 +7,8 @@ import {
   type CreatedLeaderTrip,
 } from "../../data/mockLeaderTripStore";
 
+import { useLeaderPublicTrips } from "../../hooks";
+
 type TripStatus =
   | "draft"
   | "open"
@@ -27,107 +29,8 @@ type LeaderTrip = {
   capacity: number;
   status: TripStatus;
   revenue: number;
-  imageUrl: string;
+  imageUrl?: string;
 };
-
-const trips: LeaderTrip[] = [
-  {
-    id: "TRK-TX-2411",
-    name: "Chinh phục Sống Lưng Khủng Long",
-    subtitle: "Tour ghép tiêu chuẩn VFRS",
-    routeName: "Sống Lưng Khủng Long",
-    province: "Sơn La",
-    duration: "2N1Đ",
-    startDate: "23/11",
-    endDate: "24/11/2024",
-    registered: 15,
-    capacity: 15,
-    status: "active",
-    revenue: 34_500_000,
-    imageUrl:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=300&q=80",
-  },
-  {
-    id: "TRK-PTL-1202",
-    name: "Pu Ta Leng – Rừng Rêu Cổ Thụ",
-    subtitle: "Chuyến leo kỹ thuật cao",
-    routeName: "Rừng Rêu Pu Ta Leng",
-    province: "Lai Châu",
-    duration: "3N2Đ",
-    startDate: "02/12",
-    endDate: "04/12/2024",
-    registered: 11,
-    capacity: 12,
-    status: "open",
-    revenue: 46_200_000,
-    imageUrl:
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=300&q=80",
-  },
-  {
-    id: "TRK-K5-1214",
-    name: "Băng Rừng – Chinh phục Thác K5",
-    subtitle: "Trekking trải nghiệm thiên nhiên",
-    routeName: "Tuyến Thác K5 – Kon Chư Răng",
-    province: "Gia Lai",
-    duration: "2N1Đ",
-    startDate: "14/12",
-    endDate: "15/12/2024",
-    registered: 6,
-    capacity: 15,
-    status: "open",
-    revenue: 16_800_000,
-    imageUrl:
-      "https://images.unsplash.com/photo-1443632864897-14973fa006cf?auto=format&fit=crop&w=300&q=80",
-  },
-  {
-    id: "DRAFT-LT-0105",
-    name: "Tà Năng – Phan Dũng mùa cỏ cháy",
-    subtitle: "Bản nháp chưa công khai",
-    routeName: "Tà Năng – Phan Dũng",
-    province: "Lâm Đồng",
-    duration: "3N2Đ",
-    startDate: "05/01",
-    endDate: "07/01/2025",
-    registered: 0,
-    capacity: 15,
-    status: "draft",
-    revenue: 0,
-    imageUrl:
-      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=300&q=80",
-  },
-  {
-    id: "TRK-FSP-1018",
-    name: "Fansipan – Chạm tay nóc nhà Đông Dương",
-    subtitle: "Chuyến đi đã hoàn thành",
-    routeName: "Fansipan",
-    province: "Lào Cai",
-    duration: "2N1Đ",
-    startDate: "18/10",
-    endDate: "19/10/2024",
-    registered: 14,
-    capacity: 15,
-    status: "completed",
-    revenue: 39_200_000,
-    imageUrl:
-      "https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=300&q=80",
-  },
-  {
-    id: "TRK-BD-0912",
-    name: "Bidoup – Núi Bà",
-    subtitle: "Chuyến đi đã hủy",
-    routeName: "Bidoup – Núi Bà",
-    province: "Lâm Đồng",
-    duration: "2N1Đ",
-    startDate: "12/09",
-    endDate: "13/09/2024",
-    registered: 8,
-    capacity: 15,
-    status: "cancelled",
-    revenue: 0,
-    imageUrl:
-      "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=300&q=80",
-  },
-];
 
 const tabs: Array<{
   value: "all" | TripStatus;
@@ -175,45 +78,47 @@ function formatCurrency(value: number) {
 }
 
 export function LeaderTrips() {
-  const [createdTrip, setCreatedTrip] =
-    useState<CreatedLeaderTrip | null>(null);
+  const { trips: apiTrips, isLoading: isLoadingApi, error, refetch } = useLeaderPublicTrips();
   const [activeTab, setActiveTab] = useState<
     "all" | TripStatus
   >("all");
 
   const [search, setSearch] = useState("");
-  useEffect(() => {
-    const refresh = () => setCreatedTrip(readCreatedLeaderTrip());
-    refresh();
-    window.addEventListener("trekgo-mock-db-change", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("trekgo-mock-db-change", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, []);
 
   const allTrips = useMemo<LeaderTrip[]>(() => {
-    if (!createdTrip) return trips;
-    return [
-      {
-        id: createdTrip.id || "TRK-MOCK",
-        name: createdTrip.name,
-        subtitle: "Chuyến đi mock vừa tạo",
-        routeName: createdTrip.name,
-        province: createdTrip.place,
-        duration: "2N1Đ",
-        startDate: createdTrip.date,
-        endDate: createdTrip.date,
+    return (apiTrips || []).map((t) => {
+      const statusMap: Record<string, TripStatus> = {
+        DRAFT: "draft",
+        OPEN: "open",
+        FULL: "active",
+        IN_PROGRESS: "active",
+        COMPLETED: "completed",
+        CANCELLED: "cancelled",
+        CANCEL_PENDING: "cancelled",
+      };
+
+      const start = t.startAt ? new Date(t.startAt).toLocaleDateString("vi-VN") : "";
+      const end = t.endAt ? new Date(t.endAt).toLocaleDateString("vi-VN") : "";
+      const priceNum = Number(t.price) || 0;
+
+      return {
+        id: t.id,
+        name: t.title,
+        subtitle: `Hành trình ${t.checkpoints?.length || 0} trạm kiểm soát`,
+        routeName: t.trails?.[0]?.snapshotName || t.title,
+        province: "Điểm đến",
+        duration: "Trekking Tour",
+        startDate: start,
+        endDate: end,
         registered: 0,
-        capacity: 15,
-        status: "open",
-        revenue: 0,
-        imageUrl: createdTrip.image,
-      },
-      ...trips,
-    ];
-  }, [createdTrip]);
+        capacity: t.capacity || 15,
+        status: statusMap[t.status] || "open",
+        revenue: priceNum * (t.capacity || 0),
+        imageUrl:
+          "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
+      };
+    });
+  }, [apiTrips]);
 
   const visibleTrips = useMemo(() => {
     const keyword = search.trim().toLowerCase();

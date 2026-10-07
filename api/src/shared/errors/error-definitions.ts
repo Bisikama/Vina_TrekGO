@@ -2,6 +2,7 @@ import { COMMON_ERROR_CODES } from './codes/common.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
+import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -10,6 +11,19 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.BOOKING_CANCELLATION_NOT_ALLOWED]: { status: 409, message: 'Booking cannot be cancelled in its current state', retryable: false },
+  [B.BOOKING_CANCELLATION_POLICY_INVALID]: { status: 422, message: 'Booking cancellation policy snapshot is missing or invalid', retryable: false },
+  [P.REFUND_SOURCE_INVALID]: { status: 422, message: 'Refund source does not match an approved payment decision', retryable: false },
+  [P.REFUND_AMOUNT_EXCEEDED]: { status: 409, message: 'Refund exceeds the approved remaining amount', retryable: false },
+  [P.PAYMENT_WEBHOOK_INVALID_SIGNATURE]: { status: 401, message: 'Invalid payment webhook signature', retryable: false },
+  [P.PAYMENT_WEBHOOK_STORAGE_UNAVAILABLE]: { status: 503, message: 'Payment webhook storage is temporarily unavailable', retryable: true },
+  [B.BOOKING_HOLD_EXPIRED]: { status: 410, message: 'Booking hold has expired', retryable: false },
+  [P.PAYMENT_NOT_FOUND]: { status: 404, message: 'Payment resource not found', retryable: false },
+  [P.PAYMENT_INVALID_STATE]: { status: 409, message: 'Invoice is not payable', retryable: false },
+  [P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD]: { status: 409, message: 'Idempotency key was used for a different request', retryable: false },
+  [P.PAYMENT_ATTEMPT_IN_PROGRESS]: { status: 409, message: 'A payment attempt is still unresolved', retryable: false },
+  [P.PAYMENT_AMOUNT_MISMATCH]: { status: 422, message: 'Payment amount or currency does not match', retryable: false },
+  [P.PAYMENT_PROVIDER_UNAVAILABLE]: { status: 503, message: 'Payment provider is temporarily unavailable', retryable: true },
   [B.INVITE_RATE_LIMITED]: { status: 429, message: 'Too many invite requests; retry later', retryable: true },
   [B.CAPACITY_CONFLICT]: { status: 409, message: 'Trip has no remaining slots', retryable: false },
   [B.MEMBERSHIP_VERSION_CONFLICT]: { status: 409, message: 'Reload membership before retrying', retryable: false },

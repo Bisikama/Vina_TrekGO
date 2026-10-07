@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/features/auth";
+import { listPublicTrips } from "@/features/trips/services/public-trips.api";
 
 export default function PublicLandingPage() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function PublicLandingPage() {
     router.push("/public/register");
   };
 
-  const featuredTrails = [
+  const [featuredTrails, setFeaturedTrails] = useState([
     {
       id: "t-1",
       title: "Bạch Mộc Lương Tử (Kỳ Quan San)",
@@ -70,7 +71,47 @@ export default function PublicLandingPage() {
       image: "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=800&q=80",
       rating: 4.75,
     },
-  ];
+  ]);
+
+  useEffect(() => {
+    const loadTrips = async () => {
+      try {
+        const data = await listPublicTrips({ page: 1, pageSize: 4 });
+        if (data && data.length > 0) {
+          const images = [
+            "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=800&q=80",
+          ];
+          
+          const mapped = data.map((trip, index) => {
+            const start = new Date(trip.startAt);
+            const end = new Date(trip.endAt);
+            const diffDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+            
+            return {
+              id: trip.id,
+              title: trip.title,
+              location: "Việt Nam", 
+              elevation: "Cập nhật sau",
+              distance: "Cập nhật sau",
+              duration: `${diffDays} Ngày`,
+              difficulty: "Trung bình",
+              difficultyType: "medium",
+              price: trip.price ? `${Number(trip.price).toLocaleString('vi-VN')}đ` : "Liên hệ",
+              image: images[index % images.length],
+              rating: 5.0,
+            };
+          });
+          setFeaturedTrails(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load public trips", err);
+      }
+    };
+    loadTrips();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F7F7F4] text-[#1F2937] flex flex-col selection:bg-[#2F6B4F] selection:text-white">
@@ -250,7 +291,7 @@ export default function PublicLandingPage() {
             </p>
           </div>
           <button className="mt-4 md:mt-0 text-sm font-bold text-[#2F6B4F] hover:underline flex items-center gap-1 cursor-pointer">
-            Xem Tất Cả 50+ Tuyến ➔
+            Xem Tất Cả ➔
           </button>
         </div>
 
