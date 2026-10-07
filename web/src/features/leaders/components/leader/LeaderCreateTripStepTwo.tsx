@@ -1,10 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  StepTwoOverviewMap,
+  type SystemTrailDetail,
+} from "./StepTwoOverviewMap";
 
 type RouteOption = {
   id: string;
+  code: string;
   name: string;
   location: string;
   distance: string;
@@ -27,7 +32,8 @@ type Checkpoint = {
 
 const routeOptions: RouteOption[] = [
   {
-    id: "VFRS-TR-BADEN",
+    id: "TRAIL_BADEN_COTDIEN",
+    code: "TRAIL_BADEN_COTDIEN",
     name: "Núi Bà Đen - Cung Đường Cột Điện",
     location: "Thành phố Tây Ninh, Tỉnh Tây Ninh",
     distance: "4.5 km",
@@ -38,18 +44,20 @@ const routeOptions: RouteOption[] = [
       "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
   },
   {
-    id: "VFRS-TR-067",
-    name: "Đỉnh Lảo Thẩn – Nóc nhà Y Tý",
-    location: "Bát Xát, Lào Cai",
-    distance: "16 km",
+    id: "TRAIL_FANSIPAN_TRAM_TON",
+    code: "TRAIL_FANSIPAN_TRAM_TON",
+    name: "Đỉnh Fansipan – Cung Trạm Tôn",
+    location: "Bát Xát, Sa Pa, Lào Cai",
+    distance: "11.5 km",
     completionRate: "9.8%",
     duration: "2N1Đ",
-    difficulty: "Cấp 2 – Nhẹ",
+    difficulty: "Cấp 3 – Thử thách",
     imageUrl:
       "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?auto=format&fit=crop&w=700&q=80",
   },
   {
-    id: "VFRS-TR-091",
+    id: "TRAIL_FANSIPAN_TRANH_SAT_LO",
+    code: "TRAIL_FANSIPAN_TRANH_SAT_LO",
     name: "Pu Ta Leng – Rừng Rêu Cổ Thụ",
     location: "Tam Đường, Lai Châu",
     distance: "35 km",
@@ -78,7 +86,7 @@ const initialCheckpoints: Checkpoint[] = [
     elevation: "535m",
     eta: "09:30 Ngày 1",
     note: "Tiếp nước sạch, trạm nghỉ bóng râm & sơ cứu",
-    required: true,
+    required: false,
   },
   {
     id: 3,
@@ -104,13 +112,28 @@ const initialCheckpoints: Checkpoint[] = [
 export function LeaderCreateTripStepTwo() {
   const router = useRouter();
 
-  const [selectedRouteId, setSelectedRouteId] = useState("VFRS-TR-042");
+  const [selectedRouteId, setSelectedRouteId] = useState("TRAIL_BADEN_COTDIEN");
+  const [trailDetail, setTrailDetail] = useState<SystemTrailDetail | null>(null);
 
   const [checkpoints, setCheckpoints] =
     useState<Checkpoint[]>(initialCheckpoints);
 
   const [saved, setSaved] = useState(false);
   const [createCustomRoute, setCreateCustomRoute] = useState(false);
+
+  useEffect(() => {
+    const savedRoute = window.sessionStorage.getItem("leader-create-trip-route");
+    if (savedRoute) {
+      try {
+        const parsed = JSON.parse(savedRoute);
+        if (parsed.id) {
+          setSelectedRouteId(parsed.id);
+        }
+      } catch (err) {
+        console.error("Lỗi đọc route đã lưu:", err);
+      }
+    }
+  }, []);
 
   const selectedRoute =
     routeOptions.find((route) => route.id === selectedRouteId) ??
@@ -157,10 +180,21 @@ export function LeaderCreateTripStepTwo() {
 
   function saveDraft() {
     setSaved(true);
-
+    window.sessionStorage.setItem(
+      "leader-create-trip-route",
+      JSON.stringify(selectedRoute),
+    );
     window.setTimeout(() => {
       setSaved(false);
     }, 2500);
+  }
+
+  function handleContinue() {
+    window.sessionStorage.setItem(
+      "leader-create-trip-route",
+      JSON.stringify(selectedRoute),
+    );
+    router.push("/leader/create-trip/review");
   }
 
   return (
@@ -186,7 +220,7 @@ export function LeaderCreateTripStepTwo() {
               <button
                 type="button"
                 onClick={saveDraft}
-                className="rounded-xl bg-[#eef3fb] px-4 py-2 text-xs font-bold text-slate-700"
+                className="rounded-xl bg-[#eef3fb] px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
               >
                 ▣ Lưu nháp
               </button>
@@ -218,7 +252,7 @@ export function LeaderCreateTripStepTwo() {
                 <div>
                   <p className="text-[10px] font-bold uppercase">Bước 1</p>
                   <strong className="text-sm">Thông tin cơ bản</strong>
-                  <p className="text-xs">Đã hoàn thành</p>
+                  <p className="text-xs text-emerald-700">Đã hoàn thành</p>
                 </div>
               </div>
             </button>
@@ -396,7 +430,7 @@ export function LeaderCreateTripStepTwo() {
                           onClick={() => selectRoute(route.id)}
                           className={`flex w-full flex-col gap-4 rounded-xl border p-3 text-left transition sm:flex-row ${
                             selected
-                              ? "border-[#2f6b4f] bg-emerald-50"
+                              ? "border-[#2f6b4f] bg-emerald-50 shadow-sm"
                               : "border-slate-200 bg-white hover:bg-slate-50"
                           }`}
                         >
@@ -407,7 +441,7 @@ export function LeaderCreateTripStepTwo() {
                             }}
                           >
                             <span className="m-2 inline-flex rounded bg-slate-950/75 px-2 py-1 text-[10px] font-bold text-white">
-                              #{route.id}
+                              #{route.code || route.id}
                             </span>
                           </div>
 
@@ -496,7 +530,7 @@ export function LeaderCreateTripStepTwo() {
                 <button
                   type="button"
                   onClick={addCheckpoint}
-                  className="rounded-xl bg-[#125238] px-4 py-2 text-xs font-bold text-white"
+                  className="rounded-xl bg-[#125238] px-4 py-2 text-xs font-bold text-white hover:bg-[#2f6b4f]"
                 >
                   ＋ Thêm trạm
                 </button>
@@ -583,30 +617,33 @@ export function LeaderCreateTripStepTwo() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-950">
-                  Tổng quan Núi Bà Đen
+                  {selectedRouteId === "TRAIL_BADEN_COTDIEN"
+                    ? "Tổng quan Núi Bà Đen"
+                    : `Tổng quan ${
+                        selectedRoute.name.split(" – ")[0].split(" - ")[0]
+                      }`}
                 </h2>
 
                 <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">
-                  986m Peak
+                  {trailDetail?.elevationGainM
+                    ? `${trailDetail.elevationGainM}m Peak`
+                    : "986m Peak"}
                 </span>
               </div>
 
-              <div className="relative mt-4 h-48 overflow-hidden rounded-xl bg-slate-900">
-                <img
-                  src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80"
-                  alt="Núi Bà Đen"
-                  className="h-full w-full object-cover opacity-80"
-                />
-                <span className="absolute bottom-3 left-3 rounded-md bg-[#125238] px-2 py-1 text-[10px] font-bold text-white">
-                  ● Tuyến Cột Điện - GPS 3D Ready
-                </span>
-              </div>
+              {/* Bản đồ MapLibre 3D Terrain gọi API Backend */}
+              <StepTwoOverviewMap
+                trailCode={selectedRouteId}
+                onTrailLoaded={(detail) => setTrailDetail(detail)}
+              />
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                 <div className="rounded-lg bg-slate-50 p-2">
                   <span className="text-[10px] text-slate-400">Tổng cự ly</span>
                   <strong className="block text-sm">
-                    {selectedRoute.distance}
+                    {trailDetail?.distanceKm
+                      ? `${trailDetail.distanceKm} km`
+                      : selectedRoute.distance}
                   </strong>
                 </div>
 
@@ -614,7 +651,11 @@ export function LeaderCreateTripStepTwo() {
                   <span className="text-[10px] text-slate-400">
                     Độ cao đỉnh
                   </span>
-                  <strong className="block text-sm text-red-600">986m</strong>
+                  <strong className="block text-sm text-red-600">
+                    {trailDetail?.elevationGainM
+                      ? `${trailDetail.elevationGainM}m`
+                      : "986m"}
+                  </strong>
                 </div>
 
                 <div className="rounded-lg bg-slate-50 p-2">
@@ -632,7 +673,13 @@ export function LeaderCreateTripStepTwo() {
 
                 <div className="rounded-lg bg-slate-50 p-2">
                   <span className="text-[10px] text-slate-400">Thời gian</span>
-                  <strong className="block text-sm">~5 giờ</strong>
+                  <strong className="block text-sm">
+                    {trailDetail?.estimatedDurationMinutes
+                      ? `~${Math.round(
+                          trailDetail.estimatedDurationMinutes / 60,
+                        )} giờ`
+                      : "~5 giờ"}
+                  </strong>
                 </div>
               </div>
             </section>
@@ -667,27 +714,23 @@ export function LeaderCreateTripStepTwo() {
           <button
             type="button"
             onClick={() => router.push("/leader/create-trip")}
-            className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700"
+            className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700 hover:bg-slate-200"
           >
             ← Quay lại Bước 1
           </button>
 
           <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-slate-500 md:inline">
-              ● Đã tự động lưu lúc 10:42
-            </span>
-
             <button
               type="button"
               onClick={saveDraft}
-              className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700"
+              className="h-11 rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700 hover:bg-slate-200"
             >
               Lưu bản nháp
             </button>
 
             <button
               type="button"
-              onClick={() => router.push("/leader/create-trip/review")}
+              onClick={handleContinue}
               className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f]"
             >
               Tiếp tục: Xem lại & Công khai →

@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type Visibility = "public" | "private";
-type CancellationPolicy =
-  | "flexible"
-  | "standard"
-  | "strict";
+type CancellationPolicy = "flexible" | "standard" | "strict";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
+
 const mockPickupPoints = [
   {
     id: "my-dinh-gate-2",
@@ -34,7 +32,22 @@ const mockPickupPoints = [
     longitude: "105.5254",
     marker: "Khu đón khách – Bãi xe phía Đông",
   },
+  {
+    id: "tay-ninh-station",
+    name: "Bến xe Tây Ninh, Phường 3, TP. Tây Ninh",
+    latitude: "11.3123",
+    longitude: "106.0988",
+    marker: "Cổng chính Bến xe Tây Ninh",
+  },
 ] as const;
+
+const difficultyLabels: Record<number, { name: string; detail: string }> = {
+  1: { name: "Rất nhẹ", detail: "Dạo bộ rừng" },
+  2: { name: "Nhẹ nhàng", detail: "Người mới" },
+  3: { name: "Vừa phải", detail: "6–8 giờ/tiếng" },
+  4: { name: "Thử thách", detail: "Dốc đứng" },
+  5: { name: "Chuyên gia", detail: "Đòi hỏi kỹ thuật" },
+};
 
 function dateInputValue(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
@@ -83,13 +96,8 @@ function FormCard({
         </div>
 
         <div>
-          <h2 className="font-bold text-slate-950">
-            {title}
-          </h2>
-
-          <p className="mt-1 text-xs text-slate-500">
-            {description}
-          </p>
+          <h2 className="font-bold text-slate-950">{title}</h2>
+          <p className="mt-1 text-xs text-slate-500">{description}</p>
         </div>
       </div>
 
@@ -101,9 +109,11 @@ function FormCard({
 export function LeaderCreateTripStepOne() {
   const router = useRouter();
 
-  const [visibility, setVisibility] =
-    useState<Visibility>("private");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [titleError, setTitleError] = useState("");
 
+  const [visibility, setVisibility] = useState<Visibility>("private");
   const [cancellationPolicy, setCancellationPolicy] =
     useState<CancellationPolicy>("flexible");
 
@@ -117,13 +127,54 @@ export function LeaderCreateTripStepOne() {
     return dateInputValue(tomorrow);
   });
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
-  const [pickupPointId, setPickupPointId] = useState(mockPickupPoints[0].id);
+  const [pickupPointId, setPickupPointId] = useState<string>(mockPickupPoints[0].id);
   const [dateError, setDateError] = useState("");
+
+  // Khôi phục bản nháp nếu đã lưu trước đó trong sessionStorage
+  useEffect(() => {
+    const savedDraft = window.sessionStorage.getItem("leader-create-trip-draft");
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft);
+        if (draft.title) setTitle(draft.title);
+        if (draft.name && !draft.title) setTitle(draft.name);
+        if (draft.description) setDescription(draft.description);
+        if (draft.visibility) setVisibility(draft.visibility);
+        if (draft.cancellationPolicy) setCancellationPolicy(draft.cancellationPolicy);
+        if (draft.capacity) setCapacity(Number(draft.capacity));
+        if (draft.price) setPrice(String(draft.price));
+        if (draft.difficulty) setDifficulty(Number(draft.difficulty));
+        if (draft.startDate) setStartDate(draft.startDate);
+        if (draft.endDate) setEndDate(draft.endDate);
+        if (draft.meetingTime) setMeetingTime(draft.meetingTime);
+        if (draft.pickupPointId) setPickupPointId(draft.pickupPointId);
+      } catch (err) {
+        console.error("Lỗi đọc draft:", err);
+      }
+    }
+  }, []);
+
   const selectedPickup =
     mockPickupPoints.find((point) => point.id === pickupPointId) ??
     mockPickupPoints[0];
 
+  const daysCount = Math.max(
+    1,
+    Math.round(
+      (new Date(endDate + "T00:00:00").getTime() -
+        new Date(startDate + "T00:00:00").getTime()) /
+        (1000 * 60 * 60 * 24),
+    ) + 1,
+  );
+  const nightsCount = Math.max(0, daysCount - 1);
+  const durationText =
+    nightsCount > 0 ? `${daysCount} ngày ${nightsCount} đêm` : `${daysCount} ngày`;
+
   function handleContinue() {
+    if (!title.trim()) {
+      setTitleError("Vui lòng nhập tiêu đề chuyến đi trước khi tiếp tục.");
+      return;
+    }
     const today = dateInputValue(new Date());
     if (startDate < today) {
       setDateError("Ngày khởi hành không được là ngày trong quá khứ.");
@@ -144,16 +195,25 @@ export function LeaderCreateTripStepOne() {
       }
     }
     setDateError("");
+    setTitleError("");
+
     window.sessionStorage.setItem(
       "leader-create-trip-draft",
       JSON.stringify({
-        name: "Chinh phục Sống Lưng Khủng Long Tà Xùa - Săn Biển Mây Đại Ngàn",
+        title: title.trim(),
+        name: title.trim(),
+        description: description.trim(),
+        visibility,
+        cancellationPolicy,
         startDate,
         endDate,
+        meetingTime,
+        pickupPointId,
         pickupName: selectedPickup.name,
         place: selectedPickup.name.split(",")[0],
         price,
         capacity,
+        difficulty,
       }),
     );
     router.push("/leader/create-trip/route");
@@ -187,20 +247,17 @@ export function LeaderCreateTripStepOne() {
 
           <div className="mt-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-xs text-slate-500">
-                Mã dự thảo: #TRK-TX-8824
-              </p>
+              <p className="text-xs text-slate-500">Mã dự thảo: #TRK-TX-8824</p>
 
               <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
                 Tạo Chuyến Đi Mới
               </h1>
 
               <p className="mt-2 text-sm text-slate-500">
-                Thiết lập hành trình trekking an toàn, đạt
-                chuẩn thẩm định của VFRS.
+                Thiết lập hành trình trekking an toàn, đạt chuẩn thẩm định của
+                VFRS.
               </p>
             </div>
-
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -214,10 +271,7 @@ export function LeaderCreateTripStepOne() {
                   <p className="text-[10px] font-bold uppercase">
                     Bước 1 đang nhập
                   </p>
-
-                  <strong className="text-sm">
-                    Thông tin cơ bản
-                  </strong>
+                  <strong className="text-sm">Thông tin cơ bản</strong>
                 </div>
               </div>
             </div>
@@ -229,13 +283,8 @@ export function LeaderCreateTripStepOne() {
                 </span>
 
                 <div>
-                  <p className="text-[10px] font-bold uppercase">
-                    Bước 2
-                  </p>
-
-                  <strong className="text-sm">
-                    Cung đường & Trạm dừng
-                  </strong>
+                  <p className="text-[10px] font-bold uppercase">Bước 2</p>
+                  <strong className="text-sm">Cung đường & Trạm dừng</strong>
                 </div>
 
                 <span className="ml-auto">▣</span>
@@ -249,13 +298,8 @@ export function LeaderCreateTripStepOne() {
                 </span>
 
                 <div>
-                  <p className="text-[10px] font-bold uppercase">
-                    Bước 3
-                  </p>
-
-                  <strong className="text-sm">
-                    Xem lại & Công khai
-                  </strong>
+                  <p className="text-[10px] font-bold uppercase">Bước 3</p>
+                  <strong className="text-sm">Xem lại & Công khai</strong>
                 </div>
 
                 <span className="ml-auto">▣</span>
@@ -273,24 +317,35 @@ export function LeaderCreateTripStepOne() {
             >
               <div className="space-y-5">
                 <label className="block">
-                  <FieldLabel required>
-                    Tiêu đề chuyến đi
-                  </FieldLabel>
+                  <FieldLabel required>Tiêu đề chuyến đi</FieldLabel>
 
                   <input
-                    className={inputClass}
-                    defaultValue="Chinh phục Đỉnh Núi Bà Đen 986m - Cung Đường Cột Điện (1N)"
+                    className={`${inputClass} ${
+                      titleError ? "border-red-500 focus:border-red-500" : ""
+                    }`}
+                    value={title}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      if (titleError) setTitleError("");
+                    }}
+                    placeholder="Nhập tiêu đề chuyến đi (VD: Khám phá Thiên Nhiên Kỳ Vĩ, Săn Mây Đại Ngàn...)"
+                    maxLength={100}
                   />
 
-                  <span className="mt-1 block text-right text-xs text-slate-400">
-                    74/100 ký tự
-                  </span>
+                  <div className="mt-1 flex items-center justify-between text-xs">
+                    {titleError ? (
+                      <span className="font-semibold text-red-600">{titleError}</span>
+                    ) : (
+                      <span className="text-slate-400">
+                        Đặt tên súc tích, hấp dẫn và nêu bật đặc trưng chuyến đi.
+                      </span>
+                    )}
+                    <span className="text-slate-400">{title.length}/100 ký tự</span>
+                  </div>
                 </label>
 
                 <div>
-                  <FieldLabel required>
-                    Loại hình chuyến đi
-                  </FieldLabel>
+                  <FieldLabel required>Loại hình chuyến đi</FieldLabel>
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <button
@@ -321,9 +376,8 @@ export function LeaderCreateTripStepOne() {
                       </div>
 
                       <p className="mt-3 text-xs leading-5 text-slate-500">
-                        Mở bán vé rộng rãi trên hệ thống,
-                        tiếp cận cộng đồng hơn 45.000
-                        trekker.
+                        Mở bán vé rộng rãi trên hệ thống, tiếp cận cộng đồng hơn
+                        45.000 trekker.
                       </p>
                     </button>
 
@@ -355,9 +409,8 @@ export function LeaderCreateTripStepOne() {
                       </div>
 
                       <p className="mt-3 text-xs leading-5 text-slate-500">
-                        Dành cho nhóm bạn, câu lạc bộ hoặc
-                        doanh nghiệp. Tham gia bằng mã hoặc
-                        đường liên kết.
+                        Dành cho nhóm bạn, câu lạc bộ hoặc doanh nghiệp. Tham gia
+                        bằng mã hoặc đường liên kết.
                       </p>
                     </button>
                   </div>
@@ -365,8 +418,7 @@ export function LeaderCreateTripStepOne() {
 
                 <label className="block">
                   <FieldLabel required>
-                    Mô tả chi tiết chuyến đi & Lịch trình tóm
-                    tắt
+                    Mô tả chi tiết chuyến đi & Lịch trình tóm tắt
                   </FieldLabel>
 
                   <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -387,26 +439,21 @@ export function LeaderCreateTripStepOne() {
                         ⛓
                       </button>
 
-                      <span className="ml-auto font-normal">
-                        Markdown hỗ trợ
-                      </span>
+                      <span className="ml-auto font-normal">Markdown hỗ trợ</span>
                     </div>
 
                     <textarea
                       rows={8}
                       className="w-full resize-y bg-[#f8fafc] p-4 text-sm leading-6 text-slate-800 outline-none"
-                      defaultValue={`Khám phá vẻ đẹp kỳ vĩ của Núi Bà Đen – nóc nhà Nam Bộ ở độ cao 986m. Hành trình men theo đường dây điện 117 cột huyền thoại, vượt qua rừng nguyên sinh, thung lũng đá và chạm chóp kim loại ngắm biển mây Tây Ninh.
-
-• Cung đường: Chân núi – Cột 55 – Cột 100 – Đỉnh Bà Đen.
-• Yêu cầu thể lực: Tốt, chuẩn bị đủ nước và giày leo núi có độ bám cao.`}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Nhập mô tả chi tiết chuyến đi, lịch trình tóm tắt, yêu cầu thể lực và các lưu ý chuẩn bị cho đoàn..."
                     />
                   </div>
                 </label>
 
                 <div>
-                  <FieldLabel>
-                    Ảnh bìa chuyến đi
-                  </FieldLabel>
+                  <FieldLabel>Ảnh bìa chuyến đi</FieldLabel>
 
                   <div
                     className="relative h-72 overflow-hidden rounded-2xl bg-cover bg-center"
@@ -422,14 +469,14 @@ export function LeaderCreateTripStepOne() {
                     <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 p-4">
                       <button
                         type="button"
-                        className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800"
+                        className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100"
                       >
                         ↻ Đổi ảnh bìa
                       </button>
 
                       <button
                         type="button"
-                        className="rounded-lg bg-slate-950/70 px-3 py-2 text-xs font-bold text-white"
+                        className="rounded-lg bg-slate-950/70 px-3 py-2 text-xs font-bold text-white hover:bg-slate-950"
                       >
                         ⛶ Cắt tỉ lệ
                       </button>
@@ -446,9 +493,7 @@ export function LeaderCreateTripStepOne() {
             >
               <div className="grid gap-5 md:grid-cols-2">
                 <label>
-                  <FieldLabel required>
-                    Ngày bắt đầu khởi hành
-                  </FieldLabel>
+                  <FieldLabel required>Ngày bắt đầu khởi hành</FieldLabel>
 
                   <input
                     type="date"
@@ -474,9 +519,7 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <label>
-                  <FieldLabel required>
-                    Ngày hoàn thành kết thúc
-                  </FieldLabel>
+                  <FieldLabel required>Ngày hoàn thành kết thúc</FieldLabel>
 
                   <input
                     type="date"
@@ -507,20 +550,18 @@ export function LeaderCreateTripStepOne() {
                     <span className="text-slate-600">
                       ◷ Tổng thời lượng:
                       <strong className="ml-1 text-slate-900">
-                        3 ngày 2 đêm
+                        {durationText}
                       </strong>
                     </span>
 
                     <span className="rounded bg-emerald-100 px-2 py-1 font-bold text-[#125238]">
-                      Cuối tuần
+                      Lịch trình chuẩn
                     </span>
                   </div>
                 </div>
 
                 <label>
-                  <FieldLabel required>
-                    Giờ tập trung
-                  </FieldLabel>
+                  <FieldLabel required>Giờ tập trung</FieldLabel>
 
                   <input
                     type="time"
@@ -534,9 +575,7 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <label>
-                  <FieldLabel required>
-                    Địa điểm tập kết tập trung
-                  </FieldLabel>
+                  <FieldLabel required>Địa điểm tập kết tập trung</FieldLabel>
 
                   <select
                     className={inputClass}
@@ -550,7 +589,6 @@ export function LeaderCreateTripStepOne() {
                     ))}
                   </select>
                 </label>
-
               </div>
             </FormCard>
 
@@ -561,17 +599,13 @@ export function LeaderCreateTripStepOne() {
             >
               <div className="grid gap-5 md:grid-cols-2">
                 <div>
-                  <FieldLabel required>
-                    Số thành viên tối đa
-                  </FieldLabel>
+                  <FieldLabel required>Số thành viên tối đa</FieldLabel>
 
                   <div className="flex h-12 overflow-hidden rounded-xl border border-slate-200 bg-[#f6f8fc]">
                     <button
                       type="button"
                       onClick={() =>
-                        setCapacity((current) =>
-                          Math.max(5, current - 1),
-                        )
+                        setCapacity((current) => Math.max(5, current - 1))
                       }
                       className="w-12 font-bold text-slate-600 hover:bg-slate-200"
                     >
@@ -588,9 +622,7 @@ export function LeaderCreateTripStepOne() {
                     <button
                       type="button"
                       onClick={() =>
-                        setCapacity((current) =>
-                          Math.min(30, current + 1),
-                        )
+                        setCapacity((current) => Math.min(30, current + 1))
                       }
                       className="w-12 font-bold text-slate-600 hover:bg-slate-200"
                     >
@@ -599,20 +631,17 @@ export function LeaderCreateTripStepOne() {
                   </div>
 
                   <p className="mt-2 text-xs text-orange-700">
-                    Hạn ngạch Leader hiện tại tối đa 15
-                    người.
+                    Hạn ngạch Leader hiện tại tối đa 15 người.
                   </p>
                 </div>
 
                 <label>
-                  <FieldLabel required>
-                    Giá tour trọn gói/người
-                  </FieldLabel>
+                  <FieldLabel required>Giá tour trọn gói/người</FieldLabel>
 
                   <div className="relative">
                     <input
                       className={`${inputClass} pr-16`}
-                      value={Number(price).toLocaleString("vi-VN")}
+                      value={Number(price || 0).toLocaleString("vi-VN")}
                       onChange={(event) =>
                         setPrice(event.target.value.replace(/\D/g, ""))
                       }
@@ -630,63 +659,36 @@ export function LeaderCreateTripStepOne() {
               </div>
 
               <div className="mt-6">
-                <FieldLabel required>
-                  Cấp độ thử thách
-                </FieldLabel>
+                <FieldLabel required>Cấp độ thử thách</FieldLabel>
 
                 <div className="grid gap-2 md:grid-cols-5">
-                  {[
-                    {
-                      level: 1,
-                      name: "Rất nhẹ",
-                      detail: "Dạo bộ rừng",
-                    },
-                    {
-                      level: 2,
-                      name: "Nhẹ nhàng",
-                      detail: "Người mới",
-                    },
-                    {
-                      level: 3,
-                      name: "Vừa phải",
-                      detail: "6–8 giờ/tiếng",
-                    },
-                    {
-                      level: 4,
-                      name: "Thử thách",
-                      detail: "Dốc đứng",
-                    },
-                    {
-                      level: 5,
-                      name: "Chuyên gia",
-                      detail: "Đòi hỏi kỹ thuật",
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.level}
-                      type="button"
-                      onClick={() =>
-                        setDifficulty(item.level)
-                      }
-                      className={`rounded-xl border p-3 text-left transition ${
-                        difficulty === item.level
-                          ? "border-orange-400 bg-orange-50"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <span className="text-[10px] font-bold uppercase text-slate-500">
-                        Cấp {item.level}
-                      </span>
+                  {[1, 2, 3, 4, 5].map((lvl) => {
+                    const item = difficultyLabels[lvl];
+                    return (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setDifficulty(lvl)}
+                        className={`rounded-xl border p-3 text-left transition ${
+                          difficulty === lvl
+                            ? "border-orange-400 bg-orange-50"
+                            : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold uppercase text-slate-500">
+                          Cấp {lvl}
+                        </span>
 
-                      <strong className="mt-1 block text-sm text-slate-900">
-                        {item.name}
-                      </strong>
+                        <strong className="mt-1 block text-sm text-slate-900">
+                          {item.name}
+                        </strong>
 
-                      <span className="mt-1 block text-[10px] text-slate-500">
-                        {item.detail}
-                      </span>
-                    </button>
-                  ))}
+                        <span className="mt-1 block text-[10px] text-slate-500">
+                          {item.detail}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </FormCard>
@@ -720,9 +722,7 @@ export function LeaderCreateTripStepOne() {
                   <button
                     key={policy.value}
                     type="button"
-                    onClick={() =>
-                      setCancellationPolicy(policy.value)
-                    }
+                    onClick={() => setCancellationPolicy(policy.value)}
                     className={`w-full rounded-xl border p-4 text-left transition ${
                       cancellationPolicy === policy.value
                         ? "border-[#2f6b4f] bg-emerald-50"
@@ -753,9 +753,7 @@ export function LeaderCreateTripStepOne() {
               </div>
 
               <label className="mt-5 block">
-                <FieldLabel>
-                  Điều khoản bất khả kháng
-                </FieldLabel>
+                <FieldLabel>Điều khoản bất khả kháng</FieldLabel>
 
                 <textarea
                   rows={4}
@@ -792,9 +790,7 @@ export function LeaderCreateTripStepOne() {
                   Xem trước thẻ chuyến
                 </strong>
 
-                <span className="text-xs text-[#125238]">
-                  Trekker View
-                </span>
+                <span className="text-xs text-[#125238]">Trekker View</span>
               </div>
 
               <div
@@ -808,31 +804,40 @@ export function LeaderCreateTripStepOne() {
               <div className="p-5">
                 <div className="flex gap-2">
                   <span className="rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
-                    Cấp 3 – Vừa phải
+                    Cấp {difficulty} – {difficultyLabels[difficulty]?.name || "Vừa phải"}
                   </span>
 
                   <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-[#125238]">
-                    Riêng tư
+                    {visibility === "public" ? "Công khai" : "Riêng tư"}
                   </span>
                 </div>
 
                 <h2 className="mt-4 font-bold leading-6 text-slate-950">
-                  Chinh phục Đỉnh Núi Bà Đen 986m – Cung Đường Cột Điện
+                  {title.trim() ? title : "Tiêu đề chuyến đi (Chưa đặt tên)"}
                 </h2>
 
                 <div className="mt-3 space-y-2 text-xs text-slate-500">
-                  <p>▣ 05/12/2024 (1 Ngày)</p>
-                  <p>⌖ Chân núi Bà Đen, TP. Tây Ninh</p>
+                  <p>
+                    ▣{" "}
+                    {new Date(startDate + "T00:00:00").toLocaleDateString(
+                      "vi-VN",
+                    )}{" "}
+                    ({durationText})
+                  </p>
+                  <p>⌖ Điểm đón: {selectedPickup.name.split(",")[0]}</p>
+                  <p className="font-semibold text-emerald-700">
+                    ⌁ Cung đường: Chọn ở Bước 2
+                  </p>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">
                   <div>
                     <span className="text-xs text-slate-500">
-                      Chỉ phí trọn gói
+                      Chi phí trọn gói
                     </span>
 
                     <p className="font-bold text-[#125238]">
-                      2.850.000₫
+                      {Number(price || 0).toLocaleString("vi-VN")}₫
                       <span className="text-xs font-normal text-slate-500">
                         /khách
                       </span>
@@ -855,24 +860,14 @@ export function LeaderCreateTripStepOne() {
               </h2>
 
               <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
-                <li>
-                  ✓ Tỷ lệ kiểm soát đoàn tối đa 15 người.
-                </li>
-                <li>
-                  ✓ Bắt buộc Leader chịu trách nhiệm kiểm
-                  tra GPS.
-                </li>
-                <li>
-                  ✓ Kiểm tra thiết bị cá nhân trước khi khởi
-                  hành.
-                </li>
+                <li>✓ Tỷ lệ kiểm soát đoàn tối đa 15 người.</li>
+                <li>✓ Bắt buộc Leader chịu trách nhiệm kiểm tra GPS.</li>
+                <li>✓ Kiểm tra thiết bị cá nhân trước khi khởi hành.</li>
               </ul>
             </section>
-
           </aside>
         </div>
       </div>
-
     </main>
   );
 }
