@@ -92,6 +92,23 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
   const [isOrbiting, setIsOrbiting] = useState<boolean>(false);
   const [terrainExaggeration, setTerrainExaggeration] = useState<number>(2.0);
 
+  // Kiểm tra xem cung đường hiện tại có dữ liệu DEM lưu sẵn ở local hay không
+  const isBaDen = Boolean(
+    trailData?.code?.toLowerCase().includes("baden") ||
+    trailData?.name?.toLowerCase().includes("bà đen") ||
+    trailData?.destination?.name?.toLowerCase().includes("bà đen") ||
+    selectedTrailCode.toLowerCase().includes("baden")
+  );
+
+  const getDemTileUrl = useCallback(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    if (isBaDen && origin) {
+      // Ưu tiên load từ public/tiles/dem với tốc độ < 10ms, không phụ thuộc AWS S3 quốc tế
+      return `${origin}/tiles/dem/{z}/{x}/{y}.png`;
+    }
+    return "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  }, [isBaDen]);
+
   // 1. Fetch danh sách cung đường từ API Backend
   useEffect(() => {
     async function fetchTrailList() {
@@ -174,6 +191,20 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
       trailData.destination.centerLat || 11.3789,
     ];
 
+    // Giới hạn khu vực (maxBounds) quanh địa danh để khóa camera, tránh request tile thừa thãi
+    const pad = 0.06;
+    const maxBounds: [[number, number], [number, number]] | undefined = trailData.bounds
+      ? [
+          [trailData.bounds.minLng - pad, trailData.bounds.minLat - pad],
+          [trailData.bounds.maxLng + pad, trailData.bounds.maxLat + pad],
+        ]
+      : center
+      ? [
+          [center[0] - 0.08, center[1] - 0.08],
+          [center[0] + 0.08, center[1] + 0.08],
+        ]
+      : undefined;
+
     // Tạo style chuẩn hợp lệ cho MapLibre (không chứa thuộc tính lỗi)
     const isSat = mapMode === "satellite";
     const initialStyle: maplibregl.StyleSpecification = {
@@ -208,6 +239,10 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
       style: initialStyle,
       center: center,
       zoom: 13.5,
+      minZoom: 11.5,
+      maxZoom: 16,
+      maxBounds: maxBounds,
+      renderWorldCopies: false,
       pitch: is3D ? 65 : 0,
       bearing: -20,
       maxPitch: 85,
@@ -218,15 +253,14 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
 
     const setupLayersAndTerrain = () => {
       try {
-        // A. Thêm nguồn DEM 3D Terrain toàn cầu (AWS Terrarium)
+        // A. Thêm nguồn DEM 3D Terrain (Ưu tiên local static tiles nếu có)
         if (!map.getSource("terrain-dem-source")) {
           map.addSource("terrain-dem-source", {
             type: "raster-dem",
-            tiles: [
-              "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-            ],
+            tiles: [getDemTileUrl()],
             encoding: "terrarium",
             tileSize: 256,
+            minzoom: 11,
             maxzoom: 15,
           });
         }
@@ -441,11 +475,10 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
         if (!map.getSource("terrain-dem-source")) {
           map.addSource("terrain-dem-source", {
             type: "raster-dem",
-            tiles: [
-              "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-            ],
+            tiles: [getDemTileUrl()],
             encoding: "terrarium",
             tileSize: 256,
+            minzoom: 11,
             maxzoom: 15,
           });
         }
