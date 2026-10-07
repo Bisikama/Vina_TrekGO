@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import { PrivateInviteRateGuard } from '../private-invite-rate.guard'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiQuery, ApiTags } from '@nestjs/swagger'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { z } from 'zod'
 import { Auth } from '../../../../shared/decorators/auth.decorator'
@@ -29,29 +29,42 @@ import {
   removeMemberQuerySchema,
   memberPageSchema,
 } from '../dtos/private-membership.dto'
+import { ApiPrivateCode, ApiPrivateId, ApiPrivateResponse } from '../private-trip.swagger'
 const doc = (s: z.ZodType) => ApiBody({ schema: z.toJSONSchema(s) as SchemaObject })
 @ApiTags('CF04 Private Trip Membership')
 @Controller()
 export class PrivateMembershipController {
   constructor(private readonly trips: PrivateMembershipUseCase) {}
   @Get('private-trip-invitations/:code')
+  @ApiPrivateCode()
+  @ApiPrivateResponse(
+    'Xem lời mời công khai, không tự tham gia',
+    'preview',
+    200,
+    'Không cần token. joinable=false khi hết chỗ/hết lượt; link hết hạn hoặc thu hồi trả 410. Preview không giữ chỗ.',
+  )
   @UseGuards(PrivateInviteRateGuard)
   @Auth([AuthType.None])
   @Header('Cache-Control', 'no-store')
   @Header('Referrer-Policy', 'no-referrer')
-  @ApiOperation({ summary: 'Public minimal invite preview; never creates membership' })
   preview(@Param('code', new ZodValidationPipe(inviteCodeSchema)) code: string) {
     return this.trips.preview(code)
   }
 
   @Post('private-trip-invitations/:code/join')
+  @ApiPrivateCode()
+  @ApiPrivateResponse(
+    'USER tham gia hoặc tham gia lại private trip',
+    'joined',
+    200,
+    'Body {} hoặc bỏ trống; không gửi userId. Member ACTIVE gọi lặp nhận alreadyMember=true. Dùng membership.version cho leave; redirectTo là đường dẫn frontend.',
+  )
   @UseGuards(PrivateInviteRateGuard)
   @HttpCode(200)
   @Auth([AuthType.Bearer])
   @ApiBearerAuth('bearer')
   @Header('Cache-Control', 'no-store')
   @ApiBody({ schema: { type: 'object', additionalProperties: false }, required: false })
-  @ApiOperation({ summary: 'Join/rejoin or return existing membership idempotently' })
   join(
     @ActiveUser() a: Actor,
     @Param('code', new ZodValidationPipe(inviteCodeSchema)) code: string,
@@ -61,6 +74,13 @@ export class PrivateMembershipController {
   }
 
   @Get('private-trips/:id/room')
+  @ApiPrivateId()
+  @ApiPrivateResponse(
+    'Phòng chuyến đi cho host hoặc member ACTIVE',
+    'room',
+    200,
+    'Dùng permissions để hiện nút, viewer.membershipVersion cho leave. Private trip hiện không hỗ trợ rental.',
+  )
   @Auth([AuthType.Bearer])
   @ApiBearerAuth('bearer')
   @Header('Cache-Control', 'no-store')
@@ -69,12 +89,24 @@ export class PrivateMembershipController {
   }
 
   @Get('private-trips/:id/members')
+  @ApiPrivateId()
+  @ApiPrivateResponse(
+    'Danh sách membership theo trang và trạng thái',
+    'members',
+    200,
+    'Member chỉ xem ACTIVE; creator được xem trạng thái khác hoặc ALL. items[].id là memberId, khác userId.',
+  )
   @Auth([AuthType.Bearer])
   @ApiBearerAuth('bearer')
   @Header('Cache-Control', 'no-store')
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'pageSize', required: false, type: Number })
-  @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'LEFT', 'REMOVED', 'COMPLETED', 'NO_SHOW', 'ALL'] })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 100000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    schema: { type: 'string', enum: ['ACTIVE', 'LEFT', 'REMOVED', 'COMPLETED', 'NO_SHOW', 'ALL'], default: 'ACTIVE' },
+    description: 'Chỉ creator được chọn trạng thái khác ACTIVE.',
+  })
   members(
     @ActiveUser() a: Actor,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -84,6 +116,13 @@ export class PrivateMembershipController {
   }
 
   @Post('private-trips/:id/leave')
+  @ApiPrivateId()
+  @ApiPrivateResponse(
+    'Member tự rời nhóm trước giờ bắt đầu',
+    'left',
+    200,
+    'Host không được rời. expectedMemberVersion là version membership, không phải trip. LEFT có thể join lại khi lời mời còn hợp lệ.',
+  )
   @HttpCode(200)
   @Auth([AuthType.Bearer])
   @ApiBearerAuth('bearer')
@@ -98,11 +137,24 @@ export class PrivateMembershipController {
   }
 
   @Delete('private-trips/:id/members/:memberId')
+  @ApiPrivateId()
+  @ApiPrivateId('memberId', 'ID membership từ members.items[].id; không phải userId')
+  @ApiPrivateResponse(
+    'Host loại member khỏi nhóm',
+    'removed',
+    200,
+    'Gửi expectedMemberVersion trong query, không phải body. Không loại HOST; người bị REMOVED không thể tự join lại.',
+  )
   @HttpCode(200)
   @Auth([AuthType.Bearer])
   @ApiBearerAuth('bearer')
   @Header('Cache-Control', 'no-store')
-  @ApiQuery({ name: 'expectedMemberVersion', required: true, type: Number })
+  @ApiQuery({
+    name: 'expectedMemberVersion',
+    required: true,
+    schema: { type: 'integer', minimum: 1 },
+    description: 'Lấy từ version của membership bị loại trong danh sách members.',
+  })
   remove(
     @ActiveUser() a: Actor,
     @Param('id', new ParseUUIDPipe()) id: string,

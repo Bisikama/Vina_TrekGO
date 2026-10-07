@@ -10,6 +10,104 @@ import { PrivateTripUseCase } from '../src/modules/trips/application/use-cases/p
 import { PrismaPrivateTripAdapter } from '../src/modules/trips/infrastructure/adapters/prisma-private-trip.adapter'
 import { PrivateTripController } from '../src/modules/trips/presentation/controllers/private-trip.controller'
 import { REQUEST_USER_KEY } from '../src/shared/constants/auth.constant'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+
+describe('CF03 Swagger and HTTP inputs without external services', () => {
+  let app: INestApplication
+  const actor = { id: randomUUID(), role: 'USER', status: 'ACTIVE' }
+  const pickup = { id: randomUUID(), name: 'Điểm tập kết', destinationId: randomUUID() }
+  const port = {
+    options: jest.fn().mockResolvedValue([pickup]),
+    read: jest.fn().mockResolvedValue([]),
+    revoke: jest.fn().mockResolvedValue({ tripId: randomUUID(), revokedCount: 1, tripVersion: 4 }),
+  }
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      controllers: [PrivateTripController],
+      providers: [PrivateTripUseCase, { provide: PrivateTripPort, useValue: port }],
+    }).compile()
+    app = m.createNestApplication()
+    app.setGlobalPrefix('api/v1')
+    app.useGlobalFilters(new GlobalErrorFilter())
+    app.use((req: Record<string, unknown>, _res: unknown, next: () => void) => {
+      req[REQUEST_USER_KEY] = actor
+      next()
+    })
+    await app.init()
+  })
+  afterAll(async () => {
+    await app?.close()
+  })
+
+  it('documents all 11 operations, success bodies, UUIDs and strict query fields', () => {
+    const d = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('CF03').addBearerAuth().build())
+    let count = 0
+    for (const [path, item] of Object.entries(d.paths)) {
+      for (const method of ['get', 'post', 'patch'] as const) {
+        const op = item[method]
+        if (!op) continue
+        count++
+        expect(op.summary).toBeTruthy()
+        expect(op.security).toContainEqual({ bearer: [] })
+        const status = method === 'post' && !path.endsWith('/revoke') ? '201' : '200'
+        expect((op.responses[status] as any).content['application/json'].schema.type).toMatch(/object|array/)
+        for (const match of path.matchAll(/\{(\w+)\}/g)) {
+          expect(op.parameters).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                name: match[1],
+                in: 'path',
+                required: true,
+                schema: expect.objectContaining({ format: 'uuid' }),
+              }),
+            ]),
+          )
+        }
+      }
+    }
+    expect(count).toBe(11)
+    for (const path of [
+      'private-trips',
+      'me/personal-trails',
+      'me/trail-accesses',
+      'private-trip-options/pickup-points',
+    ]) {
+      const params = d.paths['/api/v1/' + path].get!.parameters as any[]
+      expect(params).toContainEqual(
+        expect.objectContaining({ name: 'page', schema: expect.objectContaining({ default: 1 }) }),
+      )
+      expect(params.some((p) => p.name === 'pageSize')).toBe(false)
+    }
+    expect(d.paths['/api/v1/private-trip-options/pickup-points'].get!.parameters).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'destinationId', in: 'query', required: true })]),
+    )
+  })
+
+  it('accepts pickup destination/page and returns the standard validation error when absent', async () => {
+    const path = '/api/v1/private-trip-options/pickup-points'
+    await request(app.getHttpServer())
+      .get(path)
+      .query({ destinationId: pickup.destinationId, page: 2 })
+      .expect(200)
+      .expect([pickup])
+    expect(port.options).toHaveBeenLastCalledWith(actor.id, 'PICKUP', 2, pickup.destinationId)
+    for (const query of [{}, { destinationId: 'bad' }, { destinationId: pickup.destinationId, pageSize: 20 }]) {
+      const r = await request(app.getHttpServer()).get(path).query(query).expect(400)
+      expect(r.body.error.code).toBe('VALIDATION_ERROR')
+    }
+  })
+
+  it('returns JSON [] for no owned trips and accepts trip version in revoke body', async () => {
+    await request(app.getHttpServer()).get('/api/v1/private-trips').expect(200).expect([])
+    expect(port.read).toHaveBeenLastCalledWith(actor.id, undefined, 1)
+    const id = randomUUID()
+    await request(app.getHttpServer())
+      .post(`/api/v1/private-trips/${id}/invitations/revoke`)
+      .send({ expectedVersion: 3 })
+      .expect(200)
+    expect(port.revoke).toHaveBeenLastCalledWith(actor.id, id, 3)
+  })
+})
 
 const url = process.env.CF03_TEST_DATABASE_URL
 if (url) {
@@ -116,7 +214,9 @@ if (url) {
     expect(trip.status).toBe('OPEN')
     expect(trip.creatorId).toBe(actor.id)
     expect(await db.booking.count({ where: { tripId: trip.id } })).toBe(0)
-    expect(await db.tripMember.count({ where: { tripId: trip.id, userId: actor.id, role: 'HOST', status: 'ACTIVE' } })).toBe(1)
+    expect(
+      await db.tripMember.count({ where: { tripId: trip.id, userId: actor.id, role: 'HOST', status: 'ACTIVE' } }),
+    ).toBe(1)
     expect(await db.trip.count({ where: { id: trip.id, tripType: 'PUBLIC' } })).toBe(0)
     const plan = await db.tripTrailPlan.findFirstOrThrow({ where: { tripId: trip.id } })
     expect(plan.personalTrailId).toBe(input.trailRef)
