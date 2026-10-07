@@ -100,8 +100,7 @@ export const TripListPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             {/* Điểm đến */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1.5">
                 Điểm đến
               </label>
               <div className="relative">
@@ -119,8 +118,7 @@ export const TripListPage = () => {
 
             {/* Thời gian khởi hành */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1.5">
                 Thời gian khởi hành
               </label>
               <div className="relative">
@@ -136,8 +134,7 @@ export const TripListPage = () => {
 
             {/* Cấp độ thử thách */}
             <div>
-              <label className="block text-[11px] font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1.5">
                 Cấp độ thử thách
               </label>
               <div className="relative">
@@ -155,8 +152,7 @@ export const TripListPage = () => {
             {/* Khoảng ngân sách */}
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <label className="block text-[11px] font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1.5">
                   Khoảng ngân sách
                 </label>
                 <div className="relative">
@@ -171,11 +167,10 @@ export const TripListPage = () => {
                 </div>
               </div>
               <button className="bg-[#1B5E41] hover:bg-[#154B36] text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 h-[42px]">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 Lọc kết quả
               </button>
-              <button className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2.5 rounded-lg transition-colors h-[42px] flex items-center justify-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              <button className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2.5 rounded-lg text-[11px] font-bold transition-colors h-[42px] flex items-center justify-center">
+                Làm mới
               </button>
             </div>
           </div>
@@ -183,10 +178,10 @@ export const TripListPage = () => {
           <div className="flex flex-wrap items-center justify-between border-t border-gray-100 pt-4 mt-2 gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[11px] font-bold text-gray-500">Lối tắt:</span>
-              <button className="bg-orange-50 hover:bg-orange-100 text-orange-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-orange-100">🔥 Săn mây Tà Xùa & Y Tý</button>
-              <button className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-emerald-100">🌲 Cung đường rừng Miền Nam</button>
-              <button className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-blue-100">⏱ Khởi hành 48h tới</button>
-              <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-gray-200">✓ Chỉ đoàn còn chỗ</button>
+              <button className="bg-orange-50 hover:bg-orange-100 text-orange-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-orange-100">Săn mây Tà Xùa & Y Tý</button>
+              <button className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-emerald-100">Cung đường rừng Miền Nam</button>
+              <button className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-blue-100">Khởi hành 48h tới</button>
+              <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors border border-gray-200">Chỉ đoàn còn chỗ</button>
             </div>
             
             <div className="flex items-center gap-3 text-sm">
