@@ -66,20 +66,14 @@ export const UserHeader = () => {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1B5E41] text-white">
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 11l7-7 7 7M5 19l7-7 7 7"
-              />
-            </svg>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white overflow-hidden text-white shadow-sm">
+            <Image
+              src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
+              alt="Logo"
+              width={32}
+              height={32}
+              className="object-cover h-full w-full"
+            />
           </div>
 
           <div>

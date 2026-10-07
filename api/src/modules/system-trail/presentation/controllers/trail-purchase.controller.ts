@@ -18,7 +18,7 @@ export class TrailPurchaseController {
   @Post(':trailId/purchase')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   async create(
-    @Param('trailId', new ZodValidationPipe(z.string().uuid())) trailId: string,
+    @Param('trailId', new ZodValidationPipe(z.string())) trailId: string,
     @Headers('idempotency-key') idempotencyKey: string,
     @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']) }).strict()))
     body: { paymentMethod: PaymentMethod },
