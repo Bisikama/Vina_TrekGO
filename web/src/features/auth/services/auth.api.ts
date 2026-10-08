@@ -108,13 +108,8 @@ export const resendOtpApi = async (
   );
   return data;
 };
-export const loginApi = async (payload: LoginPayload): Promise<AuthResponse> =>
-  (await apiClient.post<AuthResponse>('/api/v1/auth/login', payload, config)).data;
-export const refreshTokenApi = async (payload: RefreshTokenPayload): Promise<RefreshTokenResponse> =>
-  (await apiClient.post<RefreshTokenResponse>('/api/v1/auth/refresh-token', payload, config)).data;
-export const logoutApi = async (payload: LogoutPayload): Promise<LogoutResponse> =>
-  (await apiClient.post<LogoutResponse>('/api/v1/auth/logout', payload, config)).data;
 export const verifyRegistrationApi = async (email: string, otp: string): Promise<AuthResponse> =>
-  (await apiClient.post<AuthResponse>('/api/v1/auth/verify-otp', { email, otp }, config)).data;
-export const resendRegistrationApi = async (email: string): Promise<{ message: string }> =>
-  (await apiClient.post('/api/v1/auth/resend-otp', { email }, config)).data;
+  verifyOtpApi({ email, otp });
+
+export const resendRegistrationApi = async (email: string): Promise<MessageResponse> =>
+  resendOtpApi({ email });
