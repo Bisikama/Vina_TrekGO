@@ -1,11 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useAuthStore } from "@/features/auth";
+import { useAuthStore, useCurrentUser } from "@/features/auth";
 
 export const UserHeader = () => {
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const { getCurrentUser } = useCurrentUser();
+
+  useEffect(() => {
+    getCurrentUser();
+  }, []);
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
@@ -200,20 +207,21 @@ export const UserHeader = () => {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200">
                 <Image
-                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"
+                  src={user?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"}
                   alt="User Avatar"
                   width={32}
                   height={32}
+                  className="object-cover w-full h-full"
                 />
               </div>
 
               <div className="hidden text-left lg:block">
                 <div className="text-[13px] font-bold leading-tight text-gray-900">
-                  Nguyễn Hùng
+                  {user?.firstName && user?.lastName ? `${user.lastName} ${user.firstName}` : (user?.email?.split('@')[0] || "Đang tải...")}
                 </div>
 
                 <div className="text-[10px] font-medium text-gray-500">
-                  Level 3 Trekker
+                  {user?.role === 'LEADER' ? 'Leader PRO' : 'Trekker'}
                 </div>
               </div>
             </div>

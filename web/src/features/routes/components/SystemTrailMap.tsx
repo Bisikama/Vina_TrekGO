@@ -150,7 +150,7 @@ export function SystemTrailMap({ trail }: { trail: SystemTrail }) {
   }, [trail, is3D]);
 
   return (
-    <div className="relative w-full h-[500px] rounded-2xl overflow-hidden border border-gray-200 shadow-md">
+    <div className={`relative w-full h-full min-h-[400px] rounded-2xl overflow-hidden border border-gray-200 shadow-md`}>
       {!trail.routeGeojson && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100/80 backdrop-blur-sm">
           <div className="text-center p-6 bg-white rounded-xl shadow-lg border border-gray-200">

@@ -65,3 +65,8 @@ export const purchaseTrail = async (
   });
   return response.data;
 };
+
+export const checkTrailAccess = async (trailId: string): Promise<{ hasAccess: boolean; expiresAt?: string | null }> => {
+  const response = await apiClient.get<{ hasAccess: boolean; expiresAt?: string | null }>(`/api/v1/trails/${trailId}/access`);
+  return response.data;
+};
