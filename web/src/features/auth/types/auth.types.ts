@@ -64,6 +64,12 @@ export interface AuthResponse {
   tokenType?: string;
 }
 
+export interface RegisterResponse {
+  message: string;
+  email: string;
+  userId: string;
+}
+
 export interface RefreshTokenResponse {
   accessToken: string;
   refreshToken: string;

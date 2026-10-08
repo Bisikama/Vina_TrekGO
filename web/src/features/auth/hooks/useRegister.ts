@@ -28,7 +28,7 @@ export const useRegister = () => {
     } catch (err: unknown) {
       let errorMessage = "Đã xảy ra lỗi không xác định khi đăng ký.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
         if (Array.isArray(errorMessage)) {
           errorMessage = errorMessage.join(", ");
         }

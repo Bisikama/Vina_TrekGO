@@ -1,2 +1,3 @@
 // Export modules here
-export * from './components';
+export { UserHeader } from './components/UserHeader';
+export { UserFooter } from './components/UserFooter';
