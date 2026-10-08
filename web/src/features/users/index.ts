@@ -1,2 +1,3 @@
 // Export modules here
-export * from './components';
+export { UserWelcomeHeader } from './components/UserWelcomeHeader';
+export { QuickActionCards } from './components/QuickActionCards';

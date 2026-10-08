@@ -1,2 +1,2 @@
 // Export modules here
-export * from './components';
+export { PostTripReviewLayout } from './components/PostTripReview/PostTripReviewLayout';

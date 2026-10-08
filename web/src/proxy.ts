@@ -3,6 +3,10 @@ import type { NextRequest } from 'next/server';
 
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  // CF02 discovery is public. Booking pages enforce real bearer auth through the shared API.
+  if (path === '/trips' || path.startsWith('/trips/') || path === '/bookings' || path.startsWith('/bookings/') || path === '/my-trips') {
+    return NextResponse.next();
+  }
 
   // Giả lập lấy token từ cookie (Trong thực tế sẽ check token thật)
   const token = request.cookies.get('mock_token')?.value;

@@ -1,96 +1,17 @@
-import { apiClient } from "@/lib/axios";
-import {
-  AuthResponse,
-  LoginPayload,
-  LogoutPayload,
-  LogoutResponse,
-  RefreshTokenPayload,
-  RefreshTokenResponse,
-  RegisterPayload,
-} from "../types/auth.types";
-
-/**
- * POST /auth/register - Đăng ký tài khoản người dùng mới
- */
-export const registerApi = async (payload: RegisterPayload): Promise<AuthResponse> => {
-  // const { data } = await apiClient.post<AuthResponse>("/auth/register", payload);
-  // return data;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        user: {
-          id: "mock-user-id",
-          email: payload.email,
-          fullName: payload.fullName || "Trekker Mới",
-          phone: payload.phone || "0987654321",
-          role: payload.role || "USER",
-          status: "ACTIVE",
-          createdAt: new Date().toISOString(),
-        },
-        accessToken: "mock-access-token",
-        refreshToken: "mock-refresh-token",
-      });
-    }, 1000);
-  });
+import { apiClient } from '@/lib/axios';
+import type { AuthResponse, LoginPayload, LogoutPayload, LogoutResponse, RefreshTokenPayload, RefreshTokenResponse, RegisterPayload, RegisterResponse } from '../types/auth.types';
+const config = { baseURL: '' };
+export const registerApi = async (payload: RegisterPayload): Promise<RegisterResponse> => {
+  const { email, password, fullName, phone } = payload;
+  return (await apiClient.post<RegisterResponse>('/api/v1/auth/register', { email, password, fullName, ...(phone ? { phone } : {}) }, config)).data;
 };
-
-/**
- * POST /auth/login - Đăng nhập vào hệ thống
- */
-export const loginApi = async (payload: LoginPayload): Promise<AuthResponse> => {
-  // const { data } = await apiClient.post<AuthResponse>("/auth/login", payload);
-  // return data;
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (payload.email === "error@test.com") {
-        reject(new Error("Sai email hoặc mật khẩu (Mock)"));
-      } else {
-        resolve({
-          user: {
-            id: "mock-user-id-123",
-            email: payload.email,
-            fullName: "Trekker Kì Cựu",
-            phone: "0901234567",
-            role: "USER",
-            status: "ACTIVE",
-            avatar: "https://i.pravatar.cc/150?u=mock",
-            createdAt: new Date().toISOString(),
-          },
-          accessToken: "mock-access-token-login",
-          refreshToken: "mock-refresh-token-login",
-        });
-      }
-    }, 1000);
-  });
-};
-
-/**
- * POST /auth/refresh-token - Làm mới Access Token
- */
-export const refreshTokenApi = async (
-  payload: RefreshTokenPayload
-): Promise<RefreshTokenResponse> => {
-  // const { data } = await apiClient.post<RefreshTokenResponse>("/auth/refresh-token", payload);
-  // return data;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        accessToken: "mock-new-access-token",
-        refreshToken: "mock-new-refresh-token",
-      });
-    }, 800);
-  });
-};
-
-/**
- * POST /auth/logout - Đăng xuất khỏi hệ thống
- */
-export const logoutApi = async (payload: LogoutPayload): Promise<LogoutResponse> => {
-  // const { data } = await apiClient.post<LogoutResponse>("/auth/logout", payload);
-  // return data;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ message: "Đăng xuất thành công (Mock)" });
-    }, 500);
-  });
-};
+export const loginApi = async (payload: LoginPayload): Promise<AuthResponse> =>
+  (await apiClient.post<AuthResponse>('/api/v1/auth/login', payload, config)).data;
+export const refreshTokenApi = async (payload: RefreshTokenPayload): Promise<RefreshTokenResponse> =>
+  (await apiClient.post<RefreshTokenResponse>('/api/v1/auth/refresh-token', payload, config)).data;
+export const logoutApi = async (payload: LogoutPayload): Promise<LogoutResponse> =>
+  (await apiClient.post<LogoutResponse>('/api/v1/auth/logout', payload, config)).data;
+export const verifyRegistrationApi = async (email: string, otp: string): Promise<AuthResponse> =>
+  (await apiClient.post<AuthResponse>('/api/v1/auth/verify-otp', { email, otp }, config)).data;
+export const resendRegistrationApi = async (email: string): Promise<{ message: string }> =>
+  (await apiClient.post('/api/v1/auth/resend-otp', { email }, config)).data;

@@ -25,7 +25,7 @@ export const useLogout = () => {
     } catch (err: unknown) {
       let errorMessage = "Lỗi khi gửi yêu cầu đăng xuất.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
       } else if (err instanceof Error) {
         errorMessage = err.message;
       }

@@ -1,69 +1,61 @@
-import { Controller, Get, Param } from '@nestjs/common'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { z } from 'zod'
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common'
+import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { ActiveUser } from '../../shared/decorators/active-user.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
-import { AppError, BOOKING_ERROR_CODES } from '../../shared/errors'
 import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
-import { PrismaService } from '../../shared/services/prisma.service'
+import { BookingsService } from './bookings.service'
+import {
+  bookingIdSchema,
+  bookingKeySchema,
+  bookingPageSchema,
+  createBookingSchema,
+  updateParticipantsSchema,
+} from './booking.dto'
+import type { BookingPage, CreateBookingInput, UpdateParticipantsInput } from './booking.dto'
 
 @ApiTags('Bookings')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
-@Controller('bookings')
+@Controller()
 export class BookingsController {
-  constructor(private readonly db: PrismaService) {}
-
-  @Get(':id')
-  async detail(
-    @Param('id', new ZodValidationPipe(z.string().uuid())) id: string,
-    @ActiveUser('id') actorUserId: string,
+  constructor(private readonly bookings: BookingsService) {}
+  @Post('trips/:tripId/bookings')
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  create(
+    @Param('tripId', new ZodValidationPipe(bookingIdSchema)) tripId: string,
+    @Headers('idempotency-key') key: string,
+    @Body(new ZodValidationPipe(createBookingSchema)) body: CreateBookingInput,
+    @ActiveUser('id') userId: string,
   ) {
-    if (!actorUserId) throw AppError.fromCode('UNAUTHENTICATED')
-    const booking = await this.db.booking.findFirst({
-      where: { id, userId: actorUserId },
-      include: {
-        invoicesViaBookingId: {
-          include: { paymentsViaInvoiceId: { include: { application: true, refundsViaPaymentId: true } } },
-        },
-      },
-    })
-    if (!booking) throw AppError.fromCode(BOOKING_ERROR_CODES.NOT_FOUND)
-    const payments = booking.invoicesViaBookingId
-      .flatMap((invoice) => invoice.paymentsViaInvoiceId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
-    // An accepted collection takes precedence over a newer rejected duplicate attempt.
-    const payment = payments.find((p) => p.application?.status === 'APPLIED') ?? payments[0]
-    return {
-      id: booking.id,
-      status: booking.status,
-      expiresAt: booking.expiresAt.toISOString(),
-      confirmedAt: booking.confirmedAt?.toISOString() ?? null,
-      totalAmount: booking.totalAmount.toFixed(),
-      currency: booking.currency,
-      paymentSummary: payment
-        ? {
-            paymentId: payment.id,
-            status: payment.status,
-            applicationStatus: payment.application?.status ?? null,
-            applicationReasonCode: payment.application?.reasonCode ?? null,
-            reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(payment.reconcileStatus),
-          }
-        : null,
-      refunds: payments.flatMap((p) =>
-        p.refundsViaPaymentId.map((refund) => ({
-          refundId: refund.id,
-          paymentId: p.id,
-          purpose: refund.purpose,
-          reasonCode: refund.reasonCode,
-          amount: refund.amount.toFixed(),
-          currency: refund.currency,
-          status: refund.status,
-          refundedAt: refund.refundedAt?.toISOString() ?? null,
-          reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(refund.reconcileStatus),
-        })),
-      ),
-    }
+    new ZodValidationPipe(bookingKeySchema).transform(key, { type: 'custom' })
+    return this.bookings.create(tripId, userId, key, body)
+  }
+  @Patch('bookings/:id/participants')
+  update(
+    @Param('id', new ZodValidationPipe(bookingIdSchema)) id: string,
+    @Body(new ZodValidationPipe(updateParticipantsSchema)) body: UpdateParticipantsInput,
+    @ActiveUser('id') userId: string,
+  ) {
+    return this.bookings.updateParticipants(id, userId, body)
+  }
+  @Get('bookings')
+  list(@Query(new ZodValidationPipe(bookingPageSchema)) query: BookingPage, @ActiveUser('id') userId: string) {
+    return this.bookings.list(userId, query)
+  }
+  @Get('bookings/:id')
+  detail(@Param('id', new ZodValidationPipe(bookingIdSchema)) id: string, @ActiveUser('id') userId: string) {
+    return this.bookings.detail(id, userId)
+  }
+}
+
+@ApiTags('Bookings internal')
+@Auth([AuthType.ApiKey])
+@Controller('internal/bookings')
+export class BookingRentalContextController {
+  constructor(private readonly bookings: BookingsService) {}
+  @Get(':id/rental-context')
+  context(@Param('id', new ZodValidationPipe(bookingIdSchema)) id: string) {
+    return this.bookings.rentalContext(id)
   }
 }

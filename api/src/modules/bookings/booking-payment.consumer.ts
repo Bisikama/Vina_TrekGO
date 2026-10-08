@@ -152,6 +152,8 @@ export class BookingPaymentConsumer {
               payload: {
                 schemaVersion: 1,
                 bookingId: booking.id,
+                tripId: booking.tripId,
+                userId: booking.userId,
                 paymentId: payment.id,
                 invoiceId: invoice.id,
                 confirmationIdempotencyKey: confirmationKey,
