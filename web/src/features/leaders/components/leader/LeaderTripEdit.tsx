@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type LeaderTripEditProps = {
   tripId: string;
@@ -94,18 +94,40 @@ function FieldLabel({
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f8fafc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
 
+import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
+
 export function LeaderTripEdit({
   tripId,
 }: LeaderTripEditProps) {
   const cleanTripId = tripId.replace(/^#/, "");
+  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId: cleanTripId });
+  const { updateTrip, cancelTrip, isSubmitting } = useLeaderTripMutations();
 
   const [visibility, setVisibility] = useState<
     "public" | "private"
   >("public");
 
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [capacity, setCapacity] = useState(15);
+  const [price, setPrice] = useState("2850000");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const [savedMessage, setSavedMessage] = useState("");
   const [showCancelModal, setShowCancelModal] =
     useState(false);
+
+  useEffect(() => {
+    if (trip) {
+      if (trip.title) setTitle(trip.title);
+      if (trip.description) setDescription(trip.description);
+      if (trip.startAt) setStartDate(trip.startAt.slice(0, 10));
+      if (trip.endAt) setEndDate(trip.endAt.slice(0, 10));
+      if (trip.capacity) setCapacity(trip.capacity);
+      if (trip.price) setPrice(trip.price);
+    }
+  }, [trip]);
 
   function showTemporaryMessage(message: string) {
     setSavedMessage(message);
@@ -115,23 +137,57 @@ export function LeaderTripEdit({
     }, 3000);
   }
 
-  function handleSave() {
-    showTemporaryMessage(
-      "Đã lưu thay đổi của chuyến đi thành công.",
-    );
+  async function handleSave() {
+    if (trip) {
+      try {
+        await updateTrip(cleanTripId, {
+          expectedVersion: trip.version,
+          title: title.trim() || undefined,
+          description: description.trim() || null,
+          capacity: Number(capacity),
+          price: String(price).replace(/\D/g, ""),
+        });
+        showTemporaryMessage(
+          "Đã lưu thay đổi của chuyến đi thành công.",
+        );
+      } catch (err: unknown) {
+        showTemporaryMessage(
+          err instanceof Error ? err.message : "Lỗi lưu thay đổi.",
+        );
+      }
+    }
   }
 
-  function handleCancelTrip() {
+  async function handleCancelTrip() {
     setShowCancelModal(false);
-
-    showTemporaryMessage(
-      "Đã ghi nhận yêu cầu hủy chuyến đi.",
-    );
+    if (trip) {
+      try {
+        await cancelTrip(cleanTripId, {
+          expectedVersion: trip.version,
+          reason: "Leader yêu cầu hủy chuyến đi",
+        });
+        showTemporaryMessage(
+          "Đã ghi nhận yêu cầu hủy chuyến đi.",
+        );
+      } catch (err: unknown) {
+        showTemporaryMessage(
+          err instanceof Error ? err.message : "Lỗi hủy chuyến đi.",
+        );
+      }
+    }
   }
+
+  const tripDisplayTitle = trip?.title || title || "Chỉnh sửa chuyến đi";
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] px-5 py-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
+        {savedMessage && (
+          <div className="mb-4 rounded-xl bg-[#125238] p-4 text-sm font-semibold text-white shadow-lg">
+            ✓ {savedMessage}
+          </div>
+        )}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -150,20 +206,20 @@ export function LeaderTripEdit({
               </span>
 
               <span>•</span>
-              <span>Khởi tạo: 04/10/2024</span>
+              <span>Phiên bản v{trip?.version || 1}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full bg-[#2f6b4f] px-3 py-1.5 text-xs font-bold text-white">
-                ● Đang mở bán
+                ● {trip?.status || "DRAFT"}
               </span>
 
               <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800">
-                12/15 thành viên
+                0/{capacity} thành viên
               </span>
 
               <span className="rounded-full bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-800">
-                VFRS Cấp 3
+                VFRS Chuẩn
               </span>
             </div>
           </div>
@@ -171,8 +227,7 @@ export function LeaderTripEdit({
           <div className="mt-5 flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
-                Chỉnh sửa chuyến đi: Chinh phục Sống Lưng
-                Khủng Long Tà Xùa
+                Chỉnh sửa chuyến đi: {tripDisplayTitle}
               </h1>
 
               <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">
@@ -192,18 +247,20 @@ export function LeaderTripEdit({
 
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setShowCancelModal(true)}
-                className="h-11 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:bg-red-100"
+                className="h-11 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
               >
                 ⊗ Hủy chuyến
               </button>
 
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleSave}
-                className="h-11 rounded-xl bg-[#125238] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#2f6b4f]"
+                className="h-11 rounded-xl bg-[#125238] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#2f6b4f] disabled:opacity-50"
               >
-                ✓ Lưu thay đổi
+                {isSubmitting ? "Đang lưu..." : "✓ Lưu thay đổi"}
               </button>
             </div>
           </div>
@@ -323,7 +380,9 @@ export function LeaderTripEdit({
 
                   <input
                     className={inputClass}
-                    defaultValue="Chinh phục Sống Lưng Khủng Long Tà Xùa - Săn Biển Mây Đại Ngàn (3N2Đ)"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Nhập tên chuyến đi"
                   />
 
                   <span className="mt-1 block text-xs text-slate-400">
@@ -396,8 +455,7 @@ export function LeaderTripEdit({
                       </span>
 
                       <p className="mt-2 text-sm">
-                        Sống lưng mây Tà Xùa – tỷ lệ ảnh
-                        16:9
+                        Hình ảnh hành trình trekking VFRS
                       </p>
                     </div>
                   </div>
@@ -405,18 +463,15 @@ export function LeaderTripEdit({
 
                 <label className="block">
                   <FieldLabel required>
-                    Mô tả chi tiết & Điểm nhấn
+                    Mô tả chi tiết &amp; Điểm nhấn
                   </FieldLabel>
 
                   <textarea
                     rows={7}
                     className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-sm leading-6 text-slate-950 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
-                    defaultValue={`Hành trình trekking khám phá Sống Lưng Khủng Long Tà Xùa, săn biển mây và trải nghiệm thiên nhiên Tây Bắc.
-
-Điểm nổi bật:
-• Chinh phục đỉnh Gió cao 2.650m.
-• Cắm trại giữa đại ngàn.
-• Đội ngũ Leader VFRS giàu kinh nghiệm.`}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Nhập mô tả chi tiết chuyến đi"
                   />
                 </label>
               </div>
@@ -425,7 +480,7 @@ export function LeaderTripEdit({
             <FormSection
               id="section-schedule"
               number={2}
-              title="Lịch trình & Điểm tập kết"
+              title="Lịch trình &amp; Điểm tập kết"
               description="Ngày khởi hành, thời gian kết thúc và địa điểm tập trung của đoàn."
             >
               <div className="grid gap-5 md:grid-cols-2">
@@ -437,7 +492,8 @@ export function LeaderTripEdit({
                   <input
                     type="date"
                     className={inputClass}
-                    defaultValue="2024-11-23"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
                   />
                 </label>
 
@@ -449,160 +505,20 @@ export function LeaderTripEdit({
                   <input
                     type="date"
                     className={inputClass}
-                    defaultValue="2024-11-24"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
                   />
                 </label>
-
-                <label>
-                  <FieldLabel required>
-                    Giờ tập trung
-                  </FieldLabel>
-
-                  <input
-                    type="time"
-                    className={inputClass}
-                    defaultValue="04:30"
-                  />
-                </label>
-
-                <label>
-                  <FieldLabel required>
-                    Điểm tập kết
-                  </FieldLabel>
-
-                  <input
-                    className={inputClass}
-                    defaultValue="Bến xe Mỹ Đình, Hà Nội"
-                  />
-                </label>
-
-                <label className="md:col-span-2">
-                  <FieldLabel>
-                    Ghi chú phương tiện di chuyển
-                  </FieldLabel>
-
-                  <textarea
-                    rows={3}
-                    className="w-full rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-sm outline-none focus:border-[#2f6b4f]"
-                    defaultValue="Xe giường nằm đưa đoàn từ Hà Nội đến Bắc Yên. Có mặt trước giờ khởi hành tối thiểu 30 phút."
-                  />
-                </label>
-              </div>
-            </FormSection>
-
-            <FormSection
-              id="section-trail"
-              number={3}
-              title="Cung đường & Trạm dừng"
-              description="Thông tin lộ trình chính, độ khó và các checkpoint an toàn."
-            >
-              <div className="grid gap-5 md:grid-cols-2">
-                <label>
-                  <FieldLabel required>
-                    Cung đường
-                  </FieldLabel>
-
-                  <select
-                    className={inputClass}
-                    defaultValue="ta-xua"
-                  >
-                    <option value="ta-xua">
-                      Sống Lưng Khủng Long Tà Xùa
-                    </option>
-                    <option value="pu-ta-leng">
-                      Pu Ta Leng
-                    </option>
-                    <option value="fansipan">
-                      Fansipan
-                    </option>
-                  </select>
-                </label>
-
-                <label>
-                  <FieldLabel required>
-                    Độ khó
-                  </FieldLabel>
-
-                  <select
-                    className={inputClass}
-                    defaultValue="advanced"
-                  >
-                    <option value="basic">Cơ bản</option>
-                    <option value="medium">Trung bình</option>
-                    <option value="advanced">
-                      Nâng cao – VFRS cấp 3
-                    </option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {[
-                  {
-                    time: "05:30",
-                    title: "Bản Công – Điểm xuất phát",
-                    detail: "Kiểm tra trang bị và khởi động.",
-                  },
-                  {
-                    time: "09:30",
-                    title: "Mỏm Cá Heo",
-                    detail: "Checkpoint nghỉ và bổ sung nước.",
-                  },
-                  {
-                    time: "14:00",
-                    title: "Đỉnh Gió – Khu cắm trại",
-                    detail: "Dựng trại và kiểm tra quân số.",
-                  },
-                ].map((checkpoint, index) => (
-                  <div
-                    key={checkpoint.title}
-                    className="flex gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2f6b4f] text-sm font-bold text-white">
-                      {index + 1}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex flex-wrap justify-between gap-2">
-                        <strong className="text-sm text-slate-900">
-                          {checkpoint.title}
-                        </strong>
-
-                        <span className="text-xs font-bold text-[#2f6b4f]">
-                          {checkpoint.time}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {checkpoint.detail}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="text-sm font-bold text-slate-400 hover:text-red-600"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-dashed border-[#2f6b4f] py-3 text-sm font-bold text-[#2f6b4f] hover:bg-emerald-50"
-                >
-                  ＋ Thêm trạm dừng
-                </button>
               </div>
             </FormSection>
 
             <FormSection
               id="section-price"
-              number={4}
-              title="Quy mô đoàn & Giá vé"
-              description="Số lượng thành viên, chi phí tham gia và chính sách đặt cọc."
+              number={3}
+              title="Quy mô đoàn &amp; Giá vé"
+              description="Số lượng thành viên và chi phí tham gia."
             >
-              <div className="grid gap-5 md:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2">
                 <label>
                   <FieldLabel required>
                     Số thành viên tối đa
@@ -610,33 +526,23 @@ export function LeaderTripEdit({
 
                   <input
                     type="number"
-                    min={12}
+                    min={1}
                     className={inputClass}
-                    defaultValue={15}
+                    value={capacity}
+                    onChange={(e) => setCapacity(Number(e.target.value))}
                   />
                 </label>
 
                 <label>
                   <FieldLabel required>
-                    Giá vé mỗi người
+                    Giá vé mỗi người (VNĐ)
                   </FieldLabel>
 
                   <input
-                    type="number"
+                    type="text"
                     className={inputClass}
-                    defaultValue={2_850_000}
-                  />
-                </label>
-
-                <label>
-                  <FieldLabel required>
-                    Tiền cọc
-                  </FieldLabel>
-
-                  <input
-                    type="number"
-                    className={inputClass}
-                    defaultValue={1_000_000}
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
                   />
                 </label>
               </div>

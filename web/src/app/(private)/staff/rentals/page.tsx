@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { StaffRentalProducts } from "@/features/rentals/components/staff/StaffRentalProducts";
 
 export default function StaffRentalsPage() {
-  redirect("/staff/work-queue");
+  return <StaffRentalProducts />;
 }

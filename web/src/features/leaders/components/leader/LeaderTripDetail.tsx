@@ -15,80 +15,18 @@ type Member = {
   checkedIn: boolean;
 };
 
-const initialMembers: Member[] = [
-  {
-    id: "TK-9921",
-    name: "Trần Minh Hoàng",
-    phone: "0978.221.844",
-    email: "hoang.tm@gmail.com",
-    emergency: "Trần Văn Nghĩa · 0913.998.112",
-    health: "Tiền sử hen nhẹ (mang xịt)",
-    equipment: "Gậy leo + Đèn đội",
-    payment: "100% · 2.850M",
-    checkedIn: false,
-  },
-  {
-    id: "TK-4802",
-    name: "Nguyễn Phương Anh",
-    phone: "0944.332.190",
-    email: "anh.nguyen@vfrs.vn",
-    emergency: "Nguyễn Tuấn · 0908.441.222",
-    health: "Bình thường, thể lực tốt",
-    equipment: "Tự túc trang bị",
-    payment: "100% · 2.850M",
-    checkedIn: false,
-  },
-  {
-    id: "TK-1182",
-    name: "Vũ Đức Khánh",
-    phone: "0932.110.999",
-    email: "khanh.vu@fpt.com.vn",
-    emergency: "Lê Thu Hà · 0919.231.002",
-    health: "Dị ứng phấn hoa",
-    equipment: "Lều đôi Naturehike",
-    payment: "50% · 1.425M",
-    checkedIn: false,
-  },
-  {
-    id: "TK-4432",
-    name: "Đinh Thùy Linh",
-    phone: "0987.009.212",
-    email: "thuylinh.dinh@gmail.com",
-    emergency: "Đinh Văn Hùng · 0912.334.887",
-    health: "Bình thường",
-    equipment: "Gậy trekking",
-    payment: "100% · 2.850M",
-    checkedIn: true,
-  },
-  {
-    id: "TK-1976",
-    name: "Phạm Gia Bảo",
-    phone: "0966.128.550",
-    email: "giabao.pham@techcom.com",
-    emergency: "Vũ Kim Oanh · 0904.551.993",
-    health: "Không dị ứng",
-    equipment: "Tự túc trang bị",
-    payment: "100% · 2.850M",
-    checkedIn: false,
-  },
-  {
-    id: "TK-3091",
-    name: "Võ Nhật Thảo",
-    phone: "0971.889.012",
-    email: "thao.vo.trek@gmail.com",
-    emergency: "Võ Minh Trí · 0982.771.665",
-    health: "Bình thường",
-    equipment: "Túi ngủ mượn",
-    payment: "50% · 1.425M",
-    checkedIn: false,
-  },
-];
+const initialMembers: Member[] = [];
+
+import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
 
 export function LeaderTripDetail({
   tripId,
 }: {
   tripId: string;
 }) {
+  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId });
+  const { cancelTrip, isSubmitting } = useLeaderTripMutations();
+
   const [members, setMembers] =
     useState(initialMembers);
 
@@ -101,10 +39,7 @@ export function LeaderTripDetail({
     "Không đạt yêu cầu kiểm tra thể lực / y tế trước giờ xuất phát",
   );
 
-  const [waiting, setWaiting] = useState([
-    "Lê Minh Tuấn",
-    "Trần Mai Anh",
-  ]);
+  const [waiting, setWaiting] = useState<string[]>([]);
 
   const visibleMembers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -132,6 +67,11 @@ export function LeaderTripDetail({
     setRemoveTarget(null);
   }
 
+  const tripTitle = trip?.title || `Chuyến đi #${tripId}`;
+  const startDateStr = trip?.startAt ? new Date(trip.startAt).toLocaleDateString("vi-VN") : "";
+  const endDateStr = trip?.endAt ? new Date(trip.endAt).toLocaleDateString("vi-VN") : "";
+  const statusLabel = trip?.status === "OPEN" ? "Đang mở bán" : trip?.status === "DRAFT" ? "Bản nháp" : trip?.status === "FULL" ? "Đã đủ chỗ" : trip?.status === "IN_PROGRESS" ? "Đang diễn ra" : trip?.status === "COMPLETED" ? "Đã hoàn thành" : trip?.status === "CANCELLED" ? "Đã hủy" : "Chuyến đi";
+
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -143,21 +83,20 @@ export function LeaderTripDetail({
 
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-              ● Đang mở bán
+              ● {statusLabel}
             </span>
 
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-              Cấp 3 · Vừa phải
+              Cấp {trip?.trails?.[0]?.snapshotDifficulty || "2"} · {trip?.trails?.[0]?.snapshotName || "Trekking Tour"}
             </span>
           </div>
 
           <h1 className="mt-3 text-3xl font-bold">
-            Chinh phục Sống Lưng Khủng Long Tà Xùa
+            {tripTitle}
           </h1>
 
           <p className="mt-2 text-sm text-slate-600">
-            3N2Đ · 23/11–25/11/2024 · Mã tour #
-            {tripId}
+            {startDateStr} {endDateStr ? `– ${endDateStr}` : ""} · Mã tour #{tripId}
           </p>
         </div>
 
@@ -192,7 +131,7 @@ export function LeaderTripDetail({
             {members.length}
             <span className="text-base text-slate-400">
               {" "}
-              / 15
+              / {trip?.capacity || 15}
             </span>
           </strong>
 
@@ -200,7 +139,7 @@ export function LeaderTripDetail({
             <div
               className="h-full bg-[#125238]"
               style={{
-                width: `${(members.length / 15) * 100}%`,
+                width: `${(members.length / (trip?.capacity || 15)) * 100}%`,
               }}
             />
           </div>
@@ -376,100 +315,108 @@ export function LeaderTripDetail({
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {visibleMembers.map((member) => (
-                <tr
-                  key={member.id}
-                  className="text-xs hover:bg-slate-50"
-                >
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-800">
-                        {member.name
-                          .split(" ")
-                          .slice(-2)
-                          .map((word) => word[0])
-                          .join("")}
-                      </span>
-
-                      <div>
-                        <b className="block text-sm">
-                          {member.name}
-                        </b>
-
-                        <span className="text-slate-500">
-                          #{member.id}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {member.phone}
-
-                    <span className="block text-slate-500">
-                      {member.email}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {member.emergency}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">
-                      {member.health}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {member.equipment}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <span className="rounded bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
-                      {member.payment}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <button
-                      onClick={() =>
-                        setMembers((current) =>
-                          current.map((item) =>
-                            item.id === member.id
-                              ? {
-                                  ...item,
-                                  checkedIn:
-                                    !item.checkedIn,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                      className={`rounded px-2 py-1 ${
-                        member.checkedIn
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {member.checkedIn
-                        ? "Đã check-in"
-                        : "Chưa check-in"}
-                    </button>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <button
-                      onClick={() =>
-                        setRemoveTarget(member)
-                      }
-                      className="rounded-lg bg-red-50 px-3 py-2 font-semibold text-red-700"
-                    >
-                      Loại khỏi đoàn
-                    </button>
+              {visibleMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-sm text-slate-500">
+                    Chưa có thành viên nào tham gia chuyến đi này.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                visibleMembers.map((member) => (
+                  <tr
+                    key={member.id}
+                    className="text-xs hover:bg-slate-50"
+                  >
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-800">
+                          {member.name
+                            .split(" ")
+                            .slice(-2)
+                            .map((word) => word[0])
+                            .join("")}
+                        </span>
+
+                        <div>
+                          <b className="block text-sm">
+                            {member.name}
+                          </b>
+
+                          <span className="text-slate-500">
+                            #{member.id}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {member.phone}
+
+                      <span className="block text-slate-500">
+                        {member.email}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {member.emergency}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <span className="rounded bg-amber-50 px-2 py-1 text-amber-800">
+                        {member.health}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {member.equipment}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <span className="rounded bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
+                        {member.payment}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <button
+                        onClick={() =>
+                          setMembers((current) =>
+                            current.map((item) =>
+                              item.id === member.id
+                                ? {
+                                    ...item,
+                                    checkedIn:
+                                      !item.checkedIn,
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        className={`rounded px-2 py-1 ${
+                          member.checkedIn
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {member.checkedIn
+                          ? "Đã check-in"
+                          : "Chưa check-in"}
+                      </button>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <button
+                        onClick={() =>
+                          setRemoveTarget(member)
+                        }
+                        className="rounded-lg bg-red-50 px-3 py-2 font-semibold text-red-700"
+                      >
+                        Loại khỏi đoàn
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { BadRequestException } from '@nestjs/common'
-const uuid = z.string().uuid()
+const uuid = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, 'Invalid UUID')
 const datetime = z.string().datetime({ offset: true })
 const basic = z.object({
   destinationId: uuid,

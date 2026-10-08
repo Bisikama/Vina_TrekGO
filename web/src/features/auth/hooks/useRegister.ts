@@ -2,7 +2,7 @@
 
 import { useState, ChangeEvent, FormEvent } from "react";
 import { registerApi } from "../services/auth.api";
-import { RegisterResponse, RegisterPayload } from "../types/auth.types";
+import { RegisterPayload, RegisterResponse } from "../types/auth.types";
 import { AxiosError } from "axios";
 
 export const useRegister = () => {
@@ -11,7 +11,6 @@ export const useRegister = () => {
     password: "",
     fullName: "",
     phone: "",
-    cccd: "",
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +54,7 @@ export const useRegister = () => {
   };
 
   const reset = () => {
-    setFormData({ email: "", password: "", fullName: "", phone: "", cccd: "" });
+    setFormData({ email: "", password: "", fullName: "", phone: "" });
     setError(null);
     setData(null);
     setIsLoading(false);

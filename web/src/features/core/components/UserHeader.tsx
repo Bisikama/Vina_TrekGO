@@ -2,10 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useAuthStore } from "@/features/auth";
 
 export const UserHeader = () => {
+  const logout = useAuthStore((state) => state.logout);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-100 bg-white">
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
       {/* Top thin bar */}
       <div className="flex items-center justify-between border-b border-gray-100 bg-[#F8FAFC] px-4 py-1.5 text-[10px] font-medium text-gray-500 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
@@ -35,21 +38,8 @@ export const UserHeader = () => {
 
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <svg
-              className="h-3.5 w-3.5 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
-              />
-            </svg>
-
-            Fansipan 15°C, Gió nhẹ
+            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+            Bà Đen 28°C, Nắng đẹp
           </span>
 
           <span className="hidden items-center gap-1.5 sm:flex">
@@ -112,9 +102,53 @@ export const UserHeader = () => {
             Khám phá
           </Link>
 
-          <Link href="/my-trips" className="hover:text-[#1B5E41]">Chuyến đi của tôi</Link>
-          <Link href="/routes" className="hover:text-[#1B5E41]">Cung đường của tôi</Link>
-          <Link href="/leader-registration" className="flex items-center gap-1 hover:text-[#1B5E41]">
+          <Link
+            href="/trips"
+            className="whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            Chuyến đi
+          </Link>
+
+          <Link
+            href="/my-trips"
+            className="whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            Chuyến đi của tôi
+          </Link>
+
+          <Link
+            href="/my-routes"
+            className="whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            Cung đường của tôi
+          </Link>
+
+          {/* Chỉ có trong UserHeader */}
+          <Link
+            href="/rentals?bookingId=booking_001"
+            className="flex items-center gap-1.5 whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v8a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 7V5h4v2"
+              />
+            </svg>
+
+            Thuê thiết bị
+          </Link>
+
+          <Link
+            href="/leader-registration"
+            className="flex items-center gap-1 whitespace-nowrap hover:text-[#1B5E41]"
+          >
             Trở thành Leader
 
             <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] leading-none text-black">
@@ -193,9 +227,7 @@ export const UserHeader = () => {
             <button
               type="button"
               onClick={() => {
-                document.cookie =
-                  "mock_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-
+                logout();
                 window.location.href = "/public/login";
               }}
               className="cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"
@@ -209,14 +241,8 @@ export const UserHeader = () => {
       {/* Tracking Sub-bar */}
       <div className="flex items-center justify-between bg-[#154B36] px-4 py-2 text-[11px] font-medium text-white sm:px-6 lg:px-8">
         <div className="flex items-center gap-2">
-          <span className="rounded border border-emerald-500/30 bg-emerald-500/20 px-1.5 py-0.5 font-bold text-emerald-300">
-            GPS TRACKING ON
-          </span>
-
-          <span className="hidden opacity-90 sm:inline">
-            Thời tiết vùng núi Tây Bắc: 16°C • Độ ẩm 78% • Gió
-            nhẹ, nắng mỏng Tà Xùa
-          </span>
+          <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold border border-emerald-500/30">GPS TRACKING ON</span>
+          <span className="hidden sm:inline opacity-90">Thời tiết Núi Bà Đen (Tây Ninh): 28°C • Độ ẩm 65% • Nắng ráo, mây quang đãng</span>
         </div>
 
         <div className="flex items-center gap-4 opacity-90">

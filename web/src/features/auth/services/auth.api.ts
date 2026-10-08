@@ -1,17 +1,115 @@
-import { apiClient } from '@/lib/axios';
-import type { AuthResponse, LoginPayload, LogoutPayload, LogoutResponse, RefreshTokenPayload, RefreshTokenResponse, RegisterPayload, RegisterResponse } from '../types/auth.types';
-const config = { baseURL: '' };
+import { apiClient } from "@/lib/axios";
+import {
+  AuthResponse,
+  BootstrapPayload,
+  ForgotPasswordPayload,
+  LoginPayload,
+  LogoutPayload,
+  LogoutResponse,
+  MessageResponse,
+  OtpPayload,
+  RefreshTokenPayload,
+  RefreshTokenResponse,
+  RegisterPayload,
+  RegisterResponse,
+  ResendOtpPayload,
+  User,
+} from "../types/auth.types";
+
+/**
+ * POST /api/v1/auth/register - Đăng ký tài khoản người dùng mới.
+ * The API sends an OTP; the account is activated by verifyOtpApi.
+ */
 export const registerApi = async (payload: RegisterPayload): Promise<RegisterResponse> => {
-  const { email, password, fullName, phone } = payload;
-  return (await apiClient.post<RegisterResponse>('/api/v1/auth/register', { email, password, fullName, ...(phone ? { phone } : {}) }, config)).data;
+  const { data } = await apiClient.post<RegisterResponse>("/api/v1/auth/register", payload);
+  return data;
 };
-export const loginApi = async (payload: LoginPayload): Promise<AuthResponse> =>
-  (await apiClient.post<AuthResponse>('/api/v1/auth/login', payload, config)).data;
-export const refreshTokenApi = async (payload: RefreshTokenPayload): Promise<RefreshTokenResponse> =>
-  (await apiClient.post<RefreshTokenResponse>('/api/v1/auth/refresh-token', payload, config)).data;
-export const logoutApi = async (payload: LogoutPayload): Promise<LogoutResponse> =>
-  (await apiClient.post<LogoutResponse>('/api/v1/auth/logout', payload, config)).data;
+
+/**
+ * POST /api/v1/auth/login - Đăng nhập vào hệ thống.
+ */
+export const loginApi = async (payload: LoginPayload): Promise<AuthResponse> => {
+  const { data } = await apiClient.post<AuthResponse>("/api/v1/auth/login", payload);
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/refresh-token - Làm mới Access Token.
+ */
+export const refreshTokenApi = async (
+  payload: RefreshTokenPayload
+): Promise<RefreshTokenResponse> => {
+  const { data } = await apiClient.post<RefreshTokenResponse>(
+    "/api/v1/auth/refresh-token",
+    payload
+  );
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/logout - Đăng xuất khỏi hệ thống.
+ */
+export const logoutApi = async (payload: LogoutPayload): Promise<LogoutResponse> => {
+  const { data } = await apiClient.post<LogoutResponse>("/api/v1/auth/logout", payload);
+  return data;
+};
+
+/**
+ * GET /api/v1/auth/me - Lấy profile của user hiện tại.
+ */
+export const getCurrentUserApi = async (): Promise<User> => {
+  const { data } = await apiClient.get<User>("/api/v1/auth/me");
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/bootstrap - Đồng bộ profile từ identity provider.
+ */
+export const bootstrapAuthProfileApi = async (
+  payload: BootstrapPayload
+): Promise<User> => {
+  const { data } = await apiClient.post<User>("/api/v1/auth/bootstrap", payload);
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/reset-forgot-password - Gửi email đặt lại mật khẩu.
+ */
+export const forgotPasswordApi = async (
+  payload: ForgotPasswordPayload
+): Promise<MessageResponse> => {
+  const { data } = await apiClient.post<MessageResponse>(
+    "/api/v1/auth/reset-forgot-password",
+    payload
+  );
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/verify-otp - Xác thực OTP và tạo session.
+ */
+export const verifyOtpApi = async (payload: OtpPayload): Promise<AuthResponse> => {
+  const { data } = await apiClient.post<AuthResponse>(
+    "/api/v1/auth/verify-otp",
+    payload
+  );
+  return data;
+};
+
+/**
+ * POST /api/v1/auth/resend-otp - Gửi lại OTP xác thực email.
+ */
+export const resendOtpApi = async (
+  payload: ResendOtpPayload
+): Promise<MessageResponse> => {
+  const { data } = await apiClient.post<MessageResponse>(
+    "/api/v1/auth/resend-otp",
+    payload
+  );
+  return data;
+};
 export const verifyRegistrationApi = async (email: string, otp: string): Promise<AuthResponse> =>
-  (await apiClient.post<AuthResponse>('/api/v1/auth/verify-otp', { email, otp }, config)).data;
-export const resendRegistrationApi = async (email: string): Promise<{ message: string }> =>
-  (await apiClient.post('/api/v1/auth/resend-otp', { email }, config)).data;
+  verifyOtpApi({ email, otp });
+
+export const resendRegistrationApi = async (email: string): Promise<MessageResponse> =>
+  resendOtpApi({ email });
