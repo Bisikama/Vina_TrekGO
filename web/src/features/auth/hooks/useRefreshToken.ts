@@ -31,7 +31,7 @@ export const useRefreshToken = () => {
     } catch (err: unknown) {
       let errorMessage = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
       } else if (err instanceof Error) {
         errorMessage = err.message;
       }

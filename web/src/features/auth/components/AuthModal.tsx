@@ -66,12 +66,10 @@ export const AuthModal = ({ isOpen, initialMode = "login", onClose }: AuthModalP
           {mode === "login" ? (
             <LoginForm 
               onSuccess={onClose} 
-              onSwitchToRegister={() => setMode("register")} 
             />
           ) : (
             <RegisterForm 
               onSuccess={onClose} 
-              onSwitchToLogin={() => setMode("login")} 
             />
           )}
         </div>

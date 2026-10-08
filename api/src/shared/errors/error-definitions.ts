@@ -11,6 +11,9 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.ACTIVE_BOOKING_EXISTS]: { status: 409, message: 'An active booking already exists for this trip', retryable: false },
+  [B.BOOKING_VERSION_CONFLICT]: { status: 409, message: 'Booking changed; reload before updating participants', retryable: false },
+  [B.BOOKING_POLICY_UNAVAILABLE]: { status: 503, message: 'An effective booking policy is required', retryable: true },
   [B.BOOKING_CANCELLATION_NOT_ALLOWED]: { status: 409, message: 'Booking cannot be cancelled in its current state', retryable: false },
   [B.BOOKING_CANCELLATION_POLICY_INVALID]: { status: 422, message: 'Booking cancellation policy snapshot is missing or invalid', retryable: false },
   [P.REFUND_SOURCE_INVALID]: { status: 422, message: 'Refund source does not match an approved payment decision', retryable: false },

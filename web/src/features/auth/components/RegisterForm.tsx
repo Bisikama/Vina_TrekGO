@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRegister } from "../hooks/useRegister";
+import { VerifyRegistration } from './VerifyRegistration';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -26,6 +27,7 @@ export const RegisterForm = ({ onSuccess }: RegisterFormProps) => {
   const [agreeMedical, setAgreeMedical] = useState(true);
 
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,10 +56,10 @@ export const RegisterForm = ({ onSuccess }: RegisterFormProps) => {
       cccd: cccd || undefined,
     });
 
-    if (result && onSuccess) {
-      onSuccess();
-    }
+    if (result) setVerificationEmail(result.email);
   };
+
+  if (verificationEmail) return <VerifyRegistration email={verificationEmail} onSuccess={onSuccess} />;
 
   return (
     <div className="flex flex-col h-full justify-center">
