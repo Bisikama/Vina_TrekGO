@@ -14,8 +14,9 @@ const targetDir: string = path.join(__dirname, '..', 'src', 'modules', moduleNam
 console.log(`Đang khởi tạo module Hexagonal: ${moduleName}...`);
 
 // 1. Chạy Nest CLI tạo module phẳng
+const moduleBasename = path.basename(moduleName);
 try {
-  execSync(`npx nest g mo modules/${moduleName}/${moduleName} --flat --no-spec`, {
+  execSync(`npx nest g mo modules/${moduleName}/${moduleBasename} --flat --no-spec`, {
     stdio: 'inherit',
   });
 } catch (error) {

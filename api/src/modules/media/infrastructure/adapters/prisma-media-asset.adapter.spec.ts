@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaMediaAssetAdapter } from './prisma-media-asset.adapter';
 import { PrismaService } from '../../../../shared/services/prisma.service';
