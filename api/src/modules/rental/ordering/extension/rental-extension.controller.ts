@@ -28,7 +28,7 @@ export class RentalExtensionController {
   @ApiOperation({ summary: 'Hold delta capacity atomically, apply immediately only when additionalFee = 0' })
   confirm(@Param(new ZodValidationPipe(Params)) params: z.infer<typeof Params>, @Body(new ZodValidationPipe(Confirm)) body: z.infer<typeof Confirm>,
     @Headers('idempotency-key') rawKey: string | undefined, @ActiveUser('id') userId: string) {
-    return this.service.confirm(userId, params.id, body.extensionQuoteId, body.expectedVersion, key(rawKey));
+    return this.service.confirm(userId, params.id, body.extensionQuoteId, body.expectedVersion, key(rawKey), body.acceptedTermsVersion);
   }
   @Get(':id/extensions') @Auth([AuthType.Bearer]) @Roles(UserRole.USER)
   @ApiOperation({ summary: 'Current/past extension requests' })

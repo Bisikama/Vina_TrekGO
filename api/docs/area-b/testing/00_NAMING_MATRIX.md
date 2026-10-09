@@ -29,3 +29,4 @@ Những model sau đây ĐÃ khớp với nghiệp vụ và KHÔNG CẦN thay đ
 **Lưu ý:**
 - Không tự đổi tên bảng cơ sở dữ liệu (`@@map`) hoặc public API nếu Frontend đã bắt đầu sử dụng. Việc đổi tên API cần phối hợp qua Swagger / Frontend Integration Team.
 - Ở các đợt refactor sau, khi thực hiện đổi tên các file lỗi như `warehouse.error-codes.ts`, cần cập nhật cả phần sử dụng trong service và controller tương ứng.
+

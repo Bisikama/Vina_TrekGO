@@ -57,3 +57,4 @@ Hệ thống sử dụng **Jest** làm test runner chính. Các loại kiểm th
 - **Đợt 1**: Cấu hình Test Infrastructure, sửa lỗi TypeScript và chạy Unit/Integration cho Phase 00–02.
 - **Đợt 2**: Viết/Chạy Test cho Phase 03 (Ordering) bao gồm concurrency và quote ttl.
 - **Đợt 3**: Viết/Chạy Test cho Phase 04 (Payment) bao gồm webhook và idempotency.
+

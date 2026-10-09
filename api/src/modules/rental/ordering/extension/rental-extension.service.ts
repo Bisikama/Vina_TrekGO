@@ -27,6 +27,10 @@ export class RentalExtensionService {
     const context = await this.context.getByTripId(order.tripId, userId, now);
     if (!context || context.membershipRef !== order.membershipRef) throw AppError.fromCode('FORBIDDEN');
     const policy = jsonObject(order.policySnapshot);
+    const appliedExtensions = await this.prisma.rentalExtensionRequest.count({ where: { orderId, status: RentalExtensionStatus.APPLIED } });
+    if (appliedExtensions >= (policy.maxExtensionCount ?? 2)) throw error('EXTENSION_LIMIT_EXCEEDED');
+    if (policy.maxTotalRentalDays && returnAt.getTime() - order.rentalStartAt.getTime() > policy.maxTotalRentalDays * 86400000) throw error('RENTAL_DURATION_NOT_ALLOWED');
+
     // The order's frozen policy, not today's policy, determines maximum rental duration.
     const maxExtraHours = requiredPolicyInt(policy.maxRentalAfterTripHours, 'maxRentalAfterTripHours');
     if (returnAt > context.trip.endAt && returnAt.getTime() > context.trip.endAt.getTime() + maxExtraHours * 3_600_000) throw error('RENTAL_DURATION_NOT_ALLOWED');
@@ -68,7 +72,8 @@ export class RentalExtensionService {
       chargedDays, expiresAt: quoteExpiresAt, expectedVersion: order.version };
   }
 
-  async confirm(userId: string, orderId: string, quoteId: string, expectedVersion: number, key: string, now = new Date()) {
+  async confirm(userId: string, orderId: string, quoteId: string, expectedVersion: number, key: string, acceptedTermsVersion?: string, now = new Date()) {
+    if (!acceptedTermsVersion) throw error('TERMS_NOT_ACCEPTED');
     const raw = await this.prisma.rentalExtensionRequest.findUnique({ where: { id: quoteId }, include: { order: true } });
     if (!raw || raw.orderId !== orderId || raw.userId !== userId) throw AppError.fromCode('FORBIDDEN');
     const hash = digest(JSON.stringify({ orderId, quoteId, expectedVersion }));
@@ -158,7 +163,7 @@ function requiredPolicyInt(value: unknown, field: string): number {
 function jsonObject(v: unknown): Record<string, any> { return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}; }
 function digest(v: string) { return createHash('sha256').update(v).digest('hex'); }
 function checkExtendable(order: any, now: Date) {
-  if (![RentalOrderStatus.PAID, RentalOrderStatus.PREPARING, RentalOrderStatus.READY_FOR_HANDOVER, RentalOrderStatus.ACTIVE].includes(order.status)) throw error('EXTENSION_INVALID_ORDER_STATE');
+  if (![RentalOrderStatus.ACTIVE].includes(order.status)) throw error('EXTENSION_INVALID_ORDER_STATE');
   if (now >= order.rentalEndAt || order.exceptionStatus === 'OVERDUE') throw error('EXTENSION_TOO_LATE');
   if (order.returnInspectionsViaOrderId?.length) throw error('EXTENSION_RETURN_STARTED');
   if (order.deliveryTasksViaOrderId?.some((t: any) => ![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED].includes(t.status))) throw error('EXTENSION_RETURN_TASK_STARTED');

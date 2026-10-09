@@ -20,3 +20,4 @@ Dưới đây là ma trận kiểm thử chi tiết cho Phase 00–04.
 | T-04-04 | Ph04 | Transaction Boundaries | PaymentAllocation và cập nhật Order Status phải nguyên tử (atomic). | Giả lập lỗi ở bước cập nhật Order Status. | PaymentAllocation bị rollback. | Integration | NOT_RUN |
 | T-04-05 | Ph04 | Invoice Mismatch | Không cho phép thanh toán nếu số tiền Payment Amount khác Total Invoice Amount. | Provider webhook báo số tiền X, nhưng Invoice cần Y. | Đánh dấu Payment nghi ngờ (Partial/Mismatch). | Unit | NOT_RUN |
 | T-04-06 | Ph04 | Kích hoạt Warehouse/Task | Tránh tạo trùng lặp Warehouse/Inventory Task sau khi Payment Success. | Gửi webhook success 2 lần cho cùng 1 Order. | Task chỉ được tạo 1 lần. | Integration | NOT_RUN |
+

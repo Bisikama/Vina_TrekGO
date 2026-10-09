@@ -26,3 +26,4 @@
   - Thời điểm provider xác nhận giao dịch có thể diễn ra trước hoặc sau khi worker xử lý sự kiện trong database.
   - Chưa rõ liệu Job queue (ví dụ BullMQ) đã được thiết lập chặt chẽ cho Idempotency hay chưa.
   - Cần viết test case E2E giả lập webhook đến muộn (Late Webhook) và webhook lặp lại (Duplicate Webhook).
+

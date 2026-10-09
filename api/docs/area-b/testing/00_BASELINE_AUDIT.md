@@ -46,3 +46,4 @@ Do chưa thể chạy Full Test cho Area B, các điểm nghi ngờ sau (như Bu
 - **Sửa lỗi TypeScript**: Chỉnh sửa mock data và các DTO type trong file test (`test/payments.spec.ts` và các file test liên quan) để `npx tsc --noEmit` pass toàn bộ dự án.
 - **Tạo Database Test an toàn**: Xác nhận sự hiện diện của biến môi trường Test Database, cấu hình lại Prisma Service trong test để trỏ vào Test DB (không dùng Production DB).
 - **Chạy & Báo Cáo Test Phase 00-02**: Viết hoặc cập nhật Unit Test và Integration Test cho Catalog, Inventory (Optimistic Locking, Capacity Calculation). Báo cáo các lỗi nghiệp vụ được phát hiện, chờ duyệt trước khi fix.
+
