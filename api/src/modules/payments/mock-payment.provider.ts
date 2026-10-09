@@ -117,7 +117,7 @@ export class MockPaymentProvider extends PaymentProvider {
         kind,
         requestHash,
         request,
-        result: result as unknown as Prisma.InputJsonObject,
+        result: result,
       },
     })
     if (row.requestHash !== requestHash) throw new Error('Mock idempotency reference reused with different payload')
