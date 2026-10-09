@@ -7,7 +7,8 @@ import { apiClient } from "@/lib/axios";
 
 // Cấu hình URL Web Worker cho MapLibre GL trong Next.js client
 if (typeof window !== "undefined") {
-  const workerUrl = "https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl-worker.mjs";
+  const workerUrl =
+    "https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl-worker.mjs";
   if (typeof (maplibregl as any).setWorkerUrl === "function") {
     (maplibregl as any).setWorkerUrl(workerUrl);
   }
@@ -75,7 +76,7 @@ export function TripRouteReviewMap({
         setLoading(true);
         setError(null);
         const res = await apiClient.get<SystemTrailDetail>(
-          `/api/v1/system-trails/${encodeURIComponent(trailCode)}`
+          `/api/v1/system-trails/${encodeURIComponent(trailCode)}`,
         );
         if (!cancelled) {
           setTrail(res.data);
@@ -139,27 +140,63 @@ export function TripRouteReviewMap({
       ],
     };
 
+    // Giới hạn khu vực quanh địa danh để khóa camera
+    const pad = 0.06;
+    const maxBounds: [[number, number], [number, number]] | undefined =
+      trail.bounds
+        ? [
+            [trail.bounds.minLng - pad, trail.bounds.minLat - pad],
+            [trail.bounds.maxLng + pad, trail.bounds.maxLat + pad],
+          ]
+        : center
+          ? [
+              [center[0] - 0.08, center[1] - 0.08],
+              [center[0] + 0.08, center[1] + 0.08],
+            ]
+          : undefined;
+
+    const isBaDen =
+      trail.code?.toLowerCase().includes("baden") ||
+      trail.name?.toLowerCase().includes("bà đen") ||
+      trail.destination?.name?.toLowerCase().includes("bà đen") ||
+      trailCode.toLowerCase().includes("baden");
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const demTileUrl =
+      isBaDen && origin
+        ? `${origin}/tiles/dem/{z}/{x}/{y}.png`
+        : "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: mapStyle,
       center: center,
       zoom: 13.5,
+      minZoom: 11.5,
+      maxZoom: 16,
+      maxBounds: maxBounds,
+      renderWorldCopies: false,
       pitch: is3D ? 60 : 0,
       bearing: -20,
       maxPitch: 85,
     });
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ visualizePitch: true }),
+      "top-right",
+    );
     map.addControl(new maplibregl.FullscreenControl(), "top-right");
 
     map.on("load", () => {
-      // A. Nạp 3D Terrain DEM từ AWS Terrarium
+      // A. Nạp 3D Terrain DEM (Ưu tiên local tile tốc độ cao)
       if (!map.getSource("terrain-dem")) {
         map.addSource("terrain-dem", {
           type: "raster-dem",
-          tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+          tiles: [demTileUrl],
           encoding: "terrarium",
           tileSize: 256,
+          minzoom: 11,
+          maxzoom: 15,
         });
       }
 
@@ -231,7 +268,8 @@ export function TripRouteReviewMap({
           }`;
           el.innerText = `${cp.sequence}`;
 
-          const popup = new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(`
+          const popup = new maplibregl.Popup({ offset: 15, closeButton: false })
+            .setHTML(`
             <div style="font-size: 12px; font-weight: bold; color: #0f172a; padding: 2px;">
               ${cp.name}
             </div>
@@ -253,7 +291,7 @@ export function TripRouteReviewMap({
             [trail.bounds.minLng, trail.bounds.minLat],
             [trail.bounds.maxLng, trail.bounds.maxLat],
           ],
-          { padding: 50, duration: 1200 }
+          { padding: 50, duration: 1200 },
         );
       }
     });

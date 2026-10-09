@@ -108,3 +108,8 @@ export const resendOtpApi = async (
   );
   return data;
 };
+export const verifyRegistrationApi = async (email: string, otp: string): Promise<AuthResponse> =>
+  verifyOtpApi({ email, otp });
+
+export const resendRegistrationApi = async (email: string): Promise<MessageResponse> =>
+  resendOtpApi({ email });

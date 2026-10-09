@@ -3,6 +3,10 @@ import type { NextRequest } from 'next/server';
 
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  // CF02 discovery is public. Booking pages enforce real bearer auth through the shared API.
+  if (path === '/trips' || path.startsWith('/trips/') || path === '/bookings' || path.startsWith('/bookings/') || path === '/my-trips') {
+    return NextResponse.next();
+  }
 
   const token = request.cookies.get('vina_trekgo_access_token')?.value;
   const role = request.cookies.get('vina_trekgo_role')?.value?.toUpperCase();

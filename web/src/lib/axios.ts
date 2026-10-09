@@ -50,7 +50,7 @@ apiClient.interceptors.response.use(
     // Avoid infinite loop on auth endpoints
     const isAuthEndpoint = originalRequest?.url?.includes("/auth/");
 
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       const refreshToken = useAuthStore.getState().refreshToken;
