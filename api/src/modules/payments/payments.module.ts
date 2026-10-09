@@ -22,6 +22,7 @@ import { TrailPurchaseController } from '../system-trail/presentation/controller
 import { RentalCheckoutService } from '../rental/payments/rental-checkout.service'
 import { RentalPaymentConsumer } from '../rental/payments/rental-payment.consumer'
 import { RentalPaymentsController } from '../rental/payments/rental-payments.controller'
+import { RentalExtensionPaymentsController } from '../rental/payments/rental-extension-payments.controller'
 import { RentalDepositWorker } from '../rental/payments/rental-deposit.worker'
 import { RentalRefundsService } from './rental-refunds.service'
 
@@ -35,6 +36,7 @@ import { RentalRefundsService } from './rental-refunds.service'
     BookingCancellationsController,
     TrailPurchaseController,
     RentalPaymentsController,
+    RentalExtensionPaymentsController,
   ],
   providers: [
     RefundsService,

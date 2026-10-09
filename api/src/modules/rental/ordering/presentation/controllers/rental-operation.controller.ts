@@ -36,26 +36,47 @@ export class RentalOperationController {
   @Auth([AuthType.Bearer])
   @Roles(UserRole.USER)
   @ApiOperation({
-    summary: 'Kiểm tra số lượng thiết bị còn theo Trip/time window',
+    summary: 'Kiểm tra tồn kho thiết bị theo chuyến đi',
     description: `
-RB-API-102.
-- Server derive occupiedWindow từ Trip/logistics + RentalPolicy.
-- Không có maxPerParticipant/maxPerGroup.
-- availableCount là snapshot tham khảo; B2 phải recheck trong transaction.
+**RB-API-102** — Kiểm tra số lượng thiết bị còn khả dụng theo Trip và khoảng thời gian thuê.
+
+- Server tự tính \`occupiedWindow\` dựa trên thông tin chuyến đi, logistics và RentalPolicy.
+- \`availableCount\` là snapshot tham khảo tại thời điểm truy vấn; số lượng thực tế sẽ được recheck trong transaction khi tạo đơn.
+- Không giới hạn số lượng theo participant hay nhóm.
 `,
   })
-  @ApiQuery({ name: 'tripId', required: true, format: 'uuid' })
-  @ApiQuery({ name: 'productId', required: true, format: 'uuid' })
-  @ApiQuery({ name: 'requestedReturnAt', required: false })
-  @ApiQuery({ name: 'returnOptionId', required: false })
-  @ApiResponse({ status: 200, description: 'Availability snapshot theo occupied window' })
-  @ApiErrorResponse(404, 'Not Found', 'RENTAL_PRODUCT_NOT_FOUND', 'Không tìm thấy product ACTIVE')
-  @ApiErrorResponse(
-    422,
-    'Unprocessable Entity',
-    'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
-    'Trip membership không đủ điều kiện thuê',
-  )
+  @ApiQuery({
+    name: 'tripId',
+    required: true,
+    type: String,
+    description: 'ID chuyến đi cần kiểm tra tồn kho',
+    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+  })
+  @ApiQuery({
+    name: 'productId',
+    required: true,
+    type: String,
+    description: 'ID sản phẩm thiết bị cần kiểm tra',
+    example: 'b2c3d4e5-6789-01bc-def0-234567890abc',
+  })
+  @ApiQuery({
+    name: 'requestedReturnAt',
+    required: false,
+    type: String,
+    description: 'Thời gian yêu cầu trả thiết bị (ISO 8601 có timezone)',
+    example: '2026-12-01T10:00:00+07:00',
+  })
+  @ApiQuery({
+    name: 'returnOptionId',
+    required: false,
+    type: String,
+    description: 'Mã tuỳ chọn trả hàng (nếu có nhiều phương thức trả)',
+    example: 'RETURN_AT_BASE',
+  })
+  @ApiResponse({ status: 200, description: 'Trả về thông tin tồn kho: số lượng khả dụng, khoảng thời gian thuê, giá tham khảo' })
+  @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
+  @ApiErrorResponse(404, 'Không tìm thấy', 'RENTAL_PRODUCT_NOT_FOUND', 'Sản phẩm thiết bị không tồn tại hoặc không ở trạng thái ACTIVE')
+  @ApiErrorResponse(422, 'Không đủ điều kiện', 'TRIP_MEMBERSHIP_NOT_ELIGIBLE', 'Chuyến đi không đủ điều kiện thuê thiết bị')
   async getAvailability(
     @Query(new ZodValidationPipe(RentalAvailabilityQuerySchema))
     query: RentalAvailabilityQueryDto,
@@ -76,49 +97,75 @@ RB-API-102.
   @ApiOperation({
     summary: 'Tạo báo giá thuê thiết bị',
     description: `
-RB-API-103.
-- Giá, cọc, chargedDays và currency do server tính.
-- Quote chỉ snapshot giá/policy/context; KHÔNG giữ quantity và KHÔNG assign EquipmentUnit.
-- Product trùng trong request được server gộp quantity deterministic.
+**RB-API-103** — Tạo báo giá (Quote) cho việc thuê thiết bị.
+
+- Giá thuê, tiền cọc, số ngày tính phí (\`chargedDays\`) và đơn vị tiền tệ do server tính toán.
+- Quote chỉ lưu snapshot giá/policy/context tại thời điểm tạo, **KHÔNG giữ số lượng** và **KHÔNG gán EquipmentUnit** cụ thể.
+- Nếu request có sản phẩm trùng, server sẽ tự gộp số lượng.
+- Quote có thời hạn hiệu lực (thường 15 phút); hết hạn thì không thể dùng để tạo đơn.
 `,
   })
   @ApiBody({
+    description: 'Thông tin tạo báo giá thuê thiết bị',
     schema: {
       type: 'object',
       required: ['tripId', 'items'],
       properties: {
-        tripId: { type: 'string', format: 'uuid' },
-        recipientTripMemberId: { type: 'string', format: 'uuid', nullable: true },
-        requestedReturnAt: { type: 'string', format: 'date-time' },
-        returnOptionId: { type: 'string' },
+        tripId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'ID chuyến đi',
+          example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+        },
+        recipientTripMemberId: {
+          type: 'string',
+          format: 'uuid',
+          nullable: true,
+          description: 'ID thành viên nhận thiết bị (mặc định là chính user)',
+          example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+        },
+        requestedReturnAt: {
+          type: 'string',
+          format: 'date-time',
+          description: 'Thời gian yêu cầu trả thiết bị (ISO 8601)',
+          example: '2026-12-01T10:00:00+07:00',
+        },
+        returnOptionId: {
+          type: 'string',
+          description: 'Mã tuỳ chọn trả hàng',
+          example: 'RETURN_AT_BASE',
+        },
         items: {
           type: 'array',
           minItems: 1,
+          description: 'Danh sách thiết bị cần thuê (tối thiểu 1)',
           items: {
             type: 'object',
             required: ['productId', 'quantity'],
             properties: {
-              productId: { type: 'string', format: 'uuid' },
-              quantity: { type: 'integer', minimum: 1 },
+              productId: {
+                type: 'string',
+                format: 'uuid',
+                description: 'ID sản phẩm thiết bị',
+                example: 'b2c3d4e5-6789-01bc-def0-234567890abc',
+              },
+              quantity: {
+                type: 'integer',
+                minimum: 1,
+                description: 'Số lượng cần thuê',
+                example: 2,
+              },
             },
           },
         },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Quote snapshot theo contract v0.2.0-final-flow' })
-  @ApiErrorResponse(
-    422,
-    'Unprocessable Entity',
-    'INSUFFICIENT_AVAILABLE_QUANTITY',
-    'Quantity vượt availableCount hiện tại',
-  )
-  @ApiErrorResponse(
-    422,
-    'Unprocessable Entity',
-    'RENTAL_CUTOFF_PASSED',
-    'Đã qua rental cutoff',
-  )
+  @ApiResponse({ status: 200, description: 'Trả về báo giá chi tiết: tổng phí thuê, tiền cọc, số ngày, thời hạn hiệu lực' })
+  @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'items phải có ít nhất 1 sản phẩm')
+  @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
+  @ApiErrorResponse(422, 'Không đủ tồn kho', 'INSUFFICIENT_AVAILABLE_QUANTITY', 'Số lượng yêu cầu vượt quá tồn kho khả dụng')
+  @ApiErrorResponse(422, 'Quá hạn đặt thuê', 'RENTAL_CUTOFF_PASSED', 'Đã qua thời hạn cho phép đặt thuê thiết bị của chuyến đi')
   async createQuote(
     @Body(new ZodValidationPipe(RentalQuoteBodySchema)) body: RentalQuoteBodyDto,
     @ActiveUser('id') userId: string,

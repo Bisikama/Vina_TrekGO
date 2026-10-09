@@ -51,7 +51,7 @@ export function calculateOccupiedWindow(context: RentalEligibilityContext, retur
 export function calculateChargedDays(startAt: Date, endAt: Date, dayCountMode: 'CEIL_24H' = 'CEIL_24H'): number {
   const durationMs = endAt.getTime() - startAt.getTime();
   if (durationMs <= 0) throw new Error('Rental endAt must be after startAt');
-  if (dayCountMode !== 'CEIL_24H') throw new Error(`Unsupported rental dayCountMode: ${dayCountMode}`);
+  if (dayCountMode !== 'CEIL_24H') throw new Error(`Unsupported rental dayCountMode: ${String(dayCountMode)}`);
   return Math.max(1, Math.ceil(durationMs / 86400000));
 }
 export function resolveRecipient(context: RentalEligibilityContext, requestedMemberId?: string): RentalRecipientOption | null {

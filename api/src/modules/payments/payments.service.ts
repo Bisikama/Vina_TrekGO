@@ -37,7 +37,14 @@ export class PaymentsService {
     private readonly rental: RentalCheckoutService,
   ) {}
 
-  async createRentalExtensionCheckout(input: any): Promise<any> { return { httpStatus: 200, body: {} } }
+  async createRentalExtensionCheckout(input: {
+    extensionId: string
+    actorUserId: string
+    idempotencyKey: string
+    paymentMethod: PaymentMethod
+  }) {
+    return this.submit(await this.rental.reserveExtension(input, this.provider.scope), input.paymentMethod, 'RENTAL')
+  }
   async createRentalCheckout(input: RentalCheckoutCommand) {
     return this.submit(await this.rental.reserve(input, this.provider.scope), input.paymentMethod, 'RENTAL')
   }

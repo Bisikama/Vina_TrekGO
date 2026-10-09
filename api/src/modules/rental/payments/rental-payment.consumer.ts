@@ -101,8 +101,8 @@ export class RentalPaymentConsumer {
           reason = 'DUPLICATE_PAYMENT'
         else if (
           order.status === 'EXPIRED' ||
-          (payment.paidAt && order.paymentExpiresAt <= payment.paidAt) ||
-          (payment.paidAt && payment.invoice.expiresAt && payment.invoice.expiresAt <= payment.paidAt)
+          order.paymentExpiresAt <= now ||
+          (payment.invoice.expiresAt && payment.invoice.expiresAt <= now)
         )
           reason = 'LATE_PAYMENT'
         else if (
@@ -132,7 +132,7 @@ export class RentalPaymentConsumer {
         ;[{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
         if (
           !reason &&
-          ((payment.paidAt && order.paymentExpiresAt <= payment.paidAt) || (payment.paidAt && payment.invoice.expiresAt && payment.invoice.expiresAt <= payment.paidAt))
+          (order.paymentExpiresAt <= now || (payment.invoice.expiresAt && payment.invoice.expiresAt <= now))
         )
           reason = 'LATE_PAYMENT'
         if (

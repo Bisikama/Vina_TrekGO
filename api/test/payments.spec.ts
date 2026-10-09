@@ -210,7 +210,7 @@ if (url) {
         let submittedRefund: string | null = null,
           refundCalls = 0
         const transId = Math.floor(Math.random() * 1000000000) + 1000000000
-        jest.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+        jest.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
           const body = JSON.parse(options!.body as string)
           const result = {
             partnerCode: body.partnerCode,
@@ -221,17 +221,18 @@ if (url) {
             responseTime: Date.now(),
             resultCode: 0,
           }
-          if (String(url).endsWith('/create'))
-            return new Response(
+          const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : 'url' in url ? url.url : String(url);
+          if (urlStr.endsWith('/create'))
+            return Promise.resolve(new Response(
               JSON.stringify({ ...result, payUrl: 'https://test-payment.momo.vn/v2/gateway/pay?t=fixture' }),
-            )
-          if (String(url).endsWith('/refund')) {
+            ))
+          if (urlStr.endsWith('/refund')) {
             refundCalls++
             submittedRefund = body.orderId
-            throw new Error('Response lost after PSP accepted refund')
+            return Promise.reject(new Error('Response lost after PSP accepted refund'))
           }
-          if (String(url).endsWith('/refund/query'))
-            return new Response(
+          if (urlStr.endsWith('/refund/query'))
+            return Promise.resolve(new Response(
               JSON.stringify({
                 ...result,
                 resultCode: submittedRefund ? 0 : 42,
@@ -247,8 +248,8 @@ if (url) {
                     ]
                   : [],
               }),
-            )
-          return new Response(JSON.stringify(result))
+            ))
+          return Promise.resolve(new Response(JSON.stringify(result)))
         })
         const created = (await post().expect(201)).body
         const id = created.paymentId
@@ -348,7 +349,7 @@ if (url) {
   it('same actor/key cannot be reused against a different owned booking', async () => {
     await post().expect(201)
     const source = await db.booking.findUniqueOrThrow({ where: { id: bookingId } })
-    const other = await db.booking.create({ data: { ...source, id: randomUUID(), status: 'CANCELLED' } })
+    const other = await db.booking.create({ data: { ...(source as any), id: randomUUID(), status: 'CANCELLED' } })
     const response = await post('checkout', { paymentMethod: 'QR' }, userId, other.id).expect(409)
     expect(response.body.error.code).toBe('IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD')
   })
@@ -978,9 +979,9 @@ if (url) {
   it('M5 full refund executes once and reports financial state without changing collection history', async () => {
     const paymentId = await confirmPayment()
     const decision = await approvedCancellation('1050')
-    const refund = await requestRefund(paymentId, decision.id, '1050', 'full')
+    const refund = await requestRefund(paymentId, decision.id, '1050', '11111111-1111-4111-8111-111111111111')
     expect(refund.status).toBe('PENDING')
-    expect((await requestRefund(paymentId, decision.id, '1050', 'another-key')).refundId).toBe(refund.refundId)
+    expect((await requestRefund(paymentId, decision.id, '1050', '22222222-2222-4222-8222-222222222222')).refundId).toBe(refund.refundId)
     await recovery.reconcileRefund(refund.refundId)
     expect(await db.refund.findUniqueOrThrow({ where: { id: refund.refundId } })).toMatchObject({
       status: 'SUCCEEDED',
@@ -1484,6 +1485,10 @@ if (url) {
       totalDeposit: deposit * quantity,
       totalAmount: (fee + deposit) * quantity,
       policySnapshot: {},
+      plannedHandoverAt: new Date('2035-01-01'),
+      plannedReturnAt: new Date('2035-01-02'),
+      occupiedStartAt: new Date('2035-01-01'),
+      occupiedEndAt: new Date('2035-01-02'),
     }
     const quote = await db.rentalQuote.create({
       data: { ...common, contextVersion: 1, expiresAt: new Date(Date.now() + 900000) },
@@ -1555,7 +1560,7 @@ if (url) {
     const location = await db.inventoryLocation.create({
       data: { code: randomUUID(), name: 'Fixture', address: 'Fixture' },
     })
-    const items = []
+    const items: any[] = []
     for (const amount of amounts) {
       const unit = await db.equipmentUnit.create({
         data: { productId: f.product.id, homeInventoryLocationId: location.id, assetCode: randomUUID() },
@@ -1640,8 +1645,8 @@ if (url) {
       payment = await payRental(f)
     const { settlement, items } = await approvedItems(f, [400, 500])
     const [a, b] = await Promise.all(items.map((i) => deposits.dispatch(i.id)))
-    expect((await deposits.dispatch(items[0].id)).refundId).toBe(a.refundId)
-    await Promise.all([applyRefund(a.refundId), applyRefund(b.refundId)])
+    expect((await deposits.dispatch(items[0]!.id))!.refundId).toBe(a!.refundId)
+    await Promise.all([applyRefund(a!.refundId), applyRefund(b!.refundId)])
     expect((await db.invoice.findUniqueOrThrow({ where: { id: payment.invoiceId } })).status).toBe('PARTIALLY_REFUNDED')
     expect(await db.depositSettlement.findUniqueOrThrow({ where: { id: settlement.id } })).toMatchObject({
       status: 'SETTLED',
@@ -1699,7 +1704,7 @@ if (url) {
       }),
     ).rejects.toMatchObject({ code: 'REFUND_SOURCE_INVALID' })
     const valid = await deposits.dispatch(items[0].id)
-    await applyRefund(valid.refundId)
+    await applyRefund(valid!.refundId)
     expect((await db.depositSettlementItem.findUniqueOrThrow({ where: { id: items[1].id } })).status).toBe(
       'REVIEW_REQUIRED',
     )
@@ -1718,11 +1723,11 @@ if (url) {
       await original(input)
       throw new Error('lost response')
     })
-    await recovery.reconcileRefund(refund.refundId)
-    expect((await db.refund.findUniqueOrThrow({ where: { id: refund.refundId } })).status).toBe('PROCESSING')
-    expect((await deposits.dispatch(items[0].id)).refundId).toBe(refund.refundId)
-    await dueRefund(refund.refundId)
-    await applyRefund(refund.refundId)
+    await recovery.reconcileRefund(refund!.refundId)
+    expect((await db.refund.findUniqueOrThrow({ where: { id: refund!.refundId } })).status).toBe('PROCESSING')
+    expect((await deposits.dispatch(items[0].id))!.refundId).toBe(refund!.refundId)
+    await dueRefund(refund!.refundId)
+    await applyRefund(refund!.refundId)
     expect(submit).toHaveBeenCalledTimes(1)
     expect((await db.depositSettlementItem.findUniqueOrThrow({ where: { id: items[0].id } })).status).toBe('SETTLED')
     expect((await db.invoice.findUniqueOrThrow({ where: { id: payment.invoiceId } })).status).toBe('PARTIALLY_REFUNDED')
@@ -1739,14 +1744,14 @@ if (url) {
       await provider.setResult('REFUND', input.merchantRefundRef, 'FAILED')
       return provider.queryRefund(input)
     })
-    await recovery.reconcileRefund(refund.refundId)
+    await recovery.reconcileRefund(refund!.refundId)
     const event = await db.paymentOutboxEvent.findUniqueOrThrow({
-      where: { deduplicationKey: `refund:${refund.refundId}:failed:v1` },
+      where: { deduplicationKey: `refund:${refund!.refundId}:failed:v1` },
     })
     await deposits.consume(event.id)
-    expect((await deposits.dispatch(items[0].id)).status).toBe('FAILED')
-    await dueRefund(refund.refundId)
-    await recovery.reconcileRefund(refund.refundId)
+    expect((await deposits.dispatch(items[0]!.id))!.status).toBe('FAILED')
+    await dueRefund(refund!.refundId)
+    await recovery.reconcileRefund(refund!.refundId)
     expect(submit).toHaveBeenCalledTimes(1)
     expect((await db.depositSettlementItem.findUniqueOrThrow({ where: { id: items[0].id } })).status).toBe(
       'REFUND_FAILED',

@@ -42,7 +42,7 @@ export class RentalExtensionService {
     const ttl = requiredPolicyInt(policy.extensionHoldMinutes, 'extensionHoldMinutes');
     if (now.getTime() + cutoff * 60000 >= order.rentalEndAt.getTime()) throw error('EXTENSION_TOO_LATE');
     if (ttl <= 0) throw error('EXTENSION_NOT_CONFIGURED');
-    const nextOccupiedUntil = new Date(returnAt.getTime() + (requiredPolicyInt(policy.returnBufferMinutes, 'returnBufferMinutes') + requiredPolicyInt(policy.cleaningBufferMinutes, 'cleaningBufferMinutes')) * 60000);
+    const nextOccupiedUntil = new Date(returnAt.getTime() + requiredPolicyInt(policy.occupiedPostReturnBufferMinutes, 'occupiedPostReturnBufferMinutes') * 60000);
     if (nextOccupiedUntil <= order.occupiedEndAt) throw error('EXTENSION_END_NOT_LATER');
     const chargedDays = calculateChargedDays(order.rentalStartAt, returnAt);
     const lineAmounts = order.rentalOrderLinesViaOrderId.map(line => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import type { RentalAvailabilityPort } from '../ports/rental-availability.port';
 import type {
   RentalCatalogPort,

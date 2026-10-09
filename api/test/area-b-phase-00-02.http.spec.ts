@@ -13,7 +13,7 @@ const url = process.env.AREAB_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 
 suite('Area B Phase 00-02 HTTP & RBAC (E2E)', () => {
-  let app: INestApplication;
+  let app: INestApplication | undefined;
   let db: PrismaService;
   let adminToken: string;
   let staffToken: string;

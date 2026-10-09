@@ -53,14 +53,16 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
     beforeAll(async () => {
       const cat = await db.rentalCategory.create({
-        data: { name: 'Tents' },
+        data: { name: 'Tents', slug: 'tents' },
       });
       const prod = await db.rentalProduct.create({
         data: {
           categoryId: cat.id,
           sku: 'TENT-01',
           name: '2-person Tent',
-          basePrice: 100000,
+          dailyPrice: 100000,
+          replacementValue: 2000000,
+          depositValue: 500000,
           status: 'ACTIVE',
         },
       });
@@ -68,7 +70,9 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
       const loc = await db.inventoryLocation.create({
         data: {
+          code: 'WH-01',
           name: 'Main Warehouse',
+          address: '123 Main St',
           status: 'ACTIVE',
         },
       });
@@ -138,14 +142,16 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
     beforeAll(async () => {
       const cat = await db.rentalCategory.create({
-        data: { name: 'Bags' },
+        data: { name: 'Bags', slug: 'bags' },
       });
       const prod = await db.rentalProduct.create({
         data: {
           categoryId: cat.id,
           sku: 'BAG-01',
           name: 'Sleeping Bag',
-          basePrice: 50000,
+          dailyPrice: 50000,
+          replacementValue: 500000,
+          depositValue: 100000,
           status: 'ACTIVE',
         },
       });
@@ -153,7 +159,9 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
       const loc = await db.inventoryLocation.create({
         data: {
+          code: 'WH-01',
           name: 'Main Warehouse',
+          address: '123 Main St',
           status: 'ACTIVE',
         },
       });
@@ -191,6 +199,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
       // Reservation from Nov 1 to Nov 5
       await db.rentalQuantityReservation.create({
         data: {
+          orderLineId: randomUUID(),
           productId,
           quantity: 2,
           occupiedFrom: new Date('2026-11-01T00:00:00Z'),
@@ -214,6 +223,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
       // Reservation from Nov 1 to Nov 5
       await db.rentalQuantityReservation.create({
         data: {
+          orderLineId: randomUUID(),
           productId,
           quantity: 3,
           occupiedFrom: new Date('2026-11-01T00:00:00Z'),

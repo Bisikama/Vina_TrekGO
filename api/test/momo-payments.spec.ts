@@ -40,9 +40,9 @@ describe('M9 MoMo wire contract (stubbed HTTPS; not a live sandbox run)', () => 
     process.env = { ...original }
   })
   const respond = (code: number, extra: object = {}) =>
-    http.mockImplementation(async (_url, options) => {
+    http.mockImplementation((_url, options) => {
       const body = JSON.parse(options.body)
-      return new Response(
+      return Promise.resolve(new Response(
         JSON.stringify({
           partnerCode: body.partnerCode,
           orderId: body.orderId,
@@ -54,7 +54,7 @@ describe('M9 MoMo wire contract (stubbed HTTPS; not a live sandbox run)', () => 
           ...extra,
         }),
         { status: 200 },
-      )
+      ))
     })
   const ipn = (extra: object = {}) => {
     const order = input.merchantRequestRef.replace(':', '-')

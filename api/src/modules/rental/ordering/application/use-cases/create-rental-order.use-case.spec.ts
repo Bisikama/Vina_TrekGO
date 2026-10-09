@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import type { RentalOrderPort } from '../ports/rental-order.port';
 import { CreateRentalOrderUseCase } from './create-rental-order.use-case';
 
