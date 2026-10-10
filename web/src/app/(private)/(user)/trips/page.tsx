@@ -1,4 +1,4 @@
-import { TripListPage } from "@/features/trips/components/TripListPage";
+import { PublicBookingTrips } from "@/features/bookings/components/PublicBookingTrips";
 
 export const metadata = {
   title: "Chuyến Đi Khởi Hành Sắp Tới - Trekking System",
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function TripsRoute() {
-  return <TripListPage />;
+  return <PublicBookingTrips />;
 }

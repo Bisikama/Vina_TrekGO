@@ -3,39 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { useEffect } from "react";
+import { useLeaderPublicTrips } from "../../hooks/useLeaderPublicTrips";
 
-const trips = [
-  {
-    name: "Chinh phục Sống Lưng Khủng Long",
-    place: "Tà Xùa",
-    date: "25/11/2024",
-    fill: "14/15",
-    progress: 93,
-    status: "Đã chốt đoàn",
-    image:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop",
-  },
-  {
-    name: "Cung Rừng Rêu Cổ Thụ",
-    place: "Pu Ta Leng",
-    date: "02/12/2024",
-    fill: "11/12",
-    progress: 92,
-    status: "Sắp chốt đoàn",
-    image:
-      "https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=500&auto=format&fit=crop",
-  },
-  {
-    name: "Băng Rừng – Săn Mây",
-    place: "Lảo Thẩn",
-    date: "14/12/2024",
-    fill: "6/15",
-    progress: 40,
-    status: "Đang mở đăng ký",
-    image:
-      "https://images.unsplash.com/photo-1464278533981-50106e6176b1?q=80&w=500&auto=format&fit=crop",
-  },
-];
 
 const initialCandidates = [
   {
@@ -114,6 +84,7 @@ function Metric({
 export function LeaderDashboard() {
   const [candidates, setCandidates] =
     useState(initialCandidates);
+  const { trips: apiTrips, isLoading } = useLeaderPublicTrips({ page: 1, pageSize: 20 });
 
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
@@ -175,7 +146,7 @@ export function LeaderDashboard() {
           </button>
 
           <Link
-            href="/leader/public-trips"
+            href="/leader/create-trip"
             className="rounded-lg bg-[#125238] px-5 py-2 text-sm font-bold text-white"
           >
             ⊕ Tạo chuyến đi mới
@@ -233,64 +204,94 @@ export function LeaderDashboard() {
             </div>
 
             <div className="space-y-3">
-              {trips.map((trip) => (
-                <article
-                  key={trip.name}
-                  className="grid gap-3 rounded-xl bg-[#edf2fc] p-3 md:grid-cols-[120px_1fr_auto] md:items-center"
-                >
-                  <div className="relative h-24 overflow-hidden rounded-lg">
-                    <Image
-                      src={trip.image}
-                      alt={trip.name}
-                      fill
-                      sizes="120px"
-                      className="object-cover"
-                    />
-                  </div>
+              {isLoading ? (
+                <div className="p-4 text-center text-sm text-slate-500">Đang tải danh sách chuyến đi...</div>
+              ) : apiTrips.length === 0 ? (
+                <div className="p-4 text-center text-sm text-slate-500">Chưa có chuyến đi nào.</div>
+              ) : (
+                apiTrips.map((trip) => {
+                  const title = trip.title || "Chuyến đi chưa đặt tên";
+                  const place = trip.trails?.[0]?.snapshotName || "Khu vực leo núi";
+                  const dateObj = new Date(trip.startAt);
+                  const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('vi-VN') : "Chưa xác định";
+                  const statusMap: Record<string, string> = {
+                    DRAFT: "Bản nháp",
+                    OPEN: "Đang mở đăng ký",
+                    FULL: "Đã chốt đoàn",
+                    CLOSED: "Đã đóng",
+                    IN_PROGRESS: "Đang diễn ra",
+                  };
+                  const statusLabel = statusMap[trip.status] || trip.status;
+                  const progress = 0; // Since we don't have current participants count yet
+                  // Random unsplash nature image based on id if no cover available
+                  const image = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop";
 
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold">
-                        {trip.name}
-                      </h3>
-
-                      <span className="rounded-full bg-emerald-200 px-2 py-1 text-[10px] font-semibold text-emerald-900">
-                        {trip.status}
-                      </span>
-                    </div>
-
-                    <p className="mt-2 text-xs text-slate-600">
-                      ◷ Khởi hành: {trip.date} · ⛰{" "}
-                      {trip.place}
-                    </p>
-
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-[#125238]"
-                          style={{
-                            width: `${trip.progress}%`,
-                          }}
+                  return (
+                    <article
+                      key={trip.id}
+                      className="grid gap-3 rounded-xl bg-[#edf2fc] p-3 md:grid-cols-[120px_1fr_auto] md:items-center"
+                    >
+                      <div className="relative h-24 overflow-hidden rounded-lg">
+                        <Image
+                          src={image}
+                          alt={title}
+                          fill
+                          sizes="120px"
+                          className="object-cover"
                         />
                       </div>
 
-                      <span className="text-xs font-semibold">
-                        {trip.fill}
-                      </span>
-                    </div>
-                  </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-bold">
+                            {title}
+                          </h3>
 
-                  <div className="flex gap-2 md:flex-col">
-                    <button className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white">
-                      Quản lý đoàn
-                    </button>
+                          <span className="rounded-full bg-emerald-200 px-2 py-1 text-[10px] font-semibold text-emerald-900">
+                            {statusLabel}
+                          </span>
+                        </div>
 
-                    <button className="rounded-lg bg-[#dce7f7] px-4 py-2 text-xs">
-                      Lịch trình
-                    </button>
-                  </div>
-                </article>
-              ))}
+                        <p className="mt-2 text-xs text-slate-600">
+                          ◷ Khởi hành: {dateStr} · ⛰{" "}
+                          {place}
+                        </p>
+
+                        <div className="mt-3 flex items-center gap-3">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-[#125238]"
+                              style={{
+                                width: `${progress}%`,
+                              }}
+                            />
+                          </div>
+
+                          <span className="text-xs font-semibold">
+                            0/{trip.capacity}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 md:flex-col">
+                        <Link
+                          href={`/leader/trips/${trip.id}`}
+                          className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white text-center"
+                        >
+                          Quản lý đoàn
+                        </Link>
+
+                        <Link 
+                          href={`/leader/create-trip/review?tripId=${trip.id}`}
+                          className="rounded-lg bg-[#dce7f7] px-4 py-2 text-xs text-center font-medium"
+                        >
+                          Lịch trình
+                        </Link>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
             </div>
           </section>
 

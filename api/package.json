@@ -6,8 +6,11 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "test:cf02": "jest --config ./test/jest-cf02.json --runInBand",
+    "configure:cf02-policy": "ts-node scripts/configure-cf02-policy.ts",
     "test:payments": "jest --config ./test/jest-payments.json --runInBand",
     "seed:cf01": "ts-node prisma/seeds/cf01.seed.ts",
+    "seed:cf01-local": "ts-node prisma/seeds/cf01-local-trekking.seed.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -93,7 +96,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    }
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

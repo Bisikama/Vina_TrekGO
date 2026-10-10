@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 5000",
-    "build": "next build",
+    "dev": "next dev --webpack -p 5000",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "download:dem": "node scripts/download-dem.mjs"
   },
   "dependencies": {
     "axios": "^1.20.0",
+    "maplibre-gl": "^6.11.2",
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",

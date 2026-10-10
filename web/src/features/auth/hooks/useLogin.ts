@@ -30,7 +30,7 @@ export const useLogin = () => {
     } catch (err: unknown) {
       let errorMessage = "Tên đăng nhập hoặc mật khẩu không đúng.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
         if (Array.isArray(errorMessage)) {
           errorMessage = errorMessage.join(", ");
         }

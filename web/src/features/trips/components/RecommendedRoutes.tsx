@@ -1,5 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { apiClient } from "@/lib/axios";
 
 interface RouteProps {
   id: string;
@@ -14,6 +18,37 @@ interface RouteProps {
   imageUrl: string;
   tag: { text: string; colorClass: string };
 }
+
+interface SystemTrailSummary {
+  id: string;
+  code: string;
+  name: string;
+  difficulty: string;
+  distanceKm: number;
+  elevationGainM?: number | null;
+  estimatedDurationMinutes?: number | null;
+  destination?: {
+    name: string;
+  } | null;
+}
+
+interface SystemTrailsResponse {
+  items: SystemTrailSummary[];
+}
+
+const FEATURED_ROUTE: RouteProps = {
+  id: "tx-khunglong",
+  name: "Núi Bà Đen - Cung Đường Cột Điện",
+  location: "Tây Ninh",
+  elevation: "986m",
+  distance: "4.5 km",
+  days: "1 Ngày",
+  difficultyInfo: "Trung bình khá",
+  rating: "4.9",
+  reviewsCount: 348,
+  imageUrl: "/hero-trekking.jpg",
+  tag: { text: "Nóc nhà Nam Bộ", colorClass: "bg-emerald-600 text-white font-bold" },
+};
 
 const RouteCard = ({ route }: { route: RouteProps }) => {
   return (
@@ -74,47 +109,59 @@ const RouteCard = ({ route }: { route: RouteProps }) => {
 };
 
 export const RecommendedRoutes = () => {
-  const routes: RouteProps[] = [
-    {
-      id: "tx-khunglong",
-      name: "Tà Xùa - Sống Lưng Khủng Long",
-      location: "Bắc Yên, Sơn La",
-      elevation: "2.865m",
-      distance: "14.5 km",
-      days: "3N - 2Đ",
-      difficultyInfo: "Trung bình",
-      rating: "4.9",
-      reviewsCount: 158,
-      imageUrl: "https://images.unsplash.com/photo-1544885834-8b63a2327de8?q=80&w=600&auto=format&fit=crop",
-      tag: { text: "Trung bình", colorClass: "bg-white text-gray-800" }
-    },
-    {
-      id: "laothan",
-      name: "Lảo Thẩn - Nóc Nhà Y Tý",
-      location: "Bát Xát, Lào Cai",
-      elevation: "2.860m",
-      distance: "16.0 km",
-      days: "2N - 1Đ",
-      difficultyInfo: "Khá",
-      rating: "4.95",
-      reviewsCount: 214,
-      imageUrl: "https://images.unsplash.com/photo-1698224536665-27a3c3e664ee?q=80&w=600&auto=format&fit=crop",
-      tag: { text: "Dễ / Trung bình", colorClass: "bg-emerald-100 text-emerald-800" }
-    },
-    {
-      id: "fansipan",
-      name: "Fansipan Cung Trạm Tôn",
-      location: "Hoàng Liên Sơn, Sa Pa",
-      elevation: "3.143m",
-      distance: "22.0 km",
-      days: "2N - 1Đ",
-      difficultyInfo: "Thử thách",
-      rating: "4.88",
-      reviewsCount: 546,
-      imageUrl: "https://images.unsplash.com/photo-1582049019623-88c9f52f4165?q=80&w=600&auto=format&fit=crop",
-      tag: { text: "Thử thách", colorClass: "bg-red-100 text-red-800" }
-    }
-  ];
+  const [routes, setRoutes] = useState<RouteProps[]>([FEATURED_ROUTE]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchSystemTrails = async () => {
+      try {
+        const { data } = await apiClient.get<SystemTrailsResponse>(
+          "/api/v1/system-trails?page=1&pageSize=20&status=ACTIVE",
+        );
+        const systemRoutes = data.items
+          .filter(
+            (trail) =>
+              trail.code !== "TRAIL_BADEN_COTDIEN" &&
+              !trail.name.toLowerCase().includes("bà đen"),
+          )
+          .map((trail, index) => ({
+            id: trail.id,
+            name: trail.name,
+            location: trail.destination?.name ?? "Việt Nam",
+            elevation: trail.elevationGainM ? `${trail.elevationGainM}m` : "—",
+            distance: `${trail.distanceKm} km`,
+            days: trail.estimatedDurationMinutes
+              ? `${Math.ceil(trail.estimatedDurationMinutes / 480)}N`
+              : "—",
+            difficultyInfo: getDifficultyLabel(trail.difficulty),
+            rating: "—",
+            reviewsCount: 0,
+            imageUrl: [
+              "https://images.unsplash.com/photo-1698224536665-27a3c3e664ee?q=80&w=600&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1582049019623-88c9f52f4165?q=80&w=600&auto=format&fit=crop",
+            ][index % 2],
+            tag: getDifficultyTag(trail.difficulty),
+          }));
+
+        if (!isCancelled) {
+          setRoutes([FEATURED_ROUTE, ...systemRoutes]);
+        }
+      } catch (error) {
+        console.error("Không thể tải danh sách cung đường hệ thống:", error);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void fetchSystemTrails();
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   return (
     <div className="mb-12">
@@ -136,11 +183,32 @@ export const RecommendedRoutes = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {routes.map((route) => (
-          <RouteCard key={route.id} route={route} />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="rounded-2xl bg-gray-100 h-48 animate-pulse" />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {routes.map((route) => (
+            <RouteCard key={route.id} route={route} />
+          ))}
+        </div>
+      )}
     </div>
   );
+};
+
+const getDifficultyLabel = (difficulty: string) => {
+  const labels: Record<string, string> = {
+    EASY: "Dễ",
+    MEDIUM: "Trung bình",
+    HARD: "Khó",
+    EXTREME: "Thử thách",
+  };
+  return labels[difficulty] ?? difficulty;
+};
+
+const getDifficultyTag = (difficulty: string): RouteProps["tag"] => {
+  if (difficulty === "EXTREME") {
+    return { text: "Thử thách", colorClass: "bg-red-100 text-red-800" };
+  }
+  return { text: getDifficultyLabel(difficulty), colorClass: "bg-emerald-100 text-emerald-800" };
 };

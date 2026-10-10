@@ -1,7 +1,12 @@
+"use client";
+
 import React from 'react';
 import Image from 'next/image';
+import { useAuthStore } from "@/features/auth";
 
 export const AdminHeader = () => {
+  const logout = useAuthStore((state) => state.logout);
+
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-40 shrink-0">
       <div className="flex items-center gap-4 text-[13px] font-medium text-gray-600">
@@ -41,9 +46,19 @@ export const AdminHeader = () => {
             <div className="text-[10px] font-medium text-gray-500">System Administrator</div>
           </div>
           <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm border-2 border-white shadow-sm relative">
-            <Image src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=100&auto=format&fit=crop" alt="Admin" fill className="rounded-full object-cover" />
+            <Image src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=100&auto=format&fit=crop" alt="Admin" fill sizes="36px" className="rounded-full object-cover" />
             <div className="absolute -bottom-1 -right-1 bg-green-700 text-white text-[8px] font-bold px-1 rounded-sm border border-white">SUPER ADMIN</div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              logout();
+              window.location.href = "/public/login";
+            }}
+            className="ml-2 cursor-pointer rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-500 transition-colors hover:bg-red-100 hover:text-red-700"
+          >
+            Đăng xuất
+          </button>
         </div>
       </div>
     </header>

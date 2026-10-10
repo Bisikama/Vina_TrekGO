@@ -10,10 +10,12 @@ export const useRefreshToken = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { refreshToken: storedRefreshToken, setTokens, logout } = useAuthStore();
+  const storedRefreshToken = useAuthStore((state) => state.refreshToken);
+  const setTokens = useAuthStore((state) => state.setTokens);
+  const logout = useAuthStore((state) => state.logout);
 
   const refresh = async (tokenOverride?: string): Promise<RefreshTokenResponse | null> => {
-    const tokenToUse = tokenOverride || storedRefreshToken || localStorage.getItem("vina_trekgo_refresh_token");
+    const tokenToUse = tokenOverride || storedRefreshToken;
 
     if (!tokenToUse) {
       setError("Không tìm thấy refresh token");
@@ -31,7 +33,7 @@ export const useRefreshToken = () => {
     } catch (err: unknown) {
       let errorMessage = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
       } else if (err instanceof Error) {
         errorMessage = err.message;
       }

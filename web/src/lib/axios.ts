@@ -31,11 +31,7 @@ const processQueue = (error: unknown, token: string | null = null) => {
 // Request Interceptor: Attach Access Token
 apiClient.interceptors.request.use(
   (config) => {
-    const token =
-      useAuthStore.getState().accessToken ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("vina_trekgo_access_token")
-        : null);
+    const token = useAuthStore.getState().accessToken;
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -54,14 +50,10 @@ apiClient.interceptors.response.use(
     // Avoid infinite loop on auth endpoints
     const isAuthEndpoint = originalRequest?.url?.includes("/auth/");
 
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
-      const refreshToken =
-        useAuthStore.getState().refreshToken ||
-        (typeof window !== "undefined"
-          ? localStorage.getItem("vina_trekgo_refresh_token")
-          : null);
+      const refreshToken = useAuthStore.getState().refreshToken;
 
       if (!refreshToken) {
         useAuthStore.getState().logout();

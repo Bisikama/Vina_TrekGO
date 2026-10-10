@@ -9,23 +9,22 @@ export const useLogout = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { refreshToken, logout: storeLogout } = useAuthStore();
+  const refreshToken = useAuthStore((state) => state.refreshToken);
+  const storeLogout = useAuthStore((state) => state.logout);
 
   const logout = async (): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
 
-    const tokenToRevoke = refreshToken || (typeof window !== "undefined" ? localStorage.getItem("vina_trekgo_refresh_token") : null);
-
     try {
-      if (tokenToRevoke) {
-        await logoutApi({ refreshToken: tokenToRevoke });
+      if (refreshToken) {
+        await logoutApi({ refreshToken });
       }
       return true;
     } catch (err: unknown) {
       let errorMessage = "Lỗi khi gửi yêu cầu đăng xuất.";
       if (err instanceof AxiosError) {
-        errorMessage = err.response?.data?.message || err.message || errorMessage;
+        errorMessage = err.response?.data?.error?.message || err.message || errorMessage;
       } else if (err instanceof Error) {
         errorMessage = err.message;
       }

@@ -11,6 +11,11 @@ const navigation = [
     icon: "queue",
   },
   {
+    href: "/staff/rentals",
+    label: "Danh mục Cho thuê",
+    icon: "catalog",
+  },
+  {
     href: "/staff/inventory",
     label: "Kho & Thiết bị",
     icon: "warehouse",
@@ -36,6 +41,8 @@ function NavIcon({ type }: { type: string }) {
   const paths: Record<string, string> = {
     queue:
       "M5 6h14M5 12h14M5 18h14M3 6h.01M3 12h.01M3 18h.01",
+    catalog:
+      "M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Zm4 2h8M8 11h8M8 15h5",
     warehouse:
       "M3 21V9l9-6 9 6v12M7 21v-8h10v8M7 16h10",
     return:
@@ -63,11 +70,7 @@ function NavIcon({ type }: { type: string }) {
   );
 }
 
-export function StaffShell({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function StaffShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -94,7 +97,6 @@ export function StaffShell({
             <p className="text-[17px] font-black leading-none text-[#123f2d]">
               TrekOps
             </p>
-
             <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
               Kho vận hệ thống
             </p>
@@ -131,15 +133,10 @@ export function StaffShell({
         <div className="mt-auto p-3">
           <div className="rounded-xl border border-blue-100 bg-[#eef4ff] p-4 text-[11px] text-slate-700">
             <div className="flex items-center justify-between">
-              <span className="font-bold">
-                Hub North-01
-              </span>
-
+              <span className="font-bold">Hub North-01</span>
               <span className="h-2 w-2 rounded-full bg-emerald-600" />
             </div>
-
             <p className="mt-2">Kho Tổng Cầu Giấy</p>
-
             <div className="mt-3 flex items-center justify-between">
               <span>RFID sẵn sàng</span>
               <span className="font-mono">1800-8735</span>
@@ -154,11 +151,9 @@ export function StaffShell({
             <span className="text-sm font-black text-[#123f2d]">
               TrekOps Kho Vận
             </span>
-
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold text-emerald-800">
               NHÂN VIÊN KHO VẬN
             </span>
-
             <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-medium text-slate-600">
               Live sync: 100% telemetry
             </span>
@@ -179,7 +174,6 @@ export function StaffShell({
                   d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
                 />
               </svg>
-
               <input
                 className="h-10 w-64 rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-xs outline-none focus:border-emerald-600"
                 placeholder="Tìm mã đơn"
@@ -204,22 +198,17 @@ export function StaffShell({
                   d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h11Zm0 0v1a3 3 0 1 1-6 0v-1"
                 />
               </svg>
-
               <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white">
                 4
               </span>
             </button>
 
             <div className="text-right">
-              <p className="text-xs font-bold">
-                Nguyễn Văn An
-              </p>
-
+              <p className="text-xs font-bold">Nguyễn Văn An</p>
               <p className="text-[10px] text-slate-500">
                 Thủ kho ca sáng • Cầu Giấy
               </p>
             </div>
-
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d5b3a] text-xs font-black text-white">
               AN
             </div>

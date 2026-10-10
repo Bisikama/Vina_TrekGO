@@ -15,7 +15,7 @@ import { BookingCancellationService } from './booking-cancellation.service'
 @Auth([AuthType.Bearer])
 export class BookingCancellationsController {
   constructor(private readonly cancellations: BookingCancellationService) {}
-  @Post(':id/cancellations')
+  @Post([':id/cancellations', ':id/cancel'])
   @HttpCode(202)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   cancel(
