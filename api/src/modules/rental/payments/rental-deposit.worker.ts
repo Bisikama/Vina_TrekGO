@@ -23,7 +23,8 @@ export class RentalDepositWorker {
     })
     if (item.refundAmount.isZero()) return this.settleRetained(itemId)
     const payment = await this.db.payment.findFirst({
-      where: { application: { status: 'APPLIED' }, invoice: { rentalOrderId: item.settlement.orderId } },
+      where: { application: { status: 'APPLIED' }, invoice: { rentalOrderId: item.settlement.orderId },
+        allocations: { some: { rentalOrderLineId: item.assignment.orderLineId, component: 'RENTAL_DEPOSIT' } } },
       include: { allocations: true },
     })
     const allocation = payment?.allocations.find(
