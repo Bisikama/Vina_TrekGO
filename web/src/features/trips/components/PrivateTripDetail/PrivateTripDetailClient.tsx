@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { usePrivateTrips } from "@/features/trips/hooks/usePrivateTrips";
 import Link from "next/link";
 import { PrivateTripMap } from "./PrivateTripMap";
+import { usePrivateTripMembership } from "@/features/trips/hooks/usePrivateTripMembership";
 
 export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initialTrip: any, initialPickups?: any[] }) {
   const { busy, invite, cancel } = usePrivateTrips();
@@ -12,6 +13,14 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
 
   // Lấy tên thay vì ID (sử dụng initialPickups lấy từ server)
   const pickupName = initialPickups?.find(p => p.id === trip?.pickupPointId)?.name || trip?.pickupPointId || "Đang tải...";
+
+  const { members, loadMembers, removeMember } = usePrivateTripMembership();
+  
+  React.useEffect(() => {
+    if (trip?.id) {
+      loadMembers(trip.id, { status: 'ACTIVE' });
+    }
+  }, [trip?.id, loadMembers]);
 
   if (!trip) {
     return (
@@ -218,6 +227,33 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                     {pickupName}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Card 4: Participants */}
+            <div className="bg-white p-5 rounded-3xl border border-gray-200/60 shadow-sm hover:border-emerald-200 transition-all flex flex-col sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl text-indigo-600 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                </div>
+                <h4 className="text-sm font-bold text-gray-900">Thành viên ({members.length})</h4>
+              </div>
+              <div className="mt-2 space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                {members.length > 0 ? members.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 overflow-hidden">
+                        {m.user?.avatarUrl ? <img src={m.user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : m.user?.fullName?.charAt(0) || "?"}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 line-clamp-1">{m.user?.fullName}</p>
+                        <p className="text-[10px] font-medium text-gray-500">{m.role === 'HOST' ? 'Trưởng đoàn' : 'Thành viên'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-xs text-center text-gray-500 py-4">Chưa có thành viên nào.</p>
+                )}
               </div>
             </div>
 

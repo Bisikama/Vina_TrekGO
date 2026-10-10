@@ -124,6 +124,16 @@ export const UserHeader = () => {
             Cung đường của tôi
           </Link>
 
+          <Link
+            href="/invite"
+            className="flex items-center gap-1.5 whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+            </svg>
+            Nhập mã mời
+          </Link>
+
           {/* Chỉ có trong UserHeader */}
           <Link
             href="/rentals?bookingId=booking_001"
@@ -207,7 +217,7 @@ export const UserHeader = () => {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200">
                 <Image
-                  src={user?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"}
+                  src={user?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"}
                   alt="User Avatar"
                   width={32}
                   height={32}
@@ -217,7 +227,7 @@ export const UserHeader = () => {
 
               <div className="hidden text-left lg:block">
                 <div className="text-[13px] font-bold leading-tight text-gray-900">
-                  {user?.firstName && user?.lastName ? `${user.lastName} ${user.firstName}` : (user?.email?.split('@')[0] || "Đang tải...")}
+                  {user?.fullName || user?.name || (user?.email?.split('@')[0] || "Đang tải...")}
                 </div>
 
                 <div className="text-[10px] font-medium text-gray-500">
