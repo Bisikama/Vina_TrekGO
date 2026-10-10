@@ -51,6 +51,12 @@ const envConfigSchema = z.object({
   MEDIA_VIDEO_MIN_HEIGHT: z.coerce.number().int().positive().default(240),
   MEDIA_VIDEO_MAX_WIDTH: z.coerce.number().int().positive().default(7680),
   MEDIA_VIDEO_MAX_HEIGHT: z.coerce.number().int().positive().default(4320),
+
+  //Mongo
+  MONGODB_URI: z.string().default('mongodb://localhost:27017/vina_trekgo_notifications'),
+
+  //Notification
+  NOTIFICATION_CONSUMER_ENABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
 })
 .superRefine((data, ctx) => {
   if (data.MEDIA_ENABLED) {

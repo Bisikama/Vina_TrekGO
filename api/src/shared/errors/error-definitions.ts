@@ -3,6 +3,7 @@ import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
 import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
+import { NOTIFICATION_ERROR_CODES } from './codes/notification.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -85,4 +86,6 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
+  // --- NOTIFICATION ---
+  [NOTIFICATION_ERROR_CODES.NOTIFICATION_NOT_FOUND]: { status: 404, message: 'Notification not found or access denied', retryable: false },
 };
