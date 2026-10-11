@@ -47,7 +47,7 @@ export class SupabaseService {
       supabaseUrl = supabaseUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '')
     }
 
-    if (supabaseUrl && (serviceKey || anonKey)) {
+    if (supabaseUrl && anonKey) {
       if (serviceKey) {
         this.adminClient = createClient(supabaseUrl, serviceKey, {
           auth: {
@@ -57,7 +57,7 @@ export class SupabaseService {
         })
       }
 
-      this.supabaseClient = createClient(supabaseUrl, (serviceKey || anonKey), {
+      this.supabaseClient = createClient(supabaseUrl, anonKey, {
         auth: {
           autoRefreshToken: false,
           persistSession: false,
