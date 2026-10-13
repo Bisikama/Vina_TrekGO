@@ -15,6 +15,7 @@ import { PaymentsModule } from './modules/payments/payments.module'
 import { NotificationsModule } from './modules/notifications/notifications.module'
 import { LeaderApplicationsModule } from './modules/leader-applications/leader-applications.module'
 import { WeatherModule } from './modules/weather/weather.module'
+import { WebsocketModule } from './websockets/websocket.module'
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { WeatherModule } from './modules/weather/weather.module'
     NotificationsModule,
     LeaderApplicationsModule,
     WeatherModule,
+    WebsocketModule,
   ],
   controllers: [],
   providers: [],

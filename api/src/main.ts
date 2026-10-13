@@ -3,6 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import envConfig from './shared/config';
 import { GlobalErrorFilter } from './shared/errors';
+import { WebsocketAdapter } from './websockets/websocket.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -50,6 +51,7 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
+  app.useWebSocketAdapter(new WebsocketAdapter(app));
 
   await app.listen(envConfig.PORT);
   console.log(`Application is running on: http://localhost:${envConfig.PORT}`);

@@ -74,6 +74,12 @@ const envConfigSchema = z
     RENTAL_PAYMENT_EVENTS_URL: z.string().url().optional(),
     RENTAL_NOTIFICATION_EVENTS_URL: z.string().url().optional(),
     RENTAL_AREA_A_EVENTS_URL: z.string().url().optional(),
+
+    // Mongo
+    MONGODB_URI: z.string().default('mongodb://localhost:27017/vina_trekgo_notifications'),
+
+    // Notification
+    NOTIFICATION_CONSUMER_ENABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   })
   .superRefine((data, ctx) => {
     if (data.MEDIA_ENABLED) {
