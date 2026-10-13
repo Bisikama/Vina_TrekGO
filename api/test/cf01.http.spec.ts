@@ -189,6 +189,7 @@ suite('CF01 HTTP boundary with real guards and database', () => {
       .useValue({ verifyToken: (token: string) => Promise.resolve(tokens.get(token) || null) })
       .compile()
     app = module.createNestApplication()
+    app.setGlobalPrefix('api/v1')
     await app.init()
   })
   afterAll(async () => {

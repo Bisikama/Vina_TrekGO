@@ -43,7 +43,9 @@ export class CheckpointController {
   ) {}
 
   @Get()
-  @Auth([AuthType.None])
+  @ApiBearerAuth('bearer')
+  @Auth([AuthType.Bearer])
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Lấy danh sách điểm mốc / trạm dừng chân trekking (có phân trang)',
     description: 'Hỗ trợ lọc theo điểm đến (destinationId), loại trạm (checkpointType), trạng thái và từ khóa tìm kiếm (name, code)',

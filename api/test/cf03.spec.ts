@@ -320,6 +320,9 @@ if (url) {
     await db.trip.update({ where: { id: trip.id }, data: { startAt: new Date(Date.now() - 1000) } })
     await expect(service.invite(actor, trip.id, 1)).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' })
     await db.user.update({ where: { id: actor.id }, data: { role: 'LEADER' } })
-    await expect(service.read(actor, trip.id)).rejects.toMatchObject({ code: 'LEADER_CANNOT_CREATE_PRIVATE_TRIP' })
+    // SF01 promotion retains ownership of a trip created before becoming LEADER.
+    await expect(service.read(actor, trip.id)).resolves.toMatchObject({ id: trip.id })
+    await db.user.update({ where: { id: actor.id }, data: { status: 'SUSPENDED' } })
+    await expect(service.read(actor, trip.id)).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
 })

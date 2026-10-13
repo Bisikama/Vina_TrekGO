@@ -7,7 +7,8 @@ export const getMediaDeliverySchema = z.object({
     'CATALOG_DETAIL',
     'EVIDENCE_THUMBNAIL',
     'EVIDENCE_PREVIEW',
-    'VIDEO_PREVIEW'
+    'VIDEO_PREVIEW',
+    'DOCUMENT_ORIGINAL'
   ]),
   format: z.enum(['AUTO', 'WEBP', 'JPEG']).optional(),
 });

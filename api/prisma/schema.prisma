@@ -725,6 +725,7 @@ enum MediaStatus {
 }
 
 enum MediaScope {
+  LEADER_CERTIFICATE
   RENTAL_PRODUCT
   CONDITION_EVIDENCE
   RETURN_EVIDENCE
@@ -768,6 +769,7 @@ enum MediaC2paStatus {
 // =========================================================
 
 model MediaAsset {
+  leaderCertificate LeaderCertificate?
   id          String  @id @default(uuid()) @db.Uuid
   ownerUserId String? @map("owner_user_id") @db.Uuid
   owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -1012,6 +1014,8 @@ model LeaderTestAttempt {
 }
 
 model LeaderCertificate {
+  mediaAssetId      String?           @unique @map("media_asset_id") @db.Uuid
+  mediaAsset        MediaAsset?       @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
   id                String            @id @default(uuid()) @db.Uuid
   userId            String            @map("user_id") @db.Uuid
   applicationId     String?           @map("application_id") @db.Uuid

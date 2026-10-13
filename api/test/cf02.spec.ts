@@ -272,8 +272,21 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
   it('scheduled expiry works without a read request', async () => {
     const a = (await create().expect(201)).body
     await db.booking.update({ where: { id: a.id }, data: { expiresAt: new Date(0) } })
-    await service.expireTick()
-    expect((await db.booking.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('EXPIRED')
+    const previousExpiryWorker = process.env.BOOKING_EXPIRY_WORKER_ENABLED
+    try {
+      process.env.BOOKING_EXPIRY_WORKER_ENABLED = 'false'
+      await service.expireTick()
+      expect((await db.booking.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('PENDING_PAYMENT')
+
+      process.env.BOOKING_EXPIRY_WORKER_ENABLED = 'true'
+      await service.expireTick()
+      expect((await db.booking.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('EXPIRED')
+      expect(await db.bookingParticipant.count({ where: { bookingId: a.id, status: 'ACTIVE' } })).toBe(0)
+      expect(await db.invoice.count({ where: { bookingId: a.id, status: 'PENDING_PAYMENT' } })).toBe(0)
+    } finally {
+      if (previousExpiryWorker === undefined) delete process.env.BOOKING_EXPIRY_WORKER_ENABLED
+      else process.env.BOOKING_EXPIRY_WORKER_ENABLED = previousExpiryWorker
+    }
   })
   it('validates count, untrusted money, ownership, trip state and policy with shared error envelope', async () => {
     for (const payload of [{ ...body(), totalAmount: 1 }, { ...body(), participantCount: 2 }, body(0)]) {

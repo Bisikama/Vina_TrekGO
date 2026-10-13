@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, Query, HttpCode, HttpStatus, ParseUUIDPipe, Header } from '@nestjs/common';
 import { CreateUploadIntentUseCase } from '../application/use-cases/create-upload-intent.use-case';
 import { CompleteUploadUseCase } from '../application/use-cases/complete-upload.use-case';
 import { GetMediaDeliveryUseCase } from '../application/use-cases/get-media-delivery.use-case';
@@ -50,6 +50,7 @@ Giới hạn & Định dạng:
 - Video: Tối đa 100MB. Hỗ trợ: video/mp4, video/quicktime, video/webm.
 
 Phân quyền (Roles/Scopes):
+- LEADER_CERTIFICATE: USER ACTIVE; IMAGE resource, JPEG/PNG/PDF; shared MEDIA_MAX_IMAGE_BYTES limit; authenticated upload. Use mediaId as SF01 fileKey.
 - RENTAL_PRODUCT: STAFF_INVENTORY / ADMIN
 - CONDITION_EVIDENCE: STAFF_INVENTORY
 - RETURN_EVIDENCE: STAFF_INVENTORY / STAFF_DELIVERY
@@ -60,7 +61,7 @@ Phân quyền (Roles/Scopes):
     schema: {
       type: 'object',
       properties: {
-        scope: { type: 'string', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE'] },
+        scope: { type: 'string', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE'] },
         resourceType: { type: 'string', enum: ['IMAGE', 'VIDEO'] },
         fileName: { type: 'string' },
         contentType: { type: 'string' },
@@ -204,6 +205,7 @@ Lưu ý Idempotent: Nếu media đã ở trạng thái READY, API vẫn trả v�
 
   @Auth([AuthType.Bearer, AuthType.None]) // Allow public access (AuthType.None allows public)
   @Get(':id/delivery')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({
     summary: 'Lấy URL phân phối Media',
     description: `
@@ -213,7 +215,7 @@ Lấy URL đã tối ưu hóa cho mục đích hiển thị (Catalog) hoặc b�
 `
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiQuery({ name: 'variant', required: true, enum: ['CATALOG_THUMBNAIL', 'CATALOG_CARD', 'CATALOG_DETAIL', 'EVIDENCE_THUMBNAIL', 'EVIDENCE_PREVIEW', 'VIDEO_PREVIEW'] })
+  @ApiQuery({ name: 'variant', required: true, enum: ['CATALOG_THUMBNAIL', 'CATALOG_CARD', 'CATALOG_DETAIL', 'EVIDENCE_THUMBNAIL', 'EVIDENCE_PREVIEW', 'VIDEO_PREVIEW', 'DOCUMENT_ORIGINAL'] })
   @ApiQuery({ name: 'format', required: false, enum: ['AUTO', 'WEBP', 'JPEG'] })
   @ApiResponse({
     status: 200,

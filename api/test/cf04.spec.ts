@@ -289,7 +289,8 @@ if (url) {
     await db.user.update({ where: { id: guest.id }, data: { role: 'USER', status: 'SUSPENDED' } })
     await request(app.getHttpServer()).post(endpoint).auth(guest.id, { type: 'bearer' }).send({}).expect(403)
     tokens.set('not-bootstrapped', { id: randomUUID(), email: 'missing@cf04.test' })
-    await request(app.getHttpServer()).post(endpoint).auth('not-bootstrapped', { type: 'bearer' }).send({}).expect(401)
+    // Shared AccessTokenGuard rejects a verified identity without a TrekGo profile with 403.
+    await request(app.getHttpServer()).post(endpoint).auth('not-bootstrapped', { type: 'bearer' }).send({}).expect(403)
   })
   it('joins once, emits one event and returns stable 200 duplicate response', async () => {
     const path = `/api/v1/private-trip-invitations/${code}/join`

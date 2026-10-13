@@ -28,7 +28,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         return await this.db.$transaction(
           async (tx) => {
             await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`
-            assertPrivateActor(await tx.user.findUnique({ where: { id: userId } }))
+            assertPrivateActor(await tx.user.findUnique({ where: { id: userId } }), true)
             if (id) await tx.$queryRaw`SELECT id FROM trips WHERE id = ${id}::uuid FOR UPDATE`
             return work(tx)
           },
@@ -60,6 +60,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
   }
   create(userId: string, input: PrivateTripInput) {
     return this.transaction(userId, undefined, async (tx) => {
+      assertPrivateActor(await tx.user.findUnique({ where: { id: userId } }))
       const startAt = new Date(input.startAt),
         endAt = new Date(input.endAt)
       assertPrivateWindow(startAt, endAt, input.capacity)
