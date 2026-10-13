@@ -12,6 +12,8 @@ interface BookingFormProps {
   onMemberChange: (index: number, field: keyof MemberData, value: string) => void;
   onEquipmentCostChange?: (cost: number) => void;
   onNextStep: () => void;
+  isSubmitting?: boolean;
+  errorMessage?: string | null;
 }
 
 export const BookingForm = ({
@@ -21,6 +23,8 @@ export const BookingForm = ({
   onMemberChange,
   onEquipmentCostChange,
   onNextStep,
+  isSubmitting = false,
+  errorMessage,
 }: BookingFormProps) => {
   useEffect(() => {
     if (onEquipmentCostChange) {
@@ -37,16 +41,12 @@ export const BookingForm = ({
         const isPrimary = index === 0;
         const memberNumber = String(index + 1).padStart(2, "0");
         const currentMember = members[index] || {
-          name: isPrimary ? "Nguyễn Hùng" : "",
-          phone: isPrimary ? "0912 345 678" : "",
-          sosContact: isPrimary
-            ? "Nguyễn Thị Mai - 0988 123 456 (Chị ruột)"
-            : "",
-          medicalNote: isPrimary
-            ? "Thể lực tốt, thường xuyên chạy bộ, không say độ cao"
-            : "",
+          name: "",
+          phone: "",
+          sosContact: "",
+          medicalNote: "",
           shirtSize: "Nam - Size L (1m68 - 1m75 | 65 - 73kg)",
-          pickupPoint: "Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội",
+          pickupPoint: trip?.location?.name || "",
         };
 
         return (
@@ -66,11 +66,16 @@ export const BookingForm = ({
               </div>
 
               <div>
-                <h3 className="font-bold text-gray-900">
-                  {isPrimary
-                    ? `${currentMember.name || "Nguyễn Hùng"} (Người đặt chỗ chính)`
-                    : `Thành viên đồng hành #${index + 1}`}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-gray-900">
+                    {isPrimary ? "Người đặt chỗ chính" : `Thành viên đồng hành #${index + 1}`}
+                  </h3>
+                  {isPrimary && (
+                    <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-100">
+                      Tự động điền từ tài khoản
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">
                   {isPrimary
                     ? "Tài khoản cá nhân đặt chỗ và người đại diện liên lạc"
@@ -171,26 +176,23 @@ export const BookingForm = ({
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Điểm đón đoàn xe Limousine giường nằm
+                  Điểm đón / Tập trung đoàn
                 </label>
                 <select
-                  value={currentMember.pickupPoint}
+                  value={currentMember.pickupPoint || (trip?.location?.name || "")}
                   onChange={(e) =>
                     onMemberChange(index, "pickupPoint", e.target.value)
                   }
                   className="w-full rounded-lg border border-gray-200 bg-gray-50 p-3 text-gray-800 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/20"
                 >
-                  <option value="Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội">
-                    Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội
+                  <option value={trip?.location?.name || "Điểm hẹn chính của đoàn"}>
+                    {trip?.location?.name ? `${trip.location.name} (Điểm hẹn chính)` : "Điểm tập kết theo lịch trình đoàn"}
                   </option>
-                  <option value="Cổng công viên Cầu Giấy (Đường Thành Thái)">
-                    Cổng công viên Cầu Giấy (Đường Thành Thái)
+                  <option value="Điểm trung tâm bến xe / Đón dọc tuyến di chuyển">
+                    Điểm trung tâm bến xe / Đón dọc tuyến di chuyển
                   </option>
-                  <option value="Trạm dừng chân Hòa Lạc (Thạch Thất)">
-                    Trạm dừng chân Hòa Lạc (Thạch Thất)
-                  </option>
-                  <option value="Điểm tập kết trực tiếp tại chân núi">
-                    Điểm tập kết trực tiếp tại chân núi
+                  <option value="Tập trung trực tiếp tại điểm xuất phát chân núi">
+                    Tập trung trực tiếp tại điểm xuất phát chân núi
                   </option>
                 </select>
               </div>
@@ -249,6 +251,15 @@ export const BookingForm = ({
         </div>
       </div>
 
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center gap-2">
+          <svg className="h-4 w-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       <div className="mt-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <Link
           href={trip?.id ? `/trips/${trip.id}` : "/trips"}
@@ -273,22 +284,35 @@ export const BookingForm = ({
         <button
           type="button"
           onClick={onNextStep}
-          className="flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 font-bold text-white shadow-md shadow-emerald-900/10 transition hover:bg-[#2f6b4f] cursor-pointer"
+          disabled={isSubmitting}
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 font-bold text-white shadow-md shadow-emerald-900/10 transition hover:bg-[#2f6b4f] cursor-pointer disabled:opacity-60"
         >
-          Tiếp tục: Rà soát & Thanh toán
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M14 5l7 7m0 0l-7 7m7-7H3"
-            />
-          </svg>
+          {isSubmitting ? (
+            <>
+              <svg className="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Đang tạo giữ chỗ...
+            </>
+          ) : (
+            <>
+              Tiếp tục: Rà soát & Thanh toán
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M14 5l7 7m0 0l-7 7m7-7H3"
+                />
+              </svg>
+            </>
+          )}
         </button>
       </div>
     </div>

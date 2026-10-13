@@ -1,36 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { TripData } from "../../data/mockTripsData";
-import { addMockBooking } from "@/features/leaders/data/mockLeaderTripStore";
 
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const [participants, setParticipants] = useState(2);
-  const [booked, setBooked] = useState(false);
   const isFullyBooked = trip.slots.booked >= trip.slots.total;
-
-  const handleBooking = () => {
-    if (!isFullyBooked) {
-      addMockBooking(trip.id, participants);
-      setBooked(true);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(
-          "trekgo-booking-info",
-          JSON.stringify({
-            tripId: trip.id,
-            participants,
-            price: trip.price,
-            title: trip.title,
-            image: trip.image,
-            date: trip.date,
-            duration: trip.duration,
-            leader: trip.leader,
-            difficulty: trip.difficulty,
-          }),
-        );
-      }
-    }
-  };
 
   return (
     <div className="sticky top-24 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -158,8 +134,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
           </div>
         </div>
 
-        <a
-          onClick={handleBooking}
+        <Link
           href={`/bookings/${trip.id}?participants=${participants}`}
           className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold transition-colors ${
             isFullyBooked
@@ -167,11 +142,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
               : "bg-[#1B5E41] text-white shadow-md shadow-emerald-900/10 hover:bg-[#154B36]"
           }`}
         >
-          {booked
-            ? "Đã ghi nhận đặt mock →"
-            : isFullyBooked
-            ? "Đã hết chỗ"
-            : "Đặt chuyến đi này"}
+          {isFullyBooked ? "Đã hết chỗ" : "Đặt chuyến đi này"}
           {!isFullyBooked && (
             <svg
               className="h-4 w-4"
@@ -187,7 +158,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
               ></path>
             </svg>
           )}
-        </a>
+        </Link>
 
         <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1B5E41]/10 py-2 text-xs font-bold text-[#1B5E41] transition-colors hover:bg-[#1B5E41]/20">
           <svg

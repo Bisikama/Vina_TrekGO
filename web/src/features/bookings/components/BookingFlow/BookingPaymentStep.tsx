@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { TripData } from "@/features/trips/data/mockTripsData";
 
 export interface MemberData {
+  id?: string;
   name: string;
   phone: string;
   sosContact: string;
@@ -19,6 +20,11 @@ interface BookingPaymentStepProps {
   equipmentCost: number;
   onBack: () => void;
   onConfirmPayment: (paymentData: { method: string }) => void;
+  bookingCode?: string;
+  remainingSeconds?: number;
+  isHoldExpired?: boolean;
+  isProcessingPayment?: boolean;
+  errorMessage?: string | null;
 }
 
 export const BookingPaymentStep = ({
@@ -28,44 +34,76 @@ export const BookingPaymentStep = ({
   equipmentCost,
   onBack,
   onConfirmPayment,
+  bookingCode,
+  remainingSeconds = 0,
+  isHoldExpired = false,
+  isProcessingPayment = false,
+  errorMessage,
 }: BookingPaymentStepProps) => {
   const [paymentMethod, setPaymentMethod] = useState<
     "vnpay" | "momo" | "card" | "vietqr"
   >("vnpay");
 
-  // Card form state
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
-
-  const [isProcessing, setIsProcessing] = useState(false);
+  const isProcessing = isProcessingPayment;
 
   // Tính toán chi phí
   const memberCount = Math.max(1, participants);
-  const unitPrice = trip?.price || 2850000;
+  const unitPrice = trip?.price || 0;
   const baseTripCost = unitPrice * memberCount;
   const vat = Math.round(baseTripCost * 0.08);
   const grandTotal = baseTripCost + vat + equipmentCost;
 
-  const tripTitle = trip?.title || "Chinh phục Đỉnh Núi Bà Đen 986m";
-  const tripCode = trip?.id || "TRK-BADEN-01";
+  const tripTitle = trip?.title || "Chuyến đi";
+  const tripCode = bookingCode || trip?.id || "";
   const dateStr = trip?.date
     ? `${trip.date.start} - ${trip.date.end}/${trip.date.year} (${trip.duration})`
-    : "5 - 10/2026 (6 ngày)";
+    : "Lịch trình mở";
 
   const handleSubmit = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      onConfirmPayment({
-        method: paymentMethod,
-      });
-    }, 700);
+    onConfirmPayment({
+      method: paymentMethod,
+    });
   };
+
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
   return (
     <div className="flex-1 space-y-6">
+      {/* Thông báo đếm ngược hạn giữ chỗ */}
+      {remainingSeconds > 0 && !isHoldExpired && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+            </span>
+            <span>Chỗ của bạn đang được tạm giữ. Vui lòng hoàn tất thanh toán trong:</span>
+          </div>
+          <div className="rounded-lg bg-amber-200/80 px-2.5 py-1 text-sm font-extrabold text-amber-950 font-mono">
+            {timeFormatted}
+          </div>
+        </div>
+      )}
+
+      {/* Cảnh báo hết hạn giữ vé */}
+      {isHoldExpired && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-xs font-bold text-red-800">
+          Thời gian giữ chỗ đã hết hạn! Vui lòng quay lại bước trước để tạo lại lượt giữ vé mới.
+        </div>
+      )}
+
+      {/* Thông báo lỗi nếu có */}
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center gap-2">
+          <svg className="h-4 w-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       {/* 1. RÀ SOÁT THÔNG TIN ĐOÀN VÀ HÀNH TRÌNH */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
@@ -140,7 +178,7 @@ export const BookingPaymentStep = ({
           </div>
         </div>
 
-        {/* Danh sách thành viên tóm tắt - Không dùng emoji icon */}
+        {/* Danh sách thành viên tóm tắt */}
         <div className="mt-4 space-y-3">
           <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700">
             Danh sách thành viên ({memberCount})
@@ -166,19 +204,19 @@ export const BookingPaymentStep = ({
                     <p>
                       <span className="text-gray-500">SĐT:</span>{" "}
                       <span className="font-semibold text-gray-800">
-                        {m.phone || "0912 345 678"}
+                        {m.phone || "Chưa cung cấp"}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-500">Điểm đón:</span>{" "}
                       <span className="text-gray-800">
-                        {m.pickupPoint || "Bến xe Mỹ Đình, Cổng số 2, Nam Từ Liêm, Hà Nội"}
+                        {m.pickupPoint || (trip?.location?.name || "Điểm tập kết của đoàn")}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-500">Size áo:</span>{" "}
                       <span className="text-gray-800">
-                        {m.shirtSize || "Nam - Size L (1m68 - 1m75 | 65 - 73kg)"}
+                        {m.shirtSize || "Tiêu chuẩn"}
                       </span>
                     </p>
                     {m.sosContact && (
@@ -244,47 +282,25 @@ export const BookingPaymentStep = ({
             </div>
           </label>
 
-          {/* VNPAY Preview QR if selected */}
+          {/* VNPAY Details if selected */}
           {paymentMethod === "vnpay" && (
-            <div className="ml-7 rounded-xl border border-blue-100 bg-blue-50/50 p-4 text-xs text-blue-900">
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <div className="flex flex-col items-center justify-center rounded-lg bg-white p-3 border border-blue-200 shadow-sm">
-                  {/* Mock QR */}
-                  <div className="h-28 w-28 bg-gray-900 p-1 flex items-center justify-center rounded">
-                    <div className="h-full w-full bg-white p-1.5 flex flex-col justify-between">
-                      <div className="flex justify-between">
-                        <div className="h-6 w-6 bg-black"></div>
-                        <div className="h-6 w-6 bg-black"></div>
-                      </div>
-                      <div className="flex justify-center items-center py-2">
-                        <span className="text-[9px] font-extrabold text-blue-800">
-                          VNPAY
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <div className="h-6 w-6 bg-black"></div>
-                        <div className="h-3 w-3 bg-black"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <span className="mt-1.5 text-[10px] font-bold text-gray-500">
-                    Mã QR VNPAY
-                  </span>
-                </div>
-                <div className="space-y-1.5 text-center sm:text-left">
-                  <p className="font-bold text-gray-900 text-sm">
-                    Quét mã để thanh toán tức thì
-                  </p>
-                  <p className="text-gray-600">
-                    1. Mở ứng dụng Ngân hàng (VCB Digibank, VietinBank iPay, MB Bank...)
-                  </p>
-                  <p className="text-gray-600">
-                    2. Chọn tính năng <strong>Quét mã VNPAY-QR</strong> và quét mã trên
-                  </p>
-                  <p className="text-gray-600">
-                    3. Bấm <strong>Xác nhận & Thanh toán ngay</strong> phía dưới để hoàn tất
-                  </p>
-                </div>
+            <div className="ml-7 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs text-blue-900 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-blue-950 text-sm">
+                <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Cổng thanh toán quốc gia VNPAY-QR</span>
+              </div>
+              <p className="text-gray-700">
+                Sau khi bấm <strong>Xác nhận & Thanh toán ngay</strong>, hệ thống sẽ kết nối trực tiếp với cổng thanh toán VNPAY để khởi tạo phiên giao dịch cho đơn đặt chỗ của bạn.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-medium text-gray-600">
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">VCB Digibank</span>
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">Techcombank</span>
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">BIDV SmartBanking</span>
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">MB Bank</span>
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">VietinBank iPay</span>
+                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">+35 Ngân hàng khác</span>
               </div>
             </div>
           )}
@@ -320,10 +336,15 @@ export const BookingPaymentStep = ({
 
           {/* MoMo sub-view */}
           {paymentMethod === "momo" && (
-            <div className="ml-7 rounded-xl border border-pink-100 bg-pink-50/50 p-4 text-xs text-pink-950">
-              <p className="font-bold">Thanh toán qua ứng dụng MoMo</p>
-              <p className="mt-1 text-gray-700">
-                Hệ thống sẽ chuyển hướng hoặc mở ứng dụng MoMo trên điện thoại để quý khách xác nhận thanh toán an toàn.
+            <div className="ml-7 rounded-xl border border-pink-100 bg-pink-50/60 p-4 text-xs text-pink-950 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-[#A50064] text-sm">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <span>Thanh toán siêu tốc qua Ví MoMo</span>
+              </div>
+              <p className="text-gray-700">
+                Hệ thống sẽ kết nối đến ứng dụng Ví MoMo để bạn quét mã thanh toán hoặc liên kết tài khoản an toàn chỉ trong 1 chạm.
               </p>
             </div>
           )}
@@ -359,61 +380,23 @@ export const BookingPaymentStep = ({
             </div>
           </label>
 
-          {/* Card Form */}
+          {/* Card Gateway notice */}
           {paymentMethod === "card" && (
-            <div className="ml-7 space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">
-                  Số thẻ tín dụng / ghi nợ <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="4123 •••• •••• 9876"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-xs text-gray-800 outline-none focus:border-emerald-600"
-                />
+            <div className="ml-7 rounded-xl border border-gray-200 bg-gray-50/80 p-4 text-xs text-gray-900 space-y-2.5">
+              <div className="flex items-center gap-2 font-bold text-gray-900 text-sm">
+                <svg className="h-4 w-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Cổng thanh toán Quốc tế chuẩn PCI-DSS & 3D-Secure</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">
-                    Tên chủ thẻ (In hoa không dấu) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="NGUYEN HUNG"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value.toUpperCase())}
-                    className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-xs text-gray-800 outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      Hết hạn (MM/YY) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="12/28"
-                      value={cardExpiry}
-                      onChange={(e) => setCardExpiry(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-xs text-gray-800 outline-none focus:border-emerald-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-gray-700">
-                      CVV <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      maxLength={4}
-                      placeholder="•••"
-                      value={cardCvv}
-                      onChange={(e) => setCardCvv(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-xs text-gray-800 outline-none focus:border-emerald-600"
-                    />
-                  </div>
-                </div>
+              <p className="text-gray-600 leading-relaxed">
+                Khi bấm <strong>Xác nhận & Thanh toán ngay</strong>, bạn sẽ được chuyển hướng an toàn tới trang thanh toán bảo mật của ngân hàng đối tác. TrekGO <strong>không</strong> lưu trữ thông tin thẻ của bạn trên hệ thống nhằm bảo vệ tuyệt đối an toàn thông tin tài khoản.
+              </p>
+              <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-gray-700">
+                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">VISA</span>
+                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">Mastercard</span>
+                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">JCB</span>
+                <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800 border border-emerald-200">Bảo mật SSL 256-bit</span>
               </div>
             </div>
           )}
@@ -443,39 +426,23 @@ export const BookingPaymentStep = ({
                   Chuyển khoản Ngân hàng 24/7 (VietQR)
                 </span>
                 <p className="text-xs text-gray-500">
-                  Chuyển tiền tự động nhận diện qua số tài khoản TrekGO
+                  Chuyển tiền tự động nhận diện qua mã QR liên ngân hàng NAPAS
                 </p>
               </div>
             </div>
           </label>
 
-          {/* VietQR Bank Info */}
+          {/* VietQR notice */}
           {paymentMethod === "vietqr" && (
-            <div className="ml-7 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg bg-white p-3 border border-emerald-100">
-                  <p className="text-gray-500">Ngân hàng thụ hưởng</p>
-                  <p className="font-bold text-gray-900">MB Bank (Ngân hàng Quân Đội)</p>
-                </div>
-                <div className="rounded-lg bg-white p-3 border border-emerald-100">
-                  <p className="text-gray-500">Số tài khoản</p>
-                  <p className="font-extrabold text-[#125238] text-sm tracking-wider">
-                    0345 6789 999
-                  </p>
-                </div>
-                <div className="rounded-lg bg-white p-3 border border-emerald-100">
-                  <p className="text-gray-500">Chủ tài khoản</p>
-                  <p className="font-bold text-gray-900">CONG TY CP TREKGO VIET NAM</p>
-                </div>
-                <div className="rounded-lg bg-white p-3 border border-emerald-100">
-                  <p className="text-gray-500">Nội dung chuyển khoản</p>
-                  <p className="font-bold text-red-600 text-sm">
-                    {`TGO ${tripCode.replace(/[^A-Za-z0-9]/g, "")}`}
-                  </p>
-                </div>
+            <div className="ml-7 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs text-emerald-950 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                <svg className="h-4 w-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Chuyển khoản liên ngân hàng tự động NAPAS 24/7</span>
               </div>
-              <p className="text-[11px] text-gray-500 italic">
-                * Vui lòng điền chính xác nội dung chuyển khoản để hệ thống xác thực tự động trong 30 giây.
+              <p className="text-gray-700">
+                Hệ thống sẽ tạo mã VietQR động chứa chính xác số tiền và mã giao dịch của đơn đặt chỗ. Bạn chỉ cần mở bất kỳ ứng dụng ngân hàng nào để quét mã chuyển tiền nhanh 24/7 mà không cần gõ thủ công số tài khoản.
               </p>
             </div>
           )}
@@ -507,9 +474,9 @@ export const BookingPaymentStep = ({
 
         <button
           type="button"
-          disabled={isProcessing}
+          disabled={isProcessing || isHoldExpired}
           onClick={handleSubmit}
-          className="flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-8 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#2f6b4f] disabled:opacity-75 cursor-pointer"
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-8 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#2f6b4f] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           {isProcessing ? (
             <>
@@ -532,7 +499,7 @@ export const BookingPaymentStep = ({
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 ></path>
               </svg>
-              Đang xử lý giao dịch...
+              Đang kết nối cổng thanh toán...
             </>
           ) : (
             <>
