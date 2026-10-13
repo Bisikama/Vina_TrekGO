@@ -333,6 +333,7 @@ export enum CheckpointMissionStatus {
 }
 
 export enum WeatherProvider {
+  OPEN_METEO = 'OPEN_METEO',
   OPENWEATHER = 'OPENWEATHER',
   TOMORROW_IO = 'TOMORROW_IO',
 }

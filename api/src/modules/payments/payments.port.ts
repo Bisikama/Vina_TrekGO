@@ -5,6 +5,7 @@ import { InvoiceCheckoutCommand, PaymentsService } from './payments.service'
 import { RentalCheckoutCommand } from '../rental/payments/rental-checkout.service'
 
 export abstract class PaymentsPort {
+  abstract createRentalExtensionCheckout(input: any): any
   abstract createRentalCheckout(input: RentalCheckoutCommand): ReturnType<PaymentsService['createRentalCheckout']>
   abstract createCheckout(input: InvoiceCheckoutCommand): ReturnType<PaymentsService['createCheckout']>
   abstract requestRefund(input: RefundCommand): Promise<ReturnType<typeof refundSummary>>
@@ -24,6 +25,7 @@ export class SharedPaymentsPort extends PaymentsPort {
   createCheckout(input: InvoiceCheckoutCommand) {
     return this.checkout.createCheckout(input)
   }
+  createRentalExtensionCheckout(input: any) { return this.checkout.createRentalExtensionCheckout(input) }
   createRentalCheckout(input: RentalCheckoutCommand) {
     return this.checkout.createRentalCheckout(input)
   }

@@ -7,3 +7,4 @@ export * from './global-error.filter';
 export * from './codes/booking.error-codes';
 export * from './codes/payment.error-codes';
 export * from './codes/notification.error-codes';
+export * from './codes/leader.error-codes';

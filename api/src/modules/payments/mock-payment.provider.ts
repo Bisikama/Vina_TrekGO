@@ -117,7 +117,7 @@ export class MockPaymentProvider extends PaymentProvider {
         kind,
         requestHash,
         request,
-        result: result as unknown as Prisma.InputJsonObject,
+        result: result,
       },
     })
     if (row.requestHash !== requestHash) throw new Error('Mock idempotency reference reused with different payload')
@@ -203,7 +203,7 @@ export class MockPaymentProvider extends PaymentProvider {
     )
       return Promise.resolve(null)
     const expected = createHmac('sha256', secret).update(timestamp).update('.').update(rawBody).digest()
-    if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) return Promise.resolve(null)
+    if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) { console.log('Sig mismatch:', { expected: expected.toString('hex'), signature, rawBodyStr: rawBody.toString('utf8') }); return Promise.resolve(null); }
     let input: unknown
     try {
       input = JSON.parse(rawBody.toString('utf8'))

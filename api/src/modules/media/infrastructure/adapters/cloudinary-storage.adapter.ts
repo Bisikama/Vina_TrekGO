@@ -67,6 +67,7 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   createUploadIntent(input: CreateUploadIntentInput): Promise<CreateProviderUploadIntentResult> {
     const paramsToSign = {
+      ...(input.immutable ? { overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf' } : {}),
       public_id: input.publicId,
       type: input.deliveryType,
       timestamp: input.timestamp,
@@ -82,6 +83,7 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
       uploadUrl,
       method: 'POST',
       formFields: {
+        ...(input.immutable ? { overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf' } : {}),
         api_key: envConfig.CLOUDINARY_API_KEY!,
         timestamp: input.timestamp,
         signature,
@@ -94,10 +96,15 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   verifyUploadResponse(input: VerifyUploadResponseInput): Promise<boolean> {
     try {
-      const expectedSignature = cloudinary.utils.api_sign_request(
-        { public_id: input.publicId, version: input.version },
-        envConfig.CLOUDINARY_API_SECRET!
-      );
+      // Upload responses use the v1 canonical string (SDK request signing now defaults to v2).
+      // Cloudinary supports SHA-1 and SHA-256 response digests independently of our
+      // SHA-256 upload request signing. Only accept those exact hex encodings.
+      const algorithm = /^[a-f0-9]{64}$/.test(input.signature) ? 'sha256'
+        : /^[a-f0-9]{40}$/.test(input.signature) ? 'sha1' : null;
+      if (!algorithm) return Promise.resolve(false);
+      const expectedSignature = crypto.createHash(algorithm)
+        .update(`public_id=${input.publicId}&version=${input.version}${envConfig.CLOUDINARY_API_SECRET!}`)
+        .digest('hex');
       
       const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
       const providedBuffer = Buffer.from(input.signature, 'utf8');
@@ -202,6 +209,15 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async createDeliveryUrl(input: CreateDeliveryUrlInput): Promise<CreateDeliveryUrlResult> {
+    if (input.variant === 'DOCUMENT_ORIGINAL') {
+      if (input.deliveryType !== 'authenticated' || !input.sourceFormat || !['jpg', 'jpeg', 'png', 'pdf'].includes(input.sourceFormat))
+        throw new AppError({ code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE });
+      const expiresAt = new Date((Math.floor(Date.now() / 1000) + envConfig.LEADER_DOCUMENT_URL_TTL_SECONDS) * 1000);
+      return { expiresAt, url: cloudinary.utils.private_download_url(input.providerPublicId, input.sourceFormat, {
+        resource_type: 'image', type: 'authenticated', attachment: true,
+        expires_at: Math.floor(expiresAt.getTime() / 1000),
+      }) };
+    }
     const transformation: Record<string, unknown> = {
       crop: 'limit',
       quality: 'auto',

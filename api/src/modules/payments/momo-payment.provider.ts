@@ -308,9 +308,9 @@ export class MomoPaymentProvider extends PaymentProvider {
       return false
     }
   }
-  async verifyWebhook(rawBody: Buffer): Promise<VerifiedProviderEvent | null> {
+  verifyWebhook(rawBody: Buffer): Promise<VerifiedProviderEvent | null> {
     try {
-      if (rawBody.length > 16384) return null
+      if (rawBody.length > 16384) return Promise.resolve(null)
       const data: Payload = JSON.parse(rawBody.toString('utf8'))
       if (
         !data ||
@@ -321,11 +321,11 @@ export class MomoPaymentProvider extends PaymentProvider {
         data.requestId !== data.orderId ||
         data.orderType !== 'momo_wallet'
       )
-        return null
+        return Promise.resolve(null)
       // Delayed signed notifications remain valid: durable inbox + domain expiry govern their application.
-      return this.paymentEvent(data, data.orderId.replace('payment-', 'payment:'))
+      return Promise.resolve(this.paymentEvent(data, data.orderId.replace('payment-', 'payment:')))
     } catch {
-      return null
+      return Promise.resolve(null)
     }
   }
 }

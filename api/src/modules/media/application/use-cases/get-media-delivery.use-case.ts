@@ -4,6 +4,7 @@ import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-c
 import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes';
 import { MEDIA_ASSET_PORT } from '../ports/media-asset.port';
 import type { MediaAssetPort } from '../ports/media-asset.port';
+import type { MediaAssetView } from '../ports/media-asset.port';
 import { MEDIA_STORAGE_PORT, MediaDeliveryVariant, MediaDeliveryFormat } from '../ports/media-storage.port';
 import type { MediaStoragePort } from '../ports/media-storage.port';
 import { MediaPolicyService } from '../policies/media.policy';
@@ -25,6 +26,16 @@ export class GetMediaDeliveryUseCase {
   ) {}
 
   async execute(input: GetMediaDeliveryUseCaseInput, activeUser?: ActiveUserData) {
+    return this.deliver(input, await this.mediaAssetPort.findById({ id: input.mediaId }), activeUser);
+  }
+
+  async executeMany(inputs: GetMediaDeliveryUseCaseInput[], activeUser: ActiveUserData) {
+    const assets = await this.mediaAssetPort.findByIds(inputs.map(i => i.mediaId));
+    const byId = new Map(assets.map(a => [a.id, a]));
+    return Promise.all(inputs.map(input => this.deliver(input, byId.get(input.mediaId) ?? null, activeUser)));
+  }
+
+  private async deliver(input: GetMediaDeliveryUseCaseInput, asset: MediaAssetView | null, activeUser?: ActiveUserData) {
     if (!envConfig.MEDIA_ENABLED) {
       throw new AppError({
         code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR,
@@ -32,7 +43,6 @@ export class GetMediaDeliveryUseCase {
       });
     }
 
-    const asset = await this.mediaAssetPort.findById({ id: input.mediaId });
     if (!asset) {
       throw new AppError({
         code: MEDIA_ERROR_CODES.MEDIA_NOT_FOUND,
@@ -53,6 +63,22 @@ export class GetMediaDeliveryUseCase {
         message: 'Media asset is missing provider data',
       });
     }
+
+    if (asset.scope === 'LEADER_CERTIFICATE') {
+      if (!activeUser || activeUser.status !== 'ACTIVE' ||
+          (asset.ownerUserId !== activeUser.id && activeUser.role !== 'ADMIN'))
+        throw new AppError({ code: 'DOCUMENT_NOT_FOUND' });
+      if (input.variant !== 'DOCUMENT_ORIGINAL' || asset.deliveryType !== 'authenticated' || !asset.format)
+        throw new AppError({ code: COMMON_ERROR_CODES.VALIDATION_ERROR, message: 'Use DOCUMENT_ORIGINAL for certificates' });
+      const result = await this.mediaStoragePort.createDeliveryUrl({
+        providerPublicId: asset.providerPublicId, resourceType: asset.resourceType,
+        deliveryType: 'authenticated', variant: 'DOCUMENT_ORIGINAL', sourceFormat: asset.format,
+      });
+      return { mediaId: asset.id, variant: input.variant, resourceType: asset.resourceType,
+        url: result.url, expiresAt: result.expiresAt?.toISOString(), format: asset.format };
+    }
+    if (input.variant === 'DOCUMENT_ORIGINAL')
+      throw new AppError({ code: COMMON_ERROR_CODES.VALIDATION_ERROR });
 
     // Check authorization based on scope
     const policy = this.mediaPolicyService.getScopePolicy(asset.scope);

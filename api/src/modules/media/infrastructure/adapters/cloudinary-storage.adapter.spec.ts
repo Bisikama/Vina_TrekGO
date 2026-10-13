@@ -1,4 +1,5 @@
 import { CloudinaryStorageAdapter } from './cloudinary-storage.adapter';
+import { createHash } from 'crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
@@ -9,6 +10,7 @@ jest.mock('cloudinary', () => ({
     config: jest.fn(),
     utils: {
       api_sign_request: jest.fn(),
+      private_download_url: jest.fn().mockReturnValue('https://example.invalid/download'),
     },
     api: {
       resource: jest.fn(),
@@ -18,6 +20,15 @@ jest.mock('cloudinary', () => ({
 
 describe('CloudinaryStorageAdapter', () => {
   let adapter: CloudinaryStorageAdapter;
+
+  it('signs immutable certificate uploads and genuinely time-limited original downloads', async () => {
+    const intent = await adapter.createUploadIntent({ publicId: 'document', resourceType: 'IMAGE', deliveryType: 'authenticated', timestamp: 123, immutable: true });
+    expect(intent.formFields).toMatchObject({ overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf', type: 'authenticated' });
+    expect(cloudinary.utils.api_sign_request).toHaveBeenCalledWith(expect.objectContaining({ overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf' }), 'secret');
+    const result = await adapter.createDeliveryUrl({ providerPublicId: 'document', resourceType: 'IMAGE', deliveryType: 'authenticated', variant: 'DOCUMENT_ORIGINAL', sourceFormat: 'pdf' });
+    expect(cloudinary.utils.private_download_url).toHaveBeenCalledWith('document', 'pdf', expect.objectContaining({ type: 'authenticated', attachment: true, expires_at: Math.floor(result.expiresAt!.getTime() / 1000) }));
+    expect(result.expiresAt!.getTime()).toBeGreaterThan(Date.now());
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -89,12 +100,17 @@ describe('CloudinaryStorageAdapter', () => {
   });
 
   describe('verifyUploadResponse', () => {
+    it('accepts provider SHA-1 v1 response digests with folder paths while requests remain SHA-256', async () => {
+      const signature = createHash('sha1').update('public_id=trekgo/leader-certificate/test&version=1secret').digest('hex');
+      expect(await adapter.verifyUploadResponse({ publicId: 'trekgo/leader-certificate/test', version: 1, signature })).toBe(true);
+      expect(await adapter.verifyUploadResponse({ publicId: 'different', version: 1, signature })).toBe(false);
+    });
     it('returns true if signature matches', async () => {
       (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue('correct-sig');
       const result = await adapter.verifyUploadResponse({
         publicId: 'test',
         version: 1,
-        signature: 'correct-sig',
+        signature: createHash('sha256').update('public_id=test&version=1secret').digest('hex'),
       });
       expect(result).toBe(true);
     });

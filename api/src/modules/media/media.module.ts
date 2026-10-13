@@ -53,6 +53,6 @@ if (envConfig.NODE_ENV !== 'production' && envConfig.MEDIA_DEV_UPLOAD_ENABLED) {
     MediaCleanupScheduler,
     MediaPolicyService,
   ],
-  exports: [MEDIA_ASSET_PORT, MEDIA_STORAGE_PORT, MEDIA_PROVENANCE_PORT, MEDIA_REFERENCE_PORT],
+  exports: [MEDIA_ASSET_PORT, MEDIA_STORAGE_PORT, MEDIA_PROVENANCE_PORT, MEDIA_REFERENCE_PORT, GetMediaDeliveryUseCase],
 })
 export class MediaModule {}
