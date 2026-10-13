@@ -17,6 +17,15 @@ describe('CreateUploadIntentUseCase', () => {
   let mockAssetPort: jest.Mocked<MediaAssetPort>;
   let mockStoragePort: jest.Mocked<MediaStoragePort>;
 
+  it('accepts private PDF certificate intents only for active USER and enforces the shared size limit', async () => {
+    const input = { scope: 'LEADER_CERTIFICATE' as const, resourceType: 'IMAGE' as const, fileName: 'cert.pdf', contentType: 'application/pdf', sizeBytes: 1000 };
+    await useCase.execute(input, mockUser('USER'));
+    expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({ immutable: true, deliveryType: 'authenticated' }));
+    await expect(useCase.execute(input, mockUser('LEADER'))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(useCase.execute({ ...input, contentType: 'text/html' }, mockUser('USER'))).rejects.toMatchObject({ code: 'MEDIA_UNSUPPORTED_MIME_TYPE' });
+    await expect(useCase.execute({ ...input, sizeBytes: envConfig.MEDIA_MAX_IMAGE_BYTES + 1 }, mockUser('USER'))).rejects.toMatchObject({ code: 'MEDIA_FILE_TOO_LARGE' });
+  });
+
   const mockUser = (role: string) => ({
     id: 'u1',
     authUserId: 'au1',

@@ -6,3 +6,4 @@ export * from './codes/media.error-codes';
 export * from './global-error.filter';
 export * from './codes/booking.error-codes';
 export * from './codes/payment.error-codes';
+export * from './codes/leader.error-codes';

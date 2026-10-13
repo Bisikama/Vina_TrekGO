@@ -43,7 +43,7 @@ export class PrivateTripController {
     'Danh sách chuyến riêng do mình tạo',
     'trips',
     200,
-    'Cần USER ACTIVE. Không phải danh sách mọi chuyến đã tham gia. Trả [] nếu chưa có chuyến.',
+    'Cần USER/LEADER ACTIVE; chỉ chuyến do mình tạo. Không phải danh sách mọi chuyến đã tham gia. Trả [] nếu chưa có chuyến.',
   )
   list(@ActiveUser() a: Actor, @Query(new ZodValidationPipe(privatePageSchema)) q: { page: number }) {
     return this.trips.read(a, undefined, q.page)

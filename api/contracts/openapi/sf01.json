@@ -1,0 +1,1487 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "TrekGo SF01 Leader Applications",
+    "version": "1.0.0",
+    "description": "Backend-only SF01 MVP and shared private certificate media dependencies."
+  },
+  "paths": {
+    "/api/v1/media/upload-intents": {
+      "post": {
+        "description": "\nLuồng xử lý (Trực tiếp từ Client lên Cloudinary):\n1. Hệ thống tạo upload intent (trả về URL & thông số form).\n2. Client dùng multipart/form-data đính kèm file binary vào field \"file\".\n3. Client đính kèm tất cả các formField nhận được từ API này.\n4. Client gọi POST TRỰC TIẾP lên uploadUrl của Cloudinary.\n5. Cloudinary trả về public_id, version, signature.\n6. Client gọi API /media/:id/complete để xác nhận.\n\nLưu ý:\n- KHÔNG nhận base64, URL ảnh, hay đường dẫn nội bộ.\n- File bytes KHÔNG đi qua server NestJS (tiết kiệm băng thông).\n\nGiới hạn & Định dạng:\n- Ảnh: Tối đa 20MB. Hỗ trợ: image/jpeg, image/png, image/webp, image/heic, image/heif.\n- Video: Tối đa 100MB. Hỗ trợ: video/mp4, video/quicktime, video/webm.\n\nPhân quyền (Roles/Scopes):\n- LEADER_CERTIFICATE: USER ACTIVE; IMAGE resource, JPEG/PNG/PDF; shared MEDIA_MAX_IMAGE_BYTES limit; authenticated upload. Use mediaId as SF01 fileKey.\n- RENTAL_PRODUCT: STAFF_INVENTORY / ADMIN\n- CONDITION_EVIDENCE: STAFF_INVENTORY\n- RETURN_EVIDENCE: STAFF_INVENTORY / STAFF_DELIVERY\n- EXCEPTION_EVIDENCE: USER / LEADER / STAFF_INVENTORY / STAFF_DELIVERY / ADMIN\n",
+        "operationId": "MediaController_createUploadIntent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "RENTAL_PRODUCT",
+                      "CONDITION_EVIDENCE",
+                      "RETURN_EVIDENCE",
+                      "EXCEPTION_EVIDENCE",
+                      "LEADER_CERTIFICATE"
+                    ]
+                  },
+                  "resourceType": {
+                    "type": "string",
+                    "enum": [
+                      "IMAGE",
+                      "VIDEO"
+                    ]
+                  },
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string"
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "captureSource": {
+                    "type": "string",
+                    "enum": [
+                      "CAMERA",
+                      "GALLERY",
+                      "FILE",
+                      "SYSTEM",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "clientCapturedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2023-10-01T12:00:00+07:00"
+                  }
+                },
+                "required": [
+                  "scope",
+                  "resourceType",
+                  "fileName",
+                  "contentType",
+                  "sizeBytes"
+                ]
+              },
+              "examples": {
+                "image": {
+                  "summary": "Yêu cầu tải ảnh (IMAGE)",
+                  "value": {
+                    "scope": "RENTAL_PRODUCT",
+                    "resourceType": "IMAGE",
+                    "fileName": "tent.jpg",
+                    "contentType": "image/jpeg",
+                    "sizeBytes": 1048576,
+                    "captureSource": "CAMERA",
+                    "clientCapturedAt": "2023-10-01T12:00:00+07:00"
+                  }
+                },
+                "video": {
+                  "summary": "Yêu cầu tải video (VIDEO)",
+                  "value": {
+                    "scope": "EXCEPTION_EVIDENCE",
+                    "resourceType": "VIDEO",
+                    "fileName": "damage.mp4",
+                    "contentType": "video/mp4",
+                    "sizeBytes": 52428800
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tạo upload intent thành công.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "data": {
+                      "mediaId": "123e4567-e89b-12d3-a456-426614174000",
+                      "status": "PENDING_UPLOAD",
+                      "expiresAt": "2023-10-01T12:15:00.000Z",
+                      "provider": "CLOUDINARY",
+                      "upload": {
+                        "uploadUrl": "https://api.cloudinary.com/v1_1/demo/image/upload",
+                        "method": "POST",
+                        "resourceType": "IMAGE",
+                        "formFields": {
+                          "api_key": "1234567890",
+                          "timestamp": 1696136400,
+                          "signature": "abcdef1234567890",
+                          "public_id": "trekgo/test/123e4567-e89b-12d3-a456-426614174000",
+                          "type": "upload"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "requestId": "uuid",
+                      "serverTime": "2023-10-01T12:00:00.000Z",
+                      "contractVersion": "0.2.0-final-flow"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực (Unauthorized)."
+          },
+          "403": {
+            "description": "Không có quyền truy cập scope này (Forbidden)."
+          },
+          "413": {
+            "description": "Dữ liệu quá lớn (Payload too large)."
+          },
+          "422": {
+            "description": "Dữ liệu đầu vào không hợp lệ (Validation failed)."
+          },
+          "502": {
+            "description": "Lỗi từ dịch vụ lưu trữ Media (Cloudinary)."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo Upload Intent (Yêu cầu tải lên)",
+        "tags": [
+          "Media"
+        ]
+      }
+    },
+    "/api/v1/media/{id}/complete": {
+      "post": {
+        "description": "\nKiểm tra tính toàn vẹn và lưu trữ metadata của file sau khi client tải trực tiếp lên Cloudinary.\n\nLưu ý Idempotent: Nếu media đã ở trạng thái READY, API vẫn trả về thành công mà không gây lỗi.\n",
+        "operationId": "MediaController_completeUpload",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "publicId": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "number"
+                  },
+                  "signature": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "publicId",
+                  "version",
+                  "signature"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Xác nhận hoàn tất tải lên thành công.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "data": {
+                      "id": "123e4567-e89b-12d3-a456-426614174000",
+                      "scope": "RENTAL_PRODUCT",
+                      "resourceType": "IMAGE",
+                      "status": "READY",
+                      "mimeType": "image/jpeg",
+                      "sizeBytes": 1048576,
+                      "width": 1920,
+                      "height": 1080,
+                      "durationMs": null,
+                      "captureSource": "CAMERA",
+                      "provenanceStatus": "DIRECT_CAPTURE",
+                      "readyAt": "2023-10-01T12:05:00.000Z"
+                    },
+                    "meta": {
+                      "requestId": "uuid",
+                      "serverTime": "2023-10-01T12:05:00.000Z",
+                      "contractVersion": "0.2.0-final-flow"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dữ liệu đầu vào không hợp lệ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "VALIDATION_ERROR",
+                      "message": "Invalid payload"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy media.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_NOT_FOUND",
+                      "message": "Media asset not found"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột trạng thái hoặc thông tin nhà cung cấp.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_INVALID_STATE",
+                      "message": "Cannot complete upload for asset in REJECTED state"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Yêu cầu tải lên đã hết hạn.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_UPLOAD_EXPIRED",
+                      "message": "Upload intent has expired"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Kích thước file vượt quá giới hạn.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_FILE_TOO_LARGE",
+                      "message": "Image exceeds maximum size"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Chữ ký tải lên không hợp lệ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_UPLOAD_SIGNATURE_INVALID",
+                      "message": "Invalid provider upload signature"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Lỗi từ nhà cung cấp dịch vụ lưu trữ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "error": {
+                      "code": "MEDIA_PROVIDER_ERROR",
+                      "message": "Provider lookup failed"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Xác nhận hoàn tất tải lên",
+        "tags": [
+          "Media"
+        ]
+      }
+    },
+    "/api/v1/media/{id}/delivery": {
+      "get": {
+        "description": "\nLấy URL đã tối ưu hóa cho mục đích hiển thị (Catalog) hoặc bằng chứng (Evidence).\nĐối với Catalog, API này có thể được gọi mà không cần token.\nĐối với Evidence, bắt buộc phải có token và quyền truy cập.\n",
+        "operationId": "MediaController_getDeliveryUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "AUTO",
+                "WEBP",
+                "JPEG"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "variant",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "CATALOG_THUMBNAIL",
+                "CATALOG_CARD",
+                "CATALOG_DETAIL",
+                "EVIDENCE_THUMBNAIL",
+                "EVIDENCE_PREVIEW",
+                "VIDEO_PREVIEW",
+                "DOCUMENT_ORIGINAL"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "data": {
+                      "mediaId": "uuid",
+                      "variant": "CATALOG_CARD",
+                      "resourceType": "IMAGE",
+                      "url": "https://...",
+                      "expiresAt": null,
+                      "format": "AUTO"
+                    },
+                    "meta": {
+                      "requestId": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa xác thực (Yêu cầu đối với Evidence)."
+          },
+          "403": {
+            "description": "Không có quyền truy cập."
+          },
+          "404": {
+            "description": "Không tìm thấy media."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy URL phân phối Media",
+        "tags": [
+          "Media"
+        ]
+      }
+    },
+    "/api/v1/leader-applications": {
+      "post": {
+        "description": "USER ACTIVE only. Upload using media scope LEADER_CERTIFICATE, complete the upload, then use mediaId as fileKey. No online test or completed-trip threshold.",
+        "operationId": "LeaderApplicationsController_submit",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivation": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "experienceSummary": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "certificates": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "typeCode": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "otherTypeName": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 94
+                        },
+                        "certificateNumber": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "issuer": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "issuedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "expiresAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "fileKey": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "typeCode",
+                        "fileKey"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "certificates"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "SUBMITTED"
+                      ]
+                    },
+                    "submittedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "certificateCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "submittedAt",
+                    "certificateCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-01 Nộp đơn ứng tuyển Leader",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    },
+    "/api/v1/leader-applications/me": {
+      "get": {
+        "description": "Available after promotion. Certificate mediaId can be used with GET /media/:id/delivery?variant=DOCUMENT_ORIGINAL.",
+        "operationId": "LeaderApplicationsController_mine",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "SUBMITTED",
+                              "UNDER_REVIEW",
+                              "APPROVED",
+                              "REJECTED",
+                              "WITHDRAWN"
+                            ]
+                          },
+                          "motivation": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "experienceSummary": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "submittedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "reviewedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "rejectionReason": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "certificates": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "typeCode": {
+                                  "type": "string"
+                                },
+                                "otherTypeName": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "certificateNumber": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "issuer": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "issuedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                },
+                                "expiresAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PENDING",
+                                    "VERIFIED",
+                                    "REJECTED",
+                                    "EXPIRED"
+                                  ]
+                                },
+                                "rejectionReason": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "verifiedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                "mediaId": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "typeCode",
+                                "otherTypeName",
+                                "certificateNumber",
+                                "issuer",
+                                "issuedAt",
+                                "expiresAt",
+                                "status",
+                                "rejectionReason",
+                                "verifiedAt",
+                                "mediaId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "motivation",
+                          "experienceSummary",
+                          "submittedAt",
+                          "reviewedAt",
+                          "rejectionReason",
+                          "certificates"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-02 Lịch sử đơn của tôi",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    },
+    "/api/v1/leader-certificate-types": {
+      "get": {
+        "operationId": "LeaderApplicationsController_types",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "label"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-03 Danh mục loại chứng chỉ",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    },
+    "/api/v1/admin/leader-applications": {
+      "get": {
+        "operationId": "LeaderApplicationsController_list",
+        "parameters": [
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Applicant name or email",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "SUBMITTED",
+                "UNDER_REVIEW",
+                "APPROVED",
+                "REJECTED",
+                "WITHDRAWN"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "SUBMITTED",
+                              "UNDER_REVIEW",
+                              "APPROVED",
+                              "REJECTED",
+                              "WITHDRAWN"
+                            ]
+                          },
+                          "applicant": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "fullName": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "fullName",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "submittedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "reviewedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "certificateCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "applicant",
+                          "submittedAt",
+                          "reviewedAt",
+                          "certificateCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-04 Admin tìm kiếm đơn ứng tuyển",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    },
+    "/api/v1/admin/leader-applications/{id}": {
+      "get": {
+        "operationId": "LeaderApplicationsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "SUBMITTED",
+                        "UNDER_REVIEW",
+                        "APPROVED",
+                        "REJECTED",
+                        "WITHDRAWN"
+                      ]
+                    },
+                    "motivation": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "experienceSummary": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "reviewedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "rejectionReason": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "applicant": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "fullName": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "fullName",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "certificates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "typeCode": {
+                            "type": "string"
+                          },
+                          "otherTypeName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "certificateNumber": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "issuer": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "issuedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "expiresAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING",
+                              "VERIFIED",
+                              "REJECTED",
+                              "EXPIRED"
+                            ]
+                          },
+                          "rejectionReason": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "verifiedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "mediaId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "downloadUrl": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "downloadExpiresAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "typeCode",
+                          "otherTypeName",
+                          "certificateNumber",
+                          "issuer",
+                          "issuedAt",
+                          "expiresAt",
+                          "status",
+                          "rejectionReason",
+                          "verifiedAt",
+                          "mediaId",
+                          "downloadUrl",
+                          "downloadExpiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "motivation",
+                    "experienceSummary",
+                    "submittedAt",
+                    "reviewedAt",
+                    "rejectionReason",
+                    "applicant",
+                    "certificates"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-05 Chi tiết đơn và URL chứng chỉ có thời hạn",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    },
+    "/api/v1/admin/leader-applications/{id}/review": {
+      "patch": {
+        "description": "Atomic certificate review, application decision, profile verification, role promotion and audit. APPROVED requires no PENDING certificates and at least one valid VERIFIED certificate. Rejection requires a reason.",
+        "operationId": "LeaderApplicationsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVED",
+                      "REJECTED"
+                    ]
+                  },
+                  "rejectionReason": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "certificateReviews": {
+                    "default": [],
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "certificateId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "VERIFIED",
+                            "REJECTED"
+                          ]
+                        },
+                        "rejectionReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "certificateId",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "decision",
+                  "certificateReviews"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "applicationId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "APPROVED",
+                        "REJECTED"
+                      ]
+                    },
+                    "userRole": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "LEADER"
+                      ]
+                    },
+                    "reviewedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "applicationId",
+                    "status",
+                    "userRole",
+                    "reviewedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR: invalid DTO; shared error/meta envelope."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "403": {
+            "description": "FORBIDDEN / LEADER_CANNOT_APPLY"
+          },
+          "404": {
+            "description": "APPLICATION_NOT_FOUND / DOCUMENT_NOT_FOUND"
+          },
+          "409": {
+            "description": "APPLICATION_ALREADY_PENDING / APPLICATION_NOT_REVIEWABLE"
+          },
+          "422": {
+            "description": "Certificate or review business rule failed; read error.code and error.details."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "LR-06 Duyệt hoặc từ chối đơn",
+        "tags": [
+          "Leader applications SF01"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "name": "Authorization",
+        "description": "Nhập access token",
+        "in": "header"
+      }
+    }
+  }
+}
