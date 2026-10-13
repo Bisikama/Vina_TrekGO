@@ -13,6 +13,10 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.BOOKING_POLICY_INVALID]: { status: 503, message: 'Booking policy configuration is invalid or ambiguous', retryable: false },
+  [B.BOOKING_POLICY_NOT_FOUND]: { status: 404, message: 'Booking policy not found', retryable: false },
+  [B.BOOKING_POLICY_IMMUTABLE]: { status: 409, message: 'Published policies cannot be edited or deleted; create a new draft', retryable: false },
+  [B.BOOKING_POLICY_VERSION_CONFLICT]: { status: 409, message: 'Policy changed or a newer version was published; reload or create a new draft', retryable: false },
   [L.LEADER_CANNOT_APPLY]: { status: 403, message: 'Leader accounts cannot submit applications', retryable: false },
   [L.APPLICATION_NOT_FOUND]: { status: 404, message: 'Application not found', retryable: false },
   [L.DOCUMENT_NOT_FOUND]: { status: 404, message: 'Private document not found', retryable: false },

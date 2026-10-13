@@ -7,7 +7,8 @@ import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as P } from '..
 import { paymentHash } from '../payments/payment-utils'
 import { databaseTime, expireTripHolds, occupiedSeats } from './booking-capacity'
 import type { BookingPage, CreateBookingInput, UpdateParticipantsInput } from './booking.dto'
-import { bookingCancellationPolicySchema } from './booking-policy'
+import { refundPercentAt } from './booking-policy'
+import { BookingPolicyService, lockBookingPolicy } from './booking-policy.service'
 
 function fail(code: string, details?: Record<string, unknown>): never {
   throw AppError.fromCode(code, { details })
@@ -30,7 +31,7 @@ const detailInclude = {
 export class BookingsService {
   private running = false
   private readonly logger = new Logger(BookingsService.name)
-  constructor(private readonly db: PrismaService) {}
+  constructor(private readonly db: PrismaService, private readonly policies: BookingPolicyService) {}
 
   async create(tripId: string, userId: string, key: string, input: CreateBookingInput) {
     if (!userId) fail('UNAUTHENTICATED')
@@ -46,6 +47,7 @@ export class BookingsService {
       await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
       const trip = await tx.trip.findUnique({ where: { id: tripId } })
       if (!trip || trip.tripType !== 'PUBLIC' || !trip.publishedAt) fail(B.NOT_FOUND)
+      await lockBookingPolicy(tx)
       const now = await databaseTime(tx)
       await expireTripHolds(tx, tripId, now)
       if (trip.status !== 'OPEN' || trip.startAt <= now) fail(B.INVALID_STATE_TRANSITION)
@@ -55,16 +57,7 @@ export class BookingsService {
       if (active) fail(B.ACTIVE_BOOKING_EXISTS, { bookingId: active.id })
       const remaining = trip.maxPax - (await occupiedSeats(tx, tripId, now))
       if (input.participantCount > remaining) fail(B.CAPACITY_CONFLICT, { remainingSlots: Math.max(0, remaining) })
-      const policy = await tx.bookingPolicy.findFirst({
-        where: {
-          isActive: true,
-          effectiveFrom: { lte: now },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          ...(process.env.BOOKING_POLICY_CODE ? { policyCode: process.env.BOOKING_POLICY_CODE } : {}),
-        },
-        orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }, { id: 'asc' }],
-      })
-      if (!policy || policy.holdTtlMinutes < 1) fail(B.BOOKING_POLICY_UNAVAILABLE)
+      const policy = await this.policies.resolve(tx, now)
       if (!trip.pickupPointId || !trip.pricePerPax?.isPositive() || !trip.pricePerPax.isInteger())
         fail(B.INVALID_STATE_TRANSITION)
       const total = trip.pricePerPax.mul(input.participantCount)
@@ -251,9 +244,8 @@ export class BookingsService {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
     const payment = payments.find((p) => p.application?.status === 'APPLIED') ?? payments[0]
     const confirmed = ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED'].includes(booking.status)
-    const cancellationPolicy = bookingCancellationPolicySchema.safeParse(booking.policySnapshot)
-    const hoursBeforeStart = (booking.trip.startAt.getTime() - Date.now()) / 3600000
-    const tiers = cancellationPolicy.success ? cancellationPolicy.data.cancellationRules.tiers : []
+    const now = new Date()
+    const hoursBeforeStart = (booking.trip.startAt.getTime() - now.getTime()) / 3600000
     const canCancel =
       hoursBeforeStart > 0 &&
       (booking.status === 'PENDING_PAYMENT' ||
@@ -262,8 +254,7 @@ export class BookingsService {
           payment.status === 'SUCCEEDED' &&
           payment.reconcileStatus !== 'NEEDS_REVIEW' &&
           !payment.refundsViaPaymentId.some((r) => r.reconcileStatus === 'NEEDS_REVIEW') &&
-          new Set(tiers.map((t) => t.minHoursBeforeStart)).size === tiers.length &&
-          tiers.some((t) => hoursBeforeStart >= t.minHoursBeforeStart)))
+          refundPercentAt(booking.policySnapshot, booking.trip.startAt, now) !== null))
     const editable =
       booking.status === 'PENDING_PAYMENT' &&
       ['OPEN', 'FULL'].includes(booking.trip.status) &&
