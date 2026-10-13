@@ -17,6 +17,11 @@ export class MediaPolicyService {
   private readonly allowedVideoFormats = ['mp4', 'mov', 'webm'];
 
   private readonly scopePolicies: Record<MediaScopeValue, ScopePolicy> = {
+    LEADER_CERTIFICATE: {
+      allowedResourceTypes: ['IMAGE'], // Cloudinary image resource supports multipage PDF.
+      requiresProvenance: false,
+      deliveryType: 'authenticated',
+    },
     RENTAL_PRODUCT: {
       allowedResourceTypes: ['IMAGE'],
       requiresProvenance: false,
@@ -56,6 +61,14 @@ export class MediaPolicyService {
 
     // 2. Format validation
     const format = metadata.format.toLowerCase();
+    if (scope === 'LEADER_CERTIFICATE') {
+      if (metadata.resourceType !== 'IMAGE' || metadata.deliveryType !== 'authenticated' ||
+          !['jpg', 'jpeg', 'png', 'pdf'].includes(format) || !Number.isSafeInteger(metadata.bytes) || metadata.bytes <= 0) {
+        throw new AppError({ code: MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_FORMAT, message: 'Private JPEG, PNG or PDF document required' });
+      }
+      // Provider identifies the actual format; PDF pages do not use photo dimension rules.
+      if (format === 'pdf') return;
+    }
     if (resourceType === 'IMAGE') {
       if (!this.allowedImageFormats.includes(format)) {
         throw new AppError({
