@@ -34,10 +34,39 @@ async function generate() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  let document = SwaggerModule.createDocument(app, config);
+  const sf01 = process.argv.includes('--sf01');
+  if (sf01) {
+    const selected = new Set([
+      '/api/v1/leader-applications', '/api/v1/leader-applications/me', '/api/v1/leader-certificate-types',
+      '/api/v1/admin/leader-applications', '/api/v1/admin/leader-applications/{id}',
+      '/api/v1/admin/leader-applications/{id}/review', '/api/v1/media/upload-intents',
+      '/api/v1/media/{id}/complete', '/api/v1/media/{id}/delivery',
+    ]);
+    const paths = Object.fromEntries(Object.entries(document.paths).filter(([route]) => selected.has(route)));
+    if (Object.keys(paths).length !== selected.size) throw new Error('Missing SF01/media routes');
+    const needed = new Set<string>();
+    const collect = (value: unknown) => {
+      for (const match of JSON.stringify(value).matchAll(/#\/components\/schemas\/([^"\s]+)/g)) needed.add(match[1]);
+    };
+    collect(paths);
+    const schemas: NonNullable<NonNullable<typeof document.components>['schemas']> = {};
+    for (const name of needed) {
+      const entry = document.components?.schemas?.[name];
+      if (!entry) throw new Error(`Missing OpenAPI schema ${name}`);
+      schemas[name] = entry;
+      collect(entry);
+    }
+    document = {
+      openapi: document.openapi,
+      info: { title: 'TrekGo SF01 Leader Applications', version: '1.0.0', description: 'Backend-only SF01 MVP and shared private certificate media dependencies.' },
+      paths,
+      components: { schemas, securitySchemes: { bearer: document.components!.securitySchemes!.bearer } },
+    };
+  }
   
   const isDev = process.env.NODE_ENV === 'development';
-  const filename = isDev ? 'openapi.dev.json' : 'openapi.json';
+  const filename = sf01 ? 'sf01.json' : isDev ? 'openapi.dev.json' : 'openapi.json';
   const outputPath = path.join(__dirname, '..', 'contracts', 'openapi', filename);
   
   // Ensure directory exists

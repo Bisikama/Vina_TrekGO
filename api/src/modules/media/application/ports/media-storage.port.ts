@@ -3,6 +3,7 @@ import { MediaResourceTypeValue } from './media-asset.port';
 export const MEDIA_STORAGE_PORT = Symbol('MEDIA_STORAGE_PORT');
 
 export interface CreateUploadIntentInput {
+  immutable?: boolean;
   publicId: string;
   resourceType: MediaResourceTypeValue;
   deliveryType: 'upload' | 'authenticated';
@@ -19,6 +20,8 @@ export interface CreateProviderUploadIntentResult {
     signature: string;
     public_id: string;
     type: string;
+    overwrite?: boolean;
+    allowed_formats?: string;
   };
   resourceType: MediaResourceTypeValue;
 }
@@ -50,6 +53,7 @@ export interface ProviderAssetMetadata {
 }
 
 export type MediaDeliveryVariant = 
+  | 'DOCUMENT_ORIGINAL'
   | 'CATALOG_THUMBNAIL' 
   | 'CATALOG_CARD' 
   | 'CATALOG_DETAIL' 
@@ -67,6 +71,7 @@ export interface EnsureDerivativesInput {
 }
 
 export interface CreateDeliveryUrlInput {
+  sourceFormat?: string;
   providerPublicId: string;
   resourceType: MediaResourceTypeValue;
   deliveryType: 'upload' | 'authenticated';

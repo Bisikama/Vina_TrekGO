@@ -1,8 +1,10 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes';
+import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
 import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
+import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -11,6 +13,18 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [L.LEADER_CANNOT_APPLY]: { status: 403, message: 'Leader accounts cannot submit applications', retryable: false },
+  [L.APPLICATION_NOT_FOUND]: { status: 404, message: 'Application not found', retryable: false },
+  [L.DOCUMENT_NOT_FOUND]: { status: 404, message: 'Private document not found', retryable: false },
+  [L.APPLICATION_ALREADY_PENDING]: { status: 409, message: 'An application is already pending', retryable: false },
+  [L.APPLICATION_NOT_REVIEWABLE]: { status: 409, message: 'Application is no longer reviewable', retryable: false },
+  [L.CERTIFICATE_REQUIRED]: { status: 422, message: 'At least one certificate is required', retryable: false },
+  [L.INVALID_CERTIFICATE_TYPE]: { status: 422, message: 'Invalid certificate type or OTHER description', retryable: false },
+  [L.INVALID_CERTIFICATE_FILE]: { status: 422, message: 'Certificate file must be ready, private, unused and owned by the applicant', retryable: false },
+  [L.INVALID_CERTIFICATE_REVIEW]: { status: 422, message: 'Certificate reviews must be unique and belong to this application', retryable: false },
+  [L.CERTIFICATE_EXPIRED]: { status: 422, message: 'No verified certificate is currently valid', retryable: false },
+  [L.REJECTION_REASON_REQUIRED]: { status: 422, message: 'A rejection reason is required', retryable: false },
+  [L.NO_VALID_CERTIFICATE]: { status: 422, message: 'Review all pending certificates and verify at least one valid certificate', retryable: false },
   [B.ACTIVE_BOOKING_EXISTS]: { status: 409, message: 'An active booking already exists for this trip', retryable: false },
   [B.BOOKING_VERSION_CONFLICT]: { status: 409, message: 'Booking changed; reload before updating participants', retryable: false },
   [B.BOOKING_POLICY_UNAVAILABLE]: { status: 503, message: 'An effective booking policy is required', retryable: true },
@@ -85,4 +99,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
+  [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: { status: 400, message: 'Insufficient available quantity for rental', retryable: false },
+  [RO.QUOTE_NOT_ACTIVE]: { status: 400, message: 'Quote is no longer active', retryable: false },
+  [RO.QUOTE_EXPIRED]: { status: 400, message: 'Quote has expired', retryable: false },
 };

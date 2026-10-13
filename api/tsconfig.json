@@ -26,5 +26,6 @@
     "require": [
       "tsconfig-paths/register"
     ]
-  }
+  },
+  "exclude": ["node_modules", "docs"]
 }

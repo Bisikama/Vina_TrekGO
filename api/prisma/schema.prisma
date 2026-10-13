@@ -725,6 +725,7 @@ enum MediaStatus {
 }
 
 enum MediaScope {
+  LEADER_CERTIFICATE
   RENTAL_PRODUCT
   CONDITION_EVIDENCE
   RETURN_EVIDENCE
@@ -768,6 +769,7 @@ enum MediaC2paStatus {
 // =========================================================
 
 model MediaAsset {
+  leaderCertificate LeaderCertificate?
   id          String  @id @default(uuid()) @db.Uuid
   ownerUserId String? @map("owner_user_id") @db.Uuid
   owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -830,19 +832,21 @@ model MediaAsset {
 // =========================================================
 
 model User {
-  trailPurchaseRequests TrailPurchaseRequest[]
-  id            String     @id @default(uuid()) @db.Uuid
+  custodyTransfersViaFromStaffId CustodyTransfer[]      @relation("R_CustodyTransfer_from_staff_id")
+  custodyTransfersViaToStaffId   CustodyTransfer[]      @relation("R_CustodyTransfer_to_staff_id")
+  trailPurchaseRequests          TrailPurchaseRequest[]
+  id                             String                 @id @default(uuid()) @db.Uuid
   /// Supabase Auth user id
-  authUserId    String     @unique @map("auth_user_id") @db.Uuid
-  email         String     @unique @db.VarChar(320)
-  fullName      String     @map("full_name") @db.VarChar(150)
-  phone         String?    @db.VarChar(30)
-  avatarUrl     String?    @map("avatar_url")
-  role          UserRole   @default(USER)
-  status        UserStatus @default(ACTIVE)
-  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deactivatedAt DateTime?  @map("deactivated_at") @db.Timestamptz(6)
+  authUserId                     String                 @unique @map("auth_user_id") @db.Uuid
+  email                          String                 @unique @db.VarChar(320)
+  fullName                       String                 @map("full_name") @db.VarChar(150)
+  phone                          String?                @db.VarChar(30)
+  avatarUrl                      String?                @map("avatar_url")
+  role                           UserRole               @default(USER)
+  status                         UserStatus             @default(ACTIVE)
+  createdAt                      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deactivatedAt                  DateTime?              @map("deactivated_at") @db.Timestamptz(6)
 
   leaderProfileViaUserId                 LeaderProfile?              @relation("R_LeaderProfile_user_id")
   leaderProfilesViaVerifiedBy            LeaderProfile[]             @relation("R_LeaderProfile_verified_by")
@@ -909,6 +913,8 @@ model User {
   notificationsViaUserId                 Notification[]              @relation("R_Notification_user_id")
   auditLogsViaUserId                     AuditLog[]                  @relation("R_AuditLog_user_id")
   mediaAssetsViaOwnerUserId              MediaAsset[]                @relation("R_MediaAsset_owner_user_id")
+
+  returnCustodyTransfersViaFromStaffId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_fromStaffId")
 
   @@index([role])
   @@index([status])
@@ -1008,6 +1014,8 @@ model LeaderTestAttempt {
 }
 
 model LeaderCertificate {
+  mediaAssetId      String?           @unique @map("media_asset_id") @db.Uuid
+  mediaAsset        MediaAsset?       @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
   id                String            @id @default(uuid()) @db.Uuid
   userId            String            @map("user_id") @db.Uuid
   applicationId     String?           @map("application_id") @db.Uuid
@@ -1146,25 +1154,25 @@ model TrailSubmission {
 }
 
 model SystemTrail {
-  purchaseRequests TrailPurchaseRequest[]
-  id                       String          @id @default(uuid()) @db.Uuid
-  destinationId            String          @map("destination_id") @db.Uuid
-  sourceSubmissionId       String?         @map("source_submission_id") @db.Uuid
-  code                     String          @unique @db.VarChar(50)
-  name                     String          @db.VarChar(200)
+  purchaseRequests         TrailPurchaseRequest[]
+  id                       String                 @id @default(uuid()) @db.Uuid
+  destinationId            String                 @map("destination_id") @db.Uuid
+  sourceSubmissionId       String?                @map("source_submission_id") @db.Uuid
+  code                     String                 @unique @db.VarChar(50)
+  name                     String                 @db.VarChar(200)
   description              String?
   difficulty               DifficultyLevel
-  distanceKm               Decimal         @map("distance_km") @db.Decimal(8, 2)
-  elevationGainM           Int?            @map("elevation_gain_m")
-  estimatedDurationMinutes Int?            @map("estimated_duration_minutes")
-  routeGeojson             Json            @map("route_geojson")
-  price                    Decimal         @default(0) @db.Decimal(12, 2)
-  status                   RecordStatus    @default(ACTIVE)
-  createdBy                String          @map("created_by") @db.Uuid
-  version                  Int             @default(1)
-  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt               DateTime?       @map("archived_at") @db.Timestamptz(6)
+  distanceKm               Decimal                @map("distance_km") @db.Decimal(8, 2)
+  elevationGainM           Int?                   @map("elevation_gain_m")
+  estimatedDurationMinutes Int?                   @map("estimated_duration_minutes")
+  routeGeojson             Json                   @map("route_geojson")
+  price                    Decimal                @default(0) @db.Decimal(12, 2)
+  status                   RecordStatus           @default(ACTIVE)
+  createdBy                String                 @map("created_by") @db.Uuid
+  version                  Int                    @default(1)
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt               DateTime?              @map("archived_at") @db.Timestamptz(6)
 
   destination      Destination      @relation("R_SystemTrail_destination_id", fields: [destinationId], references: [id])
   sourceSubmission TrailSubmission? @relation("R_SystemTrail_source_submission_id", fields: [sourceSubmissionId], references: [id])
@@ -1181,17 +1189,17 @@ model SystemTrail {
 
 model TrailAccess {
   purchaseRequests TrailPurchaseRequest[]
-  id            String            @id @default(uuid()) @db.Uuid
-  userId        String            @map("user_id") @db.Uuid
-  systemTrailId String            @map("system_trail_id") @db.Uuid
-  sourceType    TrailAccessSource @default(PURCHASE) @map("source_type")
-  priceSnapshot Decimal           @default(0) @map("price_snapshot") @db.Decimal(12, 2)
-  status        TrailAccessStatus @default(PENDING_PAYMENT)
-  purchasedAt   DateTime?         @map("purchased_at") @db.Timestamptz(6)
-  activatedAt   DateTime?         @map("activated_at") @db.Timestamptz(6)
-  revokedAt     DateTime?         @map("revoked_at") @db.Timestamptz(6)
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String                 @id @default(uuid()) @db.Uuid
+  userId           String                 @map("user_id") @db.Uuid
+  systemTrailId    String                 @map("system_trail_id") @db.Uuid
+  sourceType       TrailAccessSource      @default(PURCHASE) @map("source_type")
+  priceSnapshot    Decimal                @default(0) @map("price_snapshot") @db.Decimal(12, 2)
+  status           TrailAccessStatus      @default(PENDING_PAYMENT)
+  purchasedAt      DateTime?              @map("purchased_at") @db.Timestamptz(6)
+  activatedAt      DateTime?              @map("activated_at") @db.Timestamptz(6)
+  revokedAt        DateTime?              @map("revoked_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user        User        @relation("R_TrailAccess_user_id", fields: [userId], references: [id])
   systemTrail SystemTrail @relation("R_TrailAccess_system_trail_id", fields: [systemTrailId], references: [id])
@@ -1205,18 +1213,18 @@ model TrailAccess {
 }
 
 model Checkpoint {
-  id                  String       @id @default(uuid()) @db.Uuid
-  destinationId       String       @map("destination_id") @db.Uuid
-  code                String?      @unique @db.VarChar(50)
-  name                String       @db.VarChar(200)
+  id                  String          @id @default(uuid()) @db.Uuid
+  destinationId       String          @map("destination_id") @db.Uuid
+  code                String?         @unique @db.VarChar(50)
+  name                String          @db.VarChar(200)
   description         String?
-  latitude            Decimal      @db.Decimal(10, 7)
-  longitude           Decimal      @db.Decimal(10, 7)
-  defaultRadiusMeters Int          @default(50) @map("default_radius_meters")
+  latitude            Decimal         @db.Decimal(10, 7)
+  longitude           Decimal         @db.Decimal(10, 7)
+  defaultRadiusMeters Int             @default(50) @map("default_radius_meters")
   checkpointType      CheckpointType? @map("checkpoint_type")
-  status              RecordStatus @default(ACTIVE)
-  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status              RecordStatus    @default(ACTIVE)
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   destination Destination @relation("R_Checkpoint_destination_id", fields: [destinationId], references: [id])
 
@@ -1649,8 +1657,8 @@ model BookingPolicy {
 /// PRIVATE Trips use TripMember membership and do not create paid Bookings.
 /// Rental eligibility requires a CONFIRMED Booking of a PUBLIC Trip.
 model Booking {
-  createIdempotencyKey        String?       @unique @map("create_idempotency_key") @db.Char(64)
-  createRequestHash           String?       @map("create_request_hash") @db.Char(64)
+  createIdempotencyKey       String?       @unique @map("create_idempotency_key") @db.Char(64)
+  createRequestHash          String?       @map("create_request_hash") @db.Char(64)
   id                         String        @id @default(uuid()) @db.Uuid
   tripId                     String        @map("trip_id") @db.Uuid
   userId                     String        @map("user_id") @db.Uuid
@@ -1785,15 +1793,16 @@ model BookingOutboxEvent {
 /// Physical storage/operation place for rental inventory.
 /// Physical storage/operation place; the domain can support more than one kind of inventory location later.
 model InventoryLocation {
-  id        String       @id @default(uuid()) @db.Uuid
-  code      String       @unique @db.VarChar(60)
-  name      String       @db.VarChar(160)
-  address   String
-  latitude  Decimal?     @db.Decimal(10, 7)
-  longitude Decimal?     @db.Decimal(10, 7)
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  custodyTransfersViaFromInventoryLocationId CustodyTransfer[] @relation("R_CustodyTransfer_from_inventory_location_id")
+  id                                         String            @id @default(uuid()) @db.Uuid
+  code                                       String            @unique @db.VarChar(60)
+  name                                       String            @db.VarChar(160)
+  address                                    String
+  latitude                                   Decimal?          @db.Decimal(10, 7)
+  longitude                                  Decimal?          @db.Decimal(10, 7)
+  status                                     RecordStatus      @default(ACTIVE)
+  createdAt                                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                  DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   equipmentUnitsViaHomeInventoryLocationId    EquipmentUnit[]     @relation("R_EquipmentUnit_home_inventory_location_id")
   equipmentUnitsViaCurrentInventoryLocationId EquipmentUnit[]     @relation("R_EquipmentUnit_current_inventory_location_id")
@@ -1801,6 +1810,8 @@ model InventoryLocation {
   maintenanceRecordsViaInventoryLocationId    MaintenanceRecord[] @relation("R_MaintenanceRecord_inventory_location_id")
   custodyEventsViaFromInventoryLocationId     CustodyEvent[]      @relation("R_CustodyEvent_from_inventory_location_id")
   custodyEventsViaToInventoryLocationId       CustodyEvent[]      @relation("R_CustodyEvent_to_inventory_location_id")
+
+  returnCustodyTransfersViaInventoryLocationId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_inventoryLocationId")
 
   @@index([status])
   @@map("inventory_locations")
@@ -1927,20 +1938,37 @@ model EquipmentUnit {
 /// Versioned rental business policy. Quotes/orders persist policy snapshot so later rule changes never rewrite historical financial decisions.
 /// Versioned rental business policy. Quotes/orders persist policy snapshots so later rule changes never rewrite history.
 model RentalPolicy {
-  id                    String    @id @default(uuid()) @db.Uuid
-  policyCode            String    @map("policy_code") @db.VarChar(80)
-  versionNo             Int       @map("version_no")
-  quoteTtlMinutes       Int       @map("quote_ttl_minutes")
-  cutoffHoursBeforeTrip Int       @map("cutoff_hours_before_trip")
-  prepBufferMinutes     Int       @default(0) @map("prep_buffer_minutes")
-  returnBufferMinutes   Int       @default(0) @map("return_buffer_minutes")
-  cleaningBufferMinutes Int       @default(0) @map("cleaning_buffer_minutes")
-  cancellationRules     Json      @map("cancellation_rules")
-  effectiveFrom         DateTime  @map("effective_from") @db.Timestamptz(6)
-  effectiveTo           DateTime? @map("effective_to") @db.Timestamptz(6)
-  isActive              Boolean   @default(true) @map("is_active")
-  createdBy             String?   @map("created_by") @db.Uuid
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                            String             @id @default(uuid()) @db.Uuid
+  policyCode                    String             @map("policy_code") @db.VarChar(80)
+  versionNo                     Int                @map("version_no")
+  currency                      String             @default("VND") @db.Char(3)
+  dayCountMode                  RentalDayCountMode @default(CEIL_24H) @map("day_count_mode")
+  quoteTtlMinutes               Int                @map("quote_ttl_minutes")
+  paymentHoldMinutes            Int                @default(15) @map("payment_hold_minutes")
+  freeCancellationHours         Int                @default(24) @map("free_cancellation_hours")
+  pickupCodeTtlMinutes          Int?               @map("pickup_code_ttl_minutes")
+  pickupVerificationTtlMinutes  Int?               @map("pickup_verification_ttl_minutes")
+  overdueReviewMinutes          Int?               @map("overdue_review_minutes")
+  deepInspectionReviewMinutes   Int?               @map("deep_inspection_review_minutes")
+  adminApprovalMinutes          Int?               @map("admin_approval_minutes")
+  userAssessmentReviewMinutes   Int?               @map("user_assessment_review_minutes")
+  lostConfirmationMinutes       Int?               @map("lost_confirmation_minutes")
+  cutoffHoursBeforeTrip         Int                @map("cutoff_hours_before_trip")
+  prepBufferMinutes             Int                @default(0) @map("prep_buffer_minutes")
+  returnBufferMinutes           Int                @default(0) @map("return_buffer_minutes")
+  cleaningBufferMinutes         Int                @default(0) @map("cleaning_buffer_minutes")
+  maxRentalAfterTripHours       Int?               @map("max_rental_after_trip_hours")
+  extensionRequestCutoffMinutes Int?               @map("extension_request_cutoff_minutes")
+  extensionHoldMinutes          Int?               @map("extension_hold_minutes")
+  maxExtensionCount             Int?               @map("max_extension_count")
+  maxTotalRentalDays            Int?               @map("max_total_rental_days")
+  deepInspectionBufferMinutes   Int?               @map("deep_inspection_buffer_minutes")
+  cancellationRules             Json               @map("cancellation_rules")
+  effectiveFrom                 DateTime           @map("effective_from") @db.Timestamptz(6)
+  effectiveTo                   DateTime?          @map("effective_to") @db.Timestamptz(6)
+  isActive                      Boolean            @default(true) @map("is_active")
+  createdBy                     String?            @map("created_by") @db.Uuid
+  createdAt                     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
   createdByUser User? @relation("R_RentalPolicy_created_by", fields: [createdBy], references: [id])
 
@@ -1984,13 +2012,23 @@ model RentalQuote {
   id                     String            @id @default(uuid()) @db.Uuid
   userId                 String            @map("user_id") @db.Uuid
   tripId                 String            @map("trip_id") @db.Uuid
-  bookingId              String            @map("booking_id") @db.Uuid
+  bookingId              String?           @map("booking_id") @db.Uuid
+  membershipRef          String?           @map("membership_ref") @db.Uuid
+  membershipSnapshot     Json?             @map("membership_snapshot")
+  pickupPointId          String?           @map("pickup_point_id") @db.Uuid
+  returnPointId          String?           @map("return_point_id") @db.Uuid
+  returnOptionSnapshot   Json?             @map("return_option_snapshot")
+  recipientUserId        String?           @map("recipient_user_id") @db.Uuid
   recipientParticipantId String?           @map("recipient_participant_id") @db.Uuid
   recipientSnapshot      Json              @map("recipient_snapshot")
   contextVersion         Int               @map("context_version")
   rentalPolicyId         String            @map("rental_policy_id") @db.Uuid
   rentalStartAt          DateTime          @map("rental_start_at") @db.Timestamptz(6)
   rentalEndAt            DateTime          @map("rental_end_at") @db.Timestamptz(6)
+  plannedHandoverAt      DateTime          @map("planned_handover_at") @db.Timestamptz(6)
+  plannedReturnAt        DateTime          @map("planned_return_at") @db.Timestamptz(6)
+  occupiedStartAt        DateTime          @map("occupied_start_at") @db.Timestamptz(6)
+  occupiedEndAt          DateTime          @map("occupied_end_at") @db.Timestamptz(6)
   rentalFee              Decimal           @map("rental_fee") @db.Decimal(12, 2)
   totalDeposit           Decimal           @map("total_deposit") @db.Decimal(12, 2)
   totalAmount            Decimal           @map("total_amount") @db.Decimal(12, 2)
@@ -2004,7 +2042,7 @@ model RentalQuote {
 
   user                 User                @relation("R_RentalQuote_user_id", fields: [userId], references: [id])
   trip                 Trip                @relation("R_RentalQuote_trip_id", fields: [tripId], references: [id])
-  booking              Booking             @relation("R_RentalQuote_booking_id", fields: [bookingId], references: [id])
+  booking              Booking?            @relation("R_RentalQuote_booking_id", fields: [bookingId], references: [id])
   recipientParticipant BookingParticipant? @relation("R_RentalQuote_recipient_participant_id", fields: [recipientParticipantId], references: [id])
   rentalPolicy         RentalPolicy        @relation("R_RentalQuote_rental_policy_id", fields: [rentalPolicyId], references: [id])
 
@@ -2020,16 +2058,17 @@ model RentalQuote {
 }
 
 model RentalQuoteLine {
-  id                     String   @id @default(uuid()) @db.Uuid
-  quoteId                String   @map("quote_id") @db.Uuid
-  productId              String   @map("product_id") @db.Uuid
-  quantity               Int
-  dailyPriceSnapshot     Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
-  depositPerUnitSnapshot Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
-  chargedDays            Int      @map("charged_days")
-  lineRentalFee          Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
-  lineDeposit            Decimal  @map("line_deposit") @db.Decimal(12, 2)
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                       String   @id @default(uuid()) @db.Uuid
+  quoteId                  String   @map("quote_id") @db.Uuid
+  productId                String   @map("product_id") @db.Uuid
+  quantity                 Int
+  dailyPriceSnapshot       Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
+  depositPerUnitSnapshot   Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
+  replacementValueSnapshot Decimal  @map("replacement_value_snapshot") @db.Decimal(12, 2)
+  chargedDays              Int      @map("charged_days")
+  lineRentalFee            Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
+  lineDeposit              Decimal  @map("line_deposit") @db.Decimal(12, 2)
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   quote   RentalQuote   @relation("R_RentalQuoteLine_quote_id", fields: [quoteId], references: [id])
   product RentalProduct @relation("R_RentalQuoteLine_product_id", fields: [productId], references: [id])
@@ -2046,14 +2085,21 @@ model RentalOrder {
   rentalPolicyId         String                     @map("rental_policy_id") @db.Uuid
   userId                 String                     @map("user_id") @db.Uuid
   tripId                 String                     @map("trip_id") @db.Uuid
-  bookingId              String                     @map("booking_id") @db.Uuid
+  bookingId              String?                    @map("booking_id") @db.Uuid
+  membershipRef          String?                    @map("membership_ref") @db.Uuid
+  membershipSnapshot     Json?                      @map("membership_snapshot")
+  returnOptionSnapshot   Json?                      @map("return_option_snapshot")
+  recipientUserId        String?                    @map("recipient_user_id") @db.Uuid
   recipientParticipantId String?                    @map("recipient_participant_id") @db.Uuid
   recipientSnapshot      Json                       @map("recipient_snapshot")
   pickupPointId          String                     @map("pickup_point_id") @db.Uuid
   returnPointId          String                     @map("return_point_id") @db.Uuid
   contextVersionSnapshot Int                        @map("context_version_snapshot")
+  operationalReturnDueAt DateTime?                  @map("operational_return_due_at") @db.Timestamptz(6)
   rentalStartAt          DateTime                   @map("rental_start_at") @db.Timestamptz(6)
   rentalEndAt            DateTime                   @map("rental_end_at") @db.Timestamptz(6)
+  plannedHandoverAt      DateTime                   @map("planned_handover_at") @db.Timestamptz(6)
+  plannedReturnAt        DateTime                   @map("planned_return_at") @db.Timestamptz(6)
   occupiedStartAt        DateTime                   @map("occupied_start_at") @db.Timestamptz(6)
   occupiedEndAt          DateTime                   @map("occupied_end_at") @db.Timestamptz(6)
   status                 RentalOrderStatus          @default(PENDING_PAYMENT)
@@ -2076,11 +2122,14 @@ model RentalOrder {
   rentalPolicy         RentalPolicy        @relation("R_RentalOrder_rental_policy_id", fields: [rentalPolicyId], references: [id])
   user                 User                @relation("R_RentalOrder_user_id", fields: [userId], references: [id])
   trip                 Trip                @relation("R_RentalOrder_trip_id", fields: [tripId], references: [id])
-  booking              Booking             @relation("R_RentalOrder_booking_id", fields: [bookingId], references: [id])
+  booking              Booking?            @relation("R_RentalOrder_booking_id", fields: [bookingId], references: [id])
   recipientParticipant BookingParticipant? @relation("R_RentalOrder_recipient_participant_id", fields: [recipientParticipantId], references: [id])
   pickupPoint          PickupPoint         @relation("R_RentalOrder_pickup_point_id", fields: [pickupPointId], references: [id])
   returnPoint          PickupPoint         @relation("R_RentalOrder_return_point_id", fields: [returnPointId], references: [id])
 
+  rentalDocumentsViaOrderId         RentalDocument[]
+  rentalReturnSessionsViaOrderId    RentalReturnSession[]
+  rentalExtensionRequestsViaOrderId RentalExtensionRequest[] @relation("R_RentalExtensionRequest_order_id")
   rentalOrderLinesViaOrderId        RentalOrderLine[]        @relation("R_RentalOrderLine_order_id")
   packageViaOrderId                 Package?                 @relation("R_Package_order_id")
   inventoryTaskViaOrderId           InventoryTask?           @relation("R_InventoryTask_order_id")
@@ -2093,10 +2142,14 @@ model RentalOrder {
   rentalAssessmentReviewsViaOrderId RentalAssessmentReview[] @relation("R_RentalAssessmentReview_order_id")
   depositSettlementViaOrderId       DepositSettlement?       @relation("R_DepositSettlement_order_id")
   custodyEventsViaOrderId           CustodyEvent[]           @relation("R_CustodyEvent_order_id")
+  custodyTransfersViaOrderId        CustodyTransfer[]        @relation("R_CustodyTransfer_order_id")
   invoicesViaRentalOrderId          Invoice[]                @relation("R_Invoice_rental_order_id")
   refundsViaRentalOrderId           Refund[]                 @relation("R_Refund_rental_order_id")
   rentalReviewsViaRentalOrderId     RentalReview[]           @relation("R_RentalReview_rental_order_id")
 
+  returnCustodyTransfersViaOrderId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_orderId")
+
+  @@index([userId, tripId, status])
   @@index([userId, status])
   @@index([tripId, status])
   @@index([rentalPolicyId])
@@ -2108,24 +2161,26 @@ model RentalOrder {
 }
 
 model RentalOrderLine {
-  paymentAllocations PaymentAllocation[]
-  id                       String   @id @default(uuid()) @db.Uuid
-  orderId                  String   @map("order_id") @db.Uuid
-  productId                String   @map("product_id") @db.Uuid
+  paymentAllocations       PaymentAllocation[]
+  id                       String              @id @default(uuid()) @db.Uuid
+  orderId                  String              @map("order_id") @db.Uuid
+  productId                String              @map("product_id") @db.Uuid
   quantity                 Int
-  dailyPriceSnapshot       Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
-  depositPerUnitSnapshot   Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
-  replacementValueSnapshot Decimal  @map("replacement_value_snapshot") @db.Decimal(12, 2)
-  chargedDays              Int      @map("charged_days")
-  lineRentalFee            Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
-  lineDeposit              Decimal  @map("line_deposit") @db.Decimal(12, 2)
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  dailyPriceSnapshot       Decimal             @map("daily_price_snapshot") @db.Decimal(12, 2)
+  depositPerUnitSnapshot   Decimal             @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
+  replacementValueSnapshot Decimal             @map("replacement_value_snapshot") @db.Decimal(12, 2)
+  chargedDays              Int                 @map("charged_days")
+  lineRentalFee            Decimal             @map("line_rental_fee") @db.Decimal(12, 2)
+  lineDeposit              Decimal             @map("line_deposit") @db.Decimal(12, 2)
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   order   RentalOrder   @relation("R_RentalOrderLine_order_id", fields: [orderId], references: [id])
   product RentalProduct @relation("R_RentalOrderLine_product_id", fields: [productId], references: [id])
 
   rentalQuantityReservationsViaOrderLineId RentalQuantityReservation[] @relation("R_RentalQuantityReservation_order_line_id")
   rentalUnitAssignmentsViaOrderLineId      RentalUnitAssignment[]      @relation("R_RentalUnitAssignment_order_line_id")
+
+  rentalExtensionLines RentalExtensionLine[] @relation("R_RentalExtensionLine_order_line_id")
 
   @@unique([orderId, productId])
   @@map("rental_order_lines")
@@ -2197,14 +2252,15 @@ model RentalUnitAssignment {
 }
 
 model Package {
-  id          String        @id @default(uuid()) @db.Uuid
-  packageCode String        @unique @map("package_code") @db.VarChar(120)
-  orderId     String        @unique @map("order_id") @db.Uuid
-  status      PackageStatus @default(OPEN)
-  sealedAt    DateTime?     @map("sealed_at") @db.Timestamptz(6)
-  version     Int           @default(1)
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  custodyTransfersViaPackageId CustodyTransfer[] @relation("R_CustodyTransfer_package_id")
+  id                           String            @id @default(uuid()) @db.Uuid
+  packageCode                  String            @unique @map("package_code") @db.VarChar(120)
+  orderId                      String            @unique @map("order_id") @db.Uuid
+  status                       PackageStatus     @default(OPEN)
+  sealedAt                     DateTime?         @map("sealed_at") @db.Timestamptz(6)
+  version                      Int               @default(1)
+  createdAt                    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   order RentalOrder @relation("R_Package_order_id", fields: [orderId], references: [id])
 
@@ -2238,18 +2294,19 @@ model PackageItem {
 /// Preparation task executed by Staff Inventory at an InventoryLocation.
 /// The task starts from product + quantity; exact units appear only as RentalUnitAssignment rows after pick.
 model InventoryTask {
-  id                  String              @id @default(uuid()) @db.Uuid
-  orderId             String              @unique @map("order_id") @db.Uuid
-  inventoryLocationId String              @map("inventory_location_id") @db.Uuid
-  packageId           String?             @map("package_id") @db.Uuid
-  staffId             String?             @map("staff_id") @db.Uuid
-  status              InventoryTaskStatus @default(OPEN)
-  deadline            DateTime?           @db.Timestamptz(6)
-  startedAt           DateTime?           @map("started_at") @db.Timestamptz(6)
-  completedAt         DateTime?           @map("completed_at") @db.Timestamptz(6)
-  version             Int                 @default(1)
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  custodyTransfersViaInventoryTaskId CustodyTransfer[]   @relation("R_CustodyTransfer_inventory_task_id")
+  id                                 String              @id @default(uuid()) @db.Uuid
+  orderId                            String              @unique @map("order_id") @db.Uuid
+  inventoryLocationId                String              @map("inventory_location_id") @db.Uuid
+  packageId                          String?             @map("package_id") @db.Uuid
+  staffId                            String?             @map("staff_id") @db.Uuid
+  status                             InventoryTaskStatus @default(OPEN)
+  deadline                           DateTime?           @db.Timestamptz(6)
+  startedAt                          DateTime?           @map("started_at") @db.Timestamptz(6)
+  completedAt                        DateTime?           @map("completed_at") @db.Timestamptz(6)
+  version                            Int                 @default(1)
+  createdAt                          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   order             RentalOrder       @relation("R_InventoryTask_order_id", fields: [orderId], references: [id])
   inventoryLocation InventoryLocation @relation("R_InventoryTask_inventory_location_id", fields: [inventoryLocationId], references: [id])
@@ -2262,24 +2319,28 @@ model InventoryTask {
 }
 
 model DeliveryTask {
-  id                  String             @id @default(uuid()) @db.Uuid
-  orderId             String             @map("order_id") @db.Uuid
-  packageId           String             @map("package_id") @db.Uuid
-  tripId              String             @map("trip_id") @db.Uuid
-  servicePointId      String             @map("service_point_id") @db.Uuid
-  staffId             String?            @map("staff_id") @db.Uuid
-  taskType            DeliveryTaskType   @map("task_type")
-  status              DeliveryTaskStatus @default(SCHEDULED)
-  scheduledAt         DateTime?          @map("scheduled_at") @db.Timestamptz(6)
-  packageReceivedAt   DateTime?          @map("package_received_at") @db.Timestamptz(6)
-  recipientVerifiedAt DateTime?          @map("recipient_verified_at") @db.Timestamptz(6)
-  handoverAt          DateTime?          @map("handover_at") @db.Timestamptz(6)
-  returnedAt          DateTime?          @map("returned_at") @db.Timestamptz(6)
-  inventoryReceivedAt DateTime?          @map("inventory_received_at") @db.Timestamptz(6)
-  noShowReason        String?            @map("no_show_reason")
-  version             Int                @default(1)
-  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  exceptionNotes                    String?            @map("exception_notes")
+  exceptionEvidenceIds              Json?              @map("exception_evidence_ids")
+  exceptionAt                       DateTime?          @map("exception_at") @db.Timestamptz(6)
+  custodyTransfersViaDeliveryTaskId CustodyTransfer[]  @relation("R_CustodyTransfer_delivery_task_id")
+  id                                String             @id @default(uuid()) @db.Uuid
+  orderId                           String             @map("order_id") @db.Uuid
+  packageId                         String             @map("package_id") @db.Uuid
+  tripId                            String             @map("trip_id") @db.Uuid
+  servicePointId                    String             @map("service_point_id") @db.Uuid
+  staffId                           String?            @map("staff_id") @db.Uuid
+  taskType                          DeliveryTaskType   @map("task_type")
+  status                            DeliveryTaskStatus @default(SCHEDULED)
+  scheduledAt                       DateTime?          @map("scheduled_at") @db.Timestamptz(6)
+  packageReceivedAt                 DateTime?          @map("package_received_at") @db.Timestamptz(6)
+  recipientVerifiedAt               DateTime?          @map("recipient_verified_at") @db.Timestamptz(6)
+  handoverAt                        DateTime?          @map("handover_at") @db.Timestamptz(6)
+  returnedAt                        DateTime?          @map("returned_at") @db.Timestamptz(6)
+  inventoryReceivedAt               DateTime?          @map("inventory_received_at") @db.Timestamptz(6)
+  noShowReason                      String?            @map("no_show_reason")
+  version                           Int                @default(1)
+  createdAt                         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   order        RentalOrder @relation("R_DeliveryTask_order_id", fields: [orderId], references: [id])
   package      Package     @relation("R_DeliveryTask_package_id", fields: [packageId], references: [id])
@@ -2289,6 +2350,8 @@ model DeliveryTask {
 
   rentalHandoverViaDeliveryTaskId RentalHandover? @relation("R_RentalHandover_delivery_task_id")
   custodyEventsViaDeliveryTaskId  CustodyEvent[]  @relation("R_CustodyEvent_delivery_task_id")
+
+  returnCustodyTransfersViaDeliveryTaskId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_deliveryTaskId")
 
   @@unique([orderId, taskType])
   @@index([staffId, status, scheduledAt])
@@ -2468,6 +2531,7 @@ model RentalExceptionCase {
 }
 
 model RentalAssessmentReview {
+  evidenceIds     Json?    @map("evidence_ids")
   id              String   @id @default(uuid()) @db.Uuid
   orderId         String   @map("order_id") @db.Uuid
   inspectionId    String   @map("inspection_id") @db.Uuid
@@ -2858,27 +2922,27 @@ model GpsOutboxEvent {
 model Invoice {
   trailPurchaseRequests TrailPurchaseRequest[]
   /// Null identifies a legacy obligation until its revision history is verified.
-  revisionNo          Int?          @map("revision_no")
-  supersedesInvoiceId String?       @map("supersedes_invoice_id") @db.Uuid
-  supersedesInvoice   Invoice?      @relation("InvoiceRevisions", fields: [supersedesInvoiceId], references: [id], onDelete: Restrict)
-  succeedingInvoices  Invoice[]     @relation("InvoiceRevisions")
-  id                  String        @id @default(uuid()) @db.Uuid
-  invoiceNo           String        @unique @map("invoice_no") @db.VarChar(80)
-  userId              String        @map("user_id") @db.Uuid
-  invoiceType         InvoiceType   @map("invoice_type")
-  bookingId           String?       @map("booking_id") @db.Uuid
-  rentalOrderId       String?       @map("rental_order_id") @db.Uuid
-  trailAccessId       String?       @map("trail_access_id") @db.Uuid
-  subtotalAmount      Decimal       @map("subtotal_amount") @db.Decimal(12, 2)
-  discountAmount      Decimal       @default(0) @map("discount_amount") @db.Decimal(12, 2)
-  totalAmount         Decimal       @map("total_amount") @db.Decimal(12, 2)
-  currency            String        @default("VND") @db.Char(3)
-  status              InvoiceStatus @default(DRAFT)
-  expiresAt           DateTime?     @map("expires_at") @db.Timestamptz(6)
-  paidAt              DateTime?     @map("paid_at") @db.Timestamptz(6)
-  version             Int           @default(1)
-  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  revisionNo            Int?                   @map("revision_no")
+  supersedesInvoiceId   String?                @map("supersedes_invoice_id") @db.Uuid
+  supersedesInvoice     Invoice?               @relation("InvoiceRevisions", fields: [supersedesInvoiceId], references: [id], onDelete: Restrict)
+  succeedingInvoices    Invoice[]              @relation("InvoiceRevisions")
+  id                    String                 @id @default(uuid()) @db.Uuid
+  invoiceNo             String                 @unique @map("invoice_no") @db.VarChar(80)
+  userId                String                 @map("user_id") @db.Uuid
+  invoiceType           InvoiceType            @map("invoice_type")
+  bookingId             String?                @map("booking_id") @db.Uuid
+  rentalOrderId         String?                @map("rental_order_id") @db.Uuid
+  trailAccessId         String?                @map("trail_access_id") @db.Uuid
+  subtotalAmount        Decimal                @map("subtotal_amount") @db.Decimal(12, 2)
+  discountAmount        Decimal                @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  totalAmount           Decimal                @map("total_amount") @db.Decimal(12, 2)
+  currency              String                 @default("VND") @db.Char(3)
+  status                InvoiceStatus          @default(DRAFT)
+  expiresAt             DateTime?              @map("expires_at") @db.Timestamptz(6)
+  paidAt                DateTime?              @map("paid_at") @db.Timestamptz(6)
+  version               Int                    @default(1)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user        User         @relation("R_Invoice_user_id", fields: [userId], references: [id])
   booking     Booking?     @relation("R_Invoice_booking_id", fields: [bookingId], references: [id], onDelete: Restrict)
@@ -2922,7 +2986,7 @@ model InvoiceLine {
 }
 
 model Payment {
-  allocations PaymentAllocation[]
+  allocations         PaymentAllocation[]
   /// Expand phase: null metadata is legacy/unverified, never implicitly MOCK or SANDBOX.
   providerEnvironment PaymentEnvironment?    @map("provider_environment")
   merchantAccountKey  String?                @map("merchant_account_key") @db.VarChar(100)
@@ -3004,7 +3068,7 @@ model PaymentWebhookEvent {
 }
 
 model Refund {
-  allocations RefundAllocation[]
+  allocations         RefundAllocation[]
   /// Expand phase: new writers must supply verified scope and request identity.
   reasonCode          String?                @map("reason_code") @db.VarChar(80)
   businessActionId    String?                @map("business_action_id") @db.VarChar(200)
@@ -3073,32 +3137,35 @@ model Refund {
 enum PaymentAllocationComponent {
   RENTAL_FEE
   RENTAL_DEPOSIT
+
   @@map("payment_allocation_component")
 }
 
 model PaymentAllocation {
-  id                String @id @default(uuid()) @db.Uuid
-  paymentId         String @map("payment_id") @db.Uuid
-  rentalOrderLineId  String @map("rental_order_line_id") @db.Uuid
+  id                String                     @id @default(uuid()) @db.Uuid
+  paymentId         String                     @map("payment_id") @db.Uuid
+  rentalOrderLineId String                     @map("rental_order_line_id") @db.Uuid
   component         PaymentAllocationComponent
-  amount            Decimal @db.Decimal(12, 2)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  payment           Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  rentalOrderLine    RentalOrderLine @relation(fields: [rentalOrderLineId], references: [id], onDelete: Restrict)
+  amount            Decimal                    @db.Decimal(12, 2)
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  payment           Payment                    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  rentalOrderLine   RentalOrderLine            @relation(fields: [rentalOrderLineId], references: [id], onDelete: Restrict)
   refundAllocations RefundAllocation[]
+
   @@unique([paymentId, rentalOrderLineId, component])
   @@index([rentalOrderLineId])
   @@map("payment_allocations")
 }
 
 model RefundAllocation {
-  id                  String @id @default(uuid()) @db.Uuid
-  refundId            String @map("refund_id") @db.Uuid
-  paymentAllocationId String @map("payment_allocation_id") @db.Uuid
-  amount              Decimal @db.Decimal(12, 2)
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  refund              Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  id                  String            @id @default(uuid()) @db.Uuid
+  refundId            String            @map("refund_id") @db.Uuid
+  paymentAllocationId String            @map("payment_allocation_id") @db.Uuid
+  amount              Decimal           @db.Decimal(12, 2)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  refund              Refund            @relation(fields: [refundId], references: [id], onDelete: Restrict)
   paymentAllocation   PaymentAllocation @relation(fields: [paymentAllocationId], references: [id], onDelete: Restrict)
+
   @@unique([refundId, paymentAllocationId])
   @@index([paymentAllocationId])
   @@map("refund_allocations")
@@ -3381,4 +3448,278 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([requestId])
   @@map("audit_logs")
+}
+
+// ---- Rental v1.2 additional enums and entities (integrated from Area B Closure) ----
+
+enum RentalExtensionStatus {
+  QUOTED
+  PENDING_PAYMENT
+  APPLIED
+  REJECTED_CAPACITY
+  EXPIRED
+  PAYMENT_FAILED
+  CANCELLED
+
+  @@map("rental_extension_status")
+}
+
+enum CustodyTransferStatus {
+  PENDING_RECEIPT
+  RECEIVED
+  CANCELLED
+  EXPIRED
+
+  @@map("custody_transfer_status")
+}
+
+enum RentalDayCountMode {
+  CEIL_24H
+
+  @@map("rental_day_count_mode")
+}
+
+model RentalExtensionRequest {
+  id                     String                @id @default(uuid()) @db.Uuid
+  orderId                String                @map("order_id") @db.Uuid
+  userId                 String                @map("user_id") @db.Uuid
+  status                 RentalExtensionStatus @default(QUOTED)
+  previousRentalEndAt    DateTime              @map("previous_rental_end_at") @db.Timestamptz(6)
+  requestedRentalEndAt   DateTime              @map("requested_rental_end_at") @db.Timestamptz(6)
+  previousOccupiedUntil  DateTime              @map("previous_occupied_until") @db.Timestamptz(6)
+  requestedOccupiedUntil DateTime              @map("requested_occupied_until") @db.Timestamptz(6)
+  returnOptionSnapshot   Json                  @map("return_option_snapshot")
+  additionalFee          Decimal               @map("additional_fee") @db.Decimal(12, 2)
+  currency               String                @db.Char(3)
+  policySnapshot         Json                  @map("policy_snapshot")
+  quotedOrderVersion     Int                   @map("quoted_order_version")
+  quoteExpiresAt         DateTime              @map("quote_expires_at") @db.Timestamptz(6)
+  holdExpiresAt          DateTime?             @map("hold_expires_at") @db.Timestamptz(6)
+  invoiceId              String?               @unique @map("invoice_id") @db.Uuid
+  paymentRef             String?               @map("payment_ref") @db.Uuid
+  acceptedByUserId       String?               @map("accepted_by_user_id") @db.Uuid
+  acceptedAt             DateTime?             @map("accepted_at") @db.Timestamptz(6)
+  acceptedTermsVersion   String?               @map("accepted_terms_version") @db.VarChar(40)
+  termsHash              String?               @map("terms_hash") @db.Char(64)
+  appliedAt              DateTime?             @map("applied_at") @db.Timestamptz(6)
+  version                Int                   @default(1)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order RentalOrder           @relation("R_RentalExtensionRequest_order_id", fields: [orderId], references: [id])
+  lines RentalExtensionLine[] @relation("R_RentalExtensionLine_extension_id")
+
+  @@index([orderId, status])
+  @@index([holdExpiresAt])
+  @@map("rental_extension_requests")
+}
+
+model RentalExtensionLine {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  extensionId         String                 @map("extension_id") @db.Uuid
+  orderLineId         String                 @map("order_line_id") @db.Uuid
+  previousChargedDays Int                    @map("previous_charged_days")
+  newChargedDays      Int                    @map("new_charged_days")
+  additionalFee       Decimal                @map("additional_fee") @db.Decimal(12, 2)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  extension           RentalExtensionRequest @relation("R_RentalExtensionLine_extension_id", fields: [extensionId], references: [id])
+  orderLine           RentalOrderLine        @relation("R_RentalExtensionLine_order_line_id", fields: [orderLineId], references: [id])
+
+  @@unique([extensionId, orderLineId])
+  @@map("rental_extension_lines")
+}
+
+model ReturnCustodyTransfer {
+  id                  String                @id @default(uuid()) @db.Uuid
+  orderId             String                @map("order_id") @db.Uuid
+  deliveryTaskId      String                @map("delivery_task_id") @db.Uuid
+  inventoryLocationId String                @map("inventory_location_id") @db.Uuid
+  fromStaffId         String                @map("from_staff_id") @db.Uuid
+  unitIds             Json                  @map("unit_ids")
+  receivedUnitIds     Json?                 @map("received_unit_ids")
+  status              CustodyTransferStatus @default(PENDING_RECEIPT)
+  requestedAt         DateTime              @default(now()) @map("requested_at") @db.Timestamptz(6)
+  receivedAt          DateTime?             @map("received_at") @db.Timestamptz(6)
+  cancelledAt         DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  version             Int                   @default(1)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order             RentalOrder       @relation("R_ReturnCustodyTransfer_orderId", fields: [orderId], references: [id])
+  deliveryTask      DeliveryTask      @relation("R_ReturnCustodyTransfer_deliveryTaskId", fields: [deliveryTaskId], references: [id])
+  inventoryLocation InventoryLocation @relation("R_ReturnCustodyTransfer_inventoryLocationId", fields: [inventoryLocationId], references: [id])
+  fromStaff         User              @relation("R_ReturnCustodyTransfer_fromStaffId", fields: [fromStaffId], references: [id])
+
+  @@index([orderId, status, requestedAt])
+  @@index([deliveryTaskId, status])
+  @@index([inventoryLocationId, status])
+  @@index([fromStaffId, status])
+  @@map("return_custody_transfers")
+}
+
+model CustodyTransfer {
+  id                      String                @id @default(uuid()) @db.Uuid
+  orderId                 String                @map("order_id") @db.Uuid
+  packageId               String                @map("package_id") @db.Uuid
+  inventoryTaskId         String                @map("inventory_task_id") @db.Uuid
+  deliveryTaskId          String                @map("delivery_task_id") @db.Uuid
+  fromInventoryLocationId String                @map("from_inventory_location_id") @db.Uuid
+  fromStaffId             String                @map("from_staff_id") @db.Uuid
+  toStaffId               String                @map("to_staff_id") @db.Uuid
+  status                  CustodyTransferStatus @default(PENDING_RECEIPT)
+  requestedAt             DateTime              @default(now()) @map("requested_at") @db.Timestamptz(6)
+  receivedAt              DateTime?             @map("received_at") @db.Timestamptz(6)
+  cancelledAt             DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  version                 Int                   @default(1)
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order                 RentalOrder       @relation("R_CustodyTransfer_order_id", fields: [orderId], references: [id])
+  package               Package           @relation("R_CustodyTransfer_package_id", fields: [packageId], references: [id])
+  inventoryTask         InventoryTask     @relation("R_CustodyTransfer_inventory_task_id", fields: [inventoryTaskId], references: [id])
+  deliveryTask          DeliveryTask      @relation("R_CustodyTransfer_delivery_task_id", fields: [deliveryTaskId], references: [id])
+  fromInventoryLocation InventoryLocation @relation("R_CustodyTransfer_from_inventory_location_id", fields: [fromInventoryLocationId], references: [id])
+  fromStaff             User              @relation("R_CustodyTransfer_from_staff_id", fields: [fromStaffId], references: [id])
+  toStaff               User              @relation("R_CustodyTransfer_to_staff_id", fields: [toStaffId], references: [id])
+
+  @@index([status, requestedAt])
+  @@index([deliveryTaskId, status])
+  @@index([toStaffId, status])
+  @@index([orderId, requestedAt])
+  @@map("custody_transfers")
+}
+
+model RentalInboxEvent {
+  id            String      @id @default(uuid()) @db.Uuid
+  eventId       String      @unique @map("event_id") @db.VarChar(220)
+  eventType     String      @map("event_type") @db.VarChar(140)
+  entityId      String      @map("entity_id") @db.Uuid
+  entityVersion Int         @map("entity_version")
+  correlationId String      @map("correlation_id") @db.VarChar(220)
+  occurredAt    DateTime    @map("occurred_at") @db.Timestamptz(6)
+  payload       Json
+  result        Json?
+  status        EventStatus @default(PENDING)
+  errorMessage  String?     @map("error_message")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  processedAt   DateTime?   @map("processed_at") @db.Timestamptz(6)
+
+  @@index([eventType, entityId, entityVersion])
+  @@index([status, createdAt])
+  @@map("rental_inbox_events")
+}
+
+model IdempotencyRecord {
+  id             String    @id @default(uuid()) @db.Uuid
+  scope          String    @db.VarChar(120)
+  userId         String    @map("user_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(200)
+  requestHash    String    @map("request_hash") @db.VarChar(64)
+  responseStatus Int?      @map("response_status")
+  responseBody   Json?     @map("response_body")
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([scope, userId, idempotencyKey])
+  @@index([createdAt])
+  @@map("idempotency_records")
+}
+
+// === AREA B POLICY 1.4.2 / FLOW & FR 1.2.2: document evidence (ADDITIVE) ===
+enum RentalDocumentType {
+  HANDOVER
+  EXTENSION_APPENDIX
+  RETURN_RECEIPT
+  SCHEDULE_NOTICE
+  CORRECTION_NOTICE
+
+  @@map("rental_document_type")
+}
+
+enum RentalDocumentRenderStatus {
+  PENDING_RENDER
+  READY
+  RENDER_FAILED
+
+  @@map("rental_document_render_status")
+}
+
+enum RentalReturnSessionStatus {
+  OPEN
+  FINALIZED
+
+  @@map("rental_return_session_status")
+}
+
+/// Immutable business snapshot with separately mutable PDF/render metadata.
+/// sourceRef identifies the unique handover/extension/return session/Trip event.
+model RentalDocument {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  orderId            String                     @map("order_id") @db.Uuid
+  documentNumber     String                     @unique @map("document_number") @db.VarChar(100)
+  documentType       RentalDocumentType         @map("document_type")
+  sourceRef          String                     @map("source_ref") @db.VarChar(180)
+  sourceVersion      Int                        @default(1) @map("source_version")
+  rootDocumentId     String?                    @map("root_document_id") @db.Uuid
+  previousDocumentId String?                    @map("previous_document_id") @db.Uuid
+  appendixNo         Int?                       @map("appendix_no")
+  snapshotJson       Json                       @map("snapshot_json")
+  snapshotHash       String                     @map("snapshot_hash") @db.Char(64)
+  templateVersion    String                     @default("1.0") @map("template_version") @db.VarChar(30)
+  policyVersion      String                     @default("1.4.2") @map("policy_version") @db.VarChar(30)
+  renderStatus       RentalDocumentRenderStatus @default(PENDING_RENDER) @map("render_status")
+  renderAttemptCount Int                        @default(0) @map("render_attempt_count")
+  pdfStorageKey      String?                    @map("pdf_storage_key") @db.VarChar(500)
+  pdfHash            String?                    @map("pdf_hash") @db.Char(64)
+  renderError        String?                    @map("render_error")
+  issuedAt           DateTime                   @default(now()) @map("issued_at") @db.Timestamptz(6)
+  renderedAt         DateTime?                  @map("rendered_at") @db.Timestamptz(6)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  version            Int                        @default(1)
+
+  order            RentalOrder               @relation(fields: [orderId], references: [id])
+  rootDocument     RentalDocument?           @relation("RentalDocumentRoot", fields: [rootDocumentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rootChildren     RentalDocument[]          @relation("RentalDocumentRoot")
+  previousDocument RentalDocument?           @relation("RentalDocumentPrevious", fields: [previousDocumentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  nextDocuments    RentalDocument[]          @relation("RentalDocumentPrevious")
+  accessLogs       RentalDocumentAccessLog[]
+
+  @@unique([documentType, sourceRef])
+  @@unique([orderId, documentType, appendixNo])
+  @@index([orderId, issuedAt])
+  @@index([rootDocumentId, issuedAt])
+  @@index([renderStatus, createdAt])
+  @@map("rental_documents")
+}
+
+/// One staff scan operation. A return receipt is finalized from this immutable session.
+model RentalReturnSession {
+  id            String                    @id @default(uuid()) @db.Uuid
+  orderId       String                    @map("order_id") @db.Uuid
+  operationId   String                    @unique @map("operation_id") @db.VarChar(200)
+  staffId       String                    @map("staff_id") @db.Uuid
+  status        RentalReturnSessionStatus @default(OPEN)
+  receivedUnits Json                      @map("received_units")
+  remarks       String?
+  finalizedAt   DateTime?                 @map("finalized_at") @db.Timestamptz(6)
+  version       Int                       @default(1)
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  order         RentalOrder               @relation(fields: [orderId], references: [id])
+
+  @@index([orderId, status])
+  @@map("rental_return_sessions")
+}
+
+model RentalDocumentAccessLog {
+  id          String         @id @default(uuid()) @db.Uuid
+  documentId  String         @map("document_id") @db.Uuid
+  actorUserId String         @map("actor_user_id") @db.Uuid
+  action      String         @db.VarChar(40)
+  accessedAt  DateTime       @default(now()) @map("accessed_at") @db.Timestamptz(6)
+  document    RentalDocument @relation(fields: [documentId], references: [id])
+
+  @@index([documentId, accessedAt])
+  @@index([actorUserId, accessedAt])
+  @@map("rental_document_access_logs")
 }

@@ -38,7 +38,12 @@ export class CreateUploadIntentUseCase {
     }
 
     this.checkScopeAuthorization(dto.scope, activeUser.role);
-    this.checkMimeType(dto.contentType, dto.resourceType);
+    if (dto.scope === 'LEADER_CERTIFICATE') {
+      if (activeUser.status !== 'ACTIVE' || activeUser.role !== 'USER')
+        throw new AppError({ code: COMMON_ERROR_CODES.FORBIDDEN });
+      if (dto.resourceType !== 'IMAGE' || !['image/jpeg', 'image/png', 'application/pdf'].includes(dto.contentType))
+        throw new AppError({ code: MEDIA_ERROR_CODES.MEDIA_UNSUPPORTED_MIME_TYPE });
+    } else this.checkMimeType(dto.contentType, dto.resourceType);
     this.checkSize(dto.sizeBytes, dto.resourceType);
 
     const policy = this.mediaPolicyService.getScopePolicy(dto.scope);
@@ -79,6 +84,7 @@ export class CreateUploadIntentUseCase {
         resourceType: dto.resourceType,
         deliveryType,
         timestamp: Math.round(now.getTime() / 1000),
+        ...(dto.scope === 'LEADER_CERTIFICATE' ? { immutable: true } : {}),
       });
 
       return {
@@ -99,6 +105,8 @@ export class CreateUploadIntentUseCase {
   private checkScopeAuthorization(scope: MediaScopeValue, role: string) {
     const isAllowed = (() => {
       switch (scope) {
+        case 'LEADER_CERTIFICATE':
+          return role === 'USER';
         case 'RENTAL_PRODUCT':
           return ['STAFF_INVENTORY', 'ADMIN'].includes(role);
         case 'CONDITION_EVIDENCE':

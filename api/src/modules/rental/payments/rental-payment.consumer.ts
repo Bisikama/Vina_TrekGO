@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { validateRentalAllocations } from './rental-payment.rules'
+import { rentalMembershipValid } from './rental-membership.guard'
+import { consumeExtensionPaymentWithTx } from '../ordering/extension/rental-extension.service'
 
 @Injectable()
 export class RentalPaymentConsumer {
@@ -17,7 +19,6 @@ export class RentalPaymentConsumer {
       if (!initial || initial.invoice.invoiceType !== 'RENTAL' || !initial.invoice.rentalOrder) return
       const source = initial.invoice.rentalOrder
       await tx.$queryRaw`SELECT id FROM trips WHERE id=${source.tripId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM bookings WHERE id=${source.bookingId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${source.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT r.id FROM rental_quantity_reservations r JOIN rental_order_lines l ON l.id=r.order_line_id
         WHERE l.order_id=${source.id}::uuid ORDER BY r.id FOR UPDATE OF r`
@@ -38,7 +39,6 @@ export class RentalPaymentConsumer {
         where: { id: source.id },
         include: {
           trip: true,
-          booking: true,
           rentalOrderLinesViaOrderId: { include: { rentalQuantityReservationsViaOrderLineId: true } },
         },
       })
@@ -63,8 +63,36 @@ export class RentalPaymentConsumer {
       })
       let [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
       if (!receipt && payment.application.status === 'PENDING') {
+        const extension = await tx.rentalExtensionRequest.findFirst({ where: { invoiceId: payment.invoiceId } })
+        if (extension) {
+          // Provider success is already signature-verified by Shared Payment inbox.
+          // Extension has its own amount/expiry guards; never replay base-order PAID.
+          // Never apply a payment that arrived after its delta-capacity hold expired.
+          // Provider money must be reversed by the SAME verified Shared Payment worker
+          // used by initial RENTAL payments, rather than an unscoped Refund insert.
+          const paymentLate = extension.status !== 'PENDING_PAYMENT' || !extension.holdExpiresAt || extension.holdExpiresAt <= now
+          if (paymentLate) {
+            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'SUCCEEDED', payment.transactionRef, now)
+            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'REJECTED', reasonCode: 'LATE_PAYMENT', decidedAt: now } })
+            await tx.paymentOutboxEvent.upsert({
+              where: { deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1` },
+              create: {
+                deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1`,
+                eventType: 'TECHNICAL_REVERSAL_REQUESTED', aggregateType: 'Payment', aggregateId: payment.id,
+                payload: { schemaVersion: 1, paymentId: payment.id, invoiceId: payment.invoiceId, reasonCode: 'LATE_PAYMENT' },
+              }, update: {},
+            })
+          } else {
+            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'SUCCEEDED', payment.transactionRef, now)
+            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'APPLIED', appliedAt: now, decidedAt: now } })
+          }
+          await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } })
+          await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } })
+          return
+        }
         validateRentalAllocations(order, order.rentalOrderLinesViaOrderId, payment.allocations)
         let reason: string | null = null
+        const memberEligible = await rentalMembershipValid(tx, order)
         if (
           await tx.paymentApplication.findFirst({
             where: { status: 'APPLIED', paymentId: { not: payment.id }, invoice: { rentalOrderId: order.id } },
@@ -80,12 +108,7 @@ export class RentalPaymentConsumer {
         else if (
           order.status !== 'PENDING_PAYMENT' ||
           !['UNPAID', 'PAYMENT_PENDING'].includes(order.financialStatus) ||
-          order.booking.status !== 'CONFIRMED' ||
-          order.booking.tripId !== order.tripId ||
-          order.booking.userId !== order.userId ||
-          order.trip.tripType !== 'PUBLIC' ||
-          !['OPEN', 'FULL'].includes(order.trip.status) ||
-          order.trip.startAt <= now ||
+          !memberEligible ||
           payment.invoice.status !== 'PENDING_PAYMENT' ||
           payment.invoice.userId !== order.userId ||
           payment.currency !== order.currency ||
@@ -114,8 +137,7 @@ export class RentalPaymentConsumer {
           reason = 'LATE_PAYMENT'
         if (
           !reason &&
-          (order.trip.startAt <= now ||
-            order.rentalOrderLinesViaOrderId.some((l) =>
+          (order.rentalOrderLinesViaOrderId.some((l) =>
               l.rentalQuantityReservationsViaOrderLineId.some(
                 (r) => r.status === 'HELD' && (!r.holdExpiresAt || r.holdExpiresAt <= now),
               ),
@@ -153,6 +175,16 @@ export class RentalPaymentConsumer {
             where: { paymentId: payment.id },
             data: { status: 'APPLIED', appliedAt: now, decidedAt: now },
           })
+          const existingTask = await tx.inventoryTask.findUnique({ where: { orderId: order.id } })
+          if (!existingTask) {
+            const configured = process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID
+            const locations = await tx.inventoryLocation.findMany({
+              where: { status: 'ACTIVE', ...(configured ? { id: configured } : {}) },
+              select: { id: true }, orderBy: { createdAt: 'asc' }, take: 2,
+            })
+            if (locations.length !== 1) throw new Error('RENTAL_DEFAULT_INVENTORY_LOCATION_ID is missing or ambiguous')
+            await tx.inventoryTask.create({ data: { orderId: order.id, inventoryLocationId: locations[0].id, status: 'OPEN', deadline: order.plannedHandoverAt } })
+          }
           await tx.rentalOutboxEvent.create({
             data: {
               deduplicationKey: `rental:${order.id}:paid:v1`,

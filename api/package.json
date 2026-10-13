@@ -6,10 +6,13 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "test:sf01": "jest --config ./test/jest-sf01.json --runInBand",
+    "openapi:sf01": "cross-env NODE_ENV=production MEDIA_DEV_UPLOAD_ENABLED=false ts-node scripts/generate-openapi.ts --sf01",
     "test:cf02": "jest --config ./test/jest-cf02.json --runInBand",
     "configure:cf02-policy": "ts-node scripts/configure-cf02-policy.ts",
     "test:payments": "jest --config ./test/jest-payments.json --runInBand",
     "seed:cf01": "ts-node prisma/seeds/cf01.seed.ts",
+    "seed:cf01-local": "ts-node prisma/seeds/cf01-local-trekking.seed.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -95,7 +98,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    }
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
