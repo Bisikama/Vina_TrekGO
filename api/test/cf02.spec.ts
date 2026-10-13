@@ -126,6 +126,7 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     else process.env.BOOKING_POLICY_CODE = previousPolicy
   })
   beforeEach(async () => {
+    await db.$executeRaw`UPDATE booking_policies SET effective_to = date_trunc('milliseconds', clock_timestamp()) WHERE policy_code = 'PUBLIC_BOOKING_DEFAULT' AND is_active AND effective_to IS NULL AND published_at IS NOT NULL`
     const users = [] as string[]
     for (let i = 0; i < 2; i++) {
       const user = await db.user.create({
@@ -194,8 +195,16 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     })
     const policy = await db.bookingPolicy.create({
       data: {
-        policyCode: `CF02-${randomUUID()}`,
-        versionNo: 1,
+        policyCode: 'PUBLIC_BOOKING_DEFAULT',
+        versionNo:
+          ((
+            await db.bookingPolicy.aggregate({
+              where: { policyCode: 'PUBLIC_BOOKING_DEFAULT' },
+              _max: { versionNo: true },
+            })
+          )._max.versionNo ?? 0) + 1,
+        isActive: true,
+        publishedAt: new Date(),
         holdTtlMinutes: 15,
         cancellationRules: { version: 1, tiers: [{ minHoursBeforeStart: 0, refundPercent: 100 }] },
         effectiveFrom: new Date(),
@@ -203,6 +212,259 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     })
     policyId = policy.id
     process.env.BOOKING_POLICY_CODE = policy.policyCode
+  })
+
+  const policyInput = {
+    holdTtlMinutes: 10,
+    cancellationRules: {
+      version: 1,
+      tiers: [
+        { minHoursBeforeStart: 168, refundPercent: 100 },
+        { minHoursBeforeStart: 72, refundPercent: 80 },
+        { minHoursBeforeStart: 24, refundPercent: 50 },
+        { minHoursBeforeStart: 0, refundPercent: 0 },
+      ],
+    },
+  }
+  const policyApi = '/api/v1/admin/booking-policies'
+  const asAdmin = async () => db.user.update({ where: { id: otherId }, data: { role: 'ADMIN' } })
+
+  it('protects all policy CRUD and publish endpoints with shared admin authorization', async () => {
+    const id = randomUUID()
+    for (const role of ['USER', 'LEADER', 'STAFF_INVENTORY', 'STAFF_DELIVERY'] as const) {
+      await db.user.update({ where: { id: otherId }, data: { role } })
+      const calls = [
+        () => request(app.getHttpServer()).get(policyApi),
+        () => request(app.getHttpServer()).get(`${policyApi}/${id}`),
+        () => request(app.getHttpServer()).post(policyApi),
+        () => request(app.getHttpServer()).patch(`${policyApi}/${id}`),
+        () => request(app.getHttpServer()).delete(`${policyApi}/${id}`),
+        () => request(app.getHttpServer()).post(`${policyApi}/${id}/publish`),
+      ]
+      for (const call of calls) {
+        const response = await call().set('Authorization', `Bearer ${otherId}`).expect(403)
+        expect(response.body.error.code).toBe('FORBIDDEN')
+        expect(response.body.meta.requestId).toBeTruthy()
+      }
+    }
+    await request(app.getHttpServer()).get(policyApi).expect(401)
+    await asAdmin()
+    await db.user.update({ where: { id: otherId }, data: { status: 'SUSPENDED' } })
+    await request(app.getHttpServer()).get(policyApi).set('Authorization', `Bearer ${otherId}`).expect(403)
+  })
+
+  it('supports admin draft CRUD with validation, revision checks and audit', async () => {
+    await asAdmin()
+    const invalid = await request(app.getHttpServer())
+      .post(policyApi)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ ...policyInput, cancellationRules: {}, isActive: true })
+      .expect(400)
+    expect(invalid.body.error.code).toBe('VALIDATION_ERROR')
+    const created = (
+      await request(app.getHttpServer())
+        .post(policyApi)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send(policyInput)
+        .expect(201)
+    ).body
+    expect(created).toMatchObject({ isActive: false, publishedAt: null, revision: 1, createdBy: otherId })
+    const updated = (
+      await request(app.getHttpServer())
+        .patch(`${policyApi}/${created.id}`)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send({ ...policyInput, holdTtlMinutes: 20, expectedRevision: 1 })
+        .expect(200)
+    ).body
+    expect(updated.revision).toBe(2)
+    const stale = await request(app.getHttpServer())
+      .delete(`${policyApi}/${created.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 1 })
+      .expect(409)
+    expect(stale.body.error.code).toBe('BOOKING_POLICY_VERSION_CONFLICT')
+    await request(app.getHttpServer())
+      .get(`${policyApi}/${created.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .expect(200)
+    const list = (
+      await request(app.getHttpServer())
+        .get(`${policyApi}?state=DRAFT`)
+        .set('Authorization', `Bearer ${otherId}`)
+        .expect(200)
+    ).body
+    expect(list.items.some((p: { id: string }) => p.id === created.id)).toBe(true)
+    await request(app.getHttpServer())
+      .delete(`${policyApi}/${created.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 2 })
+      .expect(200)
+    await request(app.getHttpServer())
+      .get(`${policyApi}/${created.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .expect(404)
+    expect(await db.auditLog.count({ where: { entityId: created.id, userId: otherId } })).toBe(3)
+  })
+
+  it('publishes atomically, replays safely and preserves old booking TTL and refund snapshots', async () => {
+    const old = (await create().expect(201)).body
+    const before = await db.booking.findUniqueOrThrow({ where: { id: old.id } })
+    await asAdmin()
+    const draft = (
+      await request(app.getHttpServer())
+        .post(policyApi)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send(policyInput)
+        .expect(201)
+    ).body
+    const publish = () =>
+      request(app.getHttpServer())
+        .post(`${policyApi}/${draft.id}/publish`)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send({ expectedRevision: 1 })
+    const results = await Promise.all([publish().expect(201), publish().expect(201)])
+    expect(results[0].body.publishedAt).toBe(results[1].body.publishedAt)
+    const previous = await db.bookingPolicy.findUniqueOrThrow({ where: { id: policyId } })
+    expect(previous.effectiveTo?.toISOString()).toBe(results[0].body.effectiveFrom)
+    expect(await db.auditLog.count({ where: { entityId: draft.id, action: 'BOOKING_POLICY_PUBLISHED' } })).toBe(1)
+    const next = (await create(1, 'new-policy', otherId).expect(201)).body
+    const nextRow = await db.booking.findUniqueOrThrow({ where: { id: next.id } })
+    expect(nextRow.bookingPolicyId).toBe(draft.id)
+    expect(nextRow.policySnapshot).toMatchObject({ holdTtlMinutes: 10 })
+    await edit(old.id, 2, old.version).expect(200)
+    const after = await db.booking.findUniqueOrThrow({ where: { id: old.id } })
+    expect(after.expiresAt).toEqual(before.expiresAt)
+    expect(after.policySnapshot).toEqual(before.policySnapshot)
+    const payment = (await pay(old.id).expect(201)).body
+    const event = await financialResult(payment.paymentId)
+    await consumer.consume(event!.id)
+    await cancel(old.id).expect(202)
+    const decision = await db.bookingCancellation.findFirstOrThrow({ where: { bookingId: old.id } })
+    expect(decision.refundableAmount.equals(after.totalAmount)).toBe(true)
+    await request(app.getHttpServer())
+      .patch(`${policyApi}/${draft.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ ...policyInput, expectedRevision: 2 })
+      .expect(409)
+    await request(app.getHttpServer())
+      .delete(`${policyApi}/${draft.id}`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 2 })
+      .expect(409)
+    await expect(db.bookingPolicy.update({ where: { id: draft.id }, data: { holdTtlMinutes: 30 } })).rejects.toThrow()
+    await expect(db.bookingPolicy.delete({ where: { id: draft.id } })).rejects.toThrow()
+    await expect(
+      db.bookingPolicy.create({
+        data: {
+          policyCode: 'PUBLIC_BOOKING_DEFAULT',
+          versionNo: draft.versionNo + 100,
+          ...policyInput,
+          isActive: true,
+          publishedAt: new Date(),
+          effectiveFrom: new Date(),
+        },
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('serializes concurrent draft creation and rejects publishing an older draft after a newer version', async () => {
+    await asAdmin()
+    const drafts = await Promise.all(
+      [1, 2].map(() =>
+        request(app.getHttpServer())
+          .post(policyApi)
+          .set('Authorization', `Bearer ${otherId}`)
+          .send(policyInput)
+          .expect(201),
+      ),
+    )
+    const [older, newer] = drafts.map((r) => r.body).sort((a, b) => a.versionNo - b.versionNo)
+    expect(newer.versionNo).toBe(older.versionNo + 1)
+    await request(app.getHttpServer())
+      .post(`${policyApi}/${newer.id}/publish`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 1 })
+      .expect(201)
+    await request(app.getHttpServer())
+      .post(`${policyApi}/${older.id}/publish`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 1 })
+      .expect(409)
+    expect((await db.bookingPolicy.findUniqueOrThrow({ where: { id: older.id } })).publishedAt).toBeNull()
+  })
+
+  it('ignores other policy codes even when an environment override is supplied', async () => {
+    await db.$executeRaw`UPDATE booking_policies SET effective_to = date_trunc('milliseconds', clock_timestamp()) WHERE id = ${policyId}::uuid`
+    const otherCode = `OTHER-${randomUUID()}`
+    await db.bookingPolicy.create({
+      data: {
+        policyCode: otherCode,
+        versionNo: 1,
+        ...policyInput,
+        isActive: true,
+        publishedAt: new Date(),
+        effectiveFrom: new Date(),
+      },
+    })
+    process.env.BOOKING_POLICY_CODE = otherCode
+    expect((await create().expect(503)).body.error.code).toBe('BOOKING_POLICY_UNAVAILABLE')
+  })
+
+  it('rolls back publication and retirement together if writing the audit fails', async () => {
+    await asAdmin()
+    const draft = (
+      await request(app.getHttpServer())
+        .post(policyApi)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send(policyInput)
+        .expect(201)
+    ).body
+    await db.$executeRawUnsafe(`CREATE FUNCTION cf02_block_policy_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.action = 'BOOKING_POLICY_PUBLISHED' THEN RAISE EXCEPTION 'CF02 forced audit failure'; END IF; RETURN NEW; END $$`)
+    await db.$executeRawUnsafe(
+      `CREATE TRIGGER cf02_block_policy_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION cf02_block_policy_audit()`,
+    )
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await request(app.getHttpServer())
+        .post(`${policyApi}/${draft.id}/publish`)
+        .set('Authorization', `Bearer ${otherId}`)
+        .send({ expectedRevision: 1 })
+        .expect(500)
+      expect((await db.bookingPolicy.findUniqueOrThrow({ where: { id: draft.id } })).publishedAt).toBeNull()
+      expect((await db.bookingPolicy.findUniqueOrThrow({ where: { id: policyId } })).effectiveTo).toBeNull()
+    } finally {
+      errors.mockRestore()
+      await db.$executeRawUnsafe('DROP TRIGGER cf02_block_policy_audit ON audit_logs')
+      await db.$executeRawUnsafe('DROP FUNCTION cf02_block_policy_audit()')
+    }
+    await request(app.getHttpServer())
+      .post(`${policyApi}/${draft.id}/publish`)
+      .set('Authorization', `Bearer ${otherId}`)
+      .send({ expectedRevision: 1 })
+      .expect(201)
+  })
+
+  it('fails closed when an effective policy contains invalid legacy rules', async () => {
+    await db.$executeRaw`UPDATE booking_policies SET effective_to = date_trunc('milliseconds', clock_timestamp()) WHERE id = ${policyId}::uuid`
+    const max = await db.bookingPolicy.aggregate({
+      where: { policyCode: 'PUBLIC_BOOKING_DEFAULT' },
+      _max: { versionNo: true },
+    })
+    await db.bookingPolicy.create({
+      data: {
+        policyCode: 'PUBLIC_BOOKING_DEFAULT',
+        versionNo: max._max.versionNo! + 1,
+        holdTtlMinutes: 15,
+        cancellationRules: {},
+        isActive: true,
+        publishedAt: new Date(),
+        effectiveFrom: new Date(),
+      },
+    })
+    const result = await create().expect(503)
+    expect(result.body.error.code).toBe('BOOKING_POLICY_INVALID')
+    expect(await db.booking.count({ where: { tripId } })).toBe(0)
   })
 
   it('visitors see only public trips and safe transport; hold requires real shared bearer auth', async () => {
@@ -306,7 +568,7 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     await db.trip.update({ where: { id: tripId }, data: { status: 'DRAFT' } })
     await create(1, 'draft', otherId).expect(409)
     await db.trip.update({ where: { id: tripId }, data: { status: 'OPEN' } })
-    await db.bookingPolicy.update({ where: { id: policyId }, data: { isActive: false } })
+    await db.$executeRaw`UPDATE booking_policies SET effective_to = date_trunc('milliseconds', clock_timestamp()) WHERE id = ${policyId}::uuid`
     expect((await create(1, 'no-policy', otherId).expect(503)).body.error.code).toBe('BOOKING_POLICY_UNAVAILABLE')
   })
   it('payment pending/failed never confirms and retry uses the existing server invoice', async () => {
@@ -382,11 +644,12 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     },
   )
   it('allows unpaid cancellation but blocks paid cancellation when policy has no refund rules', async () => {
-    await db.bookingPolicy.update({ where: { id: policyId }, data: { cancellationRules: {} } })
     const unpaid = (await create().expect(201)).body
+    await db.booking.update({ where: { id: unpaid.id }, data: { policySnapshot: { cancellationRules: {} } } })
     expect(unpaid.canCancel).toBe(true)
     await cancel(unpaid.id).expect(202)
     const paid = (await create(1, 'paid-without-cancel-policy').expect(201)).body
+    await db.booking.update({ where: { id: paid.id }, data: { policySnapshot: { cancellationRules: {} } } })
     const payment = (await pay(paid.id).expect(201)).body
     const event = await financialResult(payment.paymentId)
     await consumer.consume(event!.id)
