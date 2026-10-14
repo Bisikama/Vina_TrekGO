@@ -172,7 +172,7 @@ export class CompleteUploadUseCase {
       throw error;
     }
 
-    if (asset.deliveryType === 'authenticated') {
+    if (asset.deliveryType === 'authenticated' && asset.scope !== 'LEADER_CERTIFICATE') {
       const variants: import('../ports/media-storage.port').MediaDeliveryVariant[] = 
         asset.resourceType === 'IMAGE' ? ['EVIDENCE_THUMBNAIL', 'EVIDENCE_PREVIEW'] : ['VIDEO_PREVIEW'];
       
@@ -194,7 +194,7 @@ export class CompleteUploadUseCase {
     }
 
     let retentionUntil: Date | null = null;
-    if (asset.scope === 'RENTAL_PRODUCT') {
+    if (asset.scope === 'RENTAL_PRODUCT' || asset.scope === 'LEADER_CERTIFICATE') {
       retentionUntil = new Date(Date.now() + envConfig.MEDIA_CATALOG_ORPHAN_RETENTION_DAYS * 86400 * 1000);
     } else if (asset.scope?.includes('EVIDENCE')) {
       retentionUntil = new Date(Date.now() + envConfig.MEDIA_EVIDENCE_RETENTION_DAYS * 86400 * 1000);

@@ -11,6 +11,8 @@ const envConfigSchema = z
     PORT: z.coerce.number().default(3000),
     NODE_ENV: z.string().default('development'),
     DATABASE_URL: z.string(),
+    LEADER_MAX_CERTIFICATES: z.coerce.number().int().min(1).max(100).default(10),
+    LEADER_DOCUMENT_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(300),
     SECRET_API_KEY: z.string(),
     SUPABASE_URL: z.string(),
     SUPABASE_ANON_KEY: z.string(),

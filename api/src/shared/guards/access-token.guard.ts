@@ -46,6 +46,10 @@ export class AccessTokenGuard implements CanActivate {
           userRankViaUserId: true,
         },
       })
+      if (!trekGoUser) {
+        throw new ForbiddenException('Không tìm thấy user profile tương ứng với Supabase UID 11111')
+      }
+
 
       if (trekGoUser && trekGoUser.status !== PrismaUserStatus.ACTIVE) {
         throw new ForbiddenException('Tài khoản đã bị tạm khóa')
