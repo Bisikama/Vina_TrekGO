@@ -10,3 +10,4 @@ export * from './codes/rental-ordering.error-codes';
 export * from './codes/preparation.error-codes';
 export * from './codes/delivery.error-codes';
 export * from './codes/rental-return.error-codes';
+export * from './codes/leader.error-codes';

@@ -11,6 +11,7 @@ import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-c
 import { MediaScopeValue, MediaResourceTypeValue, MediaStatusValue, MediaCaptureSourceValue, MediaProvenanceStatusValue, MediaDeliveryType } from '../../application/ports/media-asset.port';
 
 const mediaAssetSelect = {
+  format: true,
   id: true,
   ownerUserId: true,
   scope: true,
@@ -32,6 +33,7 @@ const mediaAssetSelect = {
 };
 
 type RawMediaAsset = {
+  format?: string | null;
   id: string;
   ownerUserId: string | null;
   scope: string;
@@ -59,6 +61,7 @@ export class PrismaMediaAssetAdapter implements MediaAssetPort {
   private mapToView(raw: RawMediaAsset): MediaAssetView {
     return {
       id: raw.id,
+      format: raw.format,
       ownerUserId: raw.ownerUserId,
       scope: raw.scope as MediaScopeValue,
       resourceType: raw.resourceType as MediaResourceTypeValue,
@@ -88,6 +91,11 @@ export class PrismaMediaAssetAdapter implements MediaAssetPort {
     if (!asset) return null;
 
     return this.mapToView(asset);
+  }
+
+  async findByIds(ids: string[]): Promise<MediaAssetView[]> {
+    const assets = await this.prisma.mediaAsset.findMany({ where: { id: { in: ids } }, select: mediaAssetSelect });
+    return assets.map(a => this.mapToView(a));
   }
   async findOwnedById(input: FindOwnedMediaAssetByIdInput): Promise<MediaAssetView | null> {
     const asset = await this.prisma.mediaAsset.findUnique({

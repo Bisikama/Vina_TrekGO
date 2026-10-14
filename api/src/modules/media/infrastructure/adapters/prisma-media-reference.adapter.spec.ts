@@ -14,6 +14,7 @@ describe('PrismaMediaReferenceAdapter', () => {
         {
           provide: PrismaService,
           useValue: {
+            leaderCertificate: { count: jest.fn().mockResolvedValue(0) },
             rentalProduct: { count: jest.fn() },
             conditionSnapshot: { count: jest.fn() },
             returnInspection: { count: jest.fn() },

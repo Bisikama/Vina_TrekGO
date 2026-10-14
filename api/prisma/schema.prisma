@@ -725,6 +725,7 @@ enum MediaStatus {
 }
 
 enum MediaScope {
+  LEADER_CERTIFICATE
   RENTAL_PRODUCT
   CONDITION_EVIDENCE
   RETURN_EVIDENCE
@@ -768,6 +769,7 @@ enum MediaC2paStatus {
 // =========================================================
 
 model MediaAsset {
+  leaderCertificate LeaderCertificate?
   id          String  @id @default(uuid()) @db.Uuid
   ownerUserId String? @map("owner_user_id") @db.Uuid
   owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -1012,6 +1014,8 @@ model LeaderTestAttempt {
 }
 
 model LeaderCertificate {
+  mediaAssetId      String?           @unique @map("media_asset_id") @db.Uuid
+  mediaAsset        MediaAsset?       @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
   id                String            @id @default(uuid()) @db.Uuid
   userId            String            @map("user_id") @db.Uuid
   applicationId     String?           @map("application_id") @db.Uuid
@@ -1635,7 +1639,9 @@ model BookingPolicy {
   participantRules  Json?     @map("participant_rules")
   effectiveFrom     DateTime  @map("effective_from") @db.Timestamptz(6)
   effectiveTo       DateTime? @map("effective_to") @db.Timestamptz(6)
-  isActive          Boolean   @default(true) @map("is_active")
+  isActive          Boolean   @default(false) @map("is_active")
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  revision          Int       @default(1)
   createdBy         String?   @map("created_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -2886,27 +2892,33 @@ model TripActualRoute {
 
 model WeatherSnapshot {
   id                     String           @id @default(uuid()) @db.Uuid
-  tripId                 String           @map("trip_id") @db.Uuid
+  tripId                 String?          @map("trip_id") @db.Uuid
   tripCheckpointId       String?          @map("trip_checkpoint_id") @db.Uuid
   latitude               Decimal          @db.Decimal(10, 7)
   longitude              Decimal          @db.Decimal(10, 7)
   provider               String           @db.VarChar(100)
   temperatureC           Decimal?         @map("temperature_c") @db.Decimal(5, 2)
+  apparentTemperatureC   Decimal?         @map("apparent_temperature_c") @db.Decimal(5, 2)
   humidityPercent        Decimal?         @map("humidity_percent") @db.Decimal(5, 2)
   windSpeedMps           Decimal?         @map("wind_speed_mps") @db.Decimal(7, 2)
+  windGustMps            Decimal?         @map("wind_gust_mps") @db.Decimal(7, 2)
+  precipitationMm        Decimal?         @map("precipitation_mm") @db.Decimal(6, 2)
   rainProbabilityPercent Decimal?         @map("rain_probability_percent") @db.Decimal(5, 2)
+  weatherCode            Int?             @map("weather_code")
   weatherCondition       String?          @map("weather_condition") @db.VarChar(120)
   riskLevel              WeatherRiskLevel @default(UNKNOWN) @map("risk_level")
   riskSummary            String?          @map("risk_summary")
+  forecastData           Json?            @map("forecast_data")
   observedAt             DateTime         @map("observed_at") @db.Timestamptz(6)
   expiresAt              DateTime?        @map("expires_at") @db.Timestamptz(6)
   createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  trip           Trip            @relation("R_WeatherSnapshot_trip_id", fields: [tripId], references: [id])
+  trip           Trip?           @relation("R_WeatherSnapshot_trip_id", fields: [tripId], references: [id])
   tripCheckpoint TripCheckpoint? @relation("R_WeatherSnapshot_trip_checkpoint_id", fields: [tripCheckpointId], references: [id])
 
   @@index([tripId, observedAt])
   @@index([tripCheckpointId, observedAt])
+  @@index([latitude, longitude, observedAt])
   @@map("weather_snapshots")
 }
 

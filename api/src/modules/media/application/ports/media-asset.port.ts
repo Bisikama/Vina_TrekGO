@@ -3,13 +3,14 @@ export const MEDIA_ASSET_PORT = Symbol('MEDIA_ASSET_PORT');
 export type MediaProviderValue = 'CLOUDINARY';
 export type MediaResourceTypeValue = 'IMAGE' | 'VIDEO';
 export type MediaStatusValue = 'PENDING_UPLOAD' | 'PROCESSING' | 'READY' | 'REJECTED' | 'DELETE_PENDING' | 'DELETED';
-export type MediaScopeValue = 'RENTAL_PRODUCT' | 'CONDITION_EVIDENCE' | 'RETURN_EVIDENCE' | 'EXCEPTION_EVIDENCE';
+export type MediaScopeValue = 'RENTAL_PRODUCT' | 'CONDITION_EVIDENCE' | 'RETURN_EVIDENCE' | 'EXCEPTION_EVIDENCE' | 'LEADER_CERTIFICATE';
 export type MediaCaptureSourceValue = 'CAMERA' | 'GALLERY' | 'FILE' | 'SYSTEM' | 'UNKNOWN';
 export type MediaProvenanceStatusValue = 'DIRECT_CAPTURE' | 'METADATA_CONSISTENT' | 'METADATA_MISSING' | 'SUSPICIOUS' | 'UNKNOWN';
 export type MediaC2paStatusValue = 'NOT_CHECKED' | 'NOT_PRESENT' | 'VERIFIED' | 'INVALID' | 'UNSUPPORTED';
 export type MediaDeliveryType = 'upload' | 'authenticated';
 
 export interface MediaAssetView {
+  format?: string | null;
   id: string;
   ownerUserId: string | null;
   scope: MediaScopeValue;
@@ -118,6 +119,7 @@ export interface FindDeletePendingAssetsInput {
 export interface MediaAssetPort {
   findDeletePendingAssets(input: FindDeletePendingAssetsInput): Promise<MediaAssetView[]>;
   findById(input: FindMediaAssetByIdInput): Promise<MediaAssetView | null>;
+  findByIds(ids: string[]): Promise<MediaAssetView[]>;
   findOwnedById(input: FindOwnedMediaAssetByIdInput): Promise<MediaAssetView | null>;
   createPendingUpload(input: CreatePendingUploadInput): Promise<MediaAssetView>;
   markReadyFromProcessing(input: MarkReadyInput): Promise<MediaAssetView>;
