@@ -4,6 +4,9 @@ import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
 import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
 import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes';
+import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
+import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
+import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -89,4 +92,57 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: { status: 400, message: 'Insufficient available quantity for rental', retryable: false },
   [RO.QUOTE_NOT_ACTIVE]: { status: 400, message: 'Quote is no longer active', retryable: false },
   [RO.QUOTE_EXPIRED]: { status: 400, message: 'Quote has expired', retryable: false },
+  [RO.QUOTE_NOT_FOUND]: { status: 404, message: 'Rental quote not found', retryable: false },
+  [RO.OPEN_ORDER_EXISTS]: { status: 409, message: 'An open rental order already exists for this trip', retryable: false },
+  [RO.OPERATION_CONFLICT]: { status: 409, message: 'Operation conflict', retryable: false },
+  [RO.IDEMPOTENCY_KEY_REUSED]: { status: 409, message: 'Idempotency key reused with different payload', retryable: false },
+  [RO.STALE_CONTEXT]: { status: 409, message: 'Rental context is stale', retryable: false },
+  [RO.EQUIPMENT_NOT_AVAILABLE]: { status: 409, message: 'Equipment not available', retryable: false },
+  [RO.RENTAL_ORDER_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
+  [RO.INVENTORY_LOCATION_NOT_CONFIGURED]: { status: 500, message: 'Primary rental inventory location is not configured or inactive', retryable: false },
+
+  // Preparation (Phase 05)
+  [PR.TASK_NOT_FOUND]: { status: 404, message: 'Preparation task not found', retryable: false },
+  [PR.TASK_ALREADY_ASSIGNED]: { status: 409, message: 'Task already assigned to another staff', retryable: false },
+  [PR.TASK_NOT_CLAIMED]: { status: 409, message: 'Task is not claimed by current staff', retryable: false },
+  [PR.TASK_NOT_PICKABLE]: { status: 409, message: 'Task state is not pickable', retryable: false },
+  [PR.INVALID_TASK_STATE]: { status: 409, message: 'Invalid preparation task state', retryable: false },
+  [PR.UNIT_NOT_ELIGIBLE_FOR_PICK]: { status: 422, message: 'Equipment unit is not eligible for pick', retryable: false },
+  [PR.UNIT_NOT_ASSIGNED_TO_TASK]: { status: 409, message: 'Equipment unit is not assigned to this task', retryable: false },
+  [PR.ASSIGNMENT_NOT_FOUND]: { status: 404, message: 'Rental unit assignment not found', retryable: false },
+  [PR.CONDITION_SNAPSHOT_EXISTS]: { status: 409, message: 'Condition snapshot already captured for this unit', retryable: false },
+  [PR.EVIDENCE_NOT_READY]: { status: 422, message: 'Evidence media is not ready or verified', retryable: false },
+  [PR.EVIDENCE_INCOMPLETE]: { status: 422, message: 'Evidence media is incomplete for all items', retryable: false },
+  [PR.PACKAGE_NOT_FOUND]: { status: 404, message: 'Rental package not found', retryable: false },
+  [PR.PACKAGE_MISMATCH]: { status: 409, message: 'Package does not match task or order', retryable: false },
+  [PR.PACKAGE_INCOMPLETE]: { status: 409, message: 'Package items are incomplete', retryable: false },
+  [PR.DELIVERY_STAFF_INVALID]: { status: 422, message: 'Target delivery staff is invalid or inactive', retryable: false },
+  [PR.CUSTODY_MISMATCH]: { status: 409, message: 'Custody mismatch detected', retryable: false },
+  [PR.CUSTODY_TRANSFER_ALREADY_PENDING]: { status: 409, message: 'A custody transfer is already pending', retryable: false },
+  [PR.IDEMPOTENCY_KEY_REQUIRED]: { status: 400, message: 'Idempotency key is required', retryable: false },
+
+  // Delivery (Phase 06)
+  [DL.TASK_NOT_FOUND]: { status: 404, message: 'Delivery task not found', retryable: false },
+  [DL.TASK_NOT_CLAIMED]: { status: 409, message: 'Delivery task is not claimed by current staff', retryable: false },
+  [DL.INVALID_TASK_STATE]: { status: 409, message: 'Invalid delivery task state', retryable: false },
+  [DL.PICKUP_CODE_INVALID_OR_EXPIRED]: { status: 400, message: 'Pickup code is invalid or expired', retryable: false },
+  [DL.PICKUP_VERIFICATION_INVALID]: { status: 400, message: 'Pickup verification reference is invalid', retryable: false },
+  [DL.PICKUP_VERIFICATION_EXPIRED]: { status: 410, message: 'Pickup verification reference has expired', retryable: false },
+  [DL.PICKUP_CODE_CONFIG_ERROR]: { status: 500, message: 'Pickup code policy configuration error', retryable: false },
+  [DL.PACKAGE_VERSION_CHANGED]: { status: 409, message: 'Package version changed during verification', retryable: false },
+  [DL.RECIPIENT_CONTEXT_INVALID]: { status: 422, message: 'Recipient context is invalid', retryable: false },
+  [DL.PAYMENT_RECONCILIATION_REQUIRED]: { status: 409, message: 'Payment reconciliation required before operation', retryable: false },
+  [DL.ASSIGNEE_INVALID]: { status: 422, message: 'Assignee is invalid for rental task', retryable: false },
+  [DL.CUSTODY_TRANSFER_NOT_FOUND]: { status: 404, message: 'Custody transfer not found', retryable: false },
+
+  // Return Delivery (RB-API-603)
+  [RR.RENTAL_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
+  [RR.RETURN_TASK_NOT_FOUND]: { status: 404, message: 'Return task not found', retryable: false },
+  [RR.RETURN_NOT_READY]: { status: 409, message: 'Return inspection/custody not ready', retryable: false },
+  [RR.INVALID_RENTAL_STATE]: { status: 409, message: 'Invalid rental order state for return', retryable: false },
+  [RR.INVALID_RETURN_STATE]: { status: 409, message: 'Invalid return task state', retryable: false },
+  [RR.UNIT_NOT_RETURNED]: { status: 409, message: 'Unit has not been scanned as returned', retryable: false },
+  [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
+  [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
+  [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
 };

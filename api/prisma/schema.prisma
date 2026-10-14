@@ -1808,6 +1808,7 @@ model InventoryLocation {
   custodyEventsViaToInventoryLocationId       CustodyEvent[]      @relation("R_CustodyEvent_to_inventory_location_id")
 
   returnCustodyTransfersViaInventoryLocationId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_inventoryLocationId")
+  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_location")
 
   @@index([status])
   @@map("inventory_locations")
@@ -1924,6 +1925,8 @@ model EquipmentUnit {
   depositSettlementItemsViaUnitId         DepositSettlementItem[] @relation("R_DepositSettlementItem_unit_id")
   maintenanceRecordsViaUnitId             MaintenanceRecord[]     @relation("R_MaintenanceRecord_unit_id")
   custodyEventsViaUnitId                  CustodyEvent[]          @relation("R_CustodyEvent_unit_id")
+  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_unit")
+  readinessCommitmentsViaUnitId RentalReadinessCommitment[] @relation("R_RentalReadinessCommitment_unit")
 
   @@index([productId, status, condition])
   @@index([currentInventoryLocationId, status])
@@ -1959,6 +1962,10 @@ model RentalPolicy {
   maxExtensionCount             Int?               @map("max_extension_count")
   maxTotalRentalDays            Int?               @map("max_total_rental_days")
   deepInspectionBufferMinutes   Int?               @map("deep_inspection_buffer_minutes")
+  returnInspectionSlaHours Int? @map("return_inspection_sla_hours")
+  deepInspectionSlaHours Int? @map("deep_inspection_sla_hours")
+  returnToInventoryAllowanceHours Int? @map("return_to_inventory_allowance_hours")
+  postInspectionCleaningAllowanceHours Int? @map("post_inspection_cleaning_allowance_hours")
   cancellationRules             Json               @map("cancellation_rules")
   effectiveFrom                 DateTime           @map("effective_from") @db.Timestamptz(6)
   effectiveTo                   DateTime?          @map("effective_to") @db.Timestamptz(6)
@@ -2064,6 +2071,8 @@ model RentalQuoteLine {
   chargedDays              Int      @map("charged_days")
   lineRentalFee            Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
   lineDeposit              Decimal  @map("line_deposit") @db.Decimal(12, 2)
+  occupiedFrom DateTime? @map("occupied_from") @db.Timestamptz(6)
+  occupiedUntil DateTime? @map("occupied_until") @db.Timestamptz(6)
   createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   quote   RentalQuote   @relation("R_RentalQuoteLine_quote_id", fields: [quoteId], references: [id])
@@ -2144,6 +2153,7 @@ model RentalOrder {
   rentalReviewsViaRentalOrderId     RentalReview[]           @relation("R_RentalReview_rental_order_id")
 
   returnCustodyTransfersViaOrderId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_orderId")
+  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_order")
 
   @@index([userId, tripId, status])
   @@index([userId, status])
@@ -2240,6 +2250,7 @@ model RentalUnitAssignment {
   returnInspectionsViaAssignmentId     ReturnInspection[]     @relation("R_ReturnInspection_assignment_id")
   rentalExceptionCasesViaAssignmentId  RentalExceptionCase[]  @relation("R_RentalExceptionCase_assignment_id")
   depositSettlementItemViaAssignmentId DepositSettlementItem? @relation("R_DepositSettlementItem_assignment_id")
+  returnInspectionTask ReturnInspectionTask? @relation("R_ReturnInspectionTask_assignment")
 
   @@index([orderLineId, status])
   @@index([equipmentUnitId, status])
@@ -2505,6 +2516,13 @@ model RentalExceptionCase {
   approvalRef  String?                   @map("approval_ref") @db.VarChar(180)
   dueAt        DateTime?                 @map("due_at") @db.Timestamptz(6)
   resolvedAt   DateTime?                 @map("resolved_at") @db.Timestamptz(6)
+  adminApprovalDueAt DateTime?              @map("admin_approval_due_at") @db.Timestamptz(6)
+  adminReviewStatus String @default("PENDING") @map("admin_review_status") @db.VarChar(32)
+  adminSlaBreachedAt DateTime?              @map("admin_sla_breached_at") @db.Timestamptz(6)
+  evidenceAccessibleAt DateTime?           @map("evidence_accessible_at") @db.Timestamptz(6)
+  evidenceCompleteAt DateTime?              @map("evidence_complete_at") @db.Timestamptz(6)
+  evidencePublishedAt DateTime?            @map("evidence_published_at") @db.Timestamptz(6)
+  inAppNoticePublishedAt DateTime?         @map("in_app_notice_published_at") @db.Timestamptz(6)
   version      Int                       @default(1)
   createdAt    DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -2523,6 +2541,7 @@ model RentalExceptionCase {
   @@index([unitId, status])
   @@index([caseType, status])
   @@index([assignedTo, status])
+  @@index([status, adminApprovalDueAt, adminSlaBreachedAt])
   @@map("rental_exception_cases")
 }
 
@@ -2605,6 +2624,7 @@ model DepositSettlementItem {
   approvedByUser User?                @relation("R_DepositSettlementItem_approved_by", fields: [approvedBy], references: [id])
 
   refundViaDepositSettlementItemId Refund? @relation("R_Refund_deposit_settlement_item_id")
+  depositRefundAllocations DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_item")
 
   @@unique([settlementId, unitId])
   @@index([status])
@@ -3113,6 +3133,7 @@ model Refund {
   payment               Payment                @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
   depositSettlement     DepositSettlement?     @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
   depositSettlementItem DepositSettlementItem? @relation("R_Refund_deposit_settlement_item_id", fields: [depositSettlementItemId], references: [id])
+  depositRefundItems DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_refund")
   bookingCancellation   BookingCancellation?   @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id], onDelete: Restrict)
   rentalOrder           RentalOrder?           @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
   trailAccess           TrailAccess?           @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
@@ -3537,6 +3558,10 @@ model ReturnCustodyTransfer {
   requestedAt         DateTime              @default(now()) @map("requested_at") @db.Timestamptz(6)
   receivedAt          DateTime?             @map("received_at") @db.Timestamptz(6)
   cancelledAt         DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  transferStartedAt   DateTime?             @map("transfer_started_at") @db.Timestamptz(6)
+  transferWatchAt     DateTime?             @map("transfer_watch_at") @db.Timestamptz(6)
+  delayedAt           DateTime?             @map("delayed_at") @db.Timestamptz(6)
+  monitoringStatus    String                @default("ON_TIME") @map("monitoring_status") @db.VarChar(32)
   version             Int                   @default(1)
   createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -3550,6 +3575,7 @@ model ReturnCustodyTransfer {
   @@index([deliveryTaskId, status])
   @@index([inventoryLocationId, status])
   @@index([fromStaffId, status])
+  @@index([status, transferWatchAt, delayedAt])
   @@map("return_custody_transfers")
 }
 
@@ -3718,4 +3744,70 @@ model RentalDocumentAccessLog {
   @@index([documentId, accessedAt])
   @@index([actorUserId, accessedAt])
   @@map("rental_document_access_logs")
+}
+
+model ReturnInspectionTask {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @map("order_id") @db.Uuid
+  assignmentId String @unique @map("assignment_id") @db.Uuid
+  unitId String @map("unit_id") @db.Uuid
+  inventoryLocationId String @map("inventory_location_id") @db.Uuid
+  receivedAt DateTime @map("received_at") @db.Timestamptz(6)
+  inspectionDueAt DateTime @map("inspection_due_at") @db.Timestamptz(6)
+  deepInspectionDueAt DateTime? @map("deep_inspection_due_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  status String @default("PENDING") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order RentalOrder @relation("R_ReturnInspectionTask_order", fields:[orderId],references:[id],onDelete:Restrict)
+  assignment RentalUnitAssignment @relation("R_ReturnInspectionTask_assignment",fields:[assignmentId],references:[id],onDelete:Restrict)
+  unit EquipmentUnit @relation("R_ReturnInspectionTask_unit",fields:[unitId],references:[id],onDelete:Restrict)
+  inventoryLocation InventoryLocation @relation("R_ReturnInspectionTask_location",fields:[inventoryLocationId],references:[id],onDelete:Restrict)
+  @@index([status,inspectionDueAt])
+  @@index([inventoryLocationId,status,inspectionDueAt])
+  @@map("return_inspection_tasks")
+}
+
+model DepositRefundItemAllocation {
+  id String @id @default(uuid()) @db.Uuid
+  refundId String @map("refund_id") @db.Uuid
+  depositSettlementItemId String @unique @map("deposit_settlement_item_id") @db.Uuid
+  amount Decimal @db.Decimal(12,2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  refund Refund @relation("R_DepositRefundItemAllocation_refund",fields:[refundId],references:[id],onDelete:Restrict)
+  item DepositSettlementItem @relation("R_DepositRefundItemAllocation_item",fields:[depositSettlementItemId],references:[id],onDelete:Restrict)
+  @@unique([refundId,depositSettlementItemId])
+  @@index([refundId])
+  @@map("deposit_refund_item_allocations")
+}
+
+model RentalReadinessCommitment {
+  id String @id @default(uuid()) @db.Uuid
+  unitId String @unique @map("unit_id") @db.Uuid
+  readyBy DateTime @map("ready_by") @db.Timestamptz(6)
+  validUntil DateTime @map("valid_until") @db.Timestamptz(6)
+  verifiedAt DateTime @map("verified_at") @db.Timestamptz(6)
+  verifiedBy String @map("verified_by") @db.Uuid
+  evidenceRef String @map("evidence_ref") @db.VarChar(200)
+  status String @default("VERIFIED") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  unit EquipmentUnit @relation("R_RentalReadinessCommitment_unit",fields:[unitId],references:[id],onDelete:Restrict)
+  @@index([status, readyBy, validUntil])
+  @@map("rental_readiness_commitments")
+}
+
+model RentalCapacityAlert {
+  alertKey String @id @map("alert_key") @db.VarChar(120)
+  productId String @map("product_id") @db.Uuid
+  occupiedFrom DateTime @map("occupied_from") @db.Timestamptz(6)
+  occupiedUntil DateTime @map("occupied_until") @db.Timestamptz(6)
+  requestedQuantity Int @map("requested_quantity")
+  availableCount Int @map("available_count")
+  unknownUnitCount Int @map("unknown_unit_count")
+  status String @default("ACTION_REQUIRED") @db.VarChar(32)
+  reason String @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@index([productId, status])
+  @@map("rental_capacity_alerts")
 }
