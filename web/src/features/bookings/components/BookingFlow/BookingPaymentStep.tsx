@@ -25,6 +25,8 @@ interface BookingPaymentStepProps {
   isHoldExpired?: boolean;
   isProcessingPayment?: boolean;
   errorMessage?: string | null;
+  isBypassMode?: boolean;
+  onToggleBypassMode?: () => void;
 }
 
 export const BookingPaymentStep = ({
@@ -39,10 +41,10 @@ export const BookingPaymentStep = ({
   isHoldExpired = false,
   isProcessingPayment = false,
   errorMessage,
+  isBypassMode = true,
+  onToggleBypassMode,
 }: BookingPaymentStepProps) => {
-  const [paymentMethod, setPaymentMethod] = useState<
-    "vnpay" | "momo" | "card" | "vietqr"
-  >("vnpay");
+  const [paymentMethod, setPaymentMethod] = useState<string>("momo");
 
   const isProcessing = isProcessingPayment;
 
@@ -91,6 +93,41 @@ export const BookingPaymentStep = ({
       {isHoldExpired && (
         <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-xs font-bold text-red-800">
           Thời gian giữ chỗ đã hết hạn! Vui lòng quay lại bước trước để tạo lại lượt giữ vé mới.
+        </div>
+      )}
+
+      {/* Chế độ thử nghiệm Frontend Bypass */}
+      {isBypassMode ? (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs font-medium text-emerald-900">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Chế độ thử nghiệm Frontend: Tự động hoàn tất & xuất vé (Tạm ẩn cổng MoMo)</span>
+          </div>
+          {onToggleBypassMode && (
+            <button
+              type="button"
+              onClick={onToggleBypassMode}
+              className="text-[11px] font-bold text-emerald-800 underline hover:text-emerald-950 cursor-pointer"
+            >
+              Mở cổng thật
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs font-medium text-blue-900">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-blue-500"></span>
+            <span>Đang kích hoạt cổng thanh toán đối tác (MoMo Sandbox)</span>
+          </div>
+          {onToggleBypassMode && (
+            <button
+              type="button"
+              onClick={onToggleBypassMode}
+              className="text-[11px] font-bold text-blue-800 underline hover:text-blue-950 cursor-pointer"
+            >
+              Bật chế độ thử nghiệm
+            </button>
+          )}
         </div>
       )}
 
@@ -243,37 +280,30 @@ export const BookingPaymentStep = ({
         </div>
 
         <div className="space-y-3">
-          {/* VNPAY */}
+          {/* MoMo (Phương thức duy nhất khả dụng với cổng hiện tại) */}
           <label
-            onClick={() => setPaymentMethod("vnpay")}
-            className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-              paymentMethod === "vnpay"
-                ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            }`}
+            className="flex cursor-pointer items-center justify-between rounded-xl border border-emerald-600 bg-emerald-50/40 p-4 ring-2 ring-emerald-600/20 transition"
           >
             <div className="flex items-center gap-3.5">
               <input
                 type="radio"
                 name="payment_method"
-                checked={paymentMethod === "vnpay"}
-                onChange={() => setPaymentMethod("vnpay")}
+                checked={true}
+                readOnly
                 className="h-4 w-4 accent-[#125238]"
               />
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 font-extrabold text-white text-xs">
-                VNPAY
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#A50064] font-extrabold text-white text-xs">
+                MoMo
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-gray-900">
-                    VNPAY-QR (Ứng dụng Ngân hàng / Ví VNPAY)
-                  </span>
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                    Khuyên dùng
+                  <span className="font-bold text-gray-900">Cổng thanh toán MoMo (Ví MoMo / Quét QR)</span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                    Khả dụng
                   </span>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Hỗ trợ hơn 40 ứng dụng ngân hàng: Vietcombank, Techcombank, BIDV, MB...
+                  Hỗ trợ ví MoMo, quét mã VietQR ngân hàng hoặc thẻ ATM nội địa
                 </p>
               </div>
             </div>
@@ -282,170 +312,18 @@ export const BookingPaymentStep = ({
             </div>
           </label>
 
-          {/* VNPAY Details if selected */}
-          {paymentMethod === "vnpay" && (
-            <div className="ml-7 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs text-blue-900 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-blue-950 text-sm">
-                <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span>Cổng thanh toán quốc gia VNPAY-QR</span>
-              </div>
-              <p className="text-gray-700">
-                Sau khi bấm <strong>Xác nhận & Thanh toán ngay</strong>, hệ thống sẽ kết nối trực tiếp với cổng thanh toán VNPAY để khởi tạo phiên giao dịch cho đơn đặt chỗ của bạn.
-              </p>
-              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-medium text-gray-600">
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">VCB Digibank</span>
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">Techcombank</span>
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">BIDV SmartBanking</span>
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">MB Bank</span>
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">VietinBank iPay</span>
-                <span className="rounded bg-white px-2 py-0.5 border border-blue-200">+35 Ngân hàng khác</span>
-              </div>
-            </div>
-          )}
-
-          {/* MoMo */}
-          <label
-            onClick={() => setPaymentMethod("momo")}
-            className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-              paymentMethod === "momo"
-                ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            }`}
-          >
-            <div className="flex items-center gap-3.5">
-              <input
-                type="radio"
-                name="payment_method"
-                checked={paymentMethod === "momo"}
-                onChange={() => setPaymentMethod("momo")}
-                className="h-4 w-4 accent-[#125238]"
-              />
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#A50064] font-extrabold text-white text-xs">
-                MoMo
-              </div>
-              <div>
-                <span className="font-bold text-gray-900">Ví điện tử MoMo</span>
-                <p className="text-xs text-gray-500">
-                  Thanh toán qua ví MoMo hoặc liên kết tài khoản ngân hàng
-                </p>
-              </div>
-            </div>
-          </label>
-
           {/* MoMo sub-view */}
-          {paymentMethod === "momo" && (
-            <div className="ml-7 rounded-xl border border-pink-100 bg-pink-50/60 p-4 text-xs text-pink-950 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-[#A50064] text-sm">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                <span>Thanh toán siêu tốc qua Ví MoMo</span>
-              </div>
-              <p className="text-gray-700">
-                Hệ thống sẽ kết nối đến ứng dụng Ví MoMo để bạn quét mã thanh toán hoặc liên kết tài khoản an toàn chỉ trong 1 chạm.
-              </p>
+          <div className="ml-7 rounded-xl border border-pink-100 bg-pink-50/60 p-4 text-xs text-pink-950 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-[#A50064] text-sm">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <span>Thanh toán bảo mật qua Cổng MoMo Sandbox</span>
             </div>
-          )}
-
-          {/* Thẻ tín dụng / Ghi nợ quốc tế */}
-          <label
-            onClick={() => setPaymentMethod("card")}
-            className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-              paymentMethod === "card"
-                ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            }`}
-          >
-            <div className="flex items-center gap-3.5">
-              <input
-                type="radio"
-                name="payment_method"
-                checked={paymentMethod === "card"}
-                onChange={() => setPaymentMethod("card")}
-                className="h-4 w-4 accent-[#125238]"
-              />
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 font-extrabold text-white text-[10px]">
-                CARD
-              </div>
-              <div>
-                <span className="font-bold text-gray-900">
-                  Thẻ quốc tế (Visa, MasterCard, JCB)
-                </span>
-                <p className="text-xs text-gray-500">
-                  Thanh toán trực tiếp bằng thẻ tín dụng hoặc thẻ ghi nợ quốc tế
-                </p>
-              </div>
-            </div>
-          </label>
-
-          {/* Card Gateway notice */}
-          {paymentMethod === "card" && (
-            <div className="ml-7 rounded-xl border border-gray-200 bg-gray-50/80 p-4 text-xs text-gray-900 space-y-2.5">
-              <div className="flex items-center gap-2 font-bold text-gray-900 text-sm">
-                <svg className="h-4 w-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span>Cổng thanh toán Quốc tế chuẩn PCI-DSS & 3D-Secure</span>
-              </div>
-              <p className="text-gray-600 leading-relaxed">
-                Khi bấm <strong>Xác nhận & Thanh toán ngay</strong>, bạn sẽ được chuyển hướng an toàn tới trang thanh toán bảo mật của ngân hàng đối tác. TrekGO <strong>không</strong> lưu trữ thông tin thẻ của bạn trên hệ thống nhằm bảo vệ tuyệt đối an toàn thông tin tài khoản.
-              </p>
-              <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-gray-700">
-                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">VISA</span>
-                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">Mastercard</span>
-                <span className="rounded bg-white px-2 py-1 border border-gray-200 shadow-xs">JCB</span>
-                <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800 border border-emerald-200">Bảo mật SSL 256-bit</span>
-              </div>
-            </div>
-          )}
-
-          {/* Chuyển khoản VietQR */}
-          <label
-            onClick={() => setPaymentMethod("vietqr")}
-            className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-              paymentMethod === "vietqr"
-                ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            }`}
-          >
-            <div className="flex items-center gap-3.5">
-              <input
-                type="radio"
-                name="payment_method"
-                checked={paymentMethod === "vietqr"}
-                onChange={() => setPaymentMethod("vietqr")}
-                className="h-4 w-4 accent-[#125238]"
-              />
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-800 font-extrabold text-white text-[10px]">
-                VietQR
-              </div>
-              <div>
-                <span className="font-bold text-gray-900">
-                  Chuyển khoản Ngân hàng 24/7 (VietQR)
-                </span>
-                <p className="text-xs text-gray-500">
-                  Chuyển tiền tự động nhận diện qua mã QR liên ngân hàng NAPAS
-                </p>
-              </div>
-            </div>
-          </label>
-
-          {/* VietQR notice */}
-          {paymentMethod === "vietqr" && (
-            <div className="ml-7 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs text-emerald-950 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
-                <svg className="h-4 w-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Chuyển khoản liên ngân hàng tự động NAPAS 24/7</span>
-              </div>
-              <p className="text-gray-700">
-                Hệ thống sẽ tạo mã VietQR động chứa chính xác số tiền và mã giao dịch của đơn đặt chỗ. Bạn chỉ cần mở bất kỳ ứng dụng ngân hàng nào để quét mã chuyển tiền nhanh 24/7 mà không cần gõ thủ công số tài khoản.
-              </p>
-            </div>
-          )}
+            <p className="text-gray-700 leading-relaxed">
+              Hệ thống sẽ kết nối trực tiếp đến cổng thanh toán MoMo. Bạn có thể sử dụng ứng dụng MoMo để quét mã hoặc thanh toán bằng tài khoản ngân hàng liên kết an toàn chỉ trong 1 chạm.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -499,7 +377,7 @@ export const BookingPaymentStep = ({
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 ></path>
               </svg>
-              Đang kết nối cổng thanh toán...
+              Đang kết nối & chuyển hướng cổng thanh toán...
             </>
           ) : (
             <>

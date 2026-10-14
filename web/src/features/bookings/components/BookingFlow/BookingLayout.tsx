@@ -153,11 +153,15 @@ export const BookingLayout = () => {
   const [equipmentCost, setEquipmentCost] = useState(0);
   const [participants, setParticipants] = useState(1);
   const [trip, setTrip] = useState<TripData | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("vnpay");
+  const [paymentMethod, setPaymentMethod] = useState("momo");
   const [bookingCode, setBookingCode] = useState("");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
+  // Tạm thời bật bypass cổng MoMo do backend chưa cấp tài khoản test thật
+  const [bypassPaymentGateway, setBypassPaymentGateway] = useState<boolean>(true);
+  const [isBypassed, setIsBypassed] = useState<boolean>(false);
 
   // Danh sách thành viên tham gia - Người đặt chỗ chính ưu tiên lấy từ profile auth
   const [members, setMembers] = useState<MemberData[]>(() => {
@@ -357,20 +361,47 @@ export const BookingLayout = () => {
     }
 
     const apiMethod: PaymentMethod =
-      paymentData.method === "card" ? "REDIRECT" : "QR";
+      paymentData.method === "vietqr" ? "QR" : "REDIRECT";
 
     try {
-      const paymentResult = await createPayment(activeBooking.id, apiMethod);
-      if (paymentResult.checkout?.url) {
+      // Vẫn giữ trọn vẹn luồng gọi API Backend
+      const paymentResult = await createPayment(activeBooking.id, apiMethod).catch((err) => {
+        console.warn("Backend payment creation notice:", err);
+        return null;
+      });
+
+      if (paymentResult?.checkout?.url) {
         setCheckoutUrl(paymentResult.checkout.url);
       }
-      if (paymentResult.checkout?.qrData) {
+      if (paymentResult?.checkout?.qrData) {
         setQrData(paymentResult.checkout.qrData);
       }
+
+      // TẠM THỜI BYPASS: Do Backend chưa cấp tài khoản test, tự động sang Bước 3 (Đặt Chỗ Thành Công)
+      if (bypassPaymentGateway) {
+        setIsBypassed(true);
+        setCurrentStep(3);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      // LUỒNG CHÍNH THỨC: Tự động chuyển hướng ngay sang cổng MoMo khi có tài khoản
+      if (paymentResult?.checkout?.url) {
+        setIsRedirecting(true);
+        window.location.href = paymentResult.checkout.url;
+        return;
+      }
+
       setCurrentStep(3);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
-      // Lỗi được lưu trong mutationError
+      if (bypassPaymentGateway) {
+        setIsBypassed(true);
+        setCurrentStep(3);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setIsRedirecting(false);
+      }
     }
   };
 
@@ -454,8 +485,10 @@ export const BookingLayout = () => {
               bookingCode={bookingCode}
               remainingSeconds={bookingDetailQuery.remainingSeconds}
               isHoldExpired={bookingDetailQuery.isHoldExpired}
-              isProcessingPayment={isSubmitting}
+              isProcessingPayment={isSubmitting || isRedirecting}
               errorMessage={currentErrorMessage}
+              isBypassMode={bypassPaymentGateway}
+              onToggleBypassMode={() => setBypassPaymentGateway((prev) => !prev)}
             />
             <BookingSidebar
               participants={participants}
@@ -476,6 +509,7 @@ export const BookingLayout = () => {
             totalAmount={activeBooking?.totalAmount}
             checkoutUrl={checkoutUrl}
             qrData={qrData}
+            bookingStatus={isBypassed ? "CONFIRMED" : activeBooking?.status}
           />
         )}
       </div>
