@@ -68,7 +68,6 @@ export class RentalCheckoutService {
         order.paymentExpiresAt <= now ||
         !memberEligible
       ) {
-        console.log('Failing condition 1:', { status: order.status, financialStatus: order.financialStatus, paymentExpiresAt: order.paymentExpiresAt, now, memberEligible });
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       const components = rentalComponents(order, order.rentalOrderLinesViaOrderId)
@@ -90,7 +89,6 @@ export class RentalCheckoutService {
           !invoice.subtotalAmount.equals(order.totalAmount) ||
           !invoice.discountAmount.isZero()
         ) {
-          console.log('Failing condition 2 (invoice bad):', { type: invoice.invoiceType, user: invoice.userId, rev: invoice.revisionNo, status: invoice.status, cur: invoice.currency, total: invoice.totalAmount, orderTotal: order.totalAmount });
           throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
         }
         const lines = await tx.invoiceLine.findMany({ where: { invoiceId: invoice.id } })
@@ -150,17 +148,14 @@ export class RentalCheckoutService {
           )
         })
       ) {
-        console.log('Failing condition 3 (reservation state invalid)');
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       if (order.paymentExpiresAt <= now || (invoice.expiresAt && invoice.expiresAt <= now)) {
-        console.log('Failing condition 4 (expired)', { orderExp: order.paymentExpiresAt, invExp: invoice.expiresAt, now });
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       if (await tx.payment.findFirst({ where: { invoiceId: invoice.id, status: { in: ['PENDING', 'PROCESSING'] } } }))
         throw AppError.fromCode(E.PAYMENT_ATTEMPT_IN_PROGRESS)
       if (await tx.payment.findFirst({ where: { invoice: { rentalOrderId: order.id }, status: 'SUCCEEDED' } })) {
-        console.log('Failing condition 5 (already succeeded)');
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       const requestSnapshot = {
