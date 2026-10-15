@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { resolveActivePrimaryRentalLocation } from '../shared/primary-inventory-location'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { validateRentalAllocations } from './rental-payment.rules'
 import { rentalMembershipValid } from './rental-membership.guard'
@@ -39,7 +40,13 @@ export class RentalPaymentConsumer {
         where: { id: source.id },
         include: {
           trip: true,
-          rentalOrderLinesViaOrderId: { include: { rentalQuantityReservationsViaOrderLineId: true } },
+          quote: { include: { rentalQuoteLinesViaQuoteId: true } },
+          rentalOrderLinesViaOrderId: {
+            include: {
+              product: true,
+              rentalQuantityReservationsViaOrderLineId: true,
+            },
+          },
         },
       })
       const event = await tx.paymentOutboxEvent.findUniqueOrThrow({ where: { id: eventId } })
@@ -65,12 +72,23 @@ export class RentalPaymentConsumer {
       if (!receipt && payment.application.status === 'PENDING') {
         const extension = await tx.rentalExtensionRequest.findFirst({ where: { invoiceId: payment.invoiceId } })
         if (extension) {
-          // Provider success is already signature-verified by Shared Payment inbox.
-          // Extension has its own amount/expiry guards; never replay base-order PAID.
-          // Never apply a payment that arrived after its delta-capacity hold expired.
-          // Provider money must be reversed by the SAME verified Shared Payment worker
-          // used by initial RENTAL payments, rather than an unscoped Refund insert.
-          const paymentLate = extension.status !== 'PENDING_PAYMENT' || !extension.holdExpiresAt || extension.holdExpiresAt <= now
+          const effectivePaidAt = payment.paidAt
+          if (!effectivePaidAt) {
+            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'FAILED', payment.transactionRef, now)
+            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'REJECTED', reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED', decidedAt: now } })
+            await tx.paymentOutboxEvent.upsert({
+              where: { deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1` },
+              create: {
+                deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1`,
+                eventType: 'TECHNICAL_REVERSAL_REQUESTED', aggregateType: 'Payment', aggregateId: payment.id,
+                payload: { schemaVersion: 1, paymentId: payment.id, invoiceId: payment.invoiceId, reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED' },
+              }, update: {},
+            })
+            await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } })
+            await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } })
+            return
+          }
+          const paymentLate = extension.status !== 'PENDING_PAYMENT' || !extension.holdExpiresAt || extension.holdExpiresAt < effectivePaidAt
           if (paymentLate) {
             await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'SUCCEEDED', payment.transactionRef, now)
             await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'REJECTED', reasonCode: 'LATE_PAYMENT', decidedAt: now } })
@@ -90,6 +108,7 @@ export class RentalPaymentConsumer {
           await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } })
           return
         }
+        const effectivePaidAt = payment.paidAt
         validateRentalAllocations(order, order.rentalOrderLinesViaOrderId, payment.allocations)
         let reason: string | null = null
         const memberEligible = await rentalMembershipValid(tx, order)
@@ -99,10 +118,12 @@ export class RentalPaymentConsumer {
           })
         )
           reason = 'DUPLICATE_PAYMENT'
+        else if (!effectivePaidAt)
+          reason = 'PAYMENT_TIMESTAMP_UNTRUSTED'
         else if (
           order.status === 'EXPIRED' ||
-          order.paymentExpiresAt <= now ||
-          (payment.invoice.expiresAt && payment.invoice.expiresAt <= now)
+          effectivePaidAt > order.paymentExpiresAt ||
+          (payment.invoice.expiresAt && effectivePaidAt > payment.invoice.expiresAt)
         )
           reason = 'LATE_PAYMENT'
         else if (
@@ -117,33 +138,84 @@ export class RentalPaymentConsumer {
           !payment.invoice.totalAmount.equals(order.totalAmount) ||
           order.rentalOrderLinesViaOrderId.some((l) => {
             const held = l.rentalQuantityReservationsViaOrderLineId.filter((r) => r.status === 'HELD')
-            return (
+            if (
               held.length !== 1 ||
               held[0].quantity !== l.quantity ||
               held[0].productId !== l.productId ||
               !held[0].holdExpiresAt ||
-              held[0].holdExpiresAt <= now ||
-              held[0].occupiedFrom > order.occupiedStartAt ||
-              held[0].occupiedUntil < order.occupiedEndAt
-            )
+              held[0].holdExpiresAt < effectivePaidAt
+            ) {
+              return true
+            }
+
+            const quoteLine = order.quote?.rentalQuoteLinesViaQuoteId?.find((ql) => ql.productId === l.productId)
+            let expectedOccupiedFrom: Date | null = quoteLine?.occupiedFrom ?? null
+            let expectedOccupiedUntil: Date | null = quoteLine?.occupiedUntil ?? null
+
+            if (!expectedOccupiedFrom || !expectedOccupiedUntil) {
+              const rawPolicy = order.policySnapshot
+              if (!rawPolicy || typeof rawPolicy !== 'object' || Array.isArray(rawPolicy)) {
+                return true // Fail closed: policy snapshot missing or invalid
+              }
+              const policy = rawPolicy as Record<string, unknown>
+              const prepMinutes = typeof policy.prepBufferMinutes === 'number' ? policy.prepBufferMinutes : null
+              const returnBufferMinutes = typeof policy.returnBufferMinutes === 'number' ? policy.returnBufferMinutes : null
+              const cleaningBufferMinutes = typeof policy.cleaningBufferMinutes === 'number' ? policy.cleaningBufferMinutes : null
+              const deepInspectionMinutes = typeof policy.deepInspectionBufferMinutes === 'number' ? policy.deepInspectionBufferMinutes : null
+
+              if (prepMinutes === null || returnBufferMinutes === null) {
+                return true // Fail closed: missing mandatory buffers, NO magic defaults
+              }
+
+              const normalBufferHours = Math.max(returnBufferMinutes, cleaningBufferMinutes ?? returnBufferMinutes) / 60
+              const requiresDeep = l.product?.requiresDeepReturnInspection === true
+              if (requiresDeep && deepInspectionMinutes === null) {
+                return true // Fail closed: deep inspection required but missing deep buffer in policy
+              }
+              const deepBufferHours = (deepInspectionMinutes ?? 0) / 60
+              const returnBufferHours = requiresDeep ? Math.max(normalBufferHours, deepBufferHours) : normalBufferHours
+
+              if (prepMinutes !== 720 || (requiresDeep ? returnBufferHours !== 48 : returnBufferHours !== 24)) {
+                return true // Fail closed: policy violates SOT buffer invariants
+              }
+
+              const baseStart = order.plannedHandoverAt ?? order.rentalStartAt
+              const baseReturn = order.plannedReturnAt ?? order.rentalEndAt
+              if (!baseStart || !baseReturn) return true
+
+              expectedOccupiedFrom = new Date(baseStart.getTime() - prepMinutes * 60_000)
+              expectedOccupiedUntil = new Date(baseReturn.getTime() + returnBufferHours * 3600_000)
+            }
+
+            return held[0].occupiedFrom > expectedOccupiedFrom || held[0].occupiedUntil < expectedOccupiedUntil
           })
         )
           reason = 'DOMAIN_NOT_ELIGIBLE'
         ;[{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
         if (
-          !reason &&
-          (order.paymentExpiresAt <= now || (payment.invoice.expiresAt && payment.invoice.expiresAt <= now))
+          !reason && effectivePaidAt &&
+          (effectivePaidAt > order.paymentExpiresAt || (payment.invoice.expiresAt && effectivePaidAt > payment.invoice.expiresAt))
         )
           reason = 'LATE_PAYMENT'
         if (
-          !reason &&
+          !reason && effectivePaidAt &&
           (order.rentalOrderLinesViaOrderId.some((l) =>
               l.rentalQuantityReservationsViaOrderLineId.some(
-                (r) => r.status === 'HELD' && (!r.holdExpiresAt || r.holdExpiresAt <= now),
+                (r) => r.status === 'HELD' && (!r.holdExpiresAt || r.holdExpiresAt < effectivePaidAt),
               ),
             ))
         )
           reason = 'DOMAIN_NOT_ELIGIBLE'
+
+        if (!reason) {
+          const primary = await resolveActivePrimaryRentalLocation(tx);
+          const quote = await tx.rentalQuote.findUnique({ where: { id: order.quoteId }, select: { policySnapshot: true } });
+          const snapshot = quote?.policySnapshot;
+          const snapId = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+            ? (snapshot as Record<string, unknown>).primaryRentalInventoryLocationId : null;
+          if (snapId && snapId !== primary) reason = 'PRIMARY_RENTAL_LOCATION_NOT_VERIFIED';
+        }
+
         if (reason) {
           await tx.paymentApplication.update({
             where: { paymentId: payment.id },
@@ -177,13 +249,8 @@ export class RentalPaymentConsumer {
           })
           const existingTask = await tx.inventoryTask.findUnique({ where: { orderId: order.id } })
           if (!existingTask) {
-            const configured = process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID
-            const locations = await tx.inventoryLocation.findMany({
-              where: { status: 'ACTIVE', ...(configured ? { id: configured } : {}) },
-              select: { id: true }, orderBy: { createdAt: 'asc' }, take: 2,
-            })
-            if (locations.length !== 1) throw new Error('RENTAL_DEFAULT_INVENTORY_LOCATION_ID is missing or ambiguous')
-            await tx.inventoryTask.create({ data: { orderId: order.id, inventoryLocationId: locations[0].id, status: 'OPEN', deadline: order.plannedHandoverAt } })
+            const locationId = await resolveActivePrimaryRentalLocation(tx);
+            await tx.inventoryTask.create({ data: { orderId: order.id, inventoryLocationId: locationId, status: 'OPEN', deadline: order.plannedHandoverAt } })
           }
           await tx.rentalOutboxEvent.create({
             data: {
@@ -201,6 +268,6 @@ export class RentalPaymentConsumer {
         where: { id: eventId },
         data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null },
       })
-    })
+    }, { timeout: 20000, maxWait: 10000 })
   }
 }

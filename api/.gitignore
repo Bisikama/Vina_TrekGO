@@ -66,7 +66,8 @@ skills-lock.json
 # Test outputs
 jest.json
 jest_output.txt
-/docs/rental/VINA_TREKGO_AREA_B_FULL_CODE_BY_PHASE_v1.2.2
+/docs/rental/VINA_TREKGO_AREA_B_FULL_CODE_BY_PHASE_v1.5.2
+/docs/rental/TrekGo_Area_B_FE_Mock_SOT_v1.3.2_POLICY_v1.5.2
 /docs/rental
 /docs/area-b
 

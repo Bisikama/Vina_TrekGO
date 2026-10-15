@@ -19,8 +19,9 @@ export class RentalCheckoutService {
   constructor(private readonly db: PrismaService) {}
   async reserve(input: RentalCheckoutCommand, scope: ProviderScope) {
     const key = paymentHash([input.actorUserId, 'rental-checkout', input.idempotencyKey])
-    return this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
+    return this.db.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
       const initial = await tx.rentalOrder.findUnique({ where: { id: input.rentalOrderId } })
       if (!initial || initial.userId !== input.actorUserId) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
       await tx.$queryRaw`SELECT id FROM trips WHERE id=${initial.tripId}::uuid FOR UPDATE`
@@ -200,7 +201,7 @@ export class RentalCheckoutService {
         data: { financialStatus: 'PAYMENT_PENDING', version: { increment: 1 } },
       })
       return { payment, created: true }
-    })
+    }, { maxWait: 15000, timeout: 30000 })
   }
   /** Additional rental fee. Uses the SAME scoped payment provider/outbox/webhook
    * as initial Rental checkout; never creates an unverified payment stub.
@@ -275,7 +276,7 @@ export class RentalCheckoutService {
       } })
       await tx.rentalExtensionRequest.update({ where: { id: ext.id }, data: { paymentRef: payment.id } })
       return { payment, created: true }
-    })
+    }, { maxWait: 15000, timeout: 30000 })
   }
 
 }

@@ -1,5 +1,5 @@
 import { Controller, HttpCode, Post, Req, type RawBodyRequest } from '@nestjs/common'
-import { ApiHeader, ApiTags } from '@nestjs/swagger'
+import { ApiBody, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import type { Request } from 'express'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
@@ -7,7 +7,7 @@ import { AppError } from '../../shared/errors'
 import { PaymentWebhooksService } from './payment-webhooks.service'
 import { PaymentProvider } from './payment-provider.port'
 
-@ApiTags('Payments')
+@ApiTags('Webhook thanh toán (Payment Webhooks)')
 @Auth([AuthType.None])
 @Controller('payments/webhooks')
 export class PaymentWebhooksController {
@@ -18,6 +18,12 @@ export class PaymentWebhooksController {
 
   @Post('momo')
   @HttpCode(204)
+  @ApiOperation({
+    summary: 'Webhook nhận thông báo thanh toán từ MoMo',
+    description: 'Endpoint nhận IPN (Instant Payment Notification) từ cổng thanh toán MoMo để cập nhật trạng thái đơn hàng.',
+  })
+  @ApiResponse({ status: 204, description: 'Đã xử lý thông báo thành công' })
+  @ApiResponse({ status: 400, description: 'Chữ ký không hợp lệ hoặc dữ liệu không đúng định dạng' })
   async receiveMomo(@Req() request: RawBodyRequest<Request>) {
     if (!this.provider.forGateway('momo')) throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
     if (!request.rawBody || request.rawBody.length > 16384) throw AppError.fromCode('VALIDATION_ERROR')
@@ -26,8 +32,24 @@ export class PaymentWebhooksController {
 
   @Post('mock')
   @HttpCode(200)
-  @ApiHeader({ name: 'x-mock-timestamp', required: true })
-  @ApiHeader({ name: 'x-mock-signature', required: true })
+  @ApiOperation({
+    summary: 'Webhook giả lập thanh toán (Mock Webhook - Môi trường Dev/Test)',
+    description: 'Endpoint dùng trong môi trường phát triển và kiểm thử tự động để kích hoạt thanh toán thành công/thất bại.',
+  })
+  @ApiHeader({ name: 'x-mock-timestamp', required: true, description: 'Timestamp tạo chữ ký mock', example: '1728900000000' })
+  @ApiHeader({ name: 'x-mock-signature', required: true, description: 'Chữ ký bảo mật mock', example: 'mock-sig-abc123xyz' })
+  @ApiBody({
+    description: 'Dữ liệu webhook mock',
+    schema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'Mã đơn thanh toán' },
+        status: { type: 'string', enum: ['SUCCESS', 'FAILED'], example: 'SUCCESS' },
+        amount: { type: 'number', example: 500000 },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Nhận webhook mock thành công' })
   async receive(@Req() request: RawBodyRequest<Request>) {
     if (!this.provider.forGateway('mock')) throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
     if (!request.rawBody || request.rawBody.length > 16384) throw AppError.fromCode('VALIDATION_ERROR')

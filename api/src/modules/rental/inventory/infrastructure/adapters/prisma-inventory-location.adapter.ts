@@ -5,6 +5,8 @@ import type {
   InventoryLocationPort,
   InventoryLocationView,
   ListInventoryLocationsParams,
+  CreateInventoryLocationParams,
+  UpdateInventoryLocationParams,
 } from '../../application/ports/inventory-location.port';
 
 @Injectable()
@@ -81,6 +83,75 @@ export class PrismaInventoryLocationAdapter implements InventoryLocationPort {
     });
 
     if (!location) return null;
+    return this.mapToView(location);
+  }
+
+  async getLocationByCode(code: string): Promise<InventoryLocationView | null> {
+    const location = await this.prisma.inventoryLocation.findUnique({
+      where: { code },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        status: true,
+      },
+    });
+
+    if (!location) return null;
+    return this.mapToView(location);
+  }
+
+  async createLocation(params: CreateInventoryLocationParams): Promise<InventoryLocationView> {
+    const data: Prisma.InventoryLocationCreateInput = {
+      code: params.code,
+      name: params.name,
+      address: params.address,
+      latitude: params.latitude,
+      longitude: params.longitude,
+      status: RecordStatus.ACTIVE,
+    };
+
+    const location = await this.prisma.inventoryLocation.create({
+      data,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        status: true,
+      },
+    });
+
+    return this.mapToView(location);
+  }
+
+  async updateLocation(id: string, params: UpdateInventoryLocationParams): Promise<InventoryLocationView> {
+    const data: Prisma.InventoryLocationUpdateInput = {};
+    if (params.name !== undefined) data.name = params.name;
+    if (params.address !== undefined) data.address = params.address;
+    if (params.latitude !== undefined) data.latitude = params.latitude;
+    if (params.longitude !== undefined) data.longitude = params.longitude;
+    if (params.status !== undefined) data.status = params.status as RecordStatus;
+
+    const location = await this.prisma.inventoryLocation.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        status: true,
+      },
+    });
+
     return this.mapToView(location);
   }
 }

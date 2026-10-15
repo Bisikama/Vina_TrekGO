@@ -24,6 +24,9 @@ export const LOGISTICS_ERROR_CODES = {
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
   OPERATION_CONFLICT: 'OPERATION_CONFLICT',
   VERSION_CONFLICT: 'VERSION_CONFLICT',
-} as const
+} as const;
 
-export type LogisticsErrorCode = (typeof LOGISTICS_ERROR_CODES)[keyof typeof LOGISTICS_ERROR_CODES]
+export const DELIVERY_ERROR_CODES = LOGISTICS_ERROR_CODES;
+
+export type DeliveryErrorCode = (typeof LOGISTICS_ERROR_CODES)[keyof typeof LOGISTICS_ERROR_CODES];
+export type LogisticsErrorCode = DeliveryErrorCode;
