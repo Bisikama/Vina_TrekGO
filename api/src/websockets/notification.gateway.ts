@@ -7,9 +7,9 @@ import { Server } from 'socket.io'
 export class NotificationGateway {
   @WebSocketServer()
   server: Server
-  @SubscribeMessage('send-message')
+  @SubscribeMessage('send-notifications')
   handleEvent(@MessageBody() data: string): string {
-    this.server.emit('receive-message', {
+    this.server.emit('receive-notifications', {
       data: `hello ${data}`,
     })
     return data

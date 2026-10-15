@@ -10,20 +10,25 @@ export class WebsocketAdapter extends IoAdapter {
         credentials: true,
       },
     })
-    const authMiddleware = (socket: Socket, next: (err?: any) => void) => {
-      console.log('new connection', socket.id)
-      socket.on('disconnect', () => {
-        console.log(`Client disconnected: ${socket.id}`)
-      })
-      next()
-    }
 
     // cach 1 khai bao' cho tung namespace
     // server.of('/payment').use(authMiddleware)
     // server.of('/notification').use(authMiddleware)
     //cach 2 khai bao cho tat ca cac namespace
-    server.use(authMiddleware);
-    server.of(/.*/).use(authMiddleware);
+    server.use((socket, next) => {
+      this.authMiddleware(socket, next)
+    })
+    server.of(/.*/).use((socket, next) => {
+      this.authMiddleware(socket, next)
+    })
     return server
+  }
+  authMiddleware(socket: Socket, next: (err?: any) => void) {
+    console.log(socket.handshake)
+    console.log('new connection', socket.id)
+    socket.on('disconnect', () => {
+      console.log(`Client disconnected: ${socket.id}`)
+    })
+    next()
   }
 }
