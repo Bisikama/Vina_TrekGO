@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger'
+import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
+import { z } from 'zod'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { ActiveUser } from '../../shared/decorators/active-user.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
@@ -14,6 +16,11 @@ import {
 } from './booking.dto'
 import type { BookingPage, CreateBookingInput, UpdateParticipantsInput } from './booking.dto'
 
+const bodySchema = (schema: z.ZodType) => {
+  const { $schema, ...json } = z.toJSONSchema(schema, { target: 'openapi-3.0' })
+  return json as SchemaObject
+}
+
 @ApiTags('Bookings')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
@@ -21,7 +28,18 @@ import type { BookingPage, CreateBookingInput, UpdateParticipantsInput } from '.
 export class BookingsController {
   constructor(private readonly bookings: BookingsService) {}
   @Post('trips/:tripId/bookings')
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiHeader({ name: 'idempotency-key', required: true, example: 'cf02-booking-001' })
+  @ApiBody({
+    required: true,
+    description: 'participantCount must match participants.length. New participants must not include id.',
+    schema: {
+      ...bodySchema(createBookingSchema),
+      example: {
+        participantCount: 1,
+        participants: [{ fullName: 'Nguyen Van A', phone: '0900000001' }],
+      },
+    },
+  })
   create(
     @Param('tripId', new ZodValidationPipe(bookingIdSchema)) tripId: string,
     @Headers('idempotency-key') key: string,
@@ -32,6 +50,19 @@ export class BookingsController {
     return this.bookings.create(tripId, userId, key, body)
   }
   @Patch('bookings/:id/participants')
+  @ApiBody({
+    required: true,
+    description:
+      'Send the current booking version and the full participant list. Include existing participant IDs to preserve them; omitted participants are cancelled.',
+    schema: {
+      ...bodySchema(updateParticipantsSchema),
+      example: {
+        expectedVersion: 1,
+        participantCount: 1,
+        participants: [{ id: '00000000-0000-4000-8000-000000000001', fullName: 'Nguyen Van A', phone: '0900000001' }],
+      },
+    },
+  })
   update(
     @Param('id', new ZodValidationPipe(bookingIdSchema)) id: string,
     @Body(new ZodValidationPipe(updateParticipantsSchema)) body: UpdateParticipantsInput,

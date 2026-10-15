@@ -12,13 +12,15 @@ export type PublicTrip = {
   transportAvailable: boolean; transport: { vehicleType: string }[];
 };
 export type Checkout = { type: 'QR' | 'REDIRECT'; url: string | null; qrData: string | null };
+export type PaymentGateway = 'momo' | 'vnpay';
+export type PaymentOption = { gateway: PaymentGateway; environment: string };
 export type Booking = {
   id: string; status: string; version: number; participantCount: number; expiresAt: string; confirmedAt: string | null;
   pricePerPax: string; totalAmount: string; currency: string; canEditParticipants: boolean; canCancel: boolean; rentalEligible: boolean;
   trip: { id: string; title: string; startAt: string; endAt: string; status: string };
   pickup: { id: string; name: string; address: string }; participants: Participant[];
   transport: { vehicleType: string; plateNumber?: string | null; driverName?: string | null; driverPhone?: string | null; meetingAt?: string }[];
-  paymentSummary: { paymentId: string; status: string; applicationStatus: string | null; applicationReasonCode: string | null; reconciliationRequired: boolean; checkout: Checkout | null; providerEnvironment: string | null } | null;
+  paymentSummary: { paymentId: string; status: string; applicationStatus: string | null; applicationReasonCode: string | null; reconciliationRequired: boolean; checkout: Checkout | null; providerEnvironment: string | null; gateway: string | null } | null;
   refunds: { refundId: string; status: string; amount: string }[];
 };
 export type BookingSummary = Pick<Booking, 'id' | 'status' | 'participantCount' | 'totalAmount' | 'currency' | 'expiresAt' | 'trip'>;
@@ -38,7 +40,8 @@ export const bookingApi = {
   detail: async (id: string) => (await apiClient.get<Booking>(`/api/v1/bookings/${id}`, config)).data,
   list: async (page: number, status: string) => (await apiClient.get<Page<BookingSummary>>('/api/v1/bookings', { ...config, params: { page, ...(status ? { status } : {}) } })).data,
   update: async (booking: Booking, participants: Participant[]) => (await apiClient.patch<Booking>(`/api/v1/bookings/${booking.id}/participants`, { ...input(participants), expectedVersion: booking.version }, config)).data,
-  pay: async (id: string, key: string) => (await apiClient.post<{ checkout: Checkout | null; status: string; providerEnvironment: string }>(`/api/v1/bookings/${id}/payments`, { paymentMethod: 'REDIRECT' }, headers(key))).data,
+  paymentOptions: async () => (await apiClient.get<{ gateways: PaymentOption[] }>('/api/v1/payments/options', config)).data,
+  pay: async (id: string, key: string, gateway: PaymentGateway) => (await apiClient.post<{ checkout: Checkout | null; status: string; providerEnvironment: string; gateway: string }>(`/api/v1/bookings/${id}/payments`, { paymentMethod: 'REDIRECT', gateway }, headers(key))).data,
   cancel: async (id: string, reason: string, key: string) => (await apiClient.post(`/api/v1/bookings/${id}/cancel`, { reason }, headers(key))).data,
 };
 export function bookingError(error: unknown) {
@@ -51,6 +54,7 @@ export function bookingError(error: unknown) {
       BOOKING_HOLD_EXPIRED: 'Thời gian giữ chỗ đã hết. Vui lòng tạo đặt chỗ mới.',
       BOOKING_VERSION_CONFLICT: 'Đặt chỗ đã thay đổi. Vui lòng tải lại trước khi sửa.',
       PAYMENT_ATTEMPT_IN_PROGRESS: 'Giao dịch đang được xử lý. Vui lòng chờ kết quả trước khi sửa thành viên.',
+      PAYMENT_PROVIDER_UNAVAILABLE: 'Cổng thanh toán đang tạm thời không khả dụng. Vui lòng thử lại sau.',
       BOOKING_POLICY_UNAVAILABLE: 'Chuyến đi chưa sẵn sàng nhận đặt chỗ. Vui lòng thử lại sau.',
       BOOKING_CANCELLATION_POLICY_INVALID: 'Chính sách hoàn tiền chưa được cấu hình. Vui lòng liên hệ hỗ trợ.',
       INVALID_STATE_TRANSITION: 'Trạng thái hiện tại không cho phép thao tác này.',

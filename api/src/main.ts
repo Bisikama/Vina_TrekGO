@@ -5,7 +5,10 @@ import envConfig from './shared/config';
 import { GlobalErrorFilter } from './shared/errors';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    logger: ['warn', 'error', 'fatal'],
+  });
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalErrorFilter());
 
@@ -52,7 +55,5 @@ async function bootstrap() {
   });
 
   await app.listen(envConfig.PORT);
-  console.log(`Application is running on: http://localhost:${envConfig.PORT}`);
-  console.log(`Swagger UI is available at: http://localhost:${envConfig.PORT}/docs`);
 }
 void bootstrap();
