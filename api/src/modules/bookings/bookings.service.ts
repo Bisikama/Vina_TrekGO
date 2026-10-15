@@ -316,6 +316,7 @@ export class BookingsService {
             reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(payment.reconcileStatus),
             checkout: payment.checkoutData,
             providerEnvironment: payment.providerEnvironment,
+            gateway: payment.paymentGateway,
           }
         : null,
       refunds: payments.flatMap((p) =>

@@ -10,7 +10,7 @@ import { AppError } from '../../shared/errors'
 import { PaymentsService } from './payments.service'
 import type { PaymentMethod } from './payment-provider.port'
 
-const bodySchema = z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']) }).strict()
+const bodySchema = z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()
 const keySchema = z
   .string()
   .min(1)
@@ -55,10 +55,16 @@ export class PaymentsController {
         paymentMethod: {
           type: 'string',
           enum: ['QR', 'REDIRECT'],
-          description: 'Phương thức: QR (quét mã) hoặc REDIRECT (cổng thanh toán)',
-          example: 'QR',
+          description: 'Phương thức: QR hoặc chuyển hướng cổng thanh toán',
+          example: 'REDIRECT',
         },
-      },
+        gateway: {
+          type: 'string',
+          enum: ['momo', 'vnpay'],
+          description: 'Cổng thanh toán; bỏ trống để dùng cổng mặc định',
+          example: 'vnpay',
+        },
+      },s    
     },
   })
   @ApiResponse({ status: 201, description: 'Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode' })
@@ -70,14 +76,25 @@ export class PaymentsController {
   async create(
     @Param('id', new ZodValidationPipe(z.string().uuid())) bookingId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(bodySchema)) body: { paymentMethod: PaymentMethod },
+    @Body(new ZodValidationPipe(bodySchema)) body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
     if (!actorUserId) throw AppError.fromCode('UNAUTHENTICATED')
     new ZodValidationPipe(keySchema).transform(idempotencyKey, { type: 'custom' })
-    const result = await this.payments.createBookingCheckout({ bookingId, actorUserId, idempotencyKey, ...body })
+    const result = await this.payments.createBookingCheckout({ bookingId, actorUserId, idempotencyKey, ...body, clientIp: request.ip ?? request.socket.remoteAddress })
     response.status(result.httpStatus)
     return result.body
   }
+}
+
+@ApiTags('Payments')
+@ApiBearerAuth('bearer')
+@Auth([AuthType.Bearer])
+@Controller('payments')
+export class PaymentOptionsController {
+  constructor(private readonly payments: PaymentsService) {}
+  @Get('options')
+  options() { return this.payments.paymentOptions() }
 }

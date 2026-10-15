@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
+import { paymentFailure } from './payment-transaction'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { BookingPaymentConsumer } from '../bookings/booking-payment.consumer'
 import { PaymentWebhooksService } from './payment-webhooks.service'
@@ -32,12 +33,16 @@ export class PaymentEventsWorker {
       for (const event of events) {
         try {
           await this.inbox.process(event.id)
-        } catch {
+        } catch (error) {
+          this.logger.warn({
+            message: 'Payment inbox processing deferred',
+            eventId: event.id,
+            ...paymentFailure(error),
+          })
           await this.db.$executeRaw`UPDATE payment_webhook_events SET attempt_count = attempt_count + 1,
             processing_status = CASE WHEN attempt_count >= 7 THEN 'NEEDS_REVIEW'::payment_webhook_processing_status ELSE 'RETRY'::payment_webhook_processing_status END,
             next_retry_at = clock_timestamp() + interval '30 seconds', error_message = 'INBOX_PROCESSING_FAILED'
             WHERE id = ${event.id}::uuid AND processing_status IN ('RECEIVED', 'RETRY')`
-          this.logger.warn(`Payment inbox processing deferred: ${event.id}`)
         }
       }
       const outbox = await this.db.$queryRaw<{ id: string; invoiceType: string }[]>`
@@ -51,16 +56,23 @@ export class PaymentEventsWorker {
           if (event.invoiceType === 'TRAIL_ACCESS') await this.trail.consume(event.id)
           else if (event.invoiceType === 'RENTAL') await this.rental.consume(event.id)
           else await this.booking.consume(event.id)
-        } catch {
+        } catch (error) {
           await this.db.$executeRaw`UPDATE payment_outbox_events SET retry_count = retry_count + 1,
             status = CASE WHEN retry_count >= 7 THEN 'FAILED'::event_status ELSE 'PENDING'::event_status END,
             next_retry_at = clock_timestamp() + interval '30 seconds', last_error = 'DOMAIN_APPLICATION_DEFERRED'
             WHERE id = ${event.id}::uuid AND status = 'PENDING'`
-          this.logger.warn(`Payment domain application deferred: ${event.id}`)
+          this.logger.warn({
+            message: 'Payment domain application deferred',
+            eventId: event.id,
+            ...paymentFailure(error),
+          })
         }
       }
-    } catch {
-      this.logger.warn('Payment event worker unavailable; durable rows retained for the next tick')
+    } catch (error) {
+      this.logger.warn({
+        message: 'Payment event worker unavailable; durable rows retained for the next tick',
+        ...paymentFailure(error),
+      })
     } finally {
       this.running = false
     }

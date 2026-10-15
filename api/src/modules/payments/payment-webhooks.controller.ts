@@ -25,9 +25,9 @@ export class PaymentWebhooksController {
   @ApiResponse({ status: 204, description: 'Đã xử lý thông báo thành công' })
   @ApiResponse({ status: 400, description: 'Chữ ký không hợp lệ hoặc dữ liệu không đúng định dạng' })
   async receiveMomo(@Req() request: RawBodyRequest<Request>) {
-    if (this.provider.scope.gateway !== 'momo') throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
+    if (!this.provider.forGateway('momo')) throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
     if (!request.rawBody || request.rawBody.length > 16384) throw AppError.fromCode('VALIDATION_ERROR')
-    await this.webhooks.receive(request.rawBody, {})
+    await this.webhooks.receive(request.rawBody, {}, 'momo')
   }
 
   @Post('mock')
@@ -51,14 +51,14 @@ export class PaymentWebhooksController {
   })
   @ApiResponse({ status: 200, description: 'Nhận webhook mock thành công' })
   async receive(@Req() request: RawBodyRequest<Request>) {
-    if (this.provider.scope.gateway !== 'mock') throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
+    if (!this.provider.forGateway('mock')) throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
     if (!request.rawBody || request.rawBody.length > 16384) throw AppError.fromCode('VALIDATION_ERROR')
     const headers: Record<string, string> = {}
     for (const name of ['x-mock-timestamp', 'x-mock-signature']) {
       const value = request.headers[name]
       if (typeof value === 'string') headers[name] = value
     }
-    await this.webhooks.receive(request.rawBody, headers)
+    await this.webhooks.receive(request.rawBody, headers, 'mock')
     return { received: true }
   }
 }

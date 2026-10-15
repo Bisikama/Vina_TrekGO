@@ -17,7 +17,7 @@ export class BookingCancellationsController {
   constructor(private readonly cancellations: BookingCancellationService) {}
   @Post([':id/cancellations', ':id/cancel'])
   @HttpCode(202)
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiHeader({ name: 'idempotency-key', required: true, example: 'cf02-cancel-001' })
   cancel(
     @Param('id', new ZodValidationPipe(z.string().uuid())) bookingId: string,
     @Headers('idempotency-key') idempotencyKey: string,

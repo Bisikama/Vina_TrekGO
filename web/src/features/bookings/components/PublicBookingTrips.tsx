@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth';
 import { bookingApi, bookingError, money, dateTime } from '../booking.api';
 import type { Page, Participant, PublicTrip } from '../booking.api';
-import { BookingForm } from './BookingFlow/BookingForm';
+import { BookingParticipantsForm } from './BookingParticipantsForm';
 import { BookingSignIn } from './BookingSignIn';
 
 export function PublicBookingTrips() {
@@ -31,7 +31,7 @@ export function PublicBookingTrips() {
   </div></div>;
 }
 
-export function PublicBookingTrip({ tripId }: { tripId: string }) {
+export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: string; participantCount?: number }) {
   const { accessToken, user } = useAuth(); const router = useRouter();
   const [trip, setTrip] = useState<PublicTrip | null>(null); const [error, setError] = useState('');
   const [existingId, setExistingId] = useState<string>(); const [busy, setBusy] = useState(false);
@@ -57,7 +57,7 @@ export function PublicBookingTrip({ tripId }: { tripId: string }) {
         <div><h3 className="font-semibold">Checkpoint</h3><ol className="mt-2 list-inside list-decimal space-y-1">{trip.checkpoints.map((c) => <li key={c.id}>{c.name}{c.isRequired ? ' (bắt buộc)' : ''}</li>)}</ol></div>
         <p>Phương tiện: {trip.transport.map((t) => t.vehicleType).join(', ') || 'Chưa được bố trí'}</p><p className="text-sm text-stone-500">Biển số và liên hệ tài xế được cung cấp sau khi đặt chỗ được xác nhận.</p>
       </section><section className="space-y-5 rounded-2xl bg-white p-6"><div className="flex flex-wrap justify-between gap-3"><strong className="text-2xl text-green-900">{trip.pricePerPax ? money(trip.pricePerPax) : 'Chưa có giá'} / người</strong><span>Còn {trip.remainingSlots}/{trip.capacity} chỗ</span></div>
-        {accessToken ? trip.status === 'OPEN' && trip.remainingSlots > 0 ? <BookingForm initial={[{ fullName: user?.fullName ?? '' }]} max={trip.remainingSlots} busy={busy} submitLabel="Giữ chỗ và xem tổng tiền" onSubmit={create} /> : <p>Chuyến đi hiện không còn nhận đặt chỗ.</p> : <BookingSignIn />}
+        {accessToken ? trip.status === 'OPEN' && trip.remainingSlots > 0 ? <BookingParticipantsForm initial={Array.from({ length: Math.min(participantCount, trip.remainingSlots) }, (_, index) => ({ fullName: index === 0 ? user?.fullName ?? '' : '' }))} max={trip.remainingSlots} busy={busy} submitLabel="Giữ chỗ và xem tổng tiền" onSubmit={create} /> : <p>Chuyến đi hiện không còn nhận đặt chỗ.</p> : <BookingSignIn />}
         <p className="text-sm text-stone-500">Số chỗ được kiểm tra lại khi gửi yêu cầu. Tổng tiền và hạn giữ chỗ sẽ được hiển thị trước khi thanh toán.</p>
       </section></div></>}
   </div></div>;

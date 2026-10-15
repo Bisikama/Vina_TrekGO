@@ -22,6 +22,7 @@ describe('M9 MoMo wire contract (stubbed HTTPS; not a live sandbox run)', () => 
     })
     delete process.env.PAYMENT_PROVIDER_TIMEOUT_SECONDS
     delete process.env.PAYMENT_RECOVERY_LEASE_SECONDS
+    delete process.env.MOMO_SANDBOX_REQUEST_TYPE
     provider = new MomoPaymentProvider(db as unknown as PrismaService)
     input = {
       ...provider.scope,
@@ -95,6 +96,53 @@ describe('M9 MoMo wire contract (stubbed HTTPS; not a live sandbox run)', () => 
     expect(http.mock.calls[1][1].body).toBe(http.mock.calls[0][1].body)
     expect(body.requestId.length).toBeLessThanOrEqual(50)
     expect(http.mock.calls[0][0]).toBe('https://test-payment.momo.vn/v2/gateway/api/create')
+  })
+  it.each(['10000', '2500000'])('creates a signed hosted ATM checkout preserving amount %s', async (amount) => {
+    process.env.MOMO_SANDBOX_REQUEST_TYPE = 'payWithATM'
+    provider = new MomoPaymentProvider(db as unknown as PrismaService)
+    expect(await provider.createPayment({ ...input, amount: '9999' })).toEqual({ kind: 'UNKNOWN' })
+    expect(http).not.toHaveBeenCalled()
+    respond(0, { amount: Number(amount), payUrl: 'https://test-payment.momo.vn/v2/gateway/pay?t=atm' })
+    expect(await provider.createPayment({ ...input, amount, paymentMethod: 'REDIRECT' })).toEqual({
+      kind: 'CONFIRMED_RESULT',
+      status: 'PROCESSING',
+      checkout: { type: 'REDIRECT', url: 'https://test-payment.momo.vn/v2/gateway/pay?t=atm', qrData: null },
+    })
+    const body = JSON.parse(http.mock.calls[0][1].body)
+    expect(body.amount).toBe(Number(amount))
+    expect(body.requestType).toBe('payWithATM')
+    expect(body).not.toHaveProperty('autoCapture')
+    expect(body.signature).toBe(sign(
+      `accessKey=test-access&amount=${amount}&extraData=&ipnUrl=https://merchant.test/api/v1/payments/webhooks/momo&orderId=${body.orderId}&orderInfo=TrekGo payment&partnerCode=TEST&redirectUrl=https://merchant.test/return&requestId=${body.requestId}&requestType=payWithATM`,
+    ))
+  })
+  it.each(['1050', '10000', '2500000'])('creates a collection checkout preserving amount %s', async (amount) => {
+    process.env.MOMO_SANDBOX_REQUEST_TYPE = 'payWithMethod'
+    provider = new MomoPaymentProvider(db as unknown as PrismaService)
+    respond(0, { amount: Number(amount), payUrl: 'https://test-payment.momo.vn/v2/gateway/pay?t=collection' })
+    expect(await provider.createPayment({ ...input, amount, paymentMethod: 'REDIRECT' })).toEqual({
+      kind: 'CONFIRMED_RESULT',
+      status: 'PROCESSING',
+      checkout: { type: 'REDIRECT', url: 'https://test-payment.momo.vn/v2/gateway/pay?t=collection', qrData: null },
+    })
+    const body = JSON.parse(http.mock.calls[0][1].body)
+    expect(body.amount).toBe(Number(amount))
+    expect(body.requestType).toBe('payWithMethod')
+    expect(body.autoCapture).toBe(true)
+    expect(body.signature).toBe(sign(
+      `accessKey=test-access&amount=${amount}&extraData=&ipnUrl=https://merchant.test/api/v1/payments/webhooks/momo&orderId=${body.orderId}&orderInfo=TrekGo payment&partnerCode=TEST&redirectUrl=https://merchant.test/return&requestId=${body.requestId}&requestType=payWithMethod`,
+    ))
+  })
+  it.each(['napas', 'credit', 'webApp'])('accepts signed %s notifications and rejects a modified payment type', async (payType) => {
+    const data = ipn({ amount: 10000, payType })
+    expect(await provider.verifyWebhook(Buffer.from(JSON.stringify(data)))).toMatchObject({
+      kind: 'PAYMENT', status: 'SUCCEEDED', amount: '10000',
+    })
+    expect(await provider.verifyWebhook(Buffer.from(JSON.stringify({ ...data, payType: 'qr' })))).toBeNull()
+  })
+  it('rejects unsupported sandbox request types at startup', () => {
+    process.env.MOMO_SANDBOX_REQUEST_TYPE = 'invalid'
+    expect(() => new MomoPaymentProvider(db as unknown as PrismaService)).toThrow('MOMO_SANDBOX_REQUEST_TYPE')
   })
   it('rejects amount/scope/expiry before transport and does not follow unsafe checkout URLs', async () => {
     for (const change of [
