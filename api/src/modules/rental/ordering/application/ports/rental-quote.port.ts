@@ -1,5 +1,7 @@
 export interface CreateRentalQuoteLineRecord {
   productId: string;
+  occupiedFrom: Date;
+  occupiedUntil: Date;
   quantity: number;
   dailyPriceSnapshot: string;
   depositPerUnitSnapshot: string;

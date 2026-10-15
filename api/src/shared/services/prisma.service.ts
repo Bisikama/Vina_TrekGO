@@ -12,7 +12,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const adapter = new PrismaPg(pool)
     super({
       adapter,
-      log: [ 'info', 'warn', 'error'],
+      log: ['warn', 'error'],
     })
   }
   async onModuleInit() {
