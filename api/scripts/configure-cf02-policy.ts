@@ -1,32 +1,68 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
-import { z } from 'zod'
+import { canonicalPolicy, PUBLIC_BOOKING_POLICY_CODE as CODE } from '../src/modules/bookings/booking-policy'
 
-// Explicit operator choices only. Never silently invent or replace a refund policy.
-const input = z.object({
-  CF02_POLICY_CODE: z.string().min(1).max(80),
-  CF02_HOLD_TTL_MINUTES: z.coerce.number().int().min(1).max(1440),
-  CF02_CANCELLATION_RULES: z.string().transform((value, ctx) => {
-    try { return JSON.parse(value) as unknown } catch { ctx.addIssue({ code: 'custom', message: 'Expected JSON' }); return z.NEVER }
-  }).pipe(z.union([
-    z.object({}).strict(), // Explicitly not enabled until a refund policy is agreed.
-    z.object({ version: z.literal(1), tiers: z.array(z.object({
-      minHoursBeforeStart: z.number().nonnegative(), refundPercent: z.number().min(0).max(100),
-    }).strict()).min(1).refine((tiers) => new Set(tiers.map((t) => t.minHoursBeforeStart)).size === tiers.length) }).strict(),
-  ])),
-}).parse(process.env)
+// Privileged deployment tool, not an HTTP endpoint. Values must be explicitly approved by the operator.
+const content = canonicalPolicy({
+  holdTtlMinutes: Number(process.env.CF02_HOLD_TTL_MINUTES),
+  cancellationRules: JSON.parse(process.env.CF02_CANCELLATION_RULES ?? 'null'),
+})
+if (process.env.CF02_POLICY_CODE && process.env.CF02_POLICY_CODE !== CODE)
+  throw new Error(`Policy code must be ${CODE}`)
 const db = new PrismaClient()
 async function main() {
-  const policy = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`cf02-policy:${input.CF02_POLICY_CODE}`}, 0))::text`
-    const previous = await tx.bookingPolicy.findFirst({ where: { policyCode: input.CF02_POLICY_CODE }, orderBy: { versionNo: 'desc' } })
-    if (previous?.isActive && previous.holdTtlMinutes === input.CF02_HOLD_TTL_MINUTES && JSON.stringify(previous.cancellationRules) === JSON.stringify(input.CF02_CANCELLATION_RULES)) return previous
-    return tx.bookingPolicy.create({ data: {
-      policyCode: input.CF02_POLICY_CODE, versionNo: (previous?.versionNo ?? 0) + 1,
-      holdTtlMinutes: input.CF02_HOLD_TTL_MINUTES, cancellationRules: input.CF02_CANCELLATION_RULES,
-      effectiveFrom: new Date(),
-    } })
+  const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('booking-policy:PUBLIC_BOOKING_DEFAULT', 0))::text`
+    const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT date_trunc('milliseconds', clock_timestamp()) AS now`
+    const versions = await tx.bookingPolicy.findMany({ where: { policyCode: CODE }, orderBy: { versionNo: 'desc' } })
+    const current = versions.filter(
+      (p) => p.publishedAt && p.isActive && p.effectiveFrom <= now && (!p.effectiveTo || p.effectiveTo > now),
+    )
+    if (
+      current.length > 1 ||
+      versions.some((p) => p.publishedAt && (p.effectiveFrom >= now || (p.effectiveTo && p.effectiveTo > now)))
+    )
+      throw new Error('Ambiguous or scheduled policy; reconcile explicitly before publishing')
+    if (current.length === 1) {
+      try {
+        if (
+          JSON.stringify(
+            canonicalPolicy({
+              holdTtlMinutes: current[0].holdTtlMinutes,
+              cancellationRules: current[0].cancellationRules as typeof content.cancellationRules,
+            }),
+          ) === JSON.stringify(content)
+        )
+          return { changed: false, id: current[0].id, versionNo: current[0].versionNo }
+      } catch {
+        /* Invalid legacy content can be replaced, never silently edited. */
+      }
+    }
+    const versionNo = (versions[0]?.versionNo ?? 0) + 1
+    if (process.argv.includes('--dry-run'))
+      return { dryRun: true, policyCode: CODE, versionNo, ...content, retireIds: current.map((p) => p.id) }
+    await tx.bookingPolicy.updateMany({
+      where: { policyCode: CODE, isActive: true, publishedAt: { not: null }, effectiveTo: null },
+      data: { effectiveTo: now },
+    })
+    const row = await tx.bookingPolicy.create({
+      data: { ...content, policyCode: CODE, versionNo, effectiveFrom: now, publishedAt: now, isActive: true },
+    })
+    await tx.auditLog.create({
+      data: {
+        action: 'BOOKING_POLICY_PUBLISHED',
+        entityType: 'BookingPolicy',
+        entityId: row.id,
+        newValues: { source: 'DEPLOYMENT_SCRIPT', versionNo, effectiveFrom: now.toISOString(), ...content },
+      },
+    })
+    return { changed: true, id: row.id, policyCode: CODE, versionNo }
   })
-  console.log(JSON.stringify({ policyCode: policy.policyCode, versionNo: policy.versionNo, holdTtlMinutes: policy.holdTtlMinutes }))
+  console.log(JSON.stringify(result))
 }
-main().catch(() => { console.error('CF02 policy configuration failed; check explicit policy inputs and database access.'); process.exitCode = 1 }).finally(() => db.$disconnect())
+main()
+  .catch(() => {
+    console.error('Policy publication failed; verify policy inputs, intervals and database access.')
+    process.exitCode = 1
+  })
+  .finally(() => db.$disconnect())

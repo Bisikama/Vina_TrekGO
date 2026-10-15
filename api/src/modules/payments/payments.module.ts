@@ -2,8 +2,12 @@ import { Module } from '@nestjs/common'
 import { PaymentProvider } from './payment-provider.port'
 import { MockPaymentProvider } from './mock-payment.provider'
 import { MomoPaymentProvider } from './momo-payment.provider'
+import { VnpayPaymentProvider } from './vnpay-payment.provider'
+import { PaymentProviderRouter } from './payment-provider.router'
+import { VnpayIpnController } from './vnpay-ipn.controller'
 import { PrismaService } from '../../shared/services/prisma.service'
-import { PaymentsController } from './payments.controller'
+import { PaymentsController, PaymentOptionsController } from './payments.controller'
+import { MockPaymentCheckoutController } from './mock-payment-checkout.controller'
 import { PaymentsService } from './payments.service'
 import { BookingsModule } from '../bookings/bookings.module'
 import { PaymentWebhooksController } from './payment-webhooks.controller'
@@ -30,7 +34,10 @@ import { RentalRefundsService } from './rental-refunds.service'
   imports: [BookingsModule],
   controllers: [
     PaymentsController,
+    PaymentOptionsController,
+    MockPaymentCheckoutController,
     PaymentWebhooksController,
+    VnpayIpnController,
     PaymentOperationsController,
     RefundsController,
     BookingCancellationsController,
@@ -58,9 +65,16 @@ import { RentalRefundsService } from './rental-refunds.service'
       inject: [PrismaService],
       useFactory: (db: PrismaService) => {
         const gateway = process.env.PAYMENT_PROVIDER ?? 'mock'
-        if (gateway === 'mock') return new MockPaymentProvider(db)
-        if (gateway === 'momo') return new MomoPaymentProvider(db)
-        throw new Error('Unsupported PAYMENT_PROVIDER')
+        const extra = gateway === 'mock' && process.env.PAYMENT_PROVIDER_ENVIRONMENT === 'MOCK'
+          ? '' : process.env.PAYMENT_ENABLED_PROVIDERS ?? ''
+        const gateways = [...new Set([gateway, ...extra.split(',').map((v) => v.trim()).filter(Boolean)])]
+        const providers = gateways.map((name) => {
+          if (name === 'mock') return new MockPaymentProvider(db)
+          if (name === 'momo') return new MomoPaymentProvider(db)
+          if (name === 'vnpay') return new VnpayPaymentProvider()
+          throw new Error('Unsupported payment provider')
+        })
+        return new PaymentProviderRouter(providers, gateway)
       },
     },
   ],

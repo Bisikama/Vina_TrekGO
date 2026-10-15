@@ -50,6 +50,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       where: { isActive: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
       orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }],
     })
+    //thiết lập policy
     if (!policy) throw AppError.fromCode(RT.RENTAL_POLICY_NOT_CONFIGURED)
     if (!policy) {
       const allPolicies = await this.prisma.rentalPolicy.findMany()

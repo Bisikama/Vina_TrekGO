@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
-import { bookingCancellationPolicySchema } from './booking-policy'
+import { refundPercentAt } from './booking-policy'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { PaymentsPort } from '../payments/payments.port'
@@ -121,17 +121,9 @@ export class BookingCancellationService {
       let percent = 100
       if (source === 'USER') {
         if (booking.trip.startAt <= now) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
-        const parsed = bookingCancellationPolicySchema.safeParse(booking.policySnapshot)
-        if (!parsed.success) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
-        const tiers = [...parsed.data.cancellationRules.tiers].sort(
-          (a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart,
-        )
-        if (new Set(tiers.map((t) => t.minHoursBeforeStart)).size !== tiers.length)
-          throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
-        const hours = (booking.trip.startAt.getTime() - now.getTime()) / 3600000
-        const tier = tiers.find((t) => hours >= t.minHoursBeforeStart)
-        if (!tier) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
-        percent = tier.refundPercent
+        const evaluated = refundPercentAt(booking.policySnapshot, booking.trip.startAt, now)
+        if (evaluated === null) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
+        percent = evaluated
       }
       const reserved = await tx.refund.aggregate({
         where: { paymentId: payment.id, status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },

@@ -17,6 +17,22 @@ export interface ListInventoryLocationsParams {
   status?: string;
 }
 
+export interface CreateInventoryLocationParams {
+  code: string;
+  name: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface UpdateInventoryLocationParams {
+  name?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  status?: string;
+}
+
 export interface PaginatedResult<T> {
   items: T[];
   pagination: {
@@ -30,4 +46,7 @@ export interface PaginatedResult<T> {
 export interface InventoryLocationPort {
   listLocations(params: ListInventoryLocationsParams): Promise<{ items: InventoryLocationView[]; total: number }>;
   getLocationById(id: string): Promise<InventoryLocationView | null>;
+  getLocationByCode(code: string): Promise<InventoryLocationView | null>;
+  createLocation(params: CreateInventoryLocationParams): Promise<InventoryLocationView>;
+  updateLocation(id: string, params: UpdateInventoryLocationParams): Promise<InventoryLocationView>;
 }

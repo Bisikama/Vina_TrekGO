@@ -1,7 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
 import { Test } from '@nestjs/testing'
-import type { INestApplication } from '@nestjs/common'
+import { Logger, type INestApplication } from '@nestjs/common'
+import { paymentFailure, paymentTransaction } from '../src/modules/payments/payment-transaction'
 import request from 'supertest'
 import { PaymentsModule } from '../src/modules/payments/payments.module'
 import { PaymentProvider } from '../src/modules/payments/payment-provider.port'
@@ -1914,5 +1915,86 @@ if (url) {
     expect((await db.paymentApplication.findUniqueOrThrow({ where: { paymentId: id } })).reasonCode).toBe(
       'LATE_PAYMENT',
     )
+  })
+  it('background recovery queues durable inbox work and duplicate workers apply it once', async () => {
+    const id = (await post().expect(201)).body.paymentId
+    const payment = await duePayment(id)
+    await provider.setResult('PAYMENT', payment.merchantRequestRef!, 'SUCCEEDED')
+    const processSpy = jest.spyOn(inbox, 'process')
+    const previous = process.env.PAYMENT_EVENTS_WORKER_ENABLED
+    process.env.PAYMENT_EVENTS_WORKER_ENABLED = 'true'
+    try {
+      await recovery.reconcilePayment(id, true)
+      expect(processSpy).not.toHaveBeenCalled()
+      const event = await db.paymentWebhookEvent.findFirstOrThrow({
+        where: { paymentId: id, processingStatus: 'RECEIVED' },
+      })
+      expect((await db.payment.findUniqueOrThrow({ where: { id } })).status).not.toBe('SUCCEEDED')
+      await Promise.all([inbox.process(event.id), inbox.process(event.id)])
+      expect((await db.payment.findUniqueOrThrow({ where: { id } })).status).toBe('SUCCEEDED')
+      expect(await db.paymentApplication.count({ where: { paymentId: id } })).toBe(1)
+      expect(await db.paymentOutboxEvent.count({ where: { aggregateId: id, eventType: 'PAYMENT_SUCCEEDED' } })).toBe(1)
+      expect((await db.paymentWebhookEvent.findUniqueOrThrow({ where: { id: event.id } })).processed).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.PAYMENT_EVENTS_WORKER_ENABLED
+      else process.env.PAYMENT_EVENTS_WORKER_ENABLED = previous
+    }
+  })
+
+  it('background recovery still applies results when the event worker is disabled', async () => {
+    const id = (await post().expect(201)).body.paymentId
+    const payment = await duePayment(id)
+    await provider.setResult('PAYMENT', payment.merchantRequestRef!, 'SUCCEEDED')
+    const previous = process.env.PAYMENT_EVENTS_WORKER_ENABLED
+    process.env.PAYMENT_EVENTS_WORKER_ENABLED = 'false'
+    try {
+      await recovery.reconcilePayment(id, true)
+      expect((await db.payment.findUniqueOrThrow({ where: { id } })).status).toBe('SUCCEEDED')
+    } finally {
+      if (previous === undefined) delete process.env.PAYMENT_EVENTS_WORKER_ENABLED
+      else process.env.PAYMENT_EVENTS_WORKER_ENABLED = previous
+    }
+  })
+
+  it('payment transaction tolerates more than five seconds and rolls back failed writes', async () => {
+    const logger = new Logger('PaymentTransactionTest')
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+    const transactionDb = db as unknown as PrismaService
+    await paymentTransaction(transactionDb, logger, 'test.slow', {}, async (tx, stage) => {
+      stage('lock.test')
+      await tx.$executeRaw`SELECT pg_sleep(5.1)`
+    })
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Slow payment transaction',
+        stages: expect.objectContaining({ 'lock.test': expect.any(Number) }),
+      }),
+    )
+    const failure = Object.assign(new Error('private provider payload'), { code: 'P2028' })
+    await expect(
+      paymentTransaction(transactionDb, logger, 'test.rollback', {}, async (tx, stage) => {
+        stage('write')
+        await tx.user.update({ where: { id: userId }, data: { fullName: 'Must roll back' } })
+        throw failure
+      }),
+    ).rejects.toBe(failure)
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).fullName).toBe('Payment fixture')
+    expect(warn).toHaveBeenLastCalledWith(expect.objectContaining({ failedStage: 'write', errorCode: 'P2028' }))
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private provider payload')
+  })
+})
+
+describe('Payment diagnostic privacy', () => {
+  it('retains error classification and stack frames without raw SQL or provider messages', () => {
+    const error = Object.assign(new Error('secret SQL parameters'), { code: 'P2028', meta: { payload: 'private' } })
+    const result = paymentFailure(error)
+    expect(result.errorCode).toBe('P2028')
+    expect(result.stack).toContain('at ')
+    expect(JSON.stringify(result)).not.toMatch(/secret SQL parameters|private/)
+    expect(paymentFailure('untrusted payload')).toEqual({
+      errorType: 'UnknownError',
+      errorCode: undefined,
+      stack: undefined,
+    })
   })
 })

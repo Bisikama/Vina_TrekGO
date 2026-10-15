@@ -1,432 +1,400 @@
-# TREKGO - AREA B FUNCTIONAL REQUIREMENTS
+# TREKGO — AREA B FUNCTIONAL REQUIREMENTS & BUSINESS SPECIFICATION
+## Mảng Thuê Trang Thiết Bị / Kho / Giao Nhận / Quyết Toán Cọc
+### (Rental / Inventory / Warehouse / Logistics / Deposit Settlement)
 
-**Rental / Inventory / Warehouse / Logistics**
-
-**Owner:** Quân (Backend) & Nguyên (Frontend) | *Theo template Mảng A Booking*
-
----
-
-## 1. MỤC ĐÍCH TÀI LIỆU
-
-Tài liệu này đặc tả Functional Requirement cho mảng thuê trang thiết bị của TrekGo dựa trên swimlane Rental End-to-End. Nó là nền để nhóm vẽ Use Case, Activity/Sequence/State Diagram, ERD, thiết kế API Backend/Frontend và chia task triển khai.
-
-Mảng B chịu trách nhiệm từ Rental Product $\rightarrow$ kiểm tra điều kiện Booking $\rightarrow$ kiểm tra availability $\rightarrow$ Rental Order/Payment $\rightarrow$ reserve Equipment Unit $\rightarrow$ Staff Kho chuẩn bị $\rightarrow$ Staff Logistics giao tại điểm tập trung $\rightarrow$ thu hồi/inspection $\rightarrow$ hoàn hoặc trừ cọc $\rightarrow$ cập nhật lại trạng thái thiết bị. Tài liệu tách rõ API độc lập của Rental và API/Event cross-domain cần họp với Booking/Payment/GPS trước khi code.
+**Phiên bản:** SOURCE OF TRUTH v1.3.2 | **Chính sách:** Policy v1.5.2  
+**Kế thừa và chuẩn hóa:** `BA_ERRATA_01`, `BA_ERRATA_02`, `MVP_SINGLE_LOCATION_01` (Chốt ngày 10/10/2026)  
+**Tài liệu tham chiếu chuẩn:**
+1. `TrekGo_Rental_Return_Business_Flow_SOURCE_OF_TRUTH_v1.3.2_BA_ERRATA_01_MVP_SINGLE_LOCATION_01.docx`
+2. `TrekGo_Area_B_Policy_SOURCE_OF_TRUTH_v1.5.2_BA_ERRATA_01_MVP_SINGLE_LOCATION_01.docx`
+3. `TrekGo_Area_B_Functional_Requirements_SOURCE_OF_TRUTH_v1.3.2_BA_ERRATA_01_MVP_SINGLE_LOCATION_01.docx`
 
 ---
 
-## 2. PHẠM VI DOMAIN & OWNERSHIP
+## 1. MỤC ĐÍCH & PHẠM VI HỆ THỐNG
 
-| Domain / Entity | Owner chính | Mảng B được phép làm gì | Mảng khác được phép làm gì |
+Tài liệu này là bản đặc tả nghiệp vụ chuẩn hóa cao nhất (Source of Truth) cho Mảng B của TrekGo. Đây là cơ sở duy nhất để thiết kế cơ sở dữ liệu, xây dựng giao diện (Web/Mobile), triển khai mã nguồn Backend (NestJS Hexagonal Architecture), viết kiểm thử tự động (Unit/Integration/E2E) và tích hợp liên miền với Mảng A (Trip/Booking) và Shared Payment/Media.
+
+### 1.1. Phạm vi chu trình nghiệp vụ End-to-End
+Mảng B chịu trách nhiệm toàn bộ vòng đời từ:
+$$\text{Danh mục thiết bị} \longrightarrow \text{Kiểm tra điều kiện Trip} \longrightarrow \text{Báo giá \& Giữ số lượng} \longrightarrow \text{Thanh toán (Thuê + Cọc)}$$
+$$\longrightarrow \text{Kho chuẩn bị \& Gán món vật lý} \longrightarrow \text{Giao nhận tại điểm đón} \longrightarrow \text{Trong chuyến \& Gia hạn}$$
+$$\longrightarrow \text{Thu hồi sơ bộ} \longrightarrow \text{Kho nhận \& Kiểm định 72h} \longrightarrow \text{Hoàn/Trừ cọc gộp} \longrightarrow \text{Vệ sinh \& Sẵn sàng}$$
+
+### 1.2. Ba nguyên tắc nghiệp vụ bất biến khi lập trình
+1. **Không bao giờ giữ vượt số lượng an toàn theo thời gian (Capacity Safety Gate):** Ở bước tạo đơn/thanh toán, chỉ giữ số lượng theo loại sản phẩm (`RentalQuantityReservation`) trên cửa sổ chiếm chỗ an toàn (`occupiedWindow`); không gán cứng thiết bị vật lý cụ thể.
+2. **Chỉ gán món vật lý (`EquipmentUnit`) tại bước Kho chuẩn bị (Preparation):** Sau khi đơn thanh toán thành công (`PAID`), `STAFF_INVENTORY` nhặt thiết bị cụ thể mới tạo `RentalUnitAssignment`. Mọi món vật lý được giao bắt buộc phải truy vết đầy đủ qua `assetCode`/QR và có ảnh chụp tình trạng trước khi bàn giao.
+3. **Phân định trách nhiệm thu hồi và hoàn cọc (Hybrid Return):**
+   * `STAFF_DELIVERY` tại điểm trả chỉ thực hiện kiểm đếm, ghi nhận ngoại quan sơ bộ (`return-observations`) và lập biên bản nhận trả đợt (`ReturnReceipt`); **tuyệt đối không kết luận FINAL và không hoàn cọc tại chỗ**.
+   * `STAFF_INVENTORY` tại kho là role duy nhất xác nhận nhận thực tế (`custody receivedAt`) và thực hiện **FINAL INSPECTION 100% món thực nhận trong thời hạn SLA ≤ 72 giờ**.
+   * **Thiết bị sau khi kiểm tra đạt không được tự động chuyển về `AVAILABLE`:** Bắt buộc phải qua bước làm sạch thực tế và xác nhận `READY` qua API chuyên trách (`RB-API-611`).
+
+### 1.3. Phạm vi Single Inventory Location MVP (RB-POL-33)
+* Trong giai đoạn MVP, hệ thống vận hành trên **một kho chính duy nhất** được cấu hình bởi biến môi trường `RENTAL_PRIMARY_INVENTORY_LOCATION_ID`.
+* USER không được chọn kho. Báo giá, kiểm tra tồn kho, tạo đơn, giữ số lượng, chuẩn bị và bàn giao hoàn trả đều ràng buộc vào kho chính này.
+* Thao tác tạo thiết bị của Staff chấp nhận nhãn hiển thị hoặc mã kho nhưng phải khớp với kho chính; nếu sai hoặc thiếu cấu hình kho, hệ thống áp dụng cơ chế **Fail-Closed** để bảo vệ tính toàn vẹn tồn kho.
+
+---
+
+## 2. PHẠM VI DOMAIN & QUYỀN SỞ HỮU (OWNERSHIP)
+
+| Domain / Entity | Đơn vị sở hữu | Quyền của Mảng B | Ranh giới với mảng khác |
 | :--- | :--- | :--- | :--- |
-| **RentalProduct / Category** | Quân | CRUD catalog thiết bị thuê, giá/ngày, cọc, ảnh, active status. | Consume catalog; không sửa trực tiếp. |
-| **EquipmentUnit** | Quân | CRUD unit vật lý, QR/code, condition, lifecycle status, maintenance. | GPS/Booking không sửa trạng thái unit. |
-| **RentalOrder / RentalOrderLine** | Quân | Tạo đơn thuê, quote, trạng thái thuê, liên kết Booking. | Booking chỉ cung cấp context; không sửa Rental Order. |
-| **EquipmentReservation** | Quân | Giữ unit theo time window, chống overlap/double-book. | Booking/Trip chỉ phát event đổi lịch/hủy. |
-| **WarehouseTask / Package** | Quân | Tạo task kho, pick, condition snapshot, pack, ready, custody. | Staff Kho thao tác qua API mảng B. |
-| **LogisticsTask / Handover / ReturnInspection** | Quân | Task giao/thu hồi, scan, handover, inspection sơ bộ. | Booking cung cấp pickup/dropoff; không sửa task. |
-| **Booking / Trip Context** | Bảo - Mảng A | B cung cấp contract read-only để B Rental consume. | Mảng B không query/sửa trực tiếp business state Booking/Trip. |
-| **Payment / Refund** | Shared/Integration | Rental gọi service thanh toán và nhận callback normalized. | Payment không tự quyết inventory/rental lifecycle. |
+| **RentalProduct / Category** | Area B (Rental) | CRUD danh mục, loại sản phẩm, giá thuê/ngày, chính sách cọc, ảnh, thông số kỹ thuật. | Mảng khác chỉ đọc (consume); không sửa trực tiếp. |
+| **EquipmentUnit** | Area B (Rental) | CRUD thiết bị vật lý, quản lý `assetCode`/QR, tình trạng (`condition`), trạng thái vòng đời, lịch sử bảo trì. | Trip/Booking/GPS không được sửa trạng thái unit. |
+| **RentalOrder / RentalOrderLine** | Area B (Rental) | Tạo đơn, tính quote, quản lý vòng đời đơn thuê, gắn với `tripId` + `TripMembership` (và `bookingId` nếu có để truy vết). | Area A sở hữu Trip/Booking; Booking chỉ mang tính chất nguồn gốc (provenance); không sửa RentalOrder. |
+| **RentalQuantityReservation** | Area B (Rental) | Giữ số lượng theo sản phẩm + cửa sổ thời gian (`occupiedWindow`); chống overbooking. | Trip phát sinh sự kiện đổi lịch/hủy. Tuyệt đối không giữ exact unit ở bước checkout. |
+| **RentalUnitAssignment** | Area B (Rental) | Gắn `EquipmentUnit` vật lý cụ thể vào từng dòng đơn hàng khi `STAFF_INVENTORY` nhặt đồ (pick). | Chỉ Mảng B quản lý và lưu audit trail khi thay đổi unit. |
+| **Preparation Task / Package** *(Prisma InventoryTask)* | Area B (Rental) | Tạo tác vụ kho sau khi đơn `PAID`. `STAFF_INVENTORY` scan nhặt unit, chụp ảnh bằng chứng, đóng gói (`Package`), niêm phong và bàn giao custody. | Thao tác nội bộ của Mảng B. |
+| **Delivery Task / Handover / ReturnObservation** | Area B (Rental) | `STAFF_DELIVERY` nhận package từ kho, xác minh khách bằng `pickupCode` dùng 1 lần, bàn giao; khi trả thì scan/đếm, ghi nhận observation và chuyển custody về kho. | Area A cung cấp điểm tập kết (Pickup/Dropoff Point); không sửa tác vụ logistics. |
+| **Trip Membership / Trip Context** | Area A (Trip) | Đọc quyền thuê qua `TripRentalContextPort` (`tripId` + `userId`). | Area A là nguồn sự thật duy nhất về tư cách tham gia chuyến đi. |
+| **Payment / Refund** | Shared Payment | Tích hợp tạo thanh toán phí thuê + cọc; chia tách dòng tiền (`FEE` & `DEPOSIT`); thực hiện hoàn cọc gộp hoặc hoàn cọc theo món. | Shared Payment giữ giao dịch provider; Mảng B quản lý business state. |
+| **Rental Documents** | Area B (Rental) | Tự động sinh biên bản giao nhận gốc (BBGN), phụ lục gia hạn và biên bản nhận trả đợt dạng snapshot bất biến (`immutable`). | Cung cấp tài liệu pháp lý cho User và Staff đối soát. |
 
 ---
 
-## 3. ROLE LIÊN QUAN TRONG MẢNG B
+## 3. VAI TRÒ HỆ THỐNG TRONG MẢNG B (ROLES)
 
-| Role | Quyền chính trong mảng Rental |
+| Vai trò | Trách nhiệm và quyền hạn chuẩn |
 | :--- | :--- |
-| **User** | Xem thiết bị; chọn thiết bị theo Booking; tạo Rental Order; thanh toán; xem trạng thái; hủy theo policy; xác nhận tình trạng khi nhận; xem kết quả cọc. |
-| **Staff Kho** | Quản lý Equipment Unit; xem work queue; pick; chụp condition trước giao; pack; mark ready; nhận lại thiết bị; maintenance/finalize trạng thái. |
-| **Staff Logistics** | Nhận package từ kho; tới điểm tập trung; xác minh User/Booking; giao thiết bị; thu hồi; kiểm tra ngoại quan; bàn giao lại cho kho. |
-| **Admin** | Xem report/giám sát; cấu hình rental policy; không trực tiếp thao tác nhập/xuất hàng thường ngày. |
-| **System** | Kiểm tra availability, reserve/release, tạo task, xử lý payment event, deposit settlement, notification. |
+| **USER** | Khám phá/nhận gợi ý thiết bị theo chuyến đi; kiểm tra điều kiện thuê; chọn loại và số lượng; nhận báo giá có TTL 10 phút; thanh toán; nhận mã nhận đồ dùng 1 lần (`pickupCode`); kiểm tra thiết bị khi nhận; xin gia hạn thuê; xem bảng theo dõi cọc theo từng món; gửi khiếu nại trong 48h nếu bị đề xuất trừ cọc. |
+| **STAFF_INVENTORY** *(Nhân viên Kho)* | Quản lý sản phẩm và thiết bị vật lý; tạo/in mã QR tài sản; nhận tác vụ chuẩn bị (`PreparationTask`); nhặt thiết bị hợp lệ trong kho; chụp ảnh bằng chứng trước giao (`ConditionSnapshot`); đóng gói và bàn giao custody cho Delivery; **xác nhận nhận custody thực tế khi đồ trả về kho; thực hiện FINAL INSPECTION 100% món trong thời hạn SLA ≤ 72 giờ (nhóm kiểm tra sâu ≤ 24 giờ); vệ sinh thiết bị và xác nhận READY**. |
+| **STAFF_DELIVERY** *(Nhân viên Giao nhận)* | Ứng dụng di động (Mobile App): Nhận kiện hàng từ kho; có mặt tại điểm đón; xác minh khách bằng `pickupCode`; bàn giao và kích hoạt đơn sang `ACTIVE`; khi thu hồi tại điểm trả: quét kiểm đếm, ghi nhận ngoại quan sơ bộ (`return-observations`), xuất biên bản nhận trả đợt (`ReturnReceipt`), vận chuyển và bàn giao custody về kho chính. **Không có quyền kết luận FINAL_PASS và không hoàn cọc tại chỗ**. |
+| **ADMIN** | Giám sát toàn bộ quy trình; cấu hình chính sách thuê/cọc/buffer thời gian; xem cảnh báo thiếu hụt công suất (`RentalCapacityAlert`); **phê duyệt các đề xuất khấu trừ cọc (deduction proposal > 0) trong thời hạn SLA 24 giờ**; xử lý tranh chấp khiếu nại. |
+| **System** | Tự động hóa: Hủy giữ chỗ khi quá hạn thanh toán 15 phút (`HOLD_EXPIRED`); giám sát chuyển kho quá 8 giờ (`transferWatchAt = +8h`); kích hoạt hoàn cọc gộp tự động khi toàn đơn `FINAL_PASS`; kích hoạt đồng hồ khiếu nại 48h cho User; cảnh báo vi phạm SLA của Staff/Admin. |
 
 ---
 
 ## 4. THUẬT NGỮ & MÔ HÌNH NGHIỆP VỤ CỐT LÕI
 
-| Thuật ngữ | Định nghĩa dùng trong code/tài liệu |
+| Thuật ngữ | Định nghĩa nghiệp vụ chuẩn |
 | :--- | :--- |
-| **Rental Product** | Loại sản phẩm cho thuê: lều, gậy, balo... chứa giá thuê/ngày, deposit policy và metadata. |
-| **Equipment Unit** | Một thiết bị vật lý cụ thể có `assetCode`/QR riêng, condition và lifecycle riêng. |
-| **Rental Order** | Đơn thuê của User, bắt buộc gắn Booking/Trip hợp lệ. |
-| **Reservation** | Bản ghi giữ Equipment Unit trong khoảng thời gian Trip để chống double-book. |
-| **Warehouse Task** | Nhiệm vụ Staff Kho chuẩn bị Rental Order đã thanh toán. |
-| **Package** | Gói thiết bị đã pick/pack, có `packageCode`/QR và chứa exact Equipment Units. |
-| **Logistics Task** | Nhiệm vụ Staff Logistics giao/thu hồi thiết bị theo Trip + Pickup/Drop-off. |
-| **Condition Snapshot** | Bằng chứng tình trạng thiết bị trước khi giao và sau khi thu hồi. |
-| **Deposit Settlement** | Kết quả hoàn cọc đầy đủ / khấu trừ / giữ cọc theo inspection và policy. |
+| **Rental Product** | Loại sản phẩm cho thuê (ví dụ: Lều 4 người, Balo 50L,...), chứa giá thuê/ngày, chính sách cọc, thông số và metadata gợi ý. |
+| **Equipment Unit** | Một món vật lý cụ thể, có mã tài sản duy nhất (`assetCode`), mã quét QR, tình trạng vật lý (`NEW`, `GOOD`, `FAIR`,...) và trạng thái vòng đời riêng. |
+| **Rental Order** | Đơn thuê thuộc về một User, bắt buộc liên kết với `tripId` và `TripMembership` hợp lệ (kèm `bookingId` để truy vết). |
+| **Rental Quantity Reservation** | Bản ghi khóa tạm **SỐ LƯỢNG** khả dụng của loại sản phẩm trong cửa sổ chiếm chỗ (`occupiedWindow`). Chưa gắn với thiết bị vật lý nào. |
+| **Rental Unit Assignment** | Bản ghi chỉ định đích danh `EquipmentUnit` vật lý vào từng dòng đơn hàng khi Staff Kho thực hiện nhặt đồ. |
+| **Preparation Task** *(InventoryTask)* | Tác vụ chuẩn bị thiết bị của `STAFF_INVENTORY` sinh ra ngay sau khi đơn hàng được thanh toán (`PAID`). |
+| **Package** | Kiện hàng đã được nhặt đủ, chụp ảnh bằng chứng và đóng gói niêm phong, gắn mã `packageCode`/QR riêng. |
+| **Delivery Task** *(DeliveryTask)* | Tác vụ giao đồ hoặc thu hồi đồ của `STAFF_DELIVERY` theo chuyến đi và điểm tập trung. |
+| **Pickup Code** | Mã xác minh nhận đồ dùng một lần (hoặc có hiệu lực ngắn hạn) hiển thị trên app của User; `STAFF_DELIVERY` quét mã này để xác thực người nhận. |
+| **Condition Snapshot** | Bằng chứng ảnh/ghi chú tình trạng thiết bị được chụp trước khi giao hoặc khi nhận trả. Là dữ liệu bất biến không được chỉnh sửa/ghi đè. |
+| **Deposit Item Allocation** | Bản ghi phân bổ số tiền cọc cho từng món thiết bị vật lý cụ thể sau khi đã assign unit, dùng làm căn cứ quyết toán và hoàn cọc độc lập. |
+| **Return Receipt** | Biên bản nhận trả đồ từng đợt được lập ngay khi `STAFF_DELIVERY` nhận đồ tại hiện trường, ghi nhận số lượng và hiện trạng quan sát được. |
+| **Handover Document (BBGN)** | Biên bản giao nhận điện tử gốc có giá trị pháp lý, được sinh tự động sau khi hoàn tất bàn giao thiết bị cho khách. |
 
 ---
 
-## 5. STATE MODEL BASELINE
+## 5. MÔ HÌNH TRẠNG THÁI (STATE MODEL BASELINE)
 
-| Entity | State đề xuất cho MVP | Ghi chú |
-| :--- | :--- | :--- |
-| **Rental Order** | `DRAFT/QUOTE` $\rightarrow$ `PENDING_PAYMENT` $\rightarrow$ `PAID` $\rightarrow$ `PREPARING` $\rightarrow$ `READY_FOR_HANDOVER` $\rightarrow$ `ACTIVE` $\rightarrow$ `RETURN_PENDING` $\rightarrow$ `INSPECTED` $\rightarrow$ `COMPLETED` \| `CANCELLED` \| `EXPIRED` | State phải enforce bằng service. |
-| **Equipment Unit** | `AVAILABLE` $\rightarrow$ `RESERVED` $\rightarrow$ `PICKED` $\rightarrow$ `PACKED` $\rightarrow$ `RENTED` $\rightarrow$ `RETURN_PENDING` $\rightarrow$ `AVAILABLE` \| `MAINTENANCE` \| `DAMAGED` \| `LOST` | Không set status tùy ý. |
-| **Warehouse Task** | `OPEN` $\rightarrow$ `PICKING` $\rightarrow$ `CONDITION_CAPTURED` $\rightarrow$ `PACKED` $\rightarrow$ `READY` $\rightarrow$ `TRANSFERRED` $\rightarrow$ `CLOSED` | Created sau payment success. |
-| **Logistics Task** | `SCHEDULED` $\rightarrow$ `PACKAGE_RECEIVED` $\rightarrow$ `USER_VERIFIED` $\rightarrow$ `HANDED_OVER` $\rightarrow$ `RETURN_DUE` $\rightarrow$ `RETURNED` $\rightarrow$ `CLOSED` \| `NO_SHOW` | Mobile only. |
-| **Payment** | `PENDING` $\rightarrow$ `SUCCESS` \| `FAILED` $\rightarrow$ `REFUNDED` \| `PARTIAL_REFUND` | Payment service normalized. |
-| **Deposit** | `HELD` $\rightarrow$ `REFUND_PENDING` $\rightarrow$ `REFUNDED` \| `PARTIAL_REFUND` \| `FORFEITED` | Settlement immutable. |
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT_QUOTE: Tạo báo giá (TTL 10m)
+    DRAFT_QUOTE --> PENDING_PAYMENT: Tạo đơn (Hold 15m)
+    PENDING_PAYMENT --> PAID: Thanh toán thành công
+    PENDING_PAYMENT --> EXPIRED: Quá hạn thanh toán
+    PENDING_PAYMENT --> CANCELLED: Khách hủy đơn
+    PAID --> PREPARING: Sinh PreparationTask
+    PREPARING --> READY_FOR_HANDOVER: Pick + Snapshot + Pack
+    READY_FOR_HANDOVER --> ACTIVE: Khách quét mã nhận đồ
+    ACTIVE --> RETURN_PENDING: Kết thúc chuyến / Trả đồ
+    RETURN_PENDING --> INSPECTED: Kho hoàn tất Final 72h
+    INSPECTED --> COMPLETED: Hoàn/Khấu trừ cọc xong
+```
 
----
+### 5.1. Vòng đời Trạng thái Đơn thuê (Rental Order State)
+* `DRAFT_QUOTE`: Báo giá tạm thời có thời hạn hiệu lực 10 phút.
+* `PENDING_PAYMENT`: Đơn hàng đã tạo, số lượng được giữ tạm trong 15 phút chờ thanh toán.
+* `PAID`: Đã thanh toán đầy đủ phí thuê và tiền cọc; tác vụ chuẩn bị kho được kích hoạt.
+* `PREPARING`: Nhân viên kho đang nhặt đồ, chụp ảnh và đóng gói.
+* `READY_FOR_HANDOVER`: Kiện hàng đã đóng gói hoàn tất, sẵn sàng bàn giao cho nhân viên giao nhận.
+* `ACTIVE`: Đã bàn giao thành công cho khách tại điểm hẹn; khách đang sử dụng đồ.
+* `RETURN_PENDING`: Khách đã trả đồ tại điểm thu hồi; đang chuyển về kho hoặc đang chờ kiểm định.
+* `INSPECTED`: Kho đã hoàn tất kiểm định FINAL cho toàn bộ các món thực nhận.
+* `COMPLETED`: Quyết toán cọc hoàn tất (hoàn trả hoặc khấu trừ xong); đơn kết thúc.
+* `CANCELLED` / `EXPIRED`: Hủy đơn hoặc hết hạn thanh toán; giải phóng số lượng giữ chỗ ngay lập tức.
 
-## 6. PHASE 0 - RENTAL CATALOG / EQUIPMENT MASTER / INVENTORY
+### 5.2. Vòng đời Trạng thái Thiết bị Vật lý (Equipment Unit State)
+$$\text{AVAILABLE} \longrightarrow \text{RESERVED} \longrightarrow \text{PICKED} \longrightarrow \text{PACKED} \longrightarrow \text{RENTED} \longrightarrow \text{RETURN\_PENDING}$$
+$$\longrightarrow \text{CLEANING} \stackrel{\text{RB-API-611}}{\longrightarrow} \text{AVAILABLE}$$
+*(Nếu có hư hỏng hoặc mất mát: chuyển sang `MAINTENANCE`, `DAMAGED` hoặc `LOST`)*.
 
-Đây là nhóm API CRUD độc lập nhất của mảng B. Nên hoàn thiện trước order flow vì các phase sau phụ thuộc trực tiếp dữ liệu thiết bị.
-
-### 6.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-001** | Manage Rental Product | P0 | Staff Kho/Admin | Đăng nhập đúng role | Tạo/sửa/deactivate Rental Product; quản lý category, dailyPrice, deposit policy, image và thông tin sử dụng. | Catalog sẵn sàng cho User. | Không có `canSell`/`salePrice` vì MVP chỉ cho thuê. |
-| **RB-FR-002** | Manage Equipment Unit | P0 | Staff Kho | Có Rental Product | Tạo/sửa metadata từng Equipment Unit với `assetCode`/QR unique, condition và initial status `AVAILABLE`. | Unit xuất hiện trong inventory. | Không hard delete unit có history. |
-| **RB-FR-003** | View Inventory | P0 | Staff Kho/Admin | Có quyền | List/filter Equipment Unit theo product/status/condition/code; hiển thị count tổng hợp. | Staff thấy tồn kho thực. | Admin read-only ở nghiệp vụ vận hành. |
-| **RB-FR-004** | Maintenance | P1 | Staff Kho | Unit không active rental | Đưa unit vào `MAINTENANCE`, lưu reason/note; restore `AVAILABLE` khi hoàn tất. | Unit bị loại khỏi availability. | Không maintenance unit đang `RENTED`. |
-| **RB-FR-005** | Condition History | P0 | Staff Kho | Unit tồn tại | Xem lịch sử condition, rental, inspection, maintenance của từng unit. | Trace được vòng đời tài sản. | History immutable. |
-
-### 6.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-001** | `GET /api/v1/rental-products` | Public/User | List/search thiết bị thuê | `search`, `categoryId`, `page` | `items`, `availabilitySummary` | Chỉ `ACTIVE`; pagination. |
-| **RB-API-002** | `GET /api/v1/rental-products/:id` | Public/User | Product detail | `productId` | `product`, `price`, `depositPolicy` | 404 nếu không tồn tại/inactive theo role. |
-| **RB-API-003** | `POST /api/v1/staff/rental-products` | Staff Kho/Admin | Create product | `name`, `sku`, `categoryId`, `dailyPrice`, `deposit` | `product` | SKU unique; price/deposit hợp lệ. |
-| **RB-API-004** | `PATCH /api/v1/staff/rental-products/:id` | Staff Kho/Admin | Update product | allowed fields | `updated product` | Không sửa inventory bằng API này. |
-| **RB-API-005** | `PATCH /api/v1/staff/rental-products/:id/status` | Staff Kho/Admin | Activate/deactivate | `status` | `updated status` | Soft status change. |
-| **RB-API-006** | `GET /api/v1/staff/equipment-units` | Staff Kho/Admin | Inventory list | `productId`, `status`, `condition`, `q` | `units`, `counts` | Role/filters/pagination. |
-| **RB-API-007** | `POST /api/v1/staff/equipment-units` | Staff Kho | Create unit | `productId`, `assetCode`, `condition` | `unit` | `assetCode` unique. |
-| **RB-API-008** | `GET /api/v1/staff/equipment-units/:id` | Staff Kho/Admin | Unit detail/history | `unitId` | `unit` + `history` | 404/role. |
-| **RB-API-009** | `PATCH /api/v1/staff/equipment-units/:id` | Staff Kho | Update unit metadata | allowed metadata | `unit` | Không bypass lifecycle status. |
-| **RB-API-010** | `POST /api/v1/staff/equipment-units/:id/maintenance` | Staff Kho | Start/end maintenance | `action`, `reason`, `note` | `unit status/history` | 409 nếu đang active rental. |
+> **QUY TẮC BẮT BUỘC:** Trạng thái `CLEANING` **không bao giờ tự động chuyển về `AVAILABLE`** chỉ dựa vào thời gian buffer trôi qua. Bắt buộc nhân viên kho phải vệ sinh thực tế và gọi `RB-API-611` để xác nhận `READY`.
 
 ---
 
-## 7. PHASE 1 - USER CHỌN THIẾT BỊ / KIỂM TRA ĐIỀU KIỆN THUÊ
+## 6. PHASE 0 — DANH MỤC THIẾT BỊ & QUẢN TRỊ TỒN KHO MASTER
 
-Theo swimlane, User mở chức năng thuê $\rightarrow$ System kiểm tra Booking/Trip hợp lệ $\rightarrow$ hiển thị thiết bị khả dụng $\rightarrow$ User chọn số lượng $\rightarrow$ System kiểm tra giới hạn và availability.
+### 6.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-001:** Quản lý danh mục loại sản phẩm thuê (`RentalProduct`, `RentalCategory`), giá thuê theo ngày, chính sách cọc cố định, thông số kỹ thuật và hình ảnh mô tả.
+* **RB-FR-002:** Quản lý từng món thiết bị vật lý (`EquipmentUnit`) với mã tài sản duy nhất (`assetCode`), mã QR tương ứng, tình trạng ban đầu và vị trí kho chính.
+* **RB-FR-003:** Xem danh sách tồn kho theo bộ lọc sản phẩm, tình trạng, trạng thái vòng đời. Toàn bộ thiết bị nhập mới bắt buộc gán vào kho chính (`RB-POL-33`).
+* **RB-FR-004:** Đưa thiết bị vào bảo trì (`MAINTENANCE`) và phục hồi lại trạng thái khi bảo trì xong. Cấm đưa vào bảo trì đối với thiết bị đang `RENTED`.
+* **RB-FR-005:** Xem lịch sử vòng đời bất biến của thiết bị (lịch sử cho thuê, biên bản kiểm tra, ảnh bằng chứng hư hại).
 
-### 7.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-101** | Validate Rental Eligibility | P0 | System/User | User chọn Booking | Rental chỉ được tiếp tục khi Booking/Trip hợp lệ, thuộc User và còn trong thời gian cho phép thuê. | User đủ điều kiện mới vào rental flow. | Cross-domain với Booking. |
-| **RB-FR-102** | Availability By Booking | P0 | User/System | Booking hợp lệ | Tính số unit khả dụng theo Trip date window, loại `RESERVED`/`RENTED`/`MAINTENANCE`/`LOST` và reservation overlap. | User thấy availability thật. | Không dùng stock quantity giả. |
-| **RB-FR-103** | Quantity / Policy Validation | P0 | System | User chọn qty | Validate $\text{qty} > 0$, max allowed, availability và rental cutoff. | Selection hợp lệ. | Max quantity policy có thể config. |
-| **RB-FR-104** | Rental Quote | P0 | System/User | Selection hợp lệ | Tính `rentalFee` + `deposit` dựa trên Trip dates và policy snapshot; trả preview chưa tạo order. | User thấy tổng tiền. | Amount do server tính. |
-
-### 7.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-101** | `GET /api/v1/bookings/:bookingId/rental-eligibility` | User | Kiểm tra được thuê hay không | `bookingId` | `eligible`, `reason`, `rentalWindow` | Mảng B gọi Booking Context nội bộ; không query Booking DB. |
-| **RB-API-102** | `GET /api/v1/rentals/availability` | User | Availability theo Booking | `bookingId`, `productId`, `quantity?` | `availableCount`, `rentalWindow` | 409/422 nếu Booking invalid. |
-| **RB-API-103** | `POST /api/v1/rentals/quote` | User | Tính quote | `bookingId`, `items[]` | `rentalFee`, `deposit`, `chargedDays`, `expiresAt` | Server-side pricing; quote có TTL. |
-
----
-
-## 8. PHASE 2 - RENTAL ORDER / RESERVATION / PAYMENT
-
-Order chỉ được tạo sau khi quote hợp lệ. Backend phải reserve Equipment Unit atomically để tránh hai User thuê cùng một thiết bị trong cùng time window.
-
-### 8.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-201** | Create Rental Order | P0 | User | Quote còn hiệu lực | Tạo Rental Order `PENDING_PAYMENT`, snapshot giá/policy và liên kết Booking/Trip. | Order tồn tại. | Không tạo nếu Booking invalid. |
-| **RB-FR-202** | Reserve Equipment Units | P0 | System | Create order | Chọn exact Equipment Units khả dụng và tạo reservation theo date window trong transaction. | Units `RESERVED`. | Concurrency bắt buộc. |
-| **RB-FR-203** | Rental Payment | P0 | User/System | Order `PENDING_PAYMENT` | Tạo payment intent cho rental fee + deposit; success $\rightarrow$ `PAID`; failed/expired $\rightarrow$ xử lý release theo policy. | Payment state đồng bộ. | Cross-domain Payment. |
-| **RB-FR-204** | Cancel Before Handover | P0 | User/System | Order chưa handed over | Cho hủy theo trạng thái/policy; release reservation và refund nếu cần. | Order `CANCELLED`. | Không release unit đang `ACTIVE`. |
-| **RB-FR-205** | Payment Timeout | P0 | System | Order chưa thanh toán quá TTL | Expire order và release reservation idempotently. | Không giữ tồn kho ảo. | Job retry an toàn. |
-
-### 8.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-201** | `POST /api/v1/rental-orders` | User | Create order | `bookingId`, `quoteId/items` | `orderId`, `status`, `amount`, `reservations` | Transaction; 409 nếu race mất availability. |
-| **RB-API-202** | `GET /api/v1/rental-orders` | User | My rental orders | `status`, `bookingId`, `page` | `orders` | Ownership. |
-| **RB-API-203** | `GET /api/v1/rental-orders/:id` | User/Staff | Rental order detail | `orderId` | `order/items/payment/deposit/timeline` | Role/ownership. |
-| **RB-API-204** | `POST /api/v1/rental-orders/:id/payments` | User | Create payment | `idempotencyKey` | `paymentIntent/status` | Only `PENDING_PAYMENT`. |
-| **RB-API-205** | `POST /api/v1/rental-orders/:id/cancel` | User/System | Cancel order | `reason` | `order/refund/release result` | State/policy guard. |
-| **RB-API-206** | `GET /api/v1/rental-orders/:id/payment` | User | Payment status | `orderId` | `normalized payment state` | Không lộ provider secret. |
+### 6.2. Danh mục API Phase 0
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-001** | `GET /api/v1/rental-products` | Public / USER | Tìm kiếm, xem danh sách sản phẩm cho thuê (kèm tồn kho tóm tắt). |
+| **RB-API-002** | `GET /api/v1/rental-products/:id` | Public / USER | Xem chi tiết sản phẩm, giá thuê, mức cọc, hướng dẫn sử dụng. |
+| **RB-API-003** | `POST /api/v1/staff/rental-products` | STAFF_INVENTORY / ADMIN | Tạo mới loại sản phẩm cho thuê (SKU duy nhất). |
+| **RB-API-004** | `PATCH /api/v1/staff/rental-products/:id` | STAFF_INVENTORY / ADMIN | Cập nhật thông tin sản phẩm, giá thuê, chính sách cọc. |
+| **RB-API-005** | `PATCH /api/v1/staff/rental-products/:id/status` | STAFF_INVENTORY / ADMIN | Kích hoạt hoặc vô hiệu hóa sản phẩm (`ACTIVE` / `INACTIVE`). |
+| **RB-API-006** | `GET /api/v1/staff/equipment-units` | STAFF_INVENTORY / ADMIN | Danh sách thiết bị vật lý trong kho, lọc theo tình trạng/vòng đời. |
+| **RB-API-007** | `POST /api/v1/staff/equipment-units` | STAFF_INVENTORY | Khởi tạo 1 thiết bị vật lý (tự động gắn vào kho chính cấu hình). |
+| **RB-API-008** | `GET /api/v1/staff/equipment-units/:id` | STAFF_INVENTORY / ADMIN | Xem chi tiết thiết bị và lịch sử sử dụng/bảo trì. |
+| **RB-API-009** | `PATCH /api/v1/staff/equipment-units/:id` | STAFF_INVENTORY | Cập nhật thông tin mô tả thiết bị (không bypass lifecycle). |
+| **RB-API-010** | `POST /api/v1/staff/equipment-units/:id/maintenance` | STAFF_INVENTORY | Bắt đầu hoặc kết thúc quy trình bảo trì thiết bị. |
+| **RB-API-013** | `POST /api/v1/staff/equipment-units/batch` | STAFF_INVENTORY | Nhập thiết bị theo lô (batch import) gán vào kho chính. |
 
 ---
 
-## 9. PHASE 3 - STAFF KHO CHUẨN BỊ THIẾT BỊ
+## 7. PHASE 1 — KIỂM TRA ĐIỀU KIỆN THUÊ & BÁO GIÁ TẠM (QUOTE)
 
-Payment success xác nhận Rental Order và tạo Warehouse Task. Staff Kho nhận work queue, scan/pick exact unit, ghi evidence, pack và mark Ready.
+### 7.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-101 (Kiểm tra điều kiện):** USER chỉ được thuê đồ khi có xác nhận tham gia chuyến đi hợp lệ từ Mảng A (`TripRentalContextPort`: `tripId` + `userId`, trạng thái `CONFIRMED`) và thời điểm thuê chưa vượt qua giới hạn chốt sổ (`rentalCutoffAt`).
+* **RB-FR-102 (Tính khả dụng an toàn - Capacity Safety Gate):** Tồn kho khả dụng được tính trên kho chính duy nhất (`RB-POL-33`) và trên cửa sổ chiếm chỗ:
+  $$\text{Cửa sổ chiếm chỗ} = [\text{Trip.startAt} - 12\text{h}, \text{Trip.endAt} + \text{Buffer (24h hoặc 48h)}]$$
+  Hệ thống quét các bản ghi `RentalQuantityReservation` đang hiệu lực để đảm bảo không vượt quá tổng số thiết bị `AVAILABLE` thực tế.
+* **RB-FR-103 (Báo giá Rental Quote):** Báo giá phí thuê + tiền cọc dựa trên số ngày tính phí (`chargedDays`) và chính sách giá snapshot. Quote có thời hạn sống (TTL) đúng **10 phút**.
 
-### 9.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-301** | Create Warehouse Task | P0 | System | Order `PAID` | Tự động tạo task chuẩn bị theo Trip/Pickup/Order. | Task `OPEN`. | Idempotent event. |
-| **RB-FR-302** | Pick Reserved Units | P0 | Staff Kho | Task `OPEN` | Scan exact unit đã reserved; validate ownership/order; chuyển `PICKED`. | Task tiến độ. | Sai unit bị reject. |
-| **RB-FR-303** | Pre-handover Condition Evidence | P0 | Staff Kho | Units picked | Chụp/lưu condition trước giao, note và ảnh cho từng unit. | Baseline evidence tồn tại. | Bắt buộc trước pack. |
-| **RB-FR-304** | Pack Package | P0 | Staff Kho | Evidence complete | Tạo `packageCode`/QR, map exact units với User/Booking/Trip. | Package `PACKED`. | Không mix cross-order. |
-| **RB-FR-305** | Mark Ready | P0 | Staff Kho | Package đầy đủ | Mark `READY_FOR_HANDOVER` và tạo Logistics Task. | Downstream task được tạo. | Không ready nếu thiếu evidence/package. |
-
-### 9.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-301** | `GET /api/v1/staff/warehouse/tasks` | Staff Kho | Work queue | `date`, `status`, `tripId`, `pickupPointId` | `tasks` | Least-privilege data. |
-| **RB-API-302** | `GET /api/v1/staff/warehouse/tasks/:id` | Staff Kho | Task detail | `taskId` | `order`, `units`, `pickup context` | Role. |
-| **RB-API-303** | `POST /api/v1/staff/warehouse/tasks/:id/pick` | Staff Kho | Scan/pick unit | `assetCodes[]` | `pickedUnits`, `progress` | 409 sai reservation/order. |
-| **RB-API-304** | `POST /api/v1/staff/warehouse/tasks/:id/condition-snapshots` | Staff Kho | Save condition before | `unitId`, `condition`, `notes`, `images` | `snapshot` | Không overwrite snapshot cũ. |
-| **RB-API-305** | `POST /api/v1/staff/warehouse/tasks/:id/pack` | Staff Kho | Pack package | `unitIds` | `packageCode`, `qr`, `status` | Require all picked/evidence. |
-| **RB-API-306** | `POST /api/v1/staff/warehouse/tasks/:id/ready` | Staff Kho | Ready for logistics | `packageId` | `task/logisticsTaskRef` | Idempotent. |
+### 7.2. Danh mục API Phase 1
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-101** | `GET /api/v1/trips/:tripId/rental-eligibility` | USER | Kiểm tra quyền thuê đồ của User theo chuyến đi, lấy deadline thuê và khung ngày mặc định. |
+| **RB-API-102** | `GET /api/v1/rentals/availability` | USER | Tra cứu số lượng thiết bị khả dụng theo chuyến đi trên kho chính. |
+| **RB-API-103** | `POST /api/v1/rentals/quote` | USER | Tạo báo giá thuê thiết bị (TTL 10 phút, snapshot tiền thuê và tiền cọc). |
 
 ---
 
-## 10. PHASE 4 - STAFF LOGISTICS GIAO THIẾT BỊ TẠI ĐIỂM TẬP TRUNG
+## 8. PHASE 2 — ĐẶT ĐƠN, GIỮ SỐ LƯỢNG & THANH TOÁN (ORDER & PAYMENT)
 
-Theo swimlane, Staff Logistics nhận task + package từ kho, di chuyển tới điểm tập trung, xác minh User/Booking, kiểm tra và bàn giao thiết bị. Check-in Trip và Rental Handover vẫn là hai nghiệp vụ riêng.
+### 8.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-201 (Tạo đơn hàng):** Khi Quote còn hiệu lực, User tạo `RentalOrder` ở trạng thái `PENDING_PAYMENT`. Cùng transaction đó, hệ thống tạo bản ghi `RentalQuantityReservation` giữ số lượng an toàn trong thời hạn thanh toán **15 phút**.
+* **RB-FR-202 (Chống trùng lặp & Idempotency):** Mỗi User trong một Trip chỉ được có tối đa 1 đơn thuê đang hoạt động (`active`). Request tạo đơn bắt buộc gửi kèm `Idempotency-Key`.
+* **RB-FR-203 (Thanh toán đơn hàng):** User thanh toán tổng tiền (Phí thuê + Cọc). Shared Payment phân bổ rõ hai khoản: `FEE` và `DEPOSIT`. Khi thanh toán thành công, đơn chuyển sang `PAID` và sinh `PreparationTask` cho kho.
+* **RB-FR-204 (Hủy đơn & Timeout):** Nếu quá 15 phút chưa thanh toán hoặc User chủ động hủy, đơn chuyển `EXPIRED` hoặc `CANCELLED`, giải phóng toàn bộ số lượng giữ chỗ ngay lập tức.
+* **RB-FR-208 (Gia hạn đơn thuê - Rental Extension):** CẤM sửa trực tiếp ngày trả trên đơn cũ. User muốn gia hạn phải qua luồng tạo `ExtensionQuote` -> giữ thêm số lượng bổ sung (all-or-nothing) -> thanh toán phí gia hạn -> cập nhật phụ lục hợp đồng (`acceptedTermsVersion`).
 
-### 10.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-401** | Receive Package From Warehouse | P0 | Staff Logistics | Task scheduled | Scan package để nhận custody từ Staff Kho. | `PACKAGE_RECEIVED`. | Chain-of-custody. |
-| **RB-FR-402** | Verify User / Booking | P0 | Staff Logistics | Tại pickup point | Scan User/Booking/Participant; xác thực đúng Trip/Pickup và Booking hợp lệ. | `USER_VERIFIED`. | Cross-domain Booking context. |
-| **RB-FR-403** | Handover Equipment | P0 | Staff Logistics | User verified | Đối chiếu package, hiển thị condition; User xác nhận nhận; mark units `RENTED` và Rental `ACTIVE`. | Rental `ACTIVE`. | Không gộp Attendance check-in. |
-| **RB-FR-404** | No-show / Refuse Handover | P1 | Staff Logistics/System | User không tới/từ chối | Ghi reason; không handover; tạo return-to-warehouse/cancellation flow. | Assets được giải phóng đúng policy. | Cần Booking no-show contract nếu dùng. |
-
-### 10.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-401** | `GET /api/v1/logistics/tasks` | Staff Logistics | Task list | `date`, `status`, `type` | `tasks` | Role-scoped. |
-| **RB-API-402** | `POST /api/v1/logistics/tasks/:id/receive-package` | Staff Logistics | Nhận package | `packageCode` | `task`, `custody` | Validate task/package. |
-| **RB-API-403** | `POST /api/v1/logistics/tasks/:id/verify-user` | Staff Logistics | Verify User/Booking | `bookingQr/userQr` | `verification` + `expected package` | Cross-domain Booking validation. |
-| **RB-API-404** | `POST /api/v1/rentals/:rentalId/handover` | Staff Logistics | Confirm handover | `packageId`, `userConfirmation` | `rental ACTIVE`, `units RENTED` | Require package received + user verified. |
-| **RB-API-405** | `POST /api/v1/rentals/:rentalId/no-show` | Staff Logistics/System | No-show/refuse | `reason`, `evidence?` | `status/action` | Policy/idempotency. |
-
----
-
-## 11. PHASE 5 - TRONG CHUYẾN / CHUẨN BỊ THU HỒI
-
-Mảng B không điều khiển Trip. Khi Trip kết thúc hoặc đến return window, hệ thống nhận event từ Mảng A để tạo Return Task.
-
-### 11.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-501** | Rental Active Tracking | P0 | System/User | Handover complete | Cho User xem các thiết bị đang thuê, due time và trạng thái. | Rental được theo dõi. | Không cần GPS tracking riêng. |
-| **RB-FR-502** | Create Return Task | P0 | System | Trip completed/return window | Tạo task thu hồi theo Drop-off Point và package/rental. | `RETURN_DUE` task. | Cross-domain `TRIP_COMPLETED`. |
-| **RB-FR-503** | Trip Change Handling | P1 | System | Trip rescheduled/cancelled | Revalidate reservation/order và thông báo action required/refund. | Rental không bị lệch ngày Trip. | Cross-domain. |
-
-### 11.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-501** | `GET /api/v1/rentals/active` | User | Danh sách đang thuê | `bookingId?` | `active rentals`, `due info` | Ownership. |
-| **RB-API-502** | `GET /api/v1/rentals/:id` | User/Staff | Rental lifecycle detail | `rentalId` | `assets`, `handover`, `return`, `deposit` | Role/ownership. |
+### 8.2. Danh mục API Phase 2
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-201** | `POST /api/v1/rental-orders` | USER | Tạo đơn thuê từ Quote hợp lệ, giữ số lượng trong 15 phút (kèm `Idempotency-Key`). |
+| **RB-API-202** | `GET /api/v1/rental-orders` | USER | Danh sách các đơn thuê của tôi (phân trang, lọc trạng thái). |
+| **RB-API-203** | `GET /api/v1/rental-orders/:id` | USER / Staff | Chi tiết đơn thuê, dòng sản phẩm, thông tin cọc, tài liệu biên bản liên quan. |
+| **RB-API-204** | `POST /api/v1/rental-orders/:id/payments` | USER | Tạo yêu cầu thanh toán cho đơn thuê (kèm `Idempotency-Key`). |
+| **RB-API-205** | `POST /api/v1/rental-orders/:id/cancel` | USER / System | Hủy đơn thuê trước khi bàn giao và giải phóng giữ chỗ. |
+| **RB-API-206** | `GET /api/v1/rental-orders/:id/payment` | USER | Tra cứu trạng thái thanh toán chuẩn hóa từ cổng thanh toán. |
+| **RB-API-801** | `POST /api/v1/rental-orders/:id/extension-quotes` | USER | Tạo báo giá gia hạn thêm ngày thuê và phương án trả. |
+| **RB-API-802** | `POST /api/v1/rental-orders/:id/extensions` | USER | Chấp thuận điều khoản và tạo yêu cầu gia hạn đơn hàng. |
+| **RB-API-803** | `POST /api/v1/rental-extensions/:id/payments` | USER | Thanh toán phí gia hạn đơn thuê. |
+| **RB-API-804** | `GET /api/v1/rental-orders/:id/extensions` | USER / Staff | Lịch sử các lần gia hạn và phụ lục đi kèm của đơn thuê. |
 
 ---
 
-## 12. PHASE 6 - THU HỒI / INSPECTION / HOÀN CỌC / FINALIZE INVENTORY
+## 9. PHASE 3 — KHO CHUẨN BỊ THIẾT BỊ (PREPARATION & PACKING)
 
-Staff Logistics thu hồi và đánh giá sơ bộ; Staff Kho nhận lại, re-check tình trạng và xác định trạng thái tồn kho cuối. System xử lý deposit theo kết quả hợp lệ.
+### 9.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-301 (Tác vụ kho):** Đơn sang `PAID` tự động tạo `InventoryTask` loại `PREPARATION` gán cho kho chính.
+* **RB-FR-302 (Nhặt thiết bị - Pick):** `STAFF_INVENTORY` quét mã QR của từng thiết bị vật lý cụ thể để gán vào đơn (`RentalUnitAssignment`). Thiết bị được chọn chuyển từ `AVAILABLE` sang `PICKED`.
+* **RB-FR-303 (Chụp ảnh bằng chứng trước giao):** Trước khi đóng gói, nhân viên kho bắt buộc phải chụp ảnh tình trạng ngoại quan thực tế và phụ kiện đi kèm cho từng món thiết bị (`ConditionSnapshot` loại `PRE_HANDOVER`).
+* **RB-FR-304 (Đóng gói - Pack):** Sau khi đủ ảnh bằng chứng cho 100% món, nhân viên kho đóng gói, niêm phong kiện hàng và sinh mã kiện `packageCode` / QR kiện hàng.
+* **RB-FR-305 (Sẵn sàng bàn giao):** Chuyển trạng thái tác vụ kho sang `READY_FOR_HANDOVER` và tự động kích hoạt `DeliveryTask` cho nhân viên giao nhận.
 
-### 12.1. Functional Requirements
-
-| FR ID | Function | Priority | Actor | Pre-condition | Functional Requirement | Post-condition | Business Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-FR-601** | Return Scan | P0 | Staff Logistics | Return task due | Scan package/unit tại điểm trả; set `RETURN_PENDING`. | Return started. | Sai package/unit flag exception. |
-| **RB-FR-602** | Preliminary Inspection | P0 | Staff Logistics | Return scan done | Ghi `NORMAL`/`DAMAGED`/`LOST` sơ bộ, note, ảnh evidence. | Inspection sơ bộ. | Không tự finalize inventory. |
-| **RB-FR-603** | Return To Warehouse | P0 | Staff Logistics | Inspection done | Transfer custody package/units lại Staff Kho. | Warehouse can receive. | Trace custody. |
-| **RB-FR-604** | Warehouse Re-inspection | P0 | Staff Kho | Units returned | Đối chiếu condition trước/sau; xác nhận final condition và damage/loss. | Final assessment. | Nếu discrepancy tạo exception. |
-| **RB-FR-605** | Deposit Settlement | P0 | System/Staff | Final assessment | Normal $\rightarrow$ full refund; damaged/lost $\rightarrow$ deduction theo policy; lưu settlement immutable. | User nhận kết quả. | Không settle hai lần. |
-| **RB-FR-606** | Finalize Equipment State | P0 | Staff Kho/System | Settlement/assessment complete | `NORMAL` $\rightarrow$ `AVAILABLE`; `DAMAGED` $\rightarrow$ `MAINTENANCE`/`DAMAGED`; `LOST` $\rightarrow$ `LOST`; cập nhật inventory. | Rental `COMPLETED`. | Không đưa đồ hỏng vào pool. |
-
-### 12.2. API Specifications
-
-| API ID | Method + Route | Role | Purpose | Request chính | Response chính | Rules / Errors |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RB-API-601** | `POST /api/v1/rentals/:id/return-scan` | Staff Logistics | Start return | `packageCode`, `assetCodes` | `RETURN_PENDING` | Validate active rental. |
-| **RB-API-602** | `POST /api/v1/rentals/:id/return-inspection` | Staff Logistics | Preliminary inspection | `items[{unitId,status,note,images}]` | `inspection` | Evidence required. |
-| **RB-API-603** | `POST /api/v1/logistics/tasks/:id/return-to-warehouse` | Staff Logistics | Transfer custody | `packageId` | `custody transfer` | Task guard. |
-| **RB-API-604** | `POST /api/v1/staff/returns/:returnId/receive` | Staff Kho | Warehouse receive | `scannedUnitIds` | `received/discrepancies` | Exact units. |
-| **RB-API-605** | `POST /api/v1/staff/returns/:returnId/final-inspection` | Staff Kho | Final assessment | `per-unit condition/damage` | `final assessment` | Compare baseline. |
-| **RB-API-606** | `POST /api/v1/rentals/:id/deposit-settlement` | System/Authorized Staff | Settle deposit | `assessmentId` | `refund`, `deduction`, `status` | Idempotent; amount bounded by deposit. |
-| **RB-API-607** | `GET /api/v1/rentals/:id/deposit` | User | Deposit status | `rentalId` | `held/refund/deduction/reason` | Ownership. |
-| **RB-API-608** | `POST /api/v1/staff/returns/:returnId/finalize` | Staff Kho | Finalize inventory/order | `returnId` | `unit states`, `rental COMPLETED` | Require inspection/settlement. |
+### 9.2. Danh mục API Phase 3
+*(Đường dẫn chính thức `/api/v1/preparation/tasks`, hỗ trợ alias `/api/v1/inventory/tasks` và `/staff/warehouse/tasks`)*
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-301** | `GET /api/v1/preparation/tasks` | STAFF_INVENTORY | Hàng đợi công việc chuẩn bị đơn hàng theo ngày đi và điểm tập kết. |
+| **RB-API-302** | `GET /api/v1/preparation/tasks/:id` | STAFF_INVENTORY | Chi tiết tác vụ kho, danh sách các loại đồ và số lượng cần lấy. |
+| **RB-API-303** | `POST /api/v1/preparation/tasks/:id/pick` | STAFF_INVENTORY | Quét mã `assetCode` thiết bị vật lý để gán vào đơn hàng. |
+| **RB-API-304** | `POST /api/v1/preparation/tasks/:id/condition-snapshots` | STAFF_INVENTORY | Tải lên bằng chứng ảnh tình trạng đồ trước khi bàn giao. |
+| **RB-API-305** | `POST /api/v1/preparation/tasks/:id/pack` | STAFF_INVENTORY | Hoàn tất đóng gói kiện hàng, tạo mã `packageCode` và QR kiện. |
+| **RB-API-306** | `POST /api/v1/preparation/tasks/:id/ready` | STAFF_INVENTORY | Đánh dấu kiện hàng sẵn sàng bàn giao cho Logistics. |
 
 ---
 
-## 13. API / EVENT CẦN PHỐI HỢP GIỮA CÁC MẢNG
+## 10. PHASE 4 — GIAO NHẬN TẠI ĐIỂM TẬP KẾT (DELIVERY & HANDOVER)
 
-Các contract dưới đây phải họp owner/consumer trước khi code. Đây là vùng dễ gây xung đột nghiệp vụ nhất và không nên để mảng B tự đoán dữ liệu từ Booking/Trip/Payment.
+### 10.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-401 (Nhận bàn giao từ kho):** `STAFF_DELIVERY` quét mã kiện hàng tại kho để nhận quyền quản lý (custody transfer) trước khi xuất phát đến điểm đón.
+* **RB-FR-402 (Xác minh khách hàng):** Tại điểm đón của chuyến đi, khách xuất trình mã nhận một lần (`pickupCode`). Nhân viên quét mã này để xác minh đúng người, đúng chuyến, đúng đơn hàng.
+* **RB-FR-403 (Bàn giao thiết bị & Tạo BBGN):** Nhân viên mở kiện hàng cho khách kiểm tra. Khi khách đồng ý nhận:
+  1. Đơn hàng chuyển sang `ACTIVE`.
+  2. Toàn bộ thiết bị vật lý trong kiện chuyển sang `RENTED`.
+  3. Hệ thống tự động khởi tạo Biên bản giao nhận điện tử gốc (`HandoverDocument` / BBGN) bất biến để cả hai bên tra cứu (`RB-FR-1001`).
+* **RB-FR-404 (Xử lý không đến nhận - No-show):** Nếu khách không đến hoặc từ chối nhận đồ, ghi nhận lý do, không kích hoạt đơn sang `ACTIVE` và thực hiện luồn chuyển kiện hàng về kho theo quy định.
 
-| API / Event | Owner | Consumer | Purpose | Key Contract | Review Before Code |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `GET /internal/bookings/:id/rental-context` | Mảng A - Bảo | Mảng B - Quân | Kiểm tra quyền thuê và lấy context | `bookingId`, `userId`, `tripId`, `status`, `startAt`, `endAt`, `pickupPointId`, `dropoffPointId` | Bảo + Quân |
-| `EVENT BOOKING_CONFIRMED` | Mảng A | Mảng B | Cho phép mở rental flow / preload context | `bookingId`, `tripId`, `userId`, `timestamps` | Bảo + Quân |
-| `EVENT BOOKING_CANCELLED` | Mảng A | Mảng B | Hủy/release rental theo policy | `bookingId`, `cancelReason`, `source`, `effectiveAt` | Bảo + Quân + Luật nếu payment refund |
-| `EVENT TRIP_RESCHEDULED` | Mảng A | Mảng B | Revalidate reservation/time window | `tripId`, `oldWindow`, `newWindow`, `affectedBookingIds` | Bảo + Quân |
-| `EVENT TRIP_COMPLETED` | Mảng A | Mảng B | Mở return flow / create Return Task | `tripId`, `completedAt`, `dropoffPointId` | Bảo + Quân |
-| `GET /internal/trips/:id/logistics-context` | Mảng A | Mảng B | Lấy pickup/dropoff/time cho task logistics | `tripId`, `pickup/dropoff`, `time`, `status` | Bảo + Quân |
-| `POST /payments` / `PAYMENT_SUCCESS\|FAILED` | Shared Payment | Mảng B | Thanh toán rental fee + deposit | `orderRef`, `amount`, `status`, `providerRef`, `idempotencyKey` | Quân + Luật/Payment owner |
-| `POST /refunds` / `REFUND_RESULT` | Shared Payment | Mảng B | Hoàn tiền/cọc | `rentalOrderId`, `amount`, `reason`, `status` | Quân + Luật/Payment owner |
-| `EVENT NOTIFICATION` | Mảng B | Notification service | Thông báo order/payment/ready/handover/return/refund | `recipientId`, `type`, `entityRef`, `payload` | Quân + integration owner |
-| `AUTH / RBAC` | Shared | Mảng B | Xác thực User/Staff roles | `userId`, `roles`, `permissions` | Team thống nhất chung |
-
----
-
-## 14. BUSINESS RULE CỐT LÕI PHẢI CHỐT TRƯỚC KHI CODE
-
-| BR ID | Business Rule | Mức |
-| :--- | :--- | :--- |
-| **RB-BR-01** | Không được tạo Rental Order nếu không có Booking hợp lệ thuộc User. | P0 |
-| **RB-BR-02** | Rental date window phải derive từ Trip; FE không tự gửi ngày để thay đổi giá. | P0 |
-| **RB-BR-03** | Một Equipment Unit không được có reservation/rental overlap trong cùng time window. | P0 |
-| **RB-BR-04** | Reservation phải atomic; concurrent checkout không thể cùng reserve một unit. | P0 |
-| **RB-BR-05** | Payment timeout/cancel trước handover phải release reservation idempotently. | P0 |
-| **RB-BR-06** | Staff Kho là role duy nhất thao tác master inventory/Equipment Unit lifecycle nghiệp vụ kho. | P0 |
-| **RB-BR-07** | Staff Logistics không được chỉnh product price, inventory master hoặc maintenance. | P0 |
-| **RB-BR-08** | Handover yêu cầu package đúng + User/Booking đúng + task đúng pickup. | P0 |
-| **RB-BR-09** | Condition before-handover phải tồn tại trước khi giao; User cần xác nhận tình trạng khi nhận. | P0 |
-| **RB-BR-10** | Return inspection của Logistics là sơ bộ; Staff Kho chịu final inventory assessment. | P0 |
-| **RB-BR-11** | Thiết bị `DAMAGED`/`LOST` không được tự quay `AVAILABLE`. | P0 |
-| **RB-BR-12** | Deposit settlement không được thực hiện hai lần và deduction không vượt deposit/policy. | P0 |
-| **RB-BR-13** | Booking cancellation / Trip reschedule phải được xử lý qua event/contract, không query DB mảng A trực tiếp. | P0 |
-| **RB-BR-14** | Check-in Trip và Rental Handover là hai nghiệp vụ riêng dù cùng xảy ra tại điểm tập trung. | P0 |
-| **RB-BR-15** | Số lượng thuê tối đa/cutoff trước Trip phải cấu hình được; giá trị cụ thể có thể chốt sau. | P1 |
+### 10.2. Danh mục API Phase 4
+*(Đường dẫn chính thức `/api/v1/delivery/tasks`, hỗ trợ alias `/api/v1/logistics/tasks`)*
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-401** | `GET /api/v1/delivery/tasks` | STAFF_DELIVERY | Danh sách công việc giao nhận theo ngày, chuyến đi và điểm đón. |
+| **RB-API-402** | `POST /api/v1/delivery/tasks/:id/receive-package` | STAFF_DELIVERY | Quét mã kiện hàng để nhận quyền quản lý (custody) từ kho. |
+| **RB-API-403** | `POST /api/v1/delivery/tasks/:id/verify-user` | STAFF_DELIVERY | Quét mã `pickupCode` của khách để xác minh quyền nhận đồ. |
+| **RB-API-404** | `POST /api/v1/rentals/:rentalId/handover` | STAFF_DELIVERY | Xác nhận bàn giao thành công, kích hoạt đơn `ACTIVE` và sinh BBGN điện tử. |
+| **RB-API-405** | `POST /api/v1/rentals/:rentalId/no-show` | STAFF_DELIVERY | Ghi nhận trường hợp khách không đến nhận thiết bị. |
+| **RB-API-408** | `POST /api/v1/admin/rental-tasks/:id/assign` | ADMIN | Phân công tác vụ giao nhận cho nhân viên cụ thể. |
+| **RB-API-409** | `GET /api/v1/rental-orders/:id/handover-preview` | USER / Người nhận | Xem trước danh sách đồ và ảnh tình trạng trước khi nhận tại điểm hẹn. |
+| **RB-API-410** | `GET /api/v1/delivery/tasks/:id` | STAFF_DELIVERY | Xem chi tiết tác vụ giao nhận và thông tin kiện hàng. |
 
 ---
 
-## 15. ERROR CONTRACT / VALIDATION CHUNG
+## 11. PHASE 5 — TRONG CHUYẾN ĐI & THEO DÕI ĐƠN THUÊ (ACTIVE TRACKING)
 
-| HTTP Status | Code đề xuất | Ý nghĩa |
-| :--- | :--- | :--- |
-| **400** | `VALIDATION_ERROR` | Request thiếu/sai field. |
-| **401** | `UNAUTHENTICATED` | Chưa đăng nhập/token sai. |
-| **403** | `FORBIDDEN` | Role/ownership không đủ quyền. |
-| **404** | `RENTAL_NOT_FOUND` / `UNIT_NOT_FOUND` | Entity không tồn tại. |
-| **409** | `EQUIPMENT_NOT_AVAILABLE` | Không đủ unit khả dụng / race conflict. |
-| **409** | `INVALID_RENTAL_STATE` | State transition không hợp lệ. |
-| **409** | `DUPLICATE_OPERATION` | Handover/refund/settlement đã xử lý. |
-| **422** | `BOOKING_NOT_RENTAL_ELIGIBLE` | Booking/Trip không đủ điều kiện thuê. |
-| **422** | `RENTAL_CUTOFF_PASSED` | Đã qua deadline thuê. |
-| **502 / 503** | `PAYMENT_SERVICE_UNAVAILABLE` | External/shared service lỗi có kiểm soát. |
+### 11.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-501:** Khách hàng theo dõi danh sách các thiết bị đang thuê, hạn trả đồ (`dueAt`), phương án trả đồ và xem lại biên bản bàn giao.
+* **RB-FR-502 (Tự động tạo tác vụ thu hồi):** Khi chuyến đi hoàn tất (`TRIP_COMPLETED` từ Mảng A) hoặc đến hạn trả đồ, hệ thống tự động sinh `DeliveryTask` loại `RETURN` cho nhân viên giao nhận tại điểm trả quy định.
+* **RB-FR-503 (Xử lý khi Trip chính thức đổi lịch):** Phân biệt rõ sự kiện Trip đổi lịch từ Ban tổ chức (cập nhật hạn trả vận hành, không thu thêm tiền của khách, phát cảnh báo nếu xung đột đơn sau) với việc User chủ động xin gia hạn thuê.
+
+### 11.2. Danh mục API Phase 5
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-501** | `GET /api/v1/rental-orders` | USER | Danh sách đơn thuê đang hoạt động (`ACTIVE`) kèm thời hạn hoàn trả. |
+| **RB-API-502** | `GET /api/v1/rental-orders/:id` | USER / Staff | Chi tiết vòng đời đơn thuê, thời gian bàn giao thực tế và hạn trả. |
 
 ---
 
-## 16. ENTITY / ERD TỐI THIỂU CHO MẢNG B
+## 12. PHASE 6 — QUY TRÌNH THU HỒI HYBRID & QUYẾT TOÁN CỌC (HYBRID RETURN & DEPOSIT SETTLEMENT)
 
-| Entity | Field / Relation quan trọng | Ghi chú ownership |
-| :--- | :--- | :--- |
-| **RentalProduct** | `id`, `sku`, `name`, `categoryId`, `dailyPrice`, `depositPolicy`, `status` | B owner. |
-| **EquipmentUnit** | `id`, `productId`, `assetCode`, `status`, `condition` | Serialized asset. |
-| **EquipmentReservation** | `id`, `unitId`, `rentalOrderId`, `startAt`, `endAt`, `status` | Unique/locking logic. |
-| **RentalOrder** | `id`, `userId`, `bookingId`, `tripId`, `status`, `fee`, `deposit`, `policySnapshot` | Không FK logic ngược sang sửa Booking. |
-| **RentalOrderLine** | `orderId`, `productId`, `qty`, `dailyPriceSnapshot`, `chargedDays` | Snapshot giá. |
-| **WarehouseTask** | `orderId`, `status`, `deadline`, `tripId`, `pickupPointRef` | Generated after paid. |
-| **Package** | `id`, `packageCode`, `orderId`, `status` | Contains exact units. |
-| **PackageItem** | `packageId`, `equipmentUnitId` | Traceability. |
-| **ConditionSnapshot** | `unitId`, `type(BEFORE/RETURN)`, `condition`, `images`, `createdBy` | Immutable evidence. |
-| **LogisticsTask** | `tripId`, `orderId`, `packageId`, `type`, `pickup/dropoffRef`, `status`, `assignee` | Mobile workflow. |
-| **HandoverRecord** | `rentalOrderId`, `packageId`, `staffId`, `userConfirmAt` | Chain of custody. |
-| **ReturnInspection** | `rentalOrderId`, `unitId`, `preliminary/final`, `status`, `note`, `evidence` | Two-stage inspection. |
-| **DepositSettlement** | `rentalOrderId`, `deposit`, `deduction`, `refundAmount`, `status`, `reason` | Immutable financial record. |
-| **MaintenanceRecord** | `unitId`, `start/end`, `reason`, `note`, `status` | Warehouse owner. |
+Quy trình thu hồi và xử lý tiền cọc tuân thủ nghiêm ngặt **SOT v1.3.2** và chính sách **Policy v1.5.2 (RB-POL-28, RB-POL-29, RB-POL-32)**:
 
----
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as USER
+    actor D as STAFF_DELIVERY
+    actor I as STAFF_INVENTORY
+    actor A as ADMIN
+    participant S as System
 
-## 17. ACCEPTANCE CRITERIA MVP CHO MẢNG B
+    Note over U,D: Bước 1: Thu hồi tại hiện trường (Điểm trả)
+    U->>D: Trả đồ
+    D->>S: RB-API-601 (return-scan) & RB-API-602 (return-observations)
+    D->>S: RB-API-1004 Tạo biên bản nhận trả đợt (ReturnReceipt)
+    D->>S: RB-API-603 Chuyển custody về kho (Bắt đầu 8h monitor)
 
-- [ ] User có Booking hợp lệ mới tạo được Rental Order.
-- [ ] Availability tính đúng theo Trip date window và loại unit đang reserved/rented/maintenance.
-- [ ] Hai User checkout đồng thời không thể reserve cùng Equipment Unit.
-- [ ] Payment success tạo Warehouse Task đúng một lần; payment failed/expired release reservation đúng.
-- [ ] Staff Kho pick đúng exact unit, lưu condition before, pack package QR và mark ready.
-- [ ] Staff Logistics nhận package, verify đúng User/Booking, handover và mark Rental `ACTIVE`.
-- [ ] Trip complete tạo return flow; Logistics scan return và lưu inspection sơ bộ.
-- [ ] Staff Kho nhận lại, re-inspect và finalize Equipment Unit state.
-- [ ] Normal $\rightarrow$ refund full; Damaged/Lost $\rightarrow$ deduction theo policy; settlement idempotent.
-- [ ] Booking/Trip/Payment integration chỉ qua contract/event đã thống nhất, không chỉnh DB/domain nhóm khác.
+    Note over D,I: Bước 2: Vận chuyển về Kho chính
+    I->>S: RB-API-604 Xác nhận nhận custody thực tế (Khởi động SLA 72h Final)
 
----
+    Note over I: Bước 3: Kiểm định Final tại Kho (≤ 72 giờ)
+    I->>S: RB-API-605 Ghi nhận kết quả Final (FINAL_PASS hoặc ISSUE)
 
-## 18. API IMPLEMENTATION ROADMAP - ĐỀ XUẤT THEO GIAI ĐOẠN
+    alt Nhánh Toàn đơn Đạt (All-Normal)
+        S->>S: RB-API-606 Tự động hoàn cọc gộp 100% theo Payment gốc
+    else Nhánh Có Ngoại Lệ (Exception: Hỏng/Mất)
+        S->>S: Tách riêng phần cọc của item bị ISSUE/MISSING
+        S->>S: Hoàn trước nhóm cọc của các item FINAL_PASS
+        I->>S: Tạo đề xuất khấu trừ cọc (Deduction Proposal)
+        S->>U: Gửi in-app notice + Media ảnh Ready (Bắt đầu 48h khiếu nại)
+        A->>S: RB-API-610 Duyệt quyết định khấu trừ (SLA 24h)
+        opt Khách khiếu nại trong 48h
+            U->>S: RB-API-609 Gửi ý kiến phản hồi về khoản khấu trừ
+        end
+    end
 
-| Giai đoạn | API / Feature trọng tâm | Điều kiện hoàn tất |
-| :--- | :--- | :--- |
-| **R0 - Master Data** | RentalProduct + EquipmentUnit CRUD + inventory filters | Có data thật, unit QR/code unique. |
-| **R1 - Eligibility/Availability** | Booking rental context + availability + quote | Chốt contract Bảo - Quân. |
-| **R2 - Order/Reservation** | Create order + atomic reservation + cancel/expiry | Concurrency test pass. |
-| **R3 - Payment** | Payment intent + webhook + refund contract | Idempotent. |
-| **R4 - Warehouse** | Work queue + pick + condition + pack + ready | Staff Kho flow demo được. |
-| **R5 - Logistics Handover** | Task + receive package + verify user + handover | Mobile giao đồ demo được. |
-| **R6 - Return/Deposit** | Return scan + inspections + settlement + finalize inventory | End-to-end hoàn tất. |
-| **R7 - Integration Hardening** | Cancel/reschedule/no-show/notifications | Cross-domain test pass. |
+    Note over I: Bước 4: Vệ sinh & Cho thuê lại
+    I->>S: Vệ sinh thực tế thiết bị đạt FINAL_PASS
+    I->>S: RB-API-611 Xác nhận READY -> Chuyển sang AVAILABLE
+```
 
----
+### 12.1. Yêu cầu chức năng chi tiết (Functional Requirements)
+* **RB-FR-601 (Thu hồi tại điểm trả):** `STAFF_DELIVERY` quét mã từng món thiết bị tại điểm trả (`return-scan`). Món nào khách không đem trả sẽ được đánh dấu `MISSING_PENDING_REVIEW` (không tự ý chuyển thành `LOST`).
+* **RB-FR-602 (Ghi nhận quan sát sơ bộ):** `STAFF_DELIVERY` ghi nhận ngoại quan ban đầu (`return-observations`). **Tuyệt đối không kết luận đạt/hỏng cuối cùng và không hoàn cọc tại chỗ**.
+* **RB-FR-603 (Chuyển quyền quản lý về kho):** `STAFF_DELIVERY` xác nhận vận chuyển thiết bị về kho chính (`return-to-inventory-location`). Hệ thống giám sát quá trình vận chuyển, nếu sau **8 giờ** chưa thấy kho xác nhận thì phát cảnh báo `ACTION_REQUIRED`.
+* **RB-FR-604 (Kho xác nhận nhận hàng):** `STAFF_INVENTORY` kiểm đếm thực tế và xác nhận nhận bàn giao tại kho chính (bắt buộc truyền `inventoryLocationId`). **Đồng hồ SLA kiểm định 72 giờ chính thức bắt đầu tính từ thời điểm này**.
+* **RB-FR-605 (Kiểm định chuyên sâu Final):** `STAFF_INVENTORY` kiểm tra kỹ thuật toàn bộ 100% các món thực nhận trong vòng **72 giờ** (hoặc **24 giờ** đối với thiết bị yêu cầu kiểm tra sâu). Đưa ra kết luận: `FINAL_PASS` hoặc `ISSUE`.
+* **RB-FR-606 (Quyết toán cọc kết hợp - Hybrid Settlement):**
+  * **Nhánh toàn đơn đạt:** Nếu tất cả các món trong đơn đều đã nhận đủ và đều đạt `FINAL_PASS` $\rightarrow$ Tự động hoàn cọc gộp 1 lần cho User theo đúng phương thức thanh toán ban đầu.
+  * **Nhánh ngoại lệ:** Nếu có món bị hỏng (`ISSUE`) hoặc thiếu (`MISSING`) $\rightarrow$ Tách tiền cọc: **Hoàn tiền cọc ngay cho các món đã đạt `FINAL_PASS`**; chỉ phong tỏa phần tiền cọc tương ứng với các món có vấn đề.
+* **RB-FR-608 & 610 (Duyệt trừ cọc & Bảo vệ User):**
+  * Khi có đề xuất trừ cọc, Admin phải phê duyệt trong SLA **24 giờ**.
+  * Hệ thống chỉ kích hoạt đồng hồ khiếu nại **48 giờ** của User khi: Bằng chứng ảnh hư hại từ Shared Media đã ở trạng thái `READY` và thông báo trong app đã được gửi đến User (`evidenceAccessibleAt = max(evidencePublishedAt, inAppNoticePublishedAt)`).
+* **RB-FR-611 (Vệ sinh và hoàn trả tồn kho):** Thiết bị đạt `FINAL_PASS` chuyển sang trạng thái `CLEANING`. Chỉ khi nhân viên kho làm vệ sinh xong và gọi `RB-API-611`, thiết bị mới chính thức quay lại trạng thái `AVAILABLE`.
 
-## 19. CÁC DIAGRAM NÊN VẼ TỪ TÀI LIỆU NÀY
-
-| Diagram | Phạm vi nên thể hiện |
-| :--- | :--- |
-| **Use Case Diagram** | User / Staff Kho / Staff Logistics / Admin / Payment / Booking System. |
-| **Activity Diagram - Rental E2E** | Từ eligibility $\rightarrow$ quote $\rightarrow$ order $\rightarrow$ payment $\rightarrow$ warehouse $\rightarrow$ handover $\rightarrow$ return $\rightarrow$ deposit. |
-| **Sequence - Create Rental Order** | User $\leftrightarrow$ Rental $\leftrightarrow$ Booking Context $\leftrightarrow$ Reservation DB $\leftrightarrow$ Payment. |
-| **Sequence - Warehouse Preparation** | Payment Event $\rightarrow$ Warehouse Task $\rightarrow$ Pick $\rightarrow$ Condition $\rightarrow$ Pack $\rightarrow$ Ready. |
-| **Sequence - Logistics Handover** | Logistics App $\rightarrow$ Task $\rightarrow$ Booking Verify $\rightarrow$ Package $\rightarrow$ Handover. |
-| **Sequence - Return & Deposit** | Return Scan $\rightarrow$ Inspection $\rightarrow$ Warehouse Recheck $\rightarrow$ Deposit Settlement $\rightarrow$ Inventory. |
-| **State Diagram - EquipmentUnit** | `AVAILABLE`...`LOST`/`MAINTENANCE`. |
-| **State Diagram - RentalOrder** | `PENDING_PAYMENT`...`COMPLETED`/`CANCELLED`. |
-| **ERD** | `RentalProduct`, `EquipmentUnit`, `Reservation`, `RentalOrder`, `Task`, `Package`, `Inspection`, `Deposit`. |
-| **Integration Diagram** | Booking/Trip/Payment/Notification contracts với Rental. |
-
----
-
-## 20. TEMPLATE CHUẨN MẢNG B ĐANG DÙNG
-
-Đây là cùng cấu trúc với tài liệu Mảng A Booking để team review đồng nhất:
-
-| Mục bắt buộc | Nội dung |
-| :---: | :--- |
-| **1** | Mục đích tài liệu |
-| **2** | Domain & ownership |
-| **3** | Roles |
-| **4** | Terminology / core model |
-| **5** | State model |
-| **6+** | Functional Requirement theo từng phase |
-| **Mỗi phase** | FR table + API table |
-| **Cross-domain** | API/Event cần họp owner-consumer |
-| **Business Rule** | Rule ID + priority |
-| **Error Contract** | HTTP + business error code |
-| **ERD** | Entity + relation/ownership |
-| **Acceptance** | MVP completion criteria |
-| **Roadmap** | Thứ tự implement |
-| **Diagram** | Danh sách diagram cần vẽ |
-| **TBD** | Điểm chưa chốt |
+### 12.2. Danh mục API Phase 6
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-601** | `POST /api/v1/rental-orders/:id/return-scan` | STAFF_DELIVERY | Bắt đầu quét mã thu hồi thiết bị tại hiện trường. |
+| **RB-API-602** | `POST /api/v1/rental-orders/:id/return-observations` | STAFF_DELIVERY | Ghi nhận ngoại quan quan sát sơ bộ tại điểm trả đồ. |
+| **RB-API-603** | `POST /api/v1/delivery/tasks/:id/return-to-inventory-location` | STAFF_DELIVERY | Chuyển quyền quản lý thiết bị về kho chính (bắt đầu monitor 8h). |
+| **RB-API-604** | `POST /api/v1/staff/returns/:returnId/receive` | STAFF_INVENTORY | Xác nhận nhận hàng thực tế tại kho chính (kích hoạt SLA Final 72h). |
+| **RB-API-605** | `POST /api/v1/staff/returns/:returnId/final-inspection` | STAFF_INVENTORY | Kiểm định Final cho 100% món thực nhận (đánh giá `FINAL_PASS`/`ISSUE`). |
+| **RB-API-606** | `POST /api/v1/rental-orders/:id/deposit-settlement` | System / ADMIN | Điều phối quyết toán cọc (hoàn gộp toàn đơn hoặc hoàn theo nhóm item). |
+| **RB-API-607** | `GET /api/v1/rental-orders/:id/deposit` | USER | Tra cứu trạng thái tiền cọc bóc tách theo từng món thiết bị. |
+| **RB-API-608** | `POST /api/v1/staff/returns/:returnId/finalize` | STAFF_INVENTORY | Đóng phiên kiểm tra sau khi hoàn tất kiểm định. |
+| **RB-API-609** | `POST /api/v1/rental-orders/:id/assessment-reviews` | USER | Gửi ý kiến phản hồi/khiếu nại về khoản khấu trừ cọc (trong hạn 48h). |
+| **RB-API-610** | `POST /api/v1/admin/rental-exceptions/:id/resolve` | ADMIN | Phê duyệt quyết định xử lý đền bù/trừ cọc ngoại lệ (SLA 24h). |
+| **RB-API-611** | `POST /api/v1/staff/equipment-units/:id/ready` | STAFF_INVENTORY | **Duy nhất API này đưa thiết bị từ CLEANING -> AVAILABLE sau vệ sinh**. |
+| **RB-API-612** | `GET /api/v1/staff/rental-exceptions` | STAFF_INVENTORY / ADMIN | Hàng đợi các trường hợp thiết bị hư hỏng, thiếu phụ kiện, mất mát. |
+| **RB-API-613** | `GET /api/v1/staff/returns` | STAFF_INVENTORY | Hàng đợi các đợt hàng thu hồi đang về kho hoặc đang chờ kiểm định. |
+| **RB-API-614** | `GET /api/v1/staff/returns/:returnId` | STAFF_INVENTORY / DELIVERY | Xem chi tiết đợt hàng thu hồi và danh sách thiết bị bàn giao. |
+| **RB-API-615** | `GET /api/v1/staff/rental-exceptions/:id` | STAFF_INVENTORY / ADMIN | Xem chi tiết hồ sơ sự cố hư hỏng/mất mát thiết bị. |
+| **RB-API-616** | `GET /api/v1/rental-orders/:id/assessment` | USER | Xem bảng đánh giá chi tiết tình trạng đồ và đề xuất trừ cọc. |
 
 ---
 
-## 21. OPEN DECISIONS / TBD CẦN TEAM CHỐT
+## 13. PHASE 7 — HỒ SƠ & BIÊN BẢN ĐIỆN TỬ BẤT BIẾN (DOCUMENTS)
 
-| TBD | Vấn đề | Khuyến nghị MVP |
-| :--- | :--- | :--- |
-| **RB-TBD-01** | Rental cutoff chính xác trước Trip bao lâu? | Config; mặc định 7 ngày theo thảo luận hiện tại. |
-| **RB-TBD-02** | Giới hạn qty theo participant/loại thiết bị? | Config per product; không hardcode. |
-| **RB-TBD-03** | Damage severity và công thức deduction cụ thể? | MVP Staff Kho xác nhận amount trong giới hạn policy. |
-| **RB-TBD-04** | User từ chối tình trạng khi handover xử lý thế nào? | Tạo handover exception; không mark `RENTED`. |
-| **RB-TBD-05** | Private Trip tự tới cửa hàng nhận đồ có làm MVP không? | Để P1; core dùng Staff Logistics tại điểm tập trung. |
-| **RB-TBD-06** | No-show mất rental fee/deposit mức nào? | Họp Bảo + Quân + Payment owner. |
-| **RB-TBD-07** | Trip reschedule nếu unit mới bị conflict xử lý thế nào? | Action required; không tự đổi reservation im lặng. |
-| **RB-TBD-08** | Ai phê duyệt tranh chấp damage? | MVP Staff Kho + Admin override nếu cần. |
+### 13.1. Yêu cầu chức năng (Functional Requirements)
+* **RB-FR-1001 (Biên bản giao nhận gốc - BBGN):** Tự động khởi tạo sau khi `STAFF_DELIVERY` commit bàn giao thành công. Chứa đầy đủ danh sách thiết bị, mã QR, link ảnh chụp tình trạng trước khi giao và chữ ký xác nhận của hai bên.
+* **RB-FR-1002 (Phụ lục gia hạn):** Khi đơn hàng được gia hạn thành công, tự động sinh phụ lục hợp đồng ghi nhận thời hạn mới và mức phí phát sinh.
+* **RB-FR-1003 (Biên bản nhận trả đợt - ReturnReceipt):** Sinh ra ngay khi `STAFF_DELIVERY` hoàn tất kiểm đếm tại hiện trường, làm bằng chứng xác nhận khách đã bàn giao lại đồ.
+* **Tính toàn vẹn:** Tất cả tài liệu đều là bản ghi bất biến (`immutable`), có mã số tài liệu duy nhất (`documentNo`), gắn mã băm (`hash`) và snapshot nội dung tại thời điểm ký kết.
+
+### 13.2. Danh mục API Phase 7
+| Mã API | Giao thức & Đường dẫn | Quyền truy cập | Mục đích |
+| :--- | :--- | :--- | :--- |
+| **RB-API-1001** | `GET /api/v1/rental-orders/:id/documents` | USER / Staff / ADMIN | Danh sách toàn bộ hồ sơ, biên bản, phụ lục của một đơn thuê. |
+| **RB-API-1002** | `GET /api/v1/rental-documents/:documentId` | USER / Staff / ADMIN | Xem chi tiết nội dung văn bản và siêu dữ liệu của biên bản. |
+| **RB-API-1003** | `GET /api/v1/rental-documents/:documentId/download` | USER / Staff / ADMIN | Lấy đường dẫn tải file PDF biên bản giao nhận có chữ ký số. |
+| **RB-API-1004** | `POST /api/v1/rental-orders/:id/return-receipts` | STAFF_DELIVERY | Khởi tạo biên bản nhận trả đồ đợt tại hiện trường. |
+| **RB-API-1005** | `GET /api/v1/rental-documents/:documentId/verification` | Public / USER | Tra cứu và xác minh tính toàn vẹn của mã văn bản điện tử. |
+| **RB-API-1006** | `POST /api/v1/admin/rental-documents/:documentId/corrections` | ADMIN | Ghi nhận hiệu chỉnh văn bản có lưu vết kiểm toán (audit trail). |
+| **RB-API-1007** | `POST /api/v1/admin/rental-documents/:documentId/retry-render` | ADMIN | Yêu cầu sinh lại file PDF nếu quá trình kết xuất trước đó bị lỗi. |
 
 ---
 
-## 22. KẾT LUẬN
+## 14. BỘ QUY TẮC CHÍNH SÁCH BẮT BUỘC (POLICY RULES v1.5.2)
 
-Mảng B phải được xem là nguồn sự thật cho Rental Product, Equipment Unit, Reservation, Rental Order, Warehouse/Logistics Task và trạng thái thiết bị. Mảng A Booking/Trip chỉ cung cấp context/event; Payment chỉ xử lý tiền; các mảng khác không được sửa trực tiếp lifecycle của Rental. 
+| Mã Rule | Nội dung quy tắc chính sách chuẩn | Mức độ |
+| :--- | :--- | :---: |
+| **RB-POL-01** | Không được tạo đơn thuê nếu không có xác nhận tham gia chuyến đi hợp lệ (`TripMembership` ACTIVE) thuộc tài khoản User. | P0 |
+| **RB-POL-02** | Thời gian thuê mặc định bám sát lịch trình chuyến đi; cấm FE tự ý truyền ngày giờ tùy ý để làm sai lệch biểu phí. | P0 |
+| **RB-POL-03** | Khóa số lượng an toàn (`RentalQuantityReservation`) phải thực hiện bằng giao dịch cơ sở dữ liệu có khóa nguyên tử; chống tuyệt đối tình trạng đặt vượt tồn kho (overbooking). | P0 |
+| **RB-POL-05** | Hết hạn thanh toán 15 phút (`HOLD_EXPIRED`) hoặc khách hủy đơn phải tự động giải phóng số lượng giữ chỗ ngay lập tức. | P0 |
+| **RB-POL-10** | Kiểm tra của `STAFF_DELIVERY` khi thu hồi chỉ là quan sát sơ bộ; `STAFF_INVENTORY` chịu trách nhiệm kết luận kiểm định cuối cùng (`FINAL INSPECTION`). | P0 |
+| **RB-POL-28** | **SLA Kiểm định Kho:** `STAFF_INVENTORY` phải hoàn tất kiểm định FINAL cho 100% món thực nhận trong vòng tối đa **72 giờ** (hoặc **24 giờ** với đồ kiểm tra sâu) kể từ khi nhận hàng về kho. `STAFF_DELIVERY` không có quyền hoàn cọc tại chỗ. | P0 |
+| **RB-POL-29** | **Hoàn cọc kết hợp (Hybrid Deposit):** Đơn đủ 100% món và đạt `FINAL_PASS` được hoàn cọc tự động toàn bộ. Đơn có món hư hại/mất mát chỉ phong tỏa cọc của đúng món đó; các món đạt chuẩn được hoàn trước. | P0 |
+| **RB-POL-30** | **Quy tắc Buffer chiếm chỗ:** Khung thời gian chiếm chỗ tính bằng: $12\text{h chuẩn bị} + \text{Thời gian chuyến đi} + \text{Buffer sau chuyến (24h hoặc 48h)}$. Không cộng dồn 8h vận chuyển hay 8h vệ sinh vào `occupiedUntil`. | P0 |
+| **RB-POL-31** | **Capacity Safety Gate:** Tồn kho khả dụng chỉ tính trên thiết bị `AVAILABLE` thực tế tại kho; loại bỏ các thiết bị chưa rõ trạng thái hoặc cam kết ảo; cơ chế giữ chỗ all-or-nothing (đủ tất cả mới cho tạo đơn). | P0 |
+| **RB-POL-32** | **Bảo vệ User & SLA Xử lý:** Đề xuất trừ cọc phải có bằng chứng ảnh `READY` và gửi thông báo in-app mới kích hoạt hạn khiếu nại **48 giờ** của User; Admin phải phê duyệt đề xuất trừ cọc trong vòng **24 giờ**. | P0 |
+| **RB-POL-33** | **Single Inventory Location MVP:** Toàn bộ hệ thống chạy trên một kho chính duy nhất được cấu hình; từ chối mọi thao tác điều chuyển đa kho chưa được hỗ trợ. | P0 |
 
-Thứ tự quan trọng cho MVP:
+---
 
-$$
-\text{Master Inventory} \longrightarrow \text{Eligibility/Availability} \longrightarrow \text{Order/Reservation} \longrightarrow \text{Payment} \longrightarrow \text{Warehouse} \longrightarrow \text{Logistics Handover} \longrightarrow \text{Return/Inspection} \longrightarrow \text{Deposit/Finalize}
-$$
+## 15. HỢP ĐỒNG LỖI CHUẨN HÓA (ERROR CONTRACT)
 
-Các API nội bộ Rental có thể được Quân/Nguyên thiết kế và triển khai độc lập theo bảng trên. Khi chạm Booking/Trip/Payment/Notification, cần mở review contract trước khi code để tránh conflict cả schema, code và business rule.
+Hệ thống tuân thủ hợp đồng lỗi dùng chung qua `AppError` và `GlobalErrorFilter`:
+`{ error: { code, message, details, retryable }, meta: { requestId, serverTime, contractVersion: "1.3.2" } }`
+
+| Mã lỗi (Error Code) | HTTP Status | Diễn giải nghiệp vụ |
+| :--- | :---: | :--- |
+| `VALIDATION_ERROR` | 400 | Dữ liệu đầu vào sai định dạng, thiếu trường bắt buộc hoặc vi phạm schema Zod. |
+| `UNAUTHENTICATED` | 401 | Thiếu Bearer Token, token hết hạn hoặc không hợp lệ. |
+| `FORBIDDEN` | 403 | Không đúng Role yêu cầu (`STAFF_INVENTORY`, `STAFF_DELIVERY`, `ADMIN`) hoặc không sở hữu đơn. |
+| `RENTAL_NOT_FOUND` | 404 | Đơn thuê, món thiết bị hoặc tác vụ không tồn tại trong hệ thống. |
+| `EQUIPMENT_NOT_AVAILABLE` | 409 | Không đủ số lượng khả dụng tại kho chính trong khoảng thời gian yêu cầu. |
+| `INVALID_RENTAL_STATE` | 409 | Trạng thái đơn hàng hoặc thiết bị không cho phép thực hiện hành động này. |
+| `DUPLICATE_OPERATION` | 409 | Thao tác đã được thực hiện trước đó (vi phạm tính duy nhất hoặc Idempotency-Key). |
+| `BOOKING_NOT_RENTAL_ELIGIBLE` | 422 | Chuyến đi hoặc tư cách thành viên không đủ điều kiện thuê trang thiết bị. |
+| `RENTAL_CUTOFF_PASSED` | 422 | Đã vượt quá thời hạn cho phép đặt thuê trước ngày khởi hành chuyến đi. |
+| `PRIMARY_LOCATION_MISMATCH` | 422 | Thao tác không khớp với kho chính duy nhất được cấu hình trong giai đoạn MVP. |
+| `INSPECTION_NOT_FINAL` | 422 | Chưa hoàn tất kiểm định FINAL 100% món mà đã cố tình thực hiện quyết toán. |
+
+---
+
+## 16. KẾT LUẬN & ĐIỀU KIỆN CHẤP NHẬN (DEFINITION OF DONE)
+
+1. **Tính nhất quán tài liệu:** Toàn bộ API, mã trạng thái, tên actor (`STAFF_INVENTORY`, `STAFF_DELIVERY`), thuật ngữ và quy tắc nghiệp vụ trong tài liệu này hoàn toàn đồng nhất với bộ ba tài liệu gốc: Business Flow v1.3.2, Policy v1.5.2 và Functional Requirements v1.3.2 (kèm các phụ lục `BA_ERRATA_01`, `BA_ERRATA_02`, `MVP_SINGLE_LOCATION_01`).
+2. **Kiểm thử tích hợp (Integration Gate):** Toàn bộ các Phase từ Phase 00 đến Phase 04 đã vượt qua Integration Gate trên cơ sở dữ liệu thật. Các tính năng thuộc Phase 05 (Preparation), Phase 06 (Delivery), Phase 07 (Hybrid Return & Settlement) và Phase 08 (Biên bản điện tử) phải vượt qua bài kiểm tra SLA (72h, 24h, 48h, 8h) và ma trận kiểm thử tại [docs/area-b/testing/](file:///e:/WDP_PRM_PROJECT/Vina_TrekGO/api/docs/area-b/testing/) trước khi bàn giao đưa vào vận hành.

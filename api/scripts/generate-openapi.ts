@@ -36,6 +36,7 @@ async function generate() {
 
   let document = SwaggerModule.createDocument(app, config);
   const sf01 = process.argv.includes('--sf01');
+  const bookingPolicies = process.argv.includes('--booking-policies');
   if (sf01) {
     const selected = new Set([
       '/api/v1/leader-applications', '/api/v1/leader-applications/me', '/api/v1/leader-certificate-types',
@@ -66,7 +67,13 @@ async function generate() {
   }
   
   const isDev = process.env.NODE_ENV === 'development';
-  const filename = sf01 ? 'sf01.json' : isDev ? 'openapi.dev.json' : 'openapi.json';
+  if (bookingPolicies) {
+    document = { openapi: document.openapi, info: { title: 'TrekGo Admin Booking Policies', version: '1.0.0' },
+      paths: Object.fromEntries(Object.entries(document.paths).filter(([route]) => route.startsWith('/api/v1/admin/booking-policies'))),
+      components: { securitySchemes: { bearer: document.components!.securitySchemes!.bearer } } };
+    if (Object.keys(document.paths).length !== 3) throw new Error('Missing booking policy CRUD/publish routes');
+  }
+  const filename = bookingPolicies ? 'booking-policies.json' : sf01 ? 'sf01.json' : isDev ? 'openapi.dev.json' : 'openapi.json';
   const outputPath = path.join(__dirname, '..', 'contracts', 'openapi', filename);
   
   // Ensure directory exists

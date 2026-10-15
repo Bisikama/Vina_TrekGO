@@ -1,4 +1,5 @@
 import { reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
+import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { createHash } from 'node:crypto'
 import { consumeExtensionPaymentWithTx, releaseExtensionWithTx } from '../../extension/rental-extension.service'
 import { evaluateRentalEligibility } from '../../application/services/rental-ordering.rules'
@@ -117,6 +118,12 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           )
             throw AppError.fromCode(RT.STALE_CONTEXT)
 
+          const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx);
+          const snap = quote.policySnapshot as Record<string, unknown> | null;
+          if (snap?.primaryRentalInventoryLocationId && snap.primaryRentalInventoryLocationId !== primaryRentalLocationId) {
+            throw AppError.fromCode(RT.STALE_CONTEXT, { details: { reason: 'PRIMARY_RENTAL_LOCATION_CHANGED_OR_NOT_SNAPSHOTTED' } });
+          }
+
           assertContextStillRentalEligible({
             rentalEligible: currentContext.rentalEligible,
             membershipStatus: currentContext.membershipStatus,
@@ -144,15 +151,23 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
               throw AppError.fromCode(RT.EQUIPMENT_NOT_AVAILABLE, { details: { productId } })
           }
           for (const line of quote.rentalQuoteLinesViaQuoteId) {
+            const lineOccupiedFrom = line.occupiedFrom ?? quote.occupiedStartAt
+            const lineOccupiedUntil = line.occupiedUntil ?? quote.occupiedEndAt
             const availableCount = await getAvailableCountWithTx(tx, {
               productId: line.productId,
-              occupiedFrom: quote.occupiedStartAt,
-              occupiedUntil: quote.occupiedEndAt,
+              occupiedFrom: lineOccupiedFrom,
+              occupiedUntil: lineOccupiedUntil,
               now: command.now,
             })
             if (line.quantity > availableCount) {
               throw AppError.fromCode(RT.INSUFFICIENT_AVAILABLE_QUANTITY, {
-                details: { productId: line.productId, requestedQuantity: line.quantity, availableCount },
+                details: {
+                  productId: line.productId,
+                  requestedQuantity: line.quantity,
+                  availableCount,
+                  occupiedFrom: lineOccupiedFrom,
+                  occupiedUntil: lineOccupiedUntil,
+                },
               })
             }
           }
@@ -206,13 +221,16 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
 
           const quantityReservations: CreateRentalOrderResult['quantityReservations'] = []
           for (const line of order.rentalOrderLinesViaOrderId) {
+            const quoteLine = quote.rentalQuoteLinesViaQuoteId.find((ql) => ql.productId === line.productId)
+            const lineOccupiedFrom = quoteLine?.occupiedFrom ?? quote.occupiedStartAt
+            const lineOccupiedUntil = quoteLine?.occupiedUntil ?? quote.occupiedEndAt
             const r = await tx.rentalQuantityReservation.create({
               data: {
                 orderLineId: line.id,
                 productId: line.productId,
                 quantity: line.quantity,
-                occupiedFrom: quote.occupiedStartAt,
-                occupiedUntil: quote.occupiedEndAt,
+                occupiedFrom: lineOccupiedFrom,
+                occupiedUntil: lineOccupiedUntil,
                 status: ReservationStatus.HELD,
                 holdExpiresAt: paymentExpiresAt,
               },
@@ -279,10 +297,57 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           })
           return result
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          maxWait: 15000,
+          timeout: 30000,
+        },
       )
     } catch (error) {
-      if (error instanceof AppError) throw error
+      if (error instanceof AppError) {
+        if (error.code === RT.INSUFFICIENT_AVAILABLE_QUANTITY && error.details) {
+          const details = error.details as {
+            productId: string
+            requestedQuantity: number
+            availableCount: number
+            occupiedFrom?: Date
+            occupiedUntil?: Date
+          }
+          const occupiedFrom = details.occupiedFrom
+          const occupiedUntil = details.occupiedUntil
+          if (occupiedFrom && occupiedUntil && occupiedFrom < occupiedUntil) {
+            const alertKey = createHash('sha256')
+              .update([details.productId, occupiedFrom.toISOString(), occupiedUntil.toISOString()].join(':'))
+              .digest('hex')
+            try {
+              await this.prisma.rentalCapacityAlert.upsert({
+                where: { alertKey },
+                update: {
+                  requestedQuantity: details.requestedQuantity,
+                  availableCount: details.availableCount,
+                  status: 'ACTION_REQUIRED',
+                },
+                create: {
+                  alertKey,
+                  productId: details.productId,
+                  occupiedFrom,
+                  occupiedUntil,
+                  requestedQuantity: details.requestedQuantity,
+                  availableCount: details.availableCount,
+                  unknownUnitCount: 0,
+                  reason: 'CAPACITY_INSUFFICIENT',
+                  status: 'ACTION_REQUIRED',
+                },
+              })
+            } catch (alertErr) {
+              console.error('[RentalCapacityAlert] Failed to persist shortage alert:', alertErr)
+            }
+          } else {
+            console.error('[RentalCapacityAlert] Missing valid occupied window for capacity alert, skipping alert creation to avoid fake interval')
+          }
+        }
+        throw error
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const target = (error.meta?.target as string) ?? ''
 
@@ -952,29 +1017,7 @@ async function expireOrderWithTx(tx: Prisma.TransactionClient, orderId: string, 
 }
 
 async function resolveInventoryLocationId(tx: Prisma.TransactionClient): Promise<string> {
-  const configured = process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID
-  if (configured) {
-    const location = await tx.inventoryLocation.findFirst({
-      where: { id: configured, status: RecordStatus.ACTIVE },
-      select: { id: true },
-    })
-    if (!location) throw AppError.fromCode(RT.INVENTORY_LOCATION_NOT_CONFIGURED)
-    return location.id
-  }
-  const locations = await tx.inventoryLocation.findMany({
-    where: { status: RecordStatus.ACTIVE },
-    select: { id: true },
-    take: 2,
-    orderBy: { createdAt: 'asc' },
-  })
-  if (locations.length !== 1)
-    throw AppError.fromCode(RT.INVENTORY_LOCATION_NOT_CONFIGURED, {
-      details: {
-        activeLocationCount: locations.length,
-        hint: 'Set RENTAL_DEFAULT_INVENTORY_LOCATION_ID when multiple locations exist',
-      },
-    })
-  return locations[0].id
+  return resolveActivePrimaryRentalLocation(tx);
 }
 
 function calculateCancellationPreview(

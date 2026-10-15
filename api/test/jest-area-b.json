@@ -1,10 +1,11 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": "..",
-  "testRegex": "area-b-phase-.*\\.(integration|unit)\\.spec\\.ts$",
+  "testRegex": "area-b-phase-.*[-.](integration|unit|e2e)\\.spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },
   "moduleNameMapper": { "^src/(.*)$": "<rootDir>/src/$1" },
   "testEnvironment": "node",
-  "testTimeout": 30000
+  "testTimeout": 30000,
+  "maxWorkers": 1
 }
 

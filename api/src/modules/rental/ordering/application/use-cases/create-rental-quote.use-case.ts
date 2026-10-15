@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { primaryRentalInventoryLocationId } from '../../../shared/primary-inventory-location';
 import { AppError } from 'src/shared/errors/app-error';
 import { RENTAL_ORDERING_ERROR_CODES } from 'src/shared/errors/codes/rental-ordering.error-codes';
 import {
@@ -78,6 +79,7 @@ export class CreateRentalQuoteUseCase {
 
     // Bước 3: Gộp các product bị lặp trong request.
     // Quantity vẫn không phụ thuộc participant; giới hạn thực tế là availableCount.
+    const sourceInventoryLocationId = primaryRentalInventoryLocationId(); // server-owned, not a USER request field
     const normalizedItems = normalizeQuoteItems(command.items);
     const productIds = normalizedItems.map((item) => item.productId);
     const products = await this.catalogPort.getProductsByIds(productIds);
@@ -104,18 +106,27 @@ export class CreateRentalQuoteUseCase {
     const requiresDeep = products.some(p => p.requiresDeepInspectionAfterReturn === true);
     const occupiedWindow = calculateOccupiedWindow(context, chosenReturn.endAt, requiresDeep);
 
-    // Bước 6: Recheck availability tại thời điểm tạo quote.
+    // Bước 6: Recheck availability tại thời điểm tạo quote với per-product occupiedWindow.
     // Quote KHÔNG reserve capacity; kết quả này vẫn chỉ là snapshot.
     const availabilityPairs = await Promise.all(
-      normalizedItems.map(async (item) => ({
-        item,
-        availableCount: await this.availabilityPort.getAvailableCount({
-          productId: item.productId,
-          occupiedFrom: occupiedWindow.occupiedFrom,
-          occupiedUntil: occupiedWindow.occupiedUntil,
-          now,
-        }),
-      })),
+      normalizedItems.map(async (item) => {
+        const lineWindow = calculateOccupiedWindow(
+          context,
+          chosenReturn.endAt,
+          productMap.get(item.productId)?.requiresDeepInspectionAfterReturn === true,
+        );
+        return {
+          item,
+          lineWindow,
+          availableCount: await this.availabilityPort.getAvailableCount({
+            productId: item.productId,
+            requestedQuantity: item.quantity,
+            occupiedFrom: lineWindow.occupiedFrom,
+            occupiedUntil: lineWindow.occupiedUntil,
+            now,
+          }),
+        };
+      }),
     );
 
     const quoteLines: Array<{
@@ -129,6 +140,8 @@ export class CreateRentalQuoteUseCase {
       feeAmount: bigint;
       depositAmount: bigint;
       currency: string;
+      occupiedFrom: Date;
+      occupiedUntil: Date;
     }> = [];
 
     let totalRentalFee = 0n;
@@ -137,7 +150,7 @@ export class CreateRentalQuoteUseCase {
 
     // Bước 7: Tính tiền hoàn toàn phía server bằng BigInt VND.
     // Không chuyển Prisma Decimal sang JS floating-point để tính toán tài chính.
-    for (const { item, availableCount } of availabilityPairs) {
+    for (const { item, availableCount, lineWindow } of availabilityPairs) {
       const product = productMap.get(item.productId);
       if (!product || product.status !== 'ACTIVE') {
         throw AppError.fromCode('RENTAL_PRODUCT_NOT_FOUND');
@@ -183,6 +196,8 @@ export class CreateRentalQuoteUseCase {
         feeAmount,
         depositAmount,
         currency: product.currency,
+        occupiedFrom: lineWindow.occupiedFrom,
+        occupiedUntil: lineWindow.occupiedUntil,
       });
     }
 
@@ -231,6 +246,7 @@ export class CreateRentalQuoteUseCase {
       currency: quoteCurrency,
       policySnapshot: {
         ...context.activePolicy.snapshot,
+        primaryRentalInventoryLocationId: sourceInventoryLocationId,
         // Frozen at order creation, including product-dependent deep-inspection buffer.
         occupiedPostReturnBufferMinutes: (occupiedWindow.occupiedUntil.getTime() - chosenReturn.endAt.getTime()) / 60000,
         policyVersion: formatPolicyVersion(context),
@@ -239,6 +255,8 @@ export class CreateRentalQuoteUseCase {
       lines: quoteLines.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
+        occupiedFrom: line.occupiedFrom,
+        occupiedUntil: line.occupiedUntil,
         dailyPriceSnapshot: toPrismaDecimalVnd(line.dailyPrice),
         depositPerUnitSnapshot: toPrismaDecimalVnd(line.depositPerUnit),
         replacementValueSnapshot: toPrismaDecimalVnd(line.replacementValue),
