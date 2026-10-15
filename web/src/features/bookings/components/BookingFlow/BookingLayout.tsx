@@ -159,9 +159,6 @@ export const BookingLayout = () => {
   const [qrData, setQrData] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
-  // Tạm thời bật bypass cổng MoMo do backend chưa cấp tài khoản test thật
-  const [bypassPaymentGateway, setBypassPaymentGateway] = useState<boolean>(true);
-  const [isBypassed, setIsBypassed] = useState<boolean>(false);
 
   // Danh sách thành viên tham gia - Người đặt chỗ chính ưu tiên lấy từ profile auth
   const [members, setMembers] = useState<MemberData[]>(() => {
@@ -364,44 +361,22 @@ export const BookingLayout = () => {
       paymentData.method === "vietqr" ? "QR" : "REDIRECT";
 
     try {
-      // Vẫn giữ trọn vẹn luồng gọi API Backend
-      const paymentResult = await createPayment(activeBooking.id, apiMethod).catch((err) => {
-        console.warn("Backend payment creation notice:", err);
-        return null;
-      });
-
-      if (paymentResult?.checkout?.url) {
+      const paymentResult = await createPayment(activeBooking.id, apiMethod);
+      if (paymentResult.checkout?.url) {
         setCheckoutUrl(paymentResult.checkout.url);
-      }
-      if (paymentResult?.checkout?.qrData) {
-        setQrData(paymentResult.checkout.qrData);
-      }
-
-      // TẠM THỜI BYPASS: Do Backend chưa cấp tài khoản test, tự động sang Bước 3 (Đặt Chỗ Thành Công)
-      if (bypassPaymentGateway) {
-        setIsBypassed(true);
-        setCurrentStep(3);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        return;
-      }
-
-      // LUỒNG CHÍNH THỨC: Tự động chuyển hướng ngay sang cổng MoMo khi có tài khoản
-      if (paymentResult?.checkout?.url) {
         setIsRedirecting(true);
+        // Tự động chuyển hướng ngay sang cổng thanh toán (MoMo / Cổng đối tác)
         window.location.href = paymentResult.checkout.url;
         return;
       }
-
+      if (paymentResult.checkout?.qrData) {
+        setQrData(paymentResult.checkout.qrData);
+      }
       setCurrentStep(3);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
-      if (bypassPaymentGateway) {
-        setIsBypassed(true);
-        setCurrentStep(3);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } else {
-        setIsRedirecting(false);
-      }
+      setIsRedirecting(false);
+      // Lỗi được lưu trong mutationError
     }
   };
 
@@ -487,8 +462,6 @@ export const BookingLayout = () => {
               isHoldExpired={bookingDetailQuery.isHoldExpired}
               isProcessingPayment={isSubmitting || isRedirecting}
               errorMessage={currentErrorMessage}
-              isBypassMode={bypassPaymentGateway}
-              onToggleBypassMode={() => setBypassPaymentGateway((prev) => !prev)}
             />
             <BookingSidebar
               participants={participants}
@@ -509,7 +482,7 @@ export const BookingLayout = () => {
             totalAmount={activeBooking?.totalAmount}
             checkoutUrl={checkoutUrl}
             qrData={qrData}
-            bookingStatus={isBypassed ? "CONFIRMED" : activeBooking?.status}
+            bookingStatus={activeBooking?.status}
           />
         )}
       </div>

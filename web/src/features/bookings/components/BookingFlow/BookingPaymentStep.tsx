@@ -25,8 +25,6 @@ interface BookingPaymentStepProps {
   isHoldExpired?: boolean;
   isProcessingPayment?: boolean;
   errorMessage?: string | null;
-  isBypassMode?: boolean;
-  onToggleBypassMode?: () => void;
 }
 
 export const BookingPaymentStep = ({
@@ -41,8 +39,6 @@ export const BookingPaymentStep = ({
   isHoldExpired = false,
   isProcessingPayment = false,
   errorMessage,
-  isBypassMode = true,
-  onToggleBypassMode,
 }: BookingPaymentStepProps) => {
   const [paymentMethod, setPaymentMethod] = useState<string>("momo");
 
@@ -96,40 +92,6 @@ export const BookingPaymentStep = ({
         </div>
       )}
 
-      {/* Chế độ thử nghiệm Frontend Bypass */}
-      {isBypassMode ? (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs font-medium text-emerald-900">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Chế độ thử nghiệm Frontend: Tự động hoàn tất & xuất vé (Tạm ẩn cổng MoMo)</span>
-          </div>
-          {onToggleBypassMode && (
-            <button
-              type="button"
-              onClick={onToggleBypassMode}
-              className="text-[11px] font-bold text-emerald-800 underline hover:text-emerald-950 cursor-pointer"
-            >
-              Mở cổng thật
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs font-medium text-blue-900">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-blue-500"></span>
-            <span>Đang kích hoạt cổng thanh toán đối tác (MoMo Sandbox)</span>
-          </div>
-          {onToggleBypassMode && (
-            <button
-              type="button"
-              onClick={onToggleBypassMode}
-              className="text-[11px] font-bold text-blue-800 underline hover:text-blue-950 cursor-pointer"
-            >
-              Bật chế độ thử nghiệm
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Thông báo lỗi nếu có */}
       {errorMessage && (
