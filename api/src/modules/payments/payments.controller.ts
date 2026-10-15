@@ -40,7 +40,7 @@ export class PaymentsController {
     example: '550e8400-e29b-41d4-a716-446655440001',
   })
   @ApiHeader({
-    name: 'Idempotency-Key',
+    name: 'idempotency-key',
     required: true,
     description: 'Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)',
     example: 'pay-book-20261014-abc123',
