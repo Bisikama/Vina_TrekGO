@@ -16169,15 +16169,7 @@
             "name": "idempotency-key",
             "required": true,
             "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
             "description": "Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)",
-            "required": true,
             "schema": {
               "type": "string"
             }
