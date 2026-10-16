@@ -121,7 +121,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       const pickup = data.pickupPoint ?? data.pickup
       const dropoff = data.baseReturnPoint ?? data.dropoff
       if (!pickup?.id || !dropoff?.id)
-        throw new AppError({ code: 'AREA_A_CONTEXT_UNAVAILABLE', message: 'Trip logistics point missing' })
+        throw new AppError({ code: 'AREA_A_CONTEXT_UNAVAILABLE', message: 'Trip delivery point missing' })
       return {
         userId,
         membershipRef: String(data.membershipRef ?? data.membershipId ?? ''),
@@ -265,7 +265,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
         address: returnPoint.address,
         scheduledAt: transport?.returnAt ?? trip.endAt,
       },
-      // No invented post-Trip logistics options in the DB bridge. Area A must publish options to enable longer rentals.
+      // No invented post-Trip delivery options in the DB bridge. Area A must publish options to enable longer rentals.
       returnOptions: [],
       rentalCutoffAt: new Date(
         (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,

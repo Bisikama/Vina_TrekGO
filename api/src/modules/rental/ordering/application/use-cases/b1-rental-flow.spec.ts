@@ -115,6 +115,16 @@ describe('B1 rental flow use cases', () => {
   let availabilityPort: jest.Mocked<RentalAvailabilityPort>;
   let quotePort: jest.Mocked<RentalQuotePort>;
 
+  const originalPrimaryLoc = process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
+
+  beforeAll(() => {
+    process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = '11111111-1111-4111-8111-111111111111';
+  });
+
+  afterAll(() => {
+    process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = originalPrimaryLoc;
+  });
+
   beforeEach(() => {
     contextPort = {
       getByTripId: jest.fn().mockResolvedValue(createContext()),

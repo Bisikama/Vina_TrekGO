@@ -30,7 +30,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { AppError } from 'src/shared/errors/app-error';
-import { LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
+import { DELIVERY_ERROR_CODES as DL, LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
 import type {
   AssignRentalTaskCommand,
   AssignRentalTaskResult,
@@ -136,7 +136,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
   async getTask(query: GetDeliveryTaskQuery): Promise<DeliveryTaskDetailResult> {
     const task = await this.prisma.deliveryTask.findUnique({
       where: { id: query.taskId },
-      include: logisticsTaskDetailInclude,
+      include: deliveryTaskDetailInclude,
     });
     if (!task) throw AppError.fromCode(LG.TASK_NOT_FOUND);
     assertDeliveryTaskActor(task.staffId, query.actorUserId);
@@ -682,7 +682,13 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
             eventType: 'RENTAL_HANDOVER_FAILED',
             aggregateType: 'RentalOrder',
             aggregateId: order.id,
-            payload: jsonValue({ orderId: order.id, reason: command.reason, returnToWarehouseRequired: true, refundRef }),
+            payload: jsonValue({
+              orderId: order.id,
+              reason: command.reason,
+              returnToWarehouseRequired: true,
+              returnToInventoryLocationRequired: true,
+              refundRef,
+            }),
           },
         });
         await writeDeliveryAudit(tx, {
@@ -706,6 +712,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
             refundRef,
           },
           returnToWarehouseRequired: true,
+          returnToInventoryLocationRequired: true,
         };
       },
     );
@@ -825,7 +832,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         const admin = await tx.user.findFirst({ where: { id: command.actorUserId, role: UserRole.ADMIN, status: UserStatus.ACTIVE }, select: { id: true } });
         if (!admin) throw AppError.fromCode('FORBIDDEN');
 
-        if (command.taskType === 'WAREHOUSE') {
+        if (command.taskType === 'PREPARATION' || command.taskType === 'WAREHOUSE') {
           const task = await lockInventoryTask(tx, command.taskId);
           assertExpectedVersion(task.version, command.expectedVersion);
           if ([InventoryTaskStatus.TRANSFERRED, InventoryTaskStatus.CLOSED, InventoryTaskStatus.CANCELLED].includes(task.status as any)) throw AppError.fromCode(LG.INVALID_TASK_STATE);
@@ -879,7 +886,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
     const actor = await this.prisma.user.findFirst({ where: { id: query.actorUserId, role: UserRole.ADMIN, status: UserStatus.ACTIVE }, select: { id: true } });
     if (!actor) throw AppError.fromCode('FORBIDDEN');
 
-    const wantPreparation = !query.type || query.type === 'WAREHOUSE';
+    const wantPreparation = !query.type || query.type === 'PREPARATION' || query.type === 'WAREHOUSE';
     const wantDelivery = !query.type || query.type === 'OUTBOUND' || query.type === 'RETURN';
     const combined: Array<Record<string, unknown> & { sortAt: number }> = [];
     const dateWindow = query.date ? vietnamBusinessDayUtcWindow(query.date) : null;
@@ -895,7 +902,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
       for (const row of rows) {
         combined.push({
           id: row.id,
-          type: 'WAREHOUSE',
+          type: query.type === 'PREPARATION' ? 'PREPARATION' : 'WAREHOUSE',
           status: row.status,
           assignee: row.staff ? { id: row.staff.id, displayName: row.staff.fullName } : null,
           orderId: row.orderId,
@@ -910,7 +917,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
     if (wantDelivery) {
       const rows = await this.prisma.deliveryTask.findMany({
         where: {
-          taskType: query.type && query.type !== 'WAREHOUSE' ? publicTaskTypeToDeliveryTaskType(query.type) : undefined,
+          taskType: query.type && query.type !== 'PREPARATION' && query.type !== 'WAREHOUSE' ? publicTaskTypeToDeliveryTaskType(query.type) : undefined,
           staffId: assignmentWhere(query.assignment, query.actorUserId),
           scheduledAt: dateWindow ? { gte: dateWindow.start, lt: dateWindow.end } : undefined,
         },
@@ -1033,7 +1040,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
 // Helpers
 // ============================================================================
 
-const logisticsTaskDetailInclude = {
+const deliveryTaskDetailInclude = {
   staff: { select: { id: true, fullName: true } },
   servicePoint: { select: { id: true, name: true, address: true } },
   package: {
@@ -1365,9 +1372,7 @@ function mapRentalOrderForHandover(order: any): Record<string, unknown> {
   };
 }
 
-function publicTaskTypeToDeliveryTaskType(type: 'OUTBOUND' | 'RETURN'): DeliveryTaskType;
-function publicTaskTypeToDeliveryTaskType(type: 'WAREHOUSE' | 'OUTBOUND' | 'RETURN'): DeliveryTaskType;
-function publicTaskTypeToDeliveryTaskType(type: 'WAREHOUSE' | 'OUTBOUND' | 'RETURN'): DeliveryTaskType {
+function publicTaskTypeToDeliveryTaskType(type: 'PREPARATION' | 'WAREHOUSE' | 'OUTBOUND' | 'RETURN'): DeliveryTaskType {
   if (type === 'OUTBOUND') return DeliveryTaskType.HANDOVER;
   if (type === 'RETURN') return DeliveryTaskType.RETURN;
   throw AppError.fromCode(LG.INVALID_TASK_STATE, { details: { taskType: type } });

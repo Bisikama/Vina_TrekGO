@@ -6,7 +6,7 @@ import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { AppError } from 'src/shared/errors/app-error';
-import { LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
+import { DELIVERY_ERROR_CODES as DL } from 'src/shared/errors/codes/delivery.error-codes';
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
 import { CommitRentalHandoverUseCase } from '../../application/use-cases/commit-rental-handover.use-case';
 import { GetRentalHandoverPreviewUseCase } from '../../application/use-cases/get-rental-handover-preview.use-case';
@@ -182,6 +182,6 @@ export class RentalHandoverController {
 
 function requireDeliveryIdempotencyKey(raw: string | undefined): string {
   const parsed = DeliveryIdempotencyKeySchema.safeParse(raw);
-  if (!parsed.success) throw AppError.fromCode(LG.IDEMPOTENCY_KEY_REQUIRED);
+  if (!parsed.success) throw AppError.fromCode(DL.IDEMPOTENCY_KEY_REQUIRED);
   return parsed.data;
 }

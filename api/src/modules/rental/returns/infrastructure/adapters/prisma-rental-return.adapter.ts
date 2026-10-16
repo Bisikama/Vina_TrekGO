@@ -496,7 +496,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               inspectionDueAt: deadlines.inspectionDueAt,
               deepInspectionDueAt: deadlines.deepInspectionDueAt, status: 'PENDING' },
           });
-          if (prelim.outcome === ReturnInspectionOutcome.NORMAL && needsReview) discrepancies.push({ unitId, reason: 'POLICY_OR_WAREHOUSE_REVIEW_REQUIRED' });
+          if (prelim.outcome === ReturnInspectionOutcome.NORMAL && needsReview) discrepancies.push({ unitId, reason: 'POLICY_OR_INVENTORY_REVIEW_REQUIRED' });
           previouslyReceived.add(unitId);
         }
 
@@ -1355,7 +1355,7 @@ function mapReturnQueueItem(task: any) {
   const normalCount = inspections.filter((item: any) => item.stage === InspectionStage.PRELIMINARY && item.outcome === ReturnInspectionOutcome.NORMAL).length;
   const issueCount = inspections.filter((item: any) => [ReturnInspectionOutcome.ISSUE, ReturnInspectionOutcome.DAMAGE_CONFIRMED].includes(item.outcome)).length;
   const missingCount = inspections.filter((item: any) => item.outcome === ReturnInspectionOutcome.MISSING_PENDING_REVIEW).length;
-  let status = 'WAREHOUSE_RECEIVED';
+  let status = 'INVENTORY_RECEIVED';
   if (items.some((item: any) => item.status === DepositItemStatus.REVIEW_REQUIRED)) status = 'REVIEW_REQUIRED';
   else if (task.status === DeliveryTaskStatus.RETURNED) status = 'TRANSFER_PENDING';
   else if (items.some((item: any) => item.status === DepositItemStatus.SETTLED) && task.order.status === RentalOrderStatus.COMPLETED) status = 'COMPLETED';

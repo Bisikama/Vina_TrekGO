@@ -155,6 +155,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             const lineOccupiedUntil = line.occupiedUntil ?? quote.occupiedEndAt
             const availableCount = await getAvailableCountWithTx(tx, {
               productId: line.productId,
+              inventoryLocationId: primaryRentalLocationId,
               occupiedFrom: lineOccupiedFrom,
               occupiedUntil: lineOccupiedUntil,
               now: command.now,
