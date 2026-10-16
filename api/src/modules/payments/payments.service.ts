@@ -205,7 +205,7 @@ export class PaymentsService {
           paymentMethod,
           expiresAt: payment.expiresAt!,
           clientIp,
-          ...(invoiceType === 'BOOKING' ? { returnPath: `/bookings/${((payment.gatewayPayload as Prisma.JsonObject).requestSnapshot as Prisma.JsonObject).bookingId}` } : {}),
+          ...(invoiceType === 'BOOKING' ? { returnPath: `/payment-return?bookingId=${((payment.gatewayPayload as Prisma.JsonObject).requestSnapshot as Prisma.JsonObject).bookingId}` } : {}),
         }),
       )
     } catch {

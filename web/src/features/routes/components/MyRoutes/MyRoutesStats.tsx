@@ -6,7 +6,7 @@ export const MyRoutesStats = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center justify-between">
         <div>
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Tổng cộng</div>
-          <div className="text-3xl font-extrabold text-gray-900">4</div>
+          <div className="text-3xl font-extrabold text-gray-900">0</div>
           <div className="text-sm text-gray-500 mt-1">Tuyến khảo sát</div>
         </div>
         <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400">
@@ -18,7 +18,7 @@ export const MyRoutesStats = () => {
         <div>
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Đã kiểm định</div>
           <div className="flex items-center gap-2">
-            <div className="text-3xl font-extrabold text-gray-900">1</div>
+            <div className="text-3xl font-extrabold text-gray-900">0</div>
             <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">VFRS</span>
           </div>
           <div className="text-sm text-gray-500 mt-1">Công khai cộng đồng</div>
@@ -31,7 +31,7 @@ export const MyRoutesStats = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center justify-between">
         <div>
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Chờ duyệt</div>
-          <div className="text-3xl font-extrabold text-gray-900">1</div>
+          <div className="text-3xl font-extrabold text-gray-900">0</div>
           <div className="text-sm text-gray-500 mt-1">Đang phản hồi</div>
         </div>
         <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500">
@@ -42,8 +42,8 @@ export const MyRoutesStats = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center justify-between">
         <div>
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cần xử lý</div>
-          <div className="text-3xl font-extrabold text-red-600">1</div>
-          <div className="text-sm text-red-500 mt-1 font-medium">Cần bổ sung thoát hiểm</div>
+          <div className="text-3xl font-extrabold text-gray-400">0</div>
+          <div className="text-sm text-gray-400 mt-1 font-medium">Không có lỗi</div>
         </div>
         <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-red-500">
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
