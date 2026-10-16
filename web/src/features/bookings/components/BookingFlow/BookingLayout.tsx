@@ -20,6 +20,7 @@ import {
 import type {
   BookingDetail,
   Participant,
+  PaymentGateway,
   PaymentMethod,
   PublicBookingTrip,
 } from "@/features/bookings/types";
@@ -357,15 +358,16 @@ export const BookingLayout = () => {
       return;
     }
 
+    const gateway: PaymentGateway = paymentData.method === "momo" ? "momo" : "vnpay";
     const apiMethod: PaymentMethod =
       paymentData.method === "vietqr" ? "QR" : "REDIRECT";
 
     try {
-      const paymentResult = await createPayment(activeBooking.id, apiMethod);
+      const paymentResult = await createPayment(activeBooking.id, apiMethod, gateway);
       if (paymentResult.checkout?.url) {
         setCheckoutUrl(paymentResult.checkout.url);
         setIsRedirecting(true);
-        // Tự động chuyển hướng ngay sang cổng thanh toán (MoMo / Cổng đối tác)
+        // Tự động chuyển hướng ngay sang cổng thanh toán (VNPAY / MoMo)
         window.location.href = paymentResult.checkout.url;
         return;
       }

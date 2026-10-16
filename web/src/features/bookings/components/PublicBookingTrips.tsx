@@ -307,7 +307,7 @@ function SimpleParticipantForm({
   );
 }
 
-export function PublicBookingTrip({ tripId }: { tripId: string }) {
+export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: string; participantCount?: number }) {
   const { accessToken, user } = useAuth();
   const router = useRouter();
   const { trip, isLoading, error: fetchError, refetch } = usePublicBookingTripDetail(tripId);
@@ -412,7 +412,11 @@ export function PublicBookingTrip({ tripId }: { tripId: string }) {
                 {accessToken ? (
                   trip.status === 'OPEN' && trip.remainingSlots > 0 ? (
                     <SimpleParticipantForm
-                      initial={[{ fullName: user?.fullName ?? '' }]}
+                      key={`participants-${participantCount}`}
+                      initial={Array.from(
+                        { length: Math.max(1, Math.min(trip.remainingSlots, participantCount)) },
+                        (_, i) => ({ fullName: i === 0 ? (user?.fullName ?? '') : '', phone: '' })
+                      )}
                       max={trip.remainingSlots}
                       busy={isSubmitting}
                       submitLabel="Giữ chỗ và tiếp tục thanh toán"

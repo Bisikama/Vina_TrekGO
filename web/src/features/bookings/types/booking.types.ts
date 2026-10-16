@@ -51,6 +51,7 @@ export interface PublicBookingTrip {
 }
 
 export type PaymentMethod = 'QR' | 'REDIRECT';
+export type PaymentGateway = 'momo' | 'vnpay';
 
 export interface Checkout {
   type: PaymentMethod;
@@ -144,4 +145,5 @@ export interface PaymentCheckoutResponse {
   checkout: Checkout | null;
   status: string;
   providerEnvironment: string;
+  gateway?: string;
 }

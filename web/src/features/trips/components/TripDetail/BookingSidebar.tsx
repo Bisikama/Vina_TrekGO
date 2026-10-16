@@ -1,68 +1,136 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TripData } from "../../data/mockTripsData";
+import { useAuth } from "@/features/auth";
+import { bookingApiService } from "@/features/bookings/services/booking.api";
+import type { BookingSummary } from "@/features/bookings/types/booking.types";
 
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
+  const { accessToken } = useAuth();
+  const [myBooking, setMyBooking] = useState<BookingSummary | null>(null);
   const [participants, setParticipants] = useState(2);
   const isFullyBooked = trip.slots.booked >= trip.slots.total;
 
+  useEffect(() => {
+    if (!trip?.id) return;
+    bookingApiService
+      .listMyBookings({ pageSize: 50 })
+      .then((res) => {
+        const found = res?.items?.find(
+          (b) =>
+            b.trip?.id === trip.id &&
+            (b.status === "CONFIRMED" || b.status === "CHECKED_IN" || b.status === "COMPLETED")
+        );
+        if (found) setMyBooking(found);
+      })
+      .catch(() => {});
+  }, [trip?.id]);
+
   return (
     <div className="sticky top-24 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-      {/* Price Header */}
-      <div className="border-b border-gray-100 p-5">
-        <div className="mb-2 flex items-end justify-between">
-          <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-              Giá trọn gói / người
+      {myBooking ? (
+        <div className="p-6 space-y-4">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 text-center space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 shadow-sm font-bold text-xl">
+              ✓
             </div>
-            <div className="text-2xl font-extrabold text-[#1B5E41]">
-              {trip.price.toLocaleString("vi-VN")}đ
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                Đã đặt & xác nhận vé
+              </span>
+              <h3 className="mt-2 text-base font-extrabold text-gray-900">
+                Bạn đã tham gia chuyến đi này!
+              </h3>
+              <p className="mt-1 text-xs text-gray-600">
+                Số lượng: <strong>{myBooking.participantCount} thành viên</strong>
+              </p>
+              <p className="text-xs font-bold text-emerald-800 mt-1">
+                Tổng đã thanh toán: {Number(myBooking.totalAmount).toLocaleString("vi-VN")}₫
+              </p>
             </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[11px] font-bold text-gray-400 line-through">
-              {(trip.price * 1.15).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}đ
-            </div>
-            <div className="rounded border border-red-100 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-              -14% Early Bird
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Booking Form */}
-      <div className="space-y-4 p-5">
-        {/* Date Selector */}
-        <div>
-          <label className="mb-2 block text-xs font-bold text-gray-700">
-            Chọn ngày khởi hành
-          </label>
-          <div className="flex w-full cursor-not-allowed items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-3">
-            <div className="flex items-center gap-2">
-              <svg
-                className="h-4 w-4 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
+            <Link
+              href={`/bookings/${myBooking.id}`}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1B5E41] py-3 text-xs font-bold text-white shadow-md shadow-emerald-900/10 hover:bg-[#154B36] transition cursor-pointer"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                ></path>
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
-              <div className="text-sm font-bold text-gray-900">
-                {trip.date.start} - {trip.date.end}/{trip.date.year}
-              </div>
-            </div>
-            <div className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
-              Cố định
-            </div>
+              Xem Chi Tiết Vé Đặt Chỗ →
+            </Link>
+          </div>
+
+          <div className="text-center pt-2">
+            <Link
+              href="/my-trips"
+              className="text-xs font-bold text-emerald-800 hover:underline"
+            >
+              ← Xem tất cả chuyến đi của tôi
+            </Link>
           </div>
         </div>
+      ) : (
+        <>
+          {/* Price Header */}
+          <div className="border-b border-gray-100 p-5">
+            <div className="mb-2 flex items-end justify-between">
+              <div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                  Giá trọn gói / người
+                </div>
+                <div className="text-2xl font-extrabold text-[#1B5E41]">
+                  {trip.price.toLocaleString("vi-VN")}đ
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] font-bold text-gray-400 line-through">
+                  {(trip.price * 1.15).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}đ
+                </div>
+                <div className="rounded border border-red-100 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+                  -14% Early Bird
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Booking Form */}
+          <div className="space-y-4 p-5">
+            {/* Date Selector */}
+            <div>
+              <label className="mb-2 block text-xs font-bold text-gray-700">
+                Chọn ngày khởi hành
+              </label>
+              <div className="flex w-full cursor-not-allowed items-center justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-3">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="h-4 w-4 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    ></path>
+                  </svg>
+                  <div className="text-sm font-bold text-gray-900">
+                    {trip.date.start} - {trip.date.end}/{trip.date.year}
+                  </div>
+                </div>
+                <div className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
+                  Cố định
+                </div>
+              </div>
+            </div>
 
         {/* Participants Selector */}
         <div>
@@ -194,6 +262,8 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
           Bảo mật thanh toán VNPAY/Momo 100%
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 };

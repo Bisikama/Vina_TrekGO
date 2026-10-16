@@ -6,6 +6,7 @@ import type {
   BookingDetail,
   Participant,
   PaymentCheckoutResponse,
+  PaymentGateway,
   PaymentMethod,
 } from '../types/booking.types';
 
@@ -82,13 +83,14 @@ export function useBookingMutations() {
     async (
       bookingId: string,
       paymentMethod: PaymentMethod = 'REDIRECT',
+      gateway?: PaymentGateway,
       customKey?: string
     ): Promise<PaymentCheckoutResponse> => {
       setIsSubmitting(true);
       setError(null);
       try {
         const key = customKey || generateIdempotencyKey();
-        const result = await bookingApiService.createPayment(bookingId, key, paymentMethod);
+        const result = await bookingApiService.createPayment(bookingId, key, paymentMethod, gateway);
         return result;
       } catch (err: unknown) {
         const errInfo = getBookingErrorMessage(

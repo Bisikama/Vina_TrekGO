@@ -7,6 +7,7 @@ import type {
   PageResponse,
   Participant,
   PaymentCheckoutResponse,
+  PaymentGateway,
   PaymentMethod,
   PublicBookingTrip,
   PublicTripsQuery,
@@ -151,11 +152,12 @@ export const bookingApiService = {
   createPayment: async (
     bookingId: string,
     idempotencyKey: string,
-    paymentMethod: PaymentMethod = 'REDIRECT'
+    paymentMethod: PaymentMethod = 'REDIRECT',
+    gateway?: PaymentGateway
   ): Promise<PaymentCheckoutResponse> => {
     const response = await apiClient.post<PaymentCheckoutResponse>(
       `/api/v1/bookings/${bookingId}/payments`,
-      { paymentMethod },
+      { paymentMethod, ...(gateway ? { gateway } : {}) },
       headers(idempotencyKey)
     );
     return response.data;
