@@ -1,6 +1,6 @@
-import { Body, Controller, Headers, Param, Post, Res } from '@nestjs/common'
+import { Body, Controller, Headers, Param, Post, Req, Res } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { Auth } from '../../../shared/decorators/auth.decorator'
 import { AuthType } from '../../../shared/constants/auth.constant'
@@ -36,7 +36,7 @@ export class RentalPaymentsController {
     example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
   })
   @ApiHeader({
-    name: 'Idempotency-Key',
+    name: 'idempotency-key',
     required: true,
     description: 'Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)',
     example: 'pay-order-abc123',
@@ -47,6 +47,7 @@ export class RentalPaymentsController {
       type: 'object',
       required: ['paymentMethod'],
       properties: {
+        gateway: { type: 'string', enum: ['momo', 'vnpay'], description: 'Bỏ trống để dùng cổng mặc định' },
         paymentMethod: {
           type: 'string',
           enum: ['QR', 'REDIRECT'],
@@ -73,10 +74,11 @@ export class RentalPaymentsController {
   async create(
     @Param('id', new ZodValidationPipe(z.string().uuid())) rentalOrderId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']) }).strict()))
-    body: { paymentMethod: PaymentMethod },
+    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()))
+    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
     new ZodValidationPipe(
       z
@@ -85,7 +87,8 @@ export class RentalPaymentsController {
         .max(200)
         .regex(/^[\x21-\x7e]+$/),
     ).transform(idempotencyKey, { type: 'custom' })
-    const result = await this.payments.createRentalCheckout({ rentalOrderId, actorUserId, idempotencyKey, ...body })
+    const result = await this.payments.createRentalCheckout({ rentalOrderId, actorUserId, idempotencyKey, ...body,
+      clientIp: request.ip ?? request.socket.remoteAddress })
     response.status(result.httpStatus)
     return result.body
   }

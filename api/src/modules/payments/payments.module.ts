@@ -71,7 +71,7 @@ import { RentalRefundsService } from './rental-refunds.service'
         const providers = gateways.map((name) => {
           if (name === 'mock') return new MockPaymentProvider(db)
           if (name === 'momo') return new MomoPaymentProvider(db)
-          if (name === 'vnpay') return new VnpayPaymentProvider()
+          if (name === 'vnpay') return new VnpayPaymentProvider(db)
           throw new Error('Unsupported payment provider')
         })
         return new PaymentProviderRouter(providers, gateway)

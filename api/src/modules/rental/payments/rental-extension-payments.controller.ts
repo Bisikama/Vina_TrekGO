@@ -1,7 +1,7 @@
-import { Body, Controller, Headers, Param, Post, Res } from '@nestjs/common'
+import { Body, Controller, Headers, Param, Post, Req, Res } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import { Auth } from '../../../shared/decorators/auth.decorator'
 import { AuthType } from '../../../shared/constants/auth.constant'
 import { ActiveUser } from '../../../shared/decorators/active-user.decorator'
@@ -35,7 +35,7 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
     example: 'e5f6a7b8-9012-34ef-0123-567890123def',
   })
   @ApiHeader({
-    name: 'Idempotency-Key',
+    name: 'idempotency-key',
     required: true,
     description: 'Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)',
     example: 'ext-pay-abc123',
@@ -46,6 +46,7 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
       type: 'object',
       required: ['paymentMethod'],
       properties: {
+        gateway: { type: 'string', enum: ['momo', 'vnpay'], description: 'Bỏ trống để dùng cổng mặc định' },
         paymentMethod: {
           type: 'string',
           enum: ['QR', 'REDIRECT'],
@@ -72,12 +73,14 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
   async checkout(
     @Param('id', new ZodValidationPipe(z.string().uuid())) extensionId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR','REDIRECT']) }).strict())) body: { paymentMethod: PaymentMethod },
+    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR','REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict())) body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
     new ZodValidationPipe(z.string().min(1).max(200)).transform(idempotencyKey, { type: 'custom' })
-    const result = await this.payments.createRentalExtensionCheckout({ extensionId, actorUserId, idempotencyKey, paymentMethod: body.paymentMethod })
+    const result = await this.payments.createRentalExtensionCheckout({ extensionId, actorUserId, idempotencyKey, ...body,
+      clientIp: request.ip ?? request.socket.remoteAddress })
     response.status(result.httpStatus)
     return result.body
   }

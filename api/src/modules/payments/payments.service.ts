@@ -29,7 +29,7 @@ export type CheckoutCommand = {
   gateway?: 'momo' | 'vnpay'
   clientIp?: string
 }
-export type InvoiceCheckoutCommand = Omit<CheckoutCommand, 'bookingId' | 'gateway' | 'clientIp'> & { invoiceId: string }
+export type InvoiceCheckoutCommand = Omit<CheckoutCommand, 'bookingId'> & { invoiceId: string }
 
 @Injectable()
 export class PaymentsService {
@@ -44,11 +44,21 @@ export class PaymentsService {
     actorUserId: string
     idempotencyKey: string
     paymentMethod: PaymentMethod
+    gateway?: 'momo' | 'vnpay'
+    clientIp?: string
   }) {
-    return this.submit(await this.rental.reserveExtension(input, this.provider.scope), input.paymentMethod, 'RENTAL')
+    const provider = this.checkoutProvider(input.gateway)
+    return this.submit(await this.rental.reserveExtension(input, provider.scope), input.paymentMethod, 'RENTAL', input.clientIp)
   }
   async createRentalCheckout(input: RentalCheckoutCommand) {
-    return this.submit(await this.rental.reserve(input, this.provider.scope), input.paymentMethod, 'RENTAL')
+    const provider = this.checkoutProvider(input.gateway)
+    return this.submit(await this.rental.reserve(input, provider.scope), input.paymentMethod, 'RENTAL', input.clientIp)
+  }
+
+  private checkoutProvider(gateway?: string) {
+    const provider = this.provider.forGateway(gateway ?? this.provider.scope.gateway)
+    if (!provider) fail(E.PAYMENT_PROVIDER_UNAVAILABLE)
+    return provider
   }
 
   async createBookingCheckout(input: CheckoutCommand) {
@@ -63,6 +73,7 @@ export class PaymentsService {
   }
 
   async createCheckout(input: InvoiceCheckoutCommand) {
+    const provider = this.checkoutProvider(input.gateway)
     const key = hash([input.actorUserId, 'trail-checkout', input.idempotencyKey])
     const reserved = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`
@@ -99,6 +110,7 @@ export class PaymentsService {
         if (
           previous.invoiceId !== invoice.id ||
           previous.paymentMethod !== input.paymentMethod ||
+          (input.gateway !== undefined && previous.paymentGateway !== input.gateway) ||
           previous.requestHashVersion !== 1 ||
           !snapshot?.requestSnapshot ||
           hash(snapshot.requestSnapshot) !== previous.requestHash
@@ -107,7 +119,7 @@ export class PaymentsService {
         return { payment: previous, created: false }
       }
       if (
-        this.provider.scope.environment === 'MOCK' &&
+        provider.scope.environment === 'MOCK' &&
         process.env.NODE_ENV === 'production' &&
         process.env.PAYMENT_MOCK_ENABLED !== 'true'
       )
@@ -160,9 +172,9 @@ export class PaymentsService {
           invoiceId: invoice.id,
           amount: invoice.totalAmount,
           currency: invoice.currency,
-          paymentGateway: this.provider.scope.gateway,
-          providerEnvironment: this.provider.scope.environment,
-          merchantAccountKey: this.provider.scope.merchantAccountKey,
+          paymentGateway: provider.scope.gateway,
+          providerEnvironment: provider.scope.environment,
+          merchantAccountKey: provider.scope.merchantAccountKey,
           merchantRequestRef: `payment:${id}`,
           idempotencyKey: key,
           requestHash: hash(requestSnapshot),
@@ -181,7 +193,7 @@ export class PaymentsService {
         })
       return { payment, created: true }
     })
-    return this.submit(reserved, input.paymentMethod, 'TRAIL_ACCESS')
+    return this.submit(reserved, input.paymentMethod, 'TRAIL_ACCESS', input.clientIp)
   }
 
   private async submit(
