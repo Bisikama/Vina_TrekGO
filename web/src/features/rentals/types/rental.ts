@@ -175,10 +175,7 @@ export type RentalQuote = {
   policyVersion: string;
 };
 
-export type StaffRentalProductStatus =
-  | "ACTIVE"
-  | "INACTIVE"
-  | "ARCHIVED";
+export type StaffRentalProductStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED";
 
 export type EquipmentUnitStatus =
   | "AVAILABLE"
@@ -192,12 +189,7 @@ export type EquipmentUnitStatus =
   | "LOST"
   | "RETIRED";
 
-export type EquipmentCondition =
-  | "NEW"
-  | "GOOD"
-  | "FAIR"
-  | "DAMAGED"
-  | "LOST";
+export type EquipmentCondition = "NEW" | "GOOD" | "FAIR" | "DAMAGED" | "LOST";
 
 export type InventoryLocation = {
   id: string;
@@ -319,3 +311,46 @@ export type ChangeEquipmentMaintenanceInput =
       resultingCondition: EquipmentCondition;
       expectedVersion: number;
     };
+
+export type RentalDepositPolicyType = "FIXED" | "PERCENT_REPLACEMENT_VALUE";
+
+export type StaffRentalDepositPolicyInput =
+  | {
+      type: "FIXED";
+      amount: number;
+    }
+  | {
+      type: "PERCENT_REPLACEMENT_VALUE";
+      percentage: number;
+    };
+
+export type CreateStaffRentalProductInput = {
+  categoryId: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  dailyPrice: number;
+  replacementValue: number;
+  currency: string;
+  depositPolicy: StaffRentalDepositPolicyInput;
+  imageMediaIds: string[];
+  spec: Record<string, unknown>;
+  recommendationTags: string[];
+};
+
+export type UpdateStaffRentalProductInput = {
+  expectedVersion: number;
+  name: string;
+  description: string | null;
+  dailyPrice: number;
+  replacementValue: number;
+  depositPolicy: StaffRentalDepositPolicyInput;
+  imageMediaIds: string[];
+  spec: Record<string, unknown>;
+  recommendationTags: string[];
+};
+
+export type ChangeStaffRentalProductStatusInput = {
+  status: StaffRentalProductStatus;
+  expectedVersion: number;
+};
