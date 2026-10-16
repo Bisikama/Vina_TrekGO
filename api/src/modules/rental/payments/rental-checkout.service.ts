@@ -19,8 +19,9 @@ export class RentalCheckoutService {
   constructor(private readonly db: PrismaService) {}
   async reserve(input: RentalCheckoutCommand, scope: ProviderScope) {
     const key = paymentHash([input.actorUserId, 'rental-checkout', input.idempotencyKey])
-    return this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
+    return this.db.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
       const initial = await tx.rentalOrder.findUnique({ where: { id: input.rentalOrderId } })
       if (!initial || initial.userId !== input.actorUserId) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
       await tx.$queryRaw`SELECT id FROM trips WHERE id=${initial.tripId}::uuid FOR UPDATE`
@@ -68,7 +69,6 @@ export class RentalCheckoutService {
         order.paymentExpiresAt <= now ||
         !memberEligible
       ) {
-        console.log('Failing condition 1:', { status: order.status, financialStatus: order.financialStatus, paymentExpiresAt: order.paymentExpiresAt, now, memberEligible });
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       const components = rentalComponents(order, order.rentalOrderLinesViaOrderId)
@@ -90,7 +90,6 @@ export class RentalCheckoutService {
           !invoice.subtotalAmount.equals(order.totalAmount) ||
           !invoice.discountAmount.isZero()
         ) {
-          console.log('Failing condition 2 (invoice bad):', { type: invoice.invoiceType, user: invoice.userId, rev: invoice.revisionNo, status: invoice.status, cur: invoice.currency, total: invoice.totalAmount, orderTotal: order.totalAmount });
           throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
         }
         const lines = await tx.invoiceLine.findMany({ where: { invoiceId: invoice.id } })
@@ -150,17 +149,14 @@ export class RentalCheckoutService {
           )
         })
       ) {
-        console.log('Failing condition 3 (reservation state invalid)');
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       if (order.paymentExpiresAt <= now || (invoice.expiresAt && invoice.expiresAt <= now)) {
-        console.log('Failing condition 4 (expired)', { orderExp: order.paymentExpiresAt, invExp: invoice.expiresAt, now });
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       if (await tx.payment.findFirst({ where: { invoiceId: invoice.id, status: { in: ['PENDING', 'PROCESSING'] } } }))
         throw AppError.fromCode(E.PAYMENT_ATTEMPT_IN_PROGRESS)
       if (await tx.payment.findFirst({ where: { invoice: { rentalOrderId: order.id }, status: 'SUCCEEDED' } })) {
-        console.log('Failing condition 5 (already succeeded)');
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       }
       const requestSnapshot = {
@@ -205,7 +201,7 @@ export class RentalCheckoutService {
         data: { financialStatus: 'PAYMENT_PENDING', version: { increment: 1 } },
       })
       return { payment, created: true }
-    })
+    }, { maxWait: 15000, timeout: 30000 })
   }
   /** Additional rental fee. Uses the SAME scoped payment provider/outbox/webhook
    * as initial Rental checkout; never creates an unverified payment stub.
@@ -280,7 +276,7 @@ export class RentalCheckoutService {
       } })
       await tx.rentalExtensionRequest.update({ where: { id: ext.id }, data: { paymentRef: payment.id } })
       return { payment, created: true }
-    })
+    }, { maxWait: 15000, timeout: 30000 })
   }
 
 }

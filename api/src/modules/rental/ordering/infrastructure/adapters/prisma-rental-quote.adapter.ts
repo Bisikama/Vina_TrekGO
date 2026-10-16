@@ -26,7 +26,7 @@ export class PrismaRentalQuoteAdapter implements RentalQuotePort {
           membershipSnapshot: data.membershipSnapshot as Prisma.InputJsonValue,
           pickupPointId: data.pickupPointId,
           returnPointId: data.returnPointId,
-          returnOptionSnapshot: data.returnOptionSnapshot as Prisma.InputJsonValue ?? Prisma.JsonNull,
+          returnOptionSnapshot: (data.returnOptionSnapshot as Prisma.InputJsonValue) ?? Prisma.JsonNull,
           recipientUserId: data.recipientUserId,
           recipientParticipantId: data.recipientParticipantId,
           recipientSnapshot: data.recipientSnapshot as Prisma.InputJsonValue,
@@ -48,6 +48,8 @@ export class PrismaRentalQuoteAdapter implements RentalQuotePort {
             create: data.lines.map((line) => ({
               productId: line.productId,
               quantity: line.quantity,
+              occupiedFrom: line.occupiedFrom,
+              occupiedUntil: line.occupiedUntil,
               dailyPriceSnapshot: line.dailyPriceSnapshot,
               depositPerUnitSnapshot: line.depositPerUnitSnapshot,
               replacementValueSnapshot: line.replacementValueSnapshot,

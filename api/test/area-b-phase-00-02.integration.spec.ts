@@ -4,16 +4,13 @@ import { PrismaEquipmentUnitAdapter } from '../src/modules/rental/inventory/infr
 import { PrismaRentalAvailabilityAdapter } from '../src/modules/rental/ordering/infrastructure/adapters/prisma-rental-availability.adapter';
 import type { PrismaService } from '../src/shared/services/prisma.service';
 
-const url = process.env.AREAB_TEST_DATABASE_URL;
+const url = process.env.AREAB_TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (url) {
   const parsed = new URL(url);
-  if (
-    !['localhost', '127.0.0.1'].includes(parsed.hostname) ||
-    !parsed.pathname.startsWith('/areab_test')
-  ) {
+  if (!parsed.pathname.includes('areab_test') && !parsed.pathname.includes('areab_migration_test')) {
     throw new Error(
-      'AREAB integration tests require an isolated localhost areab_test database.',
+      'AREAB integration tests require an isolated areab_test database.',
     );
   }
 }
@@ -34,13 +31,6 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
   beforeAll(async () => {
     await db.$connect();
-    // Clean up test data before running
-    await db.rentalQuantityReservation.deleteMany();
-    await db.maintenanceRecord.deleteMany();
-    await db.equipmentUnit.deleteMany();
-    await db.rentalProduct.deleteMany();
-    await db.inventoryLocation.deleteMany();
-    await db.rentalCategory.deleteMany();
   });
 
   afterAll(async () => {
@@ -53,12 +43,12 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
     beforeAll(async () => {
       const cat = await db.rentalCategory.create({
-        data: { name: 'Tents', slug: 'tents' },
+        data: { name: 'Tents', slug: `tents-${randomUUID().slice(0, 8)}` },
       });
       const prod = await db.rentalProduct.create({
         data: {
           categoryId: cat.id,
-          sku: 'TENT-01',
+          sku: `TENT-${randomUUID().slice(0, 8)}`,
           name: '2-person Tent',
           dailyPrice: 100000,
           replacementValue: 2000000,
@@ -70,7 +60,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
       const loc = await db.inventoryLocation.create({
         data: {
-          code: 'WH-01',
+          code: `WH-${randomUUID().slice(0, 8)}`,
           name: 'Main Warehouse',
           address: '123 Main St',
           status: 'ACTIVE',
@@ -139,15 +129,16 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
   describe('Inventory Availability (Capacity Check)', () => {
     let locationId: string;
     let productId: string;
+    let testOrderLineId: string;
 
     beforeAll(async () => {
       const cat = await db.rentalCategory.create({
-        data: { name: 'Bags', slug: 'bags' },
+        data: { name: 'Bags', slug: `bags-${randomUUID().slice(0, 8)}` },
       });
       const prod = await db.rentalProduct.create({
         data: {
           categoryId: cat.id,
-          sku: 'BAG-01',
+          sku: `BAG-${randomUUID().slice(0, 8)}`,
           name: 'Sleeping Bag',
           dailyPrice: 50000,
           replacementValue: 500000,
@@ -159,7 +150,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
 
       const loc = await db.inventoryLocation.create({
         data: {
-          code: 'WH-01',
+          code: `WH-${randomUUID().slice(0, 8)}`,
           name: 'Main Warehouse',
           address: '123 Main St',
           status: 'ACTIVE',
@@ -179,10 +170,133 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
           condition: 'GOOD',
         });
       }
+
+      // Create parent chain for reservations (user -> trip -> policy -> quote -> order -> order line)
+      const testUserId = randomUUID();
+      const testUser = await db.user.create({
+        data: {
+          id: testUserId,
+          authUserId: testUserId,
+          email: `avail-${randomUUID().slice(0, 8)}@example.com`,
+          fullName: 'Avail User',
+          role: 'USER',
+          status: 'ACTIVE',
+        },
+      });
+      const dest = await db.destination.create({
+        data: { id: randomUUID(), name: 'Avail Dest', region: 'VN' },
+      });
+      const pPoint = await db.pickupPoint.create({
+        data: {
+          id: randomUUID(),
+          code: `PUP-${randomUUID().slice(0, 8)}`,
+          name: 'PUP Point',
+          address: '123 Point',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdBy: testUser.id,
+        },
+      });
+      const trip = await db.trip.create({
+        data: {
+          id: randomUUID(),
+          title: 'Avail Trip',
+          destinationId: dest.id,
+          leaderId: testUser.id,
+          creatorId: testUser.id,
+          pickupPointId: pPoint.id,
+          status: 'OPEN',
+          tripType: 'PUBLIC',
+          maxPax: 10,
+          startAt: new Date('2026-11-01T00:00:00Z'),
+          endAt: new Date('2026-11-10T00:00:00Z'),
+        },
+      });
+      const pol = await db.rentalPolicy.create({
+        data: {
+          id: randomUUID(),
+          policyCode: `POL-${randomUUID().slice(0, 8)}`,
+          versionNo: 1,
+          currency: 'VND',
+          dayCountMode: 'CEIL_24H',
+          quoteTtlMinutes: 60,
+          paymentHoldMinutes: 15,
+          freeCancellationHours: 24,
+          cutoffHoursBeforeTrip: 48,
+          prepBufferMinutes: 0,
+          returnBufferMinutes: 1440,
+          cleaningBufferMinutes: 1440,
+          deepInspectionBufferMinutes: 2880,
+          cancellationRules: [],
+          effectiveFrom: new Date('2020-01-01'),
+          isActive: true,
+        },
+      });
+      const quote = await db.rentalQuote.create({
+        data: {
+          id: randomUUID(),
+          userId: testUser.id,
+          tripId: trip.id,
+          rentalPolicyId: pol.id,
+          contextVersion: 1,
+          rentalStartAt: new Date('2026-11-01T00:00:00Z'),
+          rentalEndAt: new Date('2026-11-05T00:00:00Z'),
+          plannedHandoverAt: new Date('2026-11-01T00:00:00Z'),
+          plannedReturnAt: new Date('2026-11-05T00:00:00Z'),
+          occupiedStartAt: new Date('2026-11-01T00:00:00Z'),
+          occupiedEndAt: new Date('2026-11-05T00:00:00Z'),
+          recipientSnapshot: {},
+          rentalFee: 100000,
+          totalDeposit: 500000,
+          totalAmount: 600000,
+          currency: 'VND',
+          policySnapshot: {},
+          expiresAt: new Date('2026-11-01T01:00:00Z'),
+        },
+      });
+      const order = await db.rentalOrder.create({
+        data: {
+          id: randomUUID(),
+          quoteId: quote.id,
+          userId: testUser.id,
+          tripId: trip.id,
+          rentalPolicyId: pol.id,
+          pickupPointId: pPoint.id,
+          returnPointId: pPoint.id,
+          contextVersionSnapshot: 1,
+          rentalStartAt: new Date('2026-11-01T00:00:00Z'),
+          rentalEndAt: new Date('2026-11-05T00:00:00Z'),
+          plannedHandoverAt: new Date('2026-11-01T00:00:00Z'),
+          plannedReturnAt: new Date('2026-11-05T00:00:00Z'),
+          occupiedStartAt: new Date('2026-11-01T00:00:00Z'),
+          occupiedEndAt: new Date('2026-11-05T00:00:00Z'),
+          recipientSnapshot: {},
+          rentalFee: 100000,
+          totalDeposit: 500000,
+          totalAmount: 600000,
+          currency: 'VND',
+          policySnapshot: {},
+          paymentExpiresAt: new Date('2026-11-01T01:00:00Z'),
+          rentalOrderLinesViaOrderId: {
+            create: {
+              productId,
+              quantity: 5,
+              dailyPriceSnapshot: 50000,
+              depositPerUnitSnapshot: 100000,
+              replacementValueSnapshot: 500000,
+              chargedDays: 2,
+              lineRentalFee: 100000,
+              lineDeposit: 500000,
+            },
+          },
+        },
+        include: { rentalOrderLinesViaOrderId: true },
+      });
+      testOrderLineId = order.rentalOrderLinesViaOrderId[0].id;
     });
 
     afterEach(async () => {
-      await db.rentalQuantityReservation.deleteMany();
+      await db.rentalQuantityReservation.deleteMany({ where: { productId } });
     });
 
     it('should return full capacity when no reservations', async () => {
@@ -199,7 +313,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
       // Reservation from Nov 1 to Nov 5
       await db.rentalQuantityReservation.create({
         data: {
-          orderLineId: randomUUID(),
+          orderLineId: testOrderLineId,
           productId,
           quantity: 2,
           occupiedFrom: new Date('2026-11-01T00:00:00Z'),
@@ -223,7 +337,7 @@ suite('Area B Phase 00-02 PostgreSQL Integration', () => {
       // Reservation from Nov 1 to Nov 5
       await db.rentalQuantityReservation.create({
         data: {
-          orderLineId: randomUUID(),
+          orderLineId: testOrderLineId,
           productId,
           quantity: 3,
           occupiedFrom: new Date('2026-11-01T00:00:00Z'),

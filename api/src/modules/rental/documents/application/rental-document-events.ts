@@ -1,0 +1,136 @@
+/** Area B v1.2.2 — append-only documents emitted with the source BUSINESS transaction.
+ * Rendering is asynchronous; PDF failure does not revert a valid handover/extension.
+ * No public storage URL, secret pickup code or customer signature is recorded here.
+ */
+import { createHash } from 'node:crypto';
+import { Prisma, RentalDocumentType } from '@prisma/client';
+
+type Tx = Prisma.TransactionClient;
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.entries(value as Record<string, unknown>)
+      .filter(([,v]) => v !== undefined).sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([k,v]) => JSON.stringify(k) + ':' + canonical(v)).join(',') + '}';
+  }
+  return JSON.stringify(value ?? null);
+}
+export function snapshotHash(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex'); }
+
+async function insertEventDocument(tx: Tx, input: {
+  orderId: string; documentType: RentalDocumentType; sourceRef: string; issuedAt: Date;
+  snapshot: Record<string, unknown>; rootDocumentId?: string; previousDocumentId?: string;
+  appendixNo?: number; policyVersion?: string;
+}) {
+  const existing = await tx.rentalDocument.findUnique({
+    where: { documentType_sourceRef: { documentType: input.documentType, sourceRef: input.sourceRef } },
+  });
+  if (existing) return existing;
+  const document = await tx.rentalDocument.create({ data: {
+    orderId: input.orderId, documentType: input.documentType, sourceRef: input.sourceRef,
+    documentNumber: `TG-${input.documentType}-${createHash('sha256').update(input.sourceRef).digest('hex').slice(0,32)}`,
+    rootDocumentId: input.rootDocumentId ?? null,
+    previousDocumentId: input.previousDocumentId ?? null,
+    appendixNo: input.appendixNo ?? null,
+    snapshotJson: JSON.parse(canonical(input.snapshot)) as Prisma.InputJsonValue,
+    snapshotHash: snapshotHash(input.snapshot),
+    policyVersion: input.policyVersion ?? '1.4.2', issuedAt: input.issuedAt,
+  }});
+  await tx.rentalOutboxEvent.upsert({
+    where: { deduplicationKey: `rental-document-render:${document.id}` }, update: {},
+    create: { deduplicationKey: `rental-document-render:${document.id}`,
+      eventType: 'RENTAL_DOCUMENT_RENDER_REQUESTED', aggregateType: 'RentalDocument', aggregateId: document.id,
+      payload: { documentId: document.id, orderId: input.orderId, type: input.documentType, documentNumber: document.documentNumber } },
+  });
+  return document;
+}
+
+export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverId: string, issuedAt: Date) {
+  const existing = await tx.rentalDocument.findUnique({where: {documentType_sourceRef: {documentType: RentalDocumentType.HANDOVER, sourceRef: handoverId}}});
+  if (existing) return existing;
+  const [order, handover, packageItems, conditions] = await Promise.all([
+    tx.rentalOrder.findUnique({where:{id:orderId},include:{rentalOrderLinesViaOrderId:true}}),
+    tx.rentalHandover.findUnique({where:{id:handoverId}}),
+    tx.packageItem.findMany({where:{package:{orderId}},include:{equipmentUnit:{select:{assetCode:true,productId:true}}}}),
+    tx.conditionSnapshot.findMany({where:{orderId,snapshotStage:'PRE_HANDOVER'}}),
+  ]);
+  if (!order || !handover || order.id!==handover.orderId || !packageItems.length) throw new Error('HANDOVER_DOCUMENT_SOURCE_INCOMPLETE');
+  const conditionMap = new Map(conditions.map(x=>[x.assignmentId,x]));
+  if (packageItems.some(x=>!conditionMap.has(x.assignmentId))) throw new Error('HANDOVER_DOCUMENT_CONDITION_MISSING');
+  return insertEventDocument(tx,{orderId,documentType:RentalDocumentType.HANDOVER,sourceRef:handoverId,issuedAt,
+    snapshot:{kind:'HANDOVER',orderId,tripId:order.tripId,bookingProvenanceId:order.bookingId,
+      handoverId,packageId:handover.packageId,recipient:handover.recipientSnapshot,
+      handedOverAt:handover.handedOverAt.toISOString(),staffId:handover.staffId,
+      recipientNotes:handover.recipientNotes,reportedIssues:handover.reportedIssues,
+      rentalStartAt:order.rentalStartAt.toISOString(),rentalEndAt:order.rentalEndAt.toISOString(),
+      rentalFee:order.rentalFee.toString(),totalDeposit:order.totalDeposit.toString(),currency:order.currency,
+      pickupPointId:order.pickupPointId,returnPointId:order.returnPointId,
+      units:packageItems.map(x=>{const c=conditionMap.get(x.assignmentId)!;return {unitId:x.equipmentUnitId,assetCode:x.equipmentUnit.assetCode,productId:x.equipmentUnit.productId,
+        condition:c.condition,accessories:c.accessories,evidenceIds:c.evidenceIds,conditionSnapshotId:c.id};}),
+      verificationMethod:'STAFF_DELIVERY_PICKUP_CODE',signatureMethod:'NONE',
+      policySnapshot:order.policySnapshot},policyVersion:'1.4.2'});
+}
+
+export async function issueExtensionAppendixTx(tx:Tx,extensionId:string,issuedAt:Date){
+  const extension=await tx.rentalExtensionRequest.findUnique({where:{id:extensionId}});
+  if(!extension || extension.status!=='APPLIED' || !extension.appliedAt) throw new Error('DOCUMENT_EXTENSION_NOT_APPLIED');
+  if(!extension.acceptedAt || !extension.acceptedByUserId || !extension.termsHash) throw new Error('EXTENSION_ACCEPTANCE_MISSING');
+  const root=await tx.rentalDocument.findFirst({where:{orderId:extension.orderId,documentType:RentalDocumentType.HANDOVER}});
+  if(!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX');
+  const existing=await tx.rentalDocument.findUnique({where:{documentType_sourceRef:{documentType:RentalDocumentType.EXTENSION_APPENDIX,sourceRef:extensionId}}});
+  if(existing) return existing;
+  const n=await tx.rentalDocument.count({where:{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX}})+1;
+  if(n>2) throw new Error('EXTENSION_DOCUMENT_LIMIT');
+  const previous=await tx.rentalDocument.findFirst({where:{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX},orderBy:{issuedAt:'desc'}});
+  const snap={kind:'EXTENSION_APPENDIX',orderId:extension.orderId,rootDocumentId:root.id,extensionId,
+    appendixNo:n,previousRentalEndAt:extension.previousRentalEndAt.toISOString(),
+    newRentalEndAt:extension.requestedRentalEndAt.toISOString(),additionalFee:extension.additionalFee.toString(),
+    currency:extension.currency,returnOption:extension.returnOptionSnapshot,acceptedByUserId:extension.acceptedByUserId,
+    acceptedAt:extension.acceptedAt.toISOString(),acceptedTermsVersion:extension.acceptedTermsVersion,
+    termsHash:extension.termsHash,appliedAt:extension.appliedAt.toISOString(),paymentRef:extension.paymentRef,
+    originalHandoverUnchanged:true};
+  return insertEventDocument(tx,{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX,
+    sourceRef:extensionId,issuedAt,rootDocumentId:root.id,previousDocumentId:previous?.id??root.id,appendixNo:n,snapshot:snap});
+}
+
+export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:string;newOperationalDueAt:Date;at:Date;oldOperationalDueAt?:Date|null}){
+  const root=await tx.rentalDocument.findFirst({where:{orderId:input.orderId,documentType:RentalDocumentType.HANDOVER}});
+  if(!root) return null; // No physical handover => no documentary schedule notice.
+  const order=await tx.rentalOrder.findUnique({where:{id:input.orderId}});
+  if(!order) throw new Error('RENTAL_NOT_FOUND');
+  const sourceRef=`${input.eventId}:${order.id}`;
+  return insertEventDocument(tx,{orderId:order.id,documentType:RentalDocumentType.SCHEDULE_NOTICE,sourceRef,issuedAt:input.at,
+    rootDocumentId:root.id,snapshot:{kind:'SCHEDULE_NOTICE',orderId:order.id,tripId:order.tripId,eventId:input.eventId,
+      contractualRentalEndAt:order.rentalEndAt.toISOString(),previousOperationalReturnDueAt:input.oldOperationalDueAt?.toISOString()??null,
+      operationalReturnDueAt:input.newOperationalDueAt.toISOString(),feeChanged:false,originalDocumentUnchanged:true}});
+}
+
+export async function issueReturnReceiptTx(tx:Tx,sessionId:string,at:Date){
+  const session=await tx.rentalReturnSession.findUnique({where:{id:sessionId}});
+  if(!session || session.status!=='FINALIZED' || !session.finalizedAt) throw new Error('RETURN_SESSION_NOT_FINALIZED');
+  const root=await tx.rentalDocument.findFirst({where:{orderId:session.orderId,documentType:RentalDocumentType.HANDOVER}});
+  if(!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED');
+  return insertEventDocument(tx,{orderId:session.orderId,documentType:RentalDocumentType.RETURN_RECEIPT,sourceRef:sessionId,issuedAt:at,
+    rootDocumentId:root.id,snapshot:{kind:'RETURN_RECEIPT',orderId:session.orderId,sessionId,staffId:session.staffId,
+      units:session.receivedUnits,remarks:session.remarks,finalizedAt:session.finalizedAt.toISOString(),
+      inspectionAndDepositSettlement:'SEPARATE_PER_UNIT_WORKFLOW',originalDocumentUnchanged:true}});
+}
+
+export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,correctedDisplayDetails:string,at:Date,idempotencyKey:string){
+  const source=await tx.rentalDocument.findUnique({where:{id:sourceId}});
+  if(!source) throw new Error('RENTAL_DOCUMENT_NOT_FOUND');
+  const correctionSourceRef=`${sourceId}:${createHash('sha256').update(idempotencyKey).digest('hex').slice(0,32)}`;
+  const proposedHash = snapshotHash({sourceId,actorId,reason,correctedDisplayDetails});
+  const existing = await tx.rentalDocument.findUnique({where:{documentType_sourceRef:{
+    documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef}}});
+  if (existing) {
+    const saved = existing.snapshotJson as Record<string,unknown>;
+    if(saved.requestHash!==proposedHash) throw new Error('IDEMPOTENCY_KEY_REUSED');
+    return existing;
+  }
+  return insertEventDocument(tx,{orderId:source.orderId,documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef,
+    rootDocumentId:source.rootDocumentId??source.id,previousDocumentId:source.id,issuedAt:at,
+    snapshot:{kind:'CORRECTION_NOTICE',sourceDocumentId:sourceId,sourceSnapshotHash:source.snapshotHash,
+      actorId,reason,correctedDisplayDetails,requestHash:proposedHash,sourceRemainsImmutable:true}});
+}

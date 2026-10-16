@@ -22,4 +22,7 @@ export const WAREHOUSE_ERROR_CODES = {
   VERSION_CONFLICT: 'VERSION_CONFLICT',
 } as const;
 
-export type WarehouseErrorCode = (typeof WAREHOUSE_ERROR_CODES)[keyof typeof WAREHOUSE_ERROR_CODES];
+export const PREPARATION_ERROR_CODES = WAREHOUSE_ERROR_CODES;
+
+export type PreparationErrorCode = (typeof WAREHOUSE_ERROR_CODES)[keyof typeof WAREHOUSE_ERROR_CODES];
+export type WarehouseErrorCode = PreparationErrorCode;

@@ -26,8 +26,10 @@ export type CheckoutCommand = {
   actorUserId: string
   idempotencyKey: string
   paymentMethod: PaymentMethod
+  gateway?: 'momo' | 'vnpay'
+  clientIp?: string
 }
-export type InvoiceCheckoutCommand = Omit<CheckoutCommand, 'bookingId'> & { invoiceId: string }
+export type InvoiceCheckoutCommand = Omit<CheckoutCommand, 'bookingId' | 'gateway' | 'clientIp'> & { invoiceId: string }
 
 @Injectable()
 export class PaymentsService {
@@ -52,7 +54,12 @@ export class PaymentsService {
   async createBookingCheckout(input: CheckoutCommand) {
     const key = hash([input.actorUserId, 'booking-checkout', input.idempotencyKey])
     const reserved = await this.reserve(input, key)
-    return this.submit(reserved, input.paymentMethod, 'BOOKING')
+    return this.submit(reserved, input.paymentMethod, 'BOOKING', input.clientIp)
+  }
+
+  paymentOptions() {
+    return { gateways: this.provider.scopes.filter((scope) => ['momo', 'vnpay'].includes(scope.gateway))
+      .map((scope) => ({ gateway: scope.gateway, environment: scope.environment })) }
   }
 
   async createCheckout(input: InvoiceCheckoutCommand) {
@@ -181,6 +188,7 @@ export class PaymentsService {
     reserved: { payment: Payment; created: boolean },
     paymentMethod: PaymentMethod,
     invoiceType: 'BOOKING' | 'TRAIL_ACCESS' | 'RENTAL',
+    clientIp?: string,
   ) {
     if (!reserved.created) return this.response(reserved.payment, false, invoiceType)
     const payment = reserved.payment
@@ -188,12 +196,16 @@ export class PaymentsService {
     try {
       result = await providerCall(() =>
         this.provider.createPayment({
-          ...this.provider.scope,
+          gateway: payment.paymentGateway!,
+          environment: payment.providerEnvironment!,
+          merchantAccountKey: payment.merchantAccountKey!,
           merchantRequestRef: payment.merchantRequestRef!,
           amount: payment.amount.toFixed(0),
           currency: payment.currency,
           paymentMethod,
           expiresAt: payment.expiresAt!,
+          clientIp,
+          ...(invoiceType === 'BOOKING' ? { returnPath: `/bookings/${((payment.gatewayPayload as Prisma.JsonObject).requestSnapshot as Prisma.JsonObject).bookingId}` } : {}),
         }),
       )
     } catch {
@@ -222,6 +234,8 @@ export class PaymentsService {
   }
 
   private async reserve(input: CheckoutCommand, key: string) {
+    const provider = this.provider.forGateway(input.gateway ?? this.provider.scope.gateway)
+    if (!provider) fail(E.PAYMENT_PROVIDER_UNAVAILABLE)
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.db.$transaction(async (tx) => {
@@ -243,6 +257,7 @@ export class PaymentsService {
               previous.invoice.userId !== input.actorUserId ||
               previous.invoice.bookingId !== input.bookingId ||
               previous.paymentMethod !== input.paymentMethod ||
+              (input.gateway !== undefined && previous.paymentGateway !== input.gateway) ||
               previous.requestHashVersion !== 1 ||
               !snapshot?.requestSnapshot ||
               hash(snapshot.requestSnapshot) !== previous.requestHash
@@ -251,7 +266,7 @@ export class PaymentsService {
             return { payment: previous, created: false }
           }
           if (
-            this.provider.scope.environment === 'MOCK' &&
+            provider.scope.environment === 'MOCK' &&
             process.env.NODE_ENV === 'production' &&
             process.env.PAYMENT_MOCK_ENABLED !== 'true'
           )
@@ -322,6 +337,7 @@ export class PaymentsService {
           const requestSnapshot = {
             actor: input.actorUserId,
             operation: 'booking-checkout',
+            gateway: provider.scope.gateway,
             bookingId: booking.id,
             invoiceId: invoice.id,
             revision: invoice.revisionNo,
@@ -338,9 +354,9 @@ export class PaymentsService {
               invoiceId: invoice.id,
               amount: invoice.totalAmount,
               currency: invoice.currency,
-              paymentGateway: this.provider.scope.gateway,
-              providerEnvironment: this.provider.scope.environment,
-              merchantAccountKey: this.provider.scope.merchantAccountKey,
+              paymentGateway: provider.scope.gateway,
+              providerEnvironment: provider.scope.environment,
+              merchantAccountKey: provider.scope.merchantAccountKey,
               merchantRequestRef: `payment:${id}`,
               idempotencyKey: key,
               requestHash: hash(requestSnapshot),
@@ -380,6 +396,7 @@ export class PaymentsService {
         amount: payment.amount.toFixed(0),
         currency: payment.currency,
         providerEnvironment: payment.providerEnvironment,
+        gateway: payment.paymentGateway,
         checkout: payment.checkoutData,
         expiresAt: payment.expiresAt?.toISOString() ?? null,
         reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(payment.reconcileStatus),

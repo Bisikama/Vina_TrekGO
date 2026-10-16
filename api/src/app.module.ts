@@ -12,6 +12,7 @@ import { CheckpointModule } from './modules/checkpoint/checkpoint.module'
 import { DestinationModule } from './modules/destination/destination.module'
 import { PaymentsModule } from './modules/payments/payments.module'
 import { LeaderApplicationsModule } from './modules/leader-applications/leader-applications.module'
+import { WeatherModule } from './modules/weather/weather.module'
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { LeaderApplicationsModule } from './modules/leader-applications/leader-a
     DestinationModule,
     PaymentsModule,
     LeaderApplicationsModule,
+    WeatherModule,
   ],
   controllers: [],
   providers: [],
