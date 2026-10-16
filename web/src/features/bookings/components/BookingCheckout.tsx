@@ -25,8 +25,9 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
     let active = true;
     bookingApi.paymentOptions().then(({ gateways }) => {
       if (!active) return;
-      setOptions(gateways);
-      setGateway((current) => gateways.some((item) => item.gateway === current) ? current : gateways[0]?.gateway ?? 'vnpay');
+      const enabledGateways = gateways.filter((item) => item.gateway !== 'momo');
+      setOptions(enabledGateways);
+      setGateway((current) => enabledGateways.some((item) => item.gateway === current) ? current : enabledGateways[0]?.gateway ?? 'vnpay');
     }).catch((e) => { if (active) setError(bookingError(e).message); });
     return () => { active = false; };
   }, [accessToken, retry]);
