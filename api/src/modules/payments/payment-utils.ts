@@ -17,11 +17,13 @@ function seconds(name: string, fallback: number) {
   return value
 }
 export const paymentRecoveryConfig = () => ({
-  leaseSeconds: seconds('PAYMENT_RECOVERY_LEASE_SECONDS', process.env.PAYMENT_PROVIDER === 'momo' ? 120 : 30),
+  leaseSeconds: seconds('PAYMENT_RECOVERY_LEASE_SECONDS', momoEnabled() ? 120 : 30),
   retrySeconds: seconds('PAYMENT_RECOVERY_RETRY_SECONDS', 30),
   maxAttempts: seconds('PAYMENT_RECOVERY_MAX_ATTEMPTS', 8),
-  timeoutSeconds: seconds('PAYMENT_PROVIDER_TIMEOUT_SECONDS', process.env.PAYMENT_PROVIDER === 'momo' ? 35 : 8),
+  timeoutSeconds: seconds('PAYMENT_PROVIDER_TIMEOUT_SECONDS', momoEnabled() ? 35 : 8),
 })
+const momoEnabled = () => process.env.PAYMENT_PROVIDER === 'momo' ||
+  (process.env.PAYMENT_ENABLED_PROVIDERS ?? '').split(',').some((value) => value.trim() === 'momo')
 export const trailCheckoutTtlSeconds = () => seconds('PAYMENT_TRAIL_CHECKOUT_TTL_SECONDS', 900)
 
 export async function providerCall<T>(operation: () => Promise<T>): Promise<T | { kind: 'UNKNOWN' }> {

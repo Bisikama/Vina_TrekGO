@@ -1,5 +1,5 @@
-import { MyBookings } from "@/features/bookings/components/MyBookings";
+import { MyTripsLayout } from "@/features/trips/components/MyTrips/MyTripsLayout";
 
 export default function MyTripsPage() {
-  return <MyBookings />;
+  return <MyTripsLayout />;
 }

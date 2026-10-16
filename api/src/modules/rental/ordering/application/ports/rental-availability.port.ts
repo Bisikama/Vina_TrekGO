@@ -3,6 +3,8 @@ export interface RentalAvailabilityQuery {
   occupiedFrom: Date;
   occupiedUntil: Date;
   now: Date;
+  requestedQuantity?: number;
+  inventoryLocationId?: string;
 }
 
 export const RENTAL_AVAILABILITY_PORT = Symbol('RENTAL_AVAILABILITY_PORT');

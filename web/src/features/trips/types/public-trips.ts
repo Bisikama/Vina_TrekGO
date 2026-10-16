@@ -12,6 +12,7 @@ export interface PublicTripItem {
   pickupPointId: string | null;
   status: TripStatus;
   publishedAt: string | null;
+  systemTrailId?: string | null;
 }
 
 export interface PublicTripListQuery {
