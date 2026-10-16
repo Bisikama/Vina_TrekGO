@@ -8,6 +8,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -162,4 +163,12 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
+
+  // Lifecycle (Phase 07A)
+  [LC.INVALID_EVENT_PAYLOAD]: { status: 400, message: 'Invalid rental lifecycle event payload', retryable: false },
+  [LC.UNSUPPORTED_EVENT]: { status: 422, message: 'Unsupported rental lifecycle event type', retryable: false },
+  [LC.RETURN_TASK_NOT_CREATABLE]: { status: 409, message: 'Return task cannot be created in current state', retryable: false },
+  [LC.RESCHEDULE_CAPACITY_CONFLICT]: { status: 409, message: 'Capacity conflict on trip reschedule', retryable: false },
+  [LC.OUT_OF_ORDER_EVENT]: { status: 409, message: 'Out of order lifecycle event ignored', retryable: false },
+  [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
 };
