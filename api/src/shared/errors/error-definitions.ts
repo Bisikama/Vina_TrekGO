@@ -9,6 +9,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -165,4 +166,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
+
+  // Personal Trail & Elevation
+  [PT.INSUFFICIENT_GPS_POINTS]: { status: 400, message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ', retryable: false },
+  [PT.INVALID_GEOJSON_COORDINATES]: { status: 400, message: 'Tọa độ GeoJSON không hợp lệ', retryable: false },
+  [PT.RECORDING_NOT_FOUND]: { status: 404, message: 'Không tìm thấy phiên ghi hành trình', retryable: false },
+  [PT.RECORDING_ALREADY_FINISHED]: { status: 409, message: 'Phiên ghi hành trình đã kết thúc trước đó', retryable: false },
+  [PT.TRAIL_ACCESS_DENIED]: { status: 403, message: 'Không có quyền truy cập hoặc chỉnh sửa cung đường này', retryable: false },
+  [PT.PERSONAL_TRAIL_NOT_FOUND]: { status: 404, message: 'Không tìm thấy cung đường cá nhân', retryable: false },
+  [PT.TRAIL_TOO_SHORT_FOR_VERIFY]: { status: 422, message: 'Cung đường phải dài tối thiểu 500m để gửi kiểm duyệt', retryable: false },
+  [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
+  [PT.DEM_PROCESSING_FAILED]: { status: 500, message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM', retryable: true },
+  [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: { status: 400, message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh', retryable: false },
 };

@@ -78,6 +78,10 @@ const envConfigSchema = z
     // Mongo
     MONGODB_URI: z.string().default('mongodb://localhost:27017/vina_trekgo_notifications'),
 
+    // Redis
+    REDIS_URL: z.string(),
+    REDIS_ENABLED: z.enum(['true', 'false']).transform((val) => val === 'true'),
+
     // Notification
     NOTIFICATION_CONSUMER_ENABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   })

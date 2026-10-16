@@ -7,11 +7,14 @@ import { APP_GUARD } from '@nestjs/core'
 import { AuthenticationGuard } from './guards/authentication.guard'
 import { RolesGuard } from './guards/roles.guard'
 
+import { RedisService } from './redis/redis.service'
+
 @Global()
 @Module({
   providers: [
     PrismaService,
     SupabaseService,
+    RedisService,
     AccessTokenGuard,
     ApiKeyGuard,
     {
@@ -23,6 +26,6 @@ import { RolesGuard } from './guards/roles.guard'
       useClass: RolesGuard,
     },
   ],
-  exports: [PrismaService, SupabaseService],
+  exports: [PrismaService, SupabaseService, RedisService],
 })
 export class SharedModule {}

@@ -1109,6 +1109,8 @@ model PersonalTrail {
   difficulty     DifficultyLevel?
   distanceKm     Decimal?                @map("distance_km") @db.Decimal(8, 2)
   elevationGainM Int?                    @map("elevation_gain_m")
+  elevationLossM Int?                    @map("elevation_loss_m")
+  elevationProfile Json?                 @map("elevation_profile")
   routeGeojson   Json                    @map("route_geojson")
   visibility     PersonalTrailVisibility @default(PRIVATE)
   status         RecordStatus            @default(ACTIVE)
@@ -1273,14 +1275,17 @@ model PersonalCheckpoint {
 
 model TrailRecording {
   id                     String    @id @default(uuid()) @db.Uuid
+  clientRecordingId      String?   @unique @map("client_recording_id") @db.Uuid
   userId                 String    @map("user_id") @db.Uuid
   title                  String?   @db.VarChar(200)
   status                 String    @db.VarChar(30)
   startedAt              DateTime  @map("started_at") @db.Timestamptz(6)
   endedAt                DateTime? @map("ended_at") @db.Timestamptz(6)
   processedGeojson       Json?     @map("processed_geojson")
+  elevationProfile       Json?     @map("elevation_profile")
   distanceKm             Decimal?  @map("distance_km") @db.Decimal(8, 2)
   elevationGainM         Int?      @map("elevation_gain_m")
+  elevationLossM         Int?      @map("elevation_loss_m")
   createdPersonalTrailId String?   @map("created_personal_trail_id") @db.Uuid
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1295,22 +1300,27 @@ model TrailRecording {
 }
 
 model TrailRecordingPoint {
-  id             BigInt   @id @default(autoincrement())
-  recordingId    String   @map("recording_id") @db.Uuid
-  clientSampleId String   @map("client_sample_id") @db.Uuid
-  latitude       Decimal  @db.Decimal(10, 7)
-  longitude      Decimal  @db.Decimal(10, 7)
-  accuracyM      Decimal? @map("accuracy_m") @db.Decimal(7, 2)
-  speedMps       Decimal? @map("speed_mps") @db.Decimal(7, 2)
-  headingDeg     Decimal? @map("heading_deg") @db.Decimal(6, 2)
-  altitudeM      Decimal? @map("altitude_m") @db.Decimal(8, 2)
-  recordedAt     DateTime @map("recorded_at") @db.Timestamptz(6)
-  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  id                BigInt   @id @default(autoincrement())
+  recordingId       String   @map("recording_id") @db.Uuid
+  clientSampleId    String   @map("client_sample_id") @db.Uuid
+  latitude          Decimal  @db.Decimal(10, 7)
+  longitude         Decimal  @db.Decimal(10, 7)
+  accuracyM         Decimal? @map("accuracy_m") @db.Decimal(7, 2)
+  speedMps          Decimal? @map("speed_mps") @db.Decimal(7, 2)
+  headingDeg        Decimal? @map("heading_deg") @db.Decimal(6, 2)
+  altitudeM         Decimal? @map("altitude_m") @db.Decimal(8, 2)
+  altitudeAccuracyM Decimal? @map("altitude_accuracy_m") @db.Decimal(7, 2)
+  segmentId         Int      @default(0) @map("segment_id")
+  accepted          Boolean? @map("accepted")
+  rejectReason      String?  @map("reject_reason") @db.VarChar(40)
+  recordedAt        DateTime @map("recorded_at") @db.Timestamptz(6)
+  receivedAt        DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
 
   recording TrailRecording @relation("R_TrailRecordingPoint_recording_id", fields: [recordingId], references: [id])
 
   @@unique([recordingId, clientSampleId])
   @@index([recordingId, recordedAt])
+  @@index([recordingId, segmentId, recordedAt])
   @@map("trail_recording_points")
 }
 

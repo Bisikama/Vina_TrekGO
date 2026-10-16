@@ -16,6 +16,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { LeaderApplicationsModule } from './modules/leader-applications/leader-applications.module'
 import { WeatherModule } from './modules/weather/weather.module'
 import { WebsocketModule } from './websockets/websocket.module'
+import { ElevationModule } from './modules/elevation/elevation.module'
+import { PersonalTrailModule } from './modules/personal-trail/personal-trail.module'
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { WebsocketModule } from './websockets/websocket.module'
     LeaderApplicationsModule,
     WeatherModule,
     WebsocketModule,
+    ElevationModule,
+    PersonalTrailModule,
   ],
   controllers: [],
   providers: [],
