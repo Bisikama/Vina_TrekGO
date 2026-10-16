@@ -16657,12 +16657,12 @@
             "name": "trailId",
             "required": true,
             "in": "path",
-            "description": "UUID của cung đường muốn mua bản quyền",
             "schema": {
               "format": "uuid",
               "example": "550e8400-e29b-41d4-a716-446655440000",
               "type": "string"
-            }
+            },
+            "description": "UUID của cung đường muốn mua bản quyền"
           },
           {
             "name": "idempotency-key",
@@ -16670,25 +16670,17 @@
             "in": "header",
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "description": "Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            },
+            "description": "Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)"
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Phương thức thanh toán",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
                   "paymentMethod"
                 ],
@@ -16701,11 +16693,20 @@
                     ],
                     "description": "Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)",
                     "example": "QR"
+                  },
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
                   }
                 }
               }
             }
-          }
+          },
+          "description": "Phương thức thanh toán"
         },
         "responses": {
           "200": {
@@ -16754,15 +16755,7 @@
             "name": "idempotency-key",
             "required": true,
             "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
             "description": "Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)",
-            "required": true,
             "schema": {
               "type": "string"
             }
@@ -16779,6 +16772,14 @@
                   "paymentMethod"
                 ],
                 "properties": {
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
+                  },
                   "paymentMethod": {
                     "type": "string",
                     "enum": [
@@ -17089,15 +17090,7 @@
             "name": "idempotency-key",
             "required": true,
             "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
             "description": "Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)",
-            "required": true,
             "schema": {
               "type": "string"
             }
@@ -17114,6 +17107,14 @@
                   "paymentMethod"
                 ],
                 "properties": {
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
+                  },
                   "paymentMethod": {
                     "type": "string",
                     "enum": [

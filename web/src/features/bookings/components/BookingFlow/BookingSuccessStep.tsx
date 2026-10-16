@@ -12,6 +12,10 @@ interface BookingSuccessStepProps {
   bookingCode: string;
   paymentMethod: string;
   equipmentCost: number;
+  totalAmount?: string | number;
+  checkoutUrl?: string | null;
+  qrData?: string | null;
+  bookingStatus?: string;
 }
 
 export const BookingSuccessStep = ({
@@ -21,17 +25,22 @@ export const BookingSuccessStep = ({
   bookingCode,
   paymentMethod,
   equipmentCost,
+  totalAmount,
+  checkoutUrl,
+  qrData,
+  bookingStatus,
 }: BookingSuccessStepProps) => {
+  const isConfirmed = bookingStatus === "CONFIRMED";
   const memberCount = Math.max(1, participants);
-  const unitPrice = trip?.price || 2850000;
+  const unitPrice = trip?.price || 0;
   const baseTripCost = unitPrice * memberCount;
   const vat = Math.round(baseTripCost * 0.08);
-  const grandTotal = baseTripCost + vat + equipmentCost;
+  const grandTotal = totalAmount ? Number(totalAmount) : (baseTripCost + vat + equipmentCost);
 
-  const tripTitle = trip?.title || "Chinh phục Đỉnh Núi Bà Đen 986m";
+  const tripTitle = trip?.title || "Chuyến đi";
   const dateStr = trip?.date
     ? `${trip.date.start} - ${trip.date.end}/${trip.date.year} (${trip.duration})`
-    : "5 - 10/2026 (6 ngày)";
+    : "Lịch trình chính thức";
 
   const paymentLabelMap: Record<string, string> = {
     vnpay: "VNPAY-QR (Ngân hàng / Ví điện tử)",
@@ -44,33 +53,57 @@ export const BookingSuccessStep = ({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      {/* Banner Thành công */}
-      <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white p-6 sm:p-8 text-center shadow-sm">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-[#125238]">
-          <svg
-            className="h-10 w-10 text-[#125238]"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+      {/* Banner Trạng thái */}
+      <div className={`overflow-hidden rounded-2xl border ${isConfirmed ? 'border-emerald-200' : 'border-amber-200'} bg-white p-6 sm:p-8 text-center shadow-sm`}>
+        <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${isConfirmed ? 'bg-emerald-100 text-[#125238]' : 'bg-amber-100 text-amber-700'}`}>
+          {isConfirmed ? (
+            <svg
+              className="h-10 w-10 text-[#125238]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="h-9 w-9 text-amber-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          )}
         </div>
 
         <div className="mt-4">
-          <span className="inline-block rounded-full bg-emerald-50 px-3.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
-            ✓ Đã xác nhận & Giữ chỗ thành công (VFRS Protected)
+          <span className={`inline-block rounded-full px-3.5 py-1 text-xs font-bold ${
+            isConfirmed
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-amber-50 text-amber-800 border border-amber-200'
+          }`}>
+            {isConfirmed
+              ? '✓ Đã xác nhận & Giữ chỗ thành công (VFRS Protected)'
+              : '⏳ Đang chờ xác nhận thanh toán từ cổng'}
           </span>
           <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-gray-900">
-            Đặt Chỗ Thành Công!
+            {isConfirmed ? 'Đặt Chỗ Thành Công!' : 'Đang Chờ Hoàn Tất Thanh Toán'}
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-            Cảm ơn bạn đã lựa chọn TrekGO. Vé điện tử và mã QR kiểm lâm đã được gửi về số điện thoại và email của bạn.
+            {isConfirmed
+              ? 'Cảm ơn bạn đã lựa chọn TrekGO. Vé điện tử và mã QR kiểm lâm đã được gửi về số điện thoại và email của bạn.'
+              : 'Đơn đặt chỗ đã được ghi nhận. Vui lòng hoàn tất thanh toán để hệ thống kích hoạt vé điện tử chính thức.'}
           </p>
         </div>
 
@@ -78,8 +111,8 @@ export const BookingSuccessStep = ({
         <div className="mt-8 overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-5 sm:p-6 text-left">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 pb-4 gap-2">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-                Vé Điện Tử E-Ticket
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${isConfirmed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                {isConfirmed ? 'Vé Điện Tử E-Ticket' : 'Phiếu Đặt Chỗ (Tạm thời)'}
               </span>
               <h3 className="text-lg font-bold text-gray-900">{tripTitle}</h3>
             </div>
@@ -114,7 +147,7 @@ export const BookingSuccessStep = ({
             </div>
             <div className="sm:col-span-2 border-t border-gray-200 pt-3 flex justify-between items-center">
               <span className="text-sm font-bold text-gray-700">
-                Tổng tiền đã thanh toán:
+                {isConfirmed ? 'Tổng tiền đã thanh toán:' : 'Tổng tiền cần thanh toán:'}
               </span>
               <span className="text-xl font-extrabold text-[#125238]">
                 {grandTotal.toLocaleString("vi-VN")}₫
@@ -154,6 +187,21 @@ export const BookingSuccessStep = ({
           </div>
         </div>
 
+        {/* Mã QR / Thông tin thanh toán từ cổng */}
+        {qrData && (
+          <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-left text-xs text-emerald-950">
+            <h4 className="font-bold flex items-center gap-1.5 text-emerald-900">
+              <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              Dữ liệu thanh toán từ cổng (QR Data)
+            </h4>
+            <p className="mt-1.5 font-mono text-[11px] bg-white p-2.5 rounded-lg border border-emerald-200 break-all select-all text-gray-800">
+              {qrData}
+            </p>
+          </div>
+        )}
+
         {/* Thông tin chuẩn bị hành trình */}
         <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-left text-xs text-blue-950">
           <h4 className="font-bold flex items-center gap-1.5 text-blue-900">
@@ -181,8 +229,20 @@ export const BookingSuccessStep = ({
 
         {/* Nút hành động */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+          {checkoutUrl && !isConfirmed && (
+            <a
+              href={checkoutUrl}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-8 py-3.5 font-bold text-white shadow-md shadow-emerald-900/10 transition hover:bg-emerald-800"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Tiếp tục đến cổng thanh toán
+            </a>
+          )}
+
           <Link
-            href="/my-trips"
+            href="/bookings"
             className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-8 py-3.5 font-bold text-white shadow-md shadow-emerald-900/10 transition hover:bg-[#2f6b4f]"
           >
             <svg
@@ -198,14 +258,14 @@ export const BookingSuccessStep = ({
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
               />
             </svg>
-            Quản lý chuyến đi của tôi
+            Xem danh sách đặt chỗ của tôi
           </Link>
 
           <Link
-            href="/"
+            href="/trips"
             className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-8 py-3.5 font-semibold text-gray-700 transition hover:bg-gray-200"
           >
-            Về trang chủ TrekGO
+            Khám phá thêm chuyến đi
           </Link>
         </div>
       </div>

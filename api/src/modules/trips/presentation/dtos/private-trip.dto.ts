@@ -1,5 +1,5 @@
 import { z } from 'zod'
-const uuid = z.string().uuid()
+const uuid = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, 'Invalid UUID')
 const time = z.string().datetime({ offset: true })
 const capacity = z.number().int().min(1).max(2147483647)
 export const privateVersionSchema = z.object({ expectedVersion: z.number().int().min(1) }).strict()

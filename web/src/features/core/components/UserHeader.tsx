@@ -1,11 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useAuthStore } from "@/features/auth";
+import { useAuthStore, useCurrentUser } from "@/features/auth";
 
 export const UserHeader = () => {
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const { getCurrentUser } = useCurrentUser();
+
+  useEffect(() => {
+    getCurrentUser();
+  }, []);
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-[100]">
@@ -66,20 +73,14 @@ export const UserHeader = () => {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1B5E41] text-white">
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 11l7-7 7 7M5 19l7-7 7 7"
-              />
-            </svg>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white overflow-hidden text-white shadow-sm">
+            <Image
+              src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
+              alt="Logo"
+              width={32}
+              height={32}
+              className="object-cover h-full w-full"
+            />
           </div>
 
           <div>
@@ -121,6 +122,16 @@ export const UserHeader = () => {
             className="whitespace-nowrap hover:text-[#1B5E41]"
           >
             Cung đường của tôi
+          </Link>
+
+          <Link
+            href="/invite"
+            className="flex items-center gap-1.5 whitespace-nowrap hover:text-[#1B5E41]"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+            </svg>
+            Nhập mã mời
           </Link>
 
           {/* Chỉ có trong UserHeader */}
@@ -206,20 +217,21 @@ export const UserHeader = () => {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200">
                 <Image
-                  src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"
+                  src={user?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop"}
                   alt="User Avatar"
                   width={32}
                   height={32}
+                  className="object-cover w-full h-full"
                 />
               </div>
 
               <div className="hidden text-left lg:block">
                 <div className="text-[13px] font-bold leading-tight text-gray-900">
-                  Nguyễn Hùng
+                  {user?.fullName || user?.name || (user?.email?.split('@')[0] || "Đang tải...")}
                 </div>
 
                 <div className="text-[10px] font-medium text-gray-500">
-                  Level 3 Trekker
+                  {user?.role === 'LEADER' ? 'Leader PRO' : 'Trekker'}
                 </div>
               </div>
             </div>
