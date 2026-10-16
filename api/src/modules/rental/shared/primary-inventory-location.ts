@@ -1,5 +1,5 @@
 /** RB-POL-33 / MVP_SINGLE_LOCATION_01.
- * Server-owned primary location. Never infer a primary from a list of ACTIVE warehouses.
+ * Server-owned primary location. Never infer a primary from a list of ACTIVE inventory locations.
  * Strictly uses RENTAL_PRIMARY_INVENTORY_LOCATION_ID.
  * Config changes while a quote is pending invalidate that quote; no speculative transfers.
  */

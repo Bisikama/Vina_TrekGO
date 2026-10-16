@@ -1,4 +1,4 @@
-export const LOGISTICS_ERROR_CODES = {
+export const DELIVERY_ERROR_CODES = {
   TASK_NOT_FOUND: 'LOGISTICS_TASK_NOT_FOUND',
   TASK_ALREADY_ASSIGNED: 'TASK_ALREADY_ASSIGNED',
   TASK_NOT_CLAIMED: 'LOGISTICS_TASK_NOT_CLAIMED',
@@ -26,7 +26,7 @@ export const LOGISTICS_ERROR_CODES = {
   VERSION_CONFLICT: 'VERSION_CONFLICT',
 } as const;
 
-export const DELIVERY_ERROR_CODES = LOGISTICS_ERROR_CODES;
+export const LOGISTICS_ERROR_CODES = DELIVERY_ERROR_CODES;
 
-export type DeliveryErrorCode = (typeof LOGISTICS_ERROR_CODES)[keyof typeof LOGISTICS_ERROR_CODES];
+export type DeliveryErrorCode = (typeof DELIVERY_ERROR_CODES)[keyof typeof DELIVERY_ERROR_CODES];
 export type LogisticsErrorCode = DeliveryErrorCode;

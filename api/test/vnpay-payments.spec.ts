@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { createHmac, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { Test } from '@nestjs/testing'
@@ -61,12 +62,17 @@ describe('VNPAY merchant query/refund protocol (stubbed HTTPS)', () => {
     refund = { id: refundId, paymentId, merchantRefundRef: `refund:${refundId}`, amount: new Prisma.Decimal(4000),
       currency: 'VND', requestHashVersion: 1, status: 'PENDING', reconcileStatus: 'SCHEDULED',
       createdAt: new Date('2026-10-16T06:00:00Z'), providerPayload: null, refundTransactionRef: null, payment }
-    db = { payment: { findFirst: jest.fn().mockImplementation(async () => payment), findUniqueOrThrow: jest.fn().mockImplementation(async () => payment) },
-      refund: { findFirst: jest.fn().mockImplementation(async () => refund), updateMany: jest.fn().mockImplementation(async ({ where, data }) => {
-        if (where.providerPayload && refund.providerPayload !== null) return { count: 0 }
-        Object.assign(refund, data)
-        return { count: 1 }
-      }) } }
+    db = {
+      payment: { findFirst: jest.fn().mockResolvedValue(payment), findUniqueOrThrow: jest.fn().mockResolvedValue(payment) },
+      refund: {
+        findFirst: jest.fn().mockResolvedValue(refund),
+        updateMany: jest.fn().mockImplementation(({ where, data }) => {
+          if (where.providerPayload && refund.providerPayload !== null) return Promise.resolve({ count: 0 })
+          Object.assign(refund, data)
+          return Promise.resolve({ count: 1 })
+        }),
+      },
+    }
     provider = new VnpayPaymentProvider(db)
     const result = await provider.createPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef,
       amount: '10000', currency: 'VND', paymentMethod: 'REDIRECT', clientIp: '203.0.113.20',

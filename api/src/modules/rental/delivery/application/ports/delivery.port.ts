@@ -90,10 +90,12 @@ export interface GetHandoverPreviewQuery {
   orderId: string;
 }
 
+export type RentalAdminTaskType = 'PREPARATION' | 'WAREHOUSE' | 'OUTBOUND' | 'RETURN';
+
 export interface AssignRentalTaskCommand {
   actorUserId: string;
   taskId: string;
-  taskType: 'WAREHOUSE' | 'OUTBOUND' | 'RETURN';
+  taskType: RentalAdminTaskType;
   assigneeId: string;
   reason: string;
   expectedVersion: number;
@@ -103,7 +105,7 @@ export interface AssignRentalTaskCommand {
 
 export interface ListAdminRentalTasksQuery extends PageQuery {
   actorUserId: string;
-  type?: 'WAREHOUSE' | 'OUTBOUND' | 'RETURN';
+  type?: RentalAdminTaskType;
   date?: string;
   assignment?: 'UNASSIGNED' | 'ASSIGNED' | 'ME';
 }
@@ -170,6 +172,7 @@ export interface MarkNoShowResult {
     refundRef: string | null;
   };
   returnToWarehouseRequired: boolean;
+  returnToInventoryLocationRequired?: boolean;
 }
 
 export interface PickupCodeResult {
@@ -198,6 +201,7 @@ export interface RentalAssigneeListResult {
   pagination: PaginationResult;
 }
 
+export const DELIVERY_PORT = Symbol('DELIVERY_PORT');
 export const LOGISTICS_PORT = Symbol('LOGISTICS_PORT');
 
 export interface DeliveryPort {

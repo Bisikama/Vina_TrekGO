@@ -115,7 +115,7 @@ describe('rental-ordering.rules', () => {
     expect(evaluateRentalEligibility(context, new Date('2026-10-08T00:00:00Z')).eligible).toBe(true);
   });
 
-  it('trả sau chuyến phải có phương án logistics server cho phép', () => {
+  it('trả sau chuyến phải có phương án delivery server cho phép', () => {
     const context = createContext();
     expect(resolveRentalReturn(context, new Date('2026-10-14T00:00:00Z'), 'return-extra').pointId).toBe('dropoff-1');
     expect(() => resolveRentalReturn(context, new Date('2026-10-14T00:00:00Z'))).toThrow();

@@ -6,7 +6,7 @@ import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { AppError } from 'src/shared/errors/app-error';
-import { LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
+import { DELIVERY_ERROR_CODES as DL } from 'src/shared/errors/codes/delivery.error-codes';
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
 import { ClaimDeliveryTaskUseCase } from '../../application/use-cases/claim-delivery-task.use-case';
 import { GetDeliveryTaskUseCase } from '../../application/use-cases/get-delivery-task.use-case';
@@ -29,7 +29,7 @@ import {
 
 @ApiTags('Delivery Tasks')
 @ApiBearerAuth('bearer')
-@Controller('delivery/tasks')
+@Controller(['delivery/tasks', 'logistics/tasks'])
 @Auth([AuthType.Bearer])
 @Roles(UserRole.STAFF_DELIVERY)
 export class DeliveryTaskController {
@@ -201,6 +201,6 @@ export class DeliveryTaskController {
 
 function requireDeliveryIdempotencyKey(raw: string | undefined): string {
   const parsed = DeliveryIdempotencyKeySchema.safeParse(raw);
-  if (!parsed.success) throw AppError.fromCode(LG.IDEMPOTENCY_KEY_REQUIRED);
+  if (!parsed.success) throw AppError.fromCode(DL.IDEMPOTENCY_KEY_REQUIRED);
   return parsed.data;
 }

@@ -21,13 +21,13 @@ describe('GetMediaDeliveryUseCase', () => {
     mockAssetPort.findById.mockResolvedValue({ id: 'doc', ownerUserId: 'owner', scope: 'LEADER_CERTIFICATE',
       status: 'READY', resourceType: 'IMAGE', deliveryType: 'authenticated', providerPublicId: 'p', format: 'pdf' } as unknown as never);
     for (const role of ['USER', 'LEADER', 'STAFF_INVENTORY', 'STAFF_DELIVERY']) {
-      await expect(useCase.execute({ mediaId: 'doc', variant: 'DOCUMENT_ORIGINAL' }, { ...mockUser(role), status: 'ACTIVE' } as unknown as never))
+      await expect(useCase.execute({ mediaId: 'doc', variant: 'DOCUMENT_ORIGINAL' }, { ...mockUser(role), status: 'ACTIVE' }))
         .rejects.toMatchObject({ code: 'DOCUMENT_NOT_FOUND' });
     }
     await expect(useCase.execute({ mediaId: 'doc', variant: 'DOCUMENT_ORIGINAL' })).rejects.toMatchObject({ code: 'DOCUMENT_NOT_FOUND' });
     mockStoragePort.createDeliveryUrl.mockResolvedValue({ url: 'private-download', expiresAt: new Date(Date.now() + 300000) });
-    expect(await useCase.execute({ mediaId: 'doc', variant: 'DOCUMENT_ORIGINAL' }, { ...mockUser('ADMIN'), status: 'ACTIVE' } as unknown as never)).toMatchObject({ url: 'private-download' });
-    await expect(useCase.execute({ mediaId: 'doc', variant: 'EVIDENCE_PREVIEW' }, { ...mockUser('ADMIN'), status: 'ACTIVE' } as unknown as never)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(await useCase.execute({ mediaId: 'doc', variant: 'DOCUMENT_ORIGINAL' }, { ...mockUser('ADMIN'), status: 'ACTIVE' })).toMatchObject({ url: 'private-download' });
+    await expect(useCase.execute({ mediaId: 'doc', variant: 'EVIDENCE_PREVIEW' }, { ...mockUser('ADMIN'), status: 'ACTIVE' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   const mockUser = (role: string) => ({

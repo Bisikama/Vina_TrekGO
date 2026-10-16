@@ -205,10 +205,20 @@ export class PaymentsService {
     if (!reserved.created) return this.response(reserved.payment, false, invoiceType)
     const payment = reserved.payment
     let result: ProviderResult
+    const requestSnapshot = (payment.gatewayPayload as Prisma.JsonObject)?.requestSnapshot as
+      | Record<string, unknown>
+      | undefined
+    const rawBookingId = requestSnapshot?.bookingId
+    const bookingIdParam =
+      typeof rawBookingId === 'string'
+        ? rawBookingId
+        : typeof rawBookingId === 'number'
+          ? rawBookingId.toString()
+          : ''
     try {
       result = await providerCall(() =>
         this.provider.createPayment({
-          gateway: payment.paymentGateway!,
+          gateway: payment.paymentGateway,
           environment: payment.providerEnvironment!,
           merchantAccountKey: payment.merchantAccountKey!,
           merchantRequestRef: payment.merchantRequestRef!,
@@ -217,7 +227,11 @@ export class PaymentsService {
           paymentMethod,
           expiresAt: payment.expiresAt!,
           clientIp,
-          ...(invoiceType === 'BOOKING' ? { returnPath: `/payment-return?bookingId=${((payment.gatewayPayload as Prisma.JsonObject).requestSnapshot as Prisma.JsonObject).bookingId}` } : {}),
+          ...(invoiceType === 'BOOKING'
+            ? {
+                returnPath: `/payment-return?bookingId=${bookingIdParam}`,
+              }
+            : {}),
         }),
       )
     } catch {

@@ -86,7 +86,7 @@ export class RentalExtensionService {
     }
     const ctx = await this.context.getByTripId(raw.order.tripId, userId, now);
     if (!ctx || ctx.membershipRef !== raw.order.membershipRef) throw AppError.fromCode('FORBIDDEN');
-    // Revalidate server-issued option at confirmation: a stale quote cannot invent logistics capacity.
+    // Revalidate server-issued option at confirmation: a stale quote cannot invent delivery capacity.
     const option = jsonObject(raw.returnOptionSnapshot);
     const snap = jsonObject(raw.policySnapshot);
     const max = requiredPolicyInt(snap.maxRentalAfterTripHours, 'maxRentalAfterTripHours');

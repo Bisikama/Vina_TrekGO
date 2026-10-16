@@ -63,7 +63,7 @@ export class VnpayPaymentProvider extends PaymentProvider {
       throw new Error('Invalid VNPAY_SANDBOX_RETURN_URL')
     this.scope = { gateway: 'vnpay', environment: 'SANDBOX', merchantAccountKey: merchant }
   }
-  async createPayment(input: ProviderPaymentInput): Promise<ProviderResult> {
+  createPayment(input: ProviderPaymentInput): Promise<ProviderResult> {
     const ip = input.clientIp?.replace(/^::ffff:/, '')
     if (
       input.gateway !== this.scope.gateway ||
@@ -77,7 +77,7 @@ export class VnpayPaymentProvider extends PaymentProvider {
       !isIP(ip) ||
       input.expiresAt.getTime() <= Date.now()
     )
-      return UNKNOWN
+      return Promise.resolve(UNKNOWN)
     const ref = input.merchantRequestRef.slice(8).replace(/-/g, '')
     const data: Record<string, string> = {
       vnp_Version: '2.1.0',
@@ -96,7 +96,7 @@ export class VnpayPaymentProvider extends PaymentProvider {
       ...(input.paymentMethod === 'QR' ? { vnp_BankCode: 'VNPAYQR' } : {}),
     }
     const url = `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?${vnpayQuery(data)}&vnp_SecureHash=${vnpaySignature(data, this.secret)}`
-    return { kind: 'CONFIRMED_RESULT', status: 'PROCESSING', checkout: { type: 'REDIRECT', url, qrData: null } }
+    return Promise.resolve({ kind: 'CONFIRMED_RESULT', status: 'PROCESSING', checkout: { type: 'REDIRECT', url, qrData: null } })
   }
   private matches(scope: ProviderScope) {
     return scope.gateway === this.scope.gateway && scope.environment === this.scope.environment &&
@@ -235,16 +235,16 @@ export class VnpayPaymentProvider extends PaymentProvider {
     return data ? this.refundResult(data, row, knownRef) : UNKNOWN
   }
 
-  async verifyWebhook(raw: Buffer): Promise<VerifiedPaymentEvent | null> {
+  verifyWebhook(raw: Buffer): Promise<VerifiedPaymentEvent | null> {
     try {
-      if (raw.length > 16384) return null
+      if (raw.length > 16384) return Promise.resolve(null)
       const data: Record<string, string> = JSON.parse(raw.toString('utf8'))
       if (
         !data ||
         Array.isArray(data) ||
         Object.entries(data).some(([key, value]) => !key.startsWith('vnp_') || typeof value !== 'string')
       )
-        return null
+        return Promise.resolve(null)
       const signature = data.vnp_SecureHash
       if (
         !/^[a-fA-F0-9]{128}$/.test(signature ?? '') ||
@@ -256,15 +256,15 @@ export class VnpayPaymentProvider extends PaymentProvider {
         !/^\d{2}$/.test(data.vnp_ResponseCode ?? '') ||
         !/^\d{2}$/.test(data.vnp_TransactionStatus ?? '')
       )
-        return null
+        return Promise.resolve(null)
       const succeeded = data.vnp_ResponseCode === '00' && data.vnp_TransactionStatus === '00'
-      if (succeeded && !/^[1-9]\d{0,14}$/.test(data.vnp_TransactionNo ?? '')) return null
+      if (succeeded && !/^[1-9]\d{0,14}$/.test(data.vnp_TransactionNo ?? '')) return Promise.resolve(null)
       // PayDate is optional in VNPAY's IPN contract. When absent use receipt
       // time; inbox deduplication is based on the signed payload, not this time.
       const occurredAt = data.vnp_PayDate ? parseDate(data.vnp_PayDate) : new Date().toISOString()
-      if (!occurredAt) return null
+      if (!occurredAt) return Promise.resolve(null)
       const ref = data.vnp_TxnRef.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5')
-      return {
+      return Promise.resolve({
         ...this.scope,
         kind: 'PAYMENT',
         merchantRequestRef: `payment:${ref}`,
@@ -283,9 +283,9 @@ export class VnpayPaymentProvider extends PaymentProvider {
         transactionRef: /^[1-9]\d{0,14}$/.test(data.vnp_TransactionNo ?? '') ? data.vnp_TransactionNo : null,
         occurredAt,
         providerEventId: `vnpay:${paymentHash([data.vnp_TxnRef, data.vnp_TransactionNo, data.vnp_ResponseCode, data.vnp_TransactionStatus, data.vnp_PayDate])}`,
-      }
+      })
     } catch {
-      return null
+      return Promise.resolve(null)
     }
   }
 }
