@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Headers, Param, Post, Req, Res } from '@nestjs/common'
+import { Body, Controller, Headers, Param, Post, Res } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
-import type { Request, Response } from 'express'
+import type { Response } from 'express'
 import { z } from 'zod'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
@@ -64,7 +64,7 @@ export class PaymentsController {
           description: 'Cổng thanh toán; bỏ trống để dùng cổng mặc định',
           example: 'vnpay',
         },
-      },
+      },s    
     },
   })
   @ApiResponse({ status: 201, description: 'Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode' })
