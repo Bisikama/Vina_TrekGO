@@ -62,7 +62,7 @@ function cleanCategoryName(value: string) {
     pattern.test(withoutTestSuffix),
   );
 
-  return alias?.[1] ?? withoutTestSuffix || "Khác";
+  return alias?.[1] ?? (withoutTestSuffix || "Khác");
 }
 
 function getCategoryKey(value: string) {
