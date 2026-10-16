@@ -1,16 +1,56 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { TripData } from "../../data/mockTripsData";
 import { TripHeader } from "./TripHeader";
 import { ItineraryAccordion } from "./ItineraryAccordion";
 import { ServicesAndPolicy } from "./ServicesAndPolicy";
 import { BookingSidebar } from "./BookingSidebar";
 import { TripRouteReviewMap } from "@/features/leaders/components/leader/TripRouteReviewMap";
+import type { SystemTrailDetail } from "@/features/leaders/components/leader/StepTwoOverviewMap";
 
-export const TripDetailClient = ({ trip }: { trip: TripData }) => {
+export const TripDetailClient = ({
+  trip,
+  trailCode,
+}: {
+  trip: TripData;
+  trailCode?: string | null;
+}) => {
+  const [trailDetail, setTrailDetail] = useState<SystemTrailDetail | null>(null);
+
+  const enrichedTrip = useMemo(() => {
+    if (!trailDetail) return trip;
+    return {
+      ...trip,
+      totalDistance: `${trailDetail.distanceKm} km`,
+      maxElevation: trailDetail.elevationGainM ? `${trailDetail.elevationGainM} m` : trip.maxElevation,
+      location: {
+        name: trailDetail.destination?.name || trailDetail.name || trip.location.name,
+        distance: `${trailDetail.distanceKm} km`,
+      },
+      difficulty: trailDetail.difficulty
+        ? {
+            level: trailDetail.difficulty.toLowerCase(),
+            label:
+              trailDetail.difficulty === "EASY"
+                ? "Dễ"
+                : trailDetail.difficulty === "MEDIUM"
+                ? "Trung bình"
+                : "Khó",
+            color:
+              trailDetail.difficulty === "EASY"
+                ? "bg-emerald-100 text-emerald-700"
+                : trailDetail.difficulty === "MEDIUM"
+                ? "bg-blue-100 text-blue-700"
+                : "bg-red-100 text-red-700",
+          }
+        : trip.difficulty,
+    };
+  }, [trip, trailDetail]);
+
   return (
     <div className="bg-[#F7F7F4] min-h-screen pb-20">
-      <TripHeader trip={trip} />
+      <TripHeader trip={enrichedTrip} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -32,17 +72,20 @@ export const TripDetailClient = ({ trip }: { trip: TripData }) => {
                 </span>
               </div>
 
-              {/* Gọi API http://localhost:3000/api/v1/system-trails/TRAIL_BADEN_COTDIEN */}
-              <TripRouteReviewMap trailCode="TRAIL_BADEN_COTDIEN" />
+              {/* Gọi API lấy toạ độ thực tế theo trailCode của trip */}
+              <TripRouteReviewMap
+                trailCode={trailCode || "TRAIL_BADEN_COTDIEN"}
+                onTrailLoaded={(detail) => setTrailDetail(detail as any)}
+              />
             </section>
 
-            <ItineraryAccordion trip={trip} />
-            <ServicesAndPolicy trip={trip} />
+            <ItineraryAccordion trip={enrichedTrip} />
+            <ServicesAndPolicy trip={enrichedTrip} />
           </div>
 
           {/* Sidebar Column */}
           <div className="lg:w-[380px] shrink-0">
-            <BookingSidebar trip={trip} />
+            <BookingSidebar trip={enrichedTrip} />
           </div>
         </div>
       </div>

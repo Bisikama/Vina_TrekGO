@@ -13,6 +13,8 @@ export type RentalCheckoutCommand = {
   actorUserId: string
   idempotencyKey: string
   paymentMethod: PaymentMethod
+  gateway?: 'momo' | 'vnpay'
+  clientIp?: string
 }
 @Injectable()
 export class RentalCheckoutService {
@@ -48,6 +50,7 @@ export class RentalCheckoutService {
           previous.invoice.rentalOrderId !== order.id ||
           previous.invoice.userId !== input.actorUserId ||
           previous.paymentMethod !== input.paymentMethod ||
+          (input.gateway !== undefined && previous.paymentGateway !== input.gateway) ||
           previous.requestHashVersion !== 1 ||
           !snapshot?.requestSnapshot ||
           paymentHash(snapshot.requestSnapshot) !== previous.requestHash
@@ -206,7 +209,7 @@ export class RentalCheckoutService {
   /** Additional rental fee. Uses the SAME scoped payment provider/outbox/webhook
    * as initial Rental checkout; never creates an unverified payment stub.
    */
-  async reserveExtension(input: { extensionId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod }, scope: ProviderScope) {
+  async reserveExtension(input: { extensionId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' }, scope: ProviderScope) {
     const key = paymentHash([input.actorUserId, 'rental-extension-checkout', input.idempotencyKey])
     return this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
@@ -220,6 +223,7 @@ export class RentalCheckoutService {
         const request = snap?.requestSnapshot as Prisma.JsonObject | undefined
         if (previous.invoiceId !== ext.invoiceId || previous.invoice.rentalOrderId !== ext.orderId ||
           previous.paymentMethod !== input.paymentMethod || previous.requestHashVersion !== 1 ||
+          (input.gateway !== undefined && previous.paymentGateway !== input.gateway) ||
           request?.extensionId !== ext.id || !request || paymentHash(request) !== previous.requestHash)
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return { payment: previous, created: false }

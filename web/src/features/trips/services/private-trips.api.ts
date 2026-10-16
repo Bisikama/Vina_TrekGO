@@ -16,11 +16,12 @@ export const privateTripsApi = {
   async sources(): Promise<PrivateSource[]> {
     const [personal, access] = await Promise.all([
       all<{ id: string; title: string; destinationId: string | null; personalCheckpointsViaPersonalTrailId: PrivatePoint[] }>('/api/v1/me/personal-trails'),
-      all<{ systemTrail: { id: string; name: string; destinationId: string; trailCheckpointsViaSystemTrailId: { sequence: number; checkpoint: { id: string; name: string; status: string } }[] } }>('/api/v1/me/trail-accesses'),
+      all<{ systemTrail: { id: string; name: string; destinationId: string; trailCheckpointsViaSystemTrailId: { sequence: number; checkpoint: { id: string; name: string; status: string; destinationId: string } }[] } }>('/api/v1/me/trail-accesses'),
     ]);
-    return [...personal.map(p => ({ id: p.id, type: 'PERSONAL' as const, name: p.title, destinationId: p.destinationId, points: p.personalCheckpointsViaPersonalTrailId })), ...access.map(({ systemTrail: t }) => ({ id: t.id, type: 'SYSTEM' as const, name: t.name, destinationId: t.destinationId, points: t.trailCheckpointsViaSystemTrailId.filter(p => p.checkpoint.status === 'ACTIVE').map(p => ({ id: p.checkpoint.id, name: p.checkpoint.name, sequence: p.sequence })) }))];
+    return [...personal.map(p => ({ id: p.id, type: 'PERSONAL' as const, name: p.title, destinationId: p.destinationId, points: p.personalCheckpointsViaPersonalTrailId })), ...access.map((a: any) => ({ id: a.systemTrailId || a.systemTrail.id, type: 'SYSTEM' as const, name: a.systemTrail.name, destinationId: a.systemTrail.destinationId, points: a.systemTrail.trailCheckpointsViaSystemTrailId.filter((p: any) => p.checkpoint.status === 'ACTIVE' && p.checkpoint.destinationId === a.systemTrail.destinationId).map((p: any) => ({ id: p.checkpoint.id, name: p.checkpoint.name, sequence: p.sequence, destinationId: p.checkpoint.destinationId })) }))];
   },
   list: async () => all<PrivateTrip>(base),
+  getById: async (id: string) => (await apiClient.get<PrivateTrip>(`${base}/${id}`)).data,
   pickups: async (destinationId: string) => all<{ id: string; name: string }>('/api/v1/private-trip-options/pickup-points', { destinationId }),
   create: async (input: PrivateInput & { type: 'PERSONAL' | 'SYSTEM'; trailRef: string; destinationId: string; checkpointIds: string[] }) => (await apiClient.post<PrivateTrip>(base, input)).data,
   update: async (trip: PrivateTrip, input: PrivateInput) => (await apiClient.patch<PrivateTrip>(`${base}/${trip.id}`, { ...input, expectedVersion: trip.version })).data,

@@ -12,11 +12,13 @@ export const BookingSteps = ({
   trip,
   currentStep = 1,
 }: BookingStepsProps) => {
-  const tripCode = trip?.id || "TRK-BADEN-01";
+  const tripCode = trip?.id ? trip.id.slice(0, 8).toUpperCase() : "";
   const dateText = trip?.date
     ? `${trip.date.start} - ${trip.date.end}/${trip.date.year} (${trip.duration})`
-    : "5 - 10/2026 (6 ngày)";
-  const leaderText = `Leader: ${trip?.leader?.name || "Leader hiện tại"} (${trip?.leader?.badge || "PRO"})`;
+    : "Lịch trình chính thức";
+  const leaderText = trip?.leader?.name
+    ? `Leader: ${trip.leader.name}`
+    : "Leader đoàn";
 
   return (
     <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">

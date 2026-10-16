@@ -47,7 +47,9 @@ export type ProviderRefundInput = ProviderScope & {
 
 export abstract class PaymentProvider {
   readonly supportsIdempotentCreate: boolean = false
-  readonly paymentResultsViaIpnOnly: boolean = false
+  // Providers with a durable one-shot refund dispatch may opt in without allowing payment recreation.
+  readonly supportsRefundDispatch: boolean = false
+  readonly waitForCheckoutExpiry: boolean = false
   abstract readonly scope: ProviderScope
   get scopes(): ProviderScope[] { return [this.scope] }
   forGateway(gateway: string): PaymentProvider | undefined {

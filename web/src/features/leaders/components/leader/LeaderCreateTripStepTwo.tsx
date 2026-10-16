@@ -46,7 +46,6 @@ export function LeaderCreateTripStepTwo() {
 
   const [destinationCheckpoints, setDestinationCheckpoints] = useState<LeaderCheckpointOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
-  const [selectedCheckpointIds, setSelectedCheckpointIds] = useState<string[]>([]);
   const [trailDetail, setTrailDetail] = useState<SystemTrailDetail | null>(null);
 
   const [saved, setSaved] = useState(false);
@@ -59,17 +58,9 @@ export function LeaderCreateTripStepTwo() {
     if (trip?.destinationId) {
       fetchCheckpoints(trip.destinationId).then((cps) => {
         setDestinationCheckpoints(cps);
-        if (trip.checkpoints && trip.checkpoints.length > 0) {
-          const ids = trip.checkpoints
-            .map((c) => c.sourceCheckpointId)
-            .filter((id): id is string => typeof id === "string");
-          setSelectedCheckpointIds(ids);
-        } else if (cps.length > 0) {
-          setSelectedCheckpointIds(cps.map((c) => c.id));
-        }
       });
     }
-  }, [trip?.destinationId, trip?.checkpoints, fetchCheckpoints]);
+  }, [trip?.destinationId, fetchCheckpoints]);
 
   // Sync selected trail from suggestions or trip
   useEffect(() => {
@@ -87,6 +78,17 @@ export function LeaderCreateTripStepTwo() {
       null
     );
   }, [suggestions, selectedRouteId]);
+
+  // Tự động lấy danh sách checkpoint theo thứ tự của cung đường đã chọn
+  const currentCheckpoints = useMemo(() => {
+    if (selectedTrailSuggestion && selectedTrailSuggestion.checkpointIds?.length > 0) {
+      const trailCps = selectedTrailSuggestion.checkpointIds;
+      return destinationCheckpoints
+        .filter((cp) => trailCps.includes(cp.id))
+        .sort((a, b) => trailCps.indexOf(a.id) - trailCps.indexOf(b.id));
+    }
+    return destinationCheckpoints;
+  }, [selectedTrailSuggestion, destinationCheckpoints]);
 
   function selectRoute(routeId: string) {
     setSelectedRouteId(routeId);
@@ -110,36 +112,17 @@ export function LeaderCreateTripStepTwo() {
     }
   }
 
-  function toggleCheckpoint(id: string) {
-    setSelectedCheckpointIds((current) =>
-      current.includes(id) ? current.filter((cId) => cId !== id) : [...current, id]
-    );
-  }
-
   async function handleSaveDraft() {
     if (!tripId || !trip) return;
     setErrorMsg("");
 
     try {
       let currentVersion = trip.version;
-      if (selectedCheckpointIds.length > 0) {
-        const trailCps = selectedTrailSuggestion?.checkpointIds || [];
-        const sortedCheckpoints = [...selectedCheckpointIds].sort((a, b) => {
-          const idxA = trailCps.indexOf(a);
-          const idxB = trailCps.indexOf(b);
-          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-          if (idxA !== -1) return -1;
-          if (idxB !== -1) return 1;
-          return 0;
-        });
-
-        const validCheckpoints = trailCps.length > 0 
-          ? sortedCheckpoints.filter(id => trailCps.includes(id)) 
-          : sortedCheckpoints;
-
+      const checkpointIdsToSave = currentCheckpoints.map((cp) => cp.id);
+      if (checkpointIdsToSave.length > 0) {
         const cpRes = await apiSetCheckpoints(tripId, {
           expectedVersion: currentVersion,
-          checkpointIds: validCheckpoints,
+          checkpointIds: checkpointIdsToSave,
         });
         currentVersion = cpRes.version;
       }
@@ -164,8 +147,9 @@ export function LeaderCreateTripStepTwo() {
       return;
     }
 
-    if (selectedCheckpointIds.length === 0) {
-      setErrorMsg("Vui lòng chọn ít nhất 1 checkpoint bắt buộc cho chuyến đi.");
+    const checkpointIdsToSave = currentCheckpoints.map((cp) => cp.id);
+    if (checkpointIdsToSave.length === 0) {
+      setErrorMsg("Cung đường chưa có checkpoint nào.");
       return;
     }
 
@@ -178,24 +162,10 @@ export function LeaderCreateTripStepTwo() {
 
     try {
       let currentVersion = trip.version;
-      
-      const trailCps = selectedTrailSuggestion?.checkpointIds || [];
-      const sortedCheckpoints = [...selectedCheckpointIds].sort((a, b) => {
-        const idxA = trailCps.indexOf(a);
-        const idxB = trailCps.indexOf(b);
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-        if (idxA !== -1) return -1;
-        if (idxB !== -1) return 1;
-        return 0;
-      });
-
-      const validCheckpoints = trailCps.length > 0 
-        ? sortedCheckpoints.filter(id => trailCps.includes(id)) 
-        : sortedCheckpoints;
 
       const cpRes = await apiSetCheckpoints(tripId, {
         expectedVersion: currentVersion,
-        checkpointIds: validCheckpoints,
+        checkpointIds: checkpointIdsToSave,
       });
       currentVersion = cpRes.version;
 
@@ -489,13 +459,13 @@ export function LeaderCreateTripStepTwo() {
                       2. Trạm dừng &amp; Checkpoints An toàn
                     </h2>
 
-                    <span className="rounded-full bg-[#125238] px-2 py-1 text-[10px] font-bold text-white">
-                      {selectedCheckpointIds.length}/{destinationCheckpoints.length} MỐC ĐÃ CHỌN
+                    <span className="rounded-full bg-[#125238] px-2.5 py-1 text-[10px] font-bold text-white">
+                      {currentCheckpoints.length} MỐC BẮT BUỘC
                     </span>
                   </div>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Chọn các mốc kiểm soát đoàn bắt buộc theo thứ tự hành trình.
+                    Danh sách các mốc kiểm soát đoàn bắt buộc theo thứ tự hành trình của cung đường.
                   </p>
                 </div>
               </div>
@@ -505,74 +475,54 @@ export function LeaderCreateTripStepTwo() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
                     Đang tải danh sách checkpoint của điểm đến...
                   </div>
+                ) : currentCheckpoints.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+                    Cung đường đã chọn chưa có trạm dừng nào.
+                  </div>
                 ) : (
-                  destinationCheckpoints
-                    .filter(cp => !selectedTrailSuggestion || selectedTrailSuggestion.checkpointIds.includes(cp.id))
-                    .map((checkpoint, idx) => {
-                    const isSelected = selectedCheckpointIds.includes(checkpoint.id);
+                  currentCheckpoints.map((checkpoint, idx) => (
+                    <article
+                      key={checkpoint.id}
+                      className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 transition"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#125238] font-bold text-white">
+                          {idx + 1}
+                        </span>
 
-                    return (
-                      <article
-                        key={checkpoint.id}
-                        className={`rounded-xl border p-4 transition ${
-                          isSelected
-                            ? "border-emerald-200 bg-emerald-50/50"
-                            : "border-slate-200 bg-[#f8fafc]"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-white ${
-                              isSelected ? "bg-[#125238]" : "bg-slate-400"
-                            }`}
-                          >
-                            {idx + 1}
-                          </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-slate-950">
+                            {checkpoint.name}
+                          </h3>
 
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-bold text-slate-950">
-                              {checkpoint.name}
-                            </h3>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {checkpoint.description || "Mốc kiểm soát vệ tinh an toàn"}
+                          </p>
 
-                            <p className="mt-1 text-xs text-slate-600">
-                              {checkpoint.description || "Mốc kiểm soát vệ tinh an toàn"}
-                            </p>
+                          <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+                            <div>
+                              <span className="text-slate-400">Tọa độ: </span>
+                              <strong className="text-slate-800">
+                                {Number(checkpoint.latitude).toFixed(4)}, {Number(checkpoint.longitude).toFixed(4)}
+                              </strong>
+                            </div>
 
-                            <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                              <div>
-                                <span className="text-slate-400">Tọa độ: </span>
-                                <strong className="text-slate-800">
-                                  {Number(checkpoint.latitude).toFixed(4)}, {Number(checkpoint.longitude).toFixed(4)}
-                                </strong>
-                              </div>
-
-                              <div>
-                                <span className="text-slate-400">Bán kính quét: </span>
-                                <strong className="text-slate-800">
-                                  {checkpoint.defaultRadiusMeters || 50}m
-                                </strong>
-                              </div>
+                            <div>
+                              <span className="text-slate-400">Bán kính quét: </span>
+                              <strong className="text-slate-800">
+                                {checkpoint.defaultRadiusMeters || 50}m
+                              </strong>
                             </div>
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={() => toggleCheckpoint(checkpoint.id)}
-                            className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                              isSelected ? "bg-[#125238]" : "bg-slate-300"
-                            }`}
-                            aria-label="Đổi trạng thái bắt buộc"
-                          >
-                            <span
-                              className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${
-                                isSelected ? "left-6" : "left-1"
-                              }`}
-                            />
-                          </button>
                         </div>
-                      </article>
-                    );
-                  })
+
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[#125238]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#125238]" />
+                          Bắt buộc
+                        </span>
+                      </div>
+                    </article>
+                  ))
                 )}
               </div>
             </section>
@@ -641,7 +591,7 @@ export function LeaderCreateTripStepTwo() {
                     Trạm bắt buộc
                   </span>
                   <strong className="block text-sm">
-                    {selectedCheckpointIds.length}/{destinationCheckpoints.length}
+                    {currentCheckpoints.length} mốc
                   </strong>
                 </div>
 

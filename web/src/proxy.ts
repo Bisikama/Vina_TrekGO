@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // CF02 discovery is public. Booking pages enforce real bearer auth through the shared API.
-  if (path === '/trips' || path.startsWith('/trips/') || path === '/bookings' || path.startsWith('/bookings/') || path === '/my-trips') {
+  if (path === '/trips' || path.startsWith('/trips/') || path === '/bookings' || path.startsWith('/bookings/') || path === '/my-trips' || path === '/payment-return') {
     return NextResponse.next();
   }
 
