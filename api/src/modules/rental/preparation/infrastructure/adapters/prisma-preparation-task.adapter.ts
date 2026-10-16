@@ -19,7 +19,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { AppError } from 'src/shared/errors/app-error';
-import { WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
+import { PREPARATION_ERROR_CODES as PR, WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location';
 import type {
   ClaimPreparationTaskCommand,
@@ -143,7 +143,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
             pickedQty: line.rentalUnitAssignmentsViaOrderLineId.length,
           })),
           version: row.version,
-          allowedActions: warehouseAllowedActions(row.status, row.staffId, query.actorUserId),
+          allowedActions: preparationAllowedActions(row.status, row.staffId, query.actorUserId),
         };
       }),
       pagination: {
@@ -364,17 +364,17 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
             unitId: command.unitId,
             packageId: task.packageId,
             snapshotStage: SnapshotStage.PRE_HANDOVER,
-            condition: command.condition as EquipmentCondition,
+            condition: command.condition,
             notes: command.notes ?? null,
-            accessories: (command.accessories ?? []) as unknown as Prisma.InputJsonValue,
-            evidenceIds: evidenceIds as unknown as Prisma.InputJsonValue,
+            accessories: command.accessories ?? [],
+            evidenceIds: evidenceIds,
             takenBy: command.actorUserId,
             createdAt: command.now,
           },
         });
         await tx.equipmentUnit.update({
           where: { id: command.unitId },
-          data: { condition: command.condition as EquipmentCondition, version: { increment: 1 } },
+          data: { condition: command.condition, version: { increment: 1 } },
         });
 
         const completeness = await preparationCompleteness(tx, task.orderId);
@@ -551,7 +551,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           data: { status: RentalOrderStatus.READY_FOR_HANDOVER, version: { increment: 1 } },
         });
 
-        const logisticsTask = await tx.deliveryTask.upsert({
+        const deliveryTask = await tx.deliveryTask.upsert({
           where: { orderId_taskType: { orderId: order.id, taskType: DeliveryTaskType.HANDOVER } },
           update: {
             packageId: pkg.id,
@@ -580,7 +580,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
             eventType: 'RENTAL_READY_FOR_HANDOVER',
             aggregateType: 'RentalOrder',
             aggregateId: order.id,
-            payload: jsonValue({ orderId: order.id, packageId: pkg.id, logisticsTaskId: logisticsTask.id, plannedHandoverAt: order.plannedHandoverAt.toISOString() }),
+            payload: jsonValue({ orderId: order.id, packageId: pkg.id, deliveryTaskId: deliveryTask.id, logisticsTaskId: deliveryTask.id, plannedHandoverAt: order.plannedHandoverAt.toISOString() }),
           },
         });
         await writePreparationAudit(tx, {
@@ -589,14 +589,15 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           entityType: 'InventoryTask',
           entityId: task.id,
           oldValues: { status: task.status },
-          newValues: { status: updatedTask.status, orderStatus: RentalOrderStatus.READY_FOR_HANDOVER, logisticsTaskId: logisticsTask.id },
+          newValues: { status: updatedTask.status, orderStatus: RentalOrderStatus.READY_FOR_HANDOVER, deliveryTaskId: deliveryTask.id, logisticsTaskId: deliveryTask.id },
           requestId: command.idempotencyKey,
         });
         return {
           taskId: updatedTask.id,
           taskStatus: updatedTask.status,
           orderStatus: RentalOrderStatus.READY_FOR_HANDOVER,
-          logisticsTaskId: logisticsTask.id,
+          deliveryTaskId: deliveryTask.id,
+          logisticsTaskId: deliveryTask.id,
           version: updatedTask.version,
         };
       },
@@ -1124,7 +1125,7 @@ function mapCandidateView(unit: {
     expectedReadyAt: unit.expectedReadyAt?.toISOString() ?? null,
     version: unit.version,
     custodian: unit.currentInventoryLocation
-      ? { type: 'WAREHOUSE', id: unit.currentInventoryLocation.id, displayName: unit.currentInventoryLocation.name }
+      ? { type: 'INVENTORY_LOCATION', id: unit.currentInventoryLocation.id, displayName: unit.currentInventoryLocation.name }
       : null,
   };
 }
@@ -1301,7 +1302,7 @@ async function validatePackageReadiness(
       return { complete: false, reason: 'UNSAFE', details: { unitId: unit.id, condition: unit.condition }, assignments: [] };
     }
 
-    // 3. Current inventory location must match primary warehouse
+    // 3. Current inventory location must match primary inventory location
     if (unit.currentInventoryLocationId !== primaryLocationId) {
       return {
         complete: false,
@@ -1386,7 +1387,7 @@ async function validatePackageReadiness(
   return { complete: true, assignments: assignments.map((a) => ({ id: a.id, equipmentUnitId: a.equipmentUnitId })) };
 }
 
-function warehouseAllowedActions(status: InventoryTaskStatus, staffId: string | null, actorUserId: string): string[] {
+function preparationAllowedActions(status: InventoryTaskStatus, staffId: string | null, actorUserId: string): string[] {
   if (!staffId) return status === InventoryTaskStatus.OPEN ? ['CLAIM'] : [];
   if (staffId !== actorUserId) return [];
   switch (status) {

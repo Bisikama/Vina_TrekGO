@@ -40,7 +40,7 @@ export class RentalOperationController {
     description: `
 **RB-API-102** — Kiểm tra số lượng thiết bị còn khả dụng theo Trip và khoảng thời gian thuê.
 
-- Server tự tính \`occupiedWindow\` dựa trên thông tin chuyến đi, logistics và RentalPolicy.
+- Server tự tính \`occupiedWindow\` dựa trên thông tin chuyến đi, delivery (phương thức giao nhận) và RentalPolicy.
 - \`availableCount\` là snapshot tham khảo tại thời điểm truy vấn; số lượng thực tế sẽ được recheck trong transaction khi tạo đơn.
 - Không giới hạn số lượng theo participant hay nhóm.
 `,

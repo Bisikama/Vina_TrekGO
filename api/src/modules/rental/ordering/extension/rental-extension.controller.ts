@@ -41,7 +41,7 @@ export class RentalExtensionController {
     description: `
 Tạo báo giá cho việc gia hạn thời gian thuê thiết bị.
 
-- Kiểm tra chính sách gia hạn (policy) và logistics.
+- Kiểm tra chính sách gia hạn (policy) và delivery (phương thức giao nhận).
 - **Không giữ tồn kho** (capacity hold) tại bước này.
 - Quote gia hạn có thời hạn hiệu lực; hết hạn cần tạo lại.
 - Trả về phí gia hạn bổ sung, ngày trả mới và điều khoản áp dụng.

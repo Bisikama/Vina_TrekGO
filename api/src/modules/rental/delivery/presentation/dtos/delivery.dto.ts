@@ -74,7 +74,7 @@ export const MarkNoShowBodySchema = z.object({
 export type MarkNoShowBodyDto = z.infer<typeof MarkNoShowBodySchema>;
 
 export const AssignRentalTaskBodySchema = z.object({
-  taskType: z.enum(['WAREHOUSE', 'OUTBOUND', 'RETURN']),
+  taskType: z.enum(['PREPARATION', 'WAREHOUSE', 'OUTBOUND', 'RETURN']),
   assigneeId: UUID,
   reason: z.string().trim().min(3).max(1000),
   expectedVersion: z.number().int().min(1),
@@ -82,7 +82,7 @@ export const AssignRentalTaskBodySchema = z.object({
 export type AssignRentalTaskBodyDto = z.infer<typeof AssignRentalTaskBodySchema>;
 
 export const ListAdminRentalTasksQuerySchema = z.object({
-  type: z.enum(['WAREHOUSE', 'OUTBOUND', 'RETURN']).optional(),
+  type: z.enum(['PREPARATION', 'WAREHOUSE', 'OUTBOUND', 'RETURN']).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   assignment: z.enum(['UNASSIGNED', 'ASSIGNED', 'ME']).optional(),
   page: z.coerce.number().int().min(1).default(1),

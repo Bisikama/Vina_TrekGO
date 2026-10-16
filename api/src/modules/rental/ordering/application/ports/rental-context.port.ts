@@ -75,7 +75,7 @@ export interface RentalEligibilityContext {
   recipientOptions: RentalRecipientOption[]
   pickup: RentalPointContext
   dropoff: RentalPointContext
-  returnOptions: RentalReturnOption[] // available, server-issued logistics options
+  returnOptions: RentalReturnOption[] // available, server-issued delivery options
   rentalCutoffAt: Date
   contextVersion: number
   existingOpenOrderId: string | null
