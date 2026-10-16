@@ -69,111 +69,135 @@ function getCategoryKey(value: string) {
   return cleanCategoryName(value).toLocaleLowerCase("vi");
 }
 
-function NatureBurst() {
+function TrailCardEffect() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-20 motion-reduce:hidden"
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-3xl bg-emerald-950/10 backdrop-blur-[1px] motion-reduce:hidden"
     >
-      {[0, 1, 2, 3, 4, 5].map((piece) => (
-        <span
-          key={piece}
-          className="rental-nature-piece absolute left-1/2 top-1/2 h-7 w-7 text-emerald-500"
-        >
-          {piece % 3 === 1 ? (
-            <svg viewBox="0 0 24 24" className="h-full w-full" fill="none">
-              <circle cx="12" cy="6.5" r="3.5" fill="currentColor" />
-              <circle cx="17.5" cy="11.5" r="3.5" fill="currentColor" />
-              <circle cx="12" cy="17" r="3.5" fill="currentColor" />
-              <circle cx="6.5" cy="11.5" r="3.5" fill="currentColor" />
-              <circle cx="12" cy="11.8" r="2.3" className="fill-amber-300" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="h-full w-full" fill="none">
-              <path
-                d="M20.2 3.8C12.6 4 6.4 7.2 4.1 13.2c-1 2.7.4 5.8 3.4 6.5 5.9 1.4 11.6-4.9 12.7-15.9Z"
-                fill="currentColor"
-              />
-              <path
-                d="M5.6 18.5c3.2-4.2 6.8-7.1 11.2-9.2"
-                stroke="white"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-        </span>
-      ))}
+      <svg
+        viewBox="0 0 420 320"
+        preserveAspectRatio="none"
+        className="h-full w-full"
+        fill="none"
+      >
+        <path
+          d="M-15 285C70 235 65 155 151 178C232 199 218 82 310 112C354 126 374 67 438 42"
+          className="trail-click-route"
+          stroke="white"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray="12 12"
+        />
+
+        <g className="trail-click-step trail-click-step-one">
+          <ellipse cx="86" cy="221" rx="7" ry="12" fill="#ECFDF5" />
+          <circle cx="82" cy="205" r="3" fill="#ECFDF5" />
+          <circle cx="88" cy="203" r="3" fill="#ECFDF5" />
+        </g>
+
+        <g className="trail-click-step trail-click-step-two">
+          <ellipse cx="168" cy="171" rx="7" ry="12" fill="#ECFDF5" />
+          <circle cx="164" cy="155" r="3" fill="#ECFDF5" />
+          <circle cx="170" cy="153" r="3" fill="#ECFDF5" />
+        </g>
+
+        <g className="trail-click-step trail-click-step-three">
+          <ellipse cx="265" cy="112" rx="7" ry="12" fill="#ECFDF5" />
+          <circle cx="261" cy="96" r="3" fill="#ECFDF5" />
+          <circle cx="267" cy="94" r="3" fill="#ECFDF5" />
+        </g>
+
+        <g className="trail-click-checkpoint">
+          <circle cx="354" cy="71" r="27" fill="#D9F99D" />
+          <path
+            d="m337 82 13-21 8 12 7-10 12 19h-40Z"
+            fill="#166534"
+          />
+          <path d="M354 49v18" stroke="#166534" strokeWidth="4" />
+          <path d="m354 49 13 5-13 6V49Z" fill="#F59E0B" />
+        </g>
+      </svg>
+
+      <div className="trail-click-label absolute bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/40 bg-[#153E2E]/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-lg">
+        Lên đường khám phá
+      </div>
 
       <style jsx global>{`
-        .rental-nature-piece {
+        .trail-click-route {
+          stroke-dashoffset: 220;
+          animation: trail-route-draw 540ms ease-out forwards;
+          filter: drop-shadow(0 3px 5px rgb(6 78 59 / 0.45));
+        }
+
+        .trail-click-step {
           opacity: 0;
-          filter: drop-shadow(0 4px 5px rgb(20 83 45 / 0.18));
-          animation: rental-nature-burst 620ms cubic-bezier(0.16, 1, 0.3, 1)
-            forwards;
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: trail-step-pop 240ms ease-out forwards;
         }
 
-        .rental-nature-piece:nth-child(1) {
-          --burst-x: -150px;
-          --burst-y: -118px;
-          --burst-rotate: -32deg;
+        .trail-click-step-one {
+          animation-delay: 80ms;
         }
 
-        .rental-nature-piece:nth-child(2) {
-          --burst-x: 18px;
-          --burst-y: -155px;
-          --burst-rotate: 18deg;
-          color: #f59e0b;
-          animation-delay: 35ms;
+        .trail-click-step-two {
+          animation-delay: 190ms;
         }
 
-        .rental-nature-piece:nth-child(3) {
-          --burst-x: 150px;
-          --burst-y: -88px;
-          --burst-rotate: 44deg;
-          color: #22c55e;
-          animation-delay: 70ms;
+        .trail-click-step-three {
+          animation-delay: 300ms;
         }
 
-        .rental-nature-piece:nth-child(4) {
-          --burst-x: 148px;
-          --burst-y: 92px;
-          --burst-rotate: 72deg;
-          color: #fb7185;
-          animation-delay: 25ms;
+        .trail-click-checkpoint {
+          opacity: 0;
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: trail-checkpoint-pop 300ms cubic-bezier(0.16, 1, 0.3, 1)
+            340ms forwards;
         }
 
-        .rental-nature-piece:nth-child(5) {
-          --burst-x: -8px;
-          --burst-y: 150px;
-          --burst-rotate: 112deg;
-          color: #10b981;
-          animation-delay: 65ms;
+        .trail-click-label {
+          opacity: 0;
+          animation: trail-label-rise 280ms ease-out 230ms forwards;
         }
 
-        .rental-nature-piece:nth-child(6) {
-          --burst-x: -148px;
-          --burst-y: 82px;
-          --burst-rotate: -78deg;
-          color: #65a30d;
-          animation-delay: 45ms;
+        @keyframes trail-route-draw {
+          to {
+            stroke-dashoffset: 0;
+          }
         }
 
-        @keyframes rental-nature-burst {
+        @keyframes trail-step-pop {
           0% {
             opacity: 0;
-            transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
-          }
-          22% {
-            opacity: 1;
+            transform: scale(0.4) rotate(-18deg);
           }
           100% {
+            opacity: 1;
+            transform: scale(1) rotate(8deg);
+          }
+        }
+
+        @keyframes trail-checkpoint-pop {
+          0% {
             opacity: 0;
-            transform: translate(
-                calc(-50% + var(--burst-x)),
-                calc(-50% + var(--burst-y))
-              )
-              scale(1) rotate(var(--burst-rotate));
+            transform: scale(0.25) translateY(16px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        @keyframes trail-label-rise {
+          from {
+            opacity: 0;
+            transform: translate(-50%, 10px);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0);
           }
         }
       `}</style>
@@ -204,7 +228,7 @@ function ProductCard({
   const router = useRouter();
   const imageUrl = item.imageUrls[0];
   const available = item.availableCount > 0;
-  const [burstKey, setBurstKey] = useState(0);
+  const [trailEffectKey, setTrailEffectKey] = useState(0);
   const navigationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const detailUrl = `/rental-products/${encodeURIComponent(
@@ -220,7 +244,7 @@ function ProductCard({
     [],
   );
 
-  const openWithNatureBurst = (event: MouseEvent<HTMLAnchorElement>) => {
+  const openWithTrailEffect = (event: MouseEvent<HTMLAnchorElement>) => {
     if (
       event.button !== 0 ||
       event.metaKey ||
@@ -232,7 +256,7 @@ function ProductCard({
     }
 
     event.preventDefault();
-    setBurstKey((current) => current + 1);
+    setTrailEffectKey((current) => current + 1);
 
     if (navigationTimer.current) {
       clearTimeout(navigationTimer.current);
@@ -244,13 +268,13 @@ function ProductCard({
   };
 
   return (
-    <div className="relative h-full">
-      {burstKey > 0 && <NatureBurst key={burstKey} />}
+    <div className="relative h-full rounded-3xl shadow-[0_14px_38px_rgba(16,185,129,0.20)] transition duration-300 hover:shadow-[0_22px_52px_rgba(5,150,105,0.30)]">
+      {trailEffectKey > 0 && <TrailCardEffect key={trailEffectKey} />}
 
-      <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-emerald-950/10 bg-white shadow-[0_12px_38px_rgba(21,62,46,0.08)] transition duration-300 hover:-translate-y-1 hover:border-emerald-700/25 hover:shadow-[0_20px_46px_rgba(21,62,46,0.14)]">
+      <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-emerald-700/15 bg-white transition duration-300 hover:-translate-y-1 hover:border-emerald-600/35">
       <Link
         href={detailUrl}
-        onClick={openWithNatureBurst}
+        onClick={openWithTrailEffect}
         className="relative block aspect-[4/3] overflow-hidden bg-[#EEF3EF]"
       >
         {imageUrl ? (
@@ -291,7 +315,7 @@ function ProductCard({
           </span>
         </div>
 
-        <Link href={detailUrl} onClick={openWithNatureBurst}>
+        <Link href={detailUrl} onClick={openWithTrailEffect}>
           <h2 className="text-lg font-extrabold text-gray-900 transition group-hover:text-[#1B5E41]">
             {item.name}
           </h2>
@@ -321,7 +345,7 @@ function ProductCard({
 
           <Link
             href={detailUrl}
-            onClick={openWithNatureBurst}
+            onClick={openWithTrailEffect}
             className="rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#154B36]"
           >
             Xem chi tiết
@@ -343,6 +367,8 @@ export function RentalCatalogPage({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryKey, setCategoryKey] = useState("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const categoryRailRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -442,6 +468,13 @@ export function RentalCatalogPage({
       return matchesCategory && matchesSearch;
     });
   }, [categoryKey, data, search]);
+
+  const scrollCategories = (direction: "left" | "right") => {
+    categoryRailRef.current?.scrollBy({
+      left: direction === "left" ? -320 : 320,
+      behavior: "smooth",
+    });
+  };
 
   if (loading) {
     return (
@@ -556,11 +589,11 @@ export function RentalCatalogPage({
       </section>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+        <section className="overflow-hidden rounded-3xl border border-emerald-900/10 bg-white shadow-[0_12px_35px_rgba(21,62,46,0.08)]">
+          <div className="grid gap-3 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="relative">
               <svg
-                className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400"
+                className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-700/60"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -575,53 +608,121 @@ export function RentalCatalogPage({
 
               <input
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Tìm lều, balo, túi ngủ..."
-                className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-12 pr-4 text-sm outline-none transition focus:border-[#1B5E41] focus:bg-white"
+                className="h-14 w-full rounded-2xl border border-emerald-900/10 bg-[#F6F9F6] pl-12 pr-4 text-sm outline-none transition focus:border-emerald-600/40 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
               />
             </div>
 
-            <div className="text-sm font-semibold text-gray-600">
-              {filteredItems.length} thiết bị phù hợp
-            </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((current) => !current)}
+              aria-expanded={filtersOpen}
+              className="group flex h-14 min-w-[230px] items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-[#153E2E] to-[#247653] px-4 text-left text-white shadow-[0_10px_24px_rgba(21,62,46,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(21,62,46,0.30)]"
+            >
+              <span className="flex items-center gap-3">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-lime-300 text-[#153E2E] shadow-inner">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M4 19 10 8l3 5 2-3 5 9H4Z" strokeLinejoin="round" />
+                    <path d="M12 4v4M12 4l4 2-4 2" strokeLinecap="round" />
+                  </svg>
+                </span>
+
+                <span>
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-100/75">
+                    Túi lọc hành trang
+                  </span>
+                  <span className="mt-0.5 block text-sm font-extrabold">
+                    {filteredItems.length} thiết bị phù hợp
+                  </span>
+                </span>
+              </span>
+
+              <svg
+                viewBox="0 0 24 24"
+                className={`h-5 w-5 shrink-0 transition-transform duration-300 ${
+                  filtersOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
 
-          <div className="mt-5 border-t border-gray-100 pt-4">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-gray-400">
-              Danh mục đang có thiết bị
-            </p>
-
-            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                type="button"
-                onClick={() => setCategoryKey("all")}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${
-                  categoryKey === "all"
-                    ? "bg-[#1B5E41] text-white shadow-sm"
-                    : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-[#1B5E41]"
-                }`}
-              >
-                Tất cả
-                <span className="ml-2 opacity-70">{data.items.length}</span>
-              </button>
-
-              {categoryFilters.map((category) => (
+          <div
+            className={`grid border-emerald-900/10 bg-gradient-to-r from-[#F1F7F2] via-white to-[#F6FAEC] transition-all duration-300 ${
+              filtersOpen
+                ? "grid-rows-[1fr] border-t opacity-100"
+                : "grid-rows-[0fr] border-t-0 opacity-0"
+            }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4">
                 <button
-                  key={category.key}
                   type="button"
-                  onClick={() => setCategoryKey(category.key)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${
-                    categoryKey === category.key
-                      ? "bg-[#1B5E41] text-white shadow-sm"
-                      : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-[#1B5E41]"
-                  }`}
+                  onClick={() => scrollCategories("left")}
+                  aria-label="Kéo danh mục sang trái"
+                  className="hidden h-10 w-10 shrink-0 place-items-center rounded-full border border-emerald-900/10 bg-white text-[#153E2E] shadow-sm transition hover:bg-lime-100 sm:grid"
                 >
-                  {category.label}
-                  <span className="ml-2 opacity-70">{category.count}</span>
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="m15 18-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-              ))}
+
+                <div
+                  ref={categoryRailRef}
+                  className="flex flex-1 snap-x snap-mandatory gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setCategoryKey("all")}
+                    className={`shrink-0 snap-start rounded-2xl border px-4 py-2.5 text-xs font-extrabold transition ${
+                      categoryKey === "all"
+                        ? "border-[#153E2E] bg-[#153E2E] text-white shadow-md"
+                        : "border-emerald-900/10 bg-white text-gray-700 hover:border-emerald-500/30 hover:bg-lime-50"
+                    }`}
+                  >
+                    Tất cả hành trang
+                    <span className="ml-2 opacity-65">{data.items.length}</span>
+                  </button>
+
+                  {categoryFilters.map((category) => (
+                    <button
+                      key={category.key}
+                      type="button"
+                      onClick={() => setCategoryKey(category.key)}
+                      className={`shrink-0 snap-start rounded-2xl border px-4 py-2.5 text-xs font-extrabold transition ${
+                        categoryKey === category.key
+                          ? "border-emerald-700 bg-emerald-700 text-white shadow-md"
+                          : "border-emerald-900/10 bg-white text-gray-700 hover:border-emerald-500/30 hover:bg-lime-50"
+                      }`}
+                    >
+                      {category.label}
+                      <span className="ml-2 opacity-65">{category.count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => scrollCategories("right")}
+                  aria-label="Kéo danh mục sang phải"
+                  className="hidden h-10 w-10 shrink-0 place-items-center rounded-full border border-emerald-900/10 bg-white text-[#153E2E] shadow-sm transition hover:bg-lime-100 sm:grid"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </section>
