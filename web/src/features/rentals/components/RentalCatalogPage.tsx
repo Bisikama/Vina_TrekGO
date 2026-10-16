@@ -69,6 +69,52 @@ function getCategoryKey(value: string) {
   return cleanCategoryName(value).toLocaleLowerCase("vi");
 }
 
+function TrailCardPreview() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
+    >
+      <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/5 via-emerald-900/5 to-emerald-950/20" />
+
+      <svg
+        viewBox="0 0 420 320"
+        preserveAspectRatio="xMidYMid slice"
+        className="h-full w-full opacity-55 transition duration-500 group-hover:opacity-90"
+        fill="none"
+      >
+        <path
+          d="M-15 285C70 235 65 155 151 178C232 199 218 82 310 112C354 126 374 67 438 42"
+          stroke="white"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray="10 12"
+          className="drop-shadow-md"
+        />
+
+        <g className="origin-center transition duration-500 group-hover:scale-110">
+          <circle cx="354" cy="71" r="23" fill="#D9F99D" fillOpacity="0.92" />
+          <circle
+            cx="354"
+            cy="71"
+            r="29"
+            stroke="#ECFCCB"
+            strokeWidth="2"
+            strokeDasharray="4 5"
+          />
+          <path d="m339 81 11-18 7 10 7-8 10 16h-35Z" fill="#166534" />
+          <path d="M354 53v14" stroke="#166534" strokeWidth="3" />
+          <path d="m354 53 11 4-11 5v-9Z" fill="#F59E0B" />
+        </g>
+      </svg>
+
+      <div className="absolute left-1/2 top-[34%] -translate-x-1/2 translate-y-2 scale-95 whitespace-nowrap rounded-full border border-white/45 bg-[#153E2E]/75 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-white opacity-0 shadow-lg backdrop-blur-sm transition duration-300 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
+        Chạm để khám phá trang bị
+      </div>
+    </div>
+  );
+}
+
 function TrailCardEffect() {
   return (
     <div
@@ -77,7 +123,7 @@ function TrailCardEffect() {
     >
       <svg
         viewBox="0 0 420 320"
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid slice"
         className="h-full w-full"
         fill="none"
       >
@@ -271,7 +317,9 @@ function ProductCard({
     <div className="relative h-full rounded-3xl shadow-[0_14px_38px_rgba(16,185,129,0.20)] transition duration-300 hover:shadow-[0_22px_52px_rgba(5,150,105,0.30)]">
       {trailEffectKey > 0 && <TrailCardEffect key={trailEffectKey} />}
 
-      <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-emerald-700/15 bg-white transition duration-300 hover:-translate-y-1 hover:border-emerald-600/35">
+      <article className="group relative flex h-full flex-col overflow-hidden rounded-3xl border border-emerald-700/15 bg-white transition duration-300 hover:-translate-y-1 hover:border-emerald-600/35">
+        <TrailCardPreview />
+
       <Link
         href={detailUrl}
         onClick={openWithTrailEffect}
