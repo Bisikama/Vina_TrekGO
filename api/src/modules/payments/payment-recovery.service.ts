@@ -8,6 +8,7 @@ import { PaymentProvider, ProviderFinancialResult, ProviderScope } from './payme
 import { paymentHash, paymentRecoveryConfig, providerCall } from './payment-utils'
 import { PaymentWebhooksService } from './payment-webhooks.service'
 import { RefundsService } from './refunds.service'
+import { paymentFailure, paymentTransaction } from './payment-transaction'
 
 type Kind = 'payment' | 'refund'
 type Claim<T> = { row: T; review: boolean; now: Date }
@@ -36,11 +37,13 @@ export class PaymentRecoveryService {
   private async claim(kind: Kind, id?: string): Promise<Claim<Payment | Refund> | null> {
     const config = paymentRecoveryConfig()
     const table = Prisma.raw(kind === 'payment' ? 'payments' : 'refunds')
-    return this.db.$transaction(async (tx) => {
+    const scopes = Prisma.join(this.provider.scopes.map((scope) => Prisma.sql`(payment_gateway = ${scope.gateway}
+      AND provider_environment = ${scope.environment}::payment_environment
+      AND merchant_account_key = ${scope.merchantAccountKey})`), ' OR ')
+    return paymentTransaction(this.db, this.logger, 'recovery.claim', { kind, resourceId: id }, async (tx, stage) => {
+      stage('lock.claim')
       const ids = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
-        SELECT id FROM ${table} WHERE payment_gateway = ${this.provider.scope.gateway}
-        AND provider_environment = ${this.provider.scope.environment}::payment_environment
-        AND merchant_account_key = ${this.provider.scope.merchantAccountKey}
+        SELECT id FROM ${table} WHERE (${scopes})
         ${id ? Prisma.sql`AND id = ${id}::uuid` : Prisma.empty}
         AND (lease_until IS NULL OR lease_until <= clock_timestamp())
         AND ((reconcile_status IN ('SCHEDULED', 'RUNNING'))
@@ -49,6 +52,7 @@ export class PaymentRecoveryService {
         AND (next_retry_at IS NULL OR next_retry_at <= clock_timestamp())
         ORDER BY next_retry_at NULLS FIRST, created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`)
       if (!ids.length) return null
+      stage('claim.lease')
       const before =
         kind === 'payment'
           ? await tx.payment.findUniqueOrThrow({ where: { id: ids[0].id } })
@@ -72,7 +76,10 @@ export class PaymentRecoveryService {
   private async defer(kind: Kind, claim: Claim<Payment | Refund>, reason = 'RECOVERY_UNKNOWN') {
     const config = paymentRecoveryConfig()
     const table = Prisma.raw(kind === 'payment' ? 'payments' : 'refunds')
-    const review = claim.review || claim.row.retryCount >= config.maxAttempts
+    const awaitingIpn = kind === 'payment' &&
+      this.provider.forGateway(claim.row.paymentGateway!)?.waitForCheckoutExpiry &&
+      (claim.row as Payment).expiresAt && (claim.row as Payment).expiresAt! > claim.now
+    const review = claim.review || (!awaitingIpn && claim.row.retryCount >= config.maxAttempts)
     // Only the current unexpired owner can persist. A stale owner never clears a newer lease.
     await this.db.$executeRaw(Prisma.sql`UPDATE ${table} SET
       status = CASE WHEN status = 'PENDING' THEN 'PROCESSING'::${Prisma.raw(kind === 'payment' ? 'payment_status' : 'refund_status')} ELSE status END,
@@ -84,7 +91,7 @@ export class PaymentRecoveryService {
       AND version = ${claim.row.version} AND lease_until > clock_timestamp()`)
   }
 
-  async reconcilePayment(id?: string): Promise<boolean> {
+  async reconcilePayment(id?: string, deferInbox = false): Promise<boolean> {
     const value = await this.claim('payment', id)
     if (!value) return false
     const claim = value as Claim<Payment>
@@ -98,7 +105,7 @@ export class PaymentRecoveryService {
     )
     if (
       result.kind === 'NOT_FOUND' &&
-      this.provider.supportsIdempotentCreate &&
+      this.provider.forGateway(row.paymentGateway)?.supportsIdempotentCreate &&
       !claim.review &&
       ['PENDING', 'PROCESSING'].includes(row.status) &&
       row.expiresAt > claim.now
@@ -121,106 +128,119 @@ export class PaymentRecoveryService {
       await this.defer('payment', claim)
       return true
     }
-    await this.persistPayment(claim, result)
+    await this.persistPayment(claim, result, deferInbox)
     return true
   }
 
   private async persistPayment(
     claim: Claim<Payment>,
     result: Extract<ProviderFinancialResult, { kind: 'CONFIRMED_RESULT' }>,
+    deferInbox: boolean,
   ) {
-    const queuedId = await this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${claim.row.invoiceId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${claim.row.id}::uuid FOR UPDATE`
-      const row = await tx.payment.findUniqueOrThrow({ where: { id: claim.row.id } })
-      const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
-      if (
-        row.leaseToken !== claim.row.leaseToken ||
-        row.version !== claim.row.version ||
-        !row.leaseUntil ||
-        row.leaseUntil <= now
-      )
-        return null
-      const event = result.event
-      const mismatch =
-        event.kind !== 'PAYMENT' ||
-        event.gateway !== row.paymentGateway ||
-        event.environment !== row.providerEnvironment ||
-        event.merchantAccountKey !== row.merchantAccountKey ||
-        event.merchantRequestRef !== row.merchantRequestRef ||
-        event.currency !== row.currency ||
-        !row.amount.equals(event.amount)
-      if (claim.review || mismatch) {
-        await tx.auditLog.create({
-          data: {
-            action: 'PAYMENT_AUTHORITATIVE_QUERY_REVIEW',
-            entityType: 'Payment',
-            entityId: row.id,
-            newValues: { event: { ...event }, mismatch },
+    const queuedId = await paymentTransaction(
+      this.db,
+      this.logger,
+      'recovery.persist',
+      { paymentId: claim.row.id },
+      async (tx, stage) => {
+        stage('lock.invoice')
+        await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${claim.row.invoiceId}::uuid FOR UPDATE`
+        stage('lock.payment')
+        await tx.$queryRaw`SELECT id FROM payments WHERE id = ${claim.row.id}::uuid FOR UPDATE`
+        stage('persist')
+        const row = await tx.payment.findUniqueOrThrow({ where: { id: claim.row.id } })
+        const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        if (
+          row.leaseToken !== claim.row.leaseToken ||
+          row.version !== claim.row.version ||
+          !row.leaseUntil ||
+          row.leaseUntil <= now
+        )
+          return null
+        const event = result.event
+        const mismatch =
+          event.kind !== 'PAYMENT' ||
+          event.gateway !== row.paymentGateway ||
+          event.environment !== row.providerEnvironment ||
+          event.merchantAccountKey !== row.merchantAccountKey ||
+          event.merchantRequestRef !== row.merchantRequestRef ||
+          event.currency !== row.currency ||
+          !row.amount.equals(event.amount)
+        if (claim.review || mismatch) {
+          await tx.auditLog.create({
+            data: {
+              action: 'PAYMENT_AUTHORITATIVE_QUERY_REVIEW',
+              entityType: 'Payment',
+              entityId: row.id,
+              newValues: { event: { ...event }, mismatch },
+            },
+          })
+          await tx.payment.update({
+            where: { id: row.id },
+            data: {
+              reconcileStatus: 'NEEDS_REVIEW',
+              lastCheckedAt: now,
+              nextRetryAt: null,
+              lastErrorCode: mismatch ? 'PAYMENT_QUERY_MISMATCH' : row.lastErrorCode,
+              leaseToken: null,
+              leaseUntil: null,
+              version: { increment: 1 },
+            },
+          })
+          return null
+        }
+        const providerEventId = `query:${row.id}:${paymentHash(event)}`
+        const payload = { ...event, providerEventId }
+        const existing = await tx.paymentWebhookEvent.findFirst({
+          where: {
+            paymentGateway: event.gateway,
+            providerEnvironment: event.environment,
+            merchantAccountKey: event.merchantAccountKey,
+            providerEventId,
           },
         })
+        const inbox =
+          existing ??
+          (await tx.paymentWebhookEvent.create({
+            data: {
+              paymentGateway: event.gateway,
+              providerEnvironment: event.environment,
+              merchantAccountKey: event.merchantAccountKey,
+              providerEventId,
+              eventKind: 'PAYMENT',
+              payload,
+              payloadHash: paymentHash(payload),
+              verifiedAt: now,
+              processingStatus: 'RECEIVED',
+              paymentId: row.id,
+            },
+          }))
         await tx.payment.update({
           where: { id: row.id },
           data: {
-            reconcileStatus: 'NEEDS_REVIEW',
+            ...(result.checkout && ['PENDING', 'PROCESSING'].includes(row.status)
+              ? { checkoutData: result.checkout }
+              : {}),
+            reconcileStatus:
+              existing?.processed && !['PENDING', 'PROCESSING'].includes(row.status) ? 'RESOLVED' : 'SCHEDULED',
             lastCheckedAt: now,
-            nextRetryAt: null,
-            lastErrorCode: mismatch ? 'PAYMENT_QUERY_MISMATCH' : row.lastErrorCode,
+            nextRetryAt:
+              existing?.processed && !['PENDING', 'PROCESSING'].includes(row.status)
+                ? null
+                : new Date(now.getTime() + paymentRecoveryConfig().retrySeconds * 1000),
+            lastErrorCode: null,
             leaseToken: null,
             leaseUntil: null,
             version: { increment: 1 },
           },
         })
-        return null
-      }
-      const providerEventId = `query:${row.id}:${paymentHash(event)}`
-      const payload = { ...event, providerEventId }
-      const existing = await tx.paymentWebhookEvent.findFirst({
-        where: {
-          paymentGateway: event.gateway,
-          providerEnvironment: event.environment,
-          merchantAccountKey: event.merchantAccountKey,
-          providerEventId,
-        },
-      })
-      const inbox =
-        existing ??
-        (await tx.paymentWebhookEvent.create({
-          data: {
-            paymentGateway: event.gateway,
-            providerEnvironment: event.environment,
-            merchantAccountKey: event.merchantAccountKey,
-            providerEventId,
-            eventKind: 'PAYMENT',
-            payload,
-            payloadHash: paymentHash(payload),
-            verifiedAt: now,
-            processingStatus: 'RECEIVED',
-            paymentId: row.id,
-          },
-        }))
-      await tx.payment.update({
-        where: { id: row.id },
-        data: {
-          ...(result.checkout && ['PENDING', 'PROCESSING'].includes(row.status)
-            ? { checkoutData: result.checkout }
-            : {}),
-          reconcileStatus:
-            existing?.processed && !['PENDING', 'PROCESSING'].includes(row.status) ? 'RESOLVED' : 'SCHEDULED',
-          lastCheckedAt: now,
-          nextRetryAt:
-            existing?.processed && !['PENDING', 'PROCESSING'].includes(row.status)
-              ? null
-              : new Date(now.getTime() + paymentRecoveryConfig().retrySeconds * 1000),
-          lastErrorCode: null,
-          leaseToken: null,
-          leaseUntil: null,
-          version: { increment: 1 },
-        },
-      })
-      return inbox.id
-    })
-    if (queuedId) await this.inbox.process(queuedId)
+        return inbox.id
+      },
+    )
+    // Background recovery leaves durable inbox work to the event worker. Explicit
+    // reconciliation and deployments without that worker retain inline processing.
+    if (queuedId && (!deferInbox || process.env.PAYMENT_EVENTS_WORKER_ENABLED === 'false'))
+      await this.inbox.process(queuedId)
   }
 
   async reconcileRefund(id?: string): Promise<boolean> {
@@ -238,7 +258,8 @@ export class PaymentRecoveryService {
     )
     if (
       result.kind === 'NOT_FOUND' &&
-      this.provider.supportsIdempotentCreate &&
+      (this.provider.forGateway(row.paymentGateway!)?.supportsIdempotentCreate ||
+        this.provider.forGateway(row.paymentGateway!)?.supportsRefundDispatch) &&
       !claim.review &&
       ['PENDING', 'PROCESSING'].includes(row.status)
     ) {
@@ -305,10 +326,13 @@ export class PaymentRecoveryService {
     if (this.running || process.env.PAYMENT_RECOVERY_WORKER_ENABLED === 'false') return
     this.running = true
     try {
-      for (let i = 0; i < 10; i++) if (!(await this.reconcilePayment())) break
+      for (let i = 0; i < 10; i++) if (!(await this.reconcilePayment(undefined, true))) break
       for (let i = 0; i < 10; i++) if (!(await this.reconcileRefund())) break
-    } catch {
-      this.logger.warn('Payment recovery deferred; persisted leases remain reclaimable')
+    } catch (error) {
+      this.logger.warn({
+        message: 'Payment recovery deferred; persisted leases remain reclaimable',
+        ...paymentFailure(error),
+      })
     } finally {
       this.running = false
     }

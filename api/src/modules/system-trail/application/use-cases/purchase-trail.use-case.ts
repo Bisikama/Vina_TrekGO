@@ -13,7 +13,7 @@ export class PurchaseTrailUseCase {
     private readonly payments: PaymentsPort,
   ) {}
 
-  async execute(input: { trailId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod }) {
+  async execute(input: { trailId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod; clientIp?: string; gateway?: 'momo' | 'vnpay' }) {
     const key = paymentHash([input.actorUserId, input.trailId, 'trail-purchase', input.idempotencyKey])
     const reserved = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text`
@@ -151,6 +151,8 @@ export class PurchaseTrailUseCase {
       actorUserId: input.actorUserId,
       idempotencyKey: purchase.id,
       paymentMethod: input.paymentMethod,
+      clientIp: input.clientIp,
+      gateway: input.gateway,
     })
     const access = await this.db.trailAccess.findUniqueOrThrow({ where: { id: purchase.trailAccessId } })
     return {

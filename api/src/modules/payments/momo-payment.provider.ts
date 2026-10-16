@@ -57,10 +57,11 @@ function orderId(ref: string, kind: 'payment' | 'refund') {
   if (!new RegExp(`^${kind}:[0-9a-f-]{36}$`).test(ref)) throw new Error('Invalid merchant reference')
   return ref.replace(':', '-')
 }
-function httpsConfig(name: string) {
+function httpsConfig(name: string, allowLocal = false) {
   const value = process.env[name] ?? ''
   const url = new URL(value)
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error(`Invalid ${name}`)
+  const local = allowLocal && url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if ((!local && url.protocol !== 'https:') || url.username || url.password || url.hash) throw new Error(`Invalid ${name}`)
   return value
 }
 
@@ -73,6 +74,7 @@ export class MomoPaymentProvider extends PaymentProvider {
   private readonly secret: string
   private readonly ipnUrl: string
   private readonly redirectUrl: string
+  private readonly requestType: 'captureWallet' | 'payWithATM' | 'payWithMethod'
 
   constructor(private readonly db: PrismaService) {
     super()
@@ -89,7 +91,11 @@ export class MomoPaymentProvider extends PaymentProvider {
     if (this.partner.length > 100) throw new Error('Invalid MoMo partner code')
     this.scope = { gateway: 'momo', environment: 'SANDBOX', merchantAccountKey: this.partner }
     this.ipnUrl = httpsConfig('MOMO_SANDBOX_IPN_URL')
-    this.redirectUrl = httpsConfig('MOMO_SANDBOX_REDIRECT_URL')
+    this.redirectUrl = httpsConfig('MOMO_SANDBOX_REDIRECT_URL', true)
+    const requestType = process.env.MOMO_SANDBOX_REQUEST_TYPE ?? 'captureWallet'
+    if (requestType !== 'captureWallet' && requestType !== 'payWithATM' && requestType !== 'payWithMethod')
+      throw new Error('MOMO_SANDBOX_REQUEST_TYPE must be captureWallet, payWithATM or payWithMethod')
+    this.requestType = requestType
     const config = paymentRecoveryConfig()
     if (config.timeoutSeconds < 31 || config.leaseSeconds <= config.timeoutSeconds * 3 + 5)
       throw new Error('MoMo requires provider timeout >=31s and recovery lease >3*timeout+5s')
@@ -136,6 +142,7 @@ export class MomoPaymentProvider extends PaymentProvider {
   async createPayment(input: ProviderPaymentInput): Promise<ProviderResult> {
     if (!this.matches(input) || !this.money(input.amount, input.currency) || input.expiresAt.getTime() <= Date.now())
       return UNKNOWN
+    if (this.requestType === 'payWithATM' && Number(input.amount) < 10000) return UNKNOWN
     const id = orderId(input.merchantRequestRef, 'payment')
     const body = {
       partnerCode: this.partner,
@@ -143,12 +150,12 @@ export class MomoPaymentProvider extends PaymentProvider {
       orderId: id,
       amount: Number(input.amount),
       orderInfo: 'TrekGo payment',
-      requestType: 'captureWallet',
+      requestType: this.requestType,
       extraData: '',
-      autoCapture: true,
+      ...(this.requestType !== 'payWithATM' ? { autoCapture: true } : {}),
       lang: 'vi',
       ipnUrl: this.ipnUrl,
-      redirectUrl: this.redirectUrl,
+      redirectUrl: input.returnPath ? new URL(input.returnPath, this.redirectUrl).toString() : this.redirectUrl,
     }
     const data = await this.post('create', body, CREATE_FIELDS)
     if (!data || data.resultCode !== 0 || integer(data.amount) !== input.amount) return UNKNOWN

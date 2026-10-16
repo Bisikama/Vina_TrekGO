@@ -27,7 +27,7 @@ import {
   type VerifyRecipientBodyDto,
 } from '../dtos/delivery.dto';
 
-@ApiTags('Giao nhận thiết bị (Delivery Tasks)')
+@ApiTags('Delivery Tasks')
 @ApiBearerAuth('bearer')
 @Controller(['delivery/tasks', 'logistics/tasks'])
 @Auth([AuthType.Bearer])

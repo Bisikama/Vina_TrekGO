@@ -84,16 +84,18 @@ describe('Rental Terminology Hotfix — REST Route Contracts & Aliases', () => {
     });
 
     it('RentalTaskAdminController and RentalHandoverController roles must be configured correctly', () => {
-      const adminRoles = Reflect.getMetadata(
-        ROLES_KEY,
-        RentalTaskAdminController.prototype.assign,
-      );
+      const assignMethod = Object.getOwnPropertyDescriptor(
+        RentalTaskAdminController.prototype,
+        'assign',
+      )?.value;
+      const adminRoles = Reflect.getMetadata(ROLES_KEY, assignMethod);
       expect(adminRoles).toEqual([UserRole.ADMIN]);
 
-      const handoverRoles = Reflect.getMetadata(
-        ROLES_KEY,
-        RentalHandoverController.prototype.handover,
-      );
+      const handoverMethod = Object.getOwnPropertyDescriptor(
+        RentalHandoverController.prototype,
+        'handover',
+      )?.value;
+      const handoverRoles = Reflect.getMetadata(ROLES_KEY, handoverMethod);
       expect(handoverRoles).toEqual([UserRole.STAFF_DELIVERY]);
     });
   });

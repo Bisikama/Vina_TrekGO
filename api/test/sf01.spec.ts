@@ -65,10 +65,10 @@ suite('SF01 HTTP, real PostgreSQL transactions and promotion', () => {
   const db = new PrismaClient({ datasourceUrl: url || 'postgresql://postgres@localhost:1/sf01_test' })
   let app: INestApplication, service: LeaderApplicationsService, admin: User, admin2: User, owner: User, other: User
   const storage = {
-    createDeliveryUrl: jest.fn(async () => ({
+    createDeliveryUrl: jest.fn().mockResolvedValue({
       url: 'https://example.invalid/private-download',
       expiresAt: new Date(Date.now() + 300000),
-    })),
+    }),
   }
   const auth = (u: User) => `Bearer ${u.authUserId}`
   const fixtureUser = (role: 'USER' | 'ADMIN' | 'LEADER' = 'USER') =>
@@ -196,7 +196,7 @@ suite('SF01 HTTP, real PostgreSQL transactions and promotion', () => {
           signal: AbortSignal.timeout(20000),
         })
         expect(upload.status).toBe(200)
-        const uploaded = (await upload.json()) as any
+        const uploaded = (await upload.json())
         const ready = await complete.execute(
           intent.mediaId,
           { publicId: uploaded.public_id, version: uploaded.version, signature: uploaded.signature },

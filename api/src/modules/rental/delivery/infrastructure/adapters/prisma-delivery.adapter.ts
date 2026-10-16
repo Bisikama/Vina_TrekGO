@@ -156,7 +156,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         const task = await lockDeliveryTask(tx, command.taskId);
         assertExpectedVersion(task.version, command.expectedVersion);
         if (![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED].includes(task.status as any)) {
-          if (task.staffId === command.actorUserId && HANDOVER_TASK_MUTABLE_STATUSES.includes(task.status as any)) {
+          if (task.staffId === command.actorUserId && HANDOVER_TASK_MUTABLE_STATUSES.includes(task.status)) {
             const actor = await getActiveStaffDelivery(tx, command.actorUserId);
             return { assignee: { id: actor.id, displayName: actor.fullName }, version: task.version };
           }

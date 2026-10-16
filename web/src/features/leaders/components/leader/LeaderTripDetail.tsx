@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiClient } from "@/lib/axios";
 
 type Member = {
   id: string;
@@ -29,6 +30,27 @@ export function LeaderTripDetail({
 
   const [members, setMembers] =
     useState(initialMembers);
+  const [slots, setSlots] = useState<{ capacity: number; remainingSlots: number } | null>(null);
+
+  useEffect(() => {
+    if (!tripId) return;
+    apiClient
+      .get<any>(`/api/v1/trips/${tripId}`)
+      .then((res) => {
+        if (res.data) {
+          setSlots({
+            capacity: Number(res.data.capacity) || 15,
+            remainingSlots: Number(res.data.remainingSlots !== undefined ? res.data.remainingSlots : res.data.capacity),
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch trip slots:", err);
+      });
+  }, [tripId]);
+
+  const totalCapacity = trip?.capacity || slots?.capacity || 15;
+  const bookedCount = slots ? Math.max(0, slots.capacity - slots.remainingSlots) : members.length;
 
   const [search, setSearch] = useState("");
 
@@ -128,18 +150,18 @@ export function LeaderTripDetail({
           </p>
 
           <strong className="mt-4 block text-4xl text-[#125238]">
-            {members.length}
+            {bookedCount}
             <span className="text-base text-slate-400">
               {" "}
-              / {trip?.capacity || 15}
+              / {totalCapacity}
             </span>
           </strong>
 
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
             <div
-              className="h-full bg-[#125238]"
+              className="h-full bg-[#125238] transition-all"
               style={{
-                width: `${(members.length / (trip?.capacity || 15)) * 100}%`,
+                width: `${totalCapacity > 0 ? (bookedCount / totalCapacity) * 100 : 0}%`,
               }}
             />
           </div>
@@ -317,8 +339,22 @@ export function LeaderTripDetail({
             <tbody className="divide-y divide-slate-100">
               {visibleMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-sm text-slate-500">
-                    Chưa có thành viên nào tham gia chuyến đi này.
+                  <td colSpan={8} className="py-10 text-center">
+                    {bookedCount > 0 ? (
+                      <div className="max-w-md mx-auto p-5 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto mb-2 font-bold text-sm">
+                          {bookedCount}
+                        </div>
+                        <p className="font-bold text-slate-800 text-sm mb-1">
+                          Hệ thống đã ghi nhận {bookedCount} thành viên đặt chỗ thành công
+                        </p>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          (Số lượng vé đã thanh toán được trừ trực tiếp vào số chỗ. Danh sách chi tiết cá nhân của từng trekker như Họ tên, SĐT, Người liên hệ khẩn cấp đang chờ API quản trị đoàn từ Backend để đồng bộ lên bảng này).
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-slate-500">Chưa có thành viên nào tham gia chuyến đi này.</span>
+                    )}
                   </td>
                 </tr>
               ) : (

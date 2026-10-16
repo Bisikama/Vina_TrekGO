@@ -1,23 +1,26 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { PaymentProvider, VerifiedProviderEvent } from './payment-provider.port'
 import { RefundsService } from './refunds.service'
 import { paymentHash, paymentRecoveryConfig } from './payment-utils'
+import { paymentTransaction } from './payment-transaction'
 
 @Injectable()
 export class PaymentWebhooksService {
+  private readonly logger = new Logger(PaymentWebhooksService.name)
   constructor(
     private readonly db: PrismaService,
     private readonly provider: PaymentProvider,
     private readonly refunds: RefundsService,
   ) {}
 
-  async receive(rawBody: Buffer, headers: Record<string, string>) {
-    const event = await this.provider.verifyWebhook(rawBody, headers)
+  async receive(rawBody: Buffer, headers: Record<string, string>, gateway = this.provider.scope.gateway) {
+    const event = await this.provider.forGateway(gateway)?.verifyWebhook(rawBody, headers)
     if (!event) throw AppError.fromCode(E.PAYMENT_WEBHOOK_INVALID_SIGNATURE)
     const payloadHash =
+      event.gateway === 'vnpay' ? paymentHash(JSON.parse(rawBody.toString('utf8')).vnp_SecureHash.toLowerCase()) :
       event.gateway === 'momo' ? paymentHash(event) : createHash('sha256').update(rawBody).digest('hex')
     try {
       await this.provider.observeVerifiedEvent(event)
@@ -144,7 +147,7 @@ export class PaymentWebhooksService {
         throw new Error('Invalid refund inbox metadata')
       return this.refunds.applyEvent(event, { inboxId: eventId })
     }
-    return this.db.$transaction(async (tx) => {
+    return paymentTransaction(this.db, this.logger, 'inbox.process', { eventId }, async (tx, stage) => {
       const initial = await tx.paymentWebhookEvent.findUnique({ where: { id: eventId } })
       if (!initial || !['RECEIVED', 'RETRY'].includes(initial.processingStatus ?? '')) return
       const event = initial.payload as unknown as VerifiedProviderEvent
@@ -164,8 +167,10 @@ export class PaymentWebhooksService {
           event.merchantAccountKey,
           event.transactionRef,
         ])
+        stage('lock.transactionRef')
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))::text`
       }
+      stage('read.payment')
       const initialPayment = await tx.payment.findFirst({
         where: {
           paymentGateway: event.gateway,
@@ -175,16 +180,20 @@ export class PaymentWebhooksService {
         },
       })
       if (initialPayment) {
+        stage('lock.invoice')
         await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${initialPayment.invoiceId}::uuid FOR UPDATE`
+        stage('lock.payment')
         await tx.$queryRaw`SELECT id FROM payments WHERE id = ${initialPayment.id}::uuid FOR UPDATE`
       }
-      const claimed = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM payment_webhook_events WHERE id = ${eventId}::uuid
+      stage('lock.inbox')
+      const claimed = await tx.$queryRaw<{ id: string; attemptCount: number; now: Date }[]>`
+        SELECT id, attempt_count AS "attemptCount", clock_timestamp() AS now FROM payment_webhook_events WHERE id = ${eventId}::uuid
         AND processing_status IN ('RECEIVED', 'RETRY')
         AND (next_retry_at IS NULL OR next_retry_at <= clock_timestamp()) FOR UPDATE SKIP LOCKED`
       if (!claimed.length) return
-      const inbox = await tx.paymentWebhookEvent.findUniqueOrThrow({ where: { id: eventId } })
-      const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+      const [inbox] = claimed
+      const { now } = inbox
+      stage('apply')
       if (!initialPayment) {
         await tx.paymentWebhookEvent.update({
           where: { id: eventId },

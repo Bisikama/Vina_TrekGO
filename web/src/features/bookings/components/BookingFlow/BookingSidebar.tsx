@@ -21,17 +21,17 @@ export const BookingSidebar = ({
   const vat = Math.round(baseTripCost * 0.08);
   const grandTotal = baseTripCost + vat + equipmentCost;
 
-  const tripTitle = trip?.title || "Chinh phục Đỉnh Núi Bà Đen 986m";
+  const tripTitle = trip?.title || "Chuyến đi";
   const tripLocation =
-    trip?.location?.name || "Núi Bà Đen, TP. Tây Ninh, Tỉnh Tây Ninh";
+    trip?.location?.name || "Điểm đến trekking";
   const tripImage =
     trip?.image ||
     "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80";
-  const tripDuration = trip?.duration || "6 ngày";
+  const tripDuration = trip?.duration || "Lộ trình đầy đủ";
   const startDateStr = trip?.date
     ? `${trip.date.start} - ${trip.date.end}/${trip.date.year}`
-    : "5 - 10/2026";
-  const leaderName = trip?.leader?.name || "Leader hiện tại";
+    : "Lịch khởi hành mở";
+  const leaderName = trip?.leader?.name || "Leader đoàn";
   const leaderRating = trip?.leader?.rating || 5.0;
 
   return (

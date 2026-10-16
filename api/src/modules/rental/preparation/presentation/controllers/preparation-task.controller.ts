@@ -45,7 +45,7 @@ import {
   type PreparationTaskIdParamDto,
 } from '../dtos/preparation-task.dto';
 
-@ApiTags('Chuẩn bị thiết bị (Preparation Tasks)')
+@ApiTags('Preparation Tasks - Chuẩn Bị Đơn Hàng')
 @ApiBearerAuth('bearer')
 @Controller(['staff/warehouse/tasks', 'staff/preparation/tasks', 'inventory/tasks'])
 @Auth([AuthType.Bearer])

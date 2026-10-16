@@ -4,3 +4,6 @@ export * from "./BookingFlow/BookingSidebar";
 export * from "./BookingFlow/BookingSteps";
 export * from "./BookingFlow/BookingPaymentStep";
 export * from "./BookingFlow/BookingSuccessStep";
+export * from "./PublicBookingTrips";
+export * from "./MyBookings";
+export * from "./BookingSignIn";

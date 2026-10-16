@@ -364,17 +364,17 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
             unitId: command.unitId,
             packageId: task.packageId,
             snapshotStage: SnapshotStage.PRE_HANDOVER,
-            condition: command.condition as EquipmentCondition,
+            condition: command.condition,
             notes: command.notes ?? null,
-            accessories: (command.accessories ?? []) as unknown as Prisma.InputJsonValue,
-            evidenceIds: evidenceIds as unknown as Prisma.InputJsonValue,
+            accessories: command.accessories ?? [],
+            evidenceIds: evidenceIds,
             takenBy: command.actorUserId,
             createdAt: command.now,
           },
         });
         await tx.equipmentUnit.update({
           where: { id: command.unitId },
-          data: { condition: command.condition as EquipmentCondition, version: { increment: 1 } },
+          data: { condition: command.condition, version: { increment: 1 } },
         });
 
         const completeness = await preparationCompleteness(tx, task.orderId);

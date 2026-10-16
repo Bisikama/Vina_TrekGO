@@ -2,10 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLeaderPublicTrips } from "../../hooks/useLeaderPublicTrips";
-
+import { apiClient } from "@/lib/axios";
 
 const initialCandidates = [
   {
@@ -85,6 +84,29 @@ export function LeaderDashboard() {
   const [candidates, setCandidates] =
     useState(initialCandidates);
   const { trips: apiTrips, isLoading } = useLeaderPublicTrips({ page: 1, pageSize: 20 });
+  const [slotsMap, setSlotsMap] = useState<Record<string, { capacity: number; remainingSlots: number }>>({});
+
+  useEffect(() => {
+    async function loadSlots() {
+      try {
+        const res = await apiClient.get<any>("/api/v1/trips", { params: { pageSize: 50 } });
+        const items = res.data?.items || res.data || [];
+        const map: Record<string, { capacity: number; remainingSlots: number }> = {};
+        for (const item of items) {
+          if (item?.id) {
+            map[item.id] = {
+              capacity: Number(item.capacity) || 15,
+              remainingSlots: Number(item.remainingSlots !== undefined ? item.remainingSlots : item.capacity),
+            };
+          }
+        }
+        setSlotsMap(map);
+      } catch (err) {
+        console.error("Lỗi khi tải thông tin số chỗ chuyến đi:", err);
+      }
+    }
+    loadSlots();
+  }, []);
 
   return (
     <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6">
@@ -222,7 +244,11 @@ export function LeaderDashboard() {
                     IN_PROGRESS: "Đang diễn ra",
                   };
                   const statusLabel = statusMap[trip.status] || trip.status;
-                  const progress = 0; // Since we don't have current participants count yet
+                  const slotInfo = slotsMap[trip.id];
+                  const totalCap = trip.capacity || slotInfo?.capacity || 15;
+                  const rem = slotInfo !== undefined ? slotInfo.remainingSlots : totalCap;
+                  const occupied = Math.max(0, totalCap - rem);
+                  const progress = totalCap > 0 ? Math.min(100, Math.round((occupied / totalCap) * 100)) : 0;
                   // Random unsplash nature image based on id if no cover available
                   const image = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop";
 
@@ -260,7 +286,7 @@ export function LeaderDashboard() {
                         <div className="mt-3 flex items-center gap-3">
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
                             <div
-                              className="h-full rounded-full bg-[#125238]"
+                              className="h-full rounded-full bg-[#125238] transition-all"
                               style={{
                                 width: `${progress}%`,
                               }}
@@ -268,7 +294,7 @@ export function LeaderDashboard() {
                           </div>
 
                           <span className="text-xs font-semibold">
-                            0/{trip.capacity}
+                            {occupied}/{totalCap}
                           </span>
                         </div>
                       </div>
