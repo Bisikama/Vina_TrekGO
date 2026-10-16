@@ -77,7 +77,7 @@ export class PaymentRecoveryService {
     const config = paymentRecoveryConfig()
     const table = Prisma.raw(kind === 'payment' ? 'payments' : 'refunds')
     const awaitingIpn = kind === 'payment' &&
-      this.provider.forGateway(claim.row.paymentGateway!)?.paymentResultsViaIpnOnly &&
+      this.provider.forGateway(claim.row.paymentGateway!)?.waitForCheckoutExpiry &&
       (claim.row as Payment).expiresAt && (claim.row as Payment).expiresAt! > claim.now
     const review = claim.review || (!awaitingIpn && claim.row.retryCount >= config.maxAttempts)
     // Only the current unexpired owner can persist. A stale owner never clears a newer lease.
@@ -258,7 +258,8 @@ export class PaymentRecoveryService {
     )
     if (
       result.kind === 'NOT_FOUND' &&
-      this.provider.forGateway(row.paymentGateway!)?.supportsIdempotentCreate &&
+      (this.provider.forGateway(row.paymentGateway!)?.supportsIdempotentCreate ||
+        this.provider.forGateway(row.paymentGateway!)?.supportsRefundDispatch) &&
       !claim.review &&
       ['PENDING', 'PROCESSING'].includes(row.status)
     ) {

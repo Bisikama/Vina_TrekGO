@@ -1,6 +1,6 @@
-import { Body, Controller, Headers, Param, Post, Res } from '@nestjs/common'
-import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger'
-import type { Response } from 'express'
+import { Body, Controller, Headers, Param, Post, Req, Res } from '@nestjs/common'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiParam, ApiTags } from '@nestjs/swagger'
+import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { Auth } from '../../../../shared/decorators/auth.decorator'
 import { AuthType } from '../../../../shared/constants/auth.constant'
@@ -16,14 +16,21 @@ import { PaymentMethod } from '../../../payments/payment-provider.port'
 export class TrailPurchaseController {
   constructor(private readonly purchase: PurchaseTrailUseCase) {}
   @Post(':trailId/purchase')
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiParam({ name: 'trailId', type: String, format: 'uuid', description: 'UUID của cung đường muốn mua bản quyền',
+    example: '550e8400-e29b-41d4-a716-446655440000' })
+  @ApiHeader({ name: 'idempotency-key', required: true, description: 'Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)' })
+  @ApiBody({ description: 'Phương thức thanh toán', schema: { type: 'object', additionalProperties: false, required: ['paymentMethod'], properties: {
+    paymentMethod: { type: 'string', enum: ['QR', 'REDIRECT'], description: 'Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)', example: 'QR' },
+    gateway: { type: 'string', enum: ['momo', 'vnpay'], description: 'Bỏ trống để dùng cổng mặc định' },
+  } } })
   async create(
     @Param('trailId', new ZodValidationPipe(z.string().uuid())) trailId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']) }).strict()))
-    body: { paymentMethod: PaymentMethod },
+    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()))
+    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
     new ZodValidationPipe(
       z
@@ -32,7 +39,10 @@ export class TrailPurchaseController {
         .max(200)
         .regex(/^[\x21-\x7e]+$/),
     ).transform(idempotencyKey, { type: 'custom' })
-    const result = await this.purchase.execute({ trailId, actorUserId, idempotencyKey, ...body })
+    const result = await this.purchase.execute({
+      trailId, actorUserId, idempotencyKey, ...body,
+      clientIp: request.ip ?? request.socket.remoteAddress,
+    })
     response.status(result.httpStatus)
     return result.body
   }

@@ -18,6 +18,172 @@ import { PaymentWebhooksService } from '../src/modules/payments/payment-webhooks
 import { RefundsService } from '../src/modules/payments/refunds.service'
 import { RentalCheckoutService } from '../src/modules/rental/payments/rental-checkout.service'
 import { PaymentRecoveryService } from '../src/modules/payments/payment-recovery.service'
+import { PaymentsPort, SharedPaymentsPort } from '../src/modules/payments/payments.port'
+import { PurchaseTrailUseCase } from '../src/modules/system-trail/application/use-cases/purchase-trail.use-case'
+import { TrailPurchaseController } from '../src/modules/system-trail/presentation/controllers/trail-purchase.controller'
+import { RentalPaymentsController } from '../src/modules/rental/payments/rental-payments.controller'
+import { RentalExtensionPaymentsController } from '../src/modules/rental/payments/rental-extension-payments.controller'
+
+describe('VNPAY merchant query/refund protocol (stubbed HTTPS)', () => {
+  const original = { ...process.env }
+  const secret = 'merchant-test-secret'
+  let provider: VnpayPaymentProvider, db: any, payment: any, refund: any, http: jest.SpyInstance
+  const hmac = (text: string) => createHmac('sha512', secret).update(text).digest('hex')
+  const responseFields = ['vnp_ResponseId', 'vnp_Command', 'vnp_ResponseCode', 'vnp_Message', 'vnp_TmnCode',
+    'vnp_TxnRef', 'vnp_Amount', 'vnp_BankCode', 'vnp_PayDate', 'vnp_TransactionNo', 'vnp_TransactionType',
+    'vnp_TransactionStatus', 'vnp_OrderInfo']
+  const signedResponse = (command: string, extra: Record<string, string> = {}) => {
+    const data: Record<string, string> = {
+      vnp_ResponseId: 'response01', vnp_Command: command, vnp_ResponseCode: '00', vnp_Message: 'Success',
+      vnp_TmnCode: 'TEST1234', vnp_TxnRef: payment.id.replace(/-/g, ''), vnp_Amount: '1000000',
+      vnp_BankCode: 'NCB', vnp_PayDate: '20261016123000', vnp_TransactionNo: '123456',
+      vnp_TransactionType: '01', vnp_TransactionStatus: '00', vnp_OrderInfo: 'Thanh toan TrekGo', ...extra,
+    }
+    const fields = command === 'querydr' ? [...responseFields, 'vnp_PromotionCode', 'vnp_PromotionAmount'] : responseFields
+    data.vnp_SecureHash = hmac(fields.map((key) => data[key] ?? '').join('|'))
+    return data
+  }
+  const reply = (data: Record<string, string>) => http.mockResolvedValue(new Response(JSON.stringify(data), { status: 200 }))
+  const refundResponse = (extra: Record<string, string> = {}, command = 'refund') => signedResponse(command, {
+    vnp_Amount: refund.amount.mul(100).toFixed(0), vnp_TransactionType: refund.amount.equals(payment.amount) ? '02' : '03',
+    vnp_TransactionNo: '987654', vnp_OrderInfo: `Refund TrekGo ${refund.id}`, ...extra,
+  })
+  const refundInput = () => ({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef,
+    merchantRefundRef: refund.merchantRefundRef, amount: refund.amount.toFixed(0), currency: 'VND' })
+  beforeEach(async () => {
+    Object.assign(process.env, { PAYMENT_PROVIDER_ENVIRONMENT: 'SANDBOX', VNPAY_SANDBOX_TMN_CODE: 'TEST1234',
+      VNPAY_SANDBOX_HASH_SECRET: secret, VNPAY_SANDBOX_RETURN_URL: 'https://merchant.test/return',
+      VNPAY_SANDBOX_API_IP: '203.0.113.5' })
+    const paymentId = randomUUID(), refundId = randomUUID()
+    payment = { id: paymentId, merchantRequestRef: `payment:${paymentId}`, amount: new Prisma.Decimal(10000),
+      currency: 'VND', paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX', merchantAccountKey: 'TEST1234',
+      status: 'SUCCEEDED', transactionRef: '123456', createdAt: new Date('2026-10-16T05:00:00Z'), reconcileStatus: 'RESOLVED' }
+    refund = { id: refundId, paymentId, merchantRefundRef: `refund:${refundId}`, amount: new Prisma.Decimal(4000),
+      currency: 'VND', requestHashVersion: 1, status: 'PENDING', reconcileStatus: 'SCHEDULED',
+      createdAt: new Date('2026-10-16T06:00:00Z'), providerPayload: null, refundTransactionRef: null, payment }
+    db = { payment: { findFirst: jest.fn().mockImplementation(async () => payment), findUniqueOrThrow: jest.fn().mockImplementation(async () => payment) },
+      refund: { findFirst: jest.fn().mockImplementation(async () => refund), updateMany: jest.fn().mockImplementation(async ({ where, data }) => {
+        if (where.providerPayload && refund.providerPayload !== null) return { count: 0 }
+        Object.assign(refund, data)
+        return { count: 1 }
+      }) } }
+    provider = new VnpayPaymentProvider(db)
+    const result = await provider.createPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef,
+      amount: '10000', currency: 'VND', paymentMethod: 'REDIRECT', clientIp: '203.0.113.20',
+      expiresAt: new Date(Date.now() + 600000) })
+    if (result.kind !== 'CONFIRMED_RESULT') throw new Error('Missing checkout fixture')
+    payment.checkoutData = result.checkout
+    http = jest.spyOn(globalThis, 'fetch')
+  })
+  afterEach(() => { jest.restoreAllMocks(); process.env = { ...original } })
+
+  it('queries a missing-IPN payment with the original checkout date and ordered HMAC', async () => {
+    reply(signedResponse('querydr'))
+    const result = await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })
+    expect(result).toMatchObject({ kind: 'CONFIRMED_RESULT', event: { kind: 'PAYMENT', status: 'SUCCEEDED',
+      amount: '10000', occurredAt: '2026-10-16T05:30:00.000Z', transactionRef: '123456' } })
+    const [url, options] = http.mock.calls[0]
+    expect(url).toBe('https://sandbox.vnpayment.vn/merchant_webapi/api/transaction')
+    expect(options.redirect).toBe('error')
+    const body = JSON.parse(options.body)
+    expect(body.vnp_TransactionDate).toBe(new URL(payment.checkoutData.url).searchParams.get('vnp_CreateDate'))
+    expect(body.vnp_IpAddr).toBe('203.0.113.5')
+    expect(body.vnp_SecureHash).toBe(hmac([body.vnp_RequestId, '2.1.0', 'querydr', 'TEST1234', body.vnp_TxnRef,
+      body.vnp_TransactionDate, body.vnp_CreateDate, '203.0.113.5', body.vnp_OrderInfo].join('|')))
+    await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })
+    expect(JSON.parse(http.mock.calls[1][1].body).vnp_RequestId).not.toBe(body.vnp_RequestId)
+  })
+  it.each<Record<string, string>>([
+    { vnp_TmnCode: 'OTHER123' }, { vnp_TxnRef: 'other' }, { vnp_Amount: '999900' },
+    { vnp_TransactionType: '03' }, { vnp_TransactionStatus: '07' }, { vnp_PayDate: '' },
+    { vnp_TransactionNo: '999' }, { vnp_ResponseCode: '91' },
+  ])('does not infer collection from mismatched or ambiguous query data: %j', async (extra) => {
+    reply(signedResponse('querydr', extra))
+    expect(await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })).toEqual({ kind: 'UNKNOWN' })
+  })
+  it('rejects tampered responses, unavailable transport and absent server IP without changing financial state', async () => {
+    reply({ ...signedResponse('querydr'), vnp_Amount: '9000000' })
+    expect((await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })).kind).toBe('UNKNOWN')
+    http.mockRejectedValue(new Error('timeout'))
+    expect((await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })).kind).toBe('UNKNOWN')
+    http.mockClear()
+    delete process.env.VNPAY_SANDBOX_API_IP
+    expect((await provider.queryPayment({ ...provider.scope, merchantRequestRef: payment.merchantRequestRef })).kind).toBe('UNKNOWN')
+    expect(http).not.toHaveBeenCalled()
+  })
+  it.each(['4000', '10000'])('dispatches a %s VND refund exactly once and recovers its signed response', async (amount) => {
+    refund.amount = new Prisma.Decimal(amount)
+    reply(refundResponse())
+    expect(await provider.queryRefund(refundInput())).toEqual({ kind: 'NOT_FOUND' })
+    const [first, concurrent] = await Promise.all([provider.refund(refundInput()), provider.refund(refundInput())])
+    expect([first.kind, concurrent.kind].sort()).toEqual(['CONFIRMED_RESULT', 'UNKNOWN'])
+    expect(http).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(http.mock.calls[0][1].body)
+    expect(body.vnp_TransactionType).toBe(amount === '10000' ? '02' : '03')
+    expect(body.vnp_RequestId).toBe(refund.id.replace(/-/g, ''))
+    expect(body.vnp_Amount).toBe(String(Number(amount) * 100))
+    expect(body.vnp_SecureHash).toBe(hmac([body.vnp_RequestId, '2.1.0', 'refund', 'TEST1234', body.vnp_TransactionType,
+      body.vnp_TxnRef, body.vnp_Amount, '123456', body.vnp_TransactionDate, 'TrekGo', body.vnp_CreateDate,
+      '203.0.113.5', `Refund TrekGo ${refund.id}`].join('|')))
+    const restarted = new VnpayPaymentProvider(db)
+    expect(await restarted.queryRefund(refundInput())).toMatchObject({ kind: 'CONFIRMED_RESULT', event: {
+      kind: 'REFUND', status: 'SUCCEEDED', merchantRefundRef: refund.merchantRefundRef, amount, refundTransactionRef: '987654' } })
+    expect(http).toHaveBeenCalledTimes(1)
+  })
+  it('retains a dispatch after timeout and rejects an unrelated same-amount refund', async () => {
+    http.mockRejectedValueOnce(new Error('timeout'))
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    expect(refund.providerPayload.vnpayDispatch).toBeDefined()
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    expect(http).toHaveBeenCalledTimes(1)
+    reply(refundResponse({ vnp_OrderInfo: 'Refund TrekGo another-refund' }, 'querydr'))
+    expect(await provider.queryRefund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    reply(refundResponse({}, 'querydr'))
+    expect(await provider.queryRefund(refundInput())).toMatchObject({ kind: 'CONFIRMED_RESULT', event: { status: 'SUCCEEDED' } })
+    expect(http.mock.calls.map((call) => JSON.parse(call[1].body).vnp_Command)).toEqual(['refund', 'querydr', 'querydr'])
+  })
+  it('queries an accepted refund by its known transaction and waits for bank completion', async () => {
+    reply(refundResponse({ vnp_TransactionStatus: '05', vnp_PayDate: '' }))
+    expect(await provider.refund(refundInput())).toMatchObject({ kind: 'CONFIRMED_RESULT', event: { status: 'PROCESSING' } })
+    reply(refundResponse({ vnp_OrderInfo: 'Query result' }, 'querydr'))
+    expect(await provider.queryRefund(refundInput())).toMatchObject({ kind: 'CONFIRMED_RESULT', event: { status: 'SUCCEEDED' } })
+    expect(JSON.parse(http.mock.calls[1][1].body).vnp_TransactionNo).toBe('987654')
+    reply(refundResponse({ vnp_TransactionNo: '987655' }, 'querydr'))
+    expect(await provider.queryRefund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+  })
+  it('does not send an unverified source or an amount above collection', async () => {
+    refund.amount = new Prisma.Decimal(10001)
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    refund.amount = new Prisma.Decimal(1000)
+    payment.status = 'PROCESSING'
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    expect(http).not.toHaveBeenCalled()
+    expect(refund.providerPayload).toBeNull()
+  })
+  it('keeps an ambiguous duplicate-request response unresolved and never sends again', async () => {
+    reply(refundResponse({ vnp_ResponseCode: '94', vnp_TransactionStatus: '05' }))
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    expect(await provider.refund(refundInput())).toEqual({ kind: 'UNKNOWN' })
+    expect(http).toHaveBeenCalledTimes(1)
+    expect(refund.status).toBe('PENDING')
+  })
+  it('reports a signed bank rejection as failed, not refunded', async () => {
+    reply(refundResponse({ vnp_TransactionStatus: '09', vnp_PayDate: '' }))
+    expect(await provider.refund(refundInput())).toMatchObject({ kind: 'CONFIRMED_RESULT', event: { status: 'FAILED' } })
+  })
+  it('lets shared recovery dispatch refunds without enabling payment recreation', async () => {
+    reply(refundResponse())
+    const refunds = { applyEvent: jest.fn() }
+    const recovery = new PaymentRecoveryService(db, provider, {} as PaymentWebhooksService, refunds as unknown as RefundsService)
+    refund.paymentGateway = 'vnpay'; refund.providerEnvironment = 'SANDBOX'; refund.merchantAccountKey = 'TEST1234'
+    refund.leaseToken = randomUUID(); refund.version = 2
+    jest.spyOn(recovery as any, 'claim').mockResolvedValue({ row: refund, review: false, now: new Date() })
+    await recovery.reconcileRefund(refund.id)
+    expect(refunds.applyEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'REFUND', status: 'SUCCEEDED' }),
+      { refundId: refund.id, lease: { token: refund.leaseToken, version: 2 } })
+    expect(provider.supportsIdempotentCreate).toBe(false)
+  })
+})
 
 // Wire/HTTP tests with a storage stub. PostgreSQL concurrency and financial
 // application remain covered by payments.spec.ts on an isolated test database.
@@ -167,7 +333,7 @@ describe('VNPAY collection and concurrent gateway routing', () => {
         }),
       },
     }
-    vnpay = new VnpayPaymentProvider()
+    vnpay = new VnpayPaymentProvider(db)
     momo = new MomoPaymentProvider(db)
     router = new PaymentProviderRouter([new MockPaymentProvider(db), momo, vnpay], 'mock')
     input = {
@@ -181,14 +347,18 @@ describe('VNPAY collection and concurrent gateway routing', () => {
       returnPath: `/bookings/${bookingId}`,
     }
     const module = await Test.createTestingModule({
-      controllers: [VnpayIpnController, PaymentsController, PaymentOptionsController, PaymentWebhooksController],
+      controllers: [VnpayIpnController, PaymentsController, PaymentOptionsController, PaymentWebhooksController, TrailPurchaseController,
+        RentalPaymentsController, RentalExtensionPaymentsController],
       providers: [
         PaymentsService,
         PaymentWebhooksService,
+        PurchaseTrailUseCase,
+        { provide: PaymentsPort, useClass: SharedPaymentsPort },
+        { provide: PaymentRecoveryService, useValue: {} },
         { provide: PaymentProvider, useValue: router },
         { provide: PrismaService, useValue: db },
         { provide: RefundsService, useValue: {} },
-        { provide: RentalCheckoutService, useValue: {} },
+        { provide: RentalCheckoutService, useValue: { reserve: jest.fn(), reserveExtension: jest.fn() } },
       ],
     }).compile()
     app = module.createNestApplication({ rawBody: true })
@@ -205,6 +375,70 @@ describe('VNPAY collection and concurrent gateway routing', () => {
     await app?.close()
     jest.restoreAllMocks()
     process.env = { ...original }
+  })
+
+  it.each([
+    [false, '203.0.113.10', '127.0.0.1'],
+    [true, '203.0.113.10', '203.0.113.10'],
+    [true, '2001:db8::10', '2001:db8::10'],
+  ])('passes trail request IP through checkout (trusted proxy: %s, forwarded IP: %s)', async (trustProxy, forwardedIp, expectedIp) => {
+    // Only trust the local test proxy explicitly; arbitrary forwarded headers must not win.
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxy ? 'loopback' : false)
+    const createPayment = jest.spyOn(vnpay, 'createPayment')
+    const trailId = randomUUID(), accessId = randomUUID(), invoiceId = randomUUID()
+    const amount = new Prisma.Decimal(10000)
+    const access = {
+      id: accessId, systemTrailId: trailId, userId, status: 'PENDING_PAYMENT',
+      sourceType: 'PURCHASE', priceSnapshot: amount, systemTrail: { status: 'ACTIVE', archivedAt: null },
+    }
+    const invoice = {
+      id: invoiceId, trailAccessId: accessId, userId, invoiceType: 'TRAIL_ACCESS',
+      status: 'PENDING_PAYMENT', revisionNo: 1, currency: 'VND',
+      expiresAt: new Date(Date.now() + 900000), totalAmount: amount, subtotalAmount: amount,
+      discountAmount: new Prisma.Decimal(0),
+      invoiceLinesViaInvoiceId: [{ lineCode: 'TRAIL_ACCESS', quantity: new Prisma.Decimal(1), unitAmount: amount, lineAmount: amount }],
+    }
+    // Existing purchase reservation exercises both initial checkout and an idempotent HTTP retry.
+    db.systemTrail = { findUnique: jest.fn().mockResolvedValue({ id: trailId }) }
+    db.trailPurchaseRequest = { findUnique: jest.fn().mockResolvedValue({
+      id: 'trail-vnpay-request', userId, systemTrailId: trailId,
+      trailAccessId: accessId, invoiceId, paymentMethod: 'REDIRECT',
+    }) }
+    db.trailAccess = { findUniqueOrThrow: jest.fn().mockResolvedValue(access) }
+    db.invoice.findUnique = jest.fn().mockResolvedValue(invoice)
+    db.invoice.findUniqueOrThrow.mockResolvedValue(invoice)
+    const purchase = (ip: string) => request(app.getHttpServer())
+      .post(`/api/v1/trails/${trailId}/purchase`)
+      .set('Idempotency-Key', 'trail-vnpay')
+      .set('X-Forwarded-For', ip)
+      .send({ paymentMethod: 'REDIRECT', gateway: 'vnpay' })
+    const first = await purchase(forwardedIp).expect(201)
+    const url = new URL(first.body.checkout.url)
+    expect(url.searchParams.get('vnp_IpAddr')).toBe(expectedIp)
+    expect(url.searchParams.get('vnp_SecureHash')).toBe(sign(Object.fromEntries(url.searchParams)))
+    expect(first.body.trailAccessId).toBe(accessId)
+    const retry = await purchase('203.0.113.20').expect(200)
+    expect(retry.body.paymentId).toBe(first.body.paymentId)
+    expect(retry.body.checkout.url).toBe(first.body.checkout.url)
+    expect(createPayment).toHaveBeenCalledTimes(1)
+    expect(rows.size).toBe(1)
+    const conflict = await request(app.getHttpServer()).post(`/api/v1/trails/${trailId}/purchase`)
+      .set('Idempotency-Key', 'trail-vnpay').send({ paymentMethod: 'REDIRECT', gateway: 'momo' }).expect(409)
+    expect(conflict.body.error.code).toBe('IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD')
+  })
+
+  it.each(['rental-orders', 'rental-extensions'])('routes %s checkout to VNPAY with the HTTP client IP', async (route) => {
+    const rental = app.get(RentalCheckoutService)
+    const reserve = (route === 'rental-orders' ? rental.reserve : rental.reserveExtension) as jest.Mock
+    reserve.mockImplementation(async (_input, scope) => ({ created: true, payment: await db.payment.create({ data: {
+      id: randomUUID(), invoiceId: randomUUID(), amount: new Prisma.Decimal(10000), currency: 'VND',
+      paymentGateway: scope.gateway, providerEnvironment: scope.environment, merchantAccountKey: scope.merchantAccountKey,
+      merchantRequestRef: `payment:${randomUUID()}`, expiresAt: new Date(Date.now() + 600000),
+    } }) }))
+    const result = await request(app.getHttpServer()).post(`/api/v1/${route}/${randomUUID()}/payments`)
+      .set('Idempotency-Key', randomUUID()).send({ paymentMethod: 'REDIRECT', gateway: 'vnpay' }).expect(201)
+    expect(new URL(result.body.checkout.url).searchParams.get('vnp_IpAddr')).toBe('127.0.0.1')
+    expect(reserve).toHaveBeenCalledWith(expect.objectContaining({ gateway: 'vnpay', clientIp: expect.any(String) }), vnpay.scope)
   })
 
   it('creates only a signed sandbox checkout with VND x100, GMT+7 and the booking return path', async () => {
@@ -350,7 +584,7 @@ describe('VNPAY collection and concurrent gateway routing', () => {
     await request(app.getHttpServer()).post('/api/v1/payments/webhooks/momo').send({ signature: 'stub' }).expect(204)
     expect([...events.values()][0].paymentGateway).toBe('momo')
   })
-  it('does not time out an IPN-only payment before checkout expiry; routes recovery across enabled scopes', async () => {
+  it('keeps an unresolved VNPAY checkout recoverable until expiry; routes recovery across enabled scopes', async () => {
     const first = await checkout('vnpay').expect(201)
     const row = { ...rows.get(first.body.paymentId), retryCount: 99, leaseToken: randomUUID() }
     const recovery = new PaymentRecoveryService(db, router, inbox, {} as RefundsService)
