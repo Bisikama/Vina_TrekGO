@@ -136,7 +136,7 @@ export const UserHeader = () => {
 
           {/* Chỉ có trong UserHeader */}
           <Link
-            href="/rentals?bookingId=booking_001"
+            href="/rentals"
             className="flex items-center gap-1.5 whitespace-nowrap hover:text-[#1B5E41]"
           >
             <svg
