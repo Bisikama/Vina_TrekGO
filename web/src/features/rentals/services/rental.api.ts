@@ -319,7 +319,7 @@ export async function getRentalEligibility(
 ) {
   try {
     const response = await apiClient.get<unknown>(
-      `/api/v1/bookings/${encodeURIComponent(
+      `/api/v1/trips/${encodeURIComponent(
         bookingId,
       )}/rental-eligibility`,
       { signal },
@@ -345,7 +345,7 @@ export async function getRentalAvailability(
     const response = await apiClient.get<unknown>(
       "/api/v1/rentals/availability",
       {
-        params: { bookingId, productId },
+        params: { tripId: bookingId, productId },
         signal,
       },
     );
@@ -373,7 +373,7 @@ export async function getRentalRecommendations(
 ) {
   try {
     const response = await apiClient.get<unknown>(
-      `/api/v1/bookings/${encodeURIComponent(
+      `/api/v1/trips/${encodeURIComponent(
         bookingId,
       )}/rental-recommendations`,
       {

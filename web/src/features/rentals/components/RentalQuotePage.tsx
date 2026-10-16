@@ -149,7 +149,7 @@ export function RentalQuotePage({
 
     try {
       const result = await createRentalQuote({
-        bookingId,
+        bookingId: data.eligibility.bookingId,
         recipientParticipantId:
           recipientId || undefined,
         items: [
