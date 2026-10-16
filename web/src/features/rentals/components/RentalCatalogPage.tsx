@@ -2,10 +2,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -40,6 +43,144 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+const CATEGORY_ALIASES: Array<[RegExp, string]> = [
+  [/^(bags?|backpacks?|balo)/i, "Balo"],
+  [/^(tents?|lều)/i, "Lều"],
+  [/^(sleeping bags?|túi ngủ)/i, "Túi ngủ"],
+  [/^(trekking poles?|gậy)/i, "Gậy trekking"],
+  [/^(camping)/i, "Dụng cụ cắm trại"],
+  [/^(hotfix cat)/i, "Khác"],
+];
+
+function cleanCategoryName(value: string) {
+  const withoutTestSuffix = value
+    .replace(/\s+(?:[0-9a-f]{7,}|[a-z]+_[0-9a-f]{6,})$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const alias = CATEGORY_ALIASES.find(([pattern]) =>
+    pattern.test(withoutTestSuffix),
+  );
+
+  return alias?.[1] ?? withoutTestSuffix || "Khác";
+}
+
+function getCategoryKey(value: string) {
+  return cleanCategoryName(value).toLocaleLowerCase("vi");
+}
+
+function NatureBurst() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-20 motion-reduce:hidden"
+    >
+      {[0, 1, 2, 3, 4, 5].map((piece) => (
+        <span
+          key={piece}
+          className="rental-nature-piece absolute left-1/2 top-1/2 h-7 w-7 text-emerald-500"
+        >
+          {piece % 3 === 1 ? (
+            <svg viewBox="0 0 24 24" className="h-full w-full" fill="none">
+              <circle cx="12" cy="6.5" r="3.5" fill="currentColor" />
+              <circle cx="17.5" cy="11.5" r="3.5" fill="currentColor" />
+              <circle cx="12" cy="17" r="3.5" fill="currentColor" />
+              <circle cx="6.5" cy="11.5" r="3.5" fill="currentColor" />
+              <circle cx="12" cy="11.8" r="2.3" className="fill-amber-300" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-full w-full" fill="none">
+              <path
+                d="M20.2 3.8C12.6 4 6.4 7.2 4.1 13.2c-1 2.7.4 5.8 3.4 6.5 5.9 1.4 11.6-4.9 12.7-15.9Z"
+                fill="currentColor"
+              />
+              <path
+                d="M5.6 18.5c3.2-4.2 6.8-7.1 11.2-9.2"
+                stroke="white"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </span>
+      ))}
+
+      <style jsx global>{`
+        .rental-nature-piece {
+          opacity: 0;
+          filter: drop-shadow(0 4px 5px rgb(20 83 45 / 0.18));
+          animation: rental-nature-burst 620ms cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .rental-nature-piece:nth-child(1) {
+          --burst-x: -150px;
+          --burst-y: -118px;
+          --burst-rotate: -32deg;
+        }
+
+        .rental-nature-piece:nth-child(2) {
+          --burst-x: 18px;
+          --burst-y: -155px;
+          --burst-rotate: 18deg;
+          color: #f59e0b;
+          animation-delay: 35ms;
+        }
+
+        .rental-nature-piece:nth-child(3) {
+          --burst-x: 150px;
+          --burst-y: -88px;
+          --burst-rotate: 44deg;
+          color: #22c55e;
+          animation-delay: 70ms;
+        }
+
+        .rental-nature-piece:nth-child(4) {
+          --burst-x: 148px;
+          --burst-y: 92px;
+          --burst-rotate: 72deg;
+          color: #fb7185;
+          animation-delay: 25ms;
+        }
+
+        .rental-nature-piece:nth-child(5) {
+          --burst-x: -8px;
+          --burst-y: 150px;
+          --burst-rotate: 112deg;
+          color: #10b981;
+          animation-delay: 65ms;
+        }
+
+        .rental-nature-piece:nth-child(6) {
+          --burst-x: -148px;
+          --burst-y: 82px;
+          --burst-rotate: -78deg;
+          color: #65a30d;
+          animation-delay: 45ms;
+        }
+
+        @keyframes rental-nature-burst {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+          }
+          22% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate(
+                calc(-50% + var(--burst-x)),
+                calc(-50% + var(--burst-y))
+              )
+              scale(1) rotate(var(--burst-rotate));
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function getErrorMessage(error: unknown) {
   if (
     typeof error === "object" &&
@@ -60,17 +201,56 @@ function ProductCard({
   item: RentalCatalogItem;
   bookingId: string;
 }) {
+  const router = useRouter();
   const imageUrl = item.imageUrls[0];
   const available = item.availableCount > 0;
+  const [burstKey, setBurstKey] = useState(0);
+  const navigationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const detailUrl = `/rental-products/${encodeURIComponent(
     item.id,
   )}?bookingId=${encodeURIComponent(bookingId)}`;
 
+  useEffect(
+    () => () => {
+      if (navigationTimer.current) {
+        clearTimeout(navigationTimer.current);
+      }
+    },
+    [],
+  );
+
+  const openWithNatureBurst = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    setBurstKey((current) => current + 1);
+
+    if (navigationTimer.current) {
+      clearTimeout(navigationTimer.current);
+    }
+
+    navigationTimer.current = setTimeout(() => {
+      router.push(detailUrl);
+    }, 520);
+  };
+
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+    <div className="relative h-full">
+      {burstKey > 0 && <NatureBurst key={burstKey} />}
+
+      <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-emerald-950/10 bg-white shadow-[0_12px_38px_rgba(21,62,46,0.08)] transition duration-300 hover:-translate-y-1 hover:border-emerald-700/25 hover:shadow-[0_20px_46px_rgba(21,62,46,0.14)]">
       <Link
         href={detailUrl}
+        onClick={openWithNatureBurst}
         className="relative block aspect-[4/3] overflow-hidden bg-[#EEF3EF]"
       >
         {imageUrl ? (
@@ -107,11 +287,11 @@ function ProductCard({
       <div className="flex flex-1 flex-col p-5">
         <div className="mb-3">
           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-            {item.category.name}
+            {cleanCategoryName(item.category.name)}
           </span>
         </div>
 
-        <Link href={detailUrl}>
+        <Link href={detailUrl} onClick={openWithNatureBurst}>
           <h2 className="text-lg font-extrabold text-gray-900 transition group-hover:text-[#1B5E41]">
             {item.name}
           </h2>
@@ -141,13 +321,15 @@ function ProductCard({
 
           <Link
             href={detailUrl}
+            onClick={openWithNatureBurst}
             className="rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#154B36]"
           >
             Xem chi tiết
           </Link>
         </div>
       </div>
-    </article>
+      </article>
+    </div>
   );
 }
 
@@ -160,7 +342,7 @@ export function RentalCatalogPage({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("all");
+  const [categoryKey, setCategoryKey] = useState("all");
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -211,6 +393,33 @@ export function RentalCatalogPage({
     return () => controller.abort();
   }, [bookingId]);
 
+  const categoryFilters = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    const groups = new Map<
+      string,
+      { key: string; label: string; count: number }
+    >();
+
+    data.items.forEach((item) => {
+      const label = cleanCategoryName(item.category.name);
+      const key = getCategoryKey(item.category.name);
+      const current = groups.get(key);
+
+      groups.set(key, {
+        key,
+        label,
+        count: (current?.count ?? 0) + 1,
+      });
+    });
+
+    return Array.from(groups.values()).sort((left, right) =>
+      left.label.localeCompare(right.label, "vi"),
+    );
+  }, [data]);
+
   const filteredItems = useMemo(() => {
     if (!data) {
       return [];
@@ -220,8 +429,8 @@ export function RentalCatalogPage({
 
     return data.items.filter((item) => {
       const matchesCategory =
-        categoryId === "all" ||
-        item.category.id === categoryId;
+        categoryKey === "all" ||
+        getCategoryKey(item.category.name) === categoryKey;
 
       const matchesSearch =
         !keyword ||
@@ -232,7 +441,7 @@ export function RentalCatalogPage({
 
       return matchesCategory && matchesSearch;
     });
-  }, [categoryId, data, search]);
+  }, [categoryKey, data, search]);
 
   if (loading) {
     return (
@@ -379,33 +588,41 @@ export function RentalCatalogPage({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCategoryId("all")}
-              className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                categoryId === "all"
-                  ? "bg-[#1B5E41] text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Tất cả
-            </button>
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-gray-400">
+              Danh mục đang có thiết bị
+            </p>
 
-            {data.categories.map((category) => (
+            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
-                key={category.id}
                 type="button"
-                onClick={() => setCategoryId(category.id)}
-                className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                  categoryId === category.id
-                    ? "bg-[#1B5E41] text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                onClick={() => setCategoryKey("all")}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${
+                  categoryKey === "all"
+                    ? "bg-[#1B5E41] text-white shadow-sm"
+                    : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-[#1B5E41]"
                 }`}
               >
-                {category.name}
+                Tất cả
+                <span className="ml-2 opacity-70">{data.items.length}</span>
               </button>
-            ))}
+
+              {categoryFilters.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => setCategoryKey(category.key)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${
+                    categoryKey === category.key
+                      ? "bg-[#1B5E41] text-white shadow-sm"
+                      : "bg-gray-100 text-gray-600 hover:bg-emerald-50 hover:text-[#1B5E41]"
+                  }`}
+                >
+                  {category.label}
+                  <span className="ml-2 opacity-70">{category.count}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
