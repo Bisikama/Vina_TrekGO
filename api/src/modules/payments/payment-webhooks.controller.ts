@@ -39,14 +39,28 @@ export class PaymentWebhooksController {
   @ApiHeader({ name: 'x-mock-timestamp', required: true, description: 'Timestamp tạo chữ ký mock', example: '1728900000000' })
   @ApiHeader({ name: 'x-mock-signature', required: true, description: 'Chữ ký bảo mật mock', example: 'mock-sig-abc123xyz' })
   @ApiBody({
-    description: 'Dữ liệu webhook mock',
+    description: 'Signed mock event. HMAC must match the exact raw JSON body; sample signatures do not work. For a successful event, transactionRef (PAYMENT) or refundTransactionRef (REFUND) must not be null.',
     schema: {
       type: 'object',
-      properties: {
-        orderId: { type: 'string', description: 'Mã đơn thanh toán' },
-        status: { type: 'string', enum: ['SUCCESS', 'FAILED'], example: 'SUCCESS' },
-        amount: { type: 'number', example: 500000 },
-      },
+      oneOf: ['PAYMENT', 'REFUND'].map((kind) => ({
+        type: 'object' as const,
+        additionalProperties: false,
+        required: ['kind', 'providerEventId', 'merchantRequestRef', 'transactionRef', 'status', 'amount', 'currency', 'occurredAt', ...(kind === 'REFUND' ? ['merchantRefundRef', 'refundTransactionRef'] : [])],
+        properties: {
+          kind: { type: 'string' as const, enum: [kind] },
+          providerEventId: { type: 'string' as const, minLength: 1, maxLength: 220 },
+          merchantRequestRef: { type: 'string' as const, minLength: 1, maxLength: 180 },
+          transactionRef: { type: 'string' as const, nullable: true, minLength: 1, maxLength: 180 },
+          status: { type: 'string' as const, enum: ['PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED', ...(kind === 'PAYMENT' ? ['EXPIRED'] : [])] },
+          amount: { type: 'string' as const, pattern: '^(0|[1-9][0-9]{0,9})$', example: '10000' },
+          currency: { type: 'string' as const, pattern: '^[A-Z]{3}$', example: 'VND' },
+          occurredAt: { type: 'string' as const, format: 'date-time' },
+          ...(kind === 'REFUND' ? {
+            merchantRefundRef: { type: 'string' as const, minLength: 1, maxLength: 180 },
+            refundTransactionRef: { type: 'string' as const, nullable: true, minLength: 1, maxLength: 180 },
+          } : {}),
+        },
+      })),
     },
   })
   @ApiResponse({ status: 200, description: 'Nhận webhook mock thành công' })

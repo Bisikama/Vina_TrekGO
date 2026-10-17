@@ -148,6 +148,7 @@ export class PublicTripUseCase {
     const add = (field: string, message: string, code = 'TRIP_NOT_READY_TO_PUBLISH') =>
       issues.push({ code, field, message })
     if (trip.status !== 'DRAFT') add('status', 'Trip không còn ở DRAFT.', 'INVALID_STATE_TRANSITION')
+    if (!trip.priceExplanation?.trim()) add('priceExplanation', 'Cần bổ sung cơ sở tính giá trước khi publish.')
     if ((await s.destination(trip.destinationId))?.status !== 'ACTIVE')
       add('destinationId', 'Destination không sử dụng được.')
     const pickup = trip.pickupPointId ? await s.pickup(trip.pickupPointId) : null
