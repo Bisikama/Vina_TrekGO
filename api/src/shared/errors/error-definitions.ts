@@ -1,4 +1,5 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes';
+import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes';
 import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
@@ -16,6 +17,10 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
+  [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
+  [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },
+  [TT.VERSION_CONFLICT]: { status: 409, message: 'Thông tin xe đã thay đổi. Hãy tải lại.', retryable: false },
   [B.BOOKING_POLICY_INVALID]: { status: 503, message: 'Booking policy configuration is invalid or ambiguous', retryable: false },
   [B.BOOKING_POLICY_NOT_FOUND]: { status: 404, message: 'Booking policy not found', retryable: false },
   [B.BOOKING_POLICY_IMMUTABLE]: { status: 409, message: 'Published policies cannot be edited or deleted; create a new draft', retryable: false },
