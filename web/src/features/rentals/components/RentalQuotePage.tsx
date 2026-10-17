@@ -11,6 +11,7 @@ import {
   getRentalApiErrorMessage,
   getRentalAvailability,
   getRentalEligibility,
+  getRentalPaymentOptions,
   getRentalProduct,
 } from "@/features/rentals/services/rental.api";
 import type {
@@ -86,6 +87,9 @@ export function RentalQuotePage({
     useState<RentalPaymentCheckoutResponse | null>(null);
   const [gateway, setGateway] =
     useState<RentalPaymentGateway>("vnpay");
+  const [paymentGateways, setPaymentGateways] = useState<
+    RentalPaymentGateway[]
+  >([]);
   const orderKeyRef = useRef<string | null>(null);
   const paymentKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,13 +107,30 @@ export function RentalQuotePage({
         productId,
         controller.signal,
       ),
+      getRentalPaymentOptions(controller.signal),
     ])
-      .then(([eligibility, product, availability]) => {
+      .then(
+        ([
+          eligibility,
+          product,
+          availability,
+          paymentOptions,
+        ]) => {
         if (controller.signal.aborted) {
           return;
         }
 
         setData({ eligibility, product, availability });
+        const availableGateways =
+          paymentOptions.gateways.map(
+            (option) => option.gateway,
+          );
+        setPaymentGateways(availableGateways);
+        setGateway((current) =>
+          availableGateways.includes(current)
+            ? current
+            : availableGateways[0] ?? "vnpay",
+        );
         setRecipientId(
           eligibility.recipientOptions[0]?.id ?? "",
         );
@@ -120,7 +141,8 @@ export function RentalQuotePage({
           ),
         );
         setError(null);
-      })
+        },
+      )
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
           setError(
@@ -201,6 +223,13 @@ export function RentalQuotePage({
 
   async function handleCreateOrderAndPayment() {
     if (!quote || submitting) {
+      return;
+    }
+
+    if (!paymentGateways.includes(gateway)) {
+      setError(
+        "Backend hiện chưa bật cổng thanh toán khả dụng.",
+      );
       return;
     }
 
@@ -428,7 +457,14 @@ export function RentalQuotePage({
                 </p>
               </div>
 
-              {orderResult && (
+              {paymentGateways.length === 0 && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                Backend chưa trả về VNPay hoặc MoMo khả dụng.
+                Kiểm tra cấu hình Shared Payment rồi tải lại trang.
+              </div>
+            )}
+
+            {orderResult && (
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700 shadow-sm">
                   Đã giữ thiết bị
                 </span>
@@ -451,7 +487,11 @@ export function RentalQuotePage({
                     icon: "M",
                   },
                 ] as const
-              ).map((option) => {
+              )
+                .filter((option) =>
+                  paymentGateways.includes(option.id),
+                )
+                .map((option) => {
                 const selected = gateway === option.id;
 
                 return (
@@ -516,7 +556,9 @@ export function RentalQuotePage({
             <button
               type="button"
               onClick={handleCreateOrderAndPayment}
-              disabled={submitting}
+              disabled={
+                submitting || paymentGateways.length === 0
+              }
               className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[#163F2D] px-6 py-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(22,63,45,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F5132] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting
