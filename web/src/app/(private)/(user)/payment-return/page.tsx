@@ -77,58 +77,58 @@ function PaymentReturnContent() {
 
   // Tham số ID đơn đặt chỗ
   const rawBookingId = searchParams.get('bookingId');
-  const [rentalContext, setRentalContext] =
-    useState<RentalPaymentReturnContext | null>(null);
-
-  useEffect(() => {
-    if (rawBookingId) {
-      return;
-    }
-
-    const stored = sessionStorage.getItem(
-      'trekgo:rental-payment-return',
-    );
-
-    if (!stored) return;
-
-    try {
-      const parsed = JSON.parse(stored) as Partial<RentalPaymentReturnContext>;
-
+  const [rentalContext] =
+    useState<RentalPaymentReturnContext | null>(() => {
       if (
-        typeof parsed.orderId === 'string' &&
-        typeof parsed.bookingId === 'string' &&
-        typeof parsed.paymentId === 'string'
+        typeof window === 'undefined' ||
+        rawBookingId
       ) {
-        setRentalContext({
-          orderId: parsed.orderId,
-          bookingId: parsed.bookingId,
-          paymentId: parsed.paymentId,
-        });
+        return null;
       }
-    } catch {
-      sessionStorage.removeItem(
+
+      const stored = sessionStorage.getItem(
         'trekgo:rental-payment-return',
       );
-    }
-  }, [rawBookingId]);
+
+      if (!stored) return null;
+
+      try {
+        const parsed = JSON.parse(
+          stored,
+        ) as Partial<RentalPaymentReturnContext>;
+
+        if (
+          typeof parsed.orderId === 'string' &&
+          typeof parsed.bookingId === 'string' &&
+          typeof parsed.paymentId === 'string'
+        ) {
+          return {
+            orderId: parsed.orderId,
+            bookingId: parsed.bookingId,
+            paymentId: parsed.paymentId,
+          };
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    });
 
   // Load thông tin chi tiết đơn đặt chỗ và chuyến đi
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [isLoadingBooking, setIsLoadingBooking] = useState(false);
 
   useEffect(() => {
     if (!rawBookingId) return;
     let active = true;
-    setIsLoadingBooking(true);
+
     bookingApi
       .detail(rawBookingId)
       .then((data) => {
         if (active) setBooking(data);
       })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setIsLoadingBooking(false);
-      });
+      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -180,7 +180,6 @@ function PaymentReturnContent() {
 
   // Lấy Trip ID để gắn vào nút "Xem chi tiết chuyến đi"
   const tripId = booking?.trip?.id;
-  const tripTitle = booking?.trip?.title;
 
   return (
     <div className="min-h-screen bg-[#F7F7F4] flex items-center justify-center px-4 py-16">
