@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { z } from 'zod'
 import { Auth } from '../../shared/decorators/auth.decorator'
@@ -71,16 +71,21 @@ export class BookingsController {
     return this.bookings.updateParticipants(id, userId, body)
   }
   @Get('bookings')
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 12 } })
+  @ApiQuery({ name: 'status', required: false, enum: ['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED', 'CANCELLED', 'CHECKED_IN', 'PARTIAL_CHECKIN', 'COMPLETED', 'NO_SHOW'] })
   list(@Query(new ZodValidationPipe(bookingPageSchema)) query: BookingPage, @ActiveUser('id') userId: string) {
     return this.bookings.list(userId, query)
   }
   @Get('bookings/:id')
+  @ApiOperation({ summary: 'Get own booking detail', description: 'Includes payment and refunds. After cancellation, poll this endpoint for refunds[].refundId and status; refund creation is asynchronous.' })
   detail(@Param('id', new ZodValidationPipe(bookingIdSchema)) id: string, @ActiveUser('id') userId: string) {
     return this.bookings.detail(id, userId)
   }
 }
 
 @ApiTags('Bookings internal')
+@ApiSecurity('x-api-key')
 @Auth([AuthType.ApiKey])
 @Controller('internal/bookings')
 export class BookingRentalContextController {

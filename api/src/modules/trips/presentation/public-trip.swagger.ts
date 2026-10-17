@@ -43,6 +43,7 @@ const trail = z.object({
   checkpointIds: z.array(uuid),
 })
 const trip = publicTrip.extend({
+  priceExplanation: z.string().nullable().describe('Cơ sở tính giá nội bộ, chỉ trả trong dữ liệu quản lý của leader.'),
   tripType: z.literal('PUBLIC'),
   creatorId: uuid,
   leaderId: uuid.nullable(),

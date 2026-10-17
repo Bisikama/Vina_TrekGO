@@ -15799,8 +15799,17 @@
                       "QR",
                       "REDIRECT"
                     ],
-                    "description": "Phương thức: QR (quét mã) hoặc REDIRECT (cổng thanh toán)",
-                    "example": "QR"
+                    "description": "Phương thức: QR hoặc chuyển hướng cổng thanh toán",
+                    "example": "REDIRECT"
+                  },
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Cổng thanh toán; bỏ trống để dùng cổng mặc định",
+                    "example": "vnpay"
                   }
                 }
               }
@@ -15812,7 +15821,10 @@
             "description": "Phiên thanh toán đã tồn tại và còn hiệu lực (idempotent)"
           },
           "201": {
-            "description": "Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode"
+            "description": "Tạo phiên thanh toán thành công — trả về checkout.url/checkout.qrData"
+          },
+          "202": {
+            "description": "Payment recorded but checkout is not available yet; reconciliation required. Retry with the same idempotency key."
           },
           "400": {
             "description": "Dữ liệu không hợp lệ hoặc paymentMethod sai"
@@ -15883,29 +15895,149 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Dữ liệu webhook mock",
+          "description": "Signed mock event. HMAC must match the exact raw JSON body; sample signatures do not work. For a successful event, transactionRef (PAYMENT) or refundTransactionRef (REFUND) must not be null.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "orderId": {
-                    "type": "string",
-                    "description": "Mã đơn thanh toán"
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "SUCCESS",
-                      "FAILED"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "providerEventId",
+                      "merchantRequestRef",
+                      "transactionRef",
+                      "status",
+                      "amount",
+                      "currency",
+                      "occurredAt"
                     ],
-                    "example": "SUCCESS"
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "PAYMENT"
+                        ]
+                      },
+                      "providerEventId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 220
+                      },
+                      "merchantRequestRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "transactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PROCESSING",
+                          "SUCCEEDED",
+                          "FAILED",
+                          "CANCELLED",
+                          "EXPIRED"
+                        ]
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,9})$",
+                        "example": "10000"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$",
+                        "example": "VND"
+                      },
+                      "occurredAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
                   },
-                  "amount": {
-                    "type": "number",
-                    "example": 500000
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "providerEventId",
+                      "merchantRequestRef",
+                      "transactionRef",
+                      "status",
+                      "amount",
+                      "currency",
+                      "occurredAt",
+                      "merchantRefundRef",
+                      "refundTransactionRef"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "REFUND"
+                        ]
+                      },
+                      "providerEventId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 220
+                      },
+                      "merchantRequestRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "transactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PROCESSING",
+                          "SUCCEEDED",
+                          "FAILED",
+                          "CANCELLED"
+                        ]
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,9})$",
+                        "example": "10000"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$",
+                        "example": "VND"
+                      },
+                      "occurredAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "merchantRefundRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "refundTransactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -16047,7 +16179,7 @@
     },
     "/api/v1/refunds/{id}": {
       "get": {
-        "description": "Xem thông tin chi tiết của một lệnh hoàn tiền bao gồm: số tiền, trạng thái, lý do và thời gian hoàn.",
+        "description": "Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.",
         "operationId": "RefundsController_detail",
         "parameters": [
           {
@@ -16080,23 +16212,22 @@
         ],
         "summary": "Xem chi tiết lệnh hoàn tiền (Refund Detail)",
         "tags": [
-          "Quản trị thanh toán (Admin Payments & Reconciliation)"
+          "Payments"
         ]
       }
     },
     "/api/v1/bookings/{id}/cancellations": {
       "post": {
-        "description": "Người dùng gửi yêu cầu hủy đơn đặt chỗ đã tạo. Yêu cầu Idempotency-Key để tránh gọi lặp lại. Hệ thống sẽ tính toán phí phạt và hoàn tiền (nếu có) theo chính sách hủy tour.",
+        "description": "Use cancellations; cancel is a compatibility alias. Owners may cancel before departure. Refund amount comes from the saved booking policy, not the request. HTTP 202 confirms cancellation, not refund completion. Workers create and process the refund asynchronously. Unpaid bookings or zero refundable amount do not create refunds.",
         "operationId": "BookingCancellationsController_cancel[0]",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID đơn đặt chỗ cần hủy",
+            "description": "Booking ID",
             "schema": {
               "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           },
@@ -16107,24 +16238,15 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "description": "Khóa duy nhất tránh hủy trùng lặp (1–200 ký tự ASCII)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Lý do hủy đơn đặt chỗ",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
                   "reason"
                 ],
@@ -16133,8 +16255,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
-                    "description": "Lý do người dùng muốn hủy chuyến",
-                    "example": "Bận việc gia đình đột xuất không thể tham gia"
+                    "example": "My travel plans changed"
                   }
                 }
               }
@@ -16142,6 +16263,251 @@
           }
         },
         "responses": {
+          "202": {
+            "description": "Cancellation accepted; refundableAmount is approved, not yet refunded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bookingId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "cancellationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "CANCELLED"
+                      ]
+                    },
+                    "refundableAmount": {
+                      "type": "string",
+                      "example": "10000"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "VND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reason, ID or idempotency key"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Not permitted to cancel this booking"
+          },
+          "404": {
+            "description": "Booking not found"
+          },
+          "409": {
+            "description": "Cancellation not allowed or idempotency payload conflict"
+          },
+          "410": {
+            "description": "Booking hold expired"
+          },
+          "422": {
+            "description": "Cancellation policy snapshot missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel booking and schedule eligible refund",
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}/cancel": {
+      "post": {
+        "description": "Use cancellations; cancel is a compatibility alias. Owners may cancel before departure. Refund amount comes from the saved booking policy, not the request. HTTP 202 confirms cancellation, not refund completion. Workers create and process the refund asynchronously. Unpaid bookings or zero refundable amount do not create refunds.",
+        "operationId": "BookingCancellationsController_cancel[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Booking ID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "example": "My travel plans changed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Cancellation accepted; refundableAmount is approved, not yet refunded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bookingId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "cancellationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "CANCELLED"
+                      ]
+                    },
+                    "refundableAmount": {
+                      "type": "string",
+                      "example": "10000"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "VND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid reason, ID or idempotency key"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Not permitted to cancel this booking"
+          },
+          "404": {
+            "description": "Booking not found"
+          },
+          "409": {
+            "description": "Cancellation not allowed or idempotency payload conflict"
+          },
+          "410": {
+            "description": "Booking hold expired"
+          },
+          "422": {
+            "description": "Cancellation policy snapshot missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel booking and schedule eligible refund",
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/trails/{trailId}/purchase": {
+      "post": {
+        "description": "Người dùng mua quyền truy cập dữ liệu GPS và mô hình 3D của cung đường hệ thống. Hỗ trợ thanh toán qua QR Code hoặc chuyển hướng cổng thanh toán (REDIRECT). Yêu cầu Idempotency-Key để tránh tạo phiên thanh toán trùng lặp.",
+        "operationId": "TrailPurchaseController_create",
+        "parameters": [
+          {
+            "name": "trailId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "type": "string"
+            },
+            "description": "UUID của cung đường muốn mua bản quyền"
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "paymentMethod"
+                ],
+                "properties": {
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "QR",
+                      "REDIRECT"
+                    ],
+                    "description": "Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)",
+                    "example": "QR"
+                  },
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
+                  }
+                }
+              }
+            }
+          },
+          "description": "Phương thức thanh toán"
+        },
+        "responses": {
+          "200": {
+            "description": "Phiên thanh toán đã tồn tại (idempotent)"
+          },
           "201": {
             "description": "Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode"
           },
@@ -16162,7 +16528,1188 @@
         ],
         "summary": "Mua quyền truy cập bản đồ cung đường GPS 3D",
         "tags": [
-          "Dev / Test"
+          "Mua bản quyền cung đường (Trail Purchases)"
+        ]
+      }
+    },
+    "/api/v1/rental-orders/{id}/payments": {
+      "post": {
+        "description": "\n**RB-API-204** — Khởi tạo luồng thanh toán cho RentalOrder.\n\n- Tạo phiên thanh toán mới hoặc tái sử dụng phiên chưa hết hạn (idempotent theo `Idempotency-Key`).\n- Hỗ trợ 2 phương thức: **QR** (quét mã QR) hoặc **REDIRECT** (chuyển hướng trang thanh toán).\n- Sau khi tạo thành công, trả về URL/mã QR để user hoàn tất thanh toán.\n- Webhook sẽ tự động cập nhật trạng thái đơn khi thanh toán thành công.\n",
+        "operationId": "RentalPaymentsController_create",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "ID đơn thuê cần thanh toán",
+            "schema": {
+              "example": "c3d4e5f6-7890-12cd-ef01-345678901bcd",
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "description": "Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Phương thức thanh toán",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "paymentMethod"
+                ],
+                "properties": {
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
+                  },
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "QR",
+                      "REDIRECT"
+                    ],
+                    "description": "Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)",
+                    "example": "QR"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phiên thanh toán đã tồn tại (idempotent) — trả về thông tin phiên hiện tại"
+          },
+          "201": {
+            "description": "Tạo phiên thanh toán mới thành công — trả về checkoutUrl/qrCode"
+          },
+          "400": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "paymentMethod phải là QR hoặc REDIRECT",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Token không hợp lệ hoặc đã hết hạn",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không có quyền",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "FORBIDDEN",
+                    "message": "Đơn thuê không thuộc về user hiện tại",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "ORDER_NOT_FOUND",
+                    "message": "Đơn thuê không tồn tại",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "PAYMENT_ALREADY_COMPLETED",
+                    "message": "Đơn thuê đã được thanh toán",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Không thể thanh toán",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "ORDER_NOT_PAYABLE",
+                    "message": "Đơn không ở trạng thái cho phép thanh toán",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.965Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo thanh toán cho đơn thuê",
+        "tags": [
+          "Rental payments"
+        ]
+      }
+    },
+    "/api/v1/rental-extensions/{id}/payments": {
+      "post": {
+        "description": "\nKhởi tạo luồng thanh toán phí gia hạn cho extension request đã xác nhận.\n\n- Tạo phiên thanh toán mới hoặc tái sử dụng phiên chưa hết hạn (idempotent theo `Idempotency-Key`).\n- Hỗ trợ 2 phương thức: **QR** (quét mã QR) hoặc **REDIRECT** (chuyển hướng trang thanh toán).\n- Sau khi thanh toán thành công, gia hạn sẽ tự động được áp dụng vào đơn thuê.\n",
+        "operationId": "RentalExtensionPaymentsController_checkout",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "ID yêu cầu gia hạn (extension request) cần thanh toán",
+            "schema": {
+              "example": "e5f6a7b8-9012-34ef-0123-567890123def",
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "description": "Khoá duy nhất để tránh tạo payment trùng (1–200 ký tự ASCII)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Phương thức thanh toán",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "paymentMethod"
+                ],
+                "properties": {
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Bỏ trống để dùng cổng mặc định"
+                  },
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "QR",
+                      "REDIRECT"
+                    ],
+                    "description": "Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)",
+                    "example": "QR"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phiên thanh toán đã tồn tại (idempotent) — trả về thông tin phiên hiện tại"
+          },
+          "201": {
+            "description": "Tạo phiên thanh toán gia hạn thành công — trả về checkoutUrl/qrCode"
+          },
+          "400": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "paymentMethod phải là QR hoặc REDIRECT",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Token không hợp lệ hoặc đã hết hạn",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không có quyền",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "FORBIDDEN",
+                    "message": "Yêu cầu gia hạn không thuộc về user hiện tại",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "EXTENSION_NOT_FOUND",
+                    "message": "Yêu cầu gia hạn không tồn tại",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Đã thanh toán",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "PAYMENT_ALREADY_COMPLETED",
+                    "message": "Gia hạn đã được thanh toán",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Không thể thanh toán",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Invalid input data"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "example": {
+                        "field": "Required"
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2026-09-28T10:00:00Z"
+                    },
+                    "path": {
+                      "type": "string",
+                      "example": "/api/v1/resource"
+                    }
+                  },
+                  "example": {
+                    "code": "EXTENSION_NOT_PAYABLE",
+                    "message": "Yêu cầu gia hạn không ở trạng thái cho phép thanh toán",
+                    "details": {},
+                    "timestamp": "2026-10-14T07:59:45.976Z",
+                    "path": "/api/v1/resource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tạo thanh toán cho yêu cầu gia hạn",
+        "tags": [
+          "Rental Extension Payments"
+        ]
+      }
+    },
+    "/api/v1/trips/{tripId}/bookings": {
+      "post": {
+        "operationId": "BookingsController_create",
+        "parameters": [
+          {
+            "name": "tripId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "participantCount must match participants.length. New participants must not include id.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "participantCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "participants": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "fullName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 150
+                        },
+                        "phone": {
+                          "type": "string",
+                          "minLength": 5,
+                          "maxLength": 30
+                        },
+                        "dateOfBirth": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "emergencyContactName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 150
+                        },
+                        "emergencyContactPhone": {
+                          "type": "string",
+                          "minLength": 5,
+                          "maxLength": 30
+                        }
+                      },
+                      "required": [
+                        "fullName"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "participantCount",
+                  "participants"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "participantCount": 1,
+                  "participants": [
+                    {
+                      "fullName": "Nguyen Van A",
+                      "phone": "0900000001"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}/participants": {
+      "patch": {
+        "operationId": "BookingsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Send the current booking version and the full participant list. Include existing participant IDs to preserve them; omitted participants are cancelled.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "participantCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "participants": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "fullName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 150
+                        },
+                        "phone": {
+                          "type": "string",
+                          "minLength": 5,
+                          "maxLength": 30
+                        },
+                        "dateOfBirth": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "emergencyContactName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 150
+                        },
+                        "emergencyContactPhone": {
+                          "type": "string",
+                          "minLength": 5,
+                          "maxLength": 30
+                        }
+                      },
+                      "required": [
+                        "fullName"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "participantCount",
+                  "participants",
+                  "expectedVersion"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "expectedVersion": 1,
+                  "participantCount": 1,
+                  "participants": [
+                    {
+                      "id": "00000000-0000-4000-8000-000000000001",
+                      "fullName": "Nguyen Van A",
+                      "phone": "0900000001"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/bookings": {
+      "get": {
+        "operationId": "BookingsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING_PAYMENT",
+                "CONFIRMED",
+                "EXPIRED",
+                "CANCELLED",
+                "CHECKED_IN",
+                "PARTIAL_CHECKIN",
+                "COMPLETED",
+                "NO_SHOW"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 12
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}": {
+      "get": {
+        "description": "Includes payment and refunds. After cancellation, poll this endpoint for refunds[].refundId and status; refund creation is asynchronous.",
+        "operationId": "BookingsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own booking detail",
+        "tags": [
+          "Bookings"
+        ]
+      }
+    },
+    "/api/v1/internal/bookings/{id}/rental-context": {
+      "get": {
+        "operationId": "BookingRentalContextController_context",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "x-api-key": []
+          }
+        ],
+        "tags": [
+          "Bookings internal"
+        ]
+      }
+    },
+    "/api/v1/trips": {
+      "get": {
+        "operationId": "BookingDiscoveryController_list",
+        "parameters": [
+          {
+            "name": "price",
+            "required": false,
+            "in": "query",
+            "description": "Maximum price per participant",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "difficulty",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "EASY",
+                "MEDIUM",
+                "HARD",
+                "EXTREME"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "destinationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 12
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Public booking discovery"
+        ]
+      }
+    },
+    "/api/v1/trips/{id}": {
+      "get": {
+        "operationId": "BookingDiscoveryController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Public booking discovery"
+        ]
+      }
+    },
+    "/api/v1/payments/options": {
+      "get": {
+        "operationId": "PaymentOptionsController_options",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List enabled payment gateways and default gateway",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/v1/payments/webhooks/vnpay": {
+      "get": {
+        "description": "VNPAY calls the registered URL with signed vnp_* query parameters. No JWT required. HTTP 200 is a protocol acknowledgement: inspect RspCode. Business updates are asynchronous after durable intake; this is not the browser return URL.",
+        "operationId": "VnpayIpnController_receive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "RspCode": {
+                      "type": "string",
+                      "enum": [
+                        "00",
+                        "01",
+                        "02",
+                        "04",
+                        "97",
+                        "99"
+                      ]
+                    },
+                    "Message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "VNPAY server-to-server IPN",
+        "tags": [
+          "Payments"
         ]
       }
     }

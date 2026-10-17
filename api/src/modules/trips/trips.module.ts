@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common'
+import { TransportController } from './transport/transport.controller'
+import { TransportService } from './transport/transport.service'
 import { PrivateInviteRateGuard } from './presentation/private-invite-rate.guard'
 import { PrivateMembershipController } from './presentation/controllers/private-membership.controller'
 import { PrivateMembershipUseCase } from './application/use-cases/private-membership.use-case'
@@ -24,6 +26,7 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
 
 @Module({
   controllers: [
+    TransportController,
     LeaderPublicTripController,
     TripOptionsController,
     PublicTripController,
@@ -32,6 +35,7 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
     PrivateMembershipController,
   ],
   providers: [
+    TransportService,
     PublicTripUseCase,
     PrivateTripUseCase,
     GetNavigationContextUseCase,
