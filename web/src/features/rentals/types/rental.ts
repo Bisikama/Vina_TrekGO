@@ -212,6 +212,13 @@ export type CreateRentalOrderResult = {
 export type RentalPaymentGateway = "momo" | "vnpay";
 export type RentalPaymentMethod = "QR" | "REDIRECT";
 
+export type RentalPaymentOptions = {
+  gateways: Array<{
+    gateway: RentalPaymentGateway;
+    environment: string;
+  }>;
+};
+
 export type RentalPaymentCheckout = {
   type: RentalPaymentMethod;
   url: string | null;
