@@ -49,7 +49,8 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
   constructor(private readonly prisma: PrismaService) {}
 
   async processTripRescheduled(command: TripRescheduledCommand): Promise<LifecycleExecutionResult> {
-    return this.prisma.$transaction(async (tx) => {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       // 1. Idempotency / Deduplication via RentalInboxEvent
       const existing = await tx.rentalInboxEvent.findUnique({
         where: { eventId: command.eventId },
@@ -96,6 +97,9 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
               rentalQuantityReservationsViaOrderLineId: {
                 where: {
                   status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] },
+                },
+                orderBy: {
+                  reservationCycle: 'asc',
                 },
               },
               rentalUnitAssignmentsViaOrderLineId: {
@@ -174,6 +178,8 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
         // RB-POL-15: effectiveReturnDue protects contractual rentalEndAt
         const effectiveReturnDue = effectiveDueAt(order.rentalEndAt, newPlannedReturnAt);
 
+        const processingNow = new Date();
+
         // Calculate line-level windows per Policy v1.5.2 RB-POL-30
         // occupiedFrom = rentalStartAt - 12h
         // Nominal occupiedUntil = effectiveReturnDueAt + (requiresDeep ? 48h : 24h), strictly single buffer
@@ -184,13 +190,28 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           quantity: number;
           occupiedFrom: Date;
           occupiedUntil: Date;
-          reservationId?: string;
+          allOwnReservationIds: string[];
+          baseReservationId?: string;
+          latestConfirmedReservationId?: string;
+          latestConfirmedOccupiedUntil?: Date;
           activeUnitIds?: string[];
         }> = [];
 
         for (const line of order.rentalOrderLinesViaOrderId) {
           const requiresDeep = line.product.requiresDeepReturnInspection === true;
           const bufferHours = requiresDeep ? 48 : 24;
+
+          const allReservations = line.rentalQuantityReservationsViaOrderLineId ?? [];
+          const confirmedReservations = allReservations.filter(
+            (r) => r.status === ReservationStatus.CONFIRMED,
+          );
+          const activeHeldReservations = allReservations.filter(
+            (r) =>
+              r.status === ReservationStatus.HELD &&
+              r.holdExpiresAt &&
+              r.holdExpiresAt > processingNow,
+          );
+          const validOwnReservations = [...confirmedReservations, ...activeHeldReservations];
 
           let lineFrom: Date;
           let lineUntil: Date;
@@ -203,8 +224,11 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             lineUntil = new Date(effectiveReturnDue.getTime() + bufferHours * 3600_000);
           } else {
             // ACTIVE: user already has equipment; handover start is immutable
-            const existingRes = line.rentalQuantityReservationsViaOrderLineId[0];
-            lineFrom = existingRes ? existingRes.occupiedFrom : order.occupiedStartAt;
+            const minConfirmedFrom =
+              confirmedReservations.length > 0
+                ? new Date(Math.min(...confirmedReservations.map((r) => r.occupiedFrom.getTime())))
+                : order.occupiedStartAt;
+            lineFrom = minConfirmedFrom;
             lineUntil = new Date(effectiveReturnDue.getTime() + bufferHours * 3600_000);
           }
 
@@ -218,34 +242,43 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 .map((a) => a.equipmentUnitId)
             : undefined;
 
+          const baseReservation = allReservations[0];
+          const latestConfirmedReservation =
+            confirmedReservations.length > 0
+              ? confirmedReservations[confirmedReservations.length - 1]
+              : undefined;
+
           lineWindows.push({
             lineId: line.id,
             productId: line.productId,
             quantity: line.quantity,
             occupiedFrom: lineFrom,
             occupiedUntil: lineUntil,
-            reservationId: line.rentalQuantityReservationsViaOrderLineId[0]?.id,
+            allOwnReservationIds: validOwnReservations.map((r) => r.id),
+            baseReservationId: baseReservation?.id,
+            latestConfirmedReservationId: latestConfirmedReservation?.id,
+            latestConfirmedOccupiedUntil: latestConfirmedReservation?.occupiedUntil,
             activeUnitIds: activeUnitIds && activeUnitIds.length > 0 ? activeUnitIds : undefined,
           });
         }
 
         // Capacity Safety Gate check per product
-        // P0-03 & P1-E: Exclude current order's existing reservations and recognize own active rented units
+        // P0-03 & P1-E & P0-01: Exclude ALL active own reservations (base + confirmed extensions + active holds)
         // Scoped to primary InventoryLocation per RB-POL-33
         let orderHasConflict = false;
         let conflictReason = '';
 
         for (const lw of lineWindows) {
           const ownResIds = lineWindows
-            .filter((w) => w.productId === lw.productId && w.reservationId)
-            .map((w) => w.reservationId as string);
+            .filter((w) => w.productId === lw.productId)
+            .flatMap((w) => w.allOwnReservationIds);
 
           const snapshot = await getVerifiedCapacitySnapshot(tx, {
             productId: lw.productId,
             requestedQuantity: lw.quantity,
             occupiedFrom: lw.occupiedFrom,
             occupiedUntil: lw.occupiedUntil,
-            now: command.occurredAt,
+            now: processingNow,
             inventoryLocationId: primaryLocationId,
             excludeReservationIds: ownResIds,
             activeUnitIds: lw.activeUnitIds,
@@ -302,9 +335,9 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           // Pre-handover SUCCESS: All lines have capacity.
           // Re-hold all-or-nothing across all line reservations
           for (const lw of lineWindows) {
-            if (lw.reservationId) {
+            if (lw.baseReservationId) {
               await tx.rentalQuantityReservation.update({
-                where: { id: lw.reservationId },
+                where: { id: lw.baseReservationId },
                 data: {
                   occupiedFrom: lw.occupiedFrom,
                   occupiedUntil: lw.occupiedUntil,
@@ -357,11 +390,14 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           // 2. ALWAYS record the actual valid operational schedule!
           // 3. Extend reservation occupiedUntil so real physical occupation is recorded.
           for (const lw of lineWindows) {
-            if (lw.reservationId) {
+            const resIdToUpdate = lw.latestConfirmedReservationId ?? lw.baseReservationId;
+            if (resIdToUpdate) {
+              const currentUntil = lw.latestConfirmedOccupiedUntil ?? lw.occupiedUntil;
+              const targetUntil = lw.occupiedUntil > currentUntil ? lw.occupiedUntil : currentUntil;
               await tx.rentalQuantityReservation.update({
-                where: { id: lw.reservationId },
+                where: { id: resIdToUpdate },
                 data: {
-                  occupiedUntil: lw.occupiedUntil,
+                  occupiedUntil: targetUntil,
                   version: { increment: 1 },
                 },
               });
@@ -485,11 +521,31 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
       });
 
       return executionResult;
-    });
+      });
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.rentalInboxEvent.findUnique({
+          where: { eventId: command.eventId },
+        });
+        if (existing?.result) {
+          return existing.result as unknown as LifecycleExecutionResult;
+        }
+        return {
+          eventId: command.eventId,
+          status: 'SKIPPED_DUPLICATE',
+          affectedOrderCount: 0,
+          affectedOrderIds: [],
+          conflicts: [],
+          scheduleNoticesIssued: [],
+        };
+      }
+      throw err;
+    }
   }
 
   async processTripCancelled(command: TripCancelledCommand): Promise<LifecycleExecutionResult> {
-    return this.prisma.$transaction(async (tx) => {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       // 1. Deduplication via RentalInboxEvent
       const existing = await tx.rentalInboxEvent.findUnique({
         where: { eventId: command.eventId },
@@ -706,6 +762,9 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
               EquipmentUnitStatus.PACKED,
             ];
 
+            let hasUnsafeUnits = false;
+            const unsafeUnits: Array<{ unitId: string; reason: string }> = [];
+
             for (const line of order.rentalOrderLinesViaOrderId) {
               for (const assignment of line.rentalUnitAssignmentsViaOrderLineId) {
                 if (assignment.status !== RentalUnitAssignmentStatus.CLOSED) {
@@ -739,6 +798,16 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                         version: { increment: 1 },
                       },
                     });
+                  } else {
+                    hasUnsafeUnits = true;
+                    unsafeUnits.push({
+                      unitId: assignment.equipmentUnitId,
+                      reason: !isAtPrimaryLocation
+                        ? 'UNIT_NOT_AT_PRIMARY_LOCATION'
+                        : !isUndamaged
+                          ? `UNIT_CONDITION_${unit.condition}`
+                          : `UNIT_STATUS_INELIGIBLE_${unit.status}`,
+                    });
                   }
                 }
               }
@@ -747,7 +816,10 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             if (order.inventoryTaskViaOrderId) {
               await tx.inventoryTask.update({
                 where: { id: order.inventoryTaskViaOrderId.id },
-                data: { status: InventoryTaskStatus.CLOSED, version: { increment: 1 } },
+                data: {
+                  status: hasUnsafeUnits ? InventoryTaskStatus.BLOCKED : InventoryTaskStatus.CLOSED,
+                  version: { increment: 1 },
+                },
               });
             }
 
@@ -757,6 +829,18 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 data: { status: DeliveryTaskStatus.CANCELLED, version: { increment: 1 } },
               });
             }
+
+            await tx.rentalOrder.update({
+              where: { id: order.id, version: order.version },
+              data: {
+                status: RentalOrderStatus.CANCELLED,
+                exceptionStatus: hasUnsafeUnits
+                  ? RentalOrderExceptionStatus.ACTION_REQUIRED
+                  : RentalOrderExceptionStatus.NONE,
+                contextVersionSnapshot: command.payload.tripVersion,
+                version: { increment: 1 },
+              },
+            });
 
             await tx.rentalOutboxEvent.upsert({
               where: { deduplicationKey: `trip-cancel:${order.id}:${eventVersion}` },
@@ -776,6 +860,27 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 }),
               },
             });
+
+            if (hasUnsafeUnits) {
+              await tx.rentalOutboxEvent.upsert({
+                where: { deduplicationKey: `rental-action-required:unsafe-units:${order.id}:${eventVersion}` },
+                update: {},
+                create: {
+                  deduplicationKey: `rental-action-required:unsafe-units:${order.id}:${eventVersion}`,
+                  eventType: 'RENTAL_ACTION_REQUIRED',
+                  aggregateType: 'RentalOrder',
+                  aggregateId: order.id,
+                  payload: jsonValue({
+                    orderId: order.id,
+                    tripId: order.tripId,
+                    reason: 'UNSAFE_CUSTODY_UNIT_ON_CANCELLATION',
+                    unsafeUnits,
+                    status: RentalOrderStatus.CANCELLED,
+                  }),
+                },
+              });
+              actionRequiredOrderIds.push(order.id);
+            }
 
             cancelledOrderIds.push(order.id);
           }
@@ -850,17 +955,13 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
       });
 
       return executionResult;
-    });
-  }
-
-  async processBookingCancelled(command: BookingCancelledCommand): Promise<LifecycleExecutionResult> {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Deduplication via RentalInboxEvent
-      const existing = await tx.rentalInboxEvent.findUnique({
-        where: { eventId: command.eventId },
       });
-      if (existing) {
-        if (existing.result) {
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.rentalInboxEvent.findUnique({
+          where: { eventId: command.eventId },
+        });
+        if (existing?.result) {
           return existing.result as unknown as LifecycleExecutionResult;
         }
         return {
@@ -872,157 +973,399 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           scheduleNoticesIssued: [],
         };
       }
+      throw err;
+    }
+  }
 
-      const eventVersion = command.payload.version ?? command.entityVersion;
+  async processBookingCancelled(command: BookingCancelledCommand): Promise<LifecycleExecutionResult> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Deduplication via RentalInboxEvent
+        const existing = await tx.rentalInboxEvent.findUnique({
+          where: { eventId: command.eventId },
+        });
+        if (existing) {
+          if (existing.result) {
+            return existing.result as unknown as LifecycleExecutionResult;
+          }
+          return {
+            eventId: command.eventId,
+            status: 'SKIPPED_DUPLICATE',
+            affectedOrderCount: 0,
+            affectedOrderIds: [],
+            conflicts: [],
+            scheduleNoticesIssued: [],
+          };
+        }
 
-      // Event ordering per entity/stream (P1-D):
-      // Track high-water mark for the Booking entity stream in RentalInboxEvent.
-      // Do NOT compare Booking version against Trip contextVersionSnapshot!
-      const higherBookingEvent = await tx.rentalInboxEvent.findFirst({
-        where: {
-          entityId: command.payload.bookingId,
-          status: EventStatus.PROCESSED,
-          entityVersion: { gte: eventVersion },
-        },
-      });
+        const canonicalVersion = command.payload.version ?? command.entityVersion;
 
-      if (higherBookingEvent) {
-        const outOfOrderResult: LifecycleExecutionResult = {
-          eventId: command.eventId,
-          status: 'SKIPPED_OUT_OF_ORDER',
-          affectedOrderCount: 0,
-          affectedOrderIds: [],
-          conflicts: [],
-          scheduleNoticesIssued: [],
-        };
-        await tx.rentalInboxEvent.create({
+        // Event ordering per entity/stream (P1-D / Preflight 2):
+        // Track high-water mark for the Booking entity stream in RentalInboxEvent using canonical version.
+        // Do NOT compare Booking version against Trip contextVersionSnapshot!
+        const higherBookingEvent = await tx.rentalInboxEvent.findFirst({
+          where: {
+            entityId: command.payload.bookingId,
+            status: EventStatus.PROCESSED,
+            entityVersion: { gte: canonicalVersion },
+          },
+        });
+
+        if (higherBookingEvent) {
+          const outOfOrderResult: LifecycleExecutionResult = {
+            eventId: command.eventId,
+            status: 'SKIPPED_OUT_OF_ORDER',
+            affectedOrderCount: 0,
+            affectedOrderIds: [],
+            conflicts: [],
+            scheduleNoticesIssued: [],
+          };
+          await tx.rentalInboxEvent.create({
+            data: {
+              eventId: command.eventId,
+              eventType: command.eventType,
+              entityId: command.payload.bookingId,
+              entityVersion: canonicalVersion,
+              correlationId: command.correlationId,
+              occurredAt: command.occurredAt,
+              payload: jsonValue(command.payload),
+              status: EventStatus.PROCESSED,
+              processedAt: new Date(),
+              result: jsonValue(outOfOrderResult),
+            },
+          });
+          return outOfOrderResult;
+        }
+
+        const inbox = await tx.rentalInboxEvent.create({
           data: {
             eventId: command.eventId,
             eventType: command.eventType,
-            entityId: command.entityId,
-            entityVersion: command.entityVersion,
+            entityId: command.payload.bookingId,
+            entityVersion: canonicalVersion,
             correlationId: command.correlationId,
             occurredAt: command.occurredAt,
             payload: jsonValue(command.payload),
-            status: EventStatus.PROCESSED,
-            processedAt: new Date(),
-            result: jsonValue(outOfOrderResult),
+            status: EventStatus.PENDING,
           },
         });
-        return outOfOrderResult;
-      }
 
-      const inbox = await tx.rentalInboxEvent.create({
-        data: {
-          eventId: command.eventId,
-          eventType: command.eventType,
-          entityId: command.entityId,
-          entityVersion: command.entityVersion,
-          correlationId: command.correlationId,
-          occurredAt: command.occurredAt,
-          payload: jsonValue(command.payload),
-          status: EventStatus.PENDING,
-        },
-      });
-
-      const orders = await tx.rentalOrder.findMany({
-        where: {
-          bookingId: command.payload.bookingId,
-          status: { in: OPEN_STATUSES },
-        },
-        include: {
-          rentalOrderLinesViaOrderId: {
-            include: {
-              rentalUnitAssignmentsViaOrderLineId: {
-                include: {
-                  equipmentUnit: true,
+        const orders = await tx.rentalOrder.findMany({
+          where: {
+            bookingId: command.payload.bookingId,
+            status: { in: OPEN_STATUSES },
+          },
+          include: {
+            rentalOrderLinesViaOrderId: {
+              include: {
+                rentalUnitAssignmentsViaOrderLineId: {
+                  include: {
+                    equipmentUnit: true,
+                  },
                 },
               },
             },
-          },
-          inventoryTaskViaOrderId: {
-            include: {
-              package: true,
+            inventoryTaskViaOrderId: {
+              include: {
+                package: true,
+              },
+            },
+            deliveryTasksViaOrderId: {
+              include: {
+                package: true,
+              },
             },
           },
-          deliveryTasksViaOrderId: {
-            include: {
-              package: true,
-            },
-          },
-        },
-      });
+        });
 
-      const affectedOrderIds: string[] = [];
-      const cancelledOrderIds: string[] = [];
-      const actionRequiredOrderIds: string[] = [];
+        const affectedOrderIds: string[] = [];
+        const cancelledOrderIds: string[] = [];
+        const actionRequiredOrderIds: string[] = [];
 
-      const effectiveAt = new Date(command.payload.effectiveAt);
-      const primaryLocationId = await resolveActivePrimaryRentalLocation(tx);
+        const effectiveAt = new Date(command.payload.effectiveAt);
+        const primaryLocationId = await resolveActivePrimaryRentalLocation(tx);
 
-      for (const order of orders) {
-        // Note: Do NOT compare order.contextVersionSnapshot with eventVersion (Booking stream != Trip stream)
-        const isBeforeHandover = BEFORE_HANDOVER_STATUSES.includes(order.status);
+        for (const order of orders) {
+          // Note: Do NOT compare order.contextVersionSnapshot with eventVersion (Booking stream != Trip stream)
+          const isBeforeHandover = BEFORE_HANDOVER_STATUSES.includes(order.status);
 
-        if (isBeforeHandover) {
-          const pkg =
-            order.inventoryTaskViaOrderId?.package ??
-            order.deliveryTasksViaOrderId?.[0]?.package;
+          if (isBeforeHandover) {
+            const pkg =
+              order.inventoryTaskViaOrderId?.package ??
+              order.deliveryTasksViaOrderId?.[0]?.package;
 
-          const isTransferredToDelivery =
-            order.inventoryTaskViaOrderId?.status === InventoryTaskStatus.TRANSFERRED ||
-            order.deliveryTasksViaOrderId?.some(
-              (dt) =>
-                dt.status === DeliveryTaskStatus.PACKAGE_RECEIVED ||
-                dt.status === DeliveryTaskStatus.RECIPIENT_VERIFIED ||
-                dt.status === DeliveryTaskStatus.HANDED_OVER,
-            ) ||
-            pkg?.status === PackageStatus.TRANSFERRED_TO_DELIVERY ||
-            order.rentalOrderLinesViaOrderId.some((l) =>
-              l.rentalUnitAssignmentsViaOrderLineId.some(
-                (a) => a.equipmentUnit && a.equipmentUnit.currentInventoryLocationId === null,
-              ),
-            );
+            const isTransferredToDelivery =
+              order.inventoryTaskViaOrderId?.status === InventoryTaskStatus.TRANSFERRED ||
+              order.deliveryTasksViaOrderId?.some(
+                (dt) =>
+                  dt.status === DeliveryTaskStatus.PACKAGE_RECEIVED ||
+                  dt.status === DeliveryTaskStatus.RECIPIENT_VERIFIED ||
+                  dt.status === DeliveryTaskStatus.HANDED_OVER,
+              ) ||
+              pkg?.status === PackageStatus.TRANSFERRED_TO_DELIVERY ||
+              order.rentalOrderLinesViaOrderId.some((l) =>
+                l.rentalUnitAssignmentsViaOrderLineId.some(
+                  (a) => a.equipmentUnit && a.equipmentUnit.currentInventoryLocationId === null,
+                ),
+              );
 
-          if (isTransferredToDelivery) {
+            if (isTransferredToDelivery) {
+              await tx.rentalOrder.update({
+                where: { id: order.id, version: order.version },
+                data: {
+                  status: RentalOrderStatus.CANCELLED,
+                  exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+                  cancelledAt: effectiveAt,
+                  version: { increment: 1 },
+                },
+              });
+
+              await tx.rentalQuantityReservation.updateMany({
+                where: {
+                  orderLine: { orderId: order.id },
+                  status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] },
+                },
+                data: {
+                  status: ReservationStatus.RELEASED,
+                  releasedAt: new Date(),
+                  version: { increment: 1 },
+                },
+              });
+
+              for (const dt of order.deliveryTasksViaOrderId) {
+                await tx.deliveryTask.update({
+                  where: { id: dt.id },
+                  data: {
+                    exceptionNotes: 'RETURN_TO_INVENTORY_LOCATION_REQUIRED',
+                    exceptionAt: effectiveAt,
+                    version: { increment: 1 },
+                  },
+                });
+              }
+
+              await tx.rentalOutboxEvent.upsert({
+                where: { deduplicationKey: `custody-return-required-booking:${order.id}:${canonicalVersion}` },
+                update: {},
+                create: {
+                  deduplicationKey: `custody-return-required-booking:${order.id}:${canonicalVersion}`,
+                  eventType: 'RENTAL_ACTION_REQUIRED',
+                  aggregateType: 'RentalOrder',
+                  aggregateId: order.id,
+                  payload: jsonValue({
+                    orderId: order.id,
+                    bookingId: order.bookingId,
+                    tripId: order.tripId,
+                    reason: 'PRE_HANDOVER_CANCELLATION_DELIVERY_CUSTODY_RETURN_REQUIRED',
+                    detail: 'Package transferred to delivery staff. Units cannot be made AVAILABLE until received at InventoryLocation.',
+                    contextVersion: canonicalVersion,
+                    status: RentalOrderStatus.CANCELLED,
+                  }),
+                },
+              });
+
+              await tx.rentalOutboxEvent.upsert({
+                where: { deduplicationKey: `booking-cancel:${order.id}:${canonicalVersion}` },
+                update: {},
+                create: {
+                  deduplicationKey: `booking-cancel:${order.id}:${canonicalVersion}`,
+                  eventType: 'RENTAL_ORDER_CANCELLED',
+                  aggregateType: 'RentalOrder',
+                  aggregateId: order.id,
+                  payload: jsonValue({
+                    orderId: order.id,
+                    bookingId: order.bookingId,
+                    tripId: order.tripId,
+                    reason: command.payload.reason,
+                    status: 'CANCELLED',
+                    financialStatus: order.financialStatus,
+                    custodyPendingReturn: true,
+                  }),
+                },
+              });
+
+              actionRequiredOrderIds.push(order.id);
+              cancelledOrderIds.push(order.id);
+            } else {
+              // Pre-handover: Package in warehouse. Release reservations.
+              await tx.rentalQuantityReservation.updateMany({
+                where: {
+                  orderLine: { orderId: order.id },
+                  status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] },
+                },
+                data: {
+                  status: ReservationStatus.RELEASED,
+                  releasedAt: new Date(),
+                  version: { increment: 1 },
+                },
+              });
+
+              // Package cancellation
+              if (pkg && pkg.status !== PackageStatus.CLOSED && pkg.status !== PackageStatus.CANCELLED) {
+                await tx.package.update({
+                  where: { id: pkg.id },
+                  data: {
+                    status: PackageStatus.CANCELLED,
+                    version: { increment: 1 },
+                  },
+                });
+              }
+
+              // RentalUnitAssignment and EquipmentUnit release with custody verification
+              const releasedUnitIds = new Set<string>();
+              const eligibleToReleaseStatuses: EquipmentUnitStatus[] = [
+                EquipmentUnitStatus.PICKED,
+                EquipmentUnitStatus.PACKED,
+              ];
+
+              let hasUnsafeUnits = false;
+              const unsafeUnits: Array<{ unitId: string; reason: string }> = [];
+
+              for (const line of order.rentalOrderLinesViaOrderId) {
+                for (const assignment of line.rentalUnitAssignmentsViaOrderLineId) {
+                  if (assignment.status !== RentalUnitAssignmentStatus.CLOSED) {
+                    await tx.rentalUnitAssignment.update({
+                      where: { id: assignment.id },
+                      data: {
+                        status: RentalUnitAssignmentStatus.CLOSED,
+                        closedAt: effectiveAt,
+                        version: { increment: 1 },
+                      },
+                    });
+                  }
+
+                  if (
+                    assignment.equipmentUnit &&
+                    !releasedUnitIds.has(assignment.equipmentUnitId)
+                  ) {
+                    const unit = assignment.equipmentUnit;
+                    const isAtPrimaryLocation = unit.currentInventoryLocationId === primaryLocationId;
+                    const isUndamaged =
+                      unit.condition !== EquipmentCondition.DAMAGED &&
+                      unit.condition !== EquipmentCondition.LOST;
+                    const isStatusEligible = eligibleToReleaseStatuses.includes(unit.status);
+
+                    if (isAtPrimaryLocation && isUndamaged && isStatusEligible) {
+                      releasedUnitIds.add(assignment.equipmentUnitId);
+                      await tx.equipmentUnit.update({
+                        where: { id: assignment.equipmentUnitId },
+                        data: {
+                          status: EquipmentUnitStatus.AVAILABLE,
+                          version: { increment: 1 },
+                        },
+                      });
+                    } else {
+                      hasUnsafeUnits = true;
+                      unsafeUnits.push({
+                        unitId: assignment.equipmentUnitId,
+                        reason: !isAtPrimaryLocation
+                          ? 'UNIT_NOT_AT_PRIMARY_LOCATION'
+                          : !isUndamaged
+                            ? `UNIT_CONDITION_${unit.condition}`
+                            : `UNIT_STATUS_INELIGIBLE_${unit.status}`,
+                      });
+                    }
+                  }
+                }
+              }
+
+              if (order.inventoryTaskViaOrderId) {
+                await tx.inventoryTask.update({
+                  where: { id: order.inventoryTaskViaOrderId.id },
+                  data: {
+                    status: hasUnsafeUnits ? InventoryTaskStatus.BLOCKED : InventoryTaskStatus.CLOSED,
+                    version: { increment: 1 },
+                  },
+                });
+              }
+
+              for (const dt of order.deliveryTasksViaOrderId) {
+                await tx.deliveryTask.update({
+                  where: { id: dt.id },
+                  data: { status: DeliveryTaskStatus.CANCELLED, version: { increment: 1 } },
+                });
+              }
+
+              await tx.rentalOrder.update({
+                where: { id: order.id, version: order.version },
+                data: {
+                  status: RentalOrderStatus.CANCELLED,
+                  exceptionStatus: hasUnsafeUnits
+                    ? RentalOrderExceptionStatus.ACTION_REQUIRED
+                    : RentalOrderExceptionStatus.NONE,
+                  cancelledAt: effectiveAt,
+                  version: { increment: 1 },
+                },
+              });
+
+              await tx.rentalOutboxEvent.upsert({
+                where: { deduplicationKey: `booking-cancel:${order.id}:${canonicalVersion}` },
+                update: {},
+                create: {
+                  deduplicationKey: `booking-cancel:${order.id}:${canonicalVersion}`,
+                  eventType: 'RENTAL_ORDER_CANCELLED',
+                  aggregateType: 'RentalOrder',
+                  aggregateId: order.id,
+                  payload: jsonValue({
+                    orderId: order.id,
+                    bookingId: order.bookingId,
+                    tripId: order.tripId,
+                    reason: command.payload.reason,
+                    status: 'CANCELLED',
+                    financialStatus: order.financialStatus,
+                    custodyPendingReturn: false,
+                  }),
+                },
+              });
+
+              if (hasUnsafeUnits) {
+                await tx.rentalOutboxEvent.upsert({
+                  where: { deduplicationKey: `rental-action-required:unsafe-units-booking:${order.id}:${canonicalVersion}` },
+                  update: {},
+                  create: {
+                    deduplicationKey: `rental-action-required:unsafe-units-booking:${order.id}:${canonicalVersion}`,
+                    eventType: 'RENTAL_ACTION_REQUIRED',
+                    aggregateType: 'RentalOrder',
+                    aggregateId: order.id,
+                    payload: jsonValue({
+                      orderId: order.id,
+                      bookingId: order.bookingId,
+                      tripId: order.tripId,
+                      reason: 'PRE_HANDOVER_CANCELLATION_UNSAFE_UNIT_CUSTODY',
+                      detail: 'One or more assigned equipment units are damaged, lost, or not at primary warehouse. Staff inventory action required.',
+                      unsafeUnits,
+                      status: RentalOrderStatus.CANCELLED,
+                    }),
+                  },
+                });
+                actionRequiredOrderIds.push(order.id);
+              }
+
+              cancelledOrderIds.push(order.id);
+            }
+          } else {
+            // ACTIVE: user custody preserved. Protect contractual rentalEndAt per RB-POL-15!
             await tx.rentalOrder.update({
               where: { id: order.id, version: order.version },
               data: {
-                status: RentalOrderStatus.CANCELLED,
                 exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
-                cancelledAt: effectiveAt,
-                version: { increment: 1 },
-              },
-            });
-
-            await tx.rentalQuantityReservation.updateMany({
-              where: {
-                orderLine: { orderId: order.id },
-                status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] },
-              },
-              data: {
-                status: ReservationStatus.RELEASED,
-                releasedAt: new Date(),
                 version: { increment: 1 },
               },
             });
 
             for (const dt of order.deliveryTasksViaOrderId) {
-              await tx.deliveryTask.update({
-                where: { id: dt.id },
-                data: {
-                  exceptionNotes: 'RETURN_TO_INVENTORY_LOCATION_REQUIRED',
-                  exceptionAt: effectiveAt,
-                  version: { increment: 1 },
-                },
-              });
+              if (dt.taskType === 'RETURN' && dt.status === DeliveryTaskStatus.SCHEDULED) {
+                await tx.deliveryTask.update({
+                  where: { id: dt.id },
+                  data: { exceptionNotes: 'BOOKING_CANCELLED_WITH_ACTIVE_RENTAL', version: { increment: 1 } },
+                });
+              }
             }
 
             await tx.rentalOutboxEvent.upsert({
-              where: { deduplicationKey: `custody-return-required-booking:${order.id}:${eventVersion}` },
+              where: { deduplicationKey: `booking-cancel-active:${order.id}:${canonicalVersion}` },
               update: {},
               create: {
-                deduplicationKey: `custody-return-required-booking:${order.id}:${eventVersion}`,
+                deduplicationKey: `booking-cancel-active:${order.id}:${canonicalVersion}`,
                 eventType: 'RENTAL_ACTION_REQUIRED',
                 aggregateType: 'RentalOrder',
                 aggregateId: order.id,
@@ -1030,219 +1373,63 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                   orderId: order.id,
                   bookingId: order.bookingId,
                   tripId: order.tripId,
-                  reason: 'PRE_HANDOVER_CANCELLATION_DELIVERY_CUSTODY_RETURN_REQUIRED',
-                  detail: 'Package transferred to delivery staff. Units cannot be made AVAILABLE until received at InventoryLocation.',
-                  contextVersion: eventVersion,
-                  status: RentalOrderStatus.CANCELLED,
-                }),
-              },
-            });
-
-            await tx.rentalOutboxEvent.upsert({
-              where: { deduplicationKey: `booking-cancel:${order.id}:${eventVersion}` },
-              update: {},
-              create: {
-                deduplicationKey: `booking-cancel:${order.id}:${eventVersion}`,
-                eventType: 'RENTAL_ORDER_CANCELLED',
-                aggregateType: 'RentalOrder',
-                aggregateId: order.id,
-                payload: jsonValue({
-                  orderId: order.id,
-                  bookingId: order.bookingId,
-                  tripId: order.tripId,
-                  reason: command.payload.reason,
-                  status: 'CANCELLED',
-                  financialStatus: order.financialStatus,
-                  custodyPendingReturn: true,
+                  reason: 'BOOKING_CANCELLED_WITH_ACTIVE_RENTAL',
+                  detail: 'Booking cancelled while customer holds equipment. Customer custody protected; contractual rentalEndAt preserved; staff action required for recovery.',
+                  effectiveAt: effectiveAt.toISOString(),
+                  rentalEndAt: order.rentalEndAt.toISOString(),
+                  operationalReturnDueAt: order.operationalReturnDueAt?.toISOString() ?? null,
+                  equipmentInCustody: true,
+                  contextVersion: canonicalVersion,
                 }),
               },
             });
 
             actionRequiredOrderIds.push(order.id);
-            cancelledOrderIds.push(order.id);
-          } else {
-            await tx.rentalOrder.update({
-              where: { id: order.id, version: order.version },
-              data: {
-                status: RentalOrderStatus.CANCELLED,
-                cancelledAt: effectiveAt,
-                version: { increment: 1 },
-              },
-            });
-
-            await tx.rentalQuantityReservation.updateMany({
-              where: {
-                orderLine: { orderId: order.id },
-                status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] },
-              },
-              data: {
-                status: ReservationStatus.RELEASED,
-                releasedAt: new Date(),
-                version: { increment: 1 },
-              },
-            });
-
-            // Package cancellation
-            if (pkg && pkg.status !== PackageStatus.CLOSED && pkg.status !== PackageStatus.CANCELLED) {
-              await tx.package.update({
-                where: { id: pkg.id },
-                data: {
-                  status: PackageStatus.CANCELLED,
-                  version: { increment: 1 },
-                },
-              });
-            }
-
-            // RentalUnitAssignment and EquipmentUnit release with custody verification
-            const releasedUnitIds = new Set<string>();
-            const eligibleToReleaseStatuses: EquipmentUnitStatus[] = [
-              EquipmentUnitStatus.PICKED,
-              EquipmentUnitStatus.PACKED,
-            ];
-
-            for (const line of order.rentalOrderLinesViaOrderId) {
-              for (const assignment of line.rentalUnitAssignmentsViaOrderLineId) {
-                if (assignment.status !== RentalUnitAssignmentStatus.CLOSED) {
-                  await tx.rentalUnitAssignment.update({
-                    where: { id: assignment.id },
-                    data: {
-                      status: RentalUnitAssignmentStatus.CLOSED,
-                      closedAt: effectiveAt,
-                      version: { increment: 1 },
-                    },
-                  });
-                }
-
-                if (
-                  assignment.equipmentUnit &&
-                  !releasedUnitIds.has(assignment.equipmentUnitId)
-                ) {
-                  const unit = assignment.equipmentUnit;
-                  const isAtPrimaryLocation = unit.currentInventoryLocationId === primaryLocationId;
-                  const isUndamaged =
-                    unit.condition !== EquipmentCondition.DAMAGED &&
-                    unit.condition !== EquipmentCondition.LOST;
-                  const isStatusEligible = eligibleToReleaseStatuses.includes(unit.status);
-
-                  if (isAtPrimaryLocation && isUndamaged && isStatusEligible) {
-                    releasedUnitIds.add(assignment.equipmentUnitId);
-                    await tx.equipmentUnit.update({
-                      where: { id: assignment.equipmentUnitId },
-                      data: {
-                        status: EquipmentUnitStatus.AVAILABLE,
-                        version: { increment: 1 },
-                      },
-                    });
-                  }
-                }
-              }
-            }
-
-            if (order.inventoryTaskViaOrderId) {
-              await tx.inventoryTask.update({
-                where: { id: order.inventoryTaskViaOrderId.id },
-                data: { status: InventoryTaskStatus.CLOSED, version: { increment: 1 } },
-              });
-            }
-
-            for (const dt of order.deliveryTasksViaOrderId) {
-              await tx.deliveryTask.update({
-                where: { id: dt.id },
-                data: { status: DeliveryTaskStatus.CANCELLED, version: { increment: 1 } },
-              });
-            }
-
-            await tx.rentalOutboxEvent.upsert({
-              where: { deduplicationKey: `booking-cancel:${order.id}:${eventVersion}` },
-              update: {},
-              create: {
-                deduplicationKey: `booking-cancel:${order.id}:${eventVersion}`,
-                eventType: 'RENTAL_ORDER_CANCELLED',
-                aggregateType: 'RentalOrder',
-                aggregateId: order.id,
-                payload: jsonValue({
-                  orderId: order.id,
-                  bookingId: order.bookingId,
-                  tripId: order.tripId,
-                  reason: command.payload.reason,
-                  status: 'CANCELLED',
-                  financialStatus: order.financialStatus,
-                  custodyPendingReturn: false,
-                }),
-              },
-            });
-
-            cancelledOrderIds.push(order.id);
-          }
-        } else {
-          // ACTIVE: user custody preserved. Protect contractual rentalEndAt per RB-POL-15!
-          await tx.rentalOrder.update({
-            where: { id: order.id, version: order.version },
-            data: {
-              exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
-              version: { increment: 1 },
-            },
-          });
-
-          for (const dt of order.deliveryTasksViaOrderId) {
-            if (dt.taskType === 'RETURN' && dt.status === DeliveryTaskStatus.SCHEDULED) {
-              await tx.deliveryTask.update({
-                where: { id: dt.id },
-                data: { exceptionNotes: 'BOOKING_CANCELLED_WITH_ACTIVE_RENTAL', version: { increment: 1 } },
-              });
-            }
           }
 
-          await tx.rentalOutboxEvent.upsert({
-            where: { deduplicationKey: `booking-cancel-active:${order.id}:${eventVersion}` },
-            update: {},
-            create: {
-              deduplicationKey: `booking-cancel-active:${order.id}:${eventVersion}`,
-              eventType: 'RENTAL_ACTION_REQUIRED',
-              aggregateType: 'RentalOrder',
-              aggregateId: order.id,
-              payload: jsonValue({
-                orderId: order.id,
-                bookingId: order.bookingId,
-                tripId: order.tripId,
-                reason: 'BOOKING_CANCELLED_WITH_ACTIVE_RENTAL',
-                detail: 'Booking cancelled while customer holds equipment. Customer custody protected; contractual rentalEndAt preserved; staff action required for recovery.',
-                effectiveAt: effectiveAt.toISOString(),
-                rentalEndAt: order.rentalEndAt.toISOString(),
-                operationalReturnDueAt: order.operationalReturnDueAt?.toISOString() ?? null,
-                equipmentInCustody: true,
-                contextVersion: eventVersion,
-              }),
-            },
-          });
-
-          actionRequiredOrderIds.push(order.id);
+          affectedOrderIds.push(order.id);
         }
 
-        affectedOrderIds.push(order.id);
-      }
+        const executionResult: LifecycleExecutionResult = {
+          eventId: command.eventId,
+          status: 'PROCESSED',
+          affectedOrderCount: affectedOrderIds.length,
+          affectedOrderIds,
+          conflicts: [],
+          scheduleNoticesIssued: [],
+          cancelledOrderIds,
+          actionRequiredOrderIds,
+        };
 
-      const executionResult: LifecycleExecutionResult = {
-        eventId: command.eventId,
-        status: 'PROCESSED',
-        affectedOrderCount: affectedOrderIds.length,
-        affectedOrderIds,
-        conflicts: [],
-        scheduleNoticesIssued: [],
-        cancelledOrderIds,
-        actionRequiredOrderIds,
-      };
+        await tx.rentalInboxEvent.update({
+          where: { id: inbox.id },
+          data: {
+            status: EventStatus.PROCESSED,
+            processedAt: new Date(),
+            result: jsonValue(executionResult),
+          },
+        });
 
-      await tx.rentalInboxEvent.update({
-        where: { id: inbox.id },
-        data: {
-          status: EventStatus.PROCESSED,
-          processedAt: new Date(),
-          result: jsonValue(executionResult),
-        },
+        return executionResult;
       });
-
-      return executionResult;
-    });
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await this.prisma.rentalInboxEvent.findUnique({
+          where: { eventId: command.eventId },
+        });
+        if (existing?.result) {
+          return existing.result as unknown as LifecycleExecutionResult;
+        }
+        return {
+          eventId: command.eventId,
+          status: 'SKIPPED_DUPLICATE',
+          affectedOrderCount: 0,
+          affectedOrderIds: [],
+          conflicts: [],
+          scheduleNoticesIssued: [],
+        };
+      }
+      throw err;
+    }
   }
 }

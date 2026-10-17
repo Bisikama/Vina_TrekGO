@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import {
+  Prisma,
   RentalOrderStatus,
   RentalOrderExceptionStatus,
   ReservationStatus,
@@ -180,6 +181,10 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = PRIMARY_LOC_ID;
       mockPrisma = {
         $transaction: jest.fn(async (cb: (tx: any) => Promise<any>) => cb(mockTx)),
+        rentalInboxEvent: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
       };
       adapter = new PrismaTripLifecycleAdapter(mockPrisma);
 
@@ -1079,7 +1084,7 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         ],
         inventoryTaskViaOrderId: {
           id: 'inv-sync-1',
-          status: InventoryTaskStatus.PACKING,
+          status: InventoryTaskStatus.PACKED,
           package: {
             id: 'pkg-sync-1',
             status: PackageStatus.PACKED,
@@ -1578,6 +1583,384 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
           }),
         }),
       );
+    });
+
+    describe('Preflight 07B Regression Tests', () => {
+      it('PREFLIGHT 1: Reschedule excludes ALL own reservation cycles (base + extension) from competitor count and updates base without double-counting', async () => {
+        const newStartAt = new Date('2026-11-01T08:00:00Z');
+        const newEndAt = new Date('2026-11-04T18:00:00Z');
+        const originalRentalEndAt = new Date('2026-10-25T18:00:00Z');
+        const order = {
+          id: 'order-multi-res',
+          tripId: 'trip-1',
+          status: RentalOrderStatus.PAID,
+          version: 1,
+          rentalStartAt: newStartAt,
+          rentalEndAt: originalRentalEndAt,
+          rentalFee: '800000.00',
+          contextVersionSnapshot: 1,
+          occupiedStartAt: new Date('2026-10-20T07:00:00Z'),
+          occupiedEndAt: new Date('2026-10-28T18:00:00Z'),
+          plannedHandoverAt: new Date('2026-10-20T08:00:00Z'),
+          plannedReturnAt: new Date('2026-10-25T18:00:00Z'),
+          operationalReturnDueAt: new Date('2026-10-25T18:00:00Z'),
+          rentalPolicy: mockPolicy,
+          rentalOrderLinesViaOrderId: [
+            {
+              id: 'line-multi-res',
+              productId: 'prod-tent',
+              quantity: 1,
+              product: { requiresDeepReturnInspection: false },
+              rentalQuantityReservationsViaOrderLineId: [
+                {
+                  id: 'res-base-1',
+                  reservationCycle: 1,
+                  status: ReservationStatus.CONFIRMED,
+                  occupiedFrom: new Date('2026-10-20T07:00:00Z'),
+                  occupiedTo: new Date('2026-10-25T18:00:00Z'),
+                  version: 1,
+                },
+                {
+                  id: 'res-ext-cycle-2',
+                  reservationCycle: 2,
+                  status: ReservationStatus.CONFIRMED,
+                  occupiedFrom: new Date('2026-10-25T18:00:00Z'),
+                  occupiedTo: new Date('2026-10-28T18:00:00Z'),
+                  version: 1,
+                },
+              ],
+            },
+          ],
+          deliveryTasksViaOrderId: [
+            { id: 'dt-handover', taskType: 'DELIVERY', status: DeliveryTaskStatus.SCHEDULED },
+            { id: 'dt-return', taskType: 'RETURN', status: DeliveryTaskStatus.SCHEDULED },
+          ],
+        };
+
+        mockTx.rentalOrder.findMany.mockResolvedValue([order]);
+
+        const cmd: TripRescheduledCommand = {
+          eventId: 'evt-resched-multi-cycle',
+          eventType: 'TRIP_RESCHEDULED',
+          entityId: 'trip-1',
+          entityVersion: 2,
+          correlationId: 'corr-multi-cycle',
+          occurredAt: new Date(),
+          payload: {
+            tripId: 'trip-1',
+            newStartAt,
+            newEndAt,
+            contextVersion: 2,
+          },
+        };
+
+        const result = await adapter.processTripRescheduled(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderIds).toContain('order-multi-res');
+        expect(result.conflicts).toHaveLength(0);
+
+        // Verify that rentalQuantityReservation.findMany excluded BOTH own reservation IDs (base + extension cycle 2)
+        expect(mockTx.rentalQuantityReservation.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              id: expect.objectContaining({
+                notIn: expect.arrayContaining(['res-base-1', 'res-ext-cycle-2']),
+              }),
+            }),
+          }),
+        );
+
+        // Verify base reservation (cycle 1) was updated
+        expect(mockTx.rentalQuantityReservation.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'res-base-1' },
+          }),
+        );
+      });
+
+      it('PREFLIGHT 2: HandleBookingCancelledUseCase rejects version mismatch and adapter skips out-of-order on booking stream', async () => {
+        const mockPortInstance: jest.Mocked<TripLifecyclePort> = {
+          processTripRescheduled: jest.fn(),
+          processTripCancelled: jest.fn(),
+          processBookingCancelled: jest.fn(),
+        };
+        const useCase = new HandleBookingCancelledUseCase(mockPortInstance);
+
+        // Version mismatch between entityVersion and payload.version
+        const mismatchCmd: BookingCancelledCommand = {
+          eventId: 'evt-mismatch-1',
+          eventType: 'BOOKING_CANCELLED',
+          entityId: 'book-1',
+          entityVersion: 2,
+          correlationId: 'corr-1',
+          occurredAt: new Date(),
+          payload: {
+            bookingId: 'book-1',
+            reason: 'Mismatch test',
+            effectiveAt: new Date(),
+            version: 5, // Mismatch with entityVersion 2!
+          },
+        };
+
+        await expect(useCase.execute(mismatchCmd)).rejects.toMatchObject({
+          code: 'RENTAL_LIFECYCLE_EVENT_INVALID',
+        });
+
+        // Now test adapter out-of-order skip using canonical version
+        mockTx.rentalInboxEvent.findFirst.mockResolvedValueOnce({
+          id: 'inbox-higher',
+          entityId: 'book-1',
+          entityVersion: 6,
+          status: 'PROCESSED',
+        });
+
+        const canonicalCmd: BookingCancelledCommand = {
+          eventId: 'evt-canonical-late',
+          eventType: 'BOOKING_CANCELLED',
+          entityId: 'book-1',
+          entityVersion: 3,
+          correlationId: 'corr-canonical',
+          occurredAt: new Date(),
+          payload: {
+            bookingId: 'book-1',
+            reason: 'Late arrival',
+            effectiveAt: new Date(),
+            version: 3,
+          },
+        };
+
+        const result = await adapter.processBookingCancelled(canonicalCmd);
+        expect(result.status).toBe('SKIPPED_OUT_OF_ORDER');
+        expect(mockTx.rentalOrder.findMany).not.toHaveBeenCalled();
+      });
+
+      it('PREFLIGHT 3: Cancellation with unsafe unit sets ACTION_REQUIRED, blocks task, and creates audit outbox', async () => {
+        const order = {
+          id: 'order-unsafe-test',
+          bookingId: 'book-unsafe-1',
+          tripId: 'trip-1',
+          status: RentalOrderStatus.PREPARING,
+          version: 1,
+          financialStatus: 'PAID',
+          rentalOrderLinesViaOrderId: [
+            {
+              id: 'line-unsafe',
+              rentalUnitAssignmentsViaOrderLineId: [
+                {
+                  id: 'assign-unsafe-1',
+                  status: RentalUnitAssignmentStatus.ASSIGNED,
+                  equipmentUnitId: 'unit-unsafe-1',
+                  equipmentUnit: {
+                    id: 'unit-unsafe-1',
+                    status: EquipmentUnitStatus.PICKED,
+                    condition: EquipmentCondition.DAMAGED, // DAMAGED unit! Unsafe!
+                    currentInventoryLocationId: PRIMARY_LOC_ID,
+                  },
+                },
+              ],
+            },
+          ],
+          inventoryTaskViaOrderId: {
+            id: 'task-inv-unsafe',
+            status: InventoryTaskStatus.PICKING,
+            package: { id: 'pkg-1', status: PackageStatus.OPEN },
+          },
+          deliveryTasksViaOrderId: [],
+        };
+
+        mockTx.rentalOrder.findMany.mockResolvedValue([order]);
+
+        const cmd: BookingCancelledCommand = {
+          eventId: 'evt-cancel-unsafe-test',
+          eventType: 'BOOKING_CANCELLED',
+          entityId: 'book-unsafe-1',
+          entityVersion: 1,
+          correlationId: 'corr-unsafe',
+          occurredAt: new Date(),
+          payload: {
+            bookingId: 'book-unsafe-1',
+            reason: 'Customer cancelled with damaged unit',
+            effectiveAt: new Date(),
+            version: 1,
+          },
+        };
+
+        const result = await adapter.processBookingCancelled(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.actionRequiredOrderIds).toContain('order-unsafe-test');
+
+        // Order marked ACTION_REQUIRED
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'order-unsafe-test', version: 1 },
+            data: expect.objectContaining({
+              status: RentalOrderStatus.CANCELLED,
+              exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+            }),
+          }),
+        );
+
+        // InventoryTask blocked (not cleanly closed) for custody resolution
+        expect(mockTx.inventoryTask.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'task-inv-unsafe' },
+            data: expect.objectContaining({
+              status: InventoryTaskStatus.BLOCKED,
+            }),
+          }),
+        );
+
+        // Outbox event RENTAL_ACTION_REQUIRED emitted with unsafe unit details
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              eventType: 'RENTAL_ACTION_REQUIRED',
+              aggregateId: 'order-unsafe-test',
+              payload: expect.objectContaining({
+                reason: 'PRE_HANDOVER_CANCELLATION_UNSAFE_UNIT_CUSTODY',
+                unsafeUnits: expect.arrayContaining([
+                  expect.objectContaining({
+                    unitId: 'unit-unsafe-1',
+                    reason: 'UNIT_CONDITION_DAMAGED',
+                  }),
+                ]),
+              }),
+            }),
+          }),
+        );
+
+        // Unit was NOT marked AVAILABLE
+        expect(mockTx.equipmentUnit.update).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'unit-unsafe-1' },
+            data: expect.objectContaining({ status: EquipmentUnitStatus.AVAILABLE }),
+          }),
+        );
+      });
+
+      it('PREFLIGHT 4: Evaluates capacity using server processing time (processingNow) instead of occurredAt', async () => {
+        const historicalTime = new Date('2026-01-01T00:00:00Z'); // 10 months ago
+        const order = {
+          id: 'order-time-eval',
+          tripId: 'trip-1',
+          status: RentalOrderStatus.PAID,
+          version: 1,
+          rentalStartAt: new Date('2026-11-01T08:00:00Z'),
+          rentalEndAt: new Date('2026-11-04T18:00:00Z'),
+          rentalFee: '500000.00',
+          contextVersionSnapshot: 1,
+          operationalReturnDueAt: new Date('2026-11-04T18:00:00Z'),
+          rentalPolicy: mockPolicy,
+          rentalOrderLinesViaOrderId: [
+            {
+              id: 'line-time-eval',
+              productId: 'prod-tent',
+              quantity: 1,
+              product: { requiresDeepReturnInspection: false },
+              rentalQuantityReservationsViaOrderLineId: [
+                {
+                  id: 'res-time-1',
+                  reservationCycle: 1,
+                  status: ReservationStatus.CONFIRMED,
+                  occupiedFrom: new Date('2026-10-20T07:00:00Z'),
+                  occupiedTo: new Date('2026-10-25T18:00:00Z'),
+                  version: 1,
+                },
+              ],
+            },
+          ],
+          deliveryTasksViaOrderId: [],
+        };
+
+        mockTx.rentalOrder.findMany.mockResolvedValue([order]);
+
+        const cmd: TripRescheduledCommand = {
+          eventId: 'evt-time-eval',
+          eventType: 'TRIP_RESCHEDULED',
+          entityId: 'trip-1',
+          entityVersion: 2,
+          correlationId: 'corr-time',
+          occurredAt: historicalTime, // Historical event!
+          payload: {
+            tripId: 'trip-1',
+            newStartAt: new Date('2026-11-01T08:00:00Z'),
+            newEndAt: new Date('2026-11-04T18:00:00Z'),
+            contextVersion: 2,
+          },
+        };
+
+        const beforeCall = new Date().getTime();
+        await adapter.processTripRescheduled(cmd);
+        const afterCall = new Date().getTime();
+
+        // Check holdExpiresAt evaluated in capacity query
+        expect(mockTx.rentalQuantityReservation.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              OR: expect.arrayContaining([
+                expect.objectContaining({
+                  status: ReservationStatus.HELD,
+                  holdExpiresAt: expect.objectContaining({
+                    gt: expect.any(Date),
+                  }),
+                }),
+              ]),
+            }),
+          }),
+        );
+
+        // Get the actual holdExpiresAt date passed
+        const calls = mockTx.rentalQuantityReservation.findMany.mock.calls;
+        const lastCall = calls[calls.length - 1][0];
+        const evaluatedDate: Date = lastCall.where.OR[1].holdExpiresAt.gt;
+        // Must be close to current server time, NOT historical occurredAt!
+        expect(evaluatedDate.getTime()).toBeGreaterThanOrEqual(beforeCall - 1000);
+        expect(evaluatedDate.getTime()).toBeLessThanOrEqual(afterCall + 1000);
+      });
+
+      it('PREFLIGHT 5: Handles concurrent duplicate insertion (P2002) idempotently without throwing', async () => {
+        const cmd: TripRescheduledCommand = {
+          eventId: 'evt-p2002-concurrent',
+          eventType: 'TRIP_RESCHEDULED',
+          entityId: 'trip-1',
+          entityVersion: 2,
+          correlationId: 'corr-p2002',
+          occurredAt: new Date(),
+          payload: {
+            tripId: 'trip-1',
+            newStartAt: new Date('2026-11-01T08:00:00Z'),
+            newEndAt: new Date('2026-11-04T18:00:00Z'),
+            contextVersion: 2,
+          },
+        };
+
+        const p2002Error = new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on eventId',
+          {
+            code: 'P2002',
+            clientVersion: '6.3.1',
+          },
+        );
+
+        // Simulate $transaction failing with P2002
+        mockPrisma.$transaction.mockRejectedValueOnce(p2002Error);
+        mockPrisma.rentalInboxEvent.findUnique.mockResolvedValueOnce({
+          eventId: 'evt-p2002-concurrent',
+          status: 'PROCESSED',
+          result: {
+            eventId: 'evt-p2002-concurrent',
+            status: 'PROCESSED',
+            affectedOrderCount: 1,
+            affectedOrderIds: ['order-p2002'],
+            conflicts: [],
+            scheduleNoticesIssued: [],
+          },
+        });
+
+        const result = await adapter.processTripRescheduled(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderIds).toEqual(['order-p2002']);
+      });
     });
   });
 });

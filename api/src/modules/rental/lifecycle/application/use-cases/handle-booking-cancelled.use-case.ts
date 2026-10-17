@@ -28,6 +28,16 @@ export class HandleBookingCancelledUseCase {
       });
     }
 
+    if (
+      command.entityVersion !== undefined &&
+      command.payload?.version !== undefined &&
+      command.entityVersion !== command.payload.version
+    ) {
+      throw AppError.fromCode(LC.INVALID_EVENT_PAYLOAD, {
+        message: 'entityVersion must match payload.version for BOOKING_CANCELLED',
+      });
+    }
+
     return this.lifecyclePort.processBookingCancelled(command);
   }
 }

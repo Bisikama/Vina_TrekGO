@@ -30,9 +30,10 @@ import { RentalOrderExpiryScheduler } from './infrastructure/jobs/rental-order-e
 import { RentalTripController } from './presentation/controllers/rental-booking.controller';
 import { RentalOperationController } from './presentation/controllers/rental-operation.controller';
 import { RentalOrderController } from './presentation/controllers/rental-order.controller';
+import { LifecycleModule } from '../lifecycle/lifecycle.module';
 
 @Module({
-  imports: [SharedModule],
+  imports: [SharedModule, LifecycleModule],
   controllers: [RentalTripController, RentalOperationController, RentalOrderController, RentalExtensionController],
   providers: [
     RentalExtensionService,

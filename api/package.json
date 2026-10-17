@@ -20,6 +20,7 @@
     "seed:cf01": "ts-node prisma/seeds/cf01.seed.ts",
     "seed:cf01-local": "ts-node prisma/seeds/cf01-local-trekking.seed.ts",
     "seed:test-booking": "ts-node prisma/seeds/test-booking-membership.seed.ts",
+    "seed:booking-policies": "ts-node prisma/seeds/booking-policy.seed.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

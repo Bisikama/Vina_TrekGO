@@ -6,11 +6,13 @@ import { HandleTripRescheduledUseCase } from './application/use-cases/handle-tri
 import { HandleTripCancelledUseCase } from './application/use-cases/handle-trip-cancelled.use-case';
 import { HandleBookingCancelledUseCase } from './application/use-cases/handle-booking-cancelled.use-case';
 import { TripLifecycleWebhookController } from './presentation/controllers/trip-lifecycle-webhook.controller';
+import { RentalOverdueService } from './application/services/rental-overdue.service';
 
 @Module({
   controllers: [TripLifecycleWebhookController],
   providers: [
     PrismaService,
+    RentalOverdueService,
     HandleTripRescheduledUseCase,
     HandleTripCancelledUseCase,
     HandleBookingCancelledUseCase,
@@ -21,6 +23,7 @@ import { TripLifecycleWebhookController } from './presentation/controllers/trip-
   ],
   exports: [
     TRIP_LIFECYCLE_PORT,
+    RentalOverdueService,
     HandleTripRescheduledUseCase,
     HandleTripCancelledUseCase,
     HandleBookingCancelledUseCase,
