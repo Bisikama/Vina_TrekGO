@@ -175,6 +175,63 @@ export type RentalQuote = {
   policyVersion: string;
 };
 
+export type RentalOrderSummary = {
+  id: string;
+  quoteId: string;
+  bookingId: string | null;
+  tripId: string;
+  status: string;
+  exceptionStatus: string;
+  financialStatus: string;
+  rentalFee: number;
+  totalDeposit: number;
+  totalAmount: number;
+  currency: string;
+  paymentExpiresAt: string;
+  dueAt: string;
+  version: number;
+  createdAt: string;
+};
+
+export type RentalQuantityReservation = {
+  id: string;
+  orderLineId: string;
+  productId: string;
+  quantity: number;
+  occupiedFrom: string;
+  occupiedUntil: string;
+  status: string;
+  holdExpiresAt: string | null;
+};
+
+export type CreateRentalOrderResult = {
+  order: RentalOrderSummary;
+  quantityReservations: RentalQuantityReservation[];
+};
+
+export type RentalPaymentGateway = "momo" | "vnpay";
+export type RentalPaymentMethod = "QR" | "REDIRECT";
+
+export type RentalPaymentCheckout = {
+  type: RentalPaymentMethod;
+  url: string | null;
+  qrData: string | null;
+};
+
+export type RentalPaymentCheckoutResponse = {
+  paymentId: string;
+  invoiceId: string;
+  invoiceType: "RENTAL";
+  status: string;
+  amount: string;
+  currency: string;
+  providerEnvironment: string | null;
+  gateway: string;
+  checkout: RentalPaymentCheckout | null;
+  expiresAt: string | null;
+  reconciliationRequired: boolean;
+};
+
 export type StaffRentalProductStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED";
 
 export type EquipmentUnitStatus =
