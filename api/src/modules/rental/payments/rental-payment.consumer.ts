@@ -98,10 +98,10 @@ export class RentalPaymentConsumer {
             } else if (lockedExt.status !== 'PENDING_PAYMENT') {
               rejectionReason = 'EXTENSION_NOT_APPLICABLE';
             }
-            await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);
+            const result = await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);
             await tx.paymentApplication.update({
               where: { paymentId: payment.id },
-              data: { status: 'REJECTED', reasonCode: rejectionReason, decidedAt: now },
+              data: { status: 'REJECTED', reasonCode: result?.reasonCode ?? rejectionReason, decidedAt: now },
             });
           } else {
             const result = await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);

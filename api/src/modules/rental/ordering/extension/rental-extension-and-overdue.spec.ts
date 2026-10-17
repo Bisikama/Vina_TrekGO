@@ -8,6 +8,7 @@ import {
   RentalOrderStatus,
   RentalOrderExceptionStatus,
   RentalExtensionStatus,
+  RentalDocumentType,
   ReservationStatus,
   DeliveryTaskStatus,
   DeliveryTaskType,
@@ -518,7 +519,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       };
 
       mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
-      mockTx.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(baseOrder);
       mockTx.rentalQuantityReservation.findMany.mockResolvedValueOnce([{ id: 'res-delta-1' }]);
       mockTx.rentalOrderLine.findUnique.mockResolvedValueOnce(baseOrder.rentalOrderLinesViaOrderId[0]);
 
@@ -1340,7 +1341,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       );
     });
 
-    it('Scenario 10: Extension APPLIED FAILS CLOSED and rolls back when root HANDOVER document is missing', async () => {
+    it('Scenario 10: Extension APPLIED FAILS CLOSED when root HANDOVER document is missing (applyExtensionWithTx throws before mutation)', async () => {
       const now = new Date('2026-10-24T10:00:00Z');
       const ext = {
         id: 'ext-no-root-doc',
@@ -1351,29 +1352,168 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         previousOccupiedUntil: mixedOrder.occupiedEndAt,
         requestedOccupiedUntil: new Date('2026-10-28T18:00:00Z'),
         returnOptionSnapshot: { id: 'RETURN_POINT_1', pointId: 'sp-1' },
-        additionalFee: new Prisma.Decimal('0.00'), // Zero fee case
+        additionalFee: new Prisma.Decimal('150000.00'),
         currency: 'VND',
         holdExpiresAt: new Date('2026-10-24T10:15:00Z'),
+        invoiceId: 'inv-no-root',
+        paymentRef: 'pay-no-root',
         acceptedByUserId: 'user-1',
         acceptedAt: now,
         acceptedTermsVersion: 'v1.5.2',
         termsHash: 'e'.repeat(64),
-        lines: [],
+        lines: [{ orderLineId: 'line-std-1', newChargedDays: 6, additionalFee: new Prisma.Decimal('150000.00') }],
       };
 
-      mockTx.rentalExtensionRequest.findUnique
-        .mockResolvedValueOnce(ext)
-        .mockResolvedValueOnce({ ...ext, status: RentalExtensionStatus.APPLIED, appliedAt: now });
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
       mockTx.rentalOrder.findUnique.mockResolvedValue(mixedOrder);
       mockTx.rentalQuantityReservation.findMany.mockResolvedValue([]);
+      mockTx.rentalDocument.findFirst.mockImplementation(() => Promise.resolve(null));
 
-      // Mock missing root HANDOVER document
-      mockTx.rentalDocument.findFirst.mockResolvedValue(null);
-
-      // SOT requirement: Must throw and NOT silently skip
+      // Direct call to applyExtensionWithTx must throw BEFORE any database mutation!
       await expect(applyExtensionWithTx(mockTx, 'ext-no-root-doc', now)).rejects.toThrow(
         'HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX',
       );
+      // Assert zero partial commits:
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      expect(mockTx.rentalOrderLine.update).not.toHaveBeenCalled();
+      expect(mockTx.rentalQuantityReservation.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: ReservationStatus.CONFIRMED }) }),
+      );
+    });
+
+    it('Scenario 10B: Missing root HANDOVER during payment consumption cleanly rejects, releases hold and emits reversal (Zero Partial Commit)', async () => {
+      const now = new Date('2026-10-24T10:00:00Z');
+      const ext = {
+        id: 'ext-no-root-doc-b',
+        orderId: 'order-mixed-cart',
+        status: RentalExtensionStatus.PENDING_PAYMENT,
+        previousRentalEndAt: mixedOrder.rentalEndAt,
+        requestedRentalEndAt: new Date('2026-10-26T18:00:00Z'),
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        requestedOccupiedUntil: new Date('2026-10-28T18:00:00Z'),
+        returnOptionSnapshot: { id: 'RETURN_POINT_1', pointId: 'sp-1' },
+        additionalFee: new Prisma.Decimal('150000.00'),
+        currency: 'VND',
+        holdExpiresAt: new Date('2026-10-24T10:15:00Z'),
+        invoiceId: 'inv-no-root-b',
+        paymentRef: 'pay-no-root-b',
+        acceptedByUserId: 'user-1',
+        acceptedAt: now,
+        acceptedTermsVersion: 'v1.5.2',
+        termsHash: 'e'.repeat(64),
+        lines: [{ orderLineId: 'line-std-1', newChargedDays: 6, additionalFee: new Prisma.Decimal('150000.00') }],
+      };
+
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(mixedOrder);
+      mockTx.rentalDocument.findFirst.mockImplementation(() => Promise.resolve(null));
+
+      const res = await consumeExtensionPaymentWithTx(
+        mockTx,
+        'ext-no-root-doc-b',
+        {
+          id: 'pay-no-root-b',
+          invoiceId: 'inv-no-root-b',
+          amount: new Prisma.Decimal('150000.00'),
+          currency: 'VND',
+          transactionRef: 'tx-no-root-b',
+          paidAt: now,
+        },
+        'SUCCEEDED',
+        'provider-ref-no-root-b',
+        now,
+      );
+
+      // Must reject with HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX
+      expect(res).toEqual({ applied: false, reasonCode: 'HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX' });
+      // Critical check: rentalOrder was NOT mutated!
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      // Critical check: rentalOrderLine was NOT mutated!
+      expect(mockTx.rentalOrderLine.update).not.toHaveBeenCalled();
+      // Critical check: reservations were NOT confirmed!
+      expect(mockTx.rentalQuantityReservation.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: ReservationStatus.CONFIRMED }) }),
+      );
+      // Extension must be marked EXPIRED and hold released:
+      expect(mockTx.rentalExtensionRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'ext-no-root-doc-b' },
+          data: expect.objectContaining({ status: RentalExtensionStatus.EXPIRED }),
+        }),
+      );
+      // Refund and Technical Reversal must be emitted with exact reason:
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            eventType: 'RENTAL_EXTENSION_REFUND_REQUIRED',
+            payload: expect.objectContaining({
+              reason: 'HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX',
+              paidAt: now.toISOString(),
+            }),
+          }),
+        }),
+      );
+      expect(mockTx.paymentOutboxEvent.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            eventType: 'TECHNICAL_REVERSAL_REQUESTED',
+            payload: expect.objectContaining({ reasonCode: 'HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX' }),
+          }),
+        }),
+      );
+    });
+
+    it('Scenario 10C: Transaction atomicity — unexpected database error propagates to transaction boundary without partial commit', async () => {
+      const now = new Date('2026-10-24T10:00:00Z');
+      const ext = {
+        id: 'ext-atomicity-fail',
+        orderId: 'order-mixed-cart',
+        status: RentalExtensionStatus.PENDING_PAYMENT,
+        previousRentalEndAt: mixedOrder.rentalEndAt,
+        requestedRentalEndAt: new Date('2026-10-26T18:00:00Z'),
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        requestedOccupiedUntil: new Date('2026-10-28T18:00:00Z'),
+        returnOptionSnapshot: { id: 'RETURN_POINT_1', pointId: 'sp-1' },
+        additionalFee: new Prisma.Decimal('150000.00'),
+        currency: 'VND',
+        holdExpiresAt: new Date('2026-10-24T10:15:00Z'),
+        invoiceId: 'inv-atomicity',
+        paymentRef: 'pay-atomicity',
+        acceptedByUserId: 'user-1',
+        acceptedAt: now,
+        acceptedTermsVersion: 'v1.5.2',
+        termsHash: 'e'.repeat(64),
+        lines: [{ orderLineId: 'line-std-1', newChargedDays: 6, additionalFee: new Prisma.Decimal('150000.00') }],
+      };
+
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(mixedOrder);
+      mockTx.rentalQuantityReservation.findMany.mockResolvedValue([]);
+      mockTx.rentalOrderLine.findUnique.mockResolvedValue({ id: 'line-std-1', chargedDays: 4 });
+      mockTx.rentalDocument.findFirst.mockResolvedValue({ id: 'doc-handover-root', documentType: RentalDocumentType.HANDOVER });
+      mockTx.rentalDocument.count.mockResolvedValue(0);
+
+      // Simulate an unexpected database failure inside applyExtensionWithTx (e.g. rentalOrder.update throws DB error)
+      mockTx.rentalOrder.update.mockRejectedValueOnce(new Error('DATABASE_CONNECTION_LOST'));
+
+      // consumeExtensionPaymentWithTx must NOT swallow the database error; it must propagate to trigger Prisma $transaction rollback!
+      await expect(
+        consumeExtensionPaymentWithTx(
+          mockTx,
+          'ext-atomicity-fail',
+          {
+            id: 'pay-atomicity',
+            invoiceId: 'inv-atomicity',
+            amount: new Prisma.Decimal('150000.00'),
+            currency: 'VND',
+            transactionRef: 'tx-atomicity',
+            paidAt: now,
+          },
+          'SUCCEEDED',
+          'provider-ref-atomicity',
+          now,
+        ),
+      ).rejects.toThrow('DATABASE_CONNECTION_LOST');
     });
 
     it('Scenario 11: Provider-confirmed paidAt before TTL applies extension even when worker processing occurs after TTL', async () => {
@@ -1602,12 +1742,40 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
           data: expect.objectContaining({ status: PaymentStatus.FAILED }),
         }),
       );
+      // Verify payment timestamp audit:
+      // Worker time is NEVER written to payment.paidAt or invoice.paidAt!
+      expect(mockTx.payment.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'pay-no-paidat' },
+          data: expect.not.objectContaining({ paidAt: expect.anything() }),
+        }),
+      );
+      expect(mockTx.invoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'inv-no-paidat' },
+          data: expect.not.objectContaining({ paidAt: expect.anything() }),
+        }),
+      );
 
       // Extension hold must be released and marked EXPIRED
       expect(mockTx.rentalExtensionRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'ext-missing-paidat' },
           data: expect.objectContaining({ status: RentalExtensionStatus.EXPIRED }),
+        }),
+      );
+
+      // RENTAL_EXTENSION_REFUND_REQUIRED must preserve paidAt: null and record processedAt
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            eventType: 'RENTAL_EXTENSION_REFUND_REQUIRED',
+            payload: expect.objectContaining({
+              reason: 'PAYMENT_TIMESTAMP_UNTRUSTED',
+              paidAt: null,
+              processedAt: now.toISOString(),
+            }),
+          }),
         }),
       );
 
@@ -1623,18 +1791,22 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       expect(res).toEqual({ applied: false, reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED' });
     });
 
-    it('Scenario 15: Timely payment before rental due date applies extension even if worker arrives after original due date', async () => {
+    it('Scenario 15: Timely payment before rental due date applies extension even if overdue cron flagged order OVERDUE before worker execution', async () => {
       // Original rental due is 18:00
       const originalDueAt = new Date('2026-10-24T18:00:00Z');
       const holdExpiresAt = new Date('2026-10-24T17:55:00Z');
       const providerPaidAt = new Date('2026-10-24T17:50:00Z'); // Paid 10 mins before due date!
       const workerProcessingTime = new Date('2026-10-24T18:15:00Z'); // Worker delayed 15 mins after due date!
 
-      const orderBeforeDue = {
+      // Overdue cron ran at 18:01 and marked order OVERDUE while customer paid timely at 17:50
+      const orderOverdueByCron = {
         ...mixedOrder,
         rentalEndAt: originalDueAt,
         operationalReturnDueAt: originalDueAt,
         status: RentalOrderStatus.ACTIVE,
+        exceptionStatus: RentalOrderExceptionStatus.OVERDUE, // Flagged OVERDUE by cron
+        deliveryTasksViaOrderId: [{ id: 'task-return-1', taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.SCHEDULED }],
+        returnInspectionsViaOrderId: [],
       };
 
       const ext = {
@@ -1663,7 +1835,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         .mockResolvedValueOnce(ext)
         .mockResolvedValueOnce({ ...ext, status: RentalExtensionStatus.APPLIED, appliedAt: workerProcessingTime });
 
-      mockTx.rentalOrder.findUnique.mockResolvedValue(orderBeforeDue);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(orderOverdueByCron);
       mockTx.rentalQuantityReservation.findMany.mockResolvedValue([]);
       mockTx.rentalOrderLine.findUnique.mockResolvedValue({ id: 'line-std-1', chargedDays: 4 });
 
@@ -1691,6 +1863,15 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
           data: expect.objectContaining({ status: RentalExtensionStatus.APPLIED }),
         }),
       );
+      // Order exceptionStatus must be reset from OVERDUE to NONE!
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'order-mixed-cart' },
+          data: expect.objectContaining({
+            exceptionStatus: RentalOrderExceptionStatus.NONE,
+          }),
+        }),
+      );
       // Outbox event must include appendixDocumentId
       expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1699,6 +1880,148 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
             payload: expect.objectContaining({
               appendixDocumentId: 'doc-appendix-1',
               extensionId: 'ext-worker-after-due',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('Scenario 15B: Delayed webhook arrives for OVERDUE order BUT physical return has started — rejects safely, does not revive capacity, emits reversal', async () => {
+      const originalDueAt = new Date('2026-10-24T18:00:00Z');
+      const holdExpiresAt = new Date('2026-10-24T17:55:00Z');
+      const providerPaidAt = new Date('2026-10-24T17:50:00Z');
+      const workerProcessingTime = new Date('2026-10-24T18:15:00Z');
+
+      // Physical return has started: delivery task is COLLECTING
+      const orderReturnStarted = {
+        ...mixedOrder,
+        rentalEndAt: originalDueAt,
+        operationalReturnDueAt: originalDueAt,
+        status: RentalOrderStatus.ACTIVE,
+        exceptionStatus: RentalOrderExceptionStatus.OVERDUE,
+        deliveryTasksViaOrderId: [{ id: 'task-return-1', taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.COLLECTING }],
+        returnInspectionsViaOrderId: [],
+      };
+
+      const ext = {
+        id: 'ext-worker-return-started',
+        orderId: 'order-mixed-cart',
+        status: RentalExtensionStatus.PENDING_PAYMENT,
+        previousRentalEndAt: originalDueAt,
+        requestedRentalEndAt: new Date('2026-10-26T18:00:00Z'),
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        requestedOccupiedUntil: new Date('2026-10-28T18:00:00Z'),
+        returnOptionSnapshot: { id: 'RETURN_POINT_1', pointId: 'sp-1' },
+        additionalFee: new Prisma.Decimal('150000.00'),
+        currency: 'VND',
+        holdExpiresAt,
+        invoiceId: 'inv-return-started',
+        paymentRef: 'pay-return-started',
+        acceptedByUserId: 'user-1',
+        acceptedAt: providerPaidAt,
+        acceptedTermsVersion: 'v1.5.2',
+        termsHash: 'f'.repeat(64),
+        lines: [{ orderLineId: 'line-std-1', newChargedDays: 6, additionalFee: new Prisma.Decimal('150000.00') }],
+      };
+
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(orderReturnStarted);
+
+      const res = await consumeExtensionPaymentWithTx(
+        mockTx,
+        'ext-worker-return-started',
+        {
+          id: 'pay-return-started',
+          invoiceId: 'inv-return-started',
+          amount: new Prisma.Decimal('150000.00'),
+          currency: 'VND',
+          transactionRef: 'momo-tx-return-started',
+          paidAt: providerPaidAt,
+        },
+        'SUCCEEDED',
+        'provider-ref-return-started',
+        workerProcessingTime,
+      );
+
+      // Must reject cleanly because physical return already commenced!
+      expect(res).toEqual({ applied: false, reasonCode: 'EXTENSION_NOT_APPLICABLE' });
+      // Order must NOT be updated:
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      // Reservations must NOT be confirmed:
+      expect(mockTx.rentalQuantityReservation.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: ReservationStatus.CONFIRMED }) }),
+      );
+      // Technical reversal requested:
+      expect(mockTx.paymentOutboxEvent.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            eventType: 'TECHNICAL_REVERSAL_REQUESTED',
+            payload: expect.objectContaining({ reasonCode: 'EXTENSION_NOT_APPLICABLE' }),
+          }),
+        }),
+      );
+    });
+
+    it('Scenario 15C: Delayed webhook arrives after background cron already released hold (EXPIRED) — does NOT revive capacity, issues refund', async () => {
+      const originalDueAt = new Date('2026-10-24T18:00:00Z');
+      const holdExpiresAt = new Date('2026-10-24T17:55:00Z');
+      const providerPaidAt = new Date('2026-10-24T17:50:00Z'); // Paid in time
+      const workerProcessingTime = new Date('2026-10-24T18:15:00Z');
+
+      // Cron already ran at 17:56 and released the hold: ext is already EXPIRED
+      const extAlreadyExpired = {
+        id: 'ext-already-expired',
+        orderId: 'order-mixed-cart',
+        status: RentalExtensionStatus.EXPIRED, // Already expired in DB
+        previousRentalEndAt: originalDueAt,
+        requestedRentalEndAt: new Date('2026-10-26T18:00:00Z'),
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        requestedOccupiedUntil: new Date('2026-10-28T18:00:00Z'),
+        returnOptionSnapshot: { id: 'RETURN_POINT_1', pointId: 'sp-1' },
+        additionalFee: new Prisma.Decimal('150000.00'),
+        currency: 'VND',
+        holdExpiresAt,
+        invoiceId: 'inv-expired',
+        paymentRef: 'pay-expired',
+        acceptedByUserId: 'user-1',
+        acceptedAt: providerPaidAt,
+        acceptedTermsVersion: 'v1.5.2',
+        termsHash: 'f'.repeat(64),
+        lines: [{ orderLineId: 'line-std-1', newChargedDays: 6, additionalFee: new Prisma.Decimal('150000.00') }],
+      };
+
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(extAlreadyExpired);
+      mockTx.rentalOrder.findUnique.mockResolvedValue(mixedOrder);
+
+      const res = await consumeExtensionPaymentWithTx(
+        mockTx,
+        'ext-already-expired',
+        {
+          id: 'pay-expired',
+          invoiceId: 'inv-expired',
+          amount: new Prisma.Decimal('150000.00'),
+          currency: 'VND',
+          transactionRef: 'momo-tx-expired',
+          paidAt: providerPaidAt,
+        },
+        'SUCCEEDED',
+        'provider-ref-expired',
+        workerProcessingTime,
+      );
+
+      // Invariant: Never revive released capacity!
+      expect(res).toEqual({ applied: false, reasonCode: 'HOLD_EXPIRED_BEFORE_PROCESSING' });
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      expect(mockTx.rentalQuantityReservation.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: ReservationStatus.CONFIRMED }) }),
+      );
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            eventType: 'RENTAL_EXTENSION_REFUND_REQUIRED',
+            payload: expect.objectContaining({
+              reason: 'HOLD_EXPIRED_BEFORE_PROCESSING',
+              paidAt: providerPaidAt.toISOString(),
             }),
           }),
         }),

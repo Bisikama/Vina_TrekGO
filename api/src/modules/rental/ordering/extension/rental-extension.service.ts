@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   DeliveryTaskStatus, DeliveryTaskType, InvoiceStatus, PaymentStatus, Prisma,
-  RentalExtensionStatus, RentalOrderStatus, ReservationStatus,
+  RentalDocumentType, RentalExtensionStatus, RentalOrderExceptionStatus, RentalOrderStatus, ReservationStatus,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from 'src/shared/services/prisma.service';
@@ -287,10 +287,15 @@ function requiredPolicyInt(value: unknown, field: string): number {
 }
 function jsonObject(v: unknown): Record<string, any> { return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}; }
 function digest(v: string) { return createHash('sha256').update(v).digest('hex'); }
-function checkExtendable(order: any, now: Date) {
+function checkExtendable(order: any, now: Date, isApplyingPayment = false) {
   if (![RentalOrderStatus.ACTIVE].includes(order.status)) throw error('EXTENSION_INVALID_ORDER_STATE');
   const due = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt);
-  if (now >= due || order.exceptionStatus === 'OVERDUE') throw error('EXTENSION_TOO_LATE');
+  if (now >= due) throw error('EXTENSION_TOO_LATE');
+  // At quote/confirm time, exceptionStatus === 'OVERDUE' blocks extension.
+  // When applying timely confirmed payment (effectivePaidAt < due), an OVERDUE flag
+  // set by the background cron while awaiting webhook delivery does not block as long
+  // as physical return has not started and capacity is still intact.
+  if (order.exceptionStatus === 'OVERDUE' && !isApplyingPayment) throw error('EXTENSION_TOO_LATE');
   if (order.returnInspectionsViaOrderId?.length) throw error('EXTENSION_RETURN_STARTED');
   // Invariant: Return delivery task in SCHEDULED (including when staff is claimed or assigned in target 1.3.3)
   // does NOT block valid extension. Only physical collection/return (COLLECTING, RETURNED, INVENTORY_RECEIVED) blocks.
@@ -333,11 +338,29 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
     },
   });
   if (!order) throw error('RENTAL_ORDER_NOT_FOUND');
-  checkExtendable(order, checkTime);
+  checkExtendable(order, checkTime, !!effectiveAt);
   if (order.rentalEndAt.getTime() !== ext.previousRentalEndAt.getTime() || order.occupiedEndAt.getTime() !== ext.previousOccupiedUntil.getTime()) throw error('VERSION_CONFLICT');
   const pointId = String(jsonObject(ext.returnOptionSnapshot).pointId ?? '');
   if (!pointId) throw error('RENTAL_RETURN_OPTION_UNAVAILABLE');
 
+  // Pre-validate root handover document before ANY mutation:
+  const rootHandover = await tx.rentalDocument.findFirst({
+    where: { orderId: order.id, documentType: RentalDocumentType.HANDOVER },
+  });
+  if (!rootHandover) throw error('HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX');
+
+  // Pre-validate appendix document count limit:
+  const appendixCount = await tx.rentalDocument.count({
+    where: { orderId: order.id, documentType: RentalDocumentType.EXTENSION_APPENDIX },
+  });
+  if (appendixCount + 1 > 2) throw error('EXTENSION_DOCUMENT_LIMIT');
+
+  // Pre-validate acceptance audit:
+  if (!ext.acceptedAt || !ext.acceptedByUserId || !ext.termsHash) {
+    throw error('EXTENSION_ACCEPTANCE_MISSING');
+  }
+
+  // Pre-validate reserved lines:
   const reservedLines = await tx.rentalQuantityReservation.findMany({
     where: {
       orderLineId: { in: ext.lines.map(l => l.orderLineId) },
@@ -347,9 +370,20 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
   });
   if (reservedLines.some(r => r.holdExpiresAt && r.holdExpiresAt < checkTime)) throw error('EXTENSION_HOLD_EXPIRED');
 
+  // Pre-validate line existence:
   for (const line of ext.lines) {
     const current = await tx.rentalOrderLine.findUnique({ where: { id: line.orderLineId } });
     if (!current) throw error('EXTENSION_LINE_MISSING');
+  }
+
+  // Pre-validate delivery tasks:
+  for (const task of order.deliveryTasksViaOrderId) {
+    if (!([DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED] as string[]).includes(task.status)) throw error('EXTENSION_RETURN_TASK_STARTED');
+  }
+
+  // --- ALL PRE-VALIDATIONS PASSED: NOW EXECUTE MUTATIONS ATOMICALLY ---
+
+  for (const line of ext.lines) {
     await tx.rentalOrderLine.update({
       where: { id: line.orderLineId },
       data: { chargedDays: line.newChargedDays, lineRentalFee: { increment: line.additionalFee } },
@@ -381,6 +415,7 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
       plannedReturnAt: finalEffectiveDueAt,
       operationalReturnDueAt: finalOperationalReturnDueAt,
       occupiedEndAt: finalOccupiedEndAt,
+      exceptionStatus: RentalOrderExceptionStatus.NONE, // Reset OVERDUE if cron had flagged it before timely payment arrived
       returnPointId: pointId,
       returnOptionSnapshot: ext.returnOptionSnapshot as Prisma.InputJsonValue,
       rentalFee: { increment: ext.additionalFee },
@@ -390,7 +425,6 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
   });
 
   for (const task of order.deliveryTasksViaOrderId) {
-    if (!([DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED] as string[]).includes(task.status)) throw error('EXTENSION_RETURN_TASK_STARTED');
     await tx.deliveryTask.update({ where: { id: task.id }, data: { servicePointId: pointId, scheduledAt: finalEffectiveDueAt, version: { increment: 1 } } });
   }
 
@@ -408,6 +442,7 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
       operationalReturnDueAt: finalOperationalReturnDueAt,
       plannedReturnAt: finalEffectiveDueAt,
       occupiedEndAt: finalOccupiedEndAt,
+      exceptionStatus: RentalOrderExceptionStatus.NONE,
     },
     oldEffectiveOperationalDueAt,
     newEffectiveOperationalDueAt: finalEffectiveDueAt,
@@ -459,8 +494,9 @@ export async function consumeExtensionPaymentWithTx(
     return { applied: false, reasonCode: 'PAYMENT_FAILED' };
   }
   if (payment.paidAt === null) {
-    // Payment succeeded at provider, but explicitly lacks trusted paidAt timestamp.
+    // Payment succeeded at provider, but lacks trusted paidAt timestamp (provider paidAt === null).
     // Preserve payment ledger as SUCCEEDED; never downgrade confirmed payment to FAILED.
+    // Never fabricate worker execution time as provider paidAt: keep paidAt: null in audit and DB.
     await tx.payment.update({
       where: { id: payment.id },
       data: {
@@ -494,7 +530,8 @@ export async function consumeExtensionPaymentWithTx(
           invoiceId: payment.invoiceId,
           amount: payment.amount.toString(),
           reason: 'PAYMENT_TIMESTAMP_UNTRUSTED',
-          paidAt: now.toISOString(),
+          paidAt: null, // SOT P1-03: DO NOT fabricate worker time as provider paidAt!
+          processedAt: now.toISOString(),
         },
       },
     });
@@ -530,13 +567,49 @@ export async function consumeExtensionPaymentWithTx(
     && !!ext.holdExpiresAt
     && effectivePaidAt <= ext.holdExpiresAt;
 
-  if (!isTimely) {
+  // Pre-validate business applicability before any mutation:
+  const order = await tx.rentalOrder.findUnique({
+    where: { id: ext.orderId },
+    include: {
+      deliveryTasksViaOrderId: { where: { taskType: DeliveryTaskType.RETURN } },
+      returnInspectionsViaOrderId: { take: 1 },
+    },
+  });
+
+  const rootHandover = await tx.rentalDocument.findFirst({
+    where: { orderId: ext.orderId, documentType: RentalDocumentType.HANDOVER },
+  });
+
+  const appendixCount = await tx.rentalDocument.count({
+    where: { orderId: ext.orderId, documentType: RentalDocumentType.EXTENSION_APPENDIX },
+  });
+
+  const effectiveDue = order ? effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt) : null;
+  const isPaidBeforeDue = effectiveDue ? effectivePaidAt < effectiveDue : false;
+  const isOrderApplicable = !!order && [RentalOrderStatus.ACTIVE].includes(order.status as any)
+    && !order.returnInspectionsViaOrderId?.length
+    && !order.deliveryTasksViaOrderId?.some((t: any) => ![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED].includes(t.status));
+
+  const hasAcceptance = !!ext.acceptedAt && !!ext.acceptedByUserId && !!ext.termsHash;
+  const canApply = isTimely && isPaidBeforeDue && isOrderApplicable && !!rootHandover && (appendixCount + 1 <= 2) && hasAcceptance;
+
+  if (!canApply) {
     let rejectionReason = 'LATE_PAYMENT';
-    if (ext.status === RentalExtensionStatus.EXPIRED && ext.holdExpiresAt && effectivePaidAt <= ext.holdExpiresAt) {
+    if (!rootHandover) {
+      rejectionReason = 'HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX';
+    } else if (appendixCount + 1 > 2) {
+      rejectionReason = 'EXTENSION_DOCUMENT_LIMIT';
+    } else if (ext.status === RentalExtensionStatus.EXPIRED && ext.holdExpiresAt && effectivePaidAt <= ext.holdExpiresAt) {
       rejectionReason = 'HOLD_EXPIRED_BEFORE_PROCESSING';
-    } else if (ext.status !== RentalExtensionStatus.PENDING_PAYMENT) {
+    } else if (!isPaidBeforeDue) {
+      rejectionReason = 'POST_DUE_PAYMENT';
+    } else if (!isOrderApplicable) {
       rejectionReason = 'EXTENSION_NOT_APPLICABLE';
+    } else if (!hasAcceptance) {
+      rejectionReason = 'EXTENSION_ACCEPTANCE_MISSING';
     }
+
+    const refundReason = ['LATE_PAYMENT', 'POST_DUE_PAYMENT'].includes(rejectionReason) ? 'EXTENSION_HOLD_EXPIRED' : rejectionReason;
 
     if (ext.status === RentalExtensionStatus.PENDING_PAYMENT)
       await releaseExtensionWithTx(tx, ext, RentalExtensionStatus.EXPIRED, now);
@@ -554,8 +627,9 @@ export async function consumeExtensionPaymentWithTx(
           paymentId: payment.id,
           invoiceId: payment.invoiceId,
           amount: payment.amount.toString(),
-          reason: 'EXTENSION_HOLD_EXPIRED',
+          reason: refundReason,
           paidAt: effectivePaidAt.toISOString(),
+          processedAt: now.toISOString(),
         },
       },
     });
@@ -580,51 +654,8 @@ export async function consumeExtensionPaymentWithTx(
     return { applied: false, reasonCode: rejectionReason };
   }
 
-  try {
-    await applyExtensionWithTx(tx, ext.id, now, effectivePaidAt);
-    return { applied: true };
-  } catch (err: any) {
-    if (ext.status === RentalExtensionStatus.PENDING_PAYMENT) {
-      await releaseExtensionWithTx(tx, ext, RentalExtensionStatus.EXPIRED, now);
-    }
-    const rejectionReason = err?.code === 'EXTENSION_TOO_LATE' ? 'POST_DUE_PAYMENT' : 'EXTENSION_NOT_APPLICABLE';
-    await tx.rentalOutboxEvent.upsert({
-      where: { deduplicationKey: `rental-extension-refund-required:${ext.id}:${payment.id}` },
-      update: {},
-      create: {
-        deduplicationKey: `rental-extension-refund-required:${ext.id}:${payment.id}`,
-        eventType: 'RENTAL_EXTENSION_REFUND_REQUIRED',
-        aggregateType: 'RentalExtensionRequest',
-        aggregateId: ext.id,
-        payload: {
-          extensionId: ext.id,
-          orderId: ext.orderId,
-          paymentId: payment.id,
-          invoiceId: payment.invoiceId,
-          amount: payment.amount.toString(),
-          reason: rejectionReason,
-          paidAt: effectivePaidAt.toISOString(),
-        },
-      },
-    });
-    if ((tx as any).paymentOutboxEvent?.upsert) {
-      await (tx as any).paymentOutboxEvent.upsert({
-        where: { deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1` },
-        create: {
-          deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1`,
-          eventType: 'TECHNICAL_REVERSAL_REQUESTED',
-          aggregateType: 'Payment',
-          aggregateId: payment.id,
-          payload: {
-            schemaVersion: 1,
-            paymentId: payment.id,
-            invoiceId: payment.invoiceId,
-            reasonCode: rejectionReason,
-          },
-        },
-        update: {},
-      });
-    }
-    return { applied: false, reasonCode: rejectionReason };
-  }
+  // Preconditions all verified! Apply extension atomically.
+  // Any unexpected database error propagates to transaction boundary to trigger clean rollback.
+  await applyExtensionWithTx(tx, ext.id, now, effectivePaidAt);
+  return { applied: true };
 }
