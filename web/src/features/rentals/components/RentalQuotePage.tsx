@@ -107,7 +107,9 @@ export function RentalQuotePage({
         productId,
         controller.signal,
       ),
-      getRentalPaymentOptions(controller.signal),
+      getRentalPaymentOptions(controller.signal).catch(
+        () => ({ gateways: [] }),
+      ),
     ])
       .then(
         ([
