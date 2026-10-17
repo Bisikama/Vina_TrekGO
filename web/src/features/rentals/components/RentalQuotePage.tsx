@@ -457,7 +457,7 @@ export function RentalQuotePage({
                 </p>
               </div>
 
-              {paymentGateways.length === 0 && (
+            {paymentGateways.length === 0 && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
                 Backend chưa trả về VNPay hoặc MoMo khả dụng.
                 Kiểm tra cấu hình Shared Payment rồi tải lại trang.
