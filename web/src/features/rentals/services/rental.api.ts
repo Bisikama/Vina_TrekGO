@@ -13,6 +13,7 @@ import type {
   RentalPaymentCheckoutResponse,
   RentalPaymentGateway,
   RentalPaymentMethod,
+  RentalPaymentOptions,
   RentalProduct,
   RentalProductDetailData,
   RentalQuote,
@@ -419,6 +420,34 @@ export async function createRentalQuote(
       getRentalApiErrorMessage(
         error,
         "Không thể tạo báo giá thuê thiết bị.",
+      ),
+    );
+  }
+}
+
+export async function getRentalPaymentOptions(
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.get<unknown>(
+      "/api/v1/payments/options",
+      { signal },
+    );
+    const result =
+      unwrapApiData<RentalPaymentOptions>(response.data);
+
+    return {
+      gateways: result.gateways.filter(
+        (option) =>
+          option.gateway === "momo" ||
+          option.gateway === "vnpay",
+      ),
+    } satisfies RentalPaymentOptions;
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể tải các cổng thanh toán hiện có.",
       ),
     );
   }
