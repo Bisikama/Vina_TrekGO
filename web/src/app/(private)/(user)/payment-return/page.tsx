@@ -46,6 +46,12 @@ function getMomoErrorMessage(code: string | null, defaultMessage?: string | null
   }
 }
 
+type RentalPaymentReturnContext = {
+  orderId: string;
+  bookingId: string;
+  paymentId: string;
+};
+
 function PaymentReturnContent() {
   const searchParams = useSearchParams();
 
@@ -71,6 +77,36 @@ function PaymentReturnContent() {
 
   // Tham số ID đơn đặt chỗ
   const rawBookingId = searchParams.get('bookingId');
+  const [rentalContext, setRentalContext] =
+    useState<RentalPaymentReturnContext | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(
+      'trekgo:rental-payment-return',
+    );
+
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as Partial<RentalPaymentReturnContext>;
+
+      if (
+        typeof parsed.orderId === 'string' &&
+        typeof parsed.bookingId === 'string' &&
+        typeof parsed.paymentId === 'string'
+      ) {
+        setRentalContext({
+          orderId: parsed.orderId,
+          bookingId: parsed.bookingId,
+          paymentId: parsed.paymentId,
+        });
+      }
+    } catch {
+      sessionStorage.removeItem(
+        'trekgo:rental-payment-return',
+      );
+    }
+  }, []);
 
   // Load thông tin chi tiết đơn đặt chỗ và chuyến đi
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -193,19 +229,46 @@ function PaymentReturnContent() {
                 : 'bg-amber-50 text-amber-800 border-amber-200'
             }`}
           >
-            {isSuccess ? '✓ Giao dịch đã xác thực thành công' : '✗ Thanh toán chưa hoàn tất'}
+            {isSuccess
+              ? rentalContext
+                ? '✓ Cổng thanh toán đã tiếp nhận'
+                : '✓ Giao dịch đã xác thực thành công'
+              : '✗ Thanh toán chưa hoàn tất'}
           </span>
 
           <h1 className="mt-3.5 text-2xl sm:text-3xl font-extrabold text-gray-900">
-            {isSuccess ? 'Thanh Toán Thành Công!' : 'Thanh Toán Không Thành Công'}
+            {isSuccess
+              ? rentalContext
+                ? 'Đang xác nhận đơn thuê'
+                : 'Thanh Toán Thành Công!'
+              : 'Thanh Toán Không Thành Công'}
           </h1>
 
           <p className="mt-2.5 text-sm text-gray-600 leading-relaxed max-w-md mx-auto">
             {isSuccess
-              ? `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Chỗ của bạn đã được đảm bảo và vé điện tử đã được xác nhận.`
+              ? rentalContext
+                ? `Cổng ${gatewayName} đã trả kết quả thành công. TrekGo đang tái xác minh giao dịch trước khi chuyển đơn thuê sang PAID.`
+                : `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Chỗ của bạn đã được đảm bảo và vé điện tử đã được xác nhận.`
               : failureReason}
           </p>
         </div>
+
+        {rentalContext && (
+          <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+              Đơn thuê thiết bị
+            </span>
+            <p className="mt-2 text-xs text-gray-600">
+              Mã đơn: <strong className="text-gray-900">{rentalContext.orderId}</strong>
+            </p>
+            <p className="mt-1 text-xs text-gray-600">
+              Mã thanh toán: <strong className="text-gray-900">{rentalContext.paymentId}</strong>
+            </p>
+            <p className="mt-3 text-xs leading-5 text-amber-800">
+              Kết quả trên trình duyệt chưa phải bằng chứng PAID. Trạng thái cuối cùng do Backend nhận webhook và đối soát.
+            </p>
+          </div>
+        )}
 
         {/* Card thông tin chuyến đi đã thanh toán */}
         {booking && (
@@ -287,7 +350,24 @@ function PaymentReturnContent() {
 
         {/* Các nút điều hướng */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          {isSuccess ? (
+          {isSuccess && rentalContext ? (
+            <>
+              <Link
+                href={`/rentals?bookingId=${encodeURIComponent(
+                  rentalContext.bookingId,
+                )}`}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f]"
+              >
+                Theo dõi đơn thuê
+              </Link>
+              <Link
+                href="/"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-xs font-bold text-gray-700 transition hover:border-emerald-300 hover:text-[#125238]"
+              >
+                Quay lại trang chủ
+              </Link>
+            </>
+          ) : isSuccess ? (
             <>
               {/* Nút Xem chi tiết chuyến đi đã đặt (chuyển thẳng tới trang vé & thông tin booking) */}
               <Link
