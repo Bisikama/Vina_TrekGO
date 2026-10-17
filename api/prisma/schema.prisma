@@ -899,6 +899,7 @@ model User {
   custodyEventsViaPerformedBy            CustodyEvent[]              @relation("R_CustodyEvent_performed_by")
   gpsPolicysViaCreatedBy                 GpsPolicy[]                 @relation("R_GpsPolicy_created_by")
   gpsSessionsViaUserId                   GpsSession[]                @relation("R_GpsSession_user_id")
+  tripActualRoutesViaUserId              TripActualRoute[]           @relation("R_TripActualRoute_user_id")
   routeDeviationEventsViaUserId          RouteDeviationEvent[]       @relation("R_RouteDeviationEvent_user_id")
   checkpointEventsViaUserId              CheckpointEvent[]           @relation("R_CheckpointEvent_user_id")
   invoicesViaUserId                      Invoice[]                   @relation("R_Invoice_user_id")
@@ -1377,7 +1378,7 @@ model Trip {
   gpsSessionsViaTripId              GpsSession[]              @relation("R_GpsSession_trip_id")
   routeDeviationEventsViaTripId     RouteDeviationEvent[]     @relation("R_RouteDeviationEvent_trip_id")
   checkpointEventsViaTripId         CheckpointEvent[]         @relation("R_CheckpointEvent_trip_id")
-  tripActualRouteViaTripId          TripActualRoute?          @relation("R_TripActualRoute_trip_id")
+  tripActualRoutesViaTripId         TripActualRoute[]         @relation("R_TripActualRoute_trip_id")
   weatherSnapshotsViaTripId         WeatherSnapshot[]         @relation("R_WeatherSnapshot_trip_id")
   userBadgesViaTripId               UserBadge[]               @relation("R_UserBadge_trip_id")
   tripReviewsViaTripId              TripReview[]              @relation("R_TripReview_trip_id")
@@ -2890,7 +2891,8 @@ model CheckpointEvent {
 
 model TripActualRoute {
   id                  String   @id @default(uuid()) @db.Uuid
-  tripId              String   @unique @map("trip_id") @db.Uuid
+  tripId              String   @map("trip_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
   sourceSessionId     String?  @map("source_session_id") @db.Uuid
   routeGeojson        Json     @map("route_geojson")
   totalDistanceMeters Decimal? @map("total_distance_meters") @db.Decimal(12, 2)
@@ -2899,8 +2901,11 @@ model TripActualRoute {
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   trip          Trip        @relation("R_TripActualRoute_trip_id", fields: [tripId], references: [id])
+  user          User        @relation("R_TripActualRoute_user_id", fields: [userId], references: [id])
   sourceSession GpsSession? @relation("R_TripActualRoute_source_session_id", fields: [sourceSessionId], references: [id])
 
+  @@unique([tripId, userId])
+  @@index([userId])
   @@map("trip_actual_routes")
 }
 
