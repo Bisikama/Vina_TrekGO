@@ -40,7 +40,7 @@ export const BookingPaymentStep = ({
   isProcessingPayment = false,
   errorMessage,
 }: BookingPaymentStepProps) => {
-  const [paymentMethod, setPaymentMethod] = useState<string>("momo");
+  const [paymentMethod, setPaymentMethod] = useState<string>("vnpay");
 
   const isProcessing = isProcessingPayment;
 
@@ -297,24 +297,19 @@ export const BookingPaymentStep = ({
             )}
           </div>
 
-          {/* Cổng MoMo */}
+          {/* Cổng MoMo (Đã vô hiệu hóa) */}
           <div className="space-y-2">
             <label
-              onClick={() => setPaymentMethod("momo")}
-              className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-                paymentMethod === "momo"
-                  ? "border-[#A50064] bg-pink-50/40 ring-2 ring-[#A50064]/20 shadow-xs"
-                  : "border-gray-200 bg-white hover:border-gray-300"
-              }`}
+              className="flex cursor-not-allowed items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 opacity-50 transition"
             >
               <div className="flex items-center gap-3.5">
                 <input
                   type="radio"
                   name="payment_method"
                   value="momo"
-                  checked={paymentMethod === "momo"}
-                  onChange={() => setPaymentMethod("momo")}
-                  className="h-4 w-4 accent-[#A50064] cursor-pointer"
+                  checked={false}
+                  disabled
+                  className="h-4 w-4 cursor-not-allowed"
                 />
                 <div className="flex h-10 w-12 items-center justify-center rounded-lg bg-[#A50064] font-black text-white text-xs shadow-xs">
                   MoMo
@@ -322,8 +317,8 @@ export const BookingPaymentStep = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-gray-900">Ví điện tử MoMo (MoMo App / Quét QR)</span>
-                    <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold text-[#A50064]">
-                      Khả dụng
+                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-600">
+                      Tạm ngưng
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
@@ -331,25 +326,10 @@ export const BookingPaymentStep = ({
                   </p>
                 </div>
               </div>
-              <div className="hidden text-right text-xs font-semibold text-emerald-700 sm:block">
-                Miễn phí giao dịch
+              <div className="hidden text-right text-xs font-semibold text-gray-400 sm:block">
+                Chưa khả dụng
               </div>
             </label>
-
-            {/* Chi tiết MoMo khi được chọn */}
-            {paymentMethod === "momo" && (
-              <div className="ml-7 rounded-xl border border-pink-100 bg-pink-50/60 p-4 text-xs text-pink-950 space-y-2 animate-fadeIn">
-                <div className="flex items-center gap-2 font-bold text-[#A50064] text-sm">
-                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  <span>Thanh toán bảo mật qua Cổng MoMo Sandbox</span>
-                </div>
-                <p className="text-gray-700 leading-relaxed">
-                  Hệ thống sẽ kết nối trực tiếp đến cổng MoMo. Bạn có thể sử dụng ứng dụng MoMo trên điện thoại để quét mã QR thanh toán nhanh chóng chỉ trong 1 chạm.
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -6,14 +6,17 @@ const basic = z.object({
   destinationId: uuid,
   title: z.string().trim().min(1).max(220),
   description: z.string().trim().max(5000).nullable().optional(),
+  priceExplanation: z.string().trim().max(5000).nullable().optional()
+    .describe('Cơ sở tính giá nội bộ: chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận. Có thể bỏ trống khi lưu nháp; bắt buộc trước khi publish. Không hiển thị công khai.'),
   startAt: datetime,
   endAt: datetime,
   pickupPointId: uuid,
   capacity: z.number().int().positive().max(2147483647),
   price: z
     .string()
-    .regex(/^\d{1,10}(\.\d{1,2})?$/)
-    .refine((v) => /[1-9]/.test(v), 'Giá phải lớn hơn 0'),
+    .regex(/^\d{1,10}$/, 'Giá phải là số nguyên dương, tối đa 10 chữ số')
+    .refine((v) => /[1-9]/.test(v), 'Giá phải lớn hơn 0')
+    .describe('Giá VND/người cho toàn bộ chuyến đi, là số nguyên dương dạng chuỗi. Ví dụ: "700000".'),
 })
 export const createSchema = basic.strict()
 export const versionSchema = z.object({ expectedVersion: z.number().int().positive() }).strict()

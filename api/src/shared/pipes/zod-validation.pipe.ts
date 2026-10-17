@@ -15,7 +15,14 @@ export class ZodValidationPipe implements PipeTransform {
       return value
     }
 
-    const result = this.schema.safeParse(value)
+    // Khi client không gửi body hoặc query (undefined), chuyển sang {}
+    // để Zod Object Schema có thể áp dụng giá trị mặc định hoặc báo lỗi chi tiết theo từng field
+    const input =
+      value === undefined && (metadata.type === 'body' || metadata.type === 'query')
+        ? {}
+        : value
+
+    const result = this.schema.safeParse(input)
 
     if (!result.success) {
       const formattedErrors = result.error.issues.map((issue) => ({

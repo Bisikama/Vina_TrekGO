@@ -25,8 +25,9 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
     let active = true;
     bookingApi.paymentOptions().then(({ gateways }) => {
       if (!active) return;
-      setOptions(gateways);
-      setGateway((current) => gateways.some((item) => item.gateway === current) ? current : gateways[0]?.gateway ?? 'vnpay');
+      const enabledGateways = gateways.filter((item) => item.gateway !== 'momo');
+      setOptions(enabledGateways);
+      setGateway((current) => enabledGateways.some((item) => item.gateway === current) ? current : enabledGateways[0]?.gateway ?? 'vnpay');
     }).catch((e) => { if (active) setError(bookingError(e).message); });
     return () => { active = false; };
   }, [accessToken, retry]);
@@ -125,9 +126,8 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
           {/* Khối Thông Tin Chuyến Đi & Vé */}
           <section className="space-y-4 rounded-2xl bg-white p-6 sm:p-7 shadow-sm border border-gray-100">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                confirmed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-              }`}>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${confirmed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}>
                 {confirmed ? '✓ Đã xác nhận vé' : (statusLabels[booking.status] ?? booking.status)}
               </span>
               <span className="text-xs font-mono text-gray-400">Mã đặt: #{booking.id.substring(0, 8)}...</span>

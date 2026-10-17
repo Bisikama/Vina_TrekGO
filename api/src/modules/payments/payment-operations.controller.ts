@@ -15,7 +15,7 @@ import { refundSummary } from './refunds.service'
 const reasonSchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict()
 
 @Controller('admin')
-@ApiTags('Payments')
+@ApiTags('Quản trị thanh toán (Admin Payments & Reconciliation)')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
 @Roles('ADMIN')
@@ -107,7 +107,7 @@ export class PaymentOperationsController {
 }
 
 @Controller('refunds')
-@ApiTags('Quản trị thanh toán (Admin Payments & Reconciliation)')
+@ApiTags('Payments')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
 export class RefundsController {
@@ -116,7 +116,7 @@ export class RefundsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Xem chi tiết lệnh hoàn tiền (Refund Detail)',
-    description: 'Xem thông tin chi tiết của một lệnh hoàn tiền bao gồm: số tiền, trạng thái, lý do và thời gian hoàn.',
+    description: 'Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.',
   })
   @ApiParam({
     name: 'id',

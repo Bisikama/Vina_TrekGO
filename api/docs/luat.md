@@ -27,7 +27,7 @@ MVP ưu tiên Authentication ổn định, bản đồ 3D, current GPS, ghi lạ
 | **Route Deviation Alert** | Luật | Tính deviation từ active route, tạo alert, hiển thị cho User/Leader. | Mảng A không tự tính GPS deviation. |
 | **Checkpoint Detection / Mission Unlock** | Luật | Xác thực User đã vào checkpoint radius, ghi arrival, mở mission theo context. | Mảng A sở hữu checkpoint/mission definition và required/optional rule. |
 | **Weather Integration** | Luật | Call provider, cache/normalize weather, trả weather summary/risk theo Trip/location. | Mảng A/B consume summary nếu cần. |
-| **User-created Trail From GPS** | Luật recording + Mảng A Trail owner | Luật ghi GPS path, simplify/prepare geometry; gửi Trail Draft/Proposal sang Mảng A. | Mảng A mới là source of truth của Trail. |
+| **User-created Trail From GPS** | Luật recording + Mảng A Trail owner | Luật ghi GPS path qua TrailRecording/Point, xử lý độ cao vệ tinh AWS Terrarium DEM kết hợp Redis Cache; tạo PersonalTrail và gửi TrailSubmission sang Mảng A. Xem chi tiết tại [Tài liệu hướng dẫn nghiệp vụ & API Area C](area-C/PERSONAL_TRAIL_AND_ELEVATION_GUIDE.md). | Mảng A mới là source of truth của SystemTrail. |
 
 ---
 
