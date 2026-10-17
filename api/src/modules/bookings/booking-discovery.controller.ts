@@ -1,5 +1,5 @@
 import { Controller, Get, Injectable, Param, Query } from '@nestjs/common'
-import { ApiTags } from '@nestjs/swagger'
+import { ApiQuery, ApiTags } from '@nestjs/swagger'
 import { Prisma } from '@prisma/client'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
@@ -102,6 +102,13 @@ export class BookingDiscoveryService {
 export class BookingDiscoveryController {
   constructor(private readonly discovery: BookingDiscoveryService) {}
   @Get()
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 12 } })
+  @ApiQuery({ name: 'destinationId', required: false, schema: { type: 'string', format: 'uuid' } })
+  @ApiQuery({ name: 'dateFrom', required: false, schema: { type: 'string', format: 'date' } })
+  @ApiQuery({ name: 'dateTo', required: false, schema: { type: 'string', format: 'date' } })
+  @ApiQuery({ name: 'difficulty', required: false, enum: ['EASY', 'MEDIUM', 'HARD', 'EXTREME'] })
+  @ApiQuery({ name: 'price', required: false, description: 'Maximum price per participant', schema: { type: 'integer', minimum: 0 } })
   list(@Query(new ZodValidationPipe(tripSearchSchema)) query: TripSearch) {
     return this.discovery.list(query)
   }

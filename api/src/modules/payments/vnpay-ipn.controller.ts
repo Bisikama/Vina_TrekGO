@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiTags } from '@nestjs/swagger'
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
 import { PrismaService } from '../../shared/services/prisma.service'
@@ -19,6 +19,8 @@ export class VnpayIpnController {
   // VNPAY's server-to-server acknowledgement protocol. Application APIs continue
   // to use GlobalErrorFilter; this endpoint intentionally speaks the gateway wire contract.
   @Get('vnpay')
+  @ApiOperation({ summary: 'VNPAY server-to-server IPN', description: 'VNPAY calls the registered URL with signed vnp_* query parameters. No JWT required. HTTP 200 is a protocol acknowledgement: inspect RspCode. Business updates are asynchronous after durable intake; this is not the browser return URL.' })
+  @ApiResponse({ status: 200, schema: { type: 'object', properties: { RspCode: { type: 'string', enum: ['00', '01', '02', '04', '97', '99'] }, Message: { type: 'string' } } } })
   async receive(@Query() query: Record<string, unknown>) {
     try {
       const raw = Buffer.from(JSON.stringify(query))

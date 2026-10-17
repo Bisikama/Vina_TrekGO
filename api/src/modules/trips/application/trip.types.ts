@@ -11,6 +11,7 @@ export interface TripInput {
   pickupPointId: string
   capacity: number
   price: string
+  priceExplanation?: string | null
 }
 export interface Checkpoint {
   id: string
@@ -69,6 +70,7 @@ export interface TripView {
   pickupPointId: string | null
   capacity: number
   price: string | null
+  priceExplanation?: string | null
   status: TripStatus
   version: number
   publishedAt: string | null
