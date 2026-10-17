@@ -81,6 +81,10 @@ function PaymentReturnContent() {
     useState<RentalPaymentReturnContext | null>(null);
 
   useEffect(() => {
+    if (rawBookingId) {
+      return;
+    }
+
     const stored = sessionStorage.getItem(
       'trekgo:rental-payment-return',
     );
@@ -106,7 +110,7 @@ function PaymentReturnContent() {
         'trekgo:rental-payment-return',
       );
     }
-  }, []);
+  }, [rawBookingId]);
 
   // Load thông tin chi tiết đơn đặt chỗ và chuyến đi
   const [booking, setBooking] = useState<Booking | null>(null);
