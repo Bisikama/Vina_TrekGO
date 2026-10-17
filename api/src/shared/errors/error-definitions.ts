@@ -1,14 +1,17 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes';
+import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes';
 import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
 import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
+import { NOTIFICATION_ERROR_CODES } from './codes/notification.error-codes';
 import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes';
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
+import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -17,6 +20,10 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
+  [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
+  [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },
+  [TT.VERSION_CONFLICT]: { status: 409, message: 'Thông tin xe đã thay đổi. Hãy tải lại.', retryable: false },
   [B.BOOKING_POLICY_INVALID]: { status: 503, message: 'Booking policy configuration is invalid or ambiguous', retryable: false },
   [B.BOOKING_POLICY_NOT_FOUND]: { status: 404, message: 'Booking policy not found', retryable: false },
   [B.BOOKING_POLICY_IMMUTABLE]: { status: 409, message: 'Published policies cannot be edited or deleted; create a new draft', retryable: false },
@@ -107,6 +114,8 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
+  // --- NOTIFICATION ---
+  [NOTIFICATION_ERROR_CODES.NOTIFICATION_NOT_FOUND]: { status: 404, message: 'Notification not found or access denied', retryable: false },
   [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: { status: 400, message: 'Insufficient available quantity for rental', retryable: false },
   [RO.QUOTE_NOT_ACTIVE]: { status: 400, message: 'Quote is no longer active', retryable: false },
   [RO.QUOTE_EXPIRED]: { status: 400, message: 'Quote has expired', retryable: false },
@@ -187,4 +196,17 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [LC.RESCHEDULE_CAPACITY_CONFLICT]: { status: 409, message: 'Capacity conflict on trip reschedule', retryable: false },
   [LC.OUT_OF_ORDER_EVENT]: { status: 409, message: 'Out of order lifecycle event ignored', retryable: false },
   [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
+
+  // Personal Trail & Elevation
+  [PT.INSUFFICIENT_GPS_POINTS]: { status: 400, message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ', retryable: false },
+  [PT.INVALID_GEOJSON_COORDINATES]: { status: 400, message: 'Tọa độ GeoJSON không hợp lệ', retryable: false },
+  [PT.RECORDING_CHANGED]: { status: 409, message: 'Dữ liệu phiên ghi đã thay đổi, vui lòng thử hoàn tất lại', retryable: true },
+  [PT.RECORDING_NOT_FOUND]: { status: 404, message: 'Không tìm thấy phiên ghi hành trình', retryable: false },
+  [PT.RECORDING_ALREADY_FINISHED]: { status: 409, message: 'Phiên ghi hành trình đã kết thúc trước đó', retryable: false },
+  [PT.TRAIL_ACCESS_DENIED]: { status: 403, message: 'Không có quyền truy cập hoặc chỉnh sửa cung đường này', retryable: false },
+  [PT.PERSONAL_TRAIL_NOT_FOUND]: { status: 404, message: 'Không tìm thấy cung đường cá nhân', retryable: false },
+  [PT.TRAIL_TOO_SHORT_FOR_VERIFY]: { status: 422, message: 'Cung đường phải dài tối thiểu 500m để gửi kiểm duyệt', retryable: false },
+  [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
+  [PT.DEM_PROCESSING_FAILED]: { status: 500, message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM', retryable: true },
+  [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: { status: 400, message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh', retryable: false },
 };

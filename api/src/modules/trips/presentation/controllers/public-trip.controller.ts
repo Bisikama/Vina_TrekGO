@@ -95,7 +95,8 @@ export class LeaderPublicTripController {
   }
   @Post(':id/publish')
   @ApiCf01Id()
-  @ApiCf01Response('Publish chuyến DRAFT thành OPEN', 'trip', 201)
+  @ApiCf01Response('Publish chuyến DRAFT thành OPEN', 'trip', 201,
+    'Leader sở hữu chuyến tự publish khi readiness hợp lệ, chưa có bước admin duyệt. Bắt buộc có priceExplanation; thiếu trả 422 với issue tại field priceExplanation.')
   @bodyDoc(versionSchema)
   publish(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
     return this.trips.publish(actor, id(tripId), parse(versionSchema, body).expectedVersion)

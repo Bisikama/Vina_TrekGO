@@ -33,6 +33,7 @@ function view(row: Row): TripView {
     pickupPointId: row.pickupPointId,
     capacity: row.maxPax,
     price: row.pricePerPax?.toString() ?? null,
+    priceExplanation: row.priceExplanation,
     status: row.status,
     version: row.version,
     publishedAt: row.publishedAt?.toISOString() ?? null,
@@ -98,6 +99,7 @@ function tripData(data: Partial<TripInput>) {
     pickupPointId: data.pickupPointId,
     maxPax: data.capacity,
     pricePerPax: data.price,
+    priceExplanation: data.priceExplanation,
   }
 }
 class Session implements TripSession {

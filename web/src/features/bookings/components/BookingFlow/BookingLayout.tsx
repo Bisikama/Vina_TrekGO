@@ -154,7 +154,7 @@ export const BookingLayout = () => {
   const [equipmentCost, setEquipmentCost] = useState(0);
   const [participants, setParticipants] = useState(1);
   const [trip, setTrip] = useState<TripData | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("momo");
+  const [paymentMethod, setPaymentMethod] = useState("vnpay");
   const [bookingCode, setBookingCode] = useState("");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
