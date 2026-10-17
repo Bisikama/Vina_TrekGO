@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SharedModule } from 'src/shared/shared.module';
-import { LOGISTICS_PORT } from './application/ports/delivery.port';
+import { DELIVERY_PORT, LOGISTICS_PORT } from './application/ports/delivery.port';
 import { AssignRentalTaskUseCase } from './application/use-cases/assign-rental-task.use-case';
 import { ClaimDeliveryTaskUseCase } from './application/use-cases/claim-delivery-task.use-case';
 import { CommitRentalHandoverUseCase } from './application/use-cases/commit-rental-handover.use-case';
@@ -18,23 +18,29 @@ import { DeliveryTaskController } from './presentation/controllers/delivery-task
 import { RentalHandoverController } from './presentation/controllers/rental-handover.controller';
 import { RentalTaskAdminController } from './presentation/controllers/rental-task-admin.controller';
 
+const USE_CASES = [
+  ListDeliveryTasksUseCase,
+  GetDeliveryTaskUseCase,
+  ClaimDeliveryTaskUseCase,
+  ReceivePackageUseCase,
+  VerifyRentalRecipientUseCase,
+  CommitRentalHandoverUseCase,
+  MarkRentalNoShowUseCase,
+  GetRentalPickupCodeUseCase,
+  GetRentalHandoverPreviewUseCase,
+  AssignRentalTaskUseCase,
+  ListAdminRentalTasksUseCase,
+  ListRentalAssigneesUseCase,
+];
+
 @Module({
   imports: [SharedModule],
   controllers: [DeliveryTaskController, RentalHandoverController, RentalTaskAdminController],
   providers: [
-    ListDeliveryTasksUseCase,
-    GetDeliveryTaskUseCase,
-    ClaimDeliveryTaskUseCase,
-    ReceivePackageUseCase,
-    VerifyRentalRecipientUseCase,
-    CommitRentalHandoverUseCase,
-    MarkRentalNoShowUseCase,
-    GetRentalPickupCodeUseCase,
-    GetRentalHandoverPreviewUseCase,
-    AssignRentalTaskUseCase,
-    ListAdminRentalTasksUseCase,
-    ListRentalAssigneesUseCase,
-    { provide: LOGISTICS_PORT, useClass: PrismaDeliveryAdapter },
+    ...USE_CASES,
+    { provide: DELIVERY_PORT, useClass: PrismaDeliveryAdapter },
+    { provide: LOGISTICS_PORT, useExisting: DELIVERY_PORT },
   ],
+  exports: [...USE_CASES, DELIVERY_PORT, LOGISTICS_PORT],
 })
 export class DeliveryModule {}

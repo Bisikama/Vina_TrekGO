@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SharedModule } from 'src/shared/shared.module';
-import { PREPARATION_TASK_PORT } from './application/ports/preparation-task.port';
+import { PREPARATION_TASK_PORT, WAREHOUSE_TASK_PORT } from './application/ports/preparation-task.port';
 import { PrismaPreparationTaskAdapter } from './infrastructure/adapters/prisma-preparation-task.adapter';
 import { ClaimPreparationTaskUseCase } from './application/use-cases/claim-preparation-task.use-case';
 import { GetPreparationTaskUseCase } from './application/use-cases/get-preparation-task.use-case';
@@ -38,7 +38,11 @@ const USE_CASES = [
       provide: PREPARATION_TASK_PORT,
       useClass: PrismaPreparationTaskAdapter,
     },
+    {
+      provide: WAREHOUSE_TASK_PORT,
+      useExisting: PREPARATION_TASK_PORT,
+    },
   ],
-  exports: [...USE_CASES, PREPARATION_TASK_PORT],
+  exports: [...USE_CASES, PREPARATION_TASK_PORT, WAREHOUSE_TASK_PORT],
 })
 export class PreparationModule {}

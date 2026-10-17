@@ -24,7 +24,7 @@ export class TrailPurchaseController {
     gateway: { type: 'string', enum: ['momo', 'vnpay'], description: 'Bỏ trống để dùng cổng mặc định' },
   } } })
   async create(
-    @Param('trailId', new ZodValidationPipe(z.string().uuid())) trailId: string,
+    @Param('trailId', new ZodValidationPipe(z.string())) trailId: string,
     @Headers('idempotency-key') idempotencyKey: string,
     @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()))
     body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },

@@ -6,7 +6,7 @@ import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { AppError } from 'src/shared/errors/app-error';
-import { WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
+import { PREPARATION_ERROR_CODES as PR } from 'src/shared/errors/codes/preparation.error-codes';
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
 import { ClaimPreparationTaskUseCase } from '../../application/use-cases/claim-preparation-task.use-case';
 import { GetPreparationTaskUseCase } from '../../application/use-cases/get-preparation-task.use-case';
@@ -45,9 +45,9 @@ import {
   type PreparationTaskIdParamDto,
 } from '../dtos/preparation-task.dto';
 
-@ApiTags('Chuẩn bị đơn hàng (Inventory Tasks)')
+@ApiTags('Preparation Tasks - Chuẩn Bị Đơn Hàng')
 @ApiBearerAuth('bearer')
-@Controller('inventory/tasks')
+@Controller(['staff/warehouse/tasks', 'staff/preparation/tasks', 'inventory/tasks'])
 @Auth([AuthType.Bearer])
 @Roles(UserRole.STAFF_INVENTORY)
 export class PreparationTaskController {
@@ -445,6 +445,6 @@ export class PreparationTaskController {
 
 function requireInventoryLocationIdempotencyKey(raw: string | undefined): string {
   const parsed = InventoryLocationIdempotencyKeySchema.safeParse(raw);
-  if (!parsed.success) throw AppError.fromCode(WH.IDEMPOTENCY_KEY_REQUIRED);
+  if (!parsed.success) throw AppError.fromCode(PR.IDEMPOTENCY_KEY_REQUIRED);
   return parsed.data;
 }

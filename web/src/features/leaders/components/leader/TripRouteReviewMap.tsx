@@ -55,8 +55,10 @@ interface SystemTrailDetail {
 
 export function TripRouteReviewMap({
   trailCode = "TRAIL_BADEN_COTDIEN",
+  onTrailLoaded,
 }: {
   trailCode?: string;
+  onTrailLoaded?: (trail: SystemTrailDetail) => void;
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -80,6 +82,7 @@ export function TripRouteReviewMap({
         );
         if (!cancelled) {
           setTrail(res.data);
+          onTrailLoaded?.(res.data);
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -329,7 +332,7 @@ export function TripRouteReviewMap({
       {/* Badges thông tin góc trên */}
       <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2">
         <span className="rounded-full bg-slate-950/80 px-3 py-1 text-xs font-bold text-emerald-400 backdrop-blur shadow border border-slate-700">
-          ● GPS 3D Núi Bà Đen
+          ● {trail?.destination?.name ? `GPS 3D ${trail.destination.name}` : trail?.name ? `GPS 3D ${trail.name}` : "GPS 3D Ready"}
         </span>
         <button
           type="button"
@@ -341,7 +344,7 @@ export function TripRouteReviewMap({
       </div>
 
       <span className="absolute bottom-3 right-3 z-10 rounded-md bg-slate-950/80 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur border border-slate-700">
-        Đỉnh 986m · Cự ly 4.5km
+        {trail?.elevationGainM ? `Đỉnh ${trail.elevationGainM}m · ` : ""}Cự ly {trail?.distanceKm || 0}km
       </span>
     </div>
   );

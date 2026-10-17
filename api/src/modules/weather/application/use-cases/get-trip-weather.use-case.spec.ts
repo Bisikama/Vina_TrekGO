@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import { WeatherRiskLevel } from '@prisma/client'
 import { GetTripWeatherUseCase } from './get-trip-weather.use-case'
@@ -64,7 +65,7 @@ describe('GetTripWeatherUseCase', () => {
       findTripContext: jest.fn(),
       findLatestByTripId: jest.fn(),
       createSnapshot: jest.fn(),
-    } as any
+    }
 
     openMeteoClientMock = {
       fetchForecastForDate: jest.fn(),

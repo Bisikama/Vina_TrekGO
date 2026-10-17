@@ -124,7 +124,7 @@ export interface PreparationCandidateView {
   expectedReadyAt?: string | null;
   version?: number;
   custodian?: {
-    type: 'WAREHOUSE';
+    type: 'INVENTORY_LOCATION' | 'WAREHOUSE';
     id: string;
     displayName: string;
   } | null;
@@ -230,7 +230,8 @@ export interface MarkPreparationReadyResult {
   taskId: string;
   taskStatus: string;
   orderStatus: string;
-  logisticsTaskId: string;
+  deliveryTaskId: string;
+  logisticsTaskId?: string;
   version: number;
 }
 
@@ -274,8 +275,8 @@ export interface PaginatedPreparationCandidatesResult {
   };
 }
 
+export const PREPARATION_TASK_PORT = Symbol('PREPARATION_TASK_PORT');
 export const WAREHOUSE_TASK_PORT = Symbol('WAREHOUSE_TASK_PORT');
-export const PREPARATION_TASK_PORT = WAREHOUSE_TASK_PORT;
 
 export interface PreparationTaskPort {
   listTasks(query: ListPreparationTasksQuery): Promise<PaginatedPreparationTasksResult>;
