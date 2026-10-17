@@ -1,0 +1,13 @@
+# RENTAL TERMINOLOGY HOTFIX — CHANGED FILES MANIFEST
+# Generated on: 2026-10-16
+# Format: <ACTION> <REL_PATH_FROM_REPO_ROOT> <SHA-256>
+
+MODIFY api/src/modules/rental/delivery/application/ports/delivery.port.ts 2dc04ffca44742c3ec5a2f719328e8335eb71deb2f04bb214b026d4e30eec687
+MODIFY api/src/modules/rental/delivery/infrastructure/adapters/prisma-delivery.adapter.ts df8697c99eadd2ddb1efe0a757065303c872f3ff0ad4e0cf3dd71bfbdbe32cbf
+MODIFY api/src/modules/rental/delivery/presentation/controllers/delivery-task.controller.ts 8bd61b93d5084bc24c7814a268e0d6a6d227d988d64ece5fdd6f7af998155117
+MODIFY api/src/modules/rental/ordering/infrastructure/adapters/prisma-rental-context.adapter.ts 8f72e3dc65bee06c3db606702425a4c6d36e0d2402cffc14ba7faa7797bff78d
+MODIFY api/src/modules/rental/ordering/infrastructure/adapters/prisma-rental-order.adapter.ts 741d88fd37ada37fbaa8296986c1110282267ad88bf4720dfa24249ef84962c7
+MODIFY api/src/modules/rental/preparation/application/ports/preparation-task.port.ts 84feb54baf06606efd5e94eeaf7eb2833a4a0a4f9c0d3441c8b170ea5ae5b8b7
+MODIFY api/src/modules/rental/preparation/presentation/controllers/preparation-task.controller.ts 62f7858b8806ccfe43b887e8fecd3f7900b746094560e70c7920d82bab63f834
+ADD api/src/modules/rental/rental-module-bootstrap.spec.ts 7ee655d9dd20a9fbec8fc154ffb5eab6340f3802a6a5f6a3b3250429161cf40e
+ADD api/src/modules/rental/rental-route-contracts.spec.ts 11f6dc9739275c2035abbaeaf4437dfc0c5daceaae31f4b26562ae1d5e1b8ddd

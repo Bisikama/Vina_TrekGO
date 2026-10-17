@@ -1,4 +1,4 @@
-export const WAREHOUSE_ERROR_CODES = {
+export const PREPARATION_ERROR_CODES = {
   TASK_NOT_FOUND: 'TASK_NOT_FOUND',
   TASK_ALREADY_ASSIGNED: 'TASK_ALREADY_ASSIGNED',
   TASK_NOT_CLAIMED: 'TASK_NOT_CLAIMED',
@@ -22,7 +22,7 @@ export const WAREHOUSE_ERROR_CODES = {
   VERSION_CONFLICT: 'VERSION_CONFLICT',
 } as const;
 
-export const PREPARATION_ERROR_CODES = WAREHOUSE_ERROR_CODES;
+export const WAREHOUSE_ERROR_CODES = PREPARATION_ERROR_CODES;
 
-export type PreparationErrorCode = (typeof WAREHOUSE_ERROR_CODES)[keyof typeof WAREHOUSE_ERROR_CODES];
+export type PreparationErrorCode = (typeof PREPARATION_ERROR_CODES)[keyof typeof PREPARATION_ERROR_CODES];
 export type WarehouseErrorCode = PreparationErrorCode;

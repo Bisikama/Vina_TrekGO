@@ -273,7 +273,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               unitId: item.unitId,
               packageId: order.packageViaOrderId?.id,
               snapshotStage: SnapshotStage.RETURN_PRELIMINARY,
-              condition: item.condition as EquipmentCondition,
+              condition: item.condition,
               notes: item.notes ?? null,
               accessories: jsonValue({ observations: item.accessoryIssues, observationOnly:true }),
               evidenceIds: jsonValue(item.evidenceIds),
@@ -496,7 +496,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               inspectionDueAt: deadlines.inspectionDueAt,
               deepInspectionDueAt: deadlines.deepInspectionDueAt, status: 'PENDING' },
           });
-          if (prelim.outcome === ReturnInspectionOutcome.NORMAL && needsReview) discrepancies.push({ unitId, reason: 'POLICY_OR_WAREHOUSE_REVIEW_REQUIRED' });
+          if (prelim.outcome === ReturnInspectionOutcome.NORMAL && needsReview) discrepancies.push({ unitId, reason: 'POLICY_OR_INVENTORY_REVIEW_REQUIRED' });
           previouslyReceived.add(unitId);
         }
 
@@ -603,7 +603,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               unitId: assignment.equipmentUnitId,
               packageId: order.packageViaOrderId?.id,
               snapshotStage: SnapshotStage.RETURN_FINAL,
-              condition: item.condition as EquipmentCondition,
+              condition: item.condition,
               notes: item.notes ?? null,
               evidenceIds: jsonValue(item.evidenceIds),
               takenBy: actor.id,
@@ -923,7 +923,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const depositItem = exceptionCase.assignmentId ? await tx.depositSettlementItem.findUnique({ where: { assignmentId: exceptionCase.assignmentId } }) : null;
         const approvalRef = `APR-${randomUUID()}`;
         let nextAction = 'NONE';
-        let resolution = command.decision;
+        const resolution = command.decision;
 
         if (command.decision === 'APPROVE_DEDUCTION' || command.decision === 'REJECT_DEDUCTION') {
           if (!exceptionCase.inspection || !depositItem) throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND);
@@ -1355,7 +1355,7 @@ function mapReturnQueueItem(task: any) {
   const normalCount = inspections.filter((item: any) => item.stage === InspectionStage.PRELIMINARY && item.outcome === ReturnInspectionOutcome.NORMAL).length;
   const issueCount = inspections.filter((item: any) => [ReturnInspectionOutcome.ISSUE, ReturnInspectionOutcome.DAMAGE_CONFIRMED].includes(item.outcome)).length;
   const missingCount = inspections.filter((item: any) => item.outcome === ReturnInspectionOutcome.MISSING_PENDING_REVIEW).length;
-  let status = 'WAREHOUSE_RECEIVED';
+  let status = 'INVENTORY_RECEIVED';
   if (items.some((item: any) => item.status === DepositItemStatus.REVIEW_REQUIRED)) status = 'REVIEW_REQUIRED';
   else if (task.status === DeliveryTaskStatus.RETURNED) status = 'TRANSFER_PENDING';
   else if (items.some((item: any) => item.status === DepositItemStatus.SETTLED) && task.order.status === RentalOrderStatus.COMPLETED) status = 'COMPLETED';
@@ -1418,5 +1418,5 @@ function jsonValue(value: unknown): Prisma.InputJsonValue { return JSON.parse(JS
 function jsonObject(value: unknown): Record<string, any> { if (!value || typeof value !== 'object' || Array.isArray(value)) return {}; return JSON.parse(JSON.stringify(value)); }
 function jsonArray(value: unknown): any[] { return Array.isArray(value) ? JSON.parse(JSON.stringify(value)) : []; }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
-function decimalFromUnknown(value: unknown): Prisma.Decimal { try { return new Prisma.Decimal(String(value ?? '0')); } catch { return new Prisma.Decimal(0); } }
+function decimalFromUnknown(value: unknown): Prisma.Decimal { try { if (value instanceof Prisma.Decimal) return value; if (typeof value === 'number' || typeof value === 'string') return new Prisma.Decimal(value); return new Prisma.Decimal(0); } catch { return new Prisma.Decimal(0); } }
 function decimalToInteger(value: Prisma.Decimal | string | number): number { const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value); if (!decimal.isInteger()) throw AppError.fromCode(RR.OPERATION_CONFLICT, { details: { reason: 'VND_AMOUNT_NOT_INTEGER' } }); const number = decimal.toNumber(); if (!Number.isSafeInteger(number)) throw AppError.fromCode(RR.OPERATION_CONFLICT, { details: { reason: 'VND_AMOUNT_OUT_OF_RANGE' } }); return number; }

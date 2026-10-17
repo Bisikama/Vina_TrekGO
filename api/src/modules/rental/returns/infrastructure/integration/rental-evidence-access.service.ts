@@ -35,7 +35,7 @@ export class RentalEvidenceAccessService {
    if(!reviewMinutes || reviewMinutes<=0) throw new Error('USER_RESPONSE_POLICY_NOT_CONFIGURED');
    const windowEndsAt=new Date(accessibleAt.getTime()+reviewMinutes*60_000);
    await tx.rentalExceptionCase.update({where:{id:c.id},data:{evidencePublishedAt:publishedAt,inAppNoticePublishedAt:notice.createdAt,evidenceAccessibleAt:accessibleAt,dueAt:windowEndsAt}});
-   await tx.auditLog.create({data:{action:'RENTAL_EVIDENCE_ACCESSIBLE',entityType:'RentalExceptionCase',entityId:c.id,newValues:{evidenceAccessibleAt:accessibleAt.toISOString(),mediaAttestationId:request.requestId,ownerUserId:request.userId} as Prisma.InputJsonValue,requestId:request.requestId}});
+   await tx.auditLog.create({data:{action:'RENTAL_EVIDENCE_ACCESSIBLE',entityType:'RentalExceptionCase',entityId:c.id,newValues:{evidenceAccessibleAt:accessibleAt.toISOString(),mediaAttestationId:request.requestId,ownerUserId:request.userId},requestId:request.requestId}});
    return {evidenceAccessibleAt:accessibleAt.toISOString(),windowEndsAt:windowEndsAt.toISOString()};
   });
  }

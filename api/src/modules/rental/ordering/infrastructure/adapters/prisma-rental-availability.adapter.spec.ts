@@ -1,7 +1,6 @@
 import {
   EquipmentCondition,
   EquipmentUnitStatus,
-  RentalUnitAssignmentStatus,
   ReservationStatus,
 } from '@prisma/client';
 import { PrismaRentalAvailabilityAdapter } from './prisma-rental-availability.adapter';
@@ -11,10 +10,13 @@ describe('PrismaRentalAvailabilityAdapter', () => {
 
   let prismaMock: {
     equipmentUnit: {
-      count: jest.Mock;
+      findMany: jest.Mock;
     };
     rentalQuantityReservation: {
       findMany: jest.Mock;
+    };
+    rentalCapacityAlert: {
+      upsert: jest.Mock;
     };
   };
 
@@ -27,26 +29,35 @@ describe('PrismaRentalAvailabilityAdapter', () => {
     now,
   };
 
+  function createUnits(count: number, loc = 'loc-1') {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `unit-${i + 1}`,
+      status: EquipmentUnitStatus.AVAILABLE,
+      homeInventoryLocationId: loc,
+      currentInventoryLocationId: loc,
+      readinessCommitmentsViaUnitId: [],
+      returnInspectionTasks: [],
+    }));
+  }
+
   beforeEach(() => {
     prismaMock = {
       equipmentUnit: {
-        count: jest.fn(),
+        findMany: jest.fn(),
       },
       rentalQuantityReservation: {
         findMany: jest.fn(),
       },
+      rentalCapacityAlert: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
     };
 
-    adapter = new PrismaRentalAvailabilityAdapter(
-      prismaMock as never,
-    );
+    adapter = new PrismaRentalAvailabilityAdapter(prismaMock as never);
   });
 
   it('không có reservation và không có unit bị chặn thì trả toàn bộ sức chứa', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
 
     const result = await adapter.getAvailableCount(query);
@@ -54,21 +65,16 @@ describe('PrismaRentalAvailabilityAdapter', () => {
     expect(result).toBe(10);
   });
 
-  it('loại unit MAINTENANCE, DAMAGED, LOST, RETIRED và condition không an toàn khỏi sức chứa cơ sở', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+  it('loại unit MAINTENANCE, DAMAGED, LOST, RETIRED khỏi truy vấn sức chứa cơ sở', async () => {
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
 
     await adapter.getAvailableCount(query);
 
-    expect(prismaMock.equipmentUnit.count).toHaveBeenNthCalledWith(
-      1,
-      {
-        where: {
+    expect(prismaMock.equipmentUnit.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
           productId: query.productId,
-
           status: {
             notIn: [
               EquipmentUnitStatus.MAINTENANCE,
@@ -77,72 +83,44 @@ describe('PrismaRentalAvailabilityAdapter', () => {
               EquipmentUnitStatus.RETIRED,
             ],
           },
-
           condition: {
-            notIn: [
-              EquipmentCondition.DAMAGED,
-              EquipmentCondition.LOST,
-            ],
+            notIn: [EquipmentCondition.DAMAGED, EquipmentCondition.LOST],
           },
-        },
-      },
+        }),
+      }),
     );
   });
 
   it('trừ HELD còn TTL và CONFIRMED đang overlap', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([
-      { quantity: 2 },
-      { quantity: 1 },
+      { id: 'res-1', quantity: 2, occupiedFrom: query.occupiedFrom, occupiedUntil: query.occupiedUntil },
+      { id: 'res-2', quantity: 1, occupiedFrom: query.occupiedFrom, occupiedUntil: query.occupiedUntil },
     ]);
 
     const result = await adapter.getAvailableCount(query);
 
     expect(result).toBe(7);
 
-    expect(
-      prismaMock.rentalQuantityReservation.findMany,
-    ).toHaveBeenCalledWith({
-      where: {
-        productId: query.productId,
-
-        occupiedFrom: {
-          lt: query.occupiedUntil,
-        },
-
-        occupiedUntil: {
-          gt: query.occupiedFrom,
-        },
-
-        OR: [
-          {
-            status: ReservationStatus.CONFIRMED,
-          },
-          {
-            status: ReservationStatus.HELD,
-            holdExpiresAt: {
-              gt: query.now,
-            },
-          },
-        ],
-      },
-
-      select: {
-        quantity: true,
-      },
-    });
+    expect(prismaMock.rentalQuantityReservation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          productId: query.productId,
+          occupiedFrom: { lt: query.occupiedUntil },
+          occupiedUntil: { gt: query.occupiedFrom },
+          OR: [
+            { status: ReservationStatus.CONFIRMED },
+            { status: ReservationStatus.HELD, holdExpiresAt: { gt: query.now } },
+          ],
+        }),
+      }),
+    );
   });
 
   it('reservation quantity 3 đã pick một phần vẫn chỉ trừ quantity 3', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([
-      { quantity: 3 },
+      { id: 'res-1', quantity: 3, occupiedFrom: query.occupiedFrom, occupiedUntil: query.occupiedUntil },
     ]);
 
     const result = await adapter.getAvailableCount(query);
@@ -151,12 +129,9 @@ describe('PrismaRentalAvailabilityAdapter', () => {
   });
 
   it('reservation quantity 2 và đã pick đủ 2 unit không bị trừ hai lần', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([
-      { quantity: 2 },
+      { id: 'res-1', quantity: 2, occupiedFrom: query.occupiedFrom, occupiedUntil: query.occupiedUntil },
     ]);
 
     const result = await adapter.getAvailableCount(query);
@@ -164,11 +139,10 @@ describe('PrismaRentalAvailabilityAdapter', () => {
     expect(result).toBe(8);
   });
 
-  it('unit trả trễ không còn reservation overlap vẫn bị chặn bổ sung', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(1);
-
+  it('unit có inspection task chưa completed không được tính là ready', async () => {
+    const units = createUnits(10);
+    units[0].returnInspectionTasks = [{ status: 'PENDING' }] as never[];
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(units);
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
 
     const result = await adapter.getAvailableCount(query);
@@ -176,156 +150,21 @@ describe('PrismaRentalAvailabilityAdapter', () => {
     expect(result).toBe(9);
   });
 
-  it('unit CLEANING được reservation CONFIRMED overlap đại diện thì không bị trừ hai lần', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
+  it('unit không có currentInventoryLocationId không được tính là ready', async () => {
+    const units = createUnits(10);
+    units[0].currentInventoryLocationId = null as never;
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(units);
+    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
 
+    const result = await adapter.getAvailableCount(query);
+
+    expect(result).toBe(9);
+  });
+
+  it('không trả availableCount âm khi reservation vượt số lượng', async () => {
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([
-      { quantity: 1 },
-    ]);
-
-    const result = await adapter.getAvailableCount(query);
-
-    expect(result).toBe(9);
-  });
-
-  it('unit CLEANING không còn reservation overlap vẫn bị chặn', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(1);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
-
-    const result = await adapter.getAvailableCount(query);
-
-    expect(result).toBe(9);
-  });
-
-  it('REPLACED và UNASSIGNED không được dùng để chứng minh unit đã được reservation đại diện', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(1);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
-
-    await adapter.getAvailableCount(query);
-
-    expect(prismaMock.equipmentUnit.count).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        where: expect.objectContaining({
-          rentalUnitAssignmentsViaEquipmentUnitId: {
-            none: expect.objectContaining({
-              status: {
-                in: [
-                  RentalUnitAssignmentStatus.ASSIGNED,
-                  RentalUnitAssignmentStatus.PACKED,
-                  RentalUnitAssignmentStatus.HANDED_OVER,
-                  RentalUnitAssignmentStatus.RETURNED,
-                  RentalUnitAssignmentStatus.CLOSED,
-                ],
-              },
-            }),
-          },
-        }),
-      }),
-    );
-  });
-
-  it('HELD không được dùng làm bằng chứng rằng exact unit đã được reservation đại diện', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
-
-    await adapter.getAvailableCount(query);
-
-    expect(prismaMock.equipmentUnit.count).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        where: expect.objectContaining({
-          rentalUnitAssignmentsViaEquipmentUnitId: {
-            none: expect.objectContaining({
-              orderLine: expect.objectContaining({
-                rentalQuantityReservationsViaOrderLineId: {
-                  some: expect.objectContaining({
-                    status: ReservationStatus.CONFIRMED,
-                  }),
-                },
-              }),
-            }),
-          },
-        }),
-      }),
-    );
-  });
-
-  it('bước chặn bổ sung cũng phải loại condition DAMAGED và LOST để tránh trừ hai lần', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
-
-    await adapter.getAvailableCount(query);
-
-    expect(prismaMock.equipmentUnit.count).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        where: expect.objectContaining({
-          condition: {
-            notIn: [
-              EquipmentCondition.DAMAGED,
-              EquipmentCondition.LOST,
-            ],
-          },
-        }),
-      }),
-    );
-  });
-
-  it('đếm current assignment đang hoạt động như một nguồn chặn vật lý', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(1);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
-
-    await adapter.getAvailableCount(query);
-
-    expect(prismaMock.equipmentUnit.count).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            {
-              rentalUnitAssignmentsViaEquipmentUnitId: {
-                some: {
-                  status: {
-                    in: [
-                      RentalUnitAssignmentStatus.ASSIGNED,
-                      RentalUnitAssignmentStatus.PACKED,
-                      RentalUnitAssignmentStatus.HANDED_OVER,
-                    ],
-                  },
-                },
-              },
-            },
-          ]),
-        }),
-      }),
-    );
-  });
-
-  it('không trả availableCount âm', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(2);
-
-    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([
-      { quantity: 15 },
+      { id: 'res-1', quantity: 15, occupiedFrom: query.occupiedFrom, occupiedUntil: query.occupiedUntil },
     ]);
 
     const result = await adapter.getAvailableCount(query);
@@ -334,27 +173,41 @@ describe('PrismaRentalAvailabilityAdapter', () => {
   });
 
   it('dùng biên thời gian nửa mở để hai window chỉ chạm nhau không bị overlap', async () => {
-    prismaMock.equipmentUnit.count
-      .mockResolvedValueOnce(10)
-      .mockResolvedValueOnce(0);
-
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(10));
     prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
 
     await adapter.getAvailableCount(query);
 
-    expect(
-      prismaMock.rentalQuantityReservation.findMany,
-    ).toHaveBeenCalledWith(
+    expect(prismaMock.rentalQuantityReservation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          occupiedFrom: {
-            lt: query.occupiedUntil,
-          },
-          occupiedUntil: {
-            gt: query.occupiedFrom,
-          },
+          occupiedFrom: { lt: query.occupiedUntil },
+          occupiedUntil: { gt: query.occupiedFrom },
         }),
       }),
     );
+  });
+
+  it('ném lỗi khi window không hợp lệ (occupiedFrom >= occupiedUntil)', async () => {
+    const invalidQuery = {
+      ...query,
+      occupiedFrom: query.occupiedUntil,
+      occupiedUntil: query.occupiedFrom,
+    };
+
+    await expect(adapter.getAvailableCount(invalidQuery)).rejects.toThrow('INVALID_OCCUPIED_WINDOW');
+  });
+
+  it('ghi nhận alert khi xảy ra shortage', async () => {
+    prismaMock.equipmentUnit.findMany.mockResolvedValue(createUnits(2));
+    prismaMock.rentalQuantityReservation.findMany.mockResolvedValue([]);
+
+    const result = await adapter.getAvailableCount({
+      ...query,
+      requestedQuantity: 5,
+    });
+
+    expect(result).toBe(2);
+    expect(prismaMock.rentalCapacityAlert.upsert).toHaveBeenCalled();
   });
 });

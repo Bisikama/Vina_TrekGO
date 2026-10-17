@@ -1,36 +1,399 @@
-import { PrismaClient } from '@prisma/client';
+import { DepositPolicyType, PrismaClient, RentalProductStatus } from '@prisma/client'
+
+interface RentalProductSeed {
+  id?: string
+  categorySlug: string
+  sku: string
+  name: string
+  description: string
+  dailyPrice: number
+  replacementValue: number
+  depositValue: number
+  usageGroup: string
+  specifications: Record<string, string | number | boolean | string[]>
+  recommendationTags: string[]
+  requiredAccessories: string[]
+  requiresDeepReturnInspection: boolean
+}
+
+export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
+  {
+    id: 'aaaaaa11-1111-1111-1111-111111111111',
+    categorySlug: 'leu-trai',
+    sku: 'TENT-001',
+    name: 'Lều trekking 4 người chống mưa',
+    description: 'Lều hai lớp cho nhóm 3–4 người, phù hợp cắm trại trekking nhiều ngày.',
+    dailyPrice: 120_000,
+    replacementValue: 2_500_000,
+    depositValue: 750_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 4, weightKg: 4.2, waterproofMm: 3000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'leu-trai',
+    sku: 'TENT-002',
+    name: 'Lều trekking 2 người siêu nhẹ',
+    description: 'Lều hai lớp gọn nhẹ dành cho 1–2 người ưu tiên giảm tải hành lý.',
+    dailyPrice: 150_000,
+    replacementValue: 3_500_000,
+    depositValue: 1_050_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 2, weightKg: 2.1, waterproofMm: 4000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY', 'LIGHTWEIGHT'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'leu-trai',
+    sku: 'TARP-001',
+    name: 'Tăng dã ngoại chống mưa 3 x 3 m',
+    description: 'Tấm tăng tạo khu sinh hoạt chung và che mưa nắng tại điểm cắm trại.',
+    dailyPrice: 70_000,
+    replacementValue: 1_200_000,
+    depositValue: 360_000,
+    usageGroup: 'SHELTER',
+    specifications: { widthM: 3, lengthM: 3, waterproofMm: 3000, weightKg: 1.4 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Tấm tăng', 'Cọc', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-001',
+    name: 'Balo trekking 40L',
+    description: 'Balo trợ lực cỡ vừa cho chuyến trekking một đến hai ngày.',
+    dailyPrice: 80_000,
+    replacementValue: 1_800_000,
+    depositValue: 540_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 40, weightKg: 1.35, rainCoverIncluded: true },
+    recommendationTags: ['MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-002',
+    name: 'Balo trekking 55L',
+    description: 'Balo trợ lực dung tích lớn cho hành trình nhiều ngày và mang đồ cắm trại.',
+    dailyPrice: 110_000,
+    replacementValue: 2_600_000,
+    depositValue: 780_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 55, weightKg: 1.75, rainCoverIncluded: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-003',
+    name: 'Balo leo núi 20L trong ngày',
+    description: 'Balo gọn nhẹ cho chuyến đi trong ngày, có ngăn túi nước và dây cố định gậy.',
+    dailyPrice: 50_000,
+    replacementValue: 900_000,
+    depositValue: 270_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 20, weightKg: 0.75, hydrationCompatible: true },
+    recommendationTags: ['MODERATE_TRAIL', 'LIGHTWEIGHT'],
+    requiredAccessories: [],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'tui-ngu-dem-cach-nhiet',
+    sku: 'SLEEP-001',
+    name: 'Túi ngủ trekking 10°C',
+    description: 'Túi ngủ ba mùa cho điều kiện nhiệt độ ôn hòa, có túi nén đi kèm.',
+    dailyPrice: 70_000,
+    replacementValue: 1_200_000,
+    depositValue: 360_000,
+    usageGroup: 'SLEEP',
+    specifications: { comfortTemperatureC: 10, limitTemperatureC: 5, weightKg: 1.1 },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Túi nén'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'tui-ngu-dem-cach-nhiet',
+    sku: 'SLEEP-002',
+    name: 'Túi ngủ trekking 0°C',
+    description: 'Túi ngủ giữ ấm cho khu vực núi cao hoặc thời tiết lạnh.',
+    dailyPrice: 100_000,
+    replacementValue: 2_000_000,
+    depositValue: 600_000,
+    usageGroup: 'SLEEP',
+    specifications: { comfortTemperatureC: 0, limitTemperatureC: -5, weightKg: 1.45 },
+    recommendationTags: ['MULTI_DAY', 'COLD_WEATHER'],
+    requiredAccessories: ['Túi nén'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'tui-ngu-dem-cach-nhiet',
+    sku: 'MAT-001',
+    name: 'Đệm hơi cách nhiệt trekking',
+    description: 'Đệm hơi gọn nhẹ giúp cách ẩm và cách nhiệt khi ngủ trong lều.',
+    dailyPrice: 50_000,
+    replacementValue: 900_000,
+    depositValue: 270_000,
+    usageGroup: 'SLEEP',
+    specifications: { lengthCm: 185, widthCm: 55, thicknessCm: 5, rValue: 3.2 },
+    recommendationTags: ['MULTI_DAY', 'COLD_WEATHER'],
+    requiredAccessories: ['Túi đựng', 'Bộ vá'],
+    requiresDeepReturnInspection: true,
+  },
+  ...[38, 39, 40, 41, 42].map((size): RentalProductSeed => ({
+    categorySlug: 'giay-leo-nui',
+    sku: `SHOE-${size}`,
+    name: `Giày trekking chống trượt size ${size}`,
+    description: `Giày trekking cổ thấp size ${size}, đế bám địa hình và mũi giày gia cường.`,
+    dailyPrice: 90_000,
+    replacementValue: 1_800_000,
+    depositValue: 540_000,
+    usageGroup: 'FOOTWEAR',
+    specifications: { euSize: size, waterproof: true, ankleType: 'LOW', terrain: ['Đường đất', 'Đá', 'Bùn nhẹ'] },
+    recommendationTags: ['MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Dây giày'],
+    requiresDeepReturnInspection: false,
+  })),
+  {
+    categorySlug: 'gay-trekking',
+    sku: 'POLE-001',
+    name: 'Cặp gậy trekking nhôm gấp gọn',
+    description: 'Cặp gậy hợp kim nhôm điều chỉnh chiều dài, hỗ trợ đường dốc và địa hình trơn.',
+    dailyPrice: 50_000,
+    replacementValue: 800_000,
+    depositValue: 240_000,
+    usageGroup: 'MOBILITY',
+    specifications: { quantity: 2, material: 'Hợp kim nhôm', minLengthCm: 65, maxLengthCm: 135 },
+    recommendationTags: ['MODERATE_TRAIL'],
+    requiredAccessories: ['Chụp cao su', 'Rọ chắn bùn'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'gay-trekking',
+    sku: 'POLE-002',
+    name: 'Cặp gậy trekking carbon siêu nhẹ',
+    description: 'Cặp gậy carbon nhẹ dành cho hành trình dài cần giảm tải.',
+    dailyPrice: 90_000,
+    replacementValue: 1_600_000,
+    depositValue: 480_000,
+    usageGroup: 'MOBILITY',
+    specifications: { quantity: 2, material: 'Carbon', minLengthCm: 62, maxLengthCm: 132 },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'LIGHTWEIGHT'],
+    requiredAccessories: ['Chụp cao su', 'Rọ chắn bùn'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'ao-mua-chong-thoi-tiet',
+    sku: 'RAIN-001',
+    name: 'Poncho trekking phủ balo',
+    description: 'Áo mưa poncho dáng rộng che được người và balo khi di chuyển.',
+    dailyPrice: 30_000,
+    replacementValue: 400_000,
+    depositValue: 120_000,
+    usageGroup: 'WEATHER_PROTECTION',
+    specifications: { fit: 'FREE_SIZE', waterproofMm: 5000, coversBackpack: true },
+    recommendationTags: ['RAIN_READY'],
+    requiredAccessories: ['Túi đựng'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'ao-mua-chong-thoi-tiet',
+    sku: 'RAIN-002',
+    name: 'Áo khoác chống mưa trekking free size',
+    description: 'Áo khoác chống mưa nhẹ có khe thoáng, phù hợp mặc ngoài nhiều lớp áo.',
+    dailyPrice: 70_000,
+    replacementValue: 1_200_000,
+    depositValue: 360_000,
+    usageGroup: 'WEATHER_PROTECTION',
+    specifications: { fit: 'ADJUSTABLE_FREE_SIZE', waterproofMm: 10000, breathable: true },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Túi đựng'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'ao-mua-chong-thoi-tiet',
+    sku: 'RAIN-003',
+    name: 'Áo trùm mưa balo 40–60L',
+    description: 'Áo trùm chống nước có dây siết, dùng cho balo trekking dung tích 40–60L.',
+    dailyPrice: 20_000,
+    replacementValue: 250_000,
+    depositValue: 75_000,
+    usageGroup: 'WEATHER_PROTECTION',
+    specifications: { compatibleCapacityLiters: '40–60', waterproofMm: 5000 },
+    recommendationTags: ['RAIN_READY'],
+    requiredAccessories: [],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'chieu-sang-nguon-dien',
+    sku: 'LIGHT-001',
+    name: 'Đèn đội đầu trekking 400 lumen',
+    description: 'Đèn đội đầu chống nước, nhiều chế độ sáng và sạc USB-C.',
+    dailyPrice: 40_000,
+    replacementValue: 700_000,
+    depositValue: 210_000,
+    usageGroup: 'LIGHTING',
+    specifications: { maxLumens: 400, waterproofRating: 'IPX6', rechargeable: true },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Dây đeo', 'Cáp sạc USB-C'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'chieu-sang-nguon-dien',
+    sku: 'LIGHT-002',
+    name: 'Đèn trại LED treo lều',
+    description: 'Đèn LED khuếch tán dùng trong lều hoặc khu sinh hoạt chung.',
+    dailyPrice: 50_000,
+    replacementValue: 900_000,
+    depositValue: 270_000,
+    usageGroup: 'LIGHTING',
+    specifications: { maxLumens: 500, waterproofRating: 'IPX5', rechargeable: true },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Móc treo', 'Cáp sạc USB-C'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'chieu-sang-nguon-dien',
+    sku: 'POWER-001',
+    name: 'Pin dự phòng 20.000mAh chống nước',
+    description: 'Pin dự phòng dung lượng cao có vỏ chống nước cho hành trình nhiều ngày.',
+    dailyPrice: 60_000,
+    replacementValue: 1_200_000,
+    depositValue: 360_000,
+    usageGroup: 'POWER',
+    specifications: { capacityMah: 20000, usbC: true, waterproofRating: 'IPX5' },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Cáp sạc USB-C'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'nau-an-xu-ly-nuoc',
+    sku: 'STOVE-001',
+    name: 'Bếp gas trekking gấp gọn',
+    description: 'Bếp dã ngoại gấp gọn dùng bình gas ren tiêu chuẩn; không bao gồm nhiên liệu.',
+    dailyPrice: 60_000,
+    replacementValue: 1_000_000,
+    depositValue: 300_000,
+    usageGroup: 'COOKING',
+    specifications: { fuelType: 'Bình gas ren', powerW: 3000, piezoIgnition: true },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Hộp đựng', 'Tấm chắn gió'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'nau-an-xu-ly-nuoc',
+    sku: 'COOK-001',
+    name: 'Bộ nồi dã ngoại 2–3 người',
+    description: 'Bộ nồi nhôm gọn nhẹ gồm nồi, chảo, bát và dụng cụ gắp.',
+    dailyPrice: 50_000,
+    replacementValue: 800_000,
+    depositValue: 240_000,
+    usageGroup: 'COOKING',
+    specifications: { servingCapacity: 3, material: 'Nhôm anodized', pieces: 7 },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Nồi', 'Chảo', '3 bát', 'Dụng cụ gắp', 'Túi lưới'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'nau-an-xu-ly-nuoc',
+    sku: 'WATER-001',
+    name: 'Bộ lọc nước dã ngoại cá nhân',
+    description: 'Thiết bị lọc nước cơ học nhỏ gọn cho nguồn nước ngọt trên hành trình.',
+    dailyPrice: 80_000,
+    replacementValue: 1_600_000,
+    depositValue: 480_000,
+    usageGroup: 'WATER_TREATMENT',
+    specifications: { filterMicron: 0.1, capacityLiters: 1000, flowLitersPerMinute: 1.2 },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL'],
+    requiredAccessories: ['Túi chứa nước', 'Ống hút', 'Ống vệ sinh'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'phu-kien-sinh-ton',
+    sku: 'NAV-001',
+    name: 'La bàn định hướng có thước bản đồ',
+    description: 'La bàn nền trong suốt có thước tỷ lệ để hỗ trợ đọc bản đồ địa hình.',
+    dailyPrice: 30_000,
+    replacementValue: 500_000,
+    depositValue: 150_000,
+    usageGroup: 'NAVIGATION',
+    specifications: { declinationAdjustment: true, luminousMarking: true, mapScale: ['1:25000', '1:50000'] },
+    recommendationTags: ['MODERATE_TRAIL'],
+    requiredAccessories: ['Dây đeo'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    categorySlug: 'phu-kien-sinh-ton',
+    sku: 'TOOL-001',
+    name: 'Dụng cụ đa năng trekking',
+    description: 'Dụng cụ gấp đa năng phục vụ sửa chữa nhỏ và xử lý tình huống tại trại.',
+    dailyPrice: 45_000,
+    replacementValue: 900_000,
+    depositValue: 270_000,
+    usageGroup: 'SURVIVAL',
+    specifications: { toolCount: 12, material: 'Thép không gỉ', lockingBlade: true },
+    recommendationTags: ['MULTI_DAY'],
+    requiredAccessories: ['Bao đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    categorySlug: 'phu-kien-sinh-ton',
+    sku: 'GPS-001',
+    name: 'Máy định vị GPS cầm tay',
+    description: 'Thiết bị GPS chống nước hỗ trợ theo dõi tuyến và xác định vị trí ngoài vùng phủ sóng.',
+    dailyPrice: 140_000,
+    replacementValue: 4_500_000,
+    depositValue: 1_350_000,
+    usageGroup: 'NAVIGATION',
+    specifications: { waterproofRating: 'IPX7', batteryHours: 20, offlineMap: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Dây đeo', 'Cáp sạc', 'Túi bảo vệ'],
+    requiresDeepReturnInspection: true,
+  },
+]
 
 export async function seedRentalProducts(prisma: PrismaClient) {
-  console.log('Seeding Rental Products...');
-  
-  const categories = await prisma.rentalCategory.findMany({ take: 1 });
-  if (categories.length === 0) {
-    console.warn('No category found. Skipping products seeding.');
-    return;
+  console.log('Seeding Rental Products...')
+
+  const requiredSlugs = [...new Set(RENTAL_PRODUCT_SEEDS.map((product) => product.categorySlug))]
+  const categories = await prisma.rentalCategory.findMany({
+    where: { slug: { in: requiredSlugs } },
+    select: { id: true, slug: true },
+  })
+  const categoryIdBySlug = new Map(categories.map((category) => [category.slug, category.id]))
+  const missingSlugs = requiredSlugs.filter((slug) => !categoryIdBySlug.has(slug))
+
+  if (missingSlugs.length > 0) {
+    throw new Error(`Missing rental categories for product seed: ${missingSlugs.join(', ')}`)
   }
-  
-  const products = [
-    {
-      id: 'aaaaaa11-1111-1111-1111-111111111111',
-      categoryId: categories[0].id,
-      sku: 'TENT-001',
-      name: 'Tent 4 Person Basic',
-      description: 'A basic 4 person tent',
-      dailyPrice: 100000,
-      replacementValue: 1000000,
-      depositValue: 1000000,
-      status: 'ACTIVE' as const,
-      images: ['test-image-id'],
+
+  for (const product of RENTAL_PRODUCT_SEEDS) {
+    const { id, categorySlug, sku, ...data } = product
+    const categoryId = categoryIdBySlug.get(categorySlug)!
+    const persistedData = {
+      ...data,
+      categoryId,
+      currency: 'VND',
+      depositPolicyType: DepositPolicyType.FIXED,
+      images: [],
+      status: RentalProductStatus.ACTIVE,
     }
-  ];
 
-  for (const product of products) {
     await prisma.rentalProduct.upsert({
-      where: { sku: product.sku },
-      update: product,
-      create: product,
-    });
+      where: { sku },
+      update: persistedData,
+      create: {
+        ...(id ? { id } : {}),
+        sku,
+        ...persistedData,
+      },
+    })
+    console.log(`Upserted rental product: ${sku} - ${data.name}`)
   }
 
-  console.log('Seeded Rental Products successfully.');
+  console.log(`Seeded ${RENTAL_PRODUCT_SEEDS.length} ACTIVE rental products successfully.`)
 }

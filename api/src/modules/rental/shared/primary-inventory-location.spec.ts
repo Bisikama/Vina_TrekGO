@@ -43,7 +43,7 @@ describe('primaryRentalInventoryLocationId (RB-POL-33)', () => {
     expect(() => assertPrimaryRentalLocation(idB)).toThrow();
   });
 
-  it('resolveActivePrimaryRentalLocation fails if warehouse is inactive or missing in db', async () => {
+  it('resolveActivePrimaryRentalLocation fails if inventory location is inactive or missing in db', async () => {
     process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = idA;
     delete process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID;
     const dbMissing = {

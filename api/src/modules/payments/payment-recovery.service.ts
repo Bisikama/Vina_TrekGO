@@ -105,7 +105,7 @@ export class PaymentRecoveryService {
     )
     if (
       result.kind === 'NOT_FOUND' &&
-      this.provider.forGateway(row.paymentGateway!)?.supportsIdempotentCreate &&
+      this.provider.forGateway(row.paymentGateway)?.supportsIdempotentCreate &&
       !claim.review &&
       ['PENDING', 'PROCESSING'].includes(row.status) &&
       row.expiresAt > claim.now
