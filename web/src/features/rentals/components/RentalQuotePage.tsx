@@ -243,6 +243,14 @@ export function RentalQuotePage({
       setPayment(nextPayment);
 
       if (nextPayment.checkout?.url) {
+        sessionStorage.setItem(
+          "trekgo:rental-payment-return",
+          JSON.stringify({
+            orderId: nextOrder.order.id,
+            bookingId: quote.bookingId,
+            paymentId: nextPayment.paymentId,
+          }),
+        );
         window.location.assign(nextPayment.checkout.url);
         return;
       }
