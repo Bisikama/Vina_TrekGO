@@ -2,6 +2,7 @@ import axios from "axios";
 
 import { apiClient } from "@/lib/axios";
 import type {
+  CreateRentalOrderResult,
   CreateRentalQuoteInput,
   RentalAvailability,
   RentalCatalogData,
@@ -9,6 +10,9 @@ import type {
   RentalDepositPolicy,
   RentalEligibility,
   RentalPagination,
+  RentalPaymentCheckoutResponse,
+  RentalPaymentGateway,
+  RentalPaymentMethod,
   RentalProduct,
   RentalProductDetailData,
   RentalQuote,
@@ -415,6 +419,72 @@ export async function createRentalQuote(
       getRentalApiErrorMessage(
         error,
         "Không thể tạo báo giá thuê thiết bị.",
+      ),
+    );
+  }
+}
+
+export async function createRentalOrder(
+  quoteId: string,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.post<unknown>(
+      "/api/v1/rental-orders",
+      { quoteId },
+      {
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
+        signal,
+      },
+    );
+
+    return unwrapApiData<CreateRentalOrderResult>(
+      response.data,
+    );
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể giữ thiết bị và tạo đơn thuê.",
+      ),
+    );
+  }
+}
+
+export async function createRentalPayment(
+  orderId: string,
+  input: {
+    paymentMethod: RentalPaymentMethod;
+    gateway: RentalPaymentGateway;
+  },
+  idempotencyKey: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await apiClient.post<unknown>(
+      `/api/v1/rental-orders/${encodeURIComponent(
+        orderId,
+      )}/payments`,
+      input,
+      {
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
+        signal,
+      },
+    );
+
+    return unwrapApiData<RentalPaymentCheckoutResponse>(
+      response.data,
+    );
+  } catch (error) {
+    throw new Error(
+      getRentalApiErrorMessage(
+        error,
+        "Không thể khởi tạo thanh toán cho đơn thuê.",
       ),
     );
   }
