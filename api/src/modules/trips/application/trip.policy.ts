@@ -33,11 +33,11 @@ export function basicIssues(
     })
   if (!Number.isInteger(data.capacity) || data.capacity <= 0 || data.capacity > 2147483647)
     issues.push({ code: 'INVALID_CAPACITY', field: 'capacity', message: 'Số người phải là số nguyên dương hợp lệ.' })
-  if (!data.price || !/^\d{1,10}(\.\d{1,2})?$/.test(data.price) || !/[1-9]/.test(data.price))
+  if (!data.price || !/^\d{1,10}$/.test(data.price) || !/[1-9]/.test(data.price))
     issues.push({
       code: 'INVALID_PRICE',
       field: 'price',
-      message: 'Giá/người phải lớn hơn 0 và tối đa hai chữ số thập phân.',
+      message: 'Giá/người phải là số nguyên dương, tối đa 10 chữ số.',
     })
   return issues
 }

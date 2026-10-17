@@ -67,7 +67,8 @@ export class PaymentsController {
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode' })
+  @ApiResponse({ status: 201, description: 'Tạo phiên thanh toán thành công — trả về checkout.url/checkout.qrData' })
+  @ApiResponse({ status: 202, description: 'Payment recorded but checkout is not available yet; reconciliation required. Retry with the same idempotency key.' })
   @ApiResponse({ status: 200, description: 'Phiên thanh toán đã tồn tại và còn hiệu lực (idempotent)' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc paymentMethod sai' })
   @ApiResponse({ status: 401, description: 'Chưa xác thực — token không hợp lệ' })
@@ -96,5 +97,6 @@ export class PaymentsController {
 export class PaymentOptionsController {
   constructor(private readonly payments: PaymentsService) {}
   @Get('options')
+  @ApiOperation({ summary: 'List enabled payment gateways and default gateway' })
   options() { return this.payments.paymentOptions() }
 }

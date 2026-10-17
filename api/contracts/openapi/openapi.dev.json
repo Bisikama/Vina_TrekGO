@@ -16193,8 +16193,17 @@
                       "QR",
                       "REDIRECT"
                     ],
-                    "description": "Phương thức: QR (quét mã) hoặc REDIRECT (cổng thanh toán)",
-                    "example": "QR"
+                    "description": "Phương thức: QR hoặc chuyển hướng cổng thanh toán",
+                    "example": "REDIRECT"
+                  },
+                  "gateway": {
+                    "type": "string",
+                    "enum": [
+                      "momo",
+                      "vnpay"
+                    ],
+                    "description": "Cổng thanh toán; bỏ trống để dùng cổng mặc định",
+                    "example": "vnpay"
                   }
                 }
               }
@@ -16206,7 +16215,10 @@
             "description": "Phiên thanh toán đã tồn tại và còn hiệu lực (idempotent)"
           },
           "201": {
-            "description": "Tạo phiên thanh toán thành công — trả về checkoutUrl/qrCode"
+            "description": "Tạo phiên thanh toán thành công — trả về checkout.url/checkout.qrData"
+          },
+          "202": {
+            "description": "Payment recorded but checkout is not available yet; reconciliation required. Retry with the same idempotency key."
           },
           "400": {
             "description": "Dữ liệu không hợp lệ hoặc paymentMethod sai"
@@ -16277,29 +16289,149 @@
         ],
         "requestBody": {
           "required": true,
-          "description": "Dữ liệu webhook mock",
+          "description": "Signed mock event. HMAC must match the exact raw JSON body; sample signatures do not work. For a successful event, transactionRef (PAYMENT) or refundTransactionRef (REFUND) must not be null.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "orderId": {
-                    "type": "string",
-                    "description": "Mã đơn thanh toán"
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "SUCCESS",
-                      "FAILED"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "providerEventId",
+                      "merchantRequestRef",
+                      "transactionRef",
+                      "status",
+                      "amount",
+                      "currency",
+                      "occurredAt"
                     ],
-                    "example": "SUCCESS"
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "PAYMENT"
+                        ]
+                      },
+                      "providerEventId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 220
+                      },
+                      "merchantRequestRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "transactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PROCESSING",
+                          "SUCCEEDED",
+                          "FAILED",
+                          "CANCELLED",
+                          "EXPIRED"
+                        ]
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,9})$",
+                        "example": "10000"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$",
+                        "example": "VND"
+                      },
+                      "occurredAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
                   },
-                  "amount": {
-                    "type": "number",
-                    "example": 500000
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "providerEventId",
+                      "merchantRequestRef",
+                      "transactionRef",
+                      "status",
+                      "amount",
+                      "currency",
+                      "occurredAt",
+                      "merchantRefundRef",
+                      "refundTransactionRef"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "REFUND"
+                        ]
+                      },
+                      "providerEventId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 220
+                      },
+                      "merchantRequestRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "transactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "PROCESSING",
+                          "SUCCEEDED",
+                          "FAILED",
+                          "CANCELLED"
+                        ]
+                      },
+                      "amount": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,9})$",
+                        "example": "10000"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$",
+                        "example": "VND"
+                      },
+                      "occurredAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "merchantRefundRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      },
+                      "refundTransactionRef": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "maxLength": 180
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -16441,7 +16573,7 @@
     },
     "/api/v1/refunds/{id}": {
       "get": {
-        "description": "Xem thông tin chi tiết của một lệnh hoàn tiền bao gồm: số tiền, trạng thái, lý do và thời gian hoàn.",
+        "description": "Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.",
         "operationId": "RefundsController_detail",
         "parameters": [
           {
@@ -16474,23 +16606,22 @@
         ],
         "summary": "Xem chi tiết lệnh hoàn tiền (Refund Detail)",
         "tags": [
-          "Quản trị thanh toán (Admin Payments & Reconciliation)"
+          "Payments"
         ]
       }
     },
     "/api/v1/bookings/{id}/cancellations": {
       "post": {
-        "description": "Người dùng gửi yêu cầu hủy đơn đặt chỗ đã tạo. Yêu cầu Idempotency-Key để tránh gọi lặp lại. Hệ thống sẽ tính toán phí phạt và hoàn tiền (nếu có) theo chính sách hủy tour.",
+        "description": "Use cancellations; cancel is a compatibility alias. Owners may cancel before departure. Refund amount comes from the saved booking policy, not the request. HTTP 202 confirms cancellation, not refund completion. Workers create and process the refund asynchronously. Unpaid bookings or zero refundable amount do not create refunds.",
         "operationId": "BookingCancellationsController_cancel[0]",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID đơn đặt chỗ cần hủy",
+            "description": "Booking ID",
             "schema": {
               "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           },
@@ -16501,24 +16632,15 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "description": "Khóa duy nhất tránh hủy trùng lặp (1–200 ký tự ASCII)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Lý do hủy đơn đặt chỗ",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
                   "reason"
                 ],
@@ -16527,8 +16649,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
-                    "description": "Lý do người dùng muốn hủy chuyến",
-                    "example": "Bận việc gia đình đột xuất không thể tham gia"
+                    "example": "My travel plans changed"
                   }
                 }
               }
@@ -16537,19 +16658,59 @@
         },
         "responses": {
           "202": {
-            "description": "Yêu cầu hủy đã được tiếp nhận và xử lý"
+            "description": "Cancellation accepted; refundableAmount is approved, not yet refunded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bookingId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "cancellationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "CANCELLED"
+                      ]
+                    },
+                    "refundableAmount": {
+                      "type": "string",
+                      "example": "10000"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "VND"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
-            "description": "Lý do không hợp lệ hoặc thiếu thông tin"
+            "description": "Invalid reason, ID or idempotency key"
           },
           "401": {
-            "description": "Chưa xác thực — token không hợp lệ"
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Not permitted to cancel this booking"
           },
           "404": {
-            "description": "Không tìm thấy đơn đặt chỗ"
+            "description": "Booking not found"
           },
           "409": {
-            "description": "Đơn đặt chỗ đã bị hủy trước đó hoặc không thể hủy ở trạng thái hiện tại"
+            "description": "Cancellation not allowed or idempotency payload conflict"
+          },
+          "410": {
+            "description": "Booking hold expired"
+          },
+          "422": {
+            "description": "Cancellation policy snapshot missing or invalid"
           }
         },
         "security": [
@@ -16557,25 +16718,24 @@
             "bearer": []
           }
         ],
-        "summary": "Hủy đơn đặt chỗ chuyến đi (Booking Cancellation)",
+        "summary": "Cancel booking and schedule eligible refund",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
     "/api/v1/bookings/{id}/cancel": {
       "post": {
-        "description": "Người dùng gửi yêu cầu hủy đơn đặt chỗ đã tạo. Yêu cầu Idempotency-Key để tránh gọi lặp lại. Hệ thống sẽ tính toán phí phạt và hoàn tiền (nếu có) theo chính sách hủy tour.",
+        "description": "Use cancellations; cancel is a compatibility alias. Owners may cancel before departure. Refund amount comes from the saved booking policy, not the request. HTTP 202 confirms cancellation, not refund completion. Workers create and process the refund asynchronously. Unpaid bookings or zero refundable amount do not create refunds.",
         "operationId": "BookingCancellationsController_cancel[1]",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID đơn đặt chỗ cần hủy",
+            "description": "Booking ID",
             "schema": {
               "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           },
@@ -16586,24 +16746,15 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "description": "Khóa duy nhất tránh hủy trùng lặp (1–200 ký tự ASCII)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Lý do hủy đơn đặt chỗ",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
                   "reason"
                 ],
@@ -16612,8 +16763,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
-                    "description": "Lý do người dùng muốn hủy chuyến",
-                    "example": "Bận việc gia đình đột xuất không thể tham gia"
+                    "example": "My travel plans changed"
                   }
                 }
               }
@@ -16622,19 +16772,59 @@
         },
         "responses": {
           "202": {
-            "description": "Yêu cầu hủy đã được tiếp nhận và xử lý"
+            "description": "Cancellation accepted; refundableAmount is approved, not yet refunded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bookingId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "cancellationId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "CANCELLED"
+                      ]
+                    },
+                    "refundableAmount": {
+                      "type": "string",
+                      "example": "10000"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "VND"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
-            "description": "Lý do không hợp lệ hoặc thiếu thông tin"
+            "description": "Invalid reason, ID or idempotency key"
           },
           "401": {
-            "description": "Chưa xác thực — token không hợp lệ"
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Not permitted to cancel this booking"
           },
           "404": {
-            "description": "Không tìm thấy đơn đặt chỗ"
+            "description": "Booking not found"
           },
           "409": {
-            "description": "Đơn đặt chỗ đã bị hủy trước đó hoặc không thể hủy ở trạng thái hiện tại"
+            "description": "Cancellation not allowed or idempotency payload conflict"
+          },
+          "410": {
+            "description": "Booking hold expired"
+          },
+          "422": {
+            "description": "Cancellation policy snapshot missing or invalid"
           }
         },
         "security": [
@@ -16642,9 +16832,9 @@
             "bearer": []
           }
         ],
-        "summary": "Hủy đơn đặt chỗ chuyến đi (Booking Cancellation)",
+        "summary": "Cancel booking and schedule eligible refund",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
@@ -17408,17 +17598,13 @@
     },
     "/api/v1/trips/{tripId}/bookings": {
       "post": {
-        "description": "Người dùng đặt chỗ cho chuyến đi công khai hoặc chuyến đi riêng tư. Yêu cầu Idempotency-Key để tránh đặt chỗ trùng lặp. Danh sách thành viên (participants) phải có số lượng khớp với participantCount.",
         "operationId": "BookingsController_create",
         "parameters": [
           {
             "name": "tripId",
             "required": true,
             "in": "path",
-            "description": "UUID của chuyến đi muốn đặt",
             "schema": {
-              "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440000",
               "type": "string"
             }
           },
@@ -17429,76 +17615,79 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "description": "Khóa duy nhất tránh trùng lặp thao tác (1–200 ký tự ASCII)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Thông tin số lượng và danh sách người tham gia",
+          "description": "participantCount must match participants.length. New participants must not include id.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "participantCount",
-                  "participants"
-                ],
                 "properties": {
                   "participantCount": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 100,
-                    "description": "Tổng số người tham gia chuyến đi",
-                    "example": 2
+                    "maximum": 100
                   },
                   "participants": {
-                    "type": "array",
                     "minItems": 1,
                     "maxItems": 100,
-                    "description": "Danh sách chi tiết từng người tham gia (số phần tử phải đúng bằng participantCount)",
+                    "type": "array",
                     "items": {
                       "type": "object",
-                      "required": [
-                        "fullName"
-                      ],
                       "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "fullName": {
                           "type": "string",
-                          "description": "Họ và tên người tham gia",
-                          "example": "Nguyễn Văn A"
+                          "minLength": 1,
+                          "maxLength": 150
                         },
                         "phone": {
                           "type": "string",
-                          "description": "Số điện thoại liên hệ (5–30 ký tự)",
-                          "example": "0987654321"
+                          "minLength": 5,
+                          "maxLength": 30
                         },
                         "dateOfBirth": {
                           "type": "string",
                           "format": "date",
-                          "description": "Ngày sinh (YYYY-MM-DD)",
-                          "example": "1995-08-15"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
                         },
                         "emergencyContactName": {
                           "type": "string",
-                          "description": "Tên người liên hệ khẩn cấp",
-                          "example": "Nguyễn Văn B (Bố)"
+                          "minLength": 1,
+                          "maxLength": 150
                         },
                         "emergencyContactPhone": {
                           "type": "string",
-                          "description": "Số điện thoại liên hệ khẩn cấp",
-                          "example": "0901234567"
+                          "minLength": 5,
+                          "maxLength": 30
                         }
-                      }
+                      },
+                      "required": [
+                        "fullName"
+                      ],
+                      "additionalProperties": false
                     }
                   }
+                },
+                "required": [
+                  "participantCount",
+                  "participants"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "participantCount": 1,
+                  "participants": [
+                    {
+                      "fullName": "Nguyen Van A",
+                      "phone": "0900000001"
+                    }
+                  ]
                 }
               }
             }
@@ -17506,19 +17695,7 @@
         },
         "responses": {
           "201": {
-            "description": "Đặt chỗ thành công, đơn hàng ở trạng thái PENDING_PAYMENT"
-          },
-          "400": {
-            "description": "Dữ liệu không hợp lệ hoặc số lượng participantCount không khớp"
-          },
-          "401": {
-            "description": "Chưa xác thực — token không hợp lệ"
-          },
-          "404": {
-            "description": "Không tìm thấy chuyến đi"
-          },
-          "409": {
-            "description": "Chuyến đi đã hết chỗ hoặc xung đột lịch"
+            "description": ""
           }
         },
         "security": [
@@ -17526,98 +17703,104 @@
             "bearer": []
           }
         ],
-        "summary": "Tạo đặt chỗ chuyến đi mới (Booking)",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
     "/api/v1/bookings/{id}/participants": {
       "patch": {
-        "description": "Cập nhật thông tin các thành viên tham gia trong đơn đặt chỗ. Yêu cầu expectedVersion để kiểm soát xung đột đồng thời.",
         "operationId": "BookingsController_update",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID của đơn đặt chỗ (Booking ID)",
             "schema": {
-              "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           }
         ],
         "requestBody": {
           "required": true,
-          "description": "Danh sách thành viên cập nhật kèm phiên bản hiện tại",
+          "description": "Send the current booking version and the full participant list. Include existing participant IDs to preserve them; omitted participants are cancelled.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "expectedVersion",
-                  "participantCount",
-                  "participants"
-                ],
                 "properties": {
-                  "expectedVersion": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Phiên bản hiện tại của đơn đặt chỗ (optimistic locking)",
-                    "example": 1
-                  },
                   "participantCount": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 100,
-                    "description": "Số lượng người tham gia",
-                    "example": 2
+                    "maximum": 100
                   },
                   "participants": {
+                    "minItems": 1,
+                    "maxItems": 100,
                     "type": "array",
                     "items": {
                       "type": "object",
-                      "required": [
-                        "fullName"
-                      ],
                       "properties": {
                         "id": {
                           "type": "string",
                           "format": "uuid",
-                          "description": "UUID của participant hiện tại (nếu cập nhật người cũ)",
-                          "example": "550e8400-e29b-41d4-a716-446655440002"
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "fullName": {
                           "type": "string",
-                          "description": "Họ và tên người tham gia",
-                          "example": "Nguyễn Văn A (Cập nhật)"
+                          "minLength": 1,
+                          "maxLength": 150
                         },
                         "phone": {
                           "type": "string",
-                          "description": "Số điện thoại",
-                          "example": "0987654321"
+                          "minLength": 5,
+                          "maxLength": 30
                         },
                         "dateOfBirth": {
                           "type": "string",
                           "format": "date",
-                          "description": "Ngày sinh (YYYY-MM-DD)",
-                          "example": "1995-08-15"
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
                         },
                         "emergencyContactName": {
                           "type": "string",
-                          "description": "Tên người liên hệ khẩn cấp",
-                          "example": "Nguyễn Văn B"
+                          "minLength": 1,
+                          "maxLength": 150
                         },
                         "emergencyContactPhone": {
                           "type": "string",
-                          "description": "SĐT người liên hệ khẩn cấp",
-                          "example": "0901234567"
+                          "minLength": 5,
+                          "maxLength": 30
                         }
-                      }
+                      },
+                      "required": [
+                        "fullName"
+                      ],
+                      "additionalProperties": false
                     }
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
+                },
+                "required": [
+                  "participantCount",
+                  "participants",
+                  "expectedVersion"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "expectedVersion": 1,
+                  "participantCount": 1,
+                  "participants": [
+                    {
+                      "id": "00000000-0000-4000-8000-000000000001",
+                      "fullName": "Nguyen Van A",
+                      "phone": "0900000001"
+                    }
+                  ]
                 }
               }
             }
@@ -17625,13 +17808,7 @@
         },
         "responses": {
           "200": {
-            "description": "Cập nhật danh sách thành viên thành công"
-          },
-          "404": {
-            "description": "Không tìm thấy đơn đặt chỗ"
-          },
-          "409": {
-            "description": "Xung đột phiên bản — đơn đặt chỗ đã bị cập nhật bởi thao tác khác"
+            "description": ""
           }
         },
         "security": [
@@ -17639,22 +17816,19 @@
             "bearer": []
           }
         ],
-        "summary": "Cập nhật danh sách thành viên tham gia",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
     "/api/v1/bookings": {
       "get": {
-        "description": "Lấy danh sách các đơn đặt chỗ của người dùng đang đăng nhập, hỗ trợ phân trang và lọc theo trạng thái.",
         "operationId": "BookingsController_list",
         "parameters": [
           {
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "Trạng thái đơn đặt chỗ cần lọc",
             "schema": {
               "enum": [
                 "PENDING_PAYMENT",
@@ -17673,29 +17847,27 @@
             "name": "pageSize",
             "required": false,
             "in": "query",
-            "description": "Số bản ghi mỗi trang (mặc định 12, tối đa 50)",
             "schema": {
-              "example": 12,
-              "type": "number"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 12
             }
           },
           {
             "name": "page",
             "required": false,
             "in": "query",
-            "description": "Số trang (mặc định 1)",
             "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Danh sách đơn đặt chỗ kèm phân trang"
-          },
-          "401": {
-            "description": "Chưa xác thực"
+            "description": ""
           }
         },
         "security": [
@@ -17703,35 +17875,28 @@
             "bearer": []
           }
         ],
-        "summary": "Danh sách đơn đặt chỗ của tôi",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
     "/api/v1/bookings/{id}": {
       "get": {
-        "description": "Xem thông tin chi tiết một đơn đặt chỗ bao gồm: chuyến đi, giá vé, thành viên, và trạng thái thanh toán.",
+        "description": "Includes payment and refunds. After cancellation, poll this endpoint for refunds[].refundId and status; refund creation is asynchronous.",
         "operationId": "BookingsController_detail",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID của đơn đặt chỗ",
             "schema": {
-              "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Thông tin chi tiết đơn đặt chỗ"
-          },
-          "404": {
-            "description": "Không tìm thấy đơn đặt chỗ"
+            "description": ""
           }
         },
         "security": [
@@ -17739,38 +17904,28 @@
             "bearer": []
           }
         ],
-        "summary": "Chi tiết đơn đặt chỗ",
+        "summary": "Get own booking detail",
         "tags": [
-          "Đặt chỗ chuyến đi (Bookings)"
+          "Bookings"
         ]
       }
     },
     "/api/v1/internal/bookings/{id}/rental-context": {
       "get": {
-        "description": "API nội bộ dành cho module Rental để kiểm tra thông tin chuyến đi, thời gian, và người tham gia từ đơn đặt chỗ.",
         "operationId": "BookingRentalContextController_context",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID của đơn đặt chỗ",
             "schema": {
-              "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440001",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Ngữ cảnh thuê thiết bị của đơn đặt chỗ"
-          },
-          "401": {
-            "description": "Thiếu hoặc sai x-api-key"
-          },
-          "404": {
-            "description": "Không tìm thấy đơn đặt chỗ"
+            "description": ""
           }
         },
         "security": [
@@ -17778,32 +17933,29 @@
             "x-api-key": []
           }
         ],
-        "summary": "Lấy ngữ cảnh thuê thiết bị theo Booking (Internal)",
         "tags": [
-          "Bookings (Nội bộ hệ thống)"
+          "Bookings internal"
         ]
       }
     },
     "/api/v1/trips": {
       "get": {
-        "description": "Người dùng có thể tìm kiếm các chuyến đi trekking công khai đang mở đăng ký (OPEN). Hỗ trợ lọc theo địa danh (destinationId), khoảng ngày (dateFrom, dateTo), độ khó và mức giá.",
         "operationId": "BookingDiscoveryController_list",
         "parameters": [
           {
             "name": "price",
             "required": false,
             "in": "query",
-            "description": "Giá vé tối đa (VND)",
+            "description": "Maximum price per participant",
             "schema": {
-              "example": 2500000,
-              "type": "number"
+              "type": "integer",
+              "minimum": 0
             }
           },
           {
             "name": "difficulty",
             "required": false,
             "in": "query",
-            "description": "Độ khó cung đường",
             "schema": {
               "enum": [
                 "EASY",
@@ -17818,91 +17970,140 @@
             "name": "dateTo",
             "required": false,
             "in": "query",
-            "description": "Ngày khởi hành đến (YYYY-MM-DD)",
             "schema": {
-              "example": "2026-12-31",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           },
           {
             "name": "dateFrom",
             "required": false,
             "in": "query",
-            "description": "Ngày khởi hành từ (YYYY-MM-DD)",
             "schema": {
-              "example": "2026-11-01",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           },
           {
             "name": "destinationId",
             "required": false,
             "in": "query",
-            "description": "UUID địa danh trekking cần lọc",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
             "name": "pageSize",
             "required": false,
             "in": "query",
-            "description": "Số bản ghi mỗi trang (mặc định 12, tối đa 50)",
             "schema": {
-              "example": 12,
-              "type": "number"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 12
             }
           },
           {
             "name": "page",
             "required": false,
             "in": "query",
-            "description": "Số trang (mặc định 1)",
             "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Danh sách các chuyến đi phù hợp kèm số chỗ còn lại (remainingSlots)"
+            "description": ""
           }
         },
-        "summary": "Tìm kiếm và khám phá các chuyến đi công khai (Public)",
         "tags": [
-          "Khám phá chuyến đi công khai (Public Trips Discovery)"
+          "Public booking discovery"
         ]
       }
     },
     "/api/v1/trips/{id}": {
       "get": {
-        "description": "Lấy thông tin đầy đủ về chuyến đi bao gồm: lịch trình, cung đường, điểm dừng (checkpoints), phương tiện và số chỗ còn trống.",
         "operationId": "BookingDiscoveryController_detail",
         "parameters": [
           {
             "name": "id",
             "required": true,
             "in": "path",
-            "description": "UUID của chuyến đi công khai",
             "schema": {
-              "format": "uuid",
-              "example": "550e8400-e29b-41d4-a716-446655440000",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Thông tin chi tiết chuyến đi"
-          },
-          "404": {
-            "description": "Không tìm thấy chuyến đi hoặc chuyến đi không ở trạng thái công khai"
+            "description": ""
           }
         },
-        "summary": "Xem chi tiết chuyến đi công khai",
         "tags": [
-          "Khám phá chuyến đi công khai (Public Trips Discovery)"
+          "Public booking discovery"
+        ]
+      }
+    },
+    "/api/v1/payments/options": {
+      "get": {
+        "operationId": "PaymentOptionsController_options",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List enabled payment gateways and default gateway",
+        "tags": [
+          "Payments"
+        ]
+      }
+    },
+    "/api/v1/payments/webhooks/vnpay": {
+      "get": {
+        "description": "VNPAY calls the registered URL with signed vnp_* query parameters. No JWT required. HTTP 200 is a protocol acknowledgement: inspect RspCode. Business updates are asynchronous after durable intake; this is not the browser return URL.",
+        "operationId": "VnpayIpnController_receive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "RspCode": {
+                      "type": "string",
+                      "enum": [
+                        "00",
+                        "01",
+                        "02",
+                        "04",
+                        "97",
+                        "99"
+                      ]
+                    },
+                    "Message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "VNPAY server-to-server IPN",
+        "tags": [
+          "Payments"
         ]
       }
     }

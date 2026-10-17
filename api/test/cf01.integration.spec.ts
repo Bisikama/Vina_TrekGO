@@ -87,6 +87,7 @@ suite('CF01 real PostgreSQL transactions', () => {
       pickupPointId: pickup.id,
       capacity: 8,
       price: '250000',
+      priceExplanation: 'Chi phí ăn uống, vé và hướng dẫn: 250000 VND/người.',
     }
   })
   const readyTrip = async () => {
@@ -103,6 +104,8 @@ suite('CF01 real PostgreSQL transactions', () => {
     expect(published.status).toBe('OPEN')
     expect(published.publishedAt).not.toBeNull()
     expect(await service.publicDetail(trip.id)).not.toHaveProperty('trails')
+    expect(await service.publicDetail(trip.id)).not.toHaveProperty('priceExplanation')
+    expect((await service.detail(actor, trip.id)).priceExplanation).toBe(input.priceExplanation)
     await expect(service.update(actor, trip.id, published.version, { title: 'Forbidden' })).rejects.toMatchObject({
       status: 409,
     })
