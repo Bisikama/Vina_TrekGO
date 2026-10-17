@@ -1,8 +1,9 @@
-import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
-import envConfig from './shared/config';
-import { GlobalErrorFilter } from './shared/errors';
+import { NestFactory } from '@nestjs/core'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { AppModule } from './app.module'
+import envConfig from './shared/config'
+import { GlobalErrorFilter } from './shared/errors'
+import { WebsocketAdapter } from './websockets/websocket.adapter'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -15,7 +16,7 @@ async function bootstrap() {
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type,Accept,Authorization,x-api-key',
-  });
+  })
 
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
@@ -42,17 +43,18 @@ async function bootstrap() {
       },
       'x-api-key',
     )
-    .build();
+    .build()
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
     },
-  });
+  })
+  app.useWebSocketAdapter(new WebsocketAdapter(app))
 
   await app.listen(envConfig.PORT);
   console.log(`Application is running on: http://localhost:${envConfig.PORT}`);
   console.log(`Swagger UI is available at: http://localhost:${envConfig.PORT}/docs`);
 }
-void bootstrap();
+void bootstrap()
