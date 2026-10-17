@@ -2,9 +2,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  createRentalOrder,
+  createRentalPayment,
   createRentalQuote,
   getRentalApiErrorMessage,
   getRentalAvailability,
@@ -12,8 +14,11 @@ import {
   getRentalProduct,
 } from "@/features/rentals/services/rental.api";
 import type {
+  CreateRentalOrderResult,
   RentalAvailability,
   RentalEligibility,
+  RentalPaymentCheckoutResponse,
+  RentalPaymentGateway,
   RentalProduct,
   RentalQuote,
 } from "@/features/rentals/types/rental";
@@ -29,6 +34,19 @@ type PageData = {
   availability: RentalAvailability;
   product: RentalProduct;
 };
+
+function createIdempotencyKey(scope: string) {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `${scope}-${crypto.randomUUID()}`;
+  }
+
+  return `${scope}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("vi-VN", {
@@ -62,6 +80,14 @@ export function RentalQuotePage({
   );
   const [recipientId, setRecipientId] = useState("");
   const [quote, setQuote] = useState<RentalQuote | null>(null);
+  const [orderResult, setOrderResult] =
+    useState<CreateRentalOrderResult | null>(null);
+  const [payment, setPayment] =
+    useState<RentalPaymentCheckoutResponse | null>(null);
+  const [gateway, setGateway] =
+    useState<RentalPaymentGateway>("vnpay");
+  const orderKeyRef = useRef<string | null>(null);
+  const paymentKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +192,71 @@ export function RentalQuotePage({
         getRentalApiErrorMessage(
           quoteError,
           "Không thể tạo báo giá thuê thiết bị.",
+        ),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCreateOrderAndPayment() {
+    if (!quote || submitting) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      if (!orderKeyRef.current) {
+        orderKeyRef.current = createIdempotencyKey(
+          `rental-order-${quote.id}`,
+        );
+      }
+
+      const nextOrder =
+        orderResult ??
+        (await createRentalOrder(
+          quote.id,
+          orderKeyRef.current,
+        ));
+
+      setOrderResult(nextOrder);
+
+      if (!paymentKeyRef.current) {
+        paymentKeyRef.current = createIdempotencyKey(
+          `rental-payment-${nextOrder.order.id}-${gateway}`,
+        );
+      }
+
+      const nextPayment =
+        payment ??
+        (await createRentalPayment(
+          nextOrder.order.id,
+          {
+            paymentMethod: "REDIRECT",
+            gateway,
+          },
+          paymentKeyRef.current,
+        ));
+
+      setPayment(nextPayment);
+
+      if (nextPayment.checkout?.url) {
+        window.location.assign(nextPayment.checkout.url);
+        return;
+      }
+
+      setError(
+        nextPayment.reconciliationRequired
+          ? "Cổng thanh toán đang xác minh giao dịch. Vui lòng chờ ít phút rồi thử lại."
+          : "Cổng thanh toán chưa trả về đường dẫn thanh toán.",
+      );
+    } catch (checkoutError) {
+      setError(
+        getRentalApiErrorMessage(
+          checkoutError,
+          "Không thể giữ thiết bị và khởi tạo thanh toán.",
         ),
       );
     } finally {
@@ -310,14 +401,131 @@ export function RentalQuotePage({
 
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
             Báo giá hết hạn lúc {formatDate(quote.expiresAt)}.
-            Bước này chưa giữ thiết bị và chưa tạo thanh toán.
+            Khi tiếp tục, hệ thống sẽ giữ toàn bộ số lượng thiết bị
+            rồi mới mở cổng thanh toán.
           </div>
+
+          <section className="mt-7 rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+                  Shared Payment
+                </p>
+                <h2 className="mt-1 text-xl font-black text-gray-950">
+                  Chọn cổng thanh toán
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-gray-600">
+                  Thiết bị chỉ được giữ khi tạo đơn thành công.
+                  Trạng thái PAID sẽ do Backend xác minh lại.
+                </p>
+              </div>
+
+              {orderResult && (
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700 shadow-sm">
+                  Đã giữ thiết bị
+                </span>
+              )}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    id: "vnpay",
+                    title: "VNPay",
+                    detail: "Thẻ ATM, QR và ngân hàng",
+                    icon: "VN",
+                  },
+                  {
+                    id: "momo",
+                    title: "MoMo",
+                    detail: "Ví MoMo sandbox",
+                    icon: "M",
+                  },
+                ] as const
+              ).map((option) => {
+                const selected = gateway === option.id;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    disabled={Boolean(payment) || submitting}
+                    onClick={() => {
+                      setGateway(option.id);
+                      paymentKeyRef.current = null;
+                      setPayment(null);
+                    }}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition ${selected
+                      ? "border-emerald-500 bg-white shadow-[0_12px_30px_rgba(16,185,129,0.16)]"
+                      : "border-emerald-100 bg-white/70 hover:border-emerald-300"} disabled:cursor-not-allowed disabled:opacity-70`}
+                  >
+                    <span
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${selected
+                        ? "bg-[#1B5E41] text-white"
+                        : "bg-emerald-100 text-emerald-800"}`}
+                    >
+                      {option.icon}
+                    </span>
+                    <span>
+                      <span className="block font-black text-gray-950">
+                        {option.title}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-gray-500">
+                        {option.detail}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {orderResult && (
+              <div className="mt-4 rounded-2xl bg-white p-4 text-xs leading-5 text-gray-600">
+                <p>
+                  Mã đơn thuê:{" "}
+                  <strong className="text-gray-900">
+                    {orderResult.order.id}
+                  </strong>
+                </p>
+                <p>
+                  Giữ đến:{" "}
+                  <strong className="text-gray-900">
+                    {formatDate(
+                      orderResult.order.paymentExpiresAt,
+                    )}
+                  </strong>
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCreateOrderAndPayment}
+              disabled={submitting}
+              className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[#163F2D] px-6 py-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(22,63,45,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F5132] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting
+                ? orderResult
+                  ? "Đang mở cổng thanh toán..."
+                  : "Đang giữ thiết bị..."
+                : `Giữ thiết bị & thanh toán qua ${
+                    gateway === "vnpay" ? "VNPay" : "MoMo"
+                  }`}
+            </button>
+          </section>
 
           <Link
             href={`/rentals?bookingId=${encodeURIComponent(
               bookingId,
             )}`}
-            className="mt-7 flex w-full justify-center rounded-xl bg-[#1B5E41] px-6 py-4 text-sm font-extrabold text-white"
+            className="mt-4 flex w-full justify-center rounded-xl border border-gray-200 bg-white px-6 py-4 text-sm font-extrabold text-gray-700 hover:border-emerald-300 hover:text-emerald-800"
           >
             Quay lại danh mục thuê
           </Link>
