@@ -19,7 +19,7 @@ export const ServicesAndPolicy = ({ trip }: { trip: TripData }) => {
             ))}
           </ul>
         </div>
-        
+
         <div className="bg-gray-50/80 p-6 rounded-2xl border border-gray-100">
           <h3 className="text-[13px] font-extrabold text-gray-800 mb-4 flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -107,7 +107,7 @@ export const ServicesAndPolicy = ({ trip }: { trip: TripData }) => {
             <div className="text-[9px] text-gray-400">Khó đổi chuyến</div>
           </div>
           <div className="bg-gray-100 p-3 rounded-lg border border-gray-200 flex flex-col justify-center">
-            <div className="text-gray-900 font-extrabold text-xs">Phút chót / Bỏ thi</div>
+            <div className="text-gray-900 font-extrabold text-xs">Hủy Chuyến Phút Chót</div>
             <div className="text-red-600 font-extrabold text-sm">Mất 100%</div>
           </div>
         </div>
