@@ -58,6 +58,7 @@ export const finishRecordingSchema = z
       .object({
         title: z.string().min(1).max(200).optional(),
         description: z.string().nullable().optional(),
+    duration: z.string().nullable().optional(),
         region: z.string().nullable().optional(),
         difficulty: z.string().nullable().optional(),
         terrainType: z.string().nullable().optional(),

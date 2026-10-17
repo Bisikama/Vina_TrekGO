@@ -62,11 +62,13 @@ export class PersonalTrailUseCase {
       distanceKm: Number(trail.distanceKm ?? 0),
       elevationGainM: trail.elevationGainM ?? 0,
       elevationLossM: trail.elevationLossM ?? 0,
+      duration: trail.duration || '1 phút',
       visibility: trail.visibility,
       verificationStatus: trail.verificationStatus || 'DRAFT',
       gpsSegments: multiLineCoordinates,
       checkpoints: [],
       elevationProfile: trail.elevationProfile || [],
+      clientRecordingId: trail.clientRecordingId,
       createdAt: trail.createdAt,
       updatedAt: trail.updatedAt,
     }

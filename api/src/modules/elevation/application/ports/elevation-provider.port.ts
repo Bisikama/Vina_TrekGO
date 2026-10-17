@@ -128,8 +128,11 @@ export function computeMetricsAcrossSegments(
     lastPoint = null
   }
 
-  const allElevations = segments.flatMap((s) => s.points.map((p) => p.elevationM))
-  const { gainM, lossM } = calculateGainLoss(allElevations, 5)
+  // A pause is an unobserved gap for elevation as well as distance.
+  const { gainM, lossM } = segments.reduce((total, segment) => {
+    const delta = calculateGainLoss(segment.points.map((p) => p.elevationM), 5)
+    return { gainM: total.gainM + delta.gainM, lossM: total.lossM + delta.lossM }
+  }, { gainM: 0, lossM: 0 })
 
   const minElev = validElevations.length > 0 ? Math.min(...validElevations) : 0
   const maxElev = validElevations.length > 0 ? Math.max(...validElevations) : 0

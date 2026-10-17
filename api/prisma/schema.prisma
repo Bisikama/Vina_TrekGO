@@ -1110,6 +1110,7 @@ model PersonalTrail {
   distanceKm     Decimal?                @map("distance_km") @db.Decimal(8, 2)
   elevationGainM Int?                    @map("elevation_gain_m")
   elevationLossM Int?                    @map("elevation_loss_m")
+    duration       String?                 @db.VarChar(100)
   elevationProfile Json?                 @map("elevation_profile")
   routeGeojson   Json                    @map("route_geojson")
   visibility     PersonalTrailVisibility @default(PRIVATE)
@@ -1286,6 +1287,8 @@ model TrailRecording {
   distanceKm             Decimal?  @map("distance_km") @db.Decimal(8, 2)
   elevationGainM         Int?      @map("elevation_gain_m")
   elevationLossM         Int?      @map("elevation_loss_m")
+    duration               String?   @db.VarChar(100)
+    elapsedSeconds         Int?      @map("elapsed_seconds")
   createdPersonalTrailId String?   @map("created_personal_trail_id") @db.Uuid
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

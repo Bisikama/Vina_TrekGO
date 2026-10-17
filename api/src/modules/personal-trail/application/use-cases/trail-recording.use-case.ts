@@ -66,6 +66,9 @@ export class TrailRecordingUseCase {
       })
     }
 
+    if (recording.status === 'READY') {
+      throw new AppError({ code: PersonalTrailErrorCode.RECORDING_ALREADY_FINISHED })
+    }
     return this.repo.saveRawSamplesBatch(recordingId, input.samples)
   }
 
@@ -150,10 +153,12 @@ export class TrailRecordingUseCase {
     const { recording: updatedRecording, personalTrail } = await this.repo.completeRecordingAndCreateTrail({
       recordingId,
       userId: user.id,
+      expectedUpdatedAt: recording.updatedAt,
       endedAt,
       processedGeojson: elevationResult.processedGeojson,
       metrics: elevationResult.metrics,
       trailMetadata: input.trailMetadata,
+      provisionalTelemetry: input.provisionalTelemetry,
     })
 
     return {

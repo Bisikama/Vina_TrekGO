@@ -170,6 +170,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   // Personal Trail & Elevation
   [PT.INSUFFICIENT_GPS_POINTS]: { status: 400, message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ', retryable: false },
   [PT.INVALID_GEOJSON_COORDINATES]: { status: 400, message: 'Tọa độ GeoJSON không hợp lệ', retryable: false },
+  [PT.RECORDING_CHANGED]: { status: 409, message: 'Dữ liệu phiên ghi đã thay đổi, vui lòng thử hoàn tất lại', retryable: true },
   [PT.RECORDING_NOT_FOUND]: { status: 404, message: 'Không tìm thấy phiên ghi hành trình', retryable: false },
   [PT.RECORDING_ALREADY_FINISHED]: { status: 409, message: 'Phiên ghi hành trình đã kết thúc trước đó', retryable: false },
   [PT.TRAIL_ACCESS_DENIED]: { status: 403, message: 'Không có quyền truy cập hoặc chỉnh sửa cung đường này', retryable: false },

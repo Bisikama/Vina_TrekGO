@@ -74,10 +74,18 @@ describe('Elevation Metrics & Domain Calculations', () => {
 
       const metrics = computeMetricsAcrossSegments(segments)
       expect(metrics.distanceKm).toBeGreaterThan(0)
-      expect(metrics.elevationGainM).toBeGreaterThanOrEqual(40)
+      expect(metrics.elevationGainM).toBe(40)
       expect(metrics.minElevationM).toBe(1400)
       expect(metrics.maxElevationM).toBe(1470)
       expect(metrics.elevationProfile.length).toBe(4)
+    })
+
+    it('does not count ascent or descent during a paused gap', () => {
+      const segment = (elevations: number[]) => ({
+        points: elevations.map((elevationM, index) => ({ latitude: 11 + index * 0.001, longitude: 108, elevationM })),
+      })
+      expect(computeMetricsAcrossSegments([segment([100, 110]), segment([500, 510])]).elevationGainM).toBe(20)
+      expect(computeMetricsAcrossSegments([segment([500, 490]), segment([100, 90])]).elevationLossM).toBe(20)
     })
   })
 })

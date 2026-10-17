@@ -9,9 +9,9 @@ export interface TrailRecordingModel {
   status: string
   startedAt: Date
   endedAt: Date | null
-  processedGeojson: any | null
-  elevationProfile: any | null
-  distanceKm: any | null
+  processedGeojson: any
+  elevationProfile: any
+  distanceKm: any
   elevationGainM: number | null
   elevationLossM: number | null
   createdPersonalTrailId: string | null
@@ -25,11 +25,11 @@ export interface TrailRecordingPointModel {
   clientSampleId: string
   latitude: any
   longitude: any
-  accuracyM: any | null
-  speedMps: any | null
-  headingDeg: any | null
-  altitudeM: any | null
-  altitudeAccuracyM: any | null
+  accuracyM: any
+  speedMps: any
+  headingDeg: any
+  altitudeM: any
+  altitudeAccuracyM: any
   segmentId: number
   accepted: boolean | null
   rejectReason: string | null
@@ -44,10 +44,10 @@ export interface PersonalTrailModel {
   title: string
   description: string | null
   difficulty: DifficultyLevel | null
-  distanceKm: any | null
+  distanceKm: any
   elevationGainM: number | null
   elevationLossM: number | null
-  elevationProfile: any | null
+  elevationProfile: any
   routeGeojson: any
   visibility: PersonalTrailVisibility
   status: RecordStatus
@@ -89,6 +89,7 @@ export interface IPersonalTrailRepository {
   completeRecordingAndCreateTrail(params: {
     recordingId: string
     userId: string
+    expectedUpdatedAt: Date
     endedAt: Date
     processedGeojson: any
     metrics: {
@@ -99,6 +100,10 @@ export interface IPersonalTrailRepository {
       maxElevationM: number
       elevationProfile: any
     }
+    provisionalTelemetry?: {
+      duration?: string
+      elapsedSeconds?: number
+    }
     trailMetadata?: {
       title?: string
       description?: string | null
@@ -107,7 +112,7 @@ export interface IPersonalTrailRepository {
     }
   }): Promise<{ recording: TrailRecordingModel; personalTrail: PersonalTrailModel }>
 
-  findPersonalTrailById(id: string): Promise<any | null>
+  findPersonalTrailById(id: string): Promise<any>
   findMyPersonalTrails(userId: string, query: MyTrailsQuery): Promise<{ items: any[]; totalItems: number }>
   updatePersonalTrail(id: string, userId: string, data: any): Promise<PersonalTrailModel>
   softDeletePersonalTrail(id: string, userId: string): Promise<void>

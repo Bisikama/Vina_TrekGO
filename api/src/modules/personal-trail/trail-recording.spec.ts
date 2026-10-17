@@ -68,7 +68,7 @@ describe('TrailRecordingUseCase Unit Tests', () => {
 
       expect(res.serverRecordingId).toBe('22222222-2222-2222-2222-222222222222')
       expect(res.status).toBe('RECORDING')
-      expect(mockRepo.createRecording).toHaveBeenCalledTimes(1)
+      expect(mockRepo.createRecording.mock.calls).toHaveLength(1)
     })
 
     it('returns existing recording if clientRecordingId is retried (Idempotent)', async () => {
@@ -95,11 +95,17 @@ describe('TrailRecordingUseCase Unit Tests', () => {
       })
 
       expect(res.serverRecordingId).toBe('22222222-2222-2222-2222-222222222222')
-      expect(mockRepo.createRecording).not.toHaveBeenCalled()
+      expect(mockRepo.createRecording.mock.calls).toHaveLength(0)
     })
   })
 
   describe('finish', () => {
+    it('returns the original trail when finish is retried after READY', async () => {
+      mockRepo.findRecordingById.mockResolvedValue({ id: 'rec-01', userId: mockUser.id, status: 'READY', createdPersonalTrailId: 'trail-01' } as any)
+      expect(await useCase.finish(mockUser, 'rec-01', {})).toMatchObject({ serverPersonalTrailId: 'trail-01', status: 'READY' })
+      expect(mockElevationUseCase.execute.mock.calls).toHaveLength(0)
+      expect(mockRepo.completeRecordingAndCreateTrail.mock.calls).toHaveLength(0)
+    })
     it('throws INSUFFICIENT_GPS_POINTS when fewer than 2 points exist', async () => {
       mockRepo.findRecordingById.mockResolvedValue({
         id: 'rec-01',
@@ -212,8 +218,14 @@ describe('TrailRecordingUseCase Unit Tests', () => {
       expect(res.serverRecordingId).toBe('rec-01')
       expect(res.serverPersonalTrailId).toBe('trail-01')
       expect(res.status).toBe('READY')
-      expect(mockElevationUseCase.execute).toHaveBeenCalledTimes(1)
-      expect(mockRepo.completeRecordingAndCreateTrail).toHaveBeenCalledTimes(1)
+      expect(mockElevationUseCase.execute.mock.calls).toHaveLength(1)
+      expect(mockRepo.completeRecordingAndCreateTrail.mock.calls).toHaveLength(1)
     })
+  })
+
+  it('rejects late GPS uploads after READY', async () => {
+    mockRepo.findRecordingById.mockResolvedValue({ id: 'rec-01', userId: mockUser.id, status: 'READY' } as any)
+    await expect(useCase.saveRawSamples(mockUser, 'rec-01', { samples: [] })).rejects.toMatchObject({ code: 'RECORDING_ALREADY_FINISHED' })
+    expect(mockRepo.saveRawSamplesBatch.mock.calls).toHaveLength(0)
   })
 })
