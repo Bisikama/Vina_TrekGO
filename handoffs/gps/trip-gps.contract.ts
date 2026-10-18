@@ -254,6 +254,15 @@ export interface SubscriptionDto {
   rosterVersion: number;
   serverTime: ISODateTime;
 }
+// Client event handlers receive the request plus a Socket.IO acknowledgement callback.
+export interface GpsClientEvents {
+  'gps:subscribe': (
+    request: SocketRequest, ack: (response: SocketAck<SubscriptionDto>) => void
+  ) => void;
+  'gps:unsubscribe': (
+    request: SocketRequest, ack: (response: SocketAck<{ tripId: UUID }>) => void
+  ) => void;
+}
 export interface EventEnvelope<T> {
   eventId: UUID;
   contractVersion: 'trip-gps/1.0.0';

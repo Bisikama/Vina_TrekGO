@@ -445,6 +445,22 @@ Các quy tắc ở bảng áp dụng cho thao tác mới; retry cùng key trả 
 
 ## 12. Socket.IO contract
 
+### 12.0. Cách dùng cho private trip và public trip
+
+**Trạng thái hiện tại:** các event dưới đây đã được định nghĩa trong tài liệu/contract đề xuất, chưa được triển khai trong backend. Backend hiện chỉ có notification gateway mẫu và HTTP `GET /geo/trips/:tripId/map-state`; endpoint này không thay thế snapshot GPS cả đoàn được đề xuất trong tài liệu.
+
+Cả private trip và public trip dùng chung namespace `/gps`, mỗi trip có room nội bộ `trip-gps:<tripId>`. Không tạo gateway/event riêng theo loại trip. Điểm khác nhau nằm ở resolver quyền: private kiểm tra host/membership hợp lệ; public kiểm tra leader được phân công hoặc participant hợp lệ theo mục 4–5. Public trip không có nghĩa vị trí GPS được công khai cho người ngoài.
+
+Luồng thống nhất:
+
+1. Mobile kết nối namespace `/gps` bằng access token, đăng ký listener và gửi `gps:subscribe` với `{requestId, tripId}`.
+2. Server xác thực danh tính từ token, kiểm tra quyền rồi join room; không tin `userId` hoặc room do client tự chọn.
+3. Sau ACK thành công, mobile lấy HTTP snapshot GPS theo quy trình chống race ở mục 12.4.
+4. Bộ ghi mobile gửi điểm qua HTTP samples batch ở mục 11.3. Sau khi commit dữ liệu, backend phát `gps:member.updated` tới room để cập nhật vị trí, session, checkpoint và trạng thái lệch tuyến của thành viên.
+5. Khi reconnect, subscribe và lấy snapshot lại; khi rời màn hình, gửi `gps:unsubscribe`. Unsubscribe không dừng phiên ghi GPS.
+
+**Không dùng các tên gợi ý trước đó** `/tracking`, `trip:join`, `trip:leave`, `gps:update`, `gps:updated`, `gps:deviation` làm contract thứ hai. Thiết kế v1 giữ `/gps`, `gps:subscribe`, `gps:unsubscribe` và các server event ở mục 12.3. Không upload raw GPS qua socket; lệch tuyến được gửi trong `gps:member.updated`. Mọi thay đổi transport/event sau này cần cập nhật đồng thời tài liệu và file contract.
+
 ### 12.1. Kết nối và xác thực
 
 ```ts
@@ -915,6 +931,15 @@ export interface SubscriptionDto {
   tripId: UUID;
   rosterVersion: number;
   serverTime: ISODateTime;
+}
+// Client event handlers receive the request plus a Socket.IO acknowledgement callback.
+export interface GpsClientEvents {
+  'gps:subscribe': (
+    request: SocketRequest, ack: (response: SocketAck<SubscriptionDto>) => void
+  ) => void;
+  'gps:unsubscribe': (
+    request: SocketRequest, ack: (response: SocketAck<{ tripId: UUID }>) => void
+  ) => void;
 }
 export interface EventEnvelope<T> {
   eventId: UUID;
