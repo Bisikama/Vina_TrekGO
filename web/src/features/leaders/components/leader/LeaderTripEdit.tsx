@@ -103,12 +103,9 @@ export function LeaderTripEdit({
   const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId: cleanTripId });
   const { updateTrip, cancelTrip, isSubmitting } = useLeaderTripMutations();
 
-  const [visibility, setVisibility] = useState<
-    "public" | "private"
-  >("public");
-
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [priceExplanation, setPriceExplanation] = useState("");
   const [capacity, setCapacity] = useState(15);
   const [price, setPrice] = useState("2850000");
   const [startDate, setStartDate] = useState("");
@@ -122,6 +119,9 @@ export function LeaderTripEdit({
     if (trip) {
       if (trip.title) setTitle(trip.title);
       if (trip.description) setDescription(trip.description);
+      if (trip.priceExplanation !== undefined && trip.priceExplanation !== null) {
+        setPriceExplanation(trip.priceExplanation);
+      }
       if (trip.startAt) setStartDate(trip.startAt.slice(0, 10));
       if (trip.endAt) setEndDate(trip.endAt.slice(0, 10));
       if (trip.capacity) setCapacity(trip.capacity);
@@ -144,6 +144,7 @@ export function LeaderTripEdit({
           expectedVersion: trip.version,
           title: title.trim() || undefined,
           description: description.trim() || null,
+          priceExplanation: priceExplanation.trim() || null,
           capacity: Number(capacity),
           price: String(price).replace(/\D/g, ""),
         });
@@ -391,40 +392,15 @@ export function LeaderTripEdit({
                 </label>
 
                 <div>
-                  <FieldLabel required>
-                    Hình thức công khai
+                  <FieldLabel>
+                    Hình thức chuyến đi
                   </FieldLabel>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setVisibility("public")}
-                      className={`rounded-xl border p-4 text-left text-sm font-semibold transition ${
-                        visibility === "public"
-                          ? "border-[#2f6b4f] bg-[#2f6b4f]/10 text-[#125238]"
-                          : "border-slate-200 bg-slate-50 text-slate-600"
-                      }`}
-                    >
-                      ◉ Công khai
-                      <span className="mt-1 block text-xs font-normal">
-                        Hiển thị trên trang khám phá.
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setVisibility("private")}
-                      className={`rounded-xl border p-4 text-left text-sm font-semibold transition ${
-                        visibility === "private"
-                          ? "border-[#2f6b4f] bg-[#2f6b4f]/10 text-[#125238]"
-                          : "border-slate-200 bg-slate-50 text-slate-600"
-                      }`}
-                    >
-                      ○ Dành riêng
-                      <span className="mt-1 block text-xs font-normal">
-                        Chỉ người có liên kết mới xem được.
-                      </span>
-                    </button>
+                  <div className="rounded-xl border border-[#2f6b4f] bg-[#2f6b4f]/10 p-4 text-left text-sm font-semibold text-[#125238]">
+                    ◉ Chuyến đi Công khai
+                    <span className="mt-1 block text-xs font-normal">
+                      Hiển thị trên trang khám phá.
+                    </span>
                   </div>
                 </div>
 
@@ -544,6 +520,25 @@ export function LeaderTripEdit({
                     value={price}
                     onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
                   />
+                </label>
+
+                <label className="md:col-span-2 block">
+                  <FieldLabel required>
+                    Cơ sở tính giá &amp; Giải trình chi phí nội bộ (priceExplanation)
+                  </FieldLabel>
+
+                  <textarea
+                    rows={4}
+                    maxLength={5000}
+                    className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-sm leading-6 text-slate-950 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
+                    value={priceExplanation}
+                    onChange={(e) => setPriceExplanation(e.target.value)}
+                    placeholder="Nhập cơ sở tính giá nội bộ: chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận..."
+                  />
+
+                  <span className="mt-1 block text-xs text-slate-400">
+                    Bắt buộc trước khi xuất bản chuyến đi. Không hiển thị công khai. ({priceExplanation.length}/5000 ký tự)
+                  </span>
                 </label>
               </div>
 
