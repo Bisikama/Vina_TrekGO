@@ -7,6 +7,17 @@ export interface PaginationMeta {
   totalPages: number;
 }
 
+export interface PickupPointItem {
+  id?: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  code?: string | null;
+  note?: string | null;
+  status?: RecordStatus;
+}
+
 export interface Destination {
   id: string;
   name: string;
@@ -16,6 +27,8 @@ export interface Destination {
   centerLng?: number | null;
   status: RecordStatus;
   trailCount?: number;
+  pickupPointCount?: number;
+  pickupPoints?: PickupPointItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +53,9 @@ export interface CreateDestinationPayload {
   centerLat?: number | null;
   centerLng?: number | null;
   status?: RecordStatus;
+  pickupPoints?: PickupPointItem[];
 }
 
-export interface UpdateDestinationPayload extends Partial<CreateDestinationPayload> {}
+export interface UpdateDestinationPayload extends Partial<CreateDestinationPayload> {
+  pickupPoints?: PickupPointItem[];
+}

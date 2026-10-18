@@ -14,7 +14,15 @@ describe('Personal trail repository regressions', () => {
     userId: 'owner',
     expectedUpdatedAt: updatedAt,
     endedAt: updatedAt,
-    processedGeojson: { type: 'MultiLineString', coordinates: [] },
+    processedGeojson: {
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [106.1, 11.1, 100],
+          [106.2, 11.2, 120],
+        ],
+      ],
+    },
     metrics: {
       distanceKm: 1,
       elevationGainM: 20,
@@ -43,6 +51,10 @@ describe('Personal trail repository regressions', () => {
         count: jest.fn().mockResolvedValue(0),
         update: jest.fn(),
       },
+      personalCheckpoint: {
+        createMany: jest.fn().mockResolvedValue({ count: 2 }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       trailSubmission: { create: jest.fn().mockResolvedValue({ createdAt: updatedAt }) },
     }
     adapter = new PrismaPersonalTrailAdapter({ ...tx, $transaction: (fn: any) => fn(tx) })
@@ -66,6 +78,31 @@ describe('Personal trail repository regressions', () => {
     tx.personalTrail.findUniqueOrThrow.mockResolvedValue({ id: 'trail' })
     expect((await adapter.completeRecordingAndCreateTrail(params)).personalTrail.id).toBe('trail')
     expect(tx.personalTrail.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates START and END personal checkpoints from the route endpoints', async () => {
+    await adapter.completeRecordingAndCreateTrail(params)
+
+    expect(tx.personalCheckpoint.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          personalTrailId: 'trail',
+          name: 'Điểm bắt đầu',
+          longitude: 106.1,
+          latitude: 11.1,
+          sequence: 1,
+          info: 'START',
+        }),
+        expect.objectContaining({
+          personalTrailId: 'trail',
+          name: 'Điểm kết thúc',
+          longitude: 106.2,
+          latitude: 11.2,
+          sequence: 2,
+          info: 'END',
+        }),
+      ],
+    })
   })
 
   it('refuses to commit metrics calculated before a new upload', async () => {
@@ -116,6 +153,29 @@ describe('Personal trail repository regressions', () => {
     expect(tx.personalTrail.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'trail', status: 'ACTIVE' } }),
     )
+  })
+
+  it('returns personal checkpoints ordered by sequence for an authorized reader', async () => {
+    tx.personalTrail.findUnique.mockResolvedValue({
+      id: 'trail',
+      userId: 'owner',
+      visibility: 'PRIVATE',
+      routeGeojson: { coordinates: [] },
+      trailSubmissionsViaPersonalTrailId: [],
+      trailRecordingsViaCreatedPersonalTrailId: [],
+    })
+    tx.personalCheckpoint.findMany.mockResolvedValue([
+      { id: 'start', latitude: '11.1', longitude: '106.1', sequence: 1 },
+    ])
+    const useCase = new PersonalTrailUseCase(adapter)
+
+    await expect(useCase.getCheckpoints({ id: 'owner' } as any, 'trail')).resolves.toEqual([
+      expect.objectContaining({ id: 'start', latitude: 11.1, longitude: 106.1 }),
+    ])
+    expect(tx.personalCheckpoint.findMany).toHaveBeenCalledWith({
+      where: { personalTrailId: 'trail' },
+      orderBy: { sequence: 'asc' },
+    })
   })
 
   it.each(['SUBMITTED', 'UNDER_REVIEW'])('reuses an existing %s submission', async (status) => {

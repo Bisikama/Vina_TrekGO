@@ -9,6 +9,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import { Auth } from 'src/shared/decorators/auth.decorator'
+import { ActiveUser } from 'src/shared/decorators/active-user.decorator'
 import { AuthType } from 'src/shared/constants/auth.constant'
 import { Roles } from 'src/shared/decorators/roles.decorator'
 import { UserRole } from '@prisma/client'
@@ -82,28 +83,36 @@ export class DestinationController {
   @ApiBearerAuth('bearer')
   @Auth([AuthType.Bearer])
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Tạo mới một điểm đến / địa danh' })
+  @ApiOperation({ summary: 'Tạo mới một điểm đến / địa danh kèm điểm tập kết (nếu có)' })
   @ApiBody({ type: CreateDestinationRequestDto })
   @ApiResponse({ status: 201, description: 'Tạo thành công', type: DestinationResponseDto })
   async createDestination(
+    @ActiveUser('id') actorId: string,
     @Body(new ZodValidationPipe(CreateDestinationSchema)) body: CreateDestinationDto,
   ): Promise<DestinationResponseDto> {
-    return this.createDestinationUseCase.execute(body)
+    return this.createDestinationUseCase.execute({
+      ...body,
+      actorId,
+    })
   }
 
   @Patch(':id')
   @ApiBearerAuth('bearer')
   @Auth([AuthType.Bearer])
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Cập nhật thông tin điểm đến' })
+  @ApiOperation({ summary: 'Cập nhật thông tin điểm đến và đồng bộ điểm tập kết' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Destination UUID' })
   @ApiBody({ type: UpdateDestinationRequestDto })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công', type: DestinationResponseDto })
   async updateDestination(
     @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) id: string,
+    @ActiveUser('id') actorId: string,
     @Body(new ZodValidationPipe(UpdateDestinationSchema)) body: UpdateDestinationDto,
   ): Promise<DestinationResponseDto> {
-    return this.updateDestinationUseCase.execute(id, body)
+    return this.updateDestinationUseCase.execute(id, {
+      ...body,
+      actorId,
+    })
   }
 
   @Delete(':id')

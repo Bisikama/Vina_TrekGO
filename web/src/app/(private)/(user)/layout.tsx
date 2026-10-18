@@ -8,9 +8,9 @@ export default function UserLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen w-full overflow-x-hidden flex flex-col bg-white">
       <UserHeader />
-      <main className="flex-grow">
+      <main className="flex-grow min-w-0">
         {children}
       </main>
       <UserFooter />

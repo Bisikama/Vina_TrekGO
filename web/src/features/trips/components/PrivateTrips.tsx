@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { privateTripsApi as api, PrivateSource, PrivateTrip, PrivateInput } from '../services/private-trips.api';
 const inputClass = 'block w-full rounded border p-2 mt-1';
@@ -17,7 +18,7 @@ export function PrivateTrips() {
   const [trip, setTrip] = useState<PrivateTrip | null>(null), [sourceKey, setSourceKey] = useState('');
   const [destination, setDestination] = useState(''), [selected, setSelected] = useState<string[]>([]);
   const [pickups, setPickups] = useState<{ id: string; name: string }[]>([]);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [invite, setInvite] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [invite, setInvite] = useState<{ code: string; expiresAt: string } | null>(null);
   const source = sources.find(s => `${s.type}:${s.id}` === sourceKey);
   useEffect(() => {
     let cancelled = false;
@@ -36,16 +37,16 @@ export function PrivateTrips() {
   return <main className="mx-auto max-w-5xl space-y-6 p-6"><h1 className="text-3xl font-bold">Chuyến đi riêng tư</h1><p>Chỉ dùng trail cá nhân hoặc trail hệ thống đã có quyền sử dụng. Không bán slot, không tạo booking thanh toán.</p>
     {!accessToken ? <Link href="/public/login">Đăng nhập để tiếp tục</Link> : user?.role !== 'USER' ? <p>CF03 chỉ dành cho tài khoản USER.</p> : <>
       {error && <p role="alert" className="text-red-700">{error}</p>}
-      <button className={button} disabled={busy} onClick={() => { setTrip(null); setSourceKey(''); setDestination(''); setPickups([]); setSelected([]); setInvite(''); }}>Tạo chuyến mới</button>
+      <button className={button} disabled={busy} onClick={() => { setTrip(null); setSourceKey(''); setDestination(''); setPickups([]); setSelected([]); setInvite(null); }}>Tạo chuyến mới</button>
       <button className={button} disabled={busy} onClick={() => void run(async () => { const t = await api.list(); setTrips(t); if (trip) setTrip(t.find(x => x.id === trip.id) ?? null); })}>Tải lại dữ liệu</button>
-      <div className="grid gap-6 md:grid-cols-[240px_1fr]"><aside className="space-y-2">{trips.map(t => <button className={`${button} block w-full text-left`} disabled={busy} key={t.id} onClick={() => { setTrip(t); setDestination(t.destinationId); setPickups([]); setInvite(''); }}>{t.title} · {t.status}</button>)}</aside><section className="space-y-5">
+      <div className="grid gap-6 md:grid-cols-[240px_1fr]"><aside className="space-y-2">{trips.map(t => <button className={`${button} block w-full text-left`} disabled={busy} key={t.id} onClick={() => { setTrip(t); setDestination(t.destinationId); setPickups([]); setInvite(null); }}>{t.title} · {t.status}</button>)}</aside><section className="space-y-5">
         {trip && <p>{trip.status} · phiên bản {trip.version}</p>}
         {!trip && <><label>Trail nguồn<select className={inputClass} value={sourceKey} disabled={busy} onChange={e => { const s = sources.find(x => `${x.type}:${x.id}` === e.target.value); setSourceKey(e.target.value); setDestination(s?.destinationId || ''); setPickups([]); setSelected([]); }}><option value="">Chọn trail</option>{sources.map(s => <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.name} ({s.type})</option>)}</select></label>
           {source && !source.destinationId && <label>ID điểm đến của trail chưa gắn địa điểm<input className={inputClass} value={destination} onChange={e => { setDestination(e.target.value); setPickups([]); }} placeholder="UUID điểm đến" /></label>}
           <fieldset disabled={busy}><legend>Checkpoint (Tất cả theo thứ tự trail)</legend>{source?.points.map(p => <div key={p.id} className="block">{p.sequence}. {p.name}</div>)}</fieldset></>}
         <form key={trip ? `${trip.id}:${trip.version}` : sourceKey} onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); void run(async () => {
           const data: PrivateInput = { title: String(f.get('title')), description: String(f.get('description')), startAt: new Date(String(f.get('start'))).toISOString(), endAt: new Date(String(f.get('end'))).toISOString(), capacity: Number(f.get('capacity')), pickupPointId: String(f.get('pickup')) };
-          const t = trip ? await api.update(trip,data) : await api.create({ ...data, type: source!.type, trailRef: source!.id, destinationId: destination, checkpointIds: source!.points.map(p => p.id) }); setTrip(t); setInvite('');
+          const t = trip ? await api.update(trip,data) : await api.create({ ...data, type: source!.type, trailRef: source!.id, destinationId: destination, checkpointIds: source!.points.map(p => p.id) }); setTrip(t); setInvite(null);
         }); }}><fieldset disabled={busy || !editable} className="space-y-3">
           <label className="block">Tên chuyến<input name="title" className={inputClass} required maxLength={220} defaultValue={trip?.title} /></label>
           <label className="block">Mô tả<textarea name="description" className={inputClass} maxLength={5000} defaultValue={trip?.description || ''} /></label>
@@ -55,10 +56,10 @@ export function PrivateTrips() {
           <label className="block">Điểm tập kết<select name="pickup" key={`${trip?.pickupPointId}-${pickups.map(p => p.id).join()}`} className={inputClass} required defaultValue={trip?.pickupPointId || ''}><option value="">Chọn điểm tập kết</option>{pickups.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <button className={button} disabled={!trip && (!source || !destination)}>{trip ? 'Lưu thay đổi' : 'Tạo chuyến OPEN'}</button>
         </fieldset></form>
-        {trip && editable && <><form onSubmit={e => { e.preventDefault(); const expiry = String(new FormData(e.currentTarget).get('expiry')); void run(async () => { const result = await api.invite(trip, expiry ? new Date(expiry).toISOString() : undefined); setTrip({ ...trip, version: result.tripVersion }); setInvite(`${result.inviteCode} (hết hạn ${new Date(result.expiresAt).toLocaleString('vi-VN')})`); }); }}><label>Hết hạn lời mời (trước giờ khởi hành)<input className={inputClass} name="expiry" type="datetime-local" /></label><button className={button} disabled={busy}>Tạo / tạo lại mã mời</button></form>
-          {invite && <p role="status" className="break-all">Mã mời: {invite}</p>}
-          <button className={button} disabled={busy} onClick={() => void run(async () => { setTrip(await api.revoke(trip)); setInvite(''); })}>Thu hồi mã mời</button>
-          <form onSubmit={e => { e.preventDefault(); const reason = String(new FormData(e.currentTarget).get('reason')); void run(async () => { setTrip(await api.cancel(trip, reason)); setInvite(''); }); }}><label>Lý do hủy<input className={inputClass} name="reason" maxLength={2000} /></label><button className={button} disabled={busy}>Hủy chuyến riêng tư</button></form>
+        {trip && editable && <><form onSubmit={e => { e.preventDefault(); const expiry = String(new FormData(e.currentTarget).get('expiry')); void run(async () => { const result = await api.invite(trip, expiry ? new Date(expiry).toISOString() : undefined); setTrip({ ...trip, version: result.tripVersion }); setInvite({ code: result.inviteCode, expiresAt: result.expiresAt }); }); }}><label>Hết hạn lời mời (trước giờ khởi hành)<input className={inputClass} name="expiry" type="datetime-local" /></label><button className={button} disabled={busy}>Tạo / tạo lại mã QR mời</button></form>
+          {invite && <div role="status" className="inline-flex flex-col items-center gap-2 rounded-xl border p-4 bg-white"><QRCodeSVG value={typeof window !== 'undefined' ? `${window.location.origin}/invite/${invite.code}` : `/invite/${invite.code}`} size={160} fgColor="#125238" includeMargin /><span className="text-xs text-gray-500">Hết hạn: {new Date(invite.expiresAt).toLocaleString('vi-VN')}</span></div>}
+          <button className={button} disabled={busy} onClick={() => void run(async () => { setTrip(await api.revoke(trip)); setInvite(null); })}>Thu hồi mã mời</button>
+          <form onSubmit={e => { e.preventDefault(); const reason = String(new FormData(e.currentTarget).get('reason')); void run(async () => { setTrip(await api.cancel(trip, reason)); setInvite(null); }); }}><label>Lý do hủy<input className={inputClass} name="reason" maxLength={2000} /></label><button className={button} disabled={busy}>Hủy chuyến riêng tư</button></form>
         </>}
       </section></div>
     </>}

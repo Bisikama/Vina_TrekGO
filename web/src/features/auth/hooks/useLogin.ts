@@ -1,10 +1,31 @@
 "use client";
 
 import { useState, ChangeEvent, FormEvent } from "react";
+import { preload } from "swr";
 import { loginApi } from "../services/auth.api";
 import { useAuthStore } from "../store/authStore";
 import { AuthResponse, LoginPayload } from "../types/auth.types";
 import { AxiosError } from "axios";
+import { useStaticDataStore } from "@/lib/staticDataStore";
+import { bookingApiService } from "@/features/bookings/services/booking.api";
+import { privateTripsApi } from "@/features/trips/services/private-trips.api";
+
+const prefetchAfterLogin = () => {
+  // 1. Zustand: Prefetch static / rarely changing data (system trails, private sources)
+  useStaticDataStore.getState().prefetchAllStaticData();
+
+  // 2. SWR: Preload dynamic / frequently changing GET endpoints into memory cache
+  void preload(["public-booking-trips", 1, 12, "", "", "", "", "", ""], () =>
+    bookingApiService.getPublicTrips({ page: 1, pageSize: 12 })
+  );
+  void preload(["my-bookings", 1, 50, ""], () =>
+    bookingApiService.listMyBookings({ page: 1, pageSize: 50 })
+  );
+  void preload(["my-bookings", 1, 10, ""], () =>
+    bookingApiService.listMyBookings({ page: 1, pageSize: 10 })
+  );
+  void preload("private-trips", () => privateTripsApi.list());
+};
 
 export const useLogin = () => {
   const [formData, setFormData] = useState<LoginPayload>({
@@ -26,6 +47,7 @@ export const useLogin = () => {
       const response = await loginApi(payloadToSubmit);
       setData(response);
       setAuth(response.user, response.accessToken, response.refreshToken);
+      prefetchAfterLogin();
       return response;
     } catch (err: unknown) {
       let errorMessage = "Tên đăng nhập hoặc mật khẩu không đúng.";
