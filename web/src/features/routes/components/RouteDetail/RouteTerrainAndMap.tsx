@@ -92,22 +92,10 @@ export const RouteTerrainAndMap = ({ route }: { route: RouteData }) => {
   const [isOrbiting, setIsOrbiting] = useState<boolean>(false);
   const [terrainExaggeration, setTerrainExaggeration] = useState<number>(2.0);
 
-  // Kiểm tra xem cung đường hiện tại có dữ liệu DEM lưu sẵn ở local hay không
-  const isBaDen = Boolean(
-    trailData?.code?.toLowerCase().includes("baden") ||
-    trailData?.name?.toLowerCase().includes("bà đen") ||
-    trailData?.destination?.name?.toLowerCase().includes("bà đen") ||
-    selectedTrailCode.toLowerCase().includes("baden")
+  const getDemTileUrl = useCallback(
+    () => "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+    [],
   );
-
-  const getDemTileUrl = useCallback(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    if (isBaDen && origin) {
-      // Ưu tiên load từ public/tiles/dem với tốc độ < 10ms, không phụ thuộc AWS S3 quốc tế
-      return `${origin}/tiles/dem/{z}/{x}/{y}.png`;
-    }
-    return "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-  }, [isBaDen]);
 
   // 1. Fetch danh sách cung đường từ API Backend
   useEffect(() => {

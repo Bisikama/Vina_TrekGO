@@ -237,6 +237,36 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
         },
       })
 
+      const routeSegments = Array.isArray(params.processedGeojson?.coordinates)
+        ? params.processedGeojson.coordinates.filter(
+            (segment: unknown) => Array.isArray(segment) && segment.length > 0,
+          )
+        : []
+      const firstCoordinate = routeSegments[0]?.[0]
+      const lastSegment = routeSegments[routeSegments.length - 1]
+      const lastCoordinate = lastSegment?.[lastSegment.length - 1]
+
+      await tx.personalCheckpoint.createMany({
+        data: [
+          {
+            personalTrailId: personalTrail.id,
+            name: 'Điểm bắt đầu',
+            longitude: Number(firstCoordinate[0]),
+            latitude: Number(firstCoordinate[1]),
+            sequence: 1,
+            info: 'START',
+          },
+          {
+            personalTrailId: personalTrail.id,
+            name: 'Điểm kết thúc',
+            longitude: Number(lastCoordinate[0]),
+            latitude: Number(lastCoordinate[1]),
+            sequence: 2,
+            info: 'END',
+          },
+        ],
+      })
+
       // 2. Update TrailRecording
       const recording = await tx.trailRecording.update({
         where: { id: params.recordingId },
@@ -300,6 +330,19 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       clientRecordingId: linkedRec?.clientRecordingId || undefined,
       verificationStatus,
     }
+  }
+
+  async findPersonalCheckpointsByTrailId(personalTrailId: string): Promise<any[]> {
+    const checkpoints = await this.prisma.personalCheckpoint.findMany({
+      where: { personalTrailId },
+      orderBy: { sequence: 'asc' },
+    })
+
+    return checkpoints.map((checkpoint) => ({
+      ...checkpoint,
+      latitude: Number(checkpoint.latitude),
+      longitude: Number(checkpoint.longitude),
+    }))
   }
 
   async findMyPersonalTrails(userId: string, query: MyTrailsQuery): Promise<{ items: any[]; totalItems: number }> {
