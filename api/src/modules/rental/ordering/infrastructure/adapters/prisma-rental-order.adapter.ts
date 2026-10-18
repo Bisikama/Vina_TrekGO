@@ -25,7 +25,6 @@ import type {
   CancelRentalOrderResult,
   CreateRentalOrderCommand,
   CreateRentalOrderResult,
-  CreateRentalPaymentCommand,
   GetRentalOrderQuery,
   GetRentalPaymentQuery,
   ListRentalOrdersQuery,
@@ -118,10 +117,15 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           )
             throw AppError.fromCode(RT.STALE_CONTEXT)
 
-          const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx);
-          const snap = quote.policySnapshot as Record<string, unknown> | null;
-          if (snap?.primaryRentalInventoryLocationId && snap.primaryRentalInventoryLocationId !== primaryRentalLocationId) {
-            throw AppError.fromCode(RT.STALE_CONTEXT, { details: { reason: 'PRIMARY_RENTAL_LOCATION_CHANGED_OR_NOT_SNAPSHOTTED' } });
+          const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx)
+          const snap = quote.policySnapshot as Record<string, unknown> | null
+          if (
+            snap?.primaryRentalInventoryLocationId &&
+            snap.primaryRentalInventoryLocationId !== primaryRentalLocationId
+          ) {
+            throw AppError.fromCode(RT.STALE_CONTEXT, {
+              details: { reason: 'PRIMARY_RENTAL_LOCATION_CHANGED_OR_NOT_SNAPSHOTTED' },
+            })
           }
 
           assertContextStillRentalEligible({
@@ -344,7 +348,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
               console.error('[RentalCapacityAlert] Failed to persist shortage alert:', alertErr)
             }
           } else {
-            console.error('[RentalCapacityAlert] Missing valid occupied window for capacity alert, skipping alert creation to avoid fake interval')
+            console.error(
+              '[RentalCapacityAlert] Missing valid occupied window for capacity alert, skipping alert creation to avoid fake interval',
+            )
           }
         }
         throw error
@@ -407,7 +413,13 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           },
         },
         invoicesViaRentalOrderId: {
-          include: { paymentsViaInvoiceId: { orderBy: { createdAt: 'desc' }, take: 1 } },
+          include: {
+            paymentsViaInvoiceId: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { application: true },
+            },
+          },
           orderBy: { createdAt: 'asc' },
           take: 1,
         },
@@ -426,7 +438,8 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       },
     })
     if (!order) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
-    if (query.actorRole === 'USER' && order.userId !== query.actorUserId) throw AppError.fromCode('FORBIDDEN')
+    const canInspectAllOrders = ['STAFF_INVENTORY', 'STAFF_DELIVERY', 'ADMIN'].includes(query.actorRole)
+    if (!canInspectAllOrders && order.userId !== query.actorUserId) throw AppError.fromCode('FORBIDDEN')
 
     const latestPayment = order.invoicesViaRentalOrderId[0]?.paymentsViaInvoiceId[0] ?? null
     const assignedUnits = order.rentalOrderLinesViaOrderId.flatMap((line) =>
@@ -459,7 +472,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         line.rentalQuantityReservationsViaOrderLineId.map(mapReservation),
       ),
       ...(assignedUnits.length ? { assignedUnits } : {}),
-      payment: latestPayment ? mapPayment(latestPayment, order.paymentExpiresAt) : null,
+      payment: latestPayment
+        ? mapPayment(latestPayment, order.paymentExpiresAt, order.invoicesViaRentalOrderId[0]?.status ?? null)
+        : null,
       trip: {
         id: order.tripId,
         rentalStartAt: order.rentalStartAt.toISOString(),
@@ -480,78 +495,6 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
     }
   }
 
-  // RB-API-204
-  async createOrReusePayment(command: CreateRentalPaymentCommand): Promise<RentalPaymentResult> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${command.orderId}::uuid FOR UPDATE`
-      const order = await tx.rentalOrder.findUnique({
-        where: { id: command.orderId },
-        include: {
-          invoicesViaRentalOrderId: {
-            orderBy: { createdAt: 'asc' },
-            take: 1,
-            include: { paymentsViaInvoiceId: { orderBy: { createdAt: 'desc' } } },
-          },
-        },
-      })
-      if (!order) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
-      if (order.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
-
-      if (order.status === RentalOrderStatus.PENDING_PAYMENT && order.paymentExpiresAt <= command.now) {
-        await expireOrderWithTx(tx, order.id, command.now)
-        throw AppError.fromCode(RT.PAYMENT_WINDOW_EXPIRED)
-      }
-      if (order.status !== RentalOrderStatus.PENDING_PAYMENT) throw AppError.fromCode(RT.INVALID_RENTAL_STATE)
-
-      const invoice = order.invoicesViaRentalOrderId[0]
-      if (!invoice) throw AppError.fromCode('INTERNAL_ERROR', { message: 'Rental invoice not found' })
-
-      const byKey = await tx.payment.findUnique({ where: { idempotencyKey: command.idempotencyKey } })
-      if (byKey) {
-        if (byKey.invoiceId !== invoice.id) throw AppError.fromCode(RT.IDEMPOTENCY_KEY_REUSED)
-        return mapPayment(byKey, order.paymentExpiresAt)
-      }
-      const reusable = invoice.paymentsViaInvoiceId.find((p) =>
-        ([PaymentStatus.PENDING, PaymentStatus.PROCESSING, PaymentStatus.SUCCEEDED] as string[]).includes(p.status),
-      )
-      if (reusable) return mapPayment(reusable, order.paymentExpiresAt)
-
-      const payment = await tx.payment.create({
-        data: {
-          invoiceId: invoice.id,
-          amount: order.totalAmount,
-          currency: order.currency,
-          paymentGateway: process.env.RENTAL_PAYMENT_GATEWAY ?? 'SHARED_PAYMENT',
-          status: PaymentStatus.PENDING,
-          idempotencyKey: command.idempotencyKey,
-        },
-      })
-      await tx.rentalOutboxEvent.upsert({
-        where: { deduplicationKey: `payment-request:${payment.id}` },
-        update: {},
-        create: {
-          deduplicationKey: `payment-request:${payment.id}`,
-          eventType: 'RENTAL_PAYMENT_REQUESTED',
-          aggregateType: 'RentalOrder',
-          aggregateId: order.id,
-          payload: jsonValue({
-            paymentRef: payment.id,
-            orderRef: order.id,
-            feeAmount: decimalVndToApiInteger(order.rentalFee.toString()),
-            depositAmount: decimalVndToApiInteger(order.totalDeposit.toString()),
-            amount: decimalVndToApiInteger(order.totalAmount.toString()),
-            currency: order.currency,
-          }),
-        },
-      })
-      await tx.rentalOrder.update({
-        where: { id: order.id },
-        data: { financialStatus: RentalFinancialStatus.PAYMENT_PENDING, version: { increment: 1 } },
-      })
-      return mapPayment(payment, order.paymentExpiresAt)
-    })
-  }
-
   // RB-API-206
   async getPayment(query: GetRentalPaymentQuery): Promise<RentalPaymentResult> {
     const order = await this.prisma.rentalOrder.findUnique({
@@ -560,7 +503,13 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         invoicesViaRentalOrderId: {
           orderBy: { createdAt: 'asc' },
           take: 1,
-          include: { paymentsViaInvoiceId: { orderBy: { createdAt: 'desc' }, take: 1 } },
+          include: {
+            paymentsViaInvoiceId: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { application: true },
+            },
+          },
         },
         refundsViaRentalOrderId: { where: { status: RefundStatus.SUCCEEDED } },
       },
@@ -576,9 +525,21 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         expiresAt: order.paymentExpiresAt.toISOString(),
         amount: decimalVndToApiInteger(order.totalAmount.toString()),
         refundedAmount: 0,
+        invoiceStatus: order.invoicesViaRentalOrderId[0]?.status ?? null,
+        applicationStatus: null,
+        applicationReasonCode: null,
+        reconciliationStatus: null,
+        reconciliationRequired: false,
+        gateway: null,
+        providerEnvironment: null,
+        paymentMethod: null,
+        orderStatus: order.status,
+        financialStatus: order.financialStatus,
       }
     return {
-      ...mapPayment(payment, order.paymentExpiresAt),
+      ...mapPayment(payment, order.paymentExpiresAt, order.invoicesViaRentalOrderId[0]?.status ?? null),
+      orderStatus: order.status,
+      financialStatus: order.financialStatus,
       refundedAmount: order.refundsViaRentalOrderId.reduce(
         (sum, r) => sum + decimalVndToApiInteger(r.amount.toString()),
         0,
@@ -1018,7 +979,7 @@ async function expireOrderWithTx(tx: Prisma.TransactionClient, orderId: string, 
 }
 
 async function resolveInventoryLocationId(tx: Prisma.TransactionClient): Promise<string> {
-  return resolveActivePrimaryRentalLocation(tx);
+  return resolveActivePrimaryRentalLocation(tx)
 }
 
 function calculateCancellationPreview(
@@ -1175,8 +1136,19 @@ function mapReservation(r: {
 }
 
 function mapPayment(
-  payment: { id: string; status: PaymentStatus; amount: Prisma.Decimal; paidAt: Date | null },
+  payment: {
+    id: string
+    status: PaymentStatus
+    amount: Prisma.Decimal
+    paidAt: Date | null
+    reconcileStatus?: string
+    paymentGateway?: string
+    providerEnvironment?: string | null
+    paymentMethod?: string | null
+    application?: { status: string; reasonCode: string | null } | null
+  },
   expiresAt: Date,
+  invoiceStatus: InvoiceStatus | null = null,
 ): RentalPaymentResult {
   return {
     paymentRef: payment.id,
@@ -1187,6 +1159,17 @@ function mapPayment(
         : { type: payment.status === PaymentStatus.FAILED ? 'RETRY_PAYMENT' : 'AWAIT_PAYMENT_RESULT' },
     expiresAt: payment.status === PaymentStatus.SUCCEEDED ? null : expiresAt.toISOString(),
     amount: decimalVndToApiInteger(payment.amount.toString()),
+    paidAt: payment.paidAt?.toISOString() ?? null,
+    invoiceStatus,
+    applicationStatus: payment.application?.status ?? null,
+    applicationReasonCode: payment.application?.reasonCode ?? null,
+    reconciliationStatus: payment.reconcileStatus ?? null,
+    reconciliationRequired: payment.reconcileStatus
+      ? ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(payment.reconcileStatus)
+      : false,
+    gateway: payment.paymentGateway ?? null,
+    providerEnvironment: payment.providerEnvironment ?? null,
+    paymentMethod: payment.paymentMethod ?? null,
   }
 }
 

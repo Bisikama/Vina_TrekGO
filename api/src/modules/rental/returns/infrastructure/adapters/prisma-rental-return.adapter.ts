@@ -354,28 +354,34 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         await tx.deliveryTask.update({ where: { id: task.id }, data: { status: DeliveryTaskStatus.RETURNED, returnedAt: command.now, version: { increment: 1 } } });
         await refreshSettlementAggregate(tx, order.id, command.now);
         await writeAudit(tx, actor.id, 'RENTAL_RETURN_INSPECTED', 'RentalOrder', order.id, { version: order.version }, { version: updatedOrder.version, discrepancies, refundCreated: false }, command.idempotencyKey);
-        const sessions = await tx.rentalReturnSession.findMany({where:{orderId:order.id,staffId:actor.id},orderBy:{createdAt:'desc'},take:1});
-        if (sessions[0] && sessions[0].status === RentalReturnSessionStatus.OPEN) {
+        const openSession = await tx.rentalReturnSession.findFirst({
+          where: { orderId: order.id, staffId: actor.id, status: RentalReturnSessionStatus.OPEN },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (openSession) {
           await tx.rentalReturnSession.update({
-            where: { id: sessions[0].id },
+            where: { id: openSession.id },
             data: {
               status: RentalReturnSessionStatus.FINALIZED,
               finalizedAt: command.now,
               version: { increment: 1 },
             },
           });
-          try {
-            const handoverDoc = await tx.rentalDocument.findFirst({
-              where: { orderId: order.id, documentType: RentalDocumentType.HANDOVER },
+          const handoverDoc = await tx.rentalDocument.findFirst({
+            where: { orderId: order.id, documentType: RentalDocumentType.HANDOVER },
+          });
+          if (!handoverDoc) {
+            throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, {
+              details: { orderId: order.id, sessionId: openSession.id },
             });
-            if (handoverDoc) {
-              await issueReturnReceiptTx(tx, sessions[0].id, command.now);
-            }
-          } catch {
-            // Handover document not present in lightweight test fixtures or already issued; non-fatal
           }
+          await issueReturnReceiptTx(tx, openSession.id, command.now);
         }
-        return { returnSessionId: sessions[0]?.id ?? null, observations: inspectionItems.map(i => ({...i, observationOnly:true})),
+        const activeSession = openSession ?? await tx.rentalReturnSession.findFirst({
+          where: { orderId: order.id, staffId: actor.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        return { returnSessionId: activeSession?.id ?? null, observations: inspectionItems.map(i => ({...i, observationOnly:true})),
           requiresInventoryInspection: true, refundEligible: false, discrepancies }; 
       },
     );
@@ -1385,24 +1391,111 @@ async function refreshSettlementAggregate(tx: Prisma.TransactionClient, orderId:
   const status = allSettled ? DepositSettlementStatus.SETTLED : hasActionRequired ? DepositSettlementStatus.ACTION_REQUIRED : (refundAmount.greaterThan(0) || totalDeduction.greaterThan(0) ? DepositSettlementStatus.PARTIALLY_SETTLED : DepositSettlementStatus.OPEN);
   const outcome = allSettled ? (totalDeduction.equals(0) ? DepositSettlementOutcome.FULL_REFUND : refundAmount.equals(0) ? DepositSettlementOutcome.FULL_DEDUCTION : DepositSettlementOutcome.PARTIAL_REFUND) : null;
   const updated = await tx.depositSettlement.update({ where: { id: settlement.id }, data: { totalDeduction, refundAmount, status, outcome, settledAt: allSettled ? now : null, version: { increment: 1 } } });
-  const orderFinancialStatus = allSettled ? RentalFinancialStatus.SETTLED : refundAmount.greaterThan(0) ? RentalFinancialStatus.PARTIALLY_REFUNDED : settlement.depositSettlementItemsViaSettlementId.some((item) => item.status === DepositItemStatus.REFUND_PENDING) ? RentalFinancialStatus.REFUND_PENDING : RentalFinancialStatus.PAID;
-  await tx.rentalOrder.update({ where: { id: orderId }, data: { financialStatus: orderFinancialStatus } });
+  const hasFailedOrPendingItem = settlement.depositSettlementItemsViaSettlementId.some((item) =>
+    [DepositItemStatus.REFUND_PENDING, DepositItemStatus.REFUND_FAILED].includes(item.status as any),
+  );
+  const orderFinancialStatus = allSettled
+    ? RentalFinancialStatus.SETTLED
+    : refundAmount.greaterThan(0)
+      ? RentalFinancialStatus.PARTIALLY_REFUNDED
+      : hasFailedOrPendingItem
+        ? RentalFinancialStatus.REFUND_PENDING
+        : RentalFinancialStatus.PAID;
+  await tx.rentalOrder.update({
+    where: { id: orderId },
+    data: {
+      financialStatus: orderFinancialStatus,
+      ...(hasActionRequired ? { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED } : {}),
+      version: { increment: 1 },
+    },
+  });
   return { id: updated.id, status: updated.status, outcome: updated.outcome, totalDeposit: decimalToInteger(updated.totalDeposit), deductionAmount: decimalToInteger(updated.totalDeduction), refundedAmount: decimalToInteger(updated.refundAmount), version: updated.version };
 }
 
 export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: string, now: Date): Promise<boolean> {
-  const order = await tx.rentalOrder.findUnique({ where: { id: orderId }, include: { rentalOrderLinesViaOrderId: { include: { rentalUnitAssignmentsViaOrderLineId: true } }, depositSettlementViaOrderId: { include: { depositSettlementItemsViaSettlementId: true } }, rentalExceptionCasesViaOrderId: true, deliveryTasksViaOrderId: true, packageViaOrderId: true } });
+  const order = await tx.rentalOrder.findUnique({
+    where: { id: orderId },
+    include: {
+      rentalOrderLinesViaOrderId: { include: { rentalUnitAssignmentsViaOrderLineId: true } },
+      depositSettlementViaOrderId: { include: { depositSettlementItemsViaSettlementId: true } },
+      rentalExceptionCasesViaOrderId: true,
+      deliveryTasksViaOrderId: true,
+      packageViaOrderId: true,
+    },
+  });
   if (!order || order.status === RentalOrderStatus.COMPLETED) return Boolean(order?.status === RentalOrderStatus.COMPLETED);
-  const assignments = order.rentalOrderLinesViaOrderId.flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId).filter((item) => ![RentalUnitAssignmentStatus.REPLACED, RentalUnitAssignmentStatus.UNASSIGNED].includes(item.status as any));
-  const assetsFinal = assignments.every((item) => item.status === RentalUnitAssignmentStatus.CLOSED);
-  const financeFinal = Boolean(order.depositSettlementViaOrderId) && order.depositSettlementViaOrderId!.depositSettlementItemsViaSettlementId.every((item) => item.status === DepositItemStatus.SETTLED);
-  const casesFinal = order.rentalExceptionCasesViaOrderId.every((item) => [RentalExceptionCaseStatus.RESOLVED, RentalExceptionCaseStatus.REJECTED, RentalExceptionCaseStatus.CLOSED].includes(item.status as any));
+  const assignments = order.rentalOrderLinesViaOrderId
+    .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
+    .filter((item) => ![RentalUnitAssignmentStatus.REPLACED, RentalUnitAssignmentStatus.UNASSIGNED].includes(item.status as any));
+  const assetsFinal = assignments.length > 0 && assignments.every((item) => item.status === RentalUnitAssignmentStatus.CLOSED);
+  const financeFinal = Boolean(order.depositSettlementViaOrderId) &&
+    order.depositSettlementViaOrderId!.depositSettlementItemsViaSettlementId.length > 0 &&
+    order.depositSettlementViaOrderId!.depositSettlementItemsViaSettlementId.every((item) => item.status === DepositItemStatus.SETTLED);
+  const casesFinal = order.rentalExceptionCasesViaOrderId.every((item) =>
+    [RentalExceptionCaseStatus.RESOLVED, RentalExceptionCaseStatus.REJECTED, RentalExceptionCaseStatus.CLOSED].includes(item.status as any),
+  );
   if (!assetsFinal || !financeFinal || !casesFinal) return false;
-  await tx.rentalOrder.update({ where: { id: order.id }, data: { status: RentalOrderStatus.COMPLETED, exceptionStatus: RentalOrderExceptionStatus.NONE, financialStatus: RentalFinancialStatus.SETTLED, completedAt: now, version: { increment: 1 } } });
+
+  await tx.rentalOrder.update({
+    where: { id: order.id },
+    data: {
+      status: RentalOrderStatus.COMPLETED,
+      exceptionStatus: RentalOrderExceptionStatus.NONE,
+      financialStatus: RentalFinancialStatus.SETTLED,
+      completedAt: now,
+      version: { increment: 1 },
+    },
+  });
+
   const returnTask = order.deliveryTasksViaOrderId.find((item) => item.taskType === DeliveryTaskType.RETURN);
-  if (returnTask && returnTask.status !== DeliveryTaskStatus.CLOSED) await tx.deliveryTask.update({ where: { id: returnTask.id }, data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } } });
-  if (order.packageViaOrderId && order.packageViaOrderId.status !== PackageStatus.CLOSED) await tx.package.update({ where: { id: order.packageViaOrderId.id }, data: { status: PackageStatus.CLOSED, version: { increment: 1 } } });
-  await tx.rentalOutboxEvent.upsert({ where: { deduplicationKey: `rental-closed:${order.id}` }, update: {}, create: { deduplicationKey: `rental-closed:${order.id}`, eventType: 'RENTAL_CLOSED', aggregateType: 'RentalOrder', aggregateId: order.id, payload: jsonValue({ orderId: order.id, bookingId: order.bookingId, status: RentalOrderStatus.COMPLETED, completedAt: now.toISOString() }) } });
+  if (returnTask && returnTask.status !== DeliveryTaskStatus.CLOSED) {
+    await tx.deliveryTask.update({ where: { id: returnTask.id }, data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } } });
+  }
+  if (order.packageViaOrderId && order.packageViaOrderId.status !== PackageStatus.CLOSED) {
+    await tx.package.update({ where: { id: order.packageViaOrderId.id }, data: { status: PackageStatus.CLOSED, version: { increment: 1 } } });
+  }
+
+  // Phase 09 Audit Trail
+  await writeAudit(
+    tx,
+    order.userId,
+    'RENTAL_ORDER_CLOSED',
+    'RentalOrder',
+    order.id,
+    { status: order.status, version: order.version },
+    { status: RentalOrderStatus.COMPLETED, financialStatus: RentalFinancialStatus.SETTLED, completedAt: now.toISOString() },
+  );
+
+  // Phase 09 Official Outbox Notifications
+  const payload = jsonValue({
+    orderId: order.id,
+    bookingId: order.bookingId,
+    status: RentalOrderStatus.COMPLETED,
+    financialStatus: RentalFinancialStatus.SETTLED,
+    completedAt: now.toISOString(),
+  });
+  await tx.rentalOutboxEvent.upsert({
+    where: { deduplicationKey: `rental-order-closed:${order.id}` },
+    update: {},
+    create: {
+      deduplicationKey: `rental-order-closed:${order.id}`,
+      eventType: 'RENTAL_ORDER_CLOSED',
+      aggregateType: 'RentalOrder',
+      aggregateId: order.id,
+      payload,
+    },
+  });
+  await tx.rentalOutboxEvent.upsert({
+    where: { deduplicationKey: `rental-closed:${order.id}` },
+    update: {},
+    create: {
+      deduplicationKey: `rental-closed:${order.id}`,
+      eventType: 'RENTAL_CLOSED',
+      aggregateType: 'RentalOrder',
+      aggregateId: order.id,
+      payload,
+    },
+  });
   return true;
 }
 
@@ -1469,7 +1562,9 @@ function publicDepositStatus(status: DepositItemStatus, refundStatus?: RefundSta
 }
 
 async function writeAudit(tx: Prisma.TransactionClient, userId: string, action: string, entityType: string, entityId: string, oldValues?: unknown, newValues?: unknown, requestId?: string) {
-  await tx.auditLog.create({ data: { userId, action, entityType, entityId, oldValues: oldValues === undefined ? undefined : jsonValue(oldValues), newValues: newValues === undefined ? undefined : jsonValue(newValues), requestId } });
+  if (tx.auditLog?.create) {
+    await tx.auditLog.create({ data: { userId, action, entityType, entityId, oldValues: oldValues === undefined ? undefined : jsonValue(oldValues), newValues: newValues === undefined ? undefined : jsonValue(newValues), requestId } });
+  }
 }
 
 function recipientMatches(snapshot: Prisma.JsonValue, userId: string): boolean {

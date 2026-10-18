@@ -27,7 +27,6 @@ describe('CreateRentalOrderUseCase', () => {
       }),
       listOrders: jest.fn(),
       getOrder: jest.fn(),
-      createOrReusePayment: jest.fn(),
       getPayment: jest.fn(),
       previewCancellation: jest.fn(),
       cancelOrder: jest.fn(),

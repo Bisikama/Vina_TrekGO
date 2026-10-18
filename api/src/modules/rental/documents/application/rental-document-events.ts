@@ -4,6 +4,8 @@
  */
 import { createHash } from 'node:crypto';
 import { Prisma, RentalDocumentType } from '@prisma/client';
+import { AppError } from '../../../../shared/errors';
+import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../../shared/errors/codes/rental-return.error-codes';
 
 type Tx = Prisma.TransactionClient;
 
@@ -89,7 +91,7 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
   const previous = await tx.rentalDocument.findFirst({ where: { orderId: extension.orderId, documentType: RentalDocumentType.EXTENSION_APPENDIX }, orderBy: { issuedAt: 'desc' } });
   
   const order = extension.order ?? await tx.rentalOrder.findUnique({ where: { id: extension.orderId } });
-  const policyVersion = (order?.policySnapshot as any)?.policyVersion ?? '1.5.2';
+  const policyVersion = (order?.policySnapshot)?.policyVersion ?? '1.5.2';
 
   const oldEffectiveDue = extension.oldEffectiveOperationalDueAt
     ? (extension.oldEffectiveOperationalDueAt instanceof Date ? extension.oldEffectiveOperationalDueAt.toISOString() : String(extension.oldEffectiveOperationalDueAt))
@@ -109,7 +111,7 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
         ? (order.occupiedEndAt instanceof Date ? order.occupiedEndAt.toISOString() : String(order.occupiedEndAt))
         : (extension.requestedOccupiedUntil instanceof Date ? extension.requestedOccupiedUntil.toISOString() : String(extension.requestedOccupiedUntil)));
 
-  const quoteId = extension.quoteId ?? (extension as any).quoteId ?? extensionId;
+  const quoteId = extension.quoteId ?? (extension).quoteId ?? extensionId;
 
   const snap = {
     kind: 'EXTENSION_APPENDIX',
@@ -167,9 +169,13 @@ export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:
 
 export async function issueReturnReceiptTx(tx:Tx,sessionId:string,at:Date){
   const session=await tx.rentalReturnSession.findUnique({where:{id:sessionId}});
-  if(!session || session.status!=='FINALIZED' || !session.finalizedAt) throw new Error('RETURN_SESSION_NOT_FINALIZED');
+  if(!session || session.status!=='FINALIZED' || !session.finalizedAt) {
+    throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'RETURN_SESSION_NOT_FINALIZED', sessionId } });
+  }
   const root=await tx.rentalDocument.findFirst({where:{orderId:session.orderId,documentType:RentalDocumentType.HANDOVER}});
-  if(!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED');
+  if(!root) {
+    throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, { details: { orderId: session.orderId, sessionId } });
+  }
   return insertEventDocument(tx,{orderId:session.orderId,documentType:RentalDocumentType.RETURN_RECEIPT,sourceRef:sessionId,issuedAt:at,
     rootDocumentId:root.id,snapshot:{kind:'RETURN_RECEIPT',orderId:session.orderId,sessionId,staffId:session.staffId,
       units:session.receivedUnits,remarks:session.remarks,finalizedAt:session.finalizedAt.toISOString(),

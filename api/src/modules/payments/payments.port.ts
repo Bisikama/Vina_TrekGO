@@ -2,10 +2,19 @@ import { Injectable } from '@nestjs/common'
 import { RefundCommand, RefundsService, refundSummary } from './refunds.service'
 import { PaymentRecoveryService } from './payment-recovery.service'
 import { InvoiceCheckoutCommand, PaymentsService } from './payments.service'
-import { RentalCheckoutCommand } from '../rental/payments/rental-checkout.service'
+import {
+  RentalCheckoutCommand,
+  RentalExtensionCheckoutCommand,
+} from '../rental/payments/rental-checkout.service'
 
 export abstract class PaymentsPort {
-  abstract createRentalExtensionCheckout(input: any): any
+  abstract createRentalExtensionCheckout(
+    input: RentalExtensionCheckoutCommand,
+  ): ReturnType<PaymentsService['createRentalExtensionCheckout']>
+  abstract getRentalExtensionPayment(input: {
+    extensionId: string
+    actorUserId: string
+  }): ReturnType<PaymentsService['getRentalExtensionPayment']>
   abstract createRentalCheckout(input: RentalCheckoutCommand): ReturnType<PaymentsService['createRentalCheckout']>
   abstract createCheckout(input: InvoiceCheckoutCommand): ReturnType<PaymentsService['createCheckout']>
   abstract requestRefund(input: RefundCommand): Promise<ReturnType<typeof refundSummary>>
@@ -25,7 +34,12 @@ export class SharedPaymentsPort extends PaymentsPort {
   createCheckout(input: InvoiceCheckoutCommand) {
     return this.checkout.createCheckout(input)
   }
-  createRentalExtensionCheckout(input: any) { return this.checkout.createRentalExtensionCheckout(input) }
+  createRentalExtensionCheckout(input: RentalExtensionCheckoutCommand) {
+    return this.checkout.createRentalExtensionCheckout(input)
+  }
+  getRentalExtensionPayment(input: { extensionId: string; actorUserId: string }) {
+    return this.checkout.getRentalExtensionPayment(input)
+  }
   createRentalCheckout(input: RentalCheckoutCommand) {
     return this.checkout.createRentalCheckout(input)
   }
