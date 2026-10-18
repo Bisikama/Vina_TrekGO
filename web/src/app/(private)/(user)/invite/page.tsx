@@ -9,8 +9,12 @@ export default function InviteEntryPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.trim()) {
-      router.push(`/invite/${code.trim()}`);
+    const raw = code.trim();
+    if (raw) {
+      const extracted = raw.includes("/invite/")
+        ? raw.split("/invite/").pop()?.split(/[?#]/)[0] || raw
+        : raw;
+      router.push(`/invite/${extracted}`);
     }
   };
 

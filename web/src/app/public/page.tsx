@@ -382,7 +382,7 @@ export default function PublicLandingPage() {
               <h2 className="text-3xl font-extrabold text-[#1F2937] mt-3">
                 Trang Bị Trekking Chuẩn Tác Chiến
               </h2>
-              <p className="mt-3 text-sm text-[#6B7280] leading-relaxed lg:w-[calc(200%+3rem)] lg:max-w-none">
+              <p className="mt-3 text-sm text-[#6B7280] leading-relaxed">
                 Không cần bỏ ra hàng chục triệu sắm sửa thiết bị. VinaTrekGO cung cấp đầy đủ lều trại chống nước, gậy trekking carbon, túi ngủ giữ nhiệt, đèn pin siêu sáng và bộ đàm định vị.
               </p>
 

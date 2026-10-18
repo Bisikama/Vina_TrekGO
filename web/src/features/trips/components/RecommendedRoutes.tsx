@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { apiClient } from "@/lib/axios";
+import { useEffect, useMemo } from "react";
+import { useStaticDataStore } from "@/lib/staticDataStore";
 
 interface RouteProps {
   id: string;
@@ -17,23 +17,6 @@ interface RouteProps {
   reviewsCount: number;
   imageUrl: string;
   tag: { text: string; colorClass: string };
-}
-
-interface SystemTrailSummary {
-  id: string;
-  code: string;
-  name: string;
-  difficulty: string;
-  distanceKm: number;
-  elevationGainM?: number | null;
-  estimatedDurationMinutes?: number | null;
-  destination?: {
-    name: string;
-  } | null;
-}
-
-interface SystemTrailsResponse {
-  items: SystemTrailSummary[];
 }
 
 const FEATURED_ROUTE: RouteProps = {
@@ -109,59 +92,45 @@ const RouteCard = ({ route }: { route: RouteProps }) => {
 };
 
 export const RecommendedRoutes = () => {
-  const [routes, setRoutes] = useState<RouteProps[]>([FEATURED_ROUTE]);
-  const [isLoading, setIsLoading] = useState(true);
+  const systemTrails = useStaticDataStore((s) => s.systemTrails);
+  const systemTrailsLoaded = useStaticDataStore((s) => s.systemTrailsLoaded);
+  const systemTrailsLoading = useStaticDataStore((s) => s.systemTrailsLoading);
+  const loadSystemTrails = useStaticDataStore((s) => s.loadSystemTrails);
 
   useEffect(() => {
-    let isCancelled = false;
+    void loadSystemTrails();
+  }, [loadSystemTrails]);
 
-    const fetchSystemTrails = async () => {
-      try {
-        const { data } = await apiClient.get<SystemTrailsResponse>(
-          "/api/v1/system-trails?page=1&pageSize=20&status=ACTIVE",
-        );
-        const systemRoutes = data.items
-          .filter(
-            (trail) =>
-              trail.code !== "TRAIL_BADEN_COTDIEN" &&
-              !trail.name.toLowerCase().includes("bà đen"),
-          )
-          .map((trail, index) => ({
-            id: trail.id,
-            name: trail.name,
-            location: trail.destination?.name ?? "Việt Nam",
-            elevation: trail.elevationGainM ? `${trail.elevationGainM}m` : "—",
-            distance: `${trail.distanceKm} km`,
-            days: trail.estimatedDurationMinutes
-              ? `${Math.ceil(trail.estimatedDurationMinutes / 480)}N`
-              : "—",
-            difficultyInfo: getDifficultyLabel(trail.difficulty),
-            rating: "—",
-            reviewsCount: 0,
-            imageUrl: [
-              "https://images.unsplash.com/photo-1698224536665-27a3c3e664ee?q=80&w=600&auto=format&fit=crop",
-              "https://images.unsplash.com/photo-1582049019623-88c9f52f4165?q=80&w=600&auto=format&fit=crop",
-            ][index % 2],
-            tag: getDifficultyTag(trail.difficulty),
-          }));
+  const routes = useMemo<RouteProps[]>(() => {
+    const systemRoutes = systemTrails
+      .filter(
+        (trail) =>
+          trail.code !== "TRAIL_BADEN_COTDIEN" &&
+          !trail.name.toLowerCase().includes("bà đen")
+      )
+      .map((trail, index) => ({
+        id: trail.id,
+        name: trail.name,
+        location: trail.destination?.name ?? "Việt Nam",
+        elevation: trail.elevationGainM ? `${trail.elevationGainM}m` : "—",
+        distance: `${trail.distanceKm} km`,
+        days: trail.estimatedDurationMinutes
+          ? `${Math.ceil(trail.estimatedDurationMinutes / 480)}N`
+          : "—",
+        difficultyInfo: getDifficultyLabel(trail.difficulty),
+        rating: "—",
+        reviewsCount: 0,
+        imageUrl: [
+          "https://images.unsplash.com/photo-1698224536665-27a3c3e664ee?q=80&w=600&auto=format&fit=crop",
+          "https://images.unsplash.com/photo-1582049019623-88c9f52f4165?q=80&w=600&auto=format&fit=crop",
+        ][index % 2],
+        tag: getDifficultyTag(trail.difficulty),
+      }));
 
-        if (!isCancelled) {
-          setRoutes([FEATURED_ROUTE, ...systemRoutes]);
-        }
-      } catch (error) {
-        console.error("Không thể tải danh sách cung đường hệ thống:", error);
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
+    return [FEATURED_ROUTE, ...systemRoutes];
+  }, [systemTrails]);
 
-    void fetchSystemTrails();
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  const isLoading = !systemTrailsLoaded && systemTrailsLoading;
 
   return (
     <div className="mb-12">

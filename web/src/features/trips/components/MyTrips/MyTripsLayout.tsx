@@ -1,47 +1,43 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
+import useSWR from 'swr';
 import { MyTripsHeader } from './MyTripsHeader';
 import { usePrivateTrips } from '../../hooks/usePrivateTrips';
 import { bookingApiService, formatMoneyVND, BOOKING_STATUS_LABELS } from '@/features/bookings/services/booking.api';
-import type { BookingSummary } from '@/features/bookings/types/booking.types';
+import type { BookingSummary, PageResponse } from '@/features/bookings/types/booking.types';
 import type { PrivateTrip } from '../../services/private-trips.api';
 
 type TabType = 'ALL' | 'BOOKINGS' | 'PRIVATE';
 
 export const MyTripsLayout = () => {
-  const { trips, loadTrips, busy, error, cancel } = usePrivateTrips();
-  const [bookings, setBookings] = useState<BookingSummary[]>([]);
-  const [bookingsLoading, setBookingsLoading] = useState(false);
-  const [bookingsError, setBookingsError] = useState<string | null>(null);
+  const { trips, busy, error, cancel } = usePrivateTrips();
+
+  const { data: bookingsPage, isLoading: bookingsSwrLoading } = useSWR<PageResponse<BookingSummary>>(
+    ['my-bookings', 1, 50, ''],
+    () => bookingApiService.listMyBookings({ page: 1, pageSize: 50 }),
+    {
+      revalidateOnFocus: true,
+      dedupingInterval: 5000,
+      keepPreviousData: true,
+    }
+  );
+
+  const bookings = useMemo(() => {
+    return (bookingsPage?.items || []).filter(
+      (b) =>
+        b.status === 'CONFIRMED' ||
+        b.status === 'CHECKED_IN' ||
+        b.status === 'COMPLETED' ||
+        b.status === 'CANCELLED'
+    );
+  }, [bookingsPage]);
+
+  const bookingsLoading = bookingsSwrLoading && !bookingsPage;
 
   const [activeTab, setActiveTab] = useState<TabType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-
-  useEffect(() => {
-    loadTrips();
-    fetchBookings();
-  }, [loadTrips]);
-
-  const fetchBookings = async () => {
-    setBookingsLoading(true);
-    setBookingsError(null);
-    try {
-      // Load user's bookings (confirmed, completed, etc.)
-      const res = await bookingApiService.listMyBookings({ pageSize: 50 });
-      // Only keep confirmed, checked-in, completed or cancelled bookings (ignore unpaid expired holds)
-      const validBookings = (res?.items || []).filter(
-        (b) => b.status === 'CONFIRMED' || b.status === 'CHECKED_IN' || b.status === 'COMPLETED' || b.status === 'CANCELLED'
-      );
-      setBookings(validBookings);
-    } catch (err: any) {
-      console.error('Không thể tải danh sách tour đã đặt:', err);
-      // Non-fatal: if bookings fail to load, don't break private trips
-    } finally {
-      setBookingsLoading(false);
-    }
-  };
 
   const now = new Date();
 

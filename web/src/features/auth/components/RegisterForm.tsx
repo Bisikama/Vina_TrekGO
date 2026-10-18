@@ -18,7 +18,6 @@ export const RegisterForm = ({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [avatar, setAvatar] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,7 +43,6 @@ export const RegisterForm = ({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       password,
       fullName: fullName.trim(),
       phone: phone.replace(/\s/g, "").trim(),
-      avatar: avatar.trim() || undefined,
     });
 
     if (result) {
@@ -189,21 +187,6 @@ export const RegisterForm = ({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
               required
               minLength={6}
               placeholder="Nhập lại mật khẩu"
-              className={inputClass}
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label htmlFor="register-avatar" className={labelClass}>
-              Avatar URL <span className="font-normal text-gray-400">(Tùy chọn)</span>
-            </label>
-            <input
-              id="register-avatar"
-              name="avatar"
-              type="url"
-              value={avatar}
-              onChange={(e) => setAvatar(e.target.value)}
-              placeholder="https://example.com/avatar.jpg"
               className={inputClass}
             />
           </div>
