@@ -35,7 +35,7 @@ async function insertEventDocument(tx: Tx, input: {
     appendixNo: input.appendixNo ?? null,
     snapshotJson: JSON.parse(canonical(input.snapshot)) as Prisma.InputJsonValue,
     snapshotHash: snapshotHash(input.snapshot),
-    policyVersion: input.policyVersion ?? '1.4.2', issuedAt: input.issuedAt,
+    policyVersion: input.policyVersion ?? '1.5.2', issuedAt: input.issuedAt,
   }});
   await tx.rentalOutboxEvent.upsert({
     where: { deduplicationKey: `rental-document-render:${document.id}` }, update: {},
@@ -58,6 +58,7 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
   if (!order || !handover || order.id!==handover.orderId || !packageItems.length) throw new Error('HANDOVER_DOCUMENT_SOURCE_INCOMPLETE');
   const conditionMap = new Map(conditions.map(x=>[x.assignmentId,x]));
   if (packageItems.some(x=>!conditionMap.has(x.assignmentId))) throw new Error('HANDOVER_DOCUMENT_CONDITION_MISSING');
+  const policyVersion = (order.policySnapshot as any)?.policyVersion ?? '1.5.2';
   return insertEventDocument(tx,{orderId,documentType:RentalDocumentType.HANDOVER,sourceRef:handoverId,issuedAt,
     snapshot:{kind:'HANDOVER',orderId,tripId:order.tripId,bookingProvenanceId:order.bookingId,
       handoverId,packageId:handover.packageId,recipient:handover.recipientSnapshot,
@@ -69,29 +70,87 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
       units:packageItems.map(x=>{const c=conditionMap.get(x.assignmentId)!;return {unitId:x.equipmentUnitId,assetCode:x.equipmentUnit.assetCode,productId:x.equipmentUnit.productId,
         condition:c.condition,accessories:c.accessories,evidenceIds:c.evidenceIds,conditionSnapshotId:c.id};}),
       verificationMethod:'STAFF_DELIVERY_PICKUP_CODE',signatureMethod:'NONE',
-      policySnapshot:order.policySnapshot},policyVersion:'1.4.2'});
+      policySnapshot:order.policySnapshot},policyVersion});
 }
 
-export async function issueExtensionAppendixTx(tx:Tx,extensionId:string,issuedAt:Date){
-  const extension=await tx.rentalExtensionRequest.findUnique({where:{id:extensionId}});
-  if(!extension || extension.status!=='APPLIED' || !extension.appliedAt) throw new Error('DOCUMENT_EXTENSION_NOT_APPLIED');
-  if(!extension.acceptedAt || !extension.acceptedByUserId || !extension.termsHash) throw new Error('EXTENSION_ACCEPTANCE_MISSING');
-  const root=await tx.rentalDocument.findFirst({where:{orderId:extension.orderId,documentType:RentalDocumentType.HANDOVER}});
-  if(!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX');
-  const existing=await tx.rentalDocument.findUnique({where:{documentType_sourceRef:{documentType:RentalDocumentType.EXTENSION_APPENDIX,sourceRef:extensionId}}});
-  if(existing) return existing;
-  const n=await tx.rentalDocument.count({where:{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX}})+1;
-  if(n>2) throw new Error('EXTENSION_DOCUMENT_LIMIT');
-  const previous=await tx.rentalDocument.findFirst({where:{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX},orderBy:{issuedAt:'desc'}});
-  const snap={kind:'EXTENSION_APPENDIX',orderId:extension.orderId,rootDocumentId:root.id,extensionId,
-    appendixNo:n,previousRentalEndAt:extension.previousRentalEndAt.toISOString(),
-    newRentalEndAt:extension.requestedRentalEndAt.toISOString(),additionalFee:extension.additionalFee.toString(),
-    currency:extension.currency,returnOption:extension.returnOptionSnapshot,acceptedByUserId:extension.acceptedByUserId,
-    acceptedAt:extension.acceptedAt.toISOString(),acceptedTermsVersion:extension.acceptedTermsVersion,
-    termsHash:extension.termsHash,appliedAt:extension.appliedAt.toISOString(),paymentRef:extension.paymentRef,
-    originalHandoverUnchanged:true};
-  return insertEventDocument(tx,{orderId:extension.orderId,documentType:RentalDocumentType.EXTENSION_APPENDIX,
-    sourceRef:extensionId,issuedAt,rootDocumentId:root.id,previousDocumentId:previous?.id??root.id,appendixNo:n,snapshot:snap});
+export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issuedAt: Date, preloadedExtension?: any) {
+  const extension = preloadedExtension ?? await tx.rentalExtensionRequest.findUnique({
+    where: { id: extensionId },
+    include: { order: true },
+  });
+  if (!extension || extension.status !== 'APPLIED' || !extension.appliedAt) throw new Error('DOCUMENT_EXTENSION_NOT_APPLIED');
+  if (!extension.acceptedAt || !extension.acceptedByUserId || !extension.termsHash) throw new Error('EXTENSION_ACCEPTANCE_MISSING');
+  const root = await tx.rentalDocument.findFirst({ where: { orderId: extension.orderId, documentType: RentalDocumentType.HANDOVER } });
+  if (!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED_FOR_APPENDIX');
+  const existing = await tx.rentalDocument.findUnique({ where: { documentType_sourceRef: { documentType: RentalDocumentType.EXTENSION_APPENDIX, sourceRef: extensionId } } });
+  if (existing) return existing;
+  const n = await tx.rentalDocument.count({ where: { orderId: extension.orderId, documentType: RentalDocumentType.EXTENSION_APPENDIX } }) + 1;
+  if (n > 2) throw new Error('EXTENSION_DOCUMENT_LIMIT');
+  const previous = await tx.rentalDocument.findFirst({ where: { orderId: extension.orderId, documentType: RentalDocumentType.EXTENSION_APPENDIX }, orderBy: { issuedAt: 'desc' } });
+  
+  const order = extension.order ?? await tx.rentalOrder.findUnique({ where: { id: extension.orderId } });
+  const policyVersion = (order?.policySnapshot as any)?.policyVersion ?? '1.5.2';
+
+  const oldEffectiveDue = extension.oldEffectiveOperationalDueAt
+    ? (extension.oldEffectiveOperationalDueAt instanceof Date ? extension.oldEffectiveOperationalDueAt.toISOString() : String(extension.oldEffectiveOperationalDueAt))
+    : (order?.operationalReturnDueAt && order.operationalReturnDueAt > (extension.previousRentalEndAt ?? order.rentalEndAt)
+        ? (order.operationalReturnDueAt instanceof Date ? order.operationalReturnDueAt.toISOString() : String(order.operationalReturnDueAt))
+        : (extension.previousRentalEndAt instanceof Date ? extension.previousRentalEndAt.toISOString() : String(extension.previousRentalEndAt)));
+
+  const newEffectiveDue = extension.newEffectiveOperationalDueAt
+    ? (extension.newEffectiveOperationalDueAt instanceof Date ? extension.newEffectiveOperationalDueAt.toISOString() : String(extension.newEffectiveOperationalDueAt))
+    : (order?.operationalReturnDueAt
+        ? (order.operationalReturnDueAt instanceof Date ? order.operationalReturnDueAt.toISOString() : String(order.operationalReturnDueAt))
+        : (extension.requestedRentalEndAt instanceof Date ? extension.requestedRentalEndAt.toISOString() : String(extension.requestedRentalEndAt)));
+
+  const occupiedUntilStr = extension.occupiedUntil
+    ? (extension.occupiedUntil instanceof Date ? extension.occupiedUntil.toISOString() : String(extension.occupiedUntil))
+    : (order?.occupiedEndAt
+        ? (order.occupiedEndAt instanceof Date ? order.occupiedEndAt.toISOString() : String(order.occupiedEndAt))
+        : (extension.requestedOccupiedUntil instanceof Date ? extension.requestedOccupiedUntil.toISOString() : String(extension.requestedOccupiedUntil)));
+
+  const quoteId = extension.quoteId ?? (extension as any).quoteId ?? extensionId;
+
+  const snap = {
+    kind: 'EXTENSION_APPENDIX',
+    documentNo: `TG-EXTENSION_APPENDIX-${createHash('sha256').update(extensionId).digest('hex').slice(0, 32)}`,
+    appendixNo: n,
+    rootDocumentId: root.id,
+    previousAppendixId: previous?.id ?? null,
+    orderId: extension.orderId,
+    extensionId,
+    acceptance: {
+      quoteId,
+      acceptedByUserId: extension.acceptedByUserId,
+      acceptedAt: extension.acceptedAt instanceof Date ? extension.acceptedAt.toISOString() : String(extension.acceptedAt),
+      acceptedTermsVersion: extension.acceptedTermsVersion,
+      termsHash: extension.termsHash,
+    },
+    oldRentalEndAt: extension.previousRentalEndAt instanceof Date ? extension.previousRentalEndAt.toISOString() : String(extension.previousRentalEndAt),
+    newRentalEndAt: extension.requestedRentalEndAt instanceof Date ? extension.requestedRentalEndAt.toISOString() : String(extension.requestedRentalEndAt),
+    oldEffectiveOperationalDueAt: oldEffectiveDue,
+    newEffectiveOperationalDueAt: newEffectiveDue,
+    occupiedUntil: occupiedUntilStr,
+    returnOption: extension.returnOptionSnapshot,
+    additionalFee: extension.additionalFee.toString(),
+    currency: extension.currency,
+    sourcePaymentId: extension.paymentRef ?? null,
+    appliedAt: extension.appliedAt instanceof Date ? extension.appliedAt.toISOString() : String(extension.appliedAt),
+    policyVersion,
+    templateVersion: '1.0.0',
+    originalHandoverUnchanged: true,
+  };
+  return insertEventDocument(tx, {
+    orderId: extension.orderId,
+    documentType: RentalDocumentType.EXTENSION_APPENDIX,
+    sourceRef: extensionId,
+    issuedAt,
+    rootDocumentId: root.id,
+    previousDocumentId: previous?.id ?? root.id,
+    appendixNo: n,
+    policyVersion,
+    snapshot: snap,
+  });
 }
 
 export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:string;newOperationalDueAt:Date;at:Date;oldOperationalDueAt?:Date|null}){

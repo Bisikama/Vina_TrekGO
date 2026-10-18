@@ -1,7 +1,19 @@
 import { z } from 'zod';
 
 const UUID = z.string().uuid();
-export const ReturnIdParamSchema = z.object({ returnId: UUID });
+
+export const ReturnIdParamSchema = z
+  .object({
+    returnId: UUID.optional(),
+    id: UUID.optional(),
+  })
+  .refine((data) => Boolean(data.returnId || data.id), {
+    message: 'returnId or id is required',
+  })
+  .transform((data) => ({
+    returnId: (data.returnId ?? data.id)!,
+    id: (data.id ?? data.returnId)!,
+  }));
 export const RentalOrderIdParamSchema = z.object({ id: UUID });
 export const ExceptionIdParamSchema = z.object({ id: UUID });
 export const EquipmentUnitIdParamSchema = z.object({ id: UUID });

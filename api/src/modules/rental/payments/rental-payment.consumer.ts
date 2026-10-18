@@ -72,41 +72,54 @@ export class RentalPaymentConsumer {
       if (!receipt && payment.application.status === 'PENDING') {
         const extension = await tx.rentalExtensionRequest.findFirst({ where: { invoiceId: payment.invoiceId } })
         if (extension) {
-          const effectivePaidAt = payment.paidAt
+          // Lock extension and order rows to serialize against background expiry scheduler
+          await tx.$queryRaw`SELECT id FROM rental_extension_requests WHERE id = ${extension.id}::uuid FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${extension.orderId}::uuid FOR UPDATE`;
+          const lockedExt = await tx.rentalExtensionRequest.findUnique({ where: { id: extension.id } });
+          if (!lockedExt) throw new Error('Rental extension request not found');
+
+          const effectivePaidAt = payment.paidAt;
           if (!effectivePaidAt) {
-            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'FAILED', payment.transactionRef, now)
-            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'REJECTED', reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED', decidedAt: now } })
-            await tx.paymentOutboxEvent.upsert({
-              where: { deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1` },
-              create: {
-                deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1`,
-                eventType: 'TECHNICAL_REVERSAL_REQUESTED', aggregateType: 'Payment', aggregateId: payment.id,
-                payload: { schemaVersion: 1, paymentId: payment.id, invoiceId: payment.invoiceId, reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED' },
-              }, update: {},
-            })
-            await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } })
-            await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } })
-            return
+            await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);
+            await tx.paymentApplication.update({
+              where: { paymentId: payment.id },
+              data: { status: 'REJECTED', reasonCode: 'PAYMENT_TIMESTAMP_UNTRUSTED', decidedAt: now },
+            });
+            await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } });
+            await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } });
+            return;
           }
-          const paymentLate = extension.status !== 'PENDING_PAYMENT' || !extension.holdExpiresAt || extension.holdExpiresAt < effectivePaidAt
-          if (paymentLate) {
-            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'SUCCEEDED', payment.transactionRef, now)
-            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'REJECTED', reasonCode: 'LATE_PAYMENT', decidedAt: now } })
-            await tx.paymentOutboxEvent.upsert({
-              where: { deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1` },
-              create: {
-                deduplicationKey: `payment:${payment.id}:technical-reversal-requested:v1`,
-                eventType: 'TECHNICAL_REVERSAL_REQUESTED', aggregateType: 'Payment', aggregateId: payment.id,
-                payload: { schemaVersion: 1, paymentId: payment.id, invoiceId: payment.invoiceId, reasonCode: 'LATE_PAYMENT' },
-              }, update: {},
-            })
+
+          const isTimely = lockedExt.status === 'PENDING_PAYMENT' && !!lockedExt.holdExpiresAt && effectivePaidAt <= lockedExt.holdExpiresAt;
+          if (!isTimely) {
+            let rejectionReason = 'LATE_PAYMENT';
+            if (lockedExt.status === 'EXPIRED' && lockedExt.holdExpiresAt && effectivePaidAt <= lockedExt.holdExpiresAt) {
+              rejectionReason = 'HOLD_EXPIRED_BEFORE_PROCESSING';
+            } else if (lockedExt.status !== 'PENDING_PAYMENT') {
+              rejectionReason = 'EXTENSION_NOT_APPLICABLE';
+            }
+            const result = await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);
+            await tx.paymentApplication.update({
+              where: { paymentId: payment.id },
+              data: { status: 'REJECTED', reasonCode: result?.reasonCode ?? rejectionReason, decidedAt: now },
+            });
           } else {
-            await consumeExtensionPaymentWithTx(tx, extension.id, payment, 'SUCCEEDED', payment.transactionRef, now)
-            await tx.paymentApplication.update({ where: { paymentId: payment.id }, data: { status: 'APPLIED', appliedAt: now, decidedAt: now } })
+            const result = await consumeExtensionPaymentWithTx(tx, lockedExt.id, payment, 'SUCCEEDED', payment.transactionRef, now);
+            if (result && !result.applied) {
+              await tx.paymentApplication.update({
+                where: { paymentId: payment.id },
+                data: { status: 'REJECTED', reasonCode: result.reasonCode ?? 'EXTENSION_NOT_APPLICABLE', decidedAt: now },
+              });
+            } else {
+              await tx.paymentApplication.update({
+                where: { paymentId: payment.id },
+                data: { status: 'APPLIED', appliedAt: now, decidedAt: now },
+              });
+            }
           }
-          await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } })
-          await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } })
-          return
+          await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-payment-v1' } });
+          await tx.paymentOutboxEvent.update({ where: { id: eventId }, data: { status: 'PROCESSED', processedAt: now, nextRetryAt: null, lastError: null } });
+          return;
         }
         const effectivePaidAt = payment.paidAt
         validateRentalAllocations(order, order.rentalOrderLinesViaOrderId, payment.allocations)

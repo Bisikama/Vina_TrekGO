@@ -7,6 +7,7 @@ import type {
   RentalContextPort,
   RentalEligibilityContext,
   RentalPolicySnapshot,
+  RentalRecipientOption,
   RentalReturnOption,
 } from '../../application/ports/rental-context.port'
 
@@ -177,102 +178,450 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
         activePolicy,
       }
     }
-    // Local monolith/dev bridge: membership is authoritative, Booking not consulted.
-    const member = await this.prisma.tripMember.findUnique({
+    // Cầu nối nội bộ (monolith / dev bridge): Phân giải ngữ cảnh đa hình giữa Thành viên Private Trip, Leader Public Trip, và Khách hàng Public Trip (Chủ đơn đặt / Người đi cùng).
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        leader: { select: { id: true, fullName: true, phone: true } },
+        pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        tripTransportsViaTripId: {
+          orderBy: { sequence: 'asc' },
+          include: {
+            pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+            returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+          },
+        },
+        tripTrailPlansViaTripId: { take: 1, orderBy: { sequence: 'asc' }, select: { snapshotDifficulty: true } },
+        weatherSnapshotsViaTripId: {
+          take: 1,
+          orderBy: { observedAt: 'desc' },
+          select: { riskSummary: true, weatherCondition: true, rainProbabilityPercent: true },
+        },
+      },
+    })
+    if (!trip) return null
+
+    const weather = trip.weatherSnapshotsViaTripId[0]
+    const difficulty = trip.tripTrailPlansViaTripId[0]?.snapshotDifficulty ?? null
+    const weatherSummary = weather?.riskSummary ?? weather?.weatherCondition ?? null
+    const rainProbabilityPercent = weather?.rainProbabilityPercent == null ? null : Number(weather.rainProbabilityPercent)
+    const tripContext = {
+      id: trip.id,
+      name: trip.title,
+      status: trip.status,
+      tripType: trip.tripType,
+      startAt: trip.startAt,
+      endAt: trip.endAt,
+      timezone: process.env.TREKGO_TIMEZONE ?? 'Asia/Ho_Chi_Minh',
+      difficulty,
+      weatherSummary,
+      rainProbabilityPercent,
+    }
+
+    // TRƯỜNG HỢP 1: CHUYẾN ĐI RIÊNG TƯ (PRIVATE TRIP) -> Tra cứu bảng trip_members
+    if (trip.tripType === 'PRIVATE') {
+      const member = await this.prisma.tripMember.findUnique({
+        where: { tripId_userId: { tripId, userId } },
+        include: {
+          user: { select: { fullName: true, phone: true } },
+          pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        },
+      })
+      if (!member) return null
+
+      // Xác định phương tiện di chuyển và điểm tập trung/trả đồ tương ứng
+      const transport =
+        trip.tripTransportsViaTripId.find(
+          (t) => t.status !== 'CANCELLED' && t.pickupPointId === (member.pickupPointId ?? trip.pickupPointId),
+        ) ?? trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
+      const pickup = member.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
+      const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+      if (!pickup || !returnPoint)
+        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+
+      // Điều kiện hợp lệ: Thành viên ACTIVE và chuyến đi không bị huỷ hay kết thúc
+      const eligibleStatus =
+        member.status === 'ACTIVE' &&
+        !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
+      const contextVersion = hashVersion({
+        tripVersion: trip.version,
+        memberVersion: member.version,
+        transportVersion: transport?.version ?? 0,
+        pickupUpdatedAt: pickup.updatedAt,
+        returnUpdatedAt: returnPoint.updatedAt,
+      })
+
+      return {
+        userId,
+        membershipRef: member.id,
+        membershipStatus: member.status,
+        membershipRole: member.role,
+        rentalEligible: eligibleStatus,
+        ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
+        bookingId: null, // Chuyến đi Private không phát sinh đơn đặt vé Booking
+        trip: tripContext,
+        recipientOptions: [
+          {
+            memberId: member.id,
+            userId: member.userId,
+            displayName: member.user.fullName,
+            phone: member.user.phone,
+            status: member.status,
+          },
+        ],
+        pickup: {
+          id: pickup.id,
+          name: pickup.name,
+          address: pickup.address,
+          scheduledAt: transport?.meetingAt ?? trip.startAt,
+        },
+        dropoff: {
+          id: returnPoint.id,
+          name: returnPoint.name,
+          address: returnPoint.address,
+          scheduledAt: transport?.returnAt ?? trip.endAt,
+        },
+        returnOptions: [],
+        rentalCutoffAt: new Date(
+          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
+        ),
+        contextVersion,
+        existingOpenOrderId: existing?.id ?? null,
+        activePolicy,
+      }
+    }
+    
+    // TRƯỜNG HỢP 2: CHUYẾN ĐI CÔNG KHAI (PUBLIC TRIP) & NGƯỜI DÙNG LÀ TRƯỞNG ĐOÀN (LEADER)
+    if (trip.leaderId === userId) {
+      const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
+      const pickup = transport?.pickupPoint ?? trip.pickupPoint
+      const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+      if (!pickup || !returnPoint)
+        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+
+      const eligibleStatus =
+        !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
+      const contextVersion = hashVersion({
+        tripVersion: trip.version,
+        leaderId: trip.leaderId,
+        transportVersion: transport?.version ?? 0,
+        pickupUpdatedAt: pickup.updatedAt,
+        returnUpdatedAt: returnPoint.updatedAt,
+      })
+
+      return {
+        userId,
+        membershipRef: trip.leaderId,
+        membershipStatus: 'ACTIVE',
+        membershipRole: 'LEADER',
+        rentalEligible: eligibleStatus,
+        ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
+        bookingId: null, // Leader là người tổ chức chuyến đi, không đặt vé qua Booking
+        trip: tripContext,
+        recipientOptions: [
+          // Tuân thủ Policy v1.5.2 Bảng 1: Chỉ cho phép Leader nhận thiết bị cho chính mình (không gom đồ cho cả đoàn)
+          {
+            memberId: trip.leaderId,
+            userId,
+            displayName: trip.leader?.fullName ?? '',
+            phone: trip.leader?.phone ?? null,
+            status: 'ACTIVE',
+          },
+        ],
+        pickup: {
+          id: pickup.id,
+          name: pickup.name,
+          address: pickup.address,
+          scheduledAt: transport?.meetingAt ?? trip.startAt,
+        },
+        dropoff: {
+          id: returnPoint.id,
+          name: returnPoint.name,
+          address: returnPoint.address,
+          scheduledAt: transport?.returnAt ?? trip.endAt,
+        },
+        returnOptions: [],
+        rentalCutoffAt: new Date(
+          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
+        ),
+        contextVersion,
+        existingOpenOrderId: existing?.id ?? null,
+        activePolicy,
+      }
+    }
+
+    
+    // TRƯỜNG HỢP 3: CHUYẾN ĐI CÔNG KHAI (PUBLIC TRIP) & NGƯỜI DÙNG LÀ KHÁCH HÀNG (Booking Owner hoặc Participant)
+
+    // 3A: Kiểm tra nếu người dùng là Người đặt vé (Booking Owner) - ưu tiên đơn đã thanh toán CONFIRMED
+    let booking = await this.prisma.booking.findFirst({
+      where: { tripId, userId, status: 'CONFIRMED' },
+      include: {
+        user: { select: { fullName: true, phone: true } },
+        pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        bookingParticipantsViaBookingId: {
+          select: { id: true, userId: true, fullName: true, phone: true, status: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Nếu không có đơn CONFIRMED, tìm đơn gần nhất (ví dụ PENDING_PAYMENT hoặc CANCELLED) để trả về lý do không đủ điều kiện
+    if (!booking) {
+      booking = await this.prisma.booking.findFirst({
+        where: { tripId, userId },
+        include: {
+          user: { select: { fullName: true, phone: true } },
+          pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+          returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+          bookingParticipantsViaBookingId: {
+            select: { id: true, userId: true, fullName: true, phone: true, status: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
+
+    if (booking) {
+      const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
+      const pickup = booking.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
+      const returnPoint = booking.returnPoint ?? transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+      if (!pickup || !returnPoint)
+        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+
+      const isConfirmed = booking.status === 'CONFIRMED'
+      const tripNotCancelled = !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
+      const eligibleStatus = isConfirmed && tripNotCancelled
+      const membershipStatus = isConfirmed ? 'ACTIVE' : booking.status
+      const contextVersion = hashVersion({
+        tripVersion: trip.version,
+        bookingVersion: booking.version,
+        transportVersion: transport?.version ?? 0,
+        pickupUpdatedAt: pickup.updatedAt,
+        returnUpdatedAt: returnPoint.updatedAt,
+      })
+
+      // Người đặt vé có thể nhận đồ cho mình hoặc chọn bạn bè đi cùng trong đơn làm recipient
+      const recipientOptions: RentalRecipientOption[] = [
+        {
+          memberId: booking.id,
+          userId: booking.userId,
+          displayName: booking.user.fullName,
+          phone: booking.user.phone,
+          status: membershipStatus,
+        },
+        ...booking.bookingParticipantsViaBookingId.map((p) => ({
+          memberId: p.id,
+          userId: p.userId ?? booking.userId,
+          displayName: p.fullName,
+          phone: p.phone,
+          status: p.status === 'ACTIVE' && isConfirmed ? 'ACTIVE' : p.status,
+        })),
+      ]
+
+      return {
+        userId,
+        membershipRef: booking.id,
+        membershipStatus,
+        membershipRole: 'MEMBER',
+        rentalEligible: eligibleStatus,
+        ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
+        bookingId: booking.id,
+        trip: tripContext,
+        recipientOptions,
+        pickup: {
+          id: pickup.id,
+          name: pickup.name,
+          address: pickup.address,
+          scheduledAt: transport?.meetingAt ?? trip.startAt,
+        },
+        dropoff: {
+          id: returnPoint.id,
+          name: returnPoint.name,
+          address: returnPoint.address,
+          scheduledAt: transport?.returnAt ?? trip.endAt,
+        },
+        returnOptions: [],
+        rentalCutoffAt: new Date(
+          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
+        ),
+        contextVersion,
+        existingOpenOrderId: existing?.id ?? null,
+        activePolicy,
+      }
+    }
+
+    // 3B: Nếu không phải chủ vé, kiểm tra người dùng có phải là Người đi cùng (Booking Participant) trong chuyến đi hay không
+    let participant = await this.prisma.bookingParticipant.findFirst({
+      where: {
+        userId,
+        booking: { tripId, status: 'CONFIRMED' },
+      },
+      include: {
+        user: { select: { fullName: true, phone: true } },
+        booking: {
+          include: {
+            pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+            returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!participant) {
+      participant = await this.prisma.bookingParticipant.findFirst({
+        where: {
+          userId,
+          booking: { tripId },
+        },
+        include: {
+          user: { select: { fullName: true, phone: true } },
+          booking: {
+            include: {
+              pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+              returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
+
+    if (participant) {
+      const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
+      const pickup = participant.booking.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
+      const returnPoint = participant.booking.returnPoint ?? transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+      if (!pickup || !returnPoint)
+        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+
+      const isConfirmed = participant.booking.status === 'CONFIRMED' && participant.status === 'ACTIVE'
+      const tripNotCancelled = !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
+      const eligibleStatus = isConfirmed && tripNotCancelled
+      const membershipStatus = isConfirmed ? 'ACTIVE' : (participant.status !== 'ACTIVE' ? participant.status : participant.booking.status)
+      const contextVersion = hashVersion({
+        tripVersion: trip.version,
+        bookingVersion: participant.booking.version,
+        participantId: participant.id,
+        transportVersion: transport?.version ?? 0,
+        pickupUpdatedAt: pickup.updatedAt,
+        returnUpdatedAt: returnPoint.updatedAt,
+      })
+
+      return {
+        userId,
+        membershipRef: participant.id,
+        membershipStatus,
+        membershipRole: 'PARTICIPANT',
+        rentalEligible: eligibleStatus,
+        ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
+        bookingId: participant.bookingId,
+        trip: tripContext,
+        recipientOptions: [
+          // Người đi cùng chỉ có quyền nhận đồ cho chính mình
+          {
+            memberId: participant.id,
+            userId,
+            displayName: participant.user?.fullName ?? participant.fullName,
+            phone: participant.user?.phone ?? participant.phone,
+            status: membershipStatus,
+          },
+        ],
+        pickup: {
+          id: pickup.id,
+          name: pickup.name,
+          address: pickup.address,
+          scheduledAt: transport?.meetingAt ?? trip.startAt,
+        },
+        dropoff: {
+          id: returnPoint.id,
+          name: returnPoint.name,
+          address: returnPoint.address,
+          scheduledAt: transport?.returnAt ?? trip.endAt,
+        },
+        returnOptions: [],
+        rentalCutoffAt: new Date(
+          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
+        ),
+        contextVersion,
+        existingOpenOrderId: existing?.id ?? null,
+        activePolicy,
+      }
+    }
+
+    // =========================================================================
+    // Cơ chế dự phòng (Fallback): Tra cứu bảng trip_members (dành cho môi trường kiểm thử / dữ liệu cũ)
+    // =========================================================================
+    const memberFallback = await this.prisma.tripMember.findUnique({
       where: { tripId_userId: { tripId, userId } },
       include: {
         user: { select: { fullName: true, phone: true } },
         pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-        trip: {
-          include: {
-            pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-            tripTransportsViaTripId: {
-              orderBy: { sequence: 'asc' },
-              include: {
-                pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-                returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-              },
-            },
-            tripTrailPlansViaTripId: { take: 1, orderBy: { sequence: 'asc' }, select: { snapshotDifficulty: true } },
-            weatherSnapshotsViaTripId: {
-              take: 1,
-              orderBy: { observedAt: 'desc' },
-              select: { riskSummary: true, weatherCondition: true, rainProbabilityPercent: true },
-            },
+      },
+    })
+    if (memberFallback) {
+      const transport =
+        trip.tripTransportsViaTripId.find(
+          (t) => t.status !== 'CANCELLED' && t.pickupPointId === (memberFallback.pickupPointId ?? trip.pickupPointId),
+        ) ?? trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
+      const pickup = memberFallback.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
+      const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+      if (!pickup || !returnPoint)
+        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+
+      const eligibleStatus =
+        memberFallback.status === 'ACTIVE' &&
+        !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
+      const contextVersion = hashVersion({
+        tripVersion: trip.version,
+        memberVersion: memberFallback.version,
+        transportVersion: transport?.version ?? 0,
+        pickupUpdatedAt: pickup.updatedAt,
+        returnUpdatedAt: returnPoint.updatedAt,
+      })
+
+      return {
+        userId,
+        membershipRef: memberFallback.id,
+        membershipStatus: memberFallback.status,
+        membershipRole: memberFallback.role,
+        rentalEligible: eligibleStatus,
+        ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
+        bookingId: null,
+        trip: tripContext,
+        recipientOptions: [
+          {
+            memberId: memberFallback.id,
+            userId: memberFallback.userId,
+            displayName: memberFallback.user.fullName,
+            phone: memberFallback.user.phone,
+            status: memberFallback.status,
           },
+        ],
+        pickup: {
+          id: pickup.id,
+          name: pickup.name,
+          address: pickup.address,
+          scheduledAt: transport?.meetingAt ?? trip.startAt,
         },
-      },
-    })
-    if (!member) return null
-    const trip = member.trip
-    const transport =
-      trip.tripTransportsViaTripId.find(
-        (t) => t.status !== 'CANCELLED' && t.pickupPointId === (member.pickupPointId ?? trip.pickupPointId),
-      ) ?? trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
-    const pickup = member.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
-    const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
-    if (!pickup || !returnPoint)
-      throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
-    const weather = trip.weatherSnapshotsViaTripId[0]
-    const eligibleStatus =
-      member.status === 'ACTIVE' &&
-      !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
-    const contextVersion = hashVersion({
-      tripVersion: trip.version,
-      memberVersion: member.version,
-      transportVersion: transport?.version ?? 0,
-      pickupUpdatedAt: pickup.updatedAt,
-      returnUpdatedAt: returnPoint.updatedAt,
-    })
-    return {
-      userId,
-      membershipRef: member.id,
-      membershipStatus: member.status,
-      membershipRole: member.role,
-      rentalEligible: eligibleStatus,
-      ineligibleReason: eligibleStatus ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE',
-      bookingId: null,
-      trip: {
-        id: trip.id,
-        name: trip.title,
-        status: trip.status,
-        tripType: trip.tripType,
-        startAt: trip.startAt,
-        endAt: trip.endAt,
-        timezone: process.env.TREKGO_TIMEZONE ?? 'Asia/Ho_Chi_Minh',
-        difficulty: trip.tripTrailPlansViaTripId[0]?.snapshotDifficulty ?? null,
-        weatherSummary: weather?.riskSummary ?? weather?.weatherCondition ?? null,
-        rainProbabilityPercent: weather?.rainProbabilityPercent == null ? null : Number(weather.rainProbabilityPercent),
-      },
-      recipientOptions: [
-        {
-          memberId: member.id,
-          userId: member.userId,
-          displayName: member.user.fullName,
-          phone: member.user.phone,
-          status: member.status,
+        dropoff: {
+          id: returnPoint.id,
+          name: returnPoint.name,
+          address: returnPoint.address,
+          scheduledAt: transport?.returnAt ?? trip.endAt,
         },
-      ],
-      pickup: {
-        id: pickup.id,
-        name: pickup.name,
-        address: pickup.address,
-        scheduledAt: transport?.meetingAt ?? trip.startAt,
-      },
-      dropoff: {
-        id: returnPoint.id,
-        name: returnPoint.name,
-        address: returnPoint.address,
-        scheduledAt: transport?.returnAt ?? trip.endAt,
-      },
-      // No invented post-Trip delivery options in the DB bridge. Area A must publish options to enable longer rentals.
-      returnOptions: [],
-      rentalCutoffAt: new Date(
-        (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
-      ),
-      contextVersion,
-      existingOpenOrderId: existing?.id ?? null,
-      activePolicy,
+        returnOptions: [],
+        rentalCutoffAt: new Date(
+          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
+        ),
+        contextVersion,
+        existingOpenOrderId: existing?.id ?? null,
+        activePolicy,
+      }
     }
+
+    // Không tìm thấy tư cách thành viên nào trong chuyến đi
+    return null
   }
 }
