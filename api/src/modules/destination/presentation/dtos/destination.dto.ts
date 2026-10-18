@@ -17,6 +17,35 @@ export const GetDestinationsQuerySchema = z.object({
 })
 export type GetDestinationsQueryDto = z.infer<typeof GetDestinationsQuerySchema>
 
+export const CreatePickupPointItemSchema = z.object({
+  name: z
+    .string({ message: 'Tên điểm tập kết là bắt buộc' })
+    .trim()
+    .min(1, 'Tên điểm tập kết không được để trống')
+    .max(200, 'Tên điểm tập kết tối đa 200 ký tự'),
+  address: z
+    .string({ message: 'Địa chỉ điểm tập kết là bắt buộc' })
+    .trim()
+    .min(1, 'Địa chỉ điểm tập kết không được để trống'),
+  latitude: z.coerce
+    .number({ message: 'Vĩ độ điểm tập kết là bắt buộc' })
+    .min(-90, 'Vĩ độ phải từ -90 đến 90')
+    .max(90, 'Vĩ độ phải từ -90 đến 90'),
+  longitude: z.coerce
+    .number({ message: 'Kinh độ điểm tập kết là bắt buộc' })
+    .min(-180, 'Kinh độ phải từ -180 đến 180')
+    .max(180, 'Kinh độ phải từ -180 đến 180'),
+  code: z.string().trim().max(50, 'Mã điểm đón tối đa 50 ký tự').nullable().optional(),
+  note: z.string().trim().max(1000, 'Ghi chú tối đa 1000 ký tự').nullable().optional(),
+  status: z.nativeEnum(RecordStatus).default(RecordStatus.ACTIVE).optional(),
+})
+export type CreatePickupPointItemDto = z.infer<typeof CreatePickupPointItemSchema>
+
+export const UpdatePickupPointItemSchema = CreatePickupPointItemSchema.extend({
+  id: z.string().uuid('ID điểm tập kết phải là UUID hợp lệ').optional(),
+})
+export type UpdatePickupPointItemDto = z.infer<typeof UpdatePickupPointItemSchema>
+
 export const CreateDestinationSchema = z.object({
   name: z
     .string({ message: 'Tên địa danh là bắt buộc' })
@@ -38,8 +67,40 @@ export const CreateDestinationSchema = z.object({
     .nullable()
     .optional(),
   status: z.nativeEnum(RecordStatus).default(RecordStatus.ACTIVE).optional(),
+  pickupPoints: z.array(CreatePickupPointItemSchema).optional(),
 })
 export type CreateDestinationDto = z.infer<typeof CreateDestinationSchema>
+
+export class CreatePickupPointItemRequestDto implements CreatePickupPointItemDto {
+  @ApiProperty({ example: 'Bến xe Mỹ Đình', description: 'Tên điểm tập kết / đón trả khách' })
+  name!: string
+
+  @ApiProperty({ example: '20 Phạm Hùng, Mỹ Đình 2, Nam Từ Liêm, Hà Nội', description: 'Địa chỉ đón' })
+  address!: string
+
+  @ApiProperty({ example: 21.0285, description: 'Vĩ độ' })
+  latitude!: number
+
+  @ApiProperty({ example: 105.7781, description: 'Kinh độ' })
+  longitude!: number
+
+  @ApiPropertyOptional({ example: 'PKP-MYDINH', description: 'Mã định danh (tự sinh nếu để trống)' })
+  code?: string | null
+
+  @ApiPropertyOptional({ example: 'Tập trung tại cổng số 2 lúc 5h30 sáng' })
+  note?: string | null
+
+  @ApiPropertyOptional({ enum: RecordStatus, default: RecordStatus.ACTIVE })
+  status?: RecordStatus
+}
+
+export class UpdatePickupPointItemRequestDto
+  extends CreatePickupPointItemRequestDto
+  implements UpdatePickupPointItemDto
+{
+  @ApiPropertyOptional({ example: 'e8a1d7f1-0000-4000-8000-000000000001', description: 'UUID điểm đón đã có' })
+  id?: string
+}
 
 // Class dùng riêng cho Swagger UI hiển thị form nhập của Create:
 export class CreateDestinationRequestDto implements CreateDestinationDto {
@@ -60,10 +121,16 @@ export class CreateDestinationRequestDto implements CreateDestinationDto {
 
   @ApiPropertyOptional({ enum: RecordStatus, default: RecordStatus.ACTIVE })
   status?: RecordStatus
+
+  @ApiPropertyOptional({ type: [CreatePickupPointItemRequestDto], description: 'Danh sách điểm tập kết ban đầu' })
+  pickupPoints?: CreatePickupPointItemDto[]
 }
 
-
-export const UpdateDestinationSchema = CreateDestinationSchema.partial()
+export const UpdateDestinationSchema = CreateDestinationSchema.omit({ pickupPoints: true })
+  .partial()
+  .extend({
+    pickupPoints: z.array(UpdatePickupPointItemSchema).optional(),
+  })
 export type UpdateDestinationDto = z.infer<typeof UpdateDestinationSchema>
 
 export class UpdateDestinationRequestDto implements UpdateDestinationDto {
@@ -84,10 +151,46 @@ export class UpdateDestinationRequestDto implements UpdateDestinationDto {
 
   @ApiPropertyOptional({ enum: RecordStatus })
   status?: RecordStatus
+
+  @ApiPropertyOptional({ type: [UpdatePickupPointItemRequestDto], description: 'Danh sách điểm tập kết cập nhật' })
+  pickupPoints?: UpdatePickupPointItemDto[]
 }
 
-
 // Response
+export class PickupPointResponseDto {
+  @ApiProperty({ example: 'p1000000-0000-0000-0000-000000000001', description: 'UUID điểm tập kết' })
+  id!: string
+
+  @ApiPropertyOptional({ example: 'd1000000-0000-0000-0000-000000000001' })
+  destinationId?: string | null
+
+  @ApiProperty({ example: 'PKP-MYDINH', description: 'Mã định danh' })
+  code!: string
+
+  @ApiProperty({ example: 'Bến xe Mỹ Đình', description: 'Tên điểm tập kết' })
+  name!: string
+
+  @ApiProperty({ example: '20 Phạm Hùng, Mỹ Đình 2, Nam Từ Liêm, Hà Nội' })
+  address!: string
+
+  @ApiProperty({ example: 21.0285 })
+  latitude!: number
+
+  @ApiProperty({ example: 105.7781 })
+  longitude!: number
+
+  @ApiPropertyOptional({ example: 'Tập trung lúc 5h30 sáng' })
+  note?: string | null
+
+  @ApiProperty({ enum: RecordStatus, example: RecordStatus.ACTIVE })
+  status!: RecordStatus
+
+  @ApiProperty({ example: '2026-03-01T08:00:00.000Z' })
+  createdAt!: Date
+
+  @ApiProperty({ example: '2026-03-01T08:00:00.000Z' })
+  updatedAt!: Date
+}
 
 export class DestinationResponseDto {
   @ApiProperty({ example: 'd1000000-0000-0000-0000-000000000001', description: 'UUID điểm đến' })
@@ -113,6 +216,12 @@ export class DestinationResponseDto {
 
   @ApiPropertyOptional({ example: 3, description: 'Số lượng cung đường trực thuộc' })
   trailCount?: number
+
+  @ApiPropertyOptional({ example: 2, description: 'Số lượng điểm tập kết trực thuộc' })
+  pickupPointCount?: number
+
+  @ApiPropertyOptional({ type: [PickupPointResponseDto], description: 'Danh sách các điểm tập kết' })
+  pickupPoints?: PickupPointResponseDto[]
 
   @ApiProperty({ example: '2026-03-01T08:00:00.000Z' })
   createdAt!: Date
