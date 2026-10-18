@@ -3,6 +3,7 @@ import { seedCategories } from './seeds/category.seed';
 import { seedInventoryLocations } from './seeds/inventory-location.seed';
 import { seedRentalProducts } from './seeds/rental-product.seed';
 import { seedRentalPolicy } from './seeds/rental-policy.seed';
+import { seedBookingPolicies } from './seeds/booking-policy.seed';
 
 const prisma = new PrismaClient();
 
@@ -13,6 +14,7 @@ async function main() {
   await seedInventoryLocations(prisma);
   await seedRentalProducts(prisma);
   await seedRentalPolicy(prisma);
+  await seedBookingPolicies(prisma);
   
   console.log('All seeding finished.');
 }

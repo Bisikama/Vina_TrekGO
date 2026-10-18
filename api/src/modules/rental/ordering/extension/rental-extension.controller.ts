@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 import { AuthType } from 'src/shared/constants/auth.constant'
@@ -20,6 +20,7 @@ const Confirm = z
     extensionQuoteId: z.string().uuid(),
     expectedVersion: z.number().int().positive(),
     acceptedTermsVersion: z.string().min(1).max(40),
+    termsHash: z.string().length(64).optional(),
   })
   .strict()
 function key(value?: string) {
@@ -34,8 +35,9 @@ export class RentalExtensionController {
   constructor(private readonly service: RentalExtensionService) {}
 
   @Post(':id/extension-quotes')
+  @HttpCode(HttpStatus.OK)
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Tạo báo giá gia hạn thuê',
     description: `
@@ -94,7 +96,7 @@ Tạo báo giá cho việc gia hạn thời gian thuê thiết bị.
 
   @Post(':id/extensions')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Xác nhận gia hạn đơn thuê',
     description: `
@@ -170,12 +172,13 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
       body.expectedVersion,
       key(rawKey),
       body.acceptedTermsVersion,
+      body.termsHash,
     )
   }
 
   @Get(':id/extensions')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Lịch sử gia hạn của đơn thuê',
     description: `

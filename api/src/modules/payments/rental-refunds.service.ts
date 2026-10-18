@@ -11,40 +11,68 @@ export type DepositRefundCommand = {
   businessActionId: string
   amount: string
   idempotencyKey: string
-  source: { depositSettlementId: string; depositSettlementItemId: string }
+  source: {
+    depositSettlementId: string
+    depositSettlementItemId?: string
+    depositSettlementItemIds?: string[]
+  }
   allocations: { paymentAllocationId: string; amount: string }[]
+  itemAllocations?: { depositSettlementItemId: string; amount: string }[]
 }
 
 @Injectable()
 export class RentalRefundsService {
   constructor(private readonly db: PrismaService) {}
+
   async reserve(input: DepositRefundCommand) {
-    const action = `deposit-item:${input.source.depositSettlementItemId}:refund:v1`
-    if (
-      input.businessActionId !== action ||
-      input.allocations.length !== 1 ||
-      input.allocations[0].amount !== input.amount
-    )
-      throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+    const itemAllocations =
+      input.itemAllocations && input.itemAllocations.length > 0
+        ? input.itemAllocations
+        : input.source.depositSettlementItemId
+          ? [{ depositSettlementItemId: input.source.depositSettlementItemId, amount: input.amount }]
+          : []
+    if (itemAllocations.length === 0) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+    const amountDecimal = new Prisma.Decimal(input.amount)
+    if (!amountDecimal.isPositive()) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+    const sumAllocations = input.allocations.reduce((sum, a) => sum.plus(a.amount), new Prisma.Decimal(0))
+    if (!sumAllocations.equals(amountDecimal)) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+    const sumItemAllocations = itemAllocations.reduce((sum, a) => sum.plus(a.amount), new Prisma.Decimal(0))
+    if (!sumItemAllocations.equals(amountDecimal)) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
     const requestHash = paymentHash({ ...input, idempotencyKey: undefined })
     const key = paymentHash(['refund', input.paymentId, input.idempotencyKey])
+
     return this.db.$transaction(async (tx) => {
-      const initial = await tx.depositSettlementItem.findUnique({
-        where: { id: input.source.depositSettlementItemId },
+      const itemIds = itemAllocations.map((a) => a.depositSettlementItemId)
+      const initialItems = await tx.depositSettlementItem.findMany({
+        where: { id: { in: itemIds } },
         include: { settlement: true },
       })
-      if (!initial) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
-      await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${initial.settlement.orderId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id=${initial.settlementId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id=${initial.settlementId}::uuid ORDER BY id FOR UPDATE`
-      const item = await tx.depositSettlementItem.findUniqueOrThrow({
-        where: { id: initial.id },
+      if (initialItems.length !== itemIds.length) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+      const settlementId = initialItems[0].settlementId
+      const orderId = initialItems[0].settlement.orderId
+      if (initialItems.some((i) => i.settlementId !== settlementId || i.settlement.orderId !== orderId))
+        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+      if (input.source.depositSettlementId !== settlementId)
+        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+      await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${orderId}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id=${settlementId}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id=${settlementId}::uuid ORDER BY id FOR UPDATE`
+
+      const items = await tx.depositSettlementItem.findMany({
+        where: { id: { in: itemIds } },
         include: {
           settlement: { include: { order: true } },
           assignment: { include: { orderLine: true } },
           inspection: true,
         },
       })
+
       const p = await tx.payment.findUnique({ where: { id: input.paymentId } })
       if (!p) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
       await tx.$queryRaw`SELECT id FROM invoices WHERE id=${p.invoiceId}::uuid FOR UPDATE`
@@ -54,26 +82,15 @@ export class RentalRefundsService {
         where: { id: p.id },
         include: { invoice: true, application: true, allocations: true },
       })
-      const line = item.assignment.orderLine
-      if (
-        item.settlementId !== initial.settlementId ||
-        item.settlement.orderId !== initial.settlement.orderId ||
-        input.source.depositSettlementId !== item.settlementId ||
-        line.orderId !== item.settlement.orderId ||
-        item.assignment.equipmentUnitId !== item.unitId ||
-        payment.invoiceId !== p.invoiceId ||
-        payment.invoice.invoiceType !== 'RENTAL' ||
-        payment.invoice.rentalOrderId !== line.orderId ||
-        payment.invoice.userId !== item.settlement.order.userId ||
-        item.settlement.rentalPolicyId !== item.settlement.order.rentalPolicyId
-      )
-        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
       const previous = await tx.refund.findFirst({
         where: {
           OR: [
             { idempotencyKey: key },
-            { depositSettlementItemId: item.id },
-            { paymentId: p.id, businessActionId: action },
+            { paymentId: p.id, businessActionId: input.businessActionId },
+            ...(itemAllocations.length === 1
+              ? [{ depositSettlementItemId: itemAllocations[0].depositSettlementItemId }]
+              : []),
           ],
         },
       })
@@ -82,7 +99,7 @@ export class RentalRefundsService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return previous
       }
-      const allocation = payment.allocations.find((a) => a.id === input.allocations[0].paymentAllocationId)
+
       if (
         payment.status !== 'SUCCEEDED' ||
         payment.application?.status !== 'APPLIED' ||
@@ -92,29 +109,37 @@ export class RentalRefundsService {
         !payment.merchantAccountKey ||
         !payment.merchantRequestRef ||
         payment.currency !== 'VND' ||
-        item.settlement.order.currency !== 'VND' ||
-        !['RETURN_PENDING', 'RETURN_PROCESSING', 'COMPLETED'].includes(item.settlement.order.status) ||
-        !item.approvedAt ||
-        !item.approvedBy ||
-        !item.decisionSnapshot ||
-        !['DEDUCTION_APPROVED', 'DEDUCTION_REJECTED', 'REFUND_PENDING'].includes(item.status) ||
-        !item.inspection ||
-        ['ISSUE', 'MISSING_PENDING_REVIEW'].includes(item.inspection.outcome) ||
-        item.inspection.orderId !== line.orderId ||
-        item.inspection.assignmentId !== item.assignmentId ||
-        item.inspection.unitId !== item.unitId ||
-        !item.depositAmount.equals(line.depositPerUnitSnapshot) ||
-        !item.deductionAmount.plus(item.refundAmount).equals(item.depositAmount) ||
-        !item.refundAmount.equals(input.amount) ||
-        !allocation ||
-        allocation.rentalOrderLineId !== line.id ||
-        allocation.component !== 'RENTAL_DEPOSIT' ||
-        !allocation.amount.equals(line.lineDeposit) ||
-        !payment.allocations.reduce((n, a) => n.plus(a.amount), new Prisma.Decimal(0)).equals(payment.amount) ||
-        (await tx.refund.findFirst({ where: { paymentId: p.id, reconcileStatus: 'NEEDS_REVIEW' } })) ||
-        (await tx.rentalExceptionCase.findFirst({
+        payment.invoice.invoiceType !== 'RENTAL' ||
+        payment.invoice.rentalOrderId !== orderId ||
+        payment.invoice.userId !== items[0].settlement.order.userId
+      )
+        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+      for (const item of items) {
+        const line = item.assignment.orderLine
+        const itemAlloc = itemAllocations.find((a) => a.depositSettlementItemId === item.id)!
+        if (
+          line.orderId !== orderId ||
+          item.assignment.equipmentUnitId !== item.unitId ||
+          !['RETURN_PENDING', 'RETURN_PROCESSING', 'COMPLETED'].includes(item.settlement.order.status) ||
+          !item.approvedAt ||
+          !item.approvedBy ||
+          !item.decisionSnapshot ||
+          !['DEDUCTION_APPROVED', 'DEDUCTION_REJECTED', 'REFUND_PENDING'].includes(item.status) ||
+          !item.inspection ||
+          ['ISSUE', 'MISSING_PENDING_REVIEW'].includes(item.inspection.outcome) ||
+          item.inspection.orderId !== orderId ||
+          item.inspection.assignmentId !== item.assignmentId ||
+          item.inspection.unitId !== item.unitId ||
+          !item.depositAmount.equals(line.depositPerUnitSnapshot) ||
+          !item.deductionAmount.plus(item.refundAmount).equals(item.depositAmount) ||
+          !item.refundAmount.equals(itemAlloc.amount)
+        )
+          throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+        const openCase = await tx.rentalExceptionCase.findFirst({
           where: {
-            orderId: line.orderId,
+            orderId,
             status: { in: ['OPEN', 'UNDER_REVIEW'] },
             OR: [
               { assignmentId: item.assignmentId },
@@ -122,35 +147,42 @@ export class RentalRefundsService {
               { assignmentId: null, inspectionId: null },
             ],
           },
-        }))
-      )
-        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
-      // Per-unit approval keeps deductions and every other held/reviewed item's deposit unavailable.
-      const siblings = await tx.depositSettlementItem.findMany({ where: { assignment: { orderLineId: line.id } } })
-      if (
-        siblings.length > line.quantity ||
-        siblings.some((s) => !s.depositAmount.equals(line.depositPerUnitSnapshot)) ||
-        siblings.reduce((n, s) => n.plus(s.depositAmount), new Prisma.Decimal(0)).gt(allocation.amount)
-      )
-        throw AppError.fromCode(E.REFUND_AMOUNT_EXCEEDED)
+        })
+        if (openCase) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+        const existingAlloc = await tx.depositRefundItemAllocation.findFirst({
+          where: {
+            depositSettlementItemId: item.id,
+            refund: { status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
+          },
+        })
+        if (existingAlloc) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+      }
+
+      for (const allocInput of input.allocations) {
+        const alloc = payment.allocations.find((a) => a.id === allocInput.paymentAllocationId)
+        if (!alloc || alloc.component !== 'RENTAL_DEPOSIT') throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+        const existingRefundAllocations = await tx.refundAllocation.aggregate({
+          where: {
+            paymentAllocationId: alloc.id,
+            refund: { status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
+          },
+          _sum: { amount: true },
+        })
+        const alreadyAllocated = existingRefundAllocations._sum.amount ?? new Prisma.Decimal(0)
+        if (alreadyAllocated.plus(allocInput.amount).gt(alloc.amount)) {
+          throw AppError.fromCode(E.REFUND_AMOUNT_EXCEEDED)
+        }
+      }
+
       const reserved = await tx.refund.aggregate({
         where: { paymentId: p.id, status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
         _sum: { amount: true },
       })
-      const allocated = await tx.refundAllocation.aggregate({
-        where: {
-          paymentAllocationId: allocation.id,
-          refund: { status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
-        },
-        _sum: { amount: true },
-      })
-      const deductions = siblings.reduce((n, s) => n.plus(s.deductionAmount), new Prisma.Decimal(0))
-      const amount = new Prisma.Decimal(input.amount)
-      if (
-        amount.gt(payment.amount.minus(reserved._sum.amount ?? 0)) ||
-        amount.gt(allocation.amount.minus(allocated._sum.amount ?? 0).minus(deductions))
-      )
+      if (amountDecimal.gt(payment.amount.minus(reserved._sum.amount ?? 0))) {
         throw AppError.fromCode(E.REFUND_AMOUNT_EXCEEDED)
+      }
+
       const id = randomUUID()
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
       const refund = await tx.refund.create({
@@ -158,11 +190,12 @@ export class RentalRefundsService {
           id,
           paymentId: p.id,
           purpose: 'DEPOSIT',
-          businessActionId: action,
-          amount,
+          businessActionId: input.businessActionId,
+          amount: amountDecimal,
           currency: payment.currency,
-          depositSettlementId: item.settlementId,
-          depositSettlementItemId: item.id,
+          depositSettlementId: settlementId,
+          depositSettlementItemId:
+            itemAllocations.length === 1 ? itemAllocations[0].depositSettlementItemId : null,
           idempotencyKey: key,
           requestHash,
           requestHashVersion: 1,
@@ -172,17 +205,31 @@ export class RentalRefundsService {
           merchantRefundRef: `refund:${id}`,
           reconcileStatus: 'SCHEDULED',
           nextRetryAt: now,
-          allocations: { create: { paymentAllocationId: allocation.id, amount } },
+          allocations: {
+            create: input.allocations.map((a) => ({
+              paymentAllocationId: a.paymentAllocationId,
+              amount: new Prisma.Decimal(a.amount),
+            })),
+          },
+          depositRefundItems: {
+            create: itemAllocations.map((a) => ({
+              depositSettlementItemId: a.depositSettlementItemId,
+              amount: new Prisma.Decimal(a.amount),
+            })),
+          },
         },
       })
-      await tx.depositSettlementItem.update({
-        where: { id: item.id },
+
+      await tx.depositSettlementItem.updateMany({
+        where: { id: { in: itemIds } },
         data: { status: 'REFUND_PENDING', version: { increment: 1 } },
       })
+
       await tx.rentalOrder.update({
-        where: { id: line.orderId },
+        where: { id: orderId },
         data: { financialStatus: 'REFUND_PENDING', version: { increment: 1 } },
       })
+
       return refund
     })
   }

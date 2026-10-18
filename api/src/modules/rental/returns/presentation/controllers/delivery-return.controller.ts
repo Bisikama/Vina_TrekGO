@@ -13,12 +13,17 @@ import { RentalReturnIdempotencyKeySchema, ReturnIdParamSchema, ReturnToInventor
 
 @ApiTags('Rental Return Delivery')
 @ApiBearerAuth('bearer')
-@Controller('delivery/tasks')
+@Controller(['delivery/tasks', 'logistics/tasks'])
 @Auth([AuthType.Bearer])
 export class DeliveryReturnController {
   constructor(private readonly useCase: ReturnToInventoryLocationUseCase) {}
 
-  @Post(':returnId/return-to-inventory-location')
+  @Post([
+    ':returnId/return-to-inventory-location',
+    ':id/return-to-inventory-location',
+    ':returnId/return-to-warehouse',
+    ':id/return-to-warehouse',
+  ])
   @Roles(UserRole.STAFF_DELIVERY)
   @HttpCode(200)
   @ApiOperation({
