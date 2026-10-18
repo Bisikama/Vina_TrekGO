@@ -1,54 +1,74 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { privateTripsApi, type PrivateTrip, type PrivateSource, type PrivateInput } from "../services/private-trips.api";
+import useSWR from "swr";
+import { privateTripsApi, type PrivateTrip, type PrivateInput } from "../services/private-trips.api";
+import { useStaticDataStore } from "@/lib/staticDataStore";
 
 export function usePrivateTrips() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [trips, setTrips] = useState<PrivateTrip[]>([]);
-  const [sources, setSources] = useState<PrivateSource[]>([]);
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+
+  const {
+    data: swrTrips,
+    error: swrError,
+    isLoading: swrLoading,
+    mutate: mutateTrips,
+  } = useSWR<PrivateTrip[]>(
+    "private-trips",
+    () => privateTripsApi.list(),
+    {
+      revalidateOnFocus: true,
+      dedupingInterval: 5000,
+      keepPreviousData: true,
+    }
+  );
+
+  const sources = useStaticDataStore((s) => s.privateSources);
+  const loadPrivateSources = useStaticDataStore((s) => s.loadPrivateSources);
+  const loadPickupsForDestination = useStaticDataStore((s) => s.loadPickupsForDestination);
+
   const [pickups, setPickups] = useState<{ id: string; name: string }[]>([]);
   const [trip, setTrip] = useState<PrivateTrip | null>(null);
 
+  const trips = swrTrips || [];
+
   const loadTrips = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+    setMutationError(null);
     try {
-      const data = await privateTripsApi.list();
-      setTrips(data);
+      await mutateTrips();
     } catch (err: any) {
-      setError(err?.response?.data?.error?.message || err?.response?.data?.message || "Không thể tải danh sách chuyến riêng.");
-    } finally {
-      setBusy(false);
+      setMutationError(
+        err?.response?.data?.error?.message ||
+          err?.response?.data?.message ||
+          "Không thể tải danh sách chuyến riêng."
+      );
     }
-  }, []);
+  }, [mutateTrips]);
 
   const loadSources = useCallback(async () => {
-    setBusy(true);
     try {
-      const data = await privateTripsApi.sources();
-      setSources(data);
+      await loadPrivateSources();
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể tải danh sách tuyến đường.");
-    } finally {
-      setBusy(false);
+      setMutationError(err?.response?.data?.message || "Không thể tải danh sách tuyến đường.");
     }
-  }, []);
+  }, [loadPrivateSources]);
 
-  const loadPickups = useCallback(async (destinationId: string) => {
-    try {
-      const data = await privateTripsApi.pickups(destinationId);
-      setPickups(data);
-    } catch (err: any) {
-      console.error(err);
-    }
-  }, []);
+  const loadPickups = useCallback(
+    async (destinationId: string) => {
+      try {
+        const data = await loadPickupsForDestination(destinationId);
+        setPickups(data);
+      } catch (err: any) {
+        console.error(err);
+      }
+    },
+    [loadPickupsForDestination]
+  );
 
   const getById = useCallback(async (id: string) => {
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const detail = await privateTripsApi.getById(id);
       setTrip(detail);
@@ -56,67 +76,67 @@ export function usePrivateTrips() {
         await loadPickups(detail.destinationId);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể tải chi tiết chuyến đi.");
+      setMutationError(err?.response?.data?.message || "Không thể tải chi tiết chuyến đi.");
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   }, [loadPickups]);
 
   const create = async (input: PrivateInput & { type: 'PERSONAL' | 'SYSTEM'; trailRef: string; destinationId: string; checkpointIds: string[] }) => {
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const created = await privateTripsApi.create(input);
       setTrip(created);
-      await loadTrips();
+      await mutateTrips();
       return created;
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message || err?.response?.data?.message || "Không thể tạo chuyến riêng.";
       const details = err?.response?.data?.error?.details;
       const detailStr = details ? " (Chi tiết: " + JSON.stringify(details) + ")" : "";
-      setError(msg + detailStr);
+      setMutationError(msg + detailStr);
       return null;
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   };
 
   const update = async (input: PrivateInput) => {
     if (!trip) return;
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const updated = await privateTripsApi.update(trip, input);
       setTrip(updated);
-      await loadTrips();
+      await mutateTrips();
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể cập nhật chuyến riêng.");
+      setMutationError(err?.response?.data?.message || "Không thể cập nhật chuyến riêng.");
       throw err;
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   };
 
   const cancel = async (targetTrip: PrivateTrip, reason: string) => {
     if (!targetTrip) return;
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const updated = await privateTripsApi.cancel(targetTrip, reason);
       if (trip && trip.id === targetTrip.id) setTrip(updated);
-      await loadTrips();
+      await mutateTrips();
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể huỷ chuyến riêng.");
+      setMutationError(err?.response?.data?.message || "Không thể huỷ chuyến riêng.");
       throw err;
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   };
 
   const invite = async (targetTrip: PrivateTrip, expiresAt?: string) => {
     if (!targetTrip) return;
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const data = await privateTripsApi.invite(targetTrip, expiresAt);
       if (trip && trip.id === targetTrip.id) {
@@ -124,31 +144,37 @@ export function usePrivateTrips() {
       }
       return data;
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể tạo lời mời.");
+      setMutationError(err?.response?.data?.message || "Không thể tạo lời mời.");
       throw err;
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   };
 
   const revoke = async () => {
     if (!trip) return;
-    setBusy(true);
-    setError(null);
+    setMutationBusy(true);
+    setMutationError(null);
     try {
       const updated = await privateTripsApi.revoke(trip);
       setTrip(updated);
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Không thể thu hồi lời mời.");
+      setMutationError(err?.response?.data?.message || "Không thể thu hồi lời mời.");
       throw err;
     } finally {
-      setBusy(false);
+      setMutationBusy(false);
     }
   };
 
+  const swrErrorMessage = swrError
+    ? (swrError as any)?.response?.data?.error?.message ||
+      (swrError as any)?.response?.data?.message ||
+      "Không thể tải danh sách chuyến riêng."
+    : null;
+
   return {
-    busy,
-    error,
+    busy: mutationBusy || (swrLoading && !swrTrips),
+    error: mutationError || swrErrorMessage,
     trips,
     trip,
     sources,
