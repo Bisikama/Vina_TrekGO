@@ -6,25 +6,29 @@ import { usePrivateTrips } from "@/features/trips/hooks/usePrivateTrips";
 import Link from "next/link";
 import { PrivateTripMap } from "./PrivateTripMap";
 import { usePrivateTripMembership } from "@/features/trips/hooks/usePrivateTripMembership";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initialTrip: any, initialPickups?: any[] }) {
+  const { user } = useAuth();
   const { busy, invite, cancel } = usePrivateTrips();
   const [inviteCode, setInviteCode] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [trip, setTrip] = useState(initialTrip);
+  const [memberStatusFilter, setMemberStatusFilter] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
 
   // Lấy tên thay vì ID (sử dụng initialPickups lấy từ server)
   const pickupName = initialPickups?.find(p => p.id === trip?.pickupPointId)?.name || trip?.pickupPointId || "Đang tải...";
 
-  const { members, loadMembers, removeMember } = usePrivateTripMembership();
+  const { members, activeMemberCount, busy: membersBusy, loadMembers, removeMember } = usePrivateTripMembership();
+  const isHost = !user?.id || !trip?.hostId || user.id === trip.hostId;
   
   React.useEffect(() => {
     if (trip?.id) {
-      loadMembers(trip.id, { status: 'ACTIVE' });
+      loadMembers(trip.id, { status: memberStatusFilter, pageSize: 50 });
     }
-  }, [trip?.id, loadMembers]);
+  }, [trip?.id, memberStatusFilter, loadMembers]);
 
   if (!trip) {
     return (
@@ -262,10 +266,13 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                 <h4 className="text-sm font-bold text-gray-900">Quy mô nhóm</h4>
               </div>
               <div className="mt-auto">
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-4xl font-black text-emerald-600">{trip.maxPax}</span>
-                  <span className="text-sm font-bold text-gray-400">người</span>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-3xl font-black text-emerald-600">{activeMemberCount || members.filter(m => m.status === 'ACTIVE').length}</span>
+                  <span className="text-lg font-bold text-gray-400">/ {trip.maxPax} người</span>
                 </div>
+                <p className="text-[11px] text-gray-500">
+                  Đang tham gia: <span className="font-bold text-emerald-700">{activeMemberCount || members.filter(m => m.status === 'ACTIVE').length}</span> tài khoản · Sức chứa tối đa: <span className="font-bold text-gray-700">{trip.maxPax}</span>
+                </p>
               </div>
             </div>
 
@@ -289,26 +296,83 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
 
             {/* Card 4: Participants */}
             <div className="bg-white p-5 rounded-3xl border border-gray-200/60 shadow-sm hover:border-emerald-200 transition-all flex flex-col sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-indigo-50 rounded-xl text-indigo-600 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                </div>
-                <h4 className="text-sm font-bold text-gray-900">Thành viên ({members.length})</h4>
-              </div>
-              <div className="mt-2 space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                {members.length > 0 ? members.map(m => (
-                  <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 overflow-hidden">
-                        {m.user?.avatarUrl ? <img src={m.user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : m.user?.fullName?.charAt(0) || "?"}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900 line-clamp-1">{m.user?.fullName}</p>
-                        <p className="text-[10px] font-medium text-gray-500">{m.role === 'HOST' ? 'Trưởng đoàn' : 'Thành viên'}</p>
-                      </div>
-                    </div>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-xl text-indigo-600 flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                   </div>
-                )) : (
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Tài khoản tham gia ({members.length})</h4>
+                    <p className="text-[11px] text-gray-500">Danh sách tài khoản thành viên trong chuyến đi</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setMemberStatusFilter('ACTIVE')}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${memberStatusFilter === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'}`}
+                  >
+                    Đang tham gia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMemberStatusFilter('ALL')}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${memberStatusFilter === 'ALL' ? 'bg-white text-emerald-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'}`}
+                  >
+                    Tất cả
+                  </button>
+                </div>
+              </div>
+              <div className="mt-1 space-y-2.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+                {members.length > 0 ? members.map(m => {
+                  const accountName = m.displayName || m.user?.fullName || `Tài khoản #${m.userId?.slice(0, 8)}`;
+                  const avatarUrl = m.user?.avatarUrl;
+                  const canKick = isHost && m.role !== 'HOST' && m.status === 'ACTIVE' && trip.status === 'OPEN';
+                  return (
+                    <div key={m.id} className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-emerald-200/70 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-800 overflow-hidden shrink-0">
+                          {avatarUrl ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : accountName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-bold text-gray-900 truncate">{accountName}</p>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${m.role === 'HOST' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-50 text-indigo-700'}`}>
+                              {m.role === 'HOST' ? 'Trưởng đoàn' : 'Thành viên'}
+                            </span>
+                            {m.status !== 'ACTIVE' && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-200 text-gray-600">
+                                {m.status === 'LEFT' ? 'Đã rời' : 'Đã xoá'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] font-medium text-gray-500 truncate mt-0.5">
+                            ID tài khoản: <span className="font-mono text-gray-700">{m.userId?.slice(0, 8)}</span>
+                            {m.joinedAt && ` • Tham gia: ${new Date(m.joinedAt).toLocaleDateString('vi-VN')}`}
+                          </p>
+                        </div>
+                      </div>
+                      {canKick && (
+                        <button
+                          type="button"
+                          disabled={membersBusy}
+                          onClick={async () => {
+                            if (confirm(`Bạn có chắc muốn loại tài khoản "${accountName}" khỏi chuyến đi?`)) {
+                              try {
+                                await removeMember(trip.id, m.id, m.version);
+                              } catch (err) {
+                                // Handled by hook
+                              }
+                            }
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-bold text-red-600 bg-white border border-red-200 hover:bg-red-50 rounded-lg shrink-0 transition cursor-pointer disabled:opacity-50"
+                        >
+                          Loại
+                        </button>
+                      )}
+                    </div>
+                  );
+                }) : (
                   <p className="text-xs text-center text-gray-500 py-4">Chưa có thành viên nào.</p>
                 )}
               </div>

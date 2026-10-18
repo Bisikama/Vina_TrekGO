@@ -12,7 +12,7 @@ const BasicForm = ({ trip, destinations, pickups, busy, onDestination, onSave }:
   const [destination, setDestination] = useState(trip?.destinationId || '');
   return <form onSubmit={e => {
     e.preventDefault(); const form = new FormData(e.currentTarget);
-    onSave({ title: String(form.get('title')), description: String(form.get('description')), destinationId: destination,
+    onSave({ title: String(form.get('title')), description: String(form.get('description')), priceExplanation: String(form.get('priceExplanation') || '').trim() || null, destinationId: destination,
       pickupPointId: String(form.get('pickup')), startAt: new Date(String(form.get('start'))).toISOString(), endAt: new Date(String(form.get('end'))).toISOString(),
       capacity: Number(form.get('capacity')), price: String(form.get('price')) });
   }}><fieldset disabled={busy || (!!trip && trip.status !== 'DRAFT')} className="grid gap-4 sm:grid-cols-2">
@@ -25,6 +25,7 @@ const BasicForm = ({ trip, destinations, pickups, busy, onDestination, onSave }:
     <label>Số người tối đa<input className={field} name="capacity" type="number" min={1} max={2147483647} required defaultValue={trip?.capacity || 1} /></label>
     <label>Giá/người (VND)<input className={field} name="price" inputMode="decimal" pattern="[0-9]{1,10}(\.[0-9]{1,2})?" required defaultValue={trip?.price || ''} /></label>
     <label>Mô tả<textarea className={field} name="description" maxLength={5000} defaultValue={trip?.description || ''} /></label>
+    <label className="sm:col-span-2">Cơ sở tính giá nội bộ (priceExplanation)<textarea className={field} name="priceExplanation" maxLength={5000} placeholder="Chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận (bắt buộc trước khi publish)" defaultValue={trip?.priceExplanation || ''} /></label>
     <button className={`${button} sm:col-span-2`} type="submit">{trip ? 'Lưu thay đổi' : 'Tạo bản nháp'}</button>
   </fieldset></form>;
 };
