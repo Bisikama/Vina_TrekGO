@@ -37,7 +37,7 @@ export class RentalExtensionController {
   @Post(':id/extension-quotes')
   @HttpCode(HttpStatus.OK)
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Tạo báo giá gia hạn thuê',
     description: `
@@ -96,7 +96,7 @@ Tạo báo giá cho việc gia hạn thời gian thuê thiết bị.
 
   @Post(':id/extensions')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Xác nhận gia hạn đơn thuê',
     description: `
@@ -178,7 +178,7 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
 
   @Get(':id/extensions')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Lịch sử gia hạn của đơn thuê',
     description: `

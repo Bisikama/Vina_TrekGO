@@ -34,7 +34,7 @@ export class RentalTripController {
 
   @Get('rental-eligibility')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Kiểm tra điều kiện thuê thiết bị của chuyến đi',
     description: `
@@ -70,7 +70,7 @@ export class RentalTripController {
 
   @Get('rental-recommendations')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Gợi ý thiết bị phù hợp cho chuyến đi',
     description: `
