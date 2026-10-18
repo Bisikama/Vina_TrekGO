@@ -5,6 +5,8 @@ export interface RentalAvailabilityQuery {
   now: Date;
   requestedQuantity?: number;
   inventoryLocationId?: string;
+  excludeReservationIds?: string[];
+  activeUnitIds?: string[];
 }
 
 export const RENTAL_AVAILABILITY_PORT = Symbol('RENTAL_AVAILABILITY_PORT');

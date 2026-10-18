@@ -61,6 +61,9 @@ export async function getVerifiedCapacitySnapshot(
           { status: ReservationStatus.CONFIRMED },
           { status: ReservationStatus.HELD, holdExpiresAt: { gt: q.now } },
         ],
+        ...(q.excludeReservationIds && q.excludeReservationIds.length > 0
+          ? { id: { notIn: q.excludeReservationIds } }
+          : {}),
         ...(q.inventoryLocationId
           ? {
               orderLine: {
@@ -125,13 +128,18 @@ export async function getVerifiedCapacitySnapshot(
     );
     const unitLoc = u.currentInventoryLocationId ?? u.homeInventoryLocationId;
     const isAtLocation = !q.inventoryLocationId || unitLoc === q.inventoryLocationId;
+    const isOwnedActiveUnit = Boolean(
+      q.activeUnitIds && q.activeUnitIds.includes(u.id) && isAtLocation,
+    );
+    const isReadyAvailable =
+      u.status === EquipmentUnitStatus.AVAILABLE &&
+      !!u.currentInventoryLocationId &&
+      isAtLocation &&
+      !pending;
+
     return {
       id: u.id,
-      ready:
-        u.status === EquipmentUnitStatus.AVAILABLE &&
-        !!u.currentInventoryLocationId &&
-        isAtLocation &&
-        !pending,
+      ready: isReadyAvailable || isOwnedActiveUnit,
       verifiedReadyAt: pending || !isAtLocation ? null : commitment?.readyBy,
       verifiedUntil: pending || !isAtLocation ? null : commitment?.validUntil,
       verifiedBy: pending || !isAtLocation ? null : commitment?.verifiedBy,

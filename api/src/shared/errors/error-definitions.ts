@@ -10,6 +10,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
 export interface ErrorDefinition {
@@ -126,6 +127,22 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.EQUIPMENT_NOT_AVAILABLE]: { status: 409, message: 'Equipment not available', retryable: false },
   [RO.RENTAL_ORDER_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
   [RO.INVENTORY_LOCATION_NOT_CONFIGURED]: { status: 500, message: 'Primary rental inventory location is not configured or inactive', retryable: false },
+  [RO.TERMS_NOT_ACCEPTED]: { status: 400, message: 'Extension terms must be accepted', retryable: false },
+  [RO.TERMS_VERSION_MISMATCH]: { status: 409, message: 'Accepted terms version does not match quoted terms', retryable: false },
+  [RO.TERMS_HASH_MISMATCH]: { status: 409, message: 'Terms hash does not match issued extension quote', retryable: false },
+  [RO.EXTENSION_CAPACITY_CONFLICT]: { status: 409, message: 'Insufficient warehouse capacity for requested extension period', retryable: false },
+  [RO.EXTENSION_QUOTE_EXPIRED]: { status: 410, message: 'Extension quote has expired', retryable: false },
+  [RO.EXTENSION_ALREADY_PENDING]: { status: 409, message: 'An extension request is already pending payment', retryable: false },
+  [RO.EXTENSION_HOLD_EXPIRED]: { status: 410, message: 'Extension capacity hold has expired', retryable: false },
+  [RO.EXTENSION_NOT_APPLICABLE]: { status: 409, message: 'Extension is not in a valid state to apply', retryable: false },
+  [RO.EXTENSION_LIMIT_EXCEEDED]: { status: 422, message: 'Maximum extension count reached', retryable: false },
+  [RO.EXTENSION_TOO_LATE]: { status: 422, message: 'Extension requested after cutoff deadline', retryable: false },
+  [RO.EXTENSION_END_NOT_LATER]: { status: 422, message: 'Requested return date must be later than current return date', retryable: false },
+  [RO.EXTENSION_INVALID_ORDER_STATE]: { status: 409, message: 'Order is not in active state for extension', retryable: false },
+  [RO.EXTENSION_RETURN_STARTED]: { status: 409, message: 'Return inspection has already started', retryable: false },
+  [RO.EXTENSION_RETURN_TASK_STARTED]: { status: 409, message: 'Return collection task is already in progress', retryable: false },
+  [RO.EXTENSION_LINE_MISSING]: { status: 404, message: 'Extension order line not found', retryable: false },
+  [RO.EXTENSION_PAYMENT_MISMATCH]: { status: 422, message: 'Payment does not match extension invoice', retryable: false },
 
   // Preparation (Phase 05)
   [PR.TASK_NOT_FOUND]: { status: 404, message: 'Preparation task not found', retryable: false },
@@ -171,6 +188,14 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
+
+  // Lifecycle (Phase 07A)
+  [LC.INVALID_EVENT_PAYLOAD]: { status: 400, message: 'Invalid rental lifecycle event payload', retryable: false },
+  [LC.UNSUPPORTED_EVENT]: { status: 422, message: 'Unsupported rental lifecycle event type', retryable: false },
+  [LC.RETURN_TASK_NOT_CREATABLE]: { status: 409, message: 'Return task cannot be created in current state', retryable: false },
+  [LC.RESCHEDULE_CAPACITY_CONFLICT]: { status: 409, message: 'Capacity conflict on trip reschedule', retryable: false },
+  [LC.OUT_OF_ORDER_EVENT]: { status: 409, message: 'Out of order lifecycle event ignored', retryable: false },
+  [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
 
   // Personal Trail & Elevation
   [PT.INSUFFICIENT_GPS_POINTS]: { status: 400, message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ', retryable: false },

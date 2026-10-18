@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { User } from "../types/auth.types";
+import { useStaticDataStore } from "@/lib/staticDataStore";
 
 interface AuthState {
   user: User | null;
@@ -65,6 +66,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         setAuthCookies(null, null);
+        useStaticDataStore.getState().clearStaticCache();
         set({
           user: null,
           accessToken: null,
