@@ -176,10 +176,15 @@ export const DestinationsTab: React.FC<DestinationsTabProps> = ({
                   {dest.description || "Chưa có mô tả chi tiết về địa danh này."}
                 </p>
 
-                <div className="flex items-center gap-4 text-xs text-gray-500 py-2 border-y border-gray-50">
+                <div className="flex items-center gap-3 text-xs text-gray-500 py-2 border-y border-gray-50 flex-wrap">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-gray-800">{dest.trailCount ?? 0}</span>
                     <span>cung đường</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full bg-gray-300"></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-gray-800">{dest.pickupPointCount ?? 0}</span>
+                    <span>điểm đón</span>
                   </div>
                   <div className="w-1 h-1 rounded-full bg-gray-300"></div>
                   <div className="flex items-center gap-1.5">

@@ -2,6 +2,13 @@ import { z } from 'zod'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { DifficultyLevel, RecordStatus } from '@prisma/client'
 
+// PostgreSQL UUID columns can contain legacy UUID-shaped values whose version
+// and variant bits are not RFC 4122 compliant (for example seeded d100... IDs).
+const DatabaseUuidSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  'ID địa danh phải là UUID hợp lệ',
+)
+
 // ============================================================================
 // 1. ZOD SCHEMAS (Validation Request)
 // ============================================================================
@@ -16,7 +23,7 @@ export const TrailCheckpointInputSchema = z.object({
 export const GetSystemTrailsQuerySchema = z.object({
   page: z.coerce.number().int().min(1, 'Trang phải lớn hơn hoặc bằng 1').default(1),
   pageSize: z.coerce.number().int().min(1).max(100, 'Số lượng mỗi trang tối đa 100').default(20),
-  destinationId: z.string().uuid('ID địa danh phải là UUID hợp lệ').optional(),
+  destinationId: DatabaseUuidSchema.optional().or(z.literal('').transform(() => undefined)),
   keyword: z.string().trim().max(100, 'Từ khóa tìm kiếm tối đa 100 ký tự').optional(),
   difficulty: z.nativeEnum(DifficultyLevel, {
     message: 'Độ khó không hợp lệ (EASY | MEDIUM | HARD | EXTREME)',

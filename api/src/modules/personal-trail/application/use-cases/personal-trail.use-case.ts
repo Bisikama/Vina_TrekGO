@@ -78,6 +78,11 @@ export class PersonalTrailUseCase {
     return this.repo.updatePersonalTrail(id, user.id, input)
   }
 
+  async getCheckpoints(user: ActiveUserData, id: string) {
+    await this.getDetail(user, id)
+    return this.repo.findPersonalCheckpointsByTrailId(id)
+  }
+
   async delete(user: ActiveUserData, id: string) {
     await this.repo.softDeletePersonalTrail(id, user.id)
     return {

@@ -64,6 +64,22 @@ export class PersonalTrailController {
     }
   }
 
+  @Get(':id/checkpoints')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lấy danh sách checkpoint của cung đường cá nhân',
+    description: 'Trả về checkpoint theo sequence tăng dần và áp dụng cùng quyền truy cập với chi tiết trail.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'UUID của cung đường cá nhân' })
+  @ApiResponse({ status: 200, description: 'Danh sách personal checkpoints' })
+  async getCheckpoints(
+    @ActiveUser() user: ActiveUserData,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    const data = await this.useCase.getCheckpoints(user, id)
+    return { success: true, data }
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
