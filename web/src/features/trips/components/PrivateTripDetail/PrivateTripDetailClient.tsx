@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import { usePrivateTrips } from "@/features/trips/hooks/usePrivateTrips";
 import Link from "next/link";
 import { PrivateTripMap } from "./PrivateTripMap";
@@ -9,6 +10,9 @@ import { usePrivateTripMembership } from "@/features/trips/hooks/usePrivateTripM
 export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initialTrip: any, initialPickups?: any[] }) {
   const { busy, invite, cancel } = usePrivateTrips();
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [trip, setTrip] = useState(initialTrip);
 
   // Lấy tên thay vì ID (sử dụng initialPickups lấy từ server)
@@ -36,10 +40,39 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
       const res = await invite(trip);
       if (res?.inviteCode) {
         setInviteCode(res.inviteCode);
+        setInviteExpiresAt(res.expiresAt || null);
+        setTrip((prev: any) => prev ? { ...prev, version: res.tripVersion } : prev);
       }
     } catch (e) {
       // Error handled by hook
     }
+  };
+
+  const getInviteUrl = () => {
+    if (!inviteCode) return "";
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/invite/${inviteCode}`;
+    }
+    return `/invite/${inviteCode}`;
+  };
+
+  const handleCopyInvite = () => {
+    if (!inviteCode) return;
+    navigator.clipboard.writeText(getInviteUrl());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadQR = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const pngUrl = canvas.toDataURL("image/png");
+    const downloadLink = document.createElement("a");
+    downloadLink.href = pngUrl;
+    downloadLink.download = `qr-moi-chuyen-di-${trip.id?.slice(0, 8) || "trekgo"}.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
   };
 
   const handleCancel = async () => {
@@ -131,15 +164,15 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                   <button
                     onClick={handleGenerateInvite}
                     disabled={busy}
-                    className="flex-1 flex justify-center items-center gap-2 px-4 py-2.5 bg-[#125238] text-white rounded-xl hover:bg-[#0f402c] transition-colors text-sm font-bold shadow-sm disabled:opacity-50"
+                    className="flex-1 flex justify-center items-center gap-2 px-4 py-2.5 bg-[#125238] text-white rounded-xl hover:bg-[#0f402c] transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
                   >
-                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    Mã Mời
+                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+                    {inviteCode ? "Tạo lại QR mời" : "Tạo mã QR mời"}
                   </button>
                   <button
                     onClick={handleCancel}
                     disabled={busy}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-sm font-bold shadow-sm disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     Huỷ
                   </button>
@@ -148,26 +181,50 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
             </div>
           </div>
           {inviteCode && (
-            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-200 flex flex-col gap-4 shadow-sm animate-in fade-in zoom-in duration-300">
-              <div className="flex items-center gap-3">
+            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-200 flex flex-col items-center gap-4 shadow-sm animate-in fade-in zoom-in duration-300">
+              <div className="w-full flex items-center gap-3">
                 <div className="p-2 bg-white rounded-xl shadow-sm text-emerald-600 shrink-0">
-                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-emerald-900">Mã mời nhóm</h4>
-                  <p className="text-[11px] text-emerald-700">Sao chép liên kết/mã này gửi cho bạn bè.</p>
+                  <h4 className="text-sm font-bold text-emerald-900">Mã QR mời tham gia nhóm</h4>
+                  <p className="text-[11px] text-emerald-700">Quét mã QR bằng điện thoại để vào thẳng chuyến đi.</p>
                 </div>
               </div>
-              <div className="bg-white pl-6 pr-2 py-2 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between gap-3 overflow-hidden">
-                <span className="font-mono text-[14px] font-black tracking-widest text-emerald-800 truncate select-all flex-1 text-center">
-                  {inviteCode}
-                </span>
-                <button 
-                  onClick={() => navigator.clipboard.writeText(inviteCode)}
-                  className="p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-xl shrink-0 transition-colors cursor-pointer"
-                  title="Sao chép"
+
+              <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm flex flex-col items-center">
+                <QRCodeCanvas
+                  ref={qrCanvasRef}
+                  value={getInviteUrl()}
+                  size={180}
+                  bgColor="#ffffff"
+                  fgColor="#125238"
+                  level="M"
+                  includeMargin={true}
+                />
+                {inviteExpiresAt && (
+                  <p className="text-[11px] font-medium text-gray-500 mt-1">
+                    Hết hạn: {new Date(inviteExpiresAt).toLocaleString("vi-VN")}
+                  </p>
+                )}
+              </div>
+
+              <div className="w-full grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleDownloadQR}
+                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#125238] text-white hover:bg-[#0f402c] rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  Tải ảnh QR
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyInvite}
+                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100/60 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  {copied ? "Đã chép link!" : "Sao chép link"}
                 </button>
               </div>
             </div>

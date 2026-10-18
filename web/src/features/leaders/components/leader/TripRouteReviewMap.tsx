@@ -158,17 +158,8 @@ export function TripRouteReviewMap({
             ]
           : undefined;
 
-    const isBaDen =
-      trail.code?.toLowerCase().includes("baden") ||
-      trail.name?.toLowerCase().includes("bà đen") ||
-      trail.destination?.name?.toLowerCase().includes("bà đen") ||
-      trailCode.toLowerCase().includes("baden");
-
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
     const demTileUrl =
-      isBaDen && origin
-        ? `${origin}/tiles/dem/{z}/{x}/{y}.png`
-        : "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,

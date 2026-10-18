@@ -27,6 +27,7 @@ describe('TrailRecordingUseCase Unit Tests', () => {
       updateRecordingStatus: jest.fn(),
       completeRecordingAndCreateTrail: jest.fn(),
       findPersonalTrailById: jest.fn(),
+      findPersonalCheckpointsByTrailId: jest.fn(),
       findMyPersonalTrails: jest.fn(),
       updatePersonalTrail: jest.fn(),
       softDeletePersonalTrail: jest.fn(),

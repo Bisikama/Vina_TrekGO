@@ -11,15 +11,8 @@ if (typeof window !== "undefined") {
   }
 }
 
-/**
- * Lấy URL của nguồn DEM độ cao (Terrarium)
- * Tự động ưu tiên local static tiles (/tiles/dem/...) nếu là khu vực Núi Bà Đen
- */
-export function getDemTileUrl(isBaDen = false): string {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  if (isBaDen && origin) {
-    return `${origin}/tiles/dem/{z}/{x}/{y}.png`;
-  }
+/** Lấy URL của nguồn DEM độ cao (Terrarium) dùng chung cho mọi khu vực. */
+export function getDemTileUrl(): string {
   return "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 }
 
