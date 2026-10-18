@@ -9,6 +9,7 @@ import { paymentHash, paymentRecoveryConfig, providerCall } from './payment-util
 import { PaymentWebhooksService } from './payment-webhooks.service'
 import { RefundsService } from './refunds.service'
 import { paymentFailure, paymentTransaction } from './payment-transaction'
+import { paymentReturnPath } from './payment-return-path'
 
 type Kind = 'payment' | 'refund'
 type Claim<T> = { row: T; review: boolean; now: Date }
@@ -37,9 +38,14 @@ export class PaymentRecoveryService {
   private async claim(kind: Kind, id?: string): Promise<Claim<Payment | Refund> | null> {
     const config = paymentRecoveryConfig()
     const table = Prisma.raw(kind === 'payment' ? 'payments' : 'refunds')
-    const scopes = Prisma.join(this.provider.scopes.map((scope) => Prisma.sql`(payment_gateway = ${scope.gateway}
+    const scopes = Prisma.join(
+      this.provider.scopes.map(
+        (scope) => Prisma.sql`(payment_gateway = ${scope.gateway}
       AND provider_environment = ${scope.environment}::payment_environment
-      AND merchant_account_key = ${scope.merchantAccountKey})`), ' OR ')
+      AND merchant_account_key = ${scope.merchantAccountKey})`,
+      ),
+      ' OR ',
+    )
     return paymentTransaction(this.db, this.logger, 'recovery.claim', { kind, resourceId: id }, async (tx, stage) => {
       stage('lock.claim')
       const ids = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
@@ -76,9 +82,11 @@ export class PaymentRecoveryService {
   private async defer(kind: Kind, claim: Claim<Payment | Refund>, reason = 'RECOVERY_UNKNOWN') {
     const config = paymentRecoveryConfig()
     const table = Prisma.raw(kind === 'payment' ? 'payments' : 'refunds')
-    const awaitingIpn = kind === 'payment' &&
+    const awaitingIpn =
+      kind === 'payment' &&
       this.provider.forGateway(claim.row.paymentGateway!)?.waitForCheckoutExpiry &&
-      (claim.row as Payment).expiresAt && (claim.row as Payment).expiresAt! > claim.now
+      (claim.row as Payment).expiresAt &&
+      (claim.row as Payment).expiresAt! > claim.now
     const review = claim.review || (!awaitingIpn && claim.row.retryCount >= config.maxAttempts)
     // Only the current unexpired owner can persist. A stale owner never clears a newer lease.
     await this.db.$executeRaw(Prisma.sql`UPDATE ${table} SET
@@ -110,7 +118,8 @@ export class PaymentRecoveryService {
       ['PENDING', 'PROCESSING'].includes(row.status) &&
       row.expiresAt > claim.now
     ) {
-      await providerCall(() =>
+      const requestSnapshot = (row.gatewayPayload as Prisma.JsonObject | null)?.requestSnapshot
+      const recreated = await providerCall(() =>
         this.provider.createPayment({
           ...this.scope(row),
           merchantRequestRef: row.merchantRequestRef!,
@@ -118,11 +127,15 @@ export class PaymentRecoveryService {
           currency: row.currency,
           paymentMethod: row.paymentMethod as 'QR' | 'REDIRECT',
           expiresAt: row.expiresAt!,
+          returnPath: paymentReturnPath(requestSnapshot),
         }),
       )
       result = await providerCall(() =>
         this.provider.queryPayment({ ...this.scope(row), merchantRequestRef: row.merchantRequestRef! }),
       )
+      if (recreated.kind === 'CONFIRMED_RESULT' && result.kind === 'CONFIRMED_RESULT' && !result.checkout) {
+        result = { ...result, checkout: recreated.checkout }
+      }
     }
     if (result.kind !== 'CONFIRMED_RESULT') {
       await this.defer('payment', claim)

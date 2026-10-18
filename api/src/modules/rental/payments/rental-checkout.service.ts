@@ -16,6 +16,16 @@ export type RentalCheckoutCommand = {
   gateway?: 'momo' | 'vnpay'
   clientIp?: string
 }
+
+export type RentalExtensionCheckoutCommand = {
+  extensionId: string
+  actorUserId: string
+  idempotencyKey: string
+  paymentMethod: PaymentMethod
+  gateway?: 'momo' | 'vnpay'
+  clientIp?: string
+}
+
 @Injectable()
 export class RentalCheckoutService {
   constructor(private readonly db: PrismaService) {}
@@ -165,6 +175,7 @@ export class RentalCheckoutService {
       const requestSnapshot = {
         actor: input.actorUserId,
         operation: 'rental-checkout',
+        gateway: scope.gateway,
         rentalOrderId: order.id,
         invoiceId: invoice.id,
         revision: invoice.revisionNo,
@@ -209,7 +220,7 @@ export class RentalCheckoutService {
   /** Additional rental fee. Uses the SAME scoped payment provider/outbox/webhook
    * as initial Rental checkout; never creates an unverified payment stub.
    */
-  async reserveExtension(input: { extensionId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' }, scope: ProviderScope) {
+  async reserveExtension(input: RentalExtensionCheckoutCommand, scope: ProviderScope) {
     const key = paymentHash([input.actorUserId, 'rental-extension-checkout', input.idempotencyKey])
     return this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
@@ -259,7 +270,7 @@ export class RentalCheckoutService {
         (invoice.expiresAt && invoice.expiresAt <= now)) throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       const running = await tx.payment.findFirst({ where: { invoiceId: invoice.id, status: { in: ['PENDING','PROCESSING','SUCCEEDED'] } } })
       if (running) throw AppError.fromCode(E.PAYMENT_ATTEMPT_IN_PROGRESS)
-      const requestSnapshot = { actor: input.actorUserId, operation: 'rental-extension-checkout',
+      const requestSnapshot = { actor: input.actorUserId, operation: 'rental-extension-checkout', gateway: scope.gateway,
         extensionId: ext.id, orderId: ext.orderId, invoiceId: invoice.id, revision: invoice.revisionNo,
         amount: ext.additionalFee.toFixed(), currency: ext.currency, paymentMethod: input.paymentMethod }
       const id = randomUUID()

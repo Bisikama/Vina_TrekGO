@@ -18,6 +18,11 @@ import {
   RentalUnitAssignmentStatus,
   RentalOrderExceptionStatus,
   RentalFinancialStatus,
+  RentalDocumentType,
+  DeliveryTaskType,
+  DeliveryTaskStatus,
+  PackageStatus,
+  RentalExceptionCaseStatus,
 } from '@prisma/client';
 import { ROLES_KEY } from '../../../shared/decorators/roles.decorator';
 import { META_AUTH_KEY } from '../../../shared/decorators/auth.decorator';
@@ -51,12 +56,16 @@ import { GetRentalExceptionUseCase } from './application/use-cases/get-rental-ex
 import { GetRentalAssessmentUseCase } from './application/use-cases/get-rental-assessment.use-case';
 
 // Domain logic & workers
-import { planDepositRefundGroups } from './application/deposit-grouping.policy';
+import { planDepositRefundGroups, type DepositRefundCandidate } from './application/deposit-grouping.policy';
 import { RETURN_POLICY_152, inspectionDeadlines } from './application/return-policy-152';
 import { RentalDepositWorker } from '../payments/rental-deposit.worker';
 import { RentalRefundsService } from '../../payments/rental-refunds.service';
 import { PaymentsPort } from '../../payments/payments.port';
+import { issueReturnReceiptTx } from '../documents/application/rental-document-events';
+import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../shared/errors/codes/rental-return.error-codes';
+import { AppError } from '../../../shared/errors';
 import { tryCompleteOrder } from './infrastructure/adapters/prisma-rental-return.adapter';
+import { RentalOperationalEscalationScheduler } from './infrastructure/jobs/rental-operational-escalation.scheduler';
 
 describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
   const dummyOrderId = '33333333-3333-4333-8333-333333333333';
@@ -1219,4 +1228,572 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(EquipmentUnitStatus.MAINTENANCE).toBeDefined();
     });
   });
+
+  describe('Part 7: Phase 09 Preflight & Closure Operations Invariants', () => {
+    describe('Preflight 1: RETURN_RECEIPT Invariants', () => {
+      it('throws HANDOVER_DOCUMENT_REQUIRED when order lacks root HANDOVER document', async () => {
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-1',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date(),
+              receivedUnits: [dummyUnitId],
+              remarks: 'Clean return',
+              staffId: 'staff-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue(null), // Missing HANDOVER
+          },
+        };
+
+        await expect(issueReturnReceiptTx(mockTx, 'sess-test-1', new Date())).rejects.toMatchObject({
+          name: 'AppError',
+          code: RR.HANDOVER_DOCUMENT_REQUIRED,
+        });
+      });
+
+      it('throws INVALID_RETURN_STATE when session is not yet FINALIZED', async () => {
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-2',
+              orderId: dummyOrderId,
+              status: 'OPEN', // Not finalized
+              finalizedAt: null,
+            }),
+          },
+        };
+
+        await expect(issueReturnReceiptTx(mockTx, 'sess-test-2', new Date())).rejects.toMatchObject({
+          name: 'AppError',
+          code: RR.INVALID_RETURN_STATE,
+        });
+      });
+
+      it('idempotent retry: returns existing RETURN_RECEIPT snapshot without duplicate document or render event', async () => {
+        const existingDoc = {
+          id: 'doc-existing-receipt',
+          orderId: dummyOrderId,
+          documentType: RentalDocumentType.RETURN_RECEIPT,
+          sourceRef: 'sess-test-3',
+          snapshotJson: { kind: 'RETURN_RECEIPT', sessionId: 'sess-test-3' },
+        };
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-3',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date(),
+              receivedUnits: [dummyUnitId],
+              remarks: 'All good',
+              staffId: 'staff-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(existingDoc),
+            create: jest.fn(),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn(),
+          },
+        };
+
+        const result = await issueReturnReceiptTx(mockTx, 'sess-test-3', new Date());
+        expect(result).toBe(existingDoc);
+        expect(mockTx.rentalDocument.create).not.toHaveBeenCalled();
+        expect(mockTx.rentalOutboxEvent.upsert).not.toHaveBeenCalled();
+      });
+
+      it('multiple return sessions on same order create distinct RETURN_RECEIPT documents referencing root HANDOVER', async () => {
+        const createdDocs: any[] = [];
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              return Promise.resolve({
+                id,
+                orderId: dummyOrderId,
+                status: 'FINALIZED',
+                finalizedAt: new Date(),
+                receivedUnits: [dummyUnitId],
+                remarks: `Session ${id}`,
+                staffId: 'staff-1',
+              });
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation(({ data }: any) => {
+              const doc = { id: `doc-${data.sourceRef}`, ...data };
+              createdDocs.push(doc);
+              return Promise.resolve(doc);
+            }),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const doc1 = await issueReturnReceiptTx(mockTx, 'sess-multi-1', new Date());
+        const doc2 = await issueReturnReceiptTx(mockTx, 'sess-multi-2', new Date());
+
+        expect(doc1.sourceRef).toBe('sess-multi-1');
+        expect(doc2.sourceRef).toBe('sess-multi-2');
+        expect(doc1.rootDocumentId).toBe('doc-handover-root');
+        expect(doc2.rootDocumentId).toBe('doc-handover-root');
+        expect(createdDocs.length).toBe(2);
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('Preflight 2: FAILED REFUND RECOVERY Invariants', () => {
+      it('REFUND_FAILED: sets order financialStatus to REFUND_PENDING and exceptionStatus to ACTION_REQUIRED', async () => {
+        const mockTx: any = {
+          $queryRaw: jest.fn().mockImplementation((...args: any[]) => {
+            const first = args[0];
+            const sql = Array.isArray(first)
+              ? first.join(' ')
+              : String(first?.text ?? first?.sql ?? (Array.isArray(first?.strings) ? first.strings.join(' ') : first ?? ''));
+            if (sql.includes('payment_outbox_events')) {
+              return Promise.resolve([{ id: 'evt-fail-recov' }]);
+            }
+            if (sql.includes('clock_timestamp')) {
+              return Promise.resolve([{ now: new Date() }]);
+            }
+            return Promise.resolve([]);
+          }),
+          paymentOutboxEvent: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'evt-fail-recov',
+              eventType: 'REFUND_FAILED',
+              aggregateType: 'Refund',
+              aggregateId: 'ref-fail-recov',
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'evt-fail-recov',
+              eventType: 'REFUND_FAILED',
+              payload: { schemaVersion: 1, refundId: 'ref-fail-recov' },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          refund: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'ref-fail-recov',
+              purpose: 'DEPOSIT',
+              paymentId: dummyPaymentId,
+              depositSettlement: { id: dummySettlementId, orderId: dummyOrderId },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'ref-fail-recov',
+              status: 'FAILED',
+              depositSettlementId: dummySettlementId,
+              paymentId: dummyPaymentId,
+              payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          payment: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-recov' }),
+          },
+          paymentAllocation: {
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+          },
+          depositSettlementItem: {
+            findMany: jest.fn().mockImplementation(({ where }: any) => {
+              if (where?.id?.in) {
+                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_PENDING' }]);
+              }
+              return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          depositSettlement: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: dummySettlementId,
+              totalDeposit: new Prisma.Decimal(300000),
+              depositSettlementItemsViaSettlementId: [{ status: 'REFUND_FAILED', depositAmount: new Prisma.Decimal(300000), refundAmount: new Prisma.Decimal(0), deductionAmount: new Prisma.Decimal(0) }],
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          paymentConsumerReceipt: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.REFUND_FAILED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [],
+              packageViaOrderId: null,
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            create: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const worker = new RentalDepositWorker({
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+          $queryRaw: mockTx.$queryRaw,
+        } as any, {} as any);
+
+        await worker.consume('evt-fail-recov');
+
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              financialStatus: 'REFUND_PENDING',
+              exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+            }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              financialStatus: 'PAID',
+            }),
+          }),
+        );
+      });
+
+      it('Recovery flow: re-evaluating succeeded event updates items to SETTLED and completes order', async () => {
+        const mockTx: any = {
+          $queryRaw: jest.fn().mockImplementation((...args: any[]) => {
+            const first = args[0];
+            const sql = Array.isArray(first)
+              ? first.join(' ')
+              : String(first?.text ?? first?.sql ?? (Array.isArray(first?.strings) ? first.strings.join(' ') : first ?? ''));
+            if (sql.includes('payment_outbox_events')) {
+              return Promise.resolve([{ id: 'evt-succ-recov' }]);
+            }
+            if (sql.includes('clock_timestamp')) {
+              return Promise.resolve([{ now: new Date() }]);
+            }
+            return Promise.resolve([]);
+          }),
+          paymentOutboxEvent: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'evt-succ-recov',
+              eventType: 'REFUND_SUCCEEDED',
+              aggregateType: 'Refund',
+              aggregateId: 'ref-succ-recov',
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'evt-succ-recov',
+              eventType: 'REFUND_SUCCEEDED',
+              payload: { schemaVersion: 1, refundId: 'ref-succ-recov' },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          refund: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'ref-succ-recov',
+              purpose: 'DEPOSIT',
+              paymentId: dummyPaymentId,
+              depositSettlement: { id: dummySettlementId, orderId: dummyOrderId },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'ref-succ-recov',
+              status: 'SUCCEEDED',
+              depositSettlementId: dummySettlementId,
+              paymentId: dummyPaymentId,
+              payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          payment: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-recov' }),
+          },
+          paymentAllocation: {
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+          },
+          depositSettlementItem: {
+            findMany: jest.fn().mockImplementation(({ where }: any) => {
+              if (where?.id?.in) {
+                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+              }
+              return Promise.resolve([{ id: 'item-recov-1', status: 'SETTLED' }]);
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          depositSettlement: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: dummySettlementId,
+              totalDeposit: new Prisma.Decimal(300000),
+              depositSettlementItemsViaSettlementId: [{ status: 'SETTLED', depositAmount: new Prisma.Decimal(300000), refundAmount: new Prisma.Decimal(300000), deductionAmount: new Prisma.Decimal(0) }],
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          paymentConsumerReceipt: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [],
+              packageViaOrderId: null,
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            create: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const worker = new RentalDepositWorker({
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+          $queryRaw: mockTx.$queryRaw,
+        } as any, {} as any);
+
+        await worker.consume('evt-succ-recov');
+
+        expect(mockTx.depositSettlementItem.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'item-recov-1' },
+            data: expect.objectContaining({ status: 'SETTLED' }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              financialStatus: 'SETTLED',
+            }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              status: RentalOrderStatus.COMPLETED,
+            }),
+          }),
+        );
+      });
+    });
+
+    describe('Phase 09: Order Closure & Operations Invariants', () => {
+      it('tryCompleteOrder: emits RENTAL_ORDER_CLOSED outbox event and writes audit log upon closure', async () => {
+        const now = new Date();
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              userId: 'user-p9-1',
+              bookingId: 'booking-p9-1',
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              version: 3,
+              rentalOrderLinesViaOrderId: [
+                {
+                  rentalUnitAssignmentsViaOrderLineId: [
+                    { id: 'assign-1', status: RentalUnitAssignmentStatus.CLOSED },
+                  ],
+                },
+              ],
+              depositSettlementViaOrderId: {
+                id: dummySettlementId,
+                depositSettlementItemsViaSettlementId: [
+                  { id: 'item-p9-1', status: DepositItemStatus.SETTLED },
+                ],
+              },
+              rentalExceptionCasesViaOrderId: [
+                { id: 'case-p9-1', status: RentalExceptionCaseStatus.RESOLVED },
+              ],
+              deliveryTasksViaOrderId: [
+                { id: dummyTaskId, taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED },
+              ],
+              packageViaOrderId: { id: 'pkg-p9-1', status: PackageStatus.RETURNED_TO_INVENTORY },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          deliveryTask: {
+            update: jest.fn().mockResolvedValue({}),
+          },
+          package: {
+            update: jest.fn().mockResolvedValue({}),
+          },
+          auditLog: {
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, now);
+        expect(result).toBe(true);
+
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              status: RentalOrderStatus.COMPLETED,
+              financialStatus: RentalFinancialStatus.SETTLED,
+              exceptionStatus: RentalOrderExceptionStatus.NONE,
+            }),
+          }),
+        );
+
+        expect(mockTx.deliveryTask.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyTaskId },
+            data: expect.objectContaining({ status: DeliveryTaskStatus.CLOSED }),
+          }),
+        );
+
+        expect(mockTx.package.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'pkg-p9-1' },
+            data: expect.objectContaining({ status: PackageStatus.CLOSED }),
+          }),
+        );
+
+        expect(mockTx.auditLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              action: 'RENTAL_ORDER_CLOSED',
+              entityType: 'RentalOrder',
+              entityId: dummyOrderId,
+            }),
+          }),
+        );
+
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { deduplicationKey: `rental-order-closed:${dummyOrderId}` },
+            create: expect.objectContaining({
+              eventType: 'RENTAL_ORDER_CLOSED',
+              aggregateType: 'RentalOrder',
+              aggregateId: dummyOrderId,
+            }),
+          }),
+        );
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { deduplicationKey: `rental-closed:${dummyOrderId}` },
+            create: expect.objectContaining({
+              eventType: 'RENTAL_CLOSED',
+              aggregateType: 'RentalOrder',
+              aggregateId: dummyOrderId,
+            }),
+          }),
+        );
+      });
+
+      it('tryCompleteOrder: rejects completion if any exception case is still OPEN', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [
+                { rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] },
+              ],
+              depositSettlementViaOrderId: {
+                depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }],
+              },
+              rentalExceptionCasesViaOrderId: [
+                { id: 'case-open', status: RentalExceptionCaseStatus.OPEN },
+              ],
+              deliveryTasksViaOrderId: [],
+              packageViaOrderId: null,
+            }),
+            update: jest.fn(),
+          },
+        };
+
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('RentalOperationalEscalationScheduler: sweep periodically invokes tryCompleteOrder on candidate orders', async () => {
+        const mockCandidateOrders = [{ id: 'order-cand-1' }, { id: 'order-cand-2' }];
+        const completedOrders: string[] = [];
+
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              return Promise.resolve({
+                id,
+                userId: 'user-sweep-1',
+                bookingId: 'booking-sweep-1',
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                version: 1,
+                rentalOrderLinesViaOrderId: [
+                  { rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] },
+                ],
+                depositSettlementViaOrderId: {
+                  depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }],
+                },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [],
+                packageViaOrderId: null,
+              });
+            }),
+            update: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              completedOrders.push(id);
+              return Promise.resolve({});
+            }),
+          },
+          auditLog: {
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const mockPrisma: any = {
+          returnCustodyTransfer: { findMany: jest.fn().mockResolvedValue([]) },
+          rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([]) },
+          rentalOrder: { findMany: jest.fn().mockResolvedValue(mockCandidateOrders) },
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+        };
+
+        const scheduler = new RentalOperationalEscalationScheduler(mockPrisma);
+        await scheduler.check();
+
+        expect(mockPrisma.rentalOrder.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { status: { in: [RentalOrderStatus.RETURN_PROCESSING, RentalOrderStatus.RETURN_PENDING] } },
+          }),
+        );
+        expect(completedOrders).toContain('order-cand-1');
+        expect(completedOrders).toContain('order-cand-2');
+      });
+    });
+  });
 });
+

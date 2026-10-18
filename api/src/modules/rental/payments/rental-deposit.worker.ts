@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
-import { Prisma } from '@prisma/client'
+import { Prisma, RentalOrderExceptionStatus } from '@prisma/client'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { PaymentsPort } from '../../payments/payments.port'
 import { AppError, PAYMENT_ERROR_CODES as E } from '../../../shared/errors'
@@ -402,12 +402,16 @@ export class RentalDepositWorker {
         })
         const allSettled =
           allSettlementItems.length > 0 && allSettlementItems.every((i) => i.status === 'SETTLED')
+        const hasFailedOrPending = allSettlementItems.some((i) =>
+          ['REFUND_FAILED', 'REFUND_PENDING'].includes(i.status),
+        )
+        const hasFailed = allSettlementItems.some((i) => i.status === 'REFUND_FAILED')
 
         await tx.rentalOrder.update({
           where: { id: orderId },
           data: {
-            financialStatus: pendingCount > 0
-              ? 'REFUND_PENDING'
+            financialStatus: (pendingCount > 0 || hasFailedOrPending)
+              ? (refundedDeposit.gt(0) ? 'PARTIALLY_REFUNDED' : 'REFUND_PENDING')
               : allSettled
                 ? 'SETTLED'
                 : refundedDeposit.equals(totalDeposit)
@@ -415,6 +419,7 @@ export class RentalDepositWorker {
                   : refundedDeposit.gt(0)
                     ? 'PARTIALLY_REFUNDED'
                     : 'PAID',
+            ...(hasFailed ? { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED } : {}),
             version: { increment: 1 },
           },
         })
