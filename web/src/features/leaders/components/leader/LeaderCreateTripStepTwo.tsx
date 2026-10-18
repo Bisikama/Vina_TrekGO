@@ -62,18 +62,21 @@ export function LeaderCreateTripStepTwo() {
     }
   }, [trip?.destinationId, fetchCheckpoints]);
 
-  // Sync selected trail from suggestions or trip
+  // Sync selected trail from suggestions or trip (ưu tiên cung đường có checkpoint hợp lệ)
   useEffect(() => {
     if (trip?.trails && trip.trails.length > 0) {
       setSelectedRouteId(trip.trails[0].systemTrailId);
     } else if (suggestions.length > 0 && !selectedRouteId) {
-      setSelectedRouteId(suggestions[0].id);
+      const firstValid = suggestions.find((s) => s.checkpointIds && s.checkpointIds.length > 0);
+      setSelectedRouteId((firstValid ?? suggestions[0]).id);
     }
   }, [trip?.trails, suggestions, selectedRouteId]);
 
   const selectedTrailSuggestion = useMemo(() => {
+    const firstValid = suggestions.find((s) => s.checkpointIds && s.checkpointIds.length > 0);
     return (
       suggestions.find((s) => s.id === selectedRouteId) ??
+      firstValid ??
       suggestions[0] ??
       null
     );
@@ -87,7 +90,7 @@ export function LeaderCreateTripStepTwo() {
         .filter((cp) => trailCps.includes(cp.id))
         .sort((a, b) => trailCps.indexOf(a.id) - trailCps.indexOf(b.id));
     }
-    return destinationCheckpoints;
+    return [];
   }, [selectedTrailSuggestion, destinationCheckpoints]);
 
   function selectRoute(routeId: string) {
@@ -391,12 +394,19 @@ export function LeaderCreateTripStepTwo() {
                             <div className="min-w-0 flex-1">
                               <div className="flex justify-between gap-3">
                                 <div>
-                                  <h3 className="font-bold text-slate-950">
-                                    {suggestion.name}
-                                  </h3>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="font-bold text-slate-950">
+                                      {suggestion.name}
+                                    </h3>
+                                    {(!suggestion.checkpointIds || suggestion.checkpointIds.length === 0) && (
+                                      <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                        Chưa gắn Checkpoint
+                                      </span>
+                                    )}
+                                  </div>
 
                                   <p className="mt-1 text-xs text-slate-500">
-                                    ⌖ Đi qua {suggestion.coveredCheckpointIds?.length || 0} checkpoint
+                                    ⌖ Đi qua {suggestion.checkpointIds?.length || 0} checkpoint
                                   </p>
                                 </div>
 
