@@ -1,48 +1,42 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import useSWR from 'swr';
 import { bookingApiService, getBookingErrorMessage } from '../services/booking.api';
 import type { PageResponse, PublicBookingTrip, PublicTripsQuery } from '../types/booking.types';
 
 export function usePublicBookingTrips(initialQuery: PublicTripsQuery = {}) {
-  const [data, setData] = useState<PageResponse<PublicBookingTrip> | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number>(initialQuery.page || 1);
   const [filters, setFilters] = useState<Omit<PublicTripsQuery, 'page'>>(initialQuery);
 
-  const fetchTrips = useCallback(
-    async (signal?: AbortSignal) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const query: PublicTripsQuery = {
-          ...filters,
-          page,
-          pageSize: filters.pageSize || 12,
-        };
-        const result = await bookingApiService.getPublicTrips(query, signal);
-        setData(result);
-        return result;
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'CanceledError') return;
-        const errInfo = getBookingErrorMessage(err, 'Không thể tải danh sách chuyến đi.');
-        setError(errInfo.message);
-        return undefined;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [filters, page]
-  );
+  const pageSize = filters.pageSize || 12;
+  const swrKey = [
+    'public-booking-trips',
+    page,
+    pageSize,
+    filters.keyword || '',
+    filters.difficulty || '',
+    filters.destinationId || '',
+    filters.dateFrom || '',
+    filters.dateTo || '',
+    filters.priceMax ?? '',
+  ] as const;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchTrips(controller.signal);
-    return () => {
-      controller.abort();
-    };
-  }, [fetchTrips]);
+  const { data, error: swrError, isLoading, mutate } = useSWR<PageResponse<PublicBookingTrip>>(
+    swrKey,
+    () =>
+      bookingApiService.getPublicTrips({
+        ...filters,
+        page,
+        pageSize,
+      }),
+    {
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+      dedupingInterval: 5000,
+      keepPreviousData: true,
+    }
+  );
 
   const updateFilters = useCallback((newFilters: Partial<PublicTripsQuery>) => {
     setPage(1);
@@ -52,15 +46,19 @@ export function usePublicBookingTrips(initialQuery: PublicTripsQuery = {}) {
     }));
   }, []);
 
+  const error = swrError
+    ? getBookingErrorMessage(swrError, 'Không thể tải danh sách chuyến đi.').message
+    : null;
+
   return {
     trips: data?.items || [],
     total: data?.total || 0,
     page: data?.page || page,
-    pageSize: data?.pageSize || 12,
-    isLoading,
+    pageSize: data?.pageSize || pageSize,
+    isLoading: isLoading && !data,
     error,
     setPage,
     setFilters: updateFilters,
-    refetch: () => fetchTrips(),
+    refetch: () => mutate(),
   };
 }

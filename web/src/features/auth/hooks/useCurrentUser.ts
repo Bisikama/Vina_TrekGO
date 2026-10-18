@@ -7,12 +7,19 @@ import { useAuthStore } from "../store/authStore";
 import { User } from "../types/auth.types";
 
 export const useCurrentUser = () => {
-  const [data, setData] = useState<User | null>(null);
+  const user = useAuthStore((state) => state.user);
+  const [data, setData] = useState<User | null>(user);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setUser = useAuthStore((state) => state.setUser);
 
-  const getCurrentUser = async (): Promise<User | null> => {
+  const getCurrentUser = async (force = false): Promise<User | null> => {
+    const cachedUser = useAuthStore.getState().user;
+    if (cachedUser && !force) {
+      setData(cachedUser);
+      return cachedUser;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -35,5 +42,5 @@ export const useCurrentUser = () => {
     }
   };
 
-  return { getCurrentUser, data, isLoading, error };
+  return { getCurrentUser, data: data ?? user, isLoading, error };
 };
