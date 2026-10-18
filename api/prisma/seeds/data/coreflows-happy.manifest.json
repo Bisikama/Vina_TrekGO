@@ -1,0 +1,110 @@
+{
+  "action": "UNCHANGED",
+  "batch": "happy_20261018_delivery",
+  "trips": [
+    {
+      "endAt": "2026-10-20T19:54:53.371Z",
+      "tripId": "c265a92f-6caa-44c6-877d-aa8b83397ffd",
+      "startAt": "2026-10-20T11:54:53.371Z",
+      "bookings": [
+        {
+          "payerId": "82c8d275-7771-40ce-83e0-2b0aa41cb1b4",
+          "bookingId": "04a467f6-27ce-4062-871b-17abf424e44f",
+          "invoiceId": "01739ad5-5b93-432d-8ea5-841aefd99319",
+          "paymentId": "5fba7e6c-2413-4247-8c40-31b45ee7f4c3",
+          "totalAmount": 450000,
+          "participantCount": 1
+        },
+        {
+          "payerId": "6bcfe735-f279-4194-8c26-70a69d0333c5",
+          "bookingId": "cf435c81-6061-4d1f-8cd7-9c01a8cf9b3a",
+          "invoiceId": "07fac014-59eb-4836-8b49-7045ac32aa52",
+          "paymentId": "002311af-bfa0-43b2-8031-098b2c9e1e08",
+          "totalAmount": 900000,
+          "participantCount": 2
+        }
+      ],
+      "scenario": "PUBLIC_D2",
+      "creatorId": "3c551978-6456-4c0c-854f-a72e6bb240f3"
+    },
+    {
+      "endAt": "2026-10-25T19:54:53.371Z",
+      "tripId": "037bfc39-1886-4bc3-87af-dfc468d25aab",
+      "startAt": "2026-10-25T11:54:53.371Z",
+      "bookings": [
+        {
+          "payerId": "82c8d275-7771-40ce-83e0-2b0aa41cb1b4",
+          "bookingId": "80149bea-b9bc-4def-86a8-c2ddf29254d1",
+          "invoiceId": "75bb4208-ecb2-497b-8edd-cb1fa6b148a8",
+          "paymentId": "68875011-a3e1-46fa-8a97-27720fbe4f60",
+          "totalAmount": 650000,
+          "participantCount": 1
+        },
+        {
+          "payerId": "6bcfe735-f279-4194-8c26-70a69d0333c5",
+          "bookingId": "aab6056d-40a9-4264-879d-542f5407d6cc",
+          "invoiceId": "08483a11-d1ac-4e82-81e2-5c4a89393f85",
+          "paymentId": "abd63ed5-85fe-42ff-88c2-f09db22411d9",
+          "totalAmount": 1300000,
+          "participantCount": 2
+        }
+      ],
+      "scenario": "PUBLIC_D7",
+      "creatorId": "3c551978-6456-4c0c-854f-a72e6bb240f3"
+    },
+    {
+      "endAt": "2026-10-20T19:54:53.371Z",
+      "route": "SYSTEM",
+      "hostId": "265f98dd-e90e-4115-8e8b-889346977c3d",
+      "tripId": "f84c59d1-aad3-4d82-806c-6f795edd5864",
+      "startAt": "2026-10-20T11:54:53.371Z",
+      "memberId": "bde56ac1-20ca-4490-8e6c-e297b93636bc",
+      "scenario": "PRIVATE_D2",
+      "creatorId": "265f98dd-e90e-4115-8e8b-889346977c3d",
+      "inviteCode": "happy-1ceeb87b27ce01b083c5a22ff3d96f54"
+    },
+    {
+      "endAt": "2026-10-25T19:54:53.371Z",
+      "route": "PERSONAL",
+      "hostId": "265f98dd-e90e-4115-8e8b-889346977c3d",
+      "tripId": "f4b2aa86-2998-4719-8906-e0757af6e5a3",
+      "startAt": "2026-10-25T11:54:53.371Z",
+      "memberId": "bde56ac1-20ca-4490-8e6c-e297b93636bc",
+      "scenario": "PRIVATE_D7",
+      "creatorId": "265f98dd-e90e-4115-8e8b-889346977c3d",
+      "inviteCode": "happy-a32f8538ed0b68d9a92529876db2ae97"
+    }
+  ],
+  "users": [
+    {
+      "id": "3c551978-6456-4c0c-854f-a72e6bb240f3",
+      "role": "LEADER",
+      "email": "happy_20261018_delivery.leader@coreflows.example.test"
+    },
+    {
+      "id": "265f98dd-e90e-4115-8e8b-889346977c3d",
+      "role": "USER",
+      "email": "happy_20261018_delivery.host@coreflows.example.test"
+    },
+    {
+      "id": "bde56ac1-20ca-4490-8e6c-e297b93636bc",
+      "role": "USER",
+      "email": "happy_20261018_delivery.member@coreflows.example.test"
+    },
+    {
+      "id": "6bcfe735-f279-4194-8c26-70a69d0333c5",
+      "role": "USER",
+      "email": "happy_20261018_delivery.companion@coreflows.example.test"
+    },
+    {
+      "id": "82c8d275-7771-40ce-83e0-2b0aa41cb1b4",
+      "role": "USER",
+      "email": "happy_20261018_delivery.booker@coreflows.example.test"
+    }
+  ],
+  "source": "CF01_CF04_HAPPY_V1",
+  "options": {
+    "batch": "happy_20261018_delivery"
+  },
+  "seededAt": "2026-10-18T11:54:53.371Z"
+}
