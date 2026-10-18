@@ -13,6 +13,7 @@ type DraftData = {
   title?: string;
   name?: string;
   description?: string;
+  priceExplanation?: string | null;
   visibility?: "public" | "private";
   cancellationPolicy?: "flexible" | "standard" | "strict";
   startDate?: string;
@@ -59,29 +60,69 @@ export function LeaderCreateTripReview() {
     }
   }, [tripIdFromParam]);
 
-  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId });
+  const { trip, isLoading: isLoadingTrip, refetch: refetchTrip } = useLeaderTripDetail({ tripId });
   const { readiness, isLoading: isLoadingReadiness, refetch: refetchReadiness } =
     useLeaderTripReadiness({ tripId });
-  const { publishTrip: apiPublishTrip, isSubmitting } = useLeaderTripMutations();
+  const { publishTrip: apiPublishTrip, updateTrip, isSubmitting } = useLeaderTripMutations();
 
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [published, setPublished] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [draftData, setDraftData] = useState<DraftData>({});
+  const [priceExplanationInput, setPriceExplanationInput] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedDraft = window.sessionStorage.getItem("leader-create-trip-draft");
       if (storedDraft) {
         try {
-          setDraftData(JSON.parse(storedDraft));
+          const parsed = JSON.parse(storedDraft);
+          setDraftData(parsed);
+          if (parsed.priceExplanation) {
+            setPriceExplanationInput(String(parsed.priceExplanation));
+          }
         } catch (err) {
           console.error("Lỗi đọc draft:", err);
         }
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (trip?.priceExplanation !== undefined && trip?.priceExplanation !== null) {
+      setPriceExplanationInput(trip.priceExplanation);
+    }
+  }, [trip?.priceExplanation]);
+
+  async function handleSavePriceExplanation() {
+    if (!tripId || !trip) return;
+    setErrorMsg("");
+    try {
+      await updateTrip(tripId, {
+        expectedVersion: trip.version,
+        priceExplanation: priceExplanationInput.trim() || null,
+      });
+      if (typeof window !== "undefined") {
+        const storedDraft = window.sessionStorage.getItem("leader-create-trip-draft");
+        if (storedDraft) {
+          try {
+            const parsed = JSON.parse(storedDraft);
+            window.sessionStorage.setItem(
+              "leader-create-trip-draft",
+              JSON.stringify({ ...parsed, priceExplanation: priceExplanationInput.trim() || null })
+            );
+          } catch {}
+        }
+      }
+      await Promise.all([refetchTrip(), refetchReadiness()]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Không thể cập nhật cơ sở tính giá.";
+      setErrorMsg(msg);
+    }
+  }
 
   function handleSaveDraft() {
     setSaved(true);
@@ -294,11 +335,7 @@ export function LeaderCreateTripReview() {
                   </div>
 
                   <div className="mt-3 flex justify-between text-xs text-slate-500">
-                    <span>
-                      {draftData.visibility === "private"
-                        ? "Chuyến đi Riêng tư"
-                        : "Công khai VFRS"}
-                    </span>
+                    <span>Công khai VFRS</span>
                     <strong className="text-[#125238]">✓ Đạt chuẩn</strong>
                   </div>
                 </div>
@@ -557,6 +594,39 @@ export function LeaderCreateTripReview() {
                 <span>✓ Phương tiện di chuyển điểm đón ↔ điểm bắt đầu</span>
                 <span>✓ Toàn bộ bữa ăn chính và hỗ trợ tiếp tế</span>
                 <span>✓ Phí quản lý rừng và sinh môi trường</span>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-slate-200 bg-[#f8fafc] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <strong className="text-sm text-slate-900">
+                      Cơ sở tính giá &amp; Giải trình chi phí nội bộ (priceExplanation)
+                    </strong>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Bắt buộc trước khi công khai chuyến đi. Không hiển thị công khai cho khách hàng.
+                    </p>
+                  </div>
+                  {trip?.status === "DRAFT" && (
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleSavePriceExplanation}
+                      className="rounded-lg bg-[#125238] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2f6b4f] disabled:bg-slate-400"
+                    >
+                      {isSubmitting ? "Đang lưu..." : "Lưu cơ sở tính giá"}
+                    </button>
+                  )}
+                </div>
+
+                <textarea
+                  rows={3}
+                  maxLength={5000}
+                  disabled={trip?.status !== undefined && trip?.status !== "DRAFT"}
+                  value={priceExplanationInput}
+                  onChange={(e) => setPriceExplanationInput(e.target.value)}
+                  placeholder="Nhập chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận..."
+                  className="mt-3 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 outline-none focus:border-[#2f6b4f] disabled:bg-slate-100"
+                />
               </div>
             </section>
           </div>

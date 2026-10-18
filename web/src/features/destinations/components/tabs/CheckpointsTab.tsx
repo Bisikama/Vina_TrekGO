@@ -94,14 +94,16 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({
 
   // 2. Tải TẤT CẢ các Trails thuộc Địa danh được chọn (kèm GeoJSON để render lên 3D Map)
   useEffect(() => {
-    if (!selectedDestId) {
+    if (!selectedDestId || !selectedDestId.trim()) {
+      setTrails([]);
       return;
     }
 
     let isCancelled = false;
+    setLoadingTrails(true);
 
     systemTrailApi
-      .getTrails({ destinationId: selectedDestId, pageSize: 50 })
+      .getTrails({ destinationId: selectedDestId.trim(), pageSize: 50 })
       .then(async (res) => {
         if (isCancelled) return;
         // Tải chi tiết từng trail để lấy routeGeojson và bounds
@@ -121,7 +123,7 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({
       })
       .catch((err) => {
         if (!isCancelled) {
-          console.error("Lỗi khi tải danh sách trails cho địa danh:", err);
+          console.error("Lỗi khi tải danh sách trails cho địa danh:", err?.response?.data || err);
           setTrails([]);
           setLoadingTrails(false);
         }

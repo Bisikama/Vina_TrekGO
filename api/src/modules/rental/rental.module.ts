@@ -5,6 +5,7 @@ import { OrderingModule } from './ordering/ordering.module';
 import { PreparationModule } from './preparation/preparation.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { RentalReturnsModule } from './returns/returns.module';
+import { LifecycleModule } from './lifecycle/lifecycle.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RentalReturnsModule } from './returns/returns.module';
     PreparationModule,
     DeliveryModule,
     RentalReturnsModule,
+    LifecycleModule,
   ],
   controllers: [],
   providers: [],

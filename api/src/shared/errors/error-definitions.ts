@@ -5,10 +5,13 @@ import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
 import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
 import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
 import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
+import { NOTIFICATION_ERROR_CODES } from './codes/notification.error-codes';
 import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes';
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
+import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -111,6 +114,8 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [MEDIA_ERROR_CODES.MEDIA_INVALID_DIMENSIONS]: { status: 422, message: 'Invalid media dimensions', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_VIDEO_TOO_LONG]: { status: 422, message: 'Video duration exceeds maximum allowed', retryable: false },
   [MEDIA_ERROR_CODES.MEDIA_INVALID_MEDIA_METADATA]: { status: 422, message: 'Invalid or missing media metadata from provider', retryable: false },
+  // --- NOTIFICATION ---
+  [NOTIFICATION_ERROR_CODES.NOTIFICATION_NOT_FOUND]: { status: 404, message: 'Notification not found or access denied', retryable: false },
   [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: { status: 400, message: 'Insufficient available quantity for rental', retryable: false },
   [RO.QUOTE_NOT_ACTIVE]: { status: 400, message: 'Quote is no longer active', retryable: false },
   [RO.QUOTE_EXPIRED]: { status: 400, message: 'Quote has expired', retryable: false },
@@ -122,6 +127,22 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.EQUIPMENT_NOT_AVAILABLE]: { status: 409, message: 'Equipment not available', retryable: false },
   [RO.RENTAL_ORDER_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
   [RO.INVENTORY_LOCATION_NOT_CONFIGURED]: { status: 500, message: 'Primary rental inventory location is not configured or inactive', retryable: false },
+  [RO.TERMS_NOT_ACCEPTED]: { status: 400, message: 'Extension terms must be accepted', retryable: false },
+  [RO.TERMS_VERSION_MISMATCH]: { status: 409, message: 'Accepted terms version does not match quoted terms', retryable: false },
+  [RO.TERMS_HASH_MISMATCH]: { status: 409, message: 'Terms hash does not match issued extension quote', retryable: false },
+  [RO.EXTENSION_CAPACITY_CONFLICT]: { status: 409, message: 'Insufficient warehouse capacity for requested extension period', retryable: false },
+  [RO.EXTENSION_QUOTE_EXPIRED]: { status: 410, message: 'Extension quote has expired', retryable: false },
+  [RO.EXTENSION_ALREADY_PENDING]: { status: 409, message: 'An extension request is already pending payment', retryable: false },
+  [RO.EXTENSION_HOLD_EXPIRED]: { status: 410, message: 'Extension capacity hold has expired', retryable: false },
+  [RO.EXTENSION_NOT_APPLICABLE]: { status: 409, message: 'Extension is not in a valid state to apply', retryable: false },
+  [RO.EXTENSION_LIMIT_EXCEEDED]: { status: 422, message: 'Maximum extension count reached', retryable: false },
+  [RO.EXTENSION_TOO_LATE]: { status: 422, message: 'Extension requested after cutoff deadline', retryable: false },
+  [RO.EXTENSION_END_NOT_LATER]: { status: 422, message: 'Requested return date must be later than current return date', retryable: false },
+  [RO.EXTENSION_INVALID_ORDER_STATE]: { status: 409, message: 'Order is not in active state for extension', retryable: false },
+  [RO.EXTENSION_RETURN_STARTED]: { status: 409, message: 'Return inspection has already started', retryable: false },
+  [RO.EXTENSION_RETURN_TASK_STARTED]: { status: 409, message: 'Return collection task is already in progress', retryable: false },
+  [RO.EXTENSION_LINE_MISSING]: { status: 404, message: 'Extension order line not found', retryable: false },
+  [RO.EXTENSION_PAYMENT_MISMATCH]: { status: 422, message: 'Payment does not match extension invoice', retryable: false },
 
   // Preparation (Phase 05)
   [PR.TASK_NOT_FOUND]: { status: 404, message: 'Preparation task not found', retryable: false },
@@ -167,4 +188,25 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
+
+  // Lifecycle (Phase 07A)
+  [LC.INVALID_EVENT_PAYLOAD]: { status: 400, message: 'Invalid rental lifecycle event payload', retryable: false },
+  [LC.UNSUPPORTED_EVENT]: { status: 422, message: 'Unsupported rental lifecycle event type', retryable: false },
+  [LC.RETURN_TASK_NOT_CREATABLE]: { status: 409, message: 'Return task cannot be created in current state', retryable: false },
+  [LC.RESCHEDULE_CAPACITY_CONFLICT]: { status: 409, message: 'Capacity conflict on trip reschedule', retryable: false },
+  [LC.OUT_OF_ORDER_EVENT]: { status: 409, message: 'Out of order lifecycle event ignored', retryable: false },
+  [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
+
+  // Personal Trail & Elevation
+  [PT.INSUFFICIENT_GPS_POINTS]: { status: 400, message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ', retryable: false },
+  [PT.INVALID_GEOJSON_COORDINATES]: { status: 400, message: 'Tọa độ GeoJSON không hợp lệ', retryable: false },
+  [PT.RECORDING_CHANGED]: { status: 409, message: 'Dữ liệu phiên ghi đã thay đổi, vui lòng thử hoàn tất lại', retryable: true },
+  [PT.RECORDING_NOT_FOUND]: { status: 404, message: 'Không tìm thấy phiên ghi hành trình', retryable: false },
+  [PT.RECORDING_ALREADY_FINISHED]: { status: 409, message: 'Phiên ghi hành trình đã kết thúc trước đó', retryable: false },
+  [PT.TRAIL_ACCESS_DENIED]: { status: 403, message: 'Không có quyền truy cập hoặc chỉnh sửa cung đường này', retryable: false },
+  [PT.PERSONAL_TRAIL_NOT_FOUND]: { status: 404, message: 'Không tìm thấy cung đường cá nhân', retryable: false },
+  [PT.TRAIL_TOO_SHORT_FOR_VERIFY]: { status: 422, message: 'Cung đường phải dài tối thiểu 500m để gửi kiểm duyệt', retryable: false },
+  [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
+  [PT.DEM_PROCESSING_FAILED]: { status: 500, message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM', retryable: true },
+  [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: { status: 400, message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh', retryable: false },
 };

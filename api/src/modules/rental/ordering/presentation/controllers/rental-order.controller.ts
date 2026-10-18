@@ -44,7 +44,7 @@ export class RentalOrderController {
 
   @Post()
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Tạo đơn thuê thiết bị',
     description: `
@@ -96,7 +96,7 @@ export class RentalOrderController {
 
   @Get()
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Danh sách đơn thuê của người dùng',
     description: `
@@ -123,7 +123,7 @@ export class RentalOrderController {
 
   @Get(':id')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER, UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN)
+  @Roles(UserRole.USER, UserRole.LEADER, UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN)
   @ApiOperation({
     summary: 'Chi tiết đơn thuê',
     description: `
@@ -149,7 +149,7 @@ export class RentalOrderController {
 
   @Post(':id/cancel')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Huỷ đơn thuê',
     description: `
@@ -188,7 +188,7 @@ export class RentalOrderController {
 
   @Get(':id/payment')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Trạng thái thanh toán của đơn thuê',
     description: `
@@ -211,7 +211,7 @@ export class RentalOrderController {
 
   @Get(':id/cancellation-preview')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Xem trước chi phí hoàn tiền khi huỷ đơn',
     description: `

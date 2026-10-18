@@ -58,18 +58,6 @@ export const Checkpoint3DMap: React.FC<Checkpoint3DMapProps> = ({
     lng: number;
   } | null>(null);
 
-  // Nhận diện địa danh Núi Bà Đen để ưu tiên Local DEM Cache
-  const isBaDen = Boolean(
-    destination?.id === "d1a2b3c4-0001-4000-8000-000000000001" ||
-    destination?.name?.toLowerCase().includes("bà đen") ||
-    destination?.name?.toLowerCase().includes("tây ninh") ||
-    trails.some(
-      (t) =>
-        t.code.toLowerCase().includes("baden") ||
-        t.name.toLowerCase().includes("bà đen"),
-    ),
-  );
-
   const centerLng = Number(destination?.centerLng) || 106.1712;
   const centerLat = Number(destination?.centerLat) || 11.3789;
   const pad = 0.35;
@@ -284,7 +272,6 @@ export const Checkpoint3DMap: React.FC<Checkpoint3DMapProps> = ({
       ref={baseMapRef}
       center={[centerLng, centerLat]}
       maxBounds={maxBounds}
-      isBaDen={isBaDen}
       cursor={isAddMode ? "crosshair" : undefined}
       onMapReady={handleMapReady}
       onMapClick={handleMapClick}

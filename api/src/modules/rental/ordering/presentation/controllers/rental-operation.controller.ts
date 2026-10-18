@@ -34,7 +34,7 @@ export class RentalOperationController {
 
   @Get('availability')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Kiểm tra tồn kho thiết bị theo chuyến đi',
     description: `
@@ -93,7 +93,7 @@ export class RentalOperationController {
 
   @Post('quote')
   @Auth([AuthType.Bearer])
-  @Roles(UserRole.USER)
+  @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     summary: 'Tạo báo giá thuê thiết bị',
     description: `

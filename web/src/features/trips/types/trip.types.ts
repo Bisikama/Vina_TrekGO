@@ -1,6 +1,6 @@
-export interface TripInput { destinationId: string; title: string; description?: string; startAt: string; endAt: string; pickupPointId: string; capacity: number; price: string }
-export interface Trip extends Omit<TripInput, 'pickupPointId' | 'price' | 'description'> {
-  id: string; status: string; version: number; pickupPointId: string | null; price: string | null; description: string | null;
+export interface TripInput { destinationId: string; title: string; description?: string; priceExplanation?: string | null; startAt: string; endAt: string; pickupPointId: string; capacity: number; price: string }
+export interface Trip extends Omit<TripInput, 'pickupPointId' | 'price' | 'description' | 'priceExplanation'> {
+  id: string; status: string; version: number; pickupPointId: string | null; price: string | null; description: string | null; priceExplanation?: string | null;
   checkpoints: { sourceCheckpointId: string | null; name: string; sequence: number }[];
   trails: { systemTrailId: string; snapshotName: string; sequence: number }[];
 }

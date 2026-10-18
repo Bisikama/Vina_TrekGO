@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-type Visibility = "public" | "private";
 const inputClass =
   "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
 
@@ -80,9 +79,9 @@ export function LeaderCreateTripStepOne() {
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState("");
 
-  const [visibility, setVisibility] = useState<Visibility>("public");
   const [capacity, setCapacity] = useState(15);
   const [price, setPrice] = useState("2850000");
+  const [priceExplanation, setPriceExplanation] = useState("");
   const [difficulty, setDifficulty] = useState(3);
   const [startDate, setStartDate] = useState(() => dateInputValue(new Date()));
   const [endDate, setEndDate] = useState(() => {
@@ -105,9 +104,9 @@ export function LeaderCreateTripStepOne() {
         if (draft.title) setTitle(draft.title);
         if (draft.name && !draft.title) setTitle(draft.name);
         if (draft.description) setDescription(draft.description);
-        if (draft.visibility) setVisibility(draft.visibility);
         if (draft.capacity) setCapacity(Number(draft.capacity));
         if (draft.price) setPrice(String(draft.price));
+        if (draft.priceExplanation) setPriceExplanation(String(draft.priceExplanation));
         if (draft.startDate) setStartDate(draft.startDate);
         if (draft.endDate) setEndDate(draft.endDate);
         if (draft.meetingTime) setMeetingTime(draft.meetingTime);
@@ -186,12 +185,14 @@ export function LeaderCreateTripStepOne() {
       const startAt = new Date(`${startDate}T${meetingTime}:00`).toISOString();
       const endAt = new Date(`${endDate}T23:59:59`).toISOString();
       const cleanPrice = String(price).replace(/\D/g, "") || "1000000";
+      const cleanPriceExplanation = priceExplanation.trim() || null;
 
       const createdTrip = await createDraft({
         destinationId,
         pickupPointId,
         title: title.trim(),
         description: description.trim() || null,
+        priceExplanation: cleanPriceExplanation,
         startAt,
         endAt,
         capacity: Number(capacity),
@@ -211,7 +212,8 @@ export function LeaderCreateTripStepOne() {
           title: createdTrip.title,
           name: createdTrip.title,
           description: createdTrip.description,
-          visibility,
+          priceExplanation: createdTrip.priceExplanation ?? cleanPriceExplanation,
+          visibility: "public",
           startDate,
           endDate,
           meetingTime,
@@ -353,74 +355,25 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <div>
-                  <FieldLabel required>Loại hình chuyến đi</FieldLabel>
+                  <FieldLabel>Loại hình chuyến đi</FieldLabel>
 
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setVisibility("public")}
-                      className={`rounded-xl border p-4 text-left transition ${
-                        visibility === "public"
-                          ? "border-[#2f6b4f] bg-emerald-50"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`h-4 w-4 rounded-full border-4 ${
-                            visibility === "public"
-                              ? "border-[#125238]"
-                              : "border-slate-300"
-                          }`}
-                        />
+                  <div className="rounded-xl border border-[#2f6b4f] bg-emerald-50 p-4 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="h-4 w-4 rounded-full border-4 border-[#125238]" />
 
-                        <strong className="text-sm text-slate-900">
-                          Chuyến đi Công khai
-                        </strong>
+                      <strong className="text-sm text-slate-900">
+                        Chuyến đi Công khai
+                      </strong>
 
-                        <span className="ml-auto rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
-                          VFRS L2
-                        </span>
-                      </div>
+                      <span className="ml-auto rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
+                        VFRS L2
+                      </span>
+                    </div>
 
-                      <p className="mt-3 text-xs leading-5 text-slate-500">
-                        Mở bán vé rộng rãi trên hệ thống, tiếp cận cộng đồng hơn
-                        45.000 trekker.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setVisibility("private")}
-                      className={`rounded-xl border p-4 text-left transition ${
-                        visibility === "private"
-                          ? "border-[#2f6b4f] bg-emerald-50"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`h-4 w-4 rounded-full border-4 ${
-                            visibility === "private"
-                              ? "border-[#125238]"
-                              : "border-slate-300"
-                          }`}
-                        />
-
-                        <strong className="text-sm text-slate-900">
-                          Chuyến đi Riêng tư
-                        </strong>
-
-                        <span className="ml-auto rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-[#125238]">
-                          Hiện dùng
-                        </span>
-                      </div>
-
-                      <p className="mt-3 text-xs leading-5 text-slate-500">
-                        Dành cho nhóm bạn, câu lạc bộ hoặc doanh nghiệp. Tham gia
-                        bằng mã hoặc đường liên kết.
-                      </p>
-                    </button>
+                    <p className="mt-2 text-xs leading-5 text-slate-600">
+                      Mở bán vé rộng rãi trên hệ thống, tiếp cận cộng đồng hơn
+                      45.000 trekker.
+                    </p>
                   </div>
                 </div>
 
@@ -682,6 +635,28 @@ export function LeaderCreateTripStepOne() {
                   <p className="mt-2 text-xs text-slate-500">
                     Đã gồm bảo hiểm VFRS 600 triệu/người.
                   </p>
+                </label>
+
+                <label className="md:col-span-2 block">
+                  <FieldLabel required>
+                    Cơ sở tính giá &amp; Giải trình chi phí (Nội bộ)
+                  </FieldLabel>
+
+                  <textarea
+                    rows={4}
+                    maxLength={5000}
+                    className="w-full resize-y rounded-xl border border-slate-200 bg-[#f6f8fc] p-4 text-sm leading-6 text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
+                    value={priceExplanation}
+                    onChange={(event) => setPriceExplanation(event.target.value)}
+                    placeholder="Nhập cơ sở tính giá nội bộ: chi phí chung (xe, porter, lều trại), chi phí/người (ăn uống, vé rừng, bảo hiểm), số khách dự toán, dự phòng và lợi nhuận..."
+                  />
+
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                    <span>
+                      Có thể tạm để trống khi lưu nháp, nhưng <strong className="text-slate-700">bắt buộc phải nhập trước khi công khai (Publish)</strong>. Không hiển thị công khai cho khách.
+                    </span>
+                    <span className="text-slate-400">{priceExplanation.length}/5000 ký tự</span>
+                  </div>
                 </label>
               </div>
 

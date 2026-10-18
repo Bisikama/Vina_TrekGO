@@ -18,6 +18,16 @@ export class UpdateDestinationUseCase {
       }
     }
 
+    if (dto.pickupPoints && dto.pickupPoints.length > 0) {
+      const codes = dto.pickupPoints
+        .map((p) => p.code?.trim().toUpperCase())
+        .filter((c): c is string => Boolean(c))
+      const uniqueCodes = new Set(codes)
+      if (uniqueCodes.size !== codes.length) {
+        throw new ConflictException('Mã điểm tập kết (code) trong danh sách không được trùng lặp nhau')
+      }
+    }
+
     return this.destinationPort.update(id, dto)
   }
 }
