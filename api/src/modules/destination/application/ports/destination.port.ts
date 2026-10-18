@@ -1,5 +1,40 @@
 import { RecordStatus } from '@prisma/client'
 
+export interface PickupPointSummary {
+  id: string
+  destinationId: string | null
+  code: string
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+  note: string | null
+  status: RecordStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface CreatePickupPointData {
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+  code?: string | null
+  note?: string | null
+  status?: RecordStatus
+}
+
+export interface UpdatePickupPointData {
+  id?: string
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+  code?: string | null
+  note?: string | null
+  status?: RecordStatus
+}
+
 export interface DestinationSummary {
   id: string
   name: string
@@ -9,9 +44,12 @@ export interface DestinationSummary {
   centerLng: number | null
   status: RecordStatus
   trailCount?: number
+  pickupPointCount?: number
+  pickupPoints?: PickupPointSummary[]
   createdAt: Date
   updatedAt: Date
 }
+
 export interface CreateDestinationData {
   name: string
   description?: string | null
@@ -19,6 +57,8 @@ export interface CreateDestinationData {
   centerLat?: number | null
   centerLng?: number | null
   status?: RecordStatus
+  actorId?: string
+  pickupPoints?: CreatePickupPointData[]
 }
 
 export interface PaginatedResult<T> {
@@ -39,7 +79,16 @@ export interface GetDestinationsFilter {
   pageSize?: number
 }
 
-export type UpdateDestinationData = Partial<CreateDestinationData>
+export interface UpdateDestinationData {
+  name?: string
+  description?: string | null
+  region?: string | null
+  centerLat?: number | null
+  centerLng?: number | null
+  status?: RecordStatus
+  actorId?: string
+  pickupPoints?: UpdatePickupPointData[]
+}
 
 export interface DestinationRelatedCounts {
   trails: number

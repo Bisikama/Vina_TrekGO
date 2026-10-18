@@ -113,6 +113,7 @@ export interface IPersonalTrailRepository {
   }): Promise<{ recording: TrailRecordingModel; personalTrail: PersonalTrailModel }>
 
   findPersonalTrailById(id: string): Promise<any>
+  findPersonalCheckpointsByTrailId(personalTrailId: string): Promise<any[]>
   findMyPersonalTrails(userId: string, query: MyTrailsQuery): Promise<{ items: any[]; totalItems: number }>
   updatePersonalTrail(id: string, userId: string, data: any): Promise<PersonalTrailModel>
   softDeletePersonalTrail(id: string, userId: string): Promise<void>

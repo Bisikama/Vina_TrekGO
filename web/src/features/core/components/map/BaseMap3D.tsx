@@ -24,7 +24,6 @@ export interface BaseMap3DProps {
   maxZoom?: number;
   maxBounds?: [[number, number], [number, number]];
   is3D?: boolean;
-  isBaDen?: boolean;
   terrainExaggeration?: number;
   cursor?: string;
   className?: string;
@@ -46,7 +45,6 @@ export const BaseMap3D = forwardRef<BaseMap3DRef, BaseMap3DProps>(
       maxZoom = 16.5,
       maxBounds,
       is3D = true,
-      isBaDen = false,
       terrainExaggeration = 2.0,
       cursor,
       className = "relative w-full h-[580px] rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-slate-950",
@@ -128,7 +126,7 @@ export const BaseMap3D = forwardRef<BaseMap3DRef, BaseMap3DProps>(
           if (!map.getSource("terrain-dem-source")) {
             map.addSource("terrain-dem-source", {
               type: "raster-dem",
-              tiles: [getDemTileUrl(isBaDen)],
+              tiles: [getDemTileUrl()],
               encoding: "terrarium",
               tileSize: 256,
               minzoom: 5,
@@ -197,7 +195,6 @@ export const BaseMap3D = forwardRef<BaseMap3DRef, BaseMap3DProps>(
     }, [
       center[0],
       center[1],
-      isBaDen,
       is3D,
       maxBounds?.[0]?.[0],
       maxBounds?.[1]?.[0],
