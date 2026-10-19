@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { RentalDocumentType } from '@prisma/client';
 import { UserRole } from 'src/shared/constants';
 import { AuthType } from 'src/shared/constants/auth.constant';
 import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
@@ -13,13 +14,22 @@ import { ReturnInspectionUseCase } from '../../application/use-cases/return-insp
 import { GetDepositUseCase } from '../../application/use-cases/get-deposit.use-case';
 import { CreateAssessmentReviewUseCase } from '../../application/use-cases/create-assessment-review.use-case';
 import { GetRentalAssessmentUseCase } from '../../application/use-cases/get-rental-assessment.use-case';
+import { FinalizeReturnReceiptUseCase } from '../../application/use-cases/finalize-return-receipt.use-case';
+import { ListRentalDocumentsUseCase } from '../../application/use-cases/list-rental-documents.use-case';
+import { GetRentalDocumentUseCase } from '../../application/use-cases/get-rental-document.use-case';
 import {
   AssessmentReviewBodySchema,
+  FinalizeReturnReceiptBodySchema,
+  ListRentalDocumentsQuerySchema,
+  RentalOrderDocumentParamsSchema,
   RentalOrderIdParamSchema,
   RentalReturnIdempotencyKeySchema,
   ReturnInspectionBodySchema,
   ReturnScanBodySchema,
   type AssessmentReviewBodyDto,
+  type FinalizeReturnReceiptBodyDto,
+  type ListRentalDocumentsQueryDto,
+  type RentalOrderDocumentParamsDto,
   type RentalOrderIdParamDto,
   type ReturnInspectionBodyDto,
   type ReturnScanBodyDto,
@@ -36,6 +46,9 @@ export class RentalReturnController {
     private readonly getDepositUseCase: GetDepositUseCase,
     private readonly createAssessmentReviewUseCase: CreateAssessmentReviewUseCase,
     private readonly getRentalAssessmentUseCase: GetRentalAssessmentUseCase,
+    private readonly finalizeReturnReceiptUseCase: FinalizeReturnReceiptUseCase,
+    private readonly listRentalDocumentsUseCase: ListRentalDocumentsUseCase,
+    private readonly getRentalDocumentUseCase: GetRentalDocumentUseCase,
   ) {}
 
   @Post(':id/return-scan')
@@ -193,6 +206,110 @@ export class RentalReturnController {
   @ApiResponse({ status: 404, description: 'Đơn hàng không tồn tại' })
   async assessment(@Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto, @ActiveUser('id') actorUserId: string) {
     return this.getRentalAssessmentUseCase.execute({ actorUserId, orderId: params.id });
+  }
+
+  @Post(':id/return-receipts')
+  @Roles(UserRole.STAFF_DELIVERY)
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'RB-API-1004 — Chốt phiên nhận trả và phát hành biên nhận (RETURN_RECEIPT)',
+    description:
+      'Nhân viên giao hàng được phân công chốt phiên nhận trả cụ thể (bằng returnSessionId) sau khi đã quét nhận và ghi nhận quan sát sơ bộ. ' +
+      'Tạo chứng từ bất biến RETURN_RECEIPT gắn với phiên, snapshot đầy đủ theo FR Table RETURN_RECEIPT.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID đơn hàng thuê' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'Khóa duy nhất để tránh gọi trùng', example: 'receipt-20261018-abc123' })
+  @ApiBody({
+    description: 'Lấy returnSessionId và expectedVersion từ phiên nhận trả hiện tại của đơn. Chỉ gửi failureEvidenceId/evidenceIds khi đã có media ID hợp lệ. Retry cùng body với cùng Idempotency-Key.',
+    schema: {
+      type: 'object',
+      required: ['returnSessionId', 'expectedVersion'],
+      properties: {
+        returnSessionId: { type: 'string', format: 'uuid', description: 'UUID phiên nhận trả cần chốt' },
+        expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại của phiên nhận trả' },
+        remarks: { type: 'string', maxLength: 1000, description: 'Ghi chú của nhân viên giao hàng, tùy chọn' },
+        userRemarks: { type: 'string', maxLength: 1000, description: 'Ý kiến khách hàng tại thời điểm nhận trả, tùy chọn' },
+        failureEvidenceId: { type: 'string', format: 'uuid', description: 'Minh chứng khi chốt phiên gặp ngoại lệ, tùy chọn' },
+        evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Minh chứng đã tải lên, tùy chọn' },
+      },
+      example: { returnSessionId: '550e8400-e29b-41d4-a716-446655440020', expectedVersion: 1 },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Biên nhận nhận trả (RETURN_RECEIPT) được phát hành thành công' })
+  @ApiResponse({ status: 403, description: 'Nhân viên không được phân công hoặc không sở hữu phiên nhận trả' })
+  @ApiResponse({ status: 404, description: 'Đơn hàng hoặc phiên nhận trả không tồn tại' })
+  @ApiResponse({ status: 409, description: 'Phiên nhận trả không ở trạng thái hợp lệ để chốt hoặc thiếu chứng từ gốc HANDOVER' })
+  async finalizeReturnReceipt(
+    @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,
+    @Body(new ZodValidationPipe(FinalizeReturnReceiptBodySchema)) body: FinalizeReturnReceiptBodyDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser('id') actorUserId: string,
+    @ActiveUser('role') actorRole: string,
+  ) {
+    return this.finalizeReturnReceiptUseCase.execute({
+      actorUserId,
+      actorRole,
+      orderId: params.id,
+      returnSessionId: body.returnSessionId,
+      remarks: body.remarks,
+      userRemarks: body.userRemarks,
+      failureEvidenceId: body.failureEvidenceId,
+      evidenceIds: body.evidenceIds,
+      expectedVersion: body.expectedVersion,
+      idempotencyKey: requireKey(rawKey),
+      now: new Date(),
+    });
+  }
+
+  @Get(':id/documents')
+  @Roles(UserRole.USER, UserRole.LEADER, UserRole.STAFF_DELIVERY, UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'RB-API-1001 — Danh sách chứng từ của đơn hàng thuê',
+    description: 'Truy vấn danh sách tất cả các chứng từ (HANDOVER, RETURN_RECEIPT, EXTENSION_APPENDIX, ...) thuộc đơn hàng kèm phân trang.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID đơn hàng thuê' })
+  @ApiQuery({ name: 'type', required: false, enum: RentalDocumentType, description: 'Lọc theo loại chứng từ' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang (mặc định 1)' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Kích thước trang (mặc định 20, tối đa 100)' })
+  @ApiResponse({ status: 200, description: 'Danh sách chứng từ và phân trang' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập chứng từ của đơn hàng này' })
+  @ApiResponse({ status: 404, description: 'Đơn hàng không tồn tại' })
+  async listDocuments(
+    @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,
+    @Query(new ZodValidationPipe(ListRentalDocumentsQuerySchema)) query: ListRentalDocumentsQueryDto,
+    @ActiveUser('id') actorUserId: string,
+    @ActiveUser('role') actorRole: string,
+  ) {
+    return this.listRentalDocumentsUseCase.execute({
+      orderId: params.id,
+      actorUserId,
+      actorRole,
+      ...query,
+    });
+  }
+
+  @Get(':id/documents/:documentId')
+  @Roles(UserRole.USER, UserRole.LEADER, UserRole.STAFF_DELIVERY, UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'RB-API-1002 — Xem chi tiết chứng từ (bằng chứng từ ID thuộc đơn)',
+    description: 'Truy vấn chi tiết chứng từ gồm snapshot bất biến, hash, phiên bản chính sách, template, bảo vệ kiểm tra orderId.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID đơn hàng thuê' })
+  @ApiParam({ name: 'documentId', type: String, format: 'uuid', description: 'UUID chứng từ' })
+  @ApiResponse({ status: 200, description: 'Chi tiết chứng từ và snapshot bất biến' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập chứng từ này' })
+  @ApiResponse({ status: 404, description: 'Chứng từ không tồn tại hoặc không thuộc đơn hàng' })
+  async getDocument(
+    @Param(new ZodValidationPipe(RentalOrderDocumentParamsSchema)) params: RentalOrderDocumentParamsDto,
+    @ActiveUser('id') actorUserId: string,
+    @ActiveUser('role') actorRole: string,
+  ) {
+    return this.getRentalDocumentUseCase.execute({
+      documentId: params.documentId,
+      expectedOrderId: params.id,
+      actorUserId,
+      actorRole,
+    });
   }
 }
 

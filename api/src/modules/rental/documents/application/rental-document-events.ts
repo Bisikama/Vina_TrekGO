@@ -23,7 +23,7 @@ export function snapshotHash(value: unknown): string { return createHash('sha256
 async function insertEventDocument(tx: Tx, input: {
   orderId: string; documentType: RentalDocumentType; sourceRef: string; issuedAt: Date;
   snapshot: Record<string, unknown>; rootDocumentId?: string; previousDocumentId?: string;
-  appendixNo?: number; policyVersion?: string;
+  appendixNo?: number; policyVersion?: string; templateVersion?: string;
 }) {
   const existing = await tx.rentalDocument.findUnique({
     where: { documentType_sourceRef: { documentType: input.documentType, sourceRef: input.sourceRef } },
@@ -37,7 +37,9 @@ async function insertEventDocument(tx: Tx, input: {
     appendixNo: input.appendixNo ?? null,
     snapshotJson: JSON.parse(canonical(input.snapshot)) as Prisma.InputJsonValue,
     snapshotHash: snapshotHash(input.snapshot),
-    policyVersion: input.policyVersion ?? '1.5.2', issuedAt: input.issuedAt,
+    policyVersion: input.policyVersion ?? '1.5.2',
+    templateVersion: input.templateVersion ?? '1.3.2',
+    issuedAt: input.issuedAt,
   }});
   await tx.rentalOutboxEvent.upsert({
     where: { deduplicationKey: `rental-document-render:${document.id}` }, update: {},
@@ -167,19 +169,144 @@ export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:
       operationalReturnDueAt:input.newOperationalDueAt.toISOString(),feeChanged:false,originalDocumentUnchanged:true}});
 }
 
-export async function issueReturnReceiptTx(tx:Tx,sessionId:string,at:Date){
-  const session=await tx.rentalReturnSession.findUnique({where:{id:sessionId}});
-  if(!session || session.status!=='FINALIZED' || !session.finalizedAt) {
+export async function issueReturnReceiptTx(
+  tx: Tx,
+  sessionId: string,
+  at: Date,
+  options?: { failureEvidenceId?: string | null; evidenceIds?: string[] | null; userRemarks?: string | null },
+) {
+  const session = await tx.rentalReturnSession.findUnique({ where: { id: sessionId } });
+  if (!session || session.status !== 'FINALIZED' || !session.finalizedAt) {
     throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'RETURN_SESSION_NOT_FINALIZED', sessionId } });
   }
-  const root=await tx.rentalDocument.findFirst({where:{orderId:session.orderId,documentType:RentalDocumentType.HANDOVER}});
-  if(!root) {
+  const root = await tx.rentalDocument.findFirst({
+    where: { orderId: session.orderId, documentType: RentalDocumentType.HANDOVER },
+  });
+  if (!root) {
     throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, { details: { orderId: session.orderId, sessionId } });
   }
-  return insertEventDocument(tx,{orderId:session.orderId,documentType:RentalDocumentType.RETURN_RECEIPT,sourceRef:sessionId,issuedAt:at,
-    rootDocumentId:root.id,snapshot:{kind:'RETURN_RECEIPT',orderId:session.orderId,sessionId,staffId:session.staffId,
-      units:session.receivedUnits,remarks:session.remarks,finalizedAt:session.finalizedAt.toISOString(),
-      inspectionAndDepositSettlement:'SEPARATE_PER_UNIT_WORKFLOW',originalDocumentUnchanged:true}});
+
+  const existing = await tx.rentalDocument.findUnique({
+    where: { documentType_sourceRef: { documentType: RentalDocumentType.RETURN_RECEIPT, sourceRef: sessionId } },
+  });
+  if (existing) return existing;
+
+  const order = tx.rentalOrder?.findUnique
+    ? await tx.rentalOrder.findUnique({
+        where: { id: session.orderId },
+        include: {
+          rentalOrderLinesViaOrderId: {
+            include: { rentalUnitAssignmentsViaOrderLineId: { include: { equipmentUnit: true } } },
+          },
+          deliveryTasksViaOrderId: true,
+        },
+      })
+    : null;
+
+  const allAssignments = (order?.rentalOrderLinesViaOrderId ?? [])
+    .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
+    .filter((a) => !['REPLACED', 'UNASSIGNED'].includes(a.status as any));
+
+  const notReturnedUnitIdsAtSessionEnd = allAssignments
+    .filter((a) => a.status !== 'RETURNED' && a.status !== 'CLOSED')
+    .map((a) => a.equipmentUnitId);
+
+  const rawReceived = Array.isArray(session.receivedUnits)
+    ? (session.receivedUnits as any[]).filter((u: any) => !u.duplicate)
+    : [];
+
+  const failureEvidenceId = options?.failureEvidenceId ?? (session as any)?.failureEvidenceId ?? null;
+  const evidenceIds = options?.evidenceIds ?? (failureEvidenceId ? [failureEvidenceId] : []);
+
+  if (rawReceived.length === 0 && !failureEvidenceId && evidenceIds.length === 0) {
+    throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+      details: { reason: 'ZERO_SCAN_REQUIRES_FAILURE_EVIDENCE', sessionId },
+    });
+  }
+
+  const returnTask = order?.deliveryTasksViaOrderId.find(
+    (t) => (t as any).taskType === 'RETURN',
+  );
+  const returnLocationRef =
+    (returnTask as any)?.hubId ??
+    (returnTask as any)?.toLocationId ??
+    (returnTask as any)?.address ??
+    (session as any)?.locationRef ??
+    null;
+
+  const orderPolicySnapshot = (order?.policySnapshot as Record<string, any>) ?? null;
+  const policyVersion =
+    orderPolicySnapshot?.policyVersion ??
+    orderPolicySnapshot?.version ??
+    '1.5.2';
+
+  const enrichedUnits = rawReceived.map((u) => {
+    const unitId = typeof u === 'string' ? u : u.unitId;
+    const assignment = allAssignments.find((a) => a.equipmentUnitId === unitId);
+    const assetCode = (typeof u === 'object' && u.assetCode) ? u.assetCode : (assignment?.equipmentUnit?.assetCode ?? unitId);
+    const receivedAt = (typeof u === 'object' && u.receivedAt)
+      ? u.receivedAt
+      : (assignment?.returnedAt ? assignment.returnedAt.toISOString() : null);
+
+    const condition = (typeof u === 'object' && (u.preliminaryCondition ?? u.condition))
+      ? (u.preliminaryCondition ?? u.condition)
+      : null;
+    const outcome = (typeof u === 'object' && (u.preliminaryOutcome ?? u.outcome))
+      ? (u.preliminaryOutcome ?? u.outcome)
+      : null;
+    const accessories = (typeof u === 'object' && Array.isArray(u.accessories))
+      ? u.accessories
+      : (typeof u === 'object' && Array.isArray(u.accessoryIssues))
+        ? u.accessoryIssues
+        : [];
+    const evidenceIds = (typeof u === 'object' && Array.isArray(u.evidenceIds))
+      ? u.evidenceIds
+      : [];
+    const notes = (typeof u === 'object' && u.notes) ? u.notes : null;
+
+    return {
+      unitId,
+      assetCode,
+      receivedAt,
+      condition,
+      outcome,
+      accessories,
+      evidenceIds,
+      notes,
+    };
+  });
+
+  const docNo = `TG-RETURN_RECEIPT-${createHash('sha256').update(sessionId).digest('hex').slice(0, 32)}`;
+
+  return insertEventDocument(tx, {
+    orderId: session.orderId,
+    documentType: RentalDocumentType.RETURN_RECEIPT,
+    sourceRef: sessionId,
+    issuedAt: at,
+    rootDocumentId: root.id,
+    policyVersion,
+    templateVersion: '1.3.2',
+    snapshot: {
+      kind: 'RETURN_RECEIPT',
+      documentNo: docNo,
+      rootDocumentId: root.id,
+      orderId: session.orderId,
+      returnSessionId: session.id,
+      staffId: session.staffId,
+      finalizedAt: session.finalizedAt.toISOString(),
+      returnLocationRef,
+      receivedUnits: enrichedUnits,
+      notReturnedUnitIdsAtSessionEnd,
+      remarks: session.remarks ?? null,
+      userRemarks: options?.userRemarks ?? null,
+      failureEvidenceId,
+      evidenceIds,
+      policyVersion,
+      templateVersion: '1.3.2',
+      outcomeNote: 'Outcome ISSUE remains preliminary; settlement is independent.',
+      originalDocumentUnchanged: true,
+    },
+  });
 }
 
 export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,correctedDisplayDetails:string,at:Date,idempotencyKey:string){

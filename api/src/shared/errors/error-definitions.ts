@@ -189,6 +189,9 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
   [RR.HANDOVER_DOCUMENT_REQUIRED]: { status: 409, message: 'Handover root document required to issue return receipt', retryable: false },
+  [RR.RETURN_SESSION_NOT_FOUND]: { status: 404, message: 'Return session not found', retryable: false },
+  [RR.DOCUMENT_NOT_FOUND]: { status: 404, message: 'Rental document not found', retryable: false },
+  [RR.DOCUMENT_NOT_READY]: { status: 409, message: 'Rental document not ready for download', retryable: false },
 
   // Lifecycle (Phase 07A)
   [LC.INVALID_EVENT_PAYLOAD]: { status: 400, message: 'Invalid rental lifecycle event payload', retryable: false },

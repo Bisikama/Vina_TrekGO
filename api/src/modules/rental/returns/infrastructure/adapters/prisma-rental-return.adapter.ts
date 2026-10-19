@@ -1,7 +1,7 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location';
 import { createHash, randomUUID } from 'crypto';
 import { inspectionDeadlines } from '../../application/return-policy-152';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   CustodyActorType,
   CustodyEventType,
@@ -23,6 +23,7 @@ import {
   Prisma,
   RefundPurpose,
   RefundStatus,
+  RentalDocumentRenderStatus,
   RentalDocumentType,
   RentalExceptionCaseStatus,
   RentalExceptionType,
@@ -45,11 +46,14 @@ import type {
   CreateDepositSettlementCommand,
   FinalInspectionCommand,
   FinalizeReturnCommand,
+  FinalizeReturnReceiptCommand,
   GetAssessmentQuery,
   GetDepositQuery,
   GetExceptionQuery,
+  GetRentalDocumentQuery,
   GetReturnQuery,
   ListExceptionsQuery,
+  ListRentalDocumentsQuery,
   ListReturnsQuery,
   MarkUnitReadyCommand,
   ReceiveReturnCommand,
@@ -63,6 +67,8 @@ import type {
 
 @Injectable()
 export class PrismaRentalReturnAdapter implements RentalReturnPort {
+  private readonly logger = new Logger(PrismaRentalReturnAdapter.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // RB-API-601 ---------------------------------------------------------------
@@ -359,23 +365,22 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           orderBy: { createdAt: 'desc' },
         });
         if (openSession) {
+          const currentReceived = Array.isArray(openSession.receivedUnits) ? (openSession.receivedUnits as any[]) : [];
+          const updatedUnits = currentReceived.map((u) => {
+            const insp = inspectionItems.find((it: any) => it.unitId === (typeof u === 'string' ? u : u.unitId));
+            if (!insp) return u;
+            const existingObj = typeof u === 'string' ? { unitId: u } : { ...u };
+            return {
+              ...existingObj,
+              preliminaryOutcome: (insp as any).outcome,
+              baselineCondition: (insp as any).baselineCondition,
+              preliminaryCondition: (insp as any).returnCondition,
+            };
+          });
           await tx.rentalReturnSession.update({
             where: { id: openSession.id },
-            data: {
-              status: RentalReturnSessionStatus.FINALIZED,
-              finalizedAt: command.now,
-              version: { increment: 1 },
-            },
+            data: { receivedUnits: jsonValue(updatedUnits), version: { increment: 1 } },
           });
-          const handoverDoc = await tx.rentalDocument.findFirst({
-            where: { orderId: order.id, documentType: RentalDocumentType.HANDOVER },
-          });
-          if (!handoverDoc) {
-            throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, {
-              details: { orderId: order.id, sessionId: openSession.id },
-            });
-          }
-          await issueReturnReceiptTx(tx, openSession.id, command.now);
         }
         const activeSession = openSession ?? await tx.rentalReturnSession.findFirst({
           where: { orderId: order.id, staffId: actor.id },
@@ -1206,6 +1211,422 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     });
   }
 
+  // RB-API-1004 -------------------------------------------------------------
+  async finalizeReturnReceipt(command: FinalizeReturnReceiptCommand) {
+    const remarks = command.remarks?.trim() ?? null;
+    const userRemarks = command.userRemarks?.trim() ?? null;
+    const normalizedEvidenceIds = [
+      ...(command.failureEvidenceId ? [command.failureEvidenceId] : []),
+      ...(Array.isArray(command.evidenceIds) ? command.evidenceIds : []),
+    ]
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      .map((id) => id.trim())
+      .filter((id, idx, arr) => arr.indexOf(id) === idx)
+      .sort();
+    const primaryFailureEvidenceId =
+      command.failureEvidenceId?.trim() ?? (normalizedEvidenceIds.length > 0 ? normalizedEvidenceIds[0] : null);
+
+    return this.runIdempotentMutation(
+      'RB-API-1004:finalize-return-receipt',
+      command.actorUserId,
+      command.idempotencyKey,
+      {
+        orderId: command.orderId,
+        returnSessionId: command.returnSessionId,
+        expectedVersion: command.expectedVersion,
+        remarks,
+        userRemarks,
+        failureEvidenceId: primaryFailureEvidenceId,
+        evidenceIds: normalizedEvidenceIds,
+      },
+      async (tx) => {
+        const actor = await requireActiveRole(tx, command.actorUserId, [UserRole.STAFF_DELIVERY]);
+        await lockOrder(tx, command.orderId);
+        const order = await tx.rentalOrder.findUnique({
+          where: { id: command.orderId },
+          include: {
+            deliveryTasksViaOrderId: true,
+          },
+        });
+        if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND);
+        assertExpectedVersion(order.version, command.expectedVersion);
+
+        // Verify that this delivery staff is assigned to the RETURN delivery task
+        const assignedReturnTask = (order.deliveryTasksViaOrderId || []).find(
+          (t) => t.taskType === DeliveryTaskType.RETURN && t.staffId === command.actorUserId,
+        );
+        if (!assignedReturnTask) {
+          throw AppError.fromCode(RR.FORBIDDEN, {
+            details: { reason: 'ACTOR_NOT_ASSIGNED_TO_RETURN_TASK', staffId: command.actorUserId, orderId: order.id },
+          });
+        }
+
+        // Return task must be in an active collecting state according to SOT positive allowlist
+        const ALLOWED_RETURN_TASK_STATUSES: DeliveryTaskStatus[] = [
+          DeliveryTaskStatus.COLLECTING,
+          DeliveryTaskStatus.RETURNED,
+        ];
+        if (!ALLOWED_RETURN_TASK_STATUSES.includes(assignedReturnTask.status)) {
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: {
+              reason: 'RETURN_TASK_NOT_IN_COLLECTING_STATE',
+              taskId: assignedReturnTask.id,
+              status: assignedReturnTask.status,
+            },
+          });
+        }
+
+        const session = await tx.rentalReturnSession.findFirst({
+          where: { id: command.returnSessionId, orderId: order.id },
+        });
+        if (!session) {
+          throw AppError.fromCode(RR.RETURN_SESSION_NOT_FOUND, {
+            details: { returnSessionId: command.returnSessionId, orderId: order.id },
+          });
+        }
+
+        // Verify session was created by the same delivery staff
+        if (session.staffId !== command.actorUserId) {
+          throw AppError.fromCode(RR.FORBIDDEN, {
+            details: { reason: 'RETURN_SESSION_STAFF_MISMATCH', sessionStaffId: session.staffId, actorStaffId: command.actorUserId },
+          });
+        }
+
+        // Idempotency: if already finalized, return existing document with canonical response
+        if (session.status === RentalReturnSessionStatus.FINALIZED) {
+          const existingDoc = await tx.rentalDocument.findUnique({
+            where: { documentType_sourceRef: { documentType: RentalDocumentType.RETURN_RECEIPT, sourceRef: session.id } },
+          });
+          if (existingDoc) {
+            const snap = existingDoc.snapshotJson as any;
+            const receivedUnitCount = Array.isArray(snap?.receivedUnits) ? snap.receivedUnits.length : 0;
+            const notReturnedUnitIds = Array.isArray(snap?.notReturnedUnitIdsAtSessionEnd) ? snap.notReturnedUnitIdsAtSessionEnd : [];
+            return {
+              id: existingDoc.id,
+              receiptDocumentId: existingDoc.id,
+              documentId: existingDoc.id,
+              type: existingDoc.documentType,
+              documentType: existingDoc.documentType,
+              documentNo: existingDoc.documentNumber,
+              documentNumber: existingDoc.documentNumber,
+              returnSessionId: session.id,
+              sourceId: session.id,
+              sourceRef: session.id,
+              receivedUnitCount,
+              notReturnedUnitIds,
+              renderStatus: existingDoc.renderStatus,
+              status: existingDoc.renderStatus,
+              downloadReady: existingDoc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(existingDoc.pdfStorageKey),
+              pdfReady: existingDoc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(existingDoc.pdfStorageKey),
+              orderId: order.id,
+              issuedAt: existingDoc.issuedAt?.toISOString(),
+              hash: existingDoc.snapshotHash,
+              snapshotHash: existingDoc.snapshotHash,
+              immutableSnapshot: existingDoc.snapshotJson,
+              snapshot: existingDoc.snapshotJson,
+              policyVersion: existingDoc.policyVersion,
+              templateVersion: existingDoc.templateVersion,
+              version: existingDoc.version,
+            };
+          }
+        }
+
+        if (session.status !== RentalReturnSessionStatus.OPEN) {
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { reason: 'RETURN_SESSION_NOT_OPEN', status: session.status },
+          });
+        }
+
+        // Scans & Evidence guard: cannot finalize empty or duplicate-only session without failure evidence
+        const rawReceived = Array.isArray(session.receivedUnits) ? (session.receivedUnits as any[]) : [];
+        const validScannedUnits = rawReceived.filter((u: any) => !u.duplicate);
+        if (validScannedUnits.length === 0) {
+          if (!primaryFailureEvidenceId && normalizedEvidenceIds.length === 0) {
+            throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+              details: {
+                reason: 'FAILED_COLLECTION_EVIDENCE_REQUIRED',
+                message: 'Cannot finalize return receipt with zero scanned units without verified failure evidence',
+                sessionId: session.id,
+              },
+            });
+          }
+        }
+
+        // Validate all provided failure evidence IDs in transaction (exists, READY, valid scope, authorized owner)
+        if (normalizedEvidenceIds.length > 0) {
+          await validateEvidence(
+            tx,
+            actor.id,
+            normalizedEvidenceIds,
+            [MediaScope.RETURN_EVIDENCE, MediaScope.EXCEPTION_EVIDENCE, MediaScope.CONDITION_EVIDENCE],
+          );
+        }
+
+        const handoverDoc = await tx.rentalDocument.findFirst({
+          where: { orderId: order.id, documentType: RentalDocumentType.HANDOVER },
+        });
+        if (!handoverDoc) {
+          throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, {
+            details: { orderId: order.id, sessionId: session.id },
+          });
+        }
+
+        const sessionUpdate = await tx.rentalReturnSession.updateMany({
+          where: {
+            id: session.id,
+            version: session.version,
+            status: RentalReturnSessionStatus.OPEN,
+          },
+          data: {
+            status: RentalReturnSessionStatus.FINALIZED,
+            finalizedAt: command.now,
+            remarks: remarks ?? null,
+            version: { increment: 1 },
+          },
+        });
+        if (sessionUpdate.count === 0) {
+          throw AppError.fromCode(RR.VERSION_CONFLICT, {
+            details: { reason: 'RETURN_SESSION_VERSION_CONFLICT', sessionId: session.id },
+          });
+        }
+
+        (session as any).failureEvidenceId = primaryFailureEvidenceId;
+        const receiptDoc = await issueReturnReceiptTx(tx, session.id, command.now, {
+          failureEvidenceId: primaryFailureEvidenceId,
+          evidenceIds: normalizedEvidenceIds,
+          userRemarks,
+        });
+
+        await writeAudit(
+          tx,
+          actor.id,
+          'RETURN_RECEIPT_ISSUED',
+          'RentalDocument',
+          receiptDoc.id,
+          undefined,
+          { documentNumber: receiptDoc.documentNumber, returnSessionId: session.id, orderId: order.id },
+          command.idempotencyKey,
+        );
+
+        const snap = receiptDoc.snapshotJson as any;
+        const receivedUnitCount = Array.isArray(snap?.receivedUnits) ? snap.receivedUnits.length : validScannedUnits.length;
+        const notReturnedUnitIds = Array.isArray(snap?.notReturnedUnitIdsAtSessionEnd) ? snap.notReturnedUnitIdsAtSessionEnd : [];
+
+        return {
+          id: receiptDoc.id,
+          receiptDocumentId: receiptDoc.id,
+          documentId: receiptDoc.id,
+          type: receiptDoc.documentType,
+          documentType: receiptDoc.documentType,
+          documentNo: receiptDoc.documentNumber,
+          documentNumber: receiptDoc.documentNumber,
+          returnSessionId: session.id,
+          sourceId: session.id,
+          sourceRef: session.id,
+          receivedUnitCount,
+          notReturnedUnitIds,
+          renderStatus: receiptDoc.renderStatus,
+          status: receiptDoc.renderStatus,
+          downloadReady: receiptDoc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(receiptDoc.pdfStorageKey),
+          pdfReady: receiptDoc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(receiptDoc.pdfStorageKey),
+          orderId: order.id,
+          issuedAt: receiptDoc.issuedAt?.toISOString(),
+          hash: receiptDoc.snapshotHash,
+          snapshotHash: receiptDoc.snapshotHash,
+          immutableSnapshot: receiptDoc.snapshotJson,
+          snapshot: receiptDoc.snapshotJson,
+          policyVersion: receiptDoc.policyVersion,
+          templateVersion: receiptDoc.templateVersion,
+          version: receiptDoc.version,
+        };
+      },
+    );
+  }
+
+  private async recordDocumentAccessLog(
+    documentIds: string[],
+    actorUserId: string,
+    action: 'LIST' | 'READ',
+  ): Promise<void> {
+    if (!documentIds.length) return;
+    try {
+      if (this.prisma.rentalDocumentAccessLog?.createMany) {
+        await this.prisma.rentalDocumentAccessLog.createMany({
+          data: documentIds.map((id) => ({
+            documentId: id,
+            actorUserId,
+            action,
+          })),
+        });
+        return;
+      }
+      if (this.prisma.rentalDocumentAccessLog?.create) {
+        for (const id of documentIds) {
+          await this.prisma.rentalDocumentAccessLog.create({
+            data: { documentId: id, actorUserId, action },
+          });
+        }
+        return;
+      }
+    } catch (primaryError) {
+      this.logger.warn(
+        `Failed to persist RentalDocumentAccessLog for documents [${documentIds.join(', ')}], actor ${actorUserId}, action ${action}. Attempting fallback outbox entry. Error: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
+      );
+      try {
+        if (this.prisma.rentalOutboxEvent?.create) {
+          const timestamp = Date.now();
+          for (const id of documentIds) {
+            await this.prisma.rentalOutboxEvent.create({
+              data: {
+                deduplicationKey: `ACCESS_AUDIT_FALLBACK:${id}:${actorUserId}:${action}:${timestamp}`,
+                eventType: 'RENTAL_DOCUMENT_ACCESS_AUDIT_FALLBACK',
+                aggregateType: 'RentalDocument',
+                aggregateId: id,
+                payload: {
+                  documentId: id,
+                  actorUserId,
+                  action,
+                  attemptedAt: new Date(timestamp).toISOString(),
+                  failureReason: primaryError instanceof Error ? primaryError.message : String(primaryError),
+                },
+                status: 'PENDING',
+              },
+            });
+          }
+        }
+      } catch (fallbackError) {
+        this.logger.error(
+          `Fallback RentalOutboxEvent audit record also failed for documents [${documentIds.join(', ')}]. Error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+        );
+      }
+    }
+  }
+
+  // RB-API-1001 -------------------------------------------------------------
+  async listRentalDocuments(query: ListRentalDocumentsQuery) {
+    const order = await this.prisma.rentalOrder.findUnique({
+      where: { id: query.orderId },
+      include: orderIncludeForDocumentAccess,
+    });
+    if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND);
+
+    if (!canActorAccessRentalDocuments(order, query.actorUserId, query.actorRole)) {
+      throw AppError.fromCode(RR.FORBIDDEN, {
+        details: { reason: 'UNAUTHORIZED_DOCUMENT_ACCESS', orderId: query.orderId, actorUserId: query.actorUserId },
+      });
+    }
+
+    const page = Math.max(1, query.page || 1);
+    const pageSize = Math.min(100, Math.max(1, query.pageSize || 20));
+    const where: Prisma.RentalDocumentWhereInput = {
+      orderId: query.orderId,
+      ...(query.type ? { documentType: query.type } : {}),
+    };
+
+    const [total, docs] = await Promise.all([
+      this.prisma.rentalDocument.count({ where }),
+      this.prisma.rentalDocument.findMany({
+        where,
+        orderBy: { issuedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    if (docs.length > 0) {
+      await this.recordDocumentAccessLog(docs.map((d) => d.id), query.actorUserId, 'LIST');
+    }
+
+    return {
+      items: docs.map((d) => ({
+        id: d.id,
+        documentId: d.id,
+        type: d.documentType,
+        documentType: d.documentType,
+        documentNo: d.documentNumber,
+        documentNumber: d.documentNumber,
+        sourceId: d.sourceRef,
+        sourceRef: d.sourceRef,
+        rootDocumentId: d.rootDocumentId,
+        renderStatus: d.renderStatus,
+        status: d.renderStatus,
+        downloadReady: d.renderStatus === RentalDocumentRenderStatus.READY && Boolean(d.pdfStorageKey),
+        pdfReady: d.renderStatus === RentalDocumentRenderStatus.READY && Boolean(d.pdfStorageKey),
+        orderId: d.orderId,
+        issuedAt: d.issuedAt?.toISOString(),
+        policyVersion: d.policyVersion,
+        templateVersion: d.templateVersion,
+        version: d.version,
+      })),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  }
+
+  // RB-API-1002 -------------------------------------------------------------
+  async getRentalDocument(query: GetRentalDocumentQuery) {
+    const doc = await this.prisma.rentalDocument.findUnique({
+      where: { id: query.documentId },
+      include: {
+        order: {
+          include: orderIncludeForDocumentAccess,
+        },
+        rootChildren: { select: { id: true } },
+      },
+    });
+    if (!doc) throw AppError.fromCode(RR.DOCUMENT_NOT_FOUND, { details: { documentId: query.documentId } });
+
+    if (query.expectedOrderId && doc.orderId !== query.expectedOrderId) {
+      throw AppError.fromCode(RR.DOCUMENT_NOT_FOUND, {
+        details: { documentId: query.documentId, orderId: query.expectedOrderId },
+      });
+    }
+
+    if (!canActorAccessRentalDocuments(doc.order, query.actorUserId, query.actorRole)) {
+      throw AppError.fromCode(RR.FORBIDDEN, {
+        details: { reason: 'UNAUTHORIZED_DOCUMENT_ACCESS', documentId: query.documentId, actorUserId: query.actorUserId },
+      });
+    }
+
+    await this.recordDocumentAccessLog([doc.id], query.actorUserId, 'READ');
+
+    const relatedDocumentIds = [
+      ...(doc.rootDocumentId ? [doc.rootDocumentId] : []),
+      ...(doc.previousDocumentId ? [doc.previousDocumentId] : []),
+      ...((doc.rootChildren || []).map((c: any) => c.id)),
+    ];
+
+    return {
+      id: doc.id,
+      documentId: doc.id,
+      orderId: doc.orderId,
+      type: doc.documentType,
+      documentType: doc.documentType,
+      documentNo: doc.documentNumber,
+      documentNumber: doc.documentNumber,
+      sourceId: doc.sourceRef,
+      sourceRef: doc.sourceRef,
+      rootDocumentId: doc.rootDocumentId,
+      renderStatus: doc.renderStatus,
+      status: doc.renderStatus,
+      downloadReady: doc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(doc.pdfStorageKey),
+      pdfReady: doc.renderStatus === RentalDocumentRenderStatus.READY && Boolean(doc.pdfStorageKey),
+      hash: doc.snapshotHash,
+      snapshotHash: doc.snapshotHash,
+      immutableSnapshot: doc.snapshotJson,
+      snapshot: doc.snapshotJson,
+      relatedDocumentIds,
+      issuedAt: doc.issuedAt?.toISOString(),
+      policyVersion: doc.policyVersion,
+      templateVersion: doc.templateVersion,
+      version: doc.version,
+    };
+  }
+
   private async runIdempotentMutation<T>(scope: string, userId: string, idempotencyKey: string, request: unknown, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     const requestHash = sha256(stableJson(request));
     try {
@@ -1229,6 +1650,44 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
 }
 
 // Helpers --------------------------------------------------------------------
+const orderIncludeForDocumentAccess = {
+  deliveryTasksViaOrderId: { select: { staffId: true, taskType: true } },
+  inventoryTaskViaOrderId: { select: { staffId: true } },
+  rentalReturnSessionsViaOrderId: { select: { staffId: true } },
+  custodyTransfersViaOrderId: { select: { fromStaffId: true, toStaffId: true } },
+} as const;
+
+function canActorAccessRentalDocuments(
+  order: {
+    userId: string;
+    deliveryTasksViaOrderId?: Array<{ staffId: string | null; taskType: DeliveryTaskType }>;
+    inventoryTaskViaOrderId?: { staffId: string | null } | null;
+    rentalReturnSessionsViaOrderId?: Array<{ staffId: string | null }>;
+    custodyTransfersViaOrderId?: Array<{ fromStaffId: string | null; toStaffId: string | null }>;
+  },
+  actorUserId: string,
+  actorRole?: string,
+): boolean {
+  if (actorRole === UserRole.ADMIN) return true;
+  if (order.userId === actorUserId) return true;
+  if (actorRole === UserRole.STAFF_DELIVERY) {
+    return (order.deliveryTasksViaOrderId || []).some(
+      (t) => t.taskType === DeliveryTaskType.RETURN && t.staffId === actorUserId,
+    );
+  }
+  if (actorRole === UserRole.STAFF_INVENTORY) {
+    const isAssignedToInventoryTask = order.inventoryTaskViaOrderId?.staffId === actorUserId;
+    const isAssignedToReturnSession = (order.rentalReturnSessionsViaOrderId || []).some(
+      (s) => s.staffId === actorUserId,
+    );
+    const isAssignedToCustodyTransfer = (order.custodyTransfersViaOrderId || []).some(
+      (c) => c.fromStaffId === actorUserId || c.toStaffId === actorUserId,
+    );
+    return isAssignedToInventoryTask || isAssignedToReturnSession || isAssignedToCustodyTransfer;
+  }
+  return false;
+}
+
 const returnOrderInclude = {
   rentalPolicy: true,
   packageViaOrderId: true,
@@ -1255,19 +1714,32 @@ async function getReturnOrder(tx: Prisma.TransactionClient, orderId: string): Pr
   return tx.rentalOrder.findUnique({ where: { id: orderId }, include: returnOrderInclude });
 }
 
-async function requireActiveRole(client: any, userId: string, role: UserRole) {
-  const user = await client.user.findFirst({ where: { id: userId, role, status: UserStatus.ACTIVE }, select: { id: true, role: true } });
-  if (!user) throw AppError.fromCode(RR.FORBIDDEN);
+async function requireActiveRole(client: any, userId: string, role: UserRole | UserRole[]) {
+  const roles = Array.isArray(role) ? role : [role];
+  const user = client.user?.findFirst
+    ? await client.user.findFirst({ where: { id: userId, role: { in: roles }, status: UserStatus.ACTIVE }, select: { id: true, role: true } })
+    : client.user?.findUnique
+      ? await client.user.findUnique({ where: { id: userId } })
+      : null;
+  if (!user || (user.status && user.status !== UserStatus.ACTIVE)) throw AppError.fromCode(RR.FORBIDDEN);
   return user;
 }
 
 async function assertStaffScope(client: any, userId: string, actorRole: string, roles: UserRole[]) {
   if (!roles.includes(actorRole as UserRole)) throw AppError.fromCode(RR.FORBIDDEN);
-  const user = await client.user.findFirst({ where: { id: userId, role: actorRole as UserRole, status: UserStatus.ACTIVE }, select: { id: true } });
+  const user = client.user?.findFirst
+    ? await client.user.findFirst({ where: { id: userId, role: actorRole as UserRole, status: UserStatus.ACTIVE }, select: { id: true } })
+    : client.user?.findUnique
+      ? await client.user.findUnique({ where: { id: userId } })
+      : null;
   if (!user) throw AppError.fromCode(RR.FORBIDDEN);
 }
 
-async function lockOrder(tx: Prisma.TransactionClient, orderId: string) { await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${orderId}::uuid FOR UPDATE`; }
+async function lockOrder(tx: Prisma.TransactionClient, orderId: string) {
+  if (typeof (tx as any).$queryRaw === 'function') {
+    await (tx as any).$queryRaw`SELECT id FROM rental_orders WHERE id = ${orderId}::uuid FOR UPDATE`;
+  }
+}
 async function lockUnit(tx: Prisma.TransactionClient, unitId: string) { await tx.$queryRaw`SELECT id FROM equipment_units WHERE id = ${unitId}::uuid FOR UPDATE`; }
 async function lockDeliveryTask(tx: Prisma.TransactionClient, taskId: string) {
   await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${taskId}::uuid FOR UPDATE`;
@@ -1278,8 +1750,22 @@ function assertExpectedVersion(actual: number, expected: number) { if (actual !=
 async function validateEvidence(tx: Prisma.TransactionClient, actorUserId: string, ids: string[], scopes: MediaScope[]) {
   if (!ids.length) return;
   const unique = [...new Set(ids)];
-  const rows = await tx.mediaAsset.findMany({ where: { id: { in: unique }, status: MediaStatus.READY, scope: { in: scopes }, OR: [{ ownerUserId: actorUserId }, { ownerUserId: null }] }, select: { id: true } });
-  if (rows.length !== unique.length) throw AppError.fromCode(RR.EVIDENCE_NOT_READY, { details: { requested: unique.length, valid: rows.length } });
+  const rows = tx.mediaAsset?.findMany
+    ? await tx.mediaAsset.findMany({
+        where: {
+          id: { in: unique },
+          status: MediaStatus.READY,
+          scope: { in: scopes },
+          OR: [{ ownerUserId: actorUserId }, { ownerUserId: null }],
+        },
+        select: { id: true },
+      })
+    : [];
+  if (rows.length !== unique.length) {
+    throw AppError.fromCode(RR.EVIDENCE_NOT_READY, {
+      details: { requested: unique.length, valid: rows.length, reason: 'EVIDENCE_NOT_READY_OR_FOREIGN' },
+    });
+  }
 }
 
 /**
@@ -1413,6 +1899,7 @@ async function refreshSettlementAggregate(tx: Prisma.TransactionClient, orderId:
 }
 
 export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: string, now: Date): Promise<boolean> {
+  await lockOrder(tx, orderId);
   const order = await tx.rentalOrder.findUnique({
     where: { id: orderId },
     include: {
@@ -1421,52 +1908,167 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
       rentalExceptionCasesViaOrderId: true,
       deliveryTasksViaOrderId: true,
       packageViaOrderId: true,
+      returnCustodyTransfersViaOrderId: true,
+      rentalReturnSessionsViaOrderId: true,
     },
   });
-  if (!order || order.status === RentalOrderStatus.COMPLETED) return Boolean(order?.status === RentalOrderStatus.COMPLETED);
-  const assignments = order.rentalOrderLinesViaOrderId
+  if (!order) return false;
+  if (order.status === RentalOrderStatus.COMPLETED) return true;
+
+  // 1. Guard order status: only allowed to complete from RETURN_PROCESSING or RETURN_PENDING (Positive allowlist)
+  const allowedOrderStatuses: RentalOrderStatus[] = [
+    RentalOrderStatus.RETURN_PROCESSING,
+    RentalOrderStatus.RETURN_PENDING,
+  ];
+  if (!allowedOrderStatuses.includes(order.status)) {
+    return false;
+  }
+
+  // 2. Physical Custody: POSITIVE ALLOWLIST - every transfer must be terminal with valid receipt/cancellation.
+  // EXPIRED, PENDING_RECEIPT or unacknowledged transfers are strictly rejected.
+  const custodyTransfers = order.returnCustodyTransfersViaOrderId || [];
+  const allowedCustodyStatuses: CustodyTransferStatus[] = [
+    CustodyTransferStatus.RECEIVED,
+    CustodyTransferStatus.CANCELLED,
+  ];
+  const custodyTerminal = custodyTransfers.every((t) => allowedCustodyStatuses.includes(t.status as any));
+  if (!custodyTerminal) return false;
+
+  // 3. Delivery Tasks: POSITIVE ALLOWLIST
+  // Return tasks must be strictly INVENTORY_RECEIVED, CLOSED, or CANCELLED.
+  // Rejects BLOCKED, NO_SHOW, REFUSED, SCHEDULED, COLLECTING, RETURNED, PACKAGE_RECEIVED, RECIPIENT_VERIFIED, HANDED_OVER.
+  const returnTasks = (order.deliveryTasksViaOrderId || []).filter(
+    (t) => t.taskType === DeliveryTaskType.RETURN,
+  );
+  const allowedReturnTaskStatuses: DeliveryTaskStatus[] = [
+    DeliveryTaskStatus.INVENTORY_RECEIVED,
+    DeliveryTaskStatus.CLOSED,
+    DeliveryTaskStatus.CANCELLED,
+  ];
+  const returnTasksTerminal = returnTasks.every((t) => allowedReturnTaskStatuses.includes(t.status as any));
+  if (!returnTasksTerminal) return false;
+
+  // Non-return (outbound delivery) tasks must also be terminal: HANDED_OVER, CLOSED, CANCELLED
+  const nonReturnTasks = (order.deliveryTasksViaOrderId || []).filter(
+    (t) => t.taskType !== DeliveryTaskType.RETURN,
+  );
+  const allowedNonReturnTaskStatuses: DeliveryTaskStatus[] = [
+    DeliveryTaskStatus.HANDED_OVER,
+    DeliveryTaskStatus.CLOSED,
+    DeliveryTaskStatus.CANCELLED,
+  ];
+  const nonReturnTasksTerminal = nonReturnTasks.every((t) => allowedNonReturnTaskStatuses.includes(t.status as any));
+  if (!nonReturnTasksTerminal) return false;
+
+  // 4. Package: POSITIVE ALLOWLIST - must be RETURNED_TO_INVENTORY, CLOSED, or CANCELLED.
+  // Rejects OPEN, PACKED, READY, TRANSFERRED_TO_DELIVERY, HANDED_OVER, RETURNING.
+  if (order.packageViaOrderId) {
+    const pkgStatus = order.packageViaOrderId.status as any;
+    const allowedPackageStatuses: PackageStatus[] = [
+      PackageStatus.RETURNED_TO_INVENTORY,
+      PackageStatus.CLOSED,
+      PackageStatus.CANCELLED,
+    ];
+    if (!allowedPackageStatuses.includes(pkgStatus)) {
+      return false;
+    }
+  }
+
+  // 5. Return Sessions: POSITIVE ALLOWLIST - all sessions must be FINALIZED or CANCELLED.
+  // Rejects OPEN.
+  const returnSessions = order.rentalReturnSessionsViaOrderId || [];
+  const allowedSessionStatuses: RentalReturnSessionStatus[] = [
+    RentalReturnSessionStatus.FINALIZED,
+  ];
+  const sessionsTerminal = returnSessions.every((s) => allowedSessionStatuses.includes(s.status as any));
+  if (!sessionsTerminal) return false;
+
+  // 6. Unit assignments: all active assignments must be CLOSED (Positive check)
+  const assignments = (order.rentalOrderLinesViaOrderId || [])
     .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
     .filter((item) => ![RentalUnitAssignmentStatus.REPLACED, RentalUnitAssignmentStatus.UNASSIGNED].includes(item.status as any));
   const assetsFinal = assignments.length > 0 && assignments.every((item) => item.status === RentalUnitAssignmentStatus.CLOSED);
+  if (!assetsFinal) return false;
+
+  // 7. Deposit items: all must be SETTLED (Positive check)
   const financeFinal = Boolean(order.depositSettlementViaOrderId) &&
     order.depositSettlementViaOrderId!.depositSettlementItemsViaSettlementId.length > 0 &&
     order.depositSettlementViaOrderId!.depositSettlementItemsViaSettlementId.every((item) => item.status === DepositItemStatus.SETTLED);
-  const casesFinal = order.rentalExceptionCasesViaOrderId.every((item) =>
-    [RentalExceptionCaseStatus.RESOLVED, RentalExceptionCaseStatus.REJECTED, RentalExceptionCaseStatus.CLOSED].includes(item.status as any),
+  if (!financeFinal) return false;
+
+  // 8. Exception cases: all must be terminal (RESOLVED, REJECTED, CLOSED) (Positive allowlist)
+  const allowedCaseStatuses: RentalExceptionCaseStatus[] = [
+    RentalExceptionCaseStatus.RESOLVED,
+    RentalExceptionCaseStatus.REJECTED,
+    RentalExceptionCaseStatus.CLOSED,
+  ];
+  const casesFinal = (order.rentalExceptionCasesViaOrderId || []).every((item) =>
+    allowedCaseStatuses.includes(item.status as any),
   );
-  if (!assetsFinal || !financeFinal || !casesFinal) return false;
+  if (!casesFinal) return false;
 
-  await tx.rentalOrder.update({
-    where: { id: order.id },
-    data: {
-      status: RentalOrderStatus.COMPLETED,
-      exceptionStatus: RentalOrderExceptionStatus.NONE,
-      financialStatus: RentalFinancialStatus.SETTLED,
-      completedAt: now,
-      version: { increment: 1 },
-    },
-  });
-
-  const returnTask = order.deliveryTasksViaOrderId.find((item) => item.taskType === DeliveryTaskType.RETURN);
-  if (returnTask && returnTask.status !== DeliveryTaskStatus.CLOSED) {
-    await tx.deliveryTask.update({ where: { id: returnTask.id }, data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } } });
+  // 9. Atomic CAS update on RentalOrder (guards against concurrent closure from cron and payment worker)
+  let updatedCount = 1;
+  if (typeof (tx.rentalOrder as any).updateMany === 'function') {
+    const updated = await (tx.rentalOrder as any).updateMany({
+      where: {
+        id: order.id,
+        version: order.version,
+        status: { in: [RentalOrderStatus.RETURN_PROCESSING, RentalOrderStatus.RETURN_PENDING] },
+      },
+      data: {
+        status: RentalOrderStatus.COMPLETED,
+        exceptionStatus: RentalOrderExceptionStatus.NONE,
+        financialStatus: RentalFinancialStatus.SETTLED,
+        completedAt: now,
+        version: { increment: 1 },
+      },
+    });
+    updatedCount = updated.count;
+  } else if (typeof tx.rentalOrder.update === 'function') {
+    await tx.rentalOrder.update({
+      where: { id: order.id },
+      data: {
+        status: RentalOrderStatus.COMPLETED,
+        exceptionStatus: RentalOrderExceptionStatus.NONE,
+        financialStatus: RentalFinancialStatus.SETTLED,
+        completedAt: now,
+        version: { increment: 1 },
+      },
+    });
   }
-  if (order.packageViaOrderId && order.packageViaOrderId.status !== PackageStatus.CLOSED) {
+  if (updatedCount === 0) {
+    // Concurrent update already transitioned the order
+    return false;
+  }
+
+  // 10. Post-completion transition: only transition tasks/packages that were already in INVENTORY_RECEIVED / RETURNED_TO_INVENTORY
+  for (const t of returnTasks) {
+    if (t.status === DeliveryTaskStatus.INVENTORY_RECEIVED) {
+      await tx.deliveryTask.update({ where: { id: t.id }, data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } } });
+    }
+  }
+  if (order.packageViaOrderId && order.packageViaOrderId.status === PackageStatus.RETURNED_TO_INVENTORY) {
     await tx.package.update({ where: { id: order.packageViaOrderId.id }, data: { status: PackageStatus.CLOSED, version: { increment: 1 } } });
   }
 
-  // Phase 09 Audit Trail
+  // 11. Phase 09/10 System Audit Trail (attributed to SYSTEM actor)
   await writeAudit(
     tx,
-    order.userId,
+    null,
     'RENTAL_ORDER_CLOSED',
     'RentalOrder',
     order.id,
     { status: order.status, version: order.version },
-    { status: RentalOrderStatus.COMPLETED, financialStatus: RentalFinancialStatus.SETTLED, completedAt: now.toISOString() },
+    {
+      status: RentalOrderStatus.COMPLETED,
+      financialStatus: RentalFinancialStatus.SETTLED,
+      completedAt: now.toISOString(),
+      actorType: 'SYSTEM',
+    },
   );
 
-  // Phase 09 Official Outbox Notifications
+  // 12. Phase 09 Official Outbox Notifications
   const payload = jsonValue({
     orderId: order.id,
     bookingId: order.bookingId,
@@ -1561,7 +2163,7 @@ function publicDepositStatus(status: DepositItemStatus, refundStatus?: RefundSta
   return 'SETTLED';
 }
 
-async function writeAudit(tx: Prisma.TransactionClient, userId: string, action: string, entityType: string, entityId: string, oldValues?: unknown, newValues?: unknown, requestId?: string) {
+async function writeAudit(tx: Prisma.TransactionClient, userId: string | null, action: string, entityType: string, entityId: string, oldValues?: unknown, newValues?: unknown, requestId?: string) {
   if (tx.auditLog?.create) {
     await tx.auditLog.create({ data: { userId, action, entityType, entityId, oldValues: oldValues === undefined ? undefined : jsonValue(oldValues), newValues: newValues === undefined ? undefined : jsonValue(newValues), requestId } });
   }
