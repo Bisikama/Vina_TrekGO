@@ -174,7 +174,7 @@ export class PreparationTaskController {
             },
           },
         },
-        evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 5, description: 'UUID ảnh/video minh chứng (đã upload trước)', example: ['a1b2c3d4-e5f6-7890-abcd-ef1234567890'] },
+        evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 5, description: 'UUID ảnh/video minh chứng (đã upload trước)', example: ['550e8400-e29b-41d4-a716-446655440106'] },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản task hiện tại', example: 2 },
       },
     },

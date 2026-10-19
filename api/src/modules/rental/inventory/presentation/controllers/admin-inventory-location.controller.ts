@@ -31,6 +31,7 @@ export class AdminInventoryLocationController {
     description: 'API dành riêng cho Admin để tạo nhà chứa/kho mới. Dùng để đăng ký các kho lưu trữ, điểm trung chuyển thiết bị (không cho phép xóa cứng sau khi tạo).',
   })
   @ApiBody({
+    description: 'Admin nhập mã kho duy nhất, tên và địa chỉ. Tọa độ là tùy chọn.',
     schema: {
       type: 'object',
       required: ['code', 'name', 'address'],
@@ -41,6 +42,7 @@ export class AdminInventoryLocationController {
         latitude: { type: 'number', example: 10.7923, description: 'Vĩ độ (GPS)' },
         longitude: { type: 'number', example: 106.6990, description: 'Kinh độ (GPS)' },
       },
+      example: { code: 'INV-HCM-01', name: 'Kho Trung Tâm HCM', address: 'Quận 1, TP. Hồ Chí Minh' },
     },
   })
   @ApiResponse({ status: 201, description: 'Tạo địa điểm nhà chứa thành công' })
@@ -53,8 +55,9 @@ export class AdminInventoryLocationController {
     summary: 'Cập nhật thông tin địa điểm nhà chứa (Kho)',
     description: 'API dành riêng cho Admin để cập nhật thông tin nhà chứa hoặc thay đổi trạng thái hoạt động của nó (ACTIVE, INACTIVE, ARCHIVED). Khi không còn sử dụng, hãy đổi trạng thái sang INACTIVE hoặc ARCHIVED thay vì xóa.',
   })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'ID của nhà chứa cần cập nhật' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Lấy ID kho từ GET /api/v1/staff/inventory-locations', example: '550e8400-e29b-41d4-a716-446655440011' })
   @ApiBody({
+    description: 'Gửi các trường cần đổi; ví dụ dưới đây đổi tên kho. Chỉ dùng INACTIVE/ARCHIVED sau khi kiểm tra tác động đến thiết bị.',
     schema: {
       type: 'object',
       properties: {
@@ -64,6 +67,7 @@ export class AdminInventoryLocationController {
         longitude: { type: 'number', example: 106.6990 },
         status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'], example: 'INACTIVE', description: 'Trạng thái hoạt động' },
       },
+      example: { name: 'Kho Trung Tâm HCM mới' },
     },
   })
   @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
