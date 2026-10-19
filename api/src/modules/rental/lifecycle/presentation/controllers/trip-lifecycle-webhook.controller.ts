@@ -132,6 +132,7 @@ export class TripLifecycleWebhookController {
     schema: {
       oneOf: [TRIP_RESCHEDULED_EVENT_SCHEMA, TRIP_CANCELLED_EVENT_SCHEMA, BOOKING_CANCELLED_EVENT_SCHEMA],
       discriminator: { propertyName: 'eventType' },
+      example: TRIP_RESCHEDULED_EVENT_SCHEMA.example,
     },
   })
   @ApiResponse({

@@ -41,7 +41,7 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
     type: String,
     format: 'uuid',
     description: 'ID yêu cầu gia hạn (extension request) cần thanh toán',
-    example: 'e5f6a7b8-9012-34ef-0123-567890123def',
+    example: '550e8400-e29b-41d4-a716-446655440105',
   })
   @ApiHeader({
     name: 'Idempotency-Key',
@@ -69,6 +69,7 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
           example: 'REDIRECT',
         },
       },
+      example: { paymentMethod: 'REDIRECT' },
     },
   })
   @ApiResponse({

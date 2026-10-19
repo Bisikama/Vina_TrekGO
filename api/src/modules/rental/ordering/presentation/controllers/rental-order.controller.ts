@@ -72,7 +72,7 @@ export class RentalOrderController {
     example: 'order-abc123-xyz',
   })
   @ApiBody({
-    description: 'Thông tin tạo đơn thuê',
+    description: 'Trước tiên gọi POST /api/v1/rentals/quote, sau đó sao chép quoteId từ phản hồi còn hiệu lực vào đây. Thay UUID minh họa bằng ID thật.',
     schema: {
       type: 'object',
       required: ['quoteId'],
@@ -81,7 +81,7 @@ export class RentalOrderController {
           type: 'string',
           format: 'uuid',
           description: 'ID của báo giá (Quote) đã tạo trước đó',
-          example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+          example: '550e8400-e29b-41d4-a716-446655440101',
         },
       },
     },
@@ -126,14 +126,14 @@ export class RentalOrderController {
     required: false,
     type: String,
     description: 'Lọc theo ID chuyến đi',
-    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+    example: '550e8400-e29b-41d4-a716-446655440101',
   })
   @ApiQuery({
     name: 'bookingId',
     required: false,
     type: String,
     description: 'Lọc theo ID booking',
-    example: 'b2c3d4e5-6789-01bc-def0-234567890abc',
+    example: '550e8400-e29b-41d4-a716-446655440102',
   })
   @ApiQuery({
     name: 'status',
@@ -177,7 +177,7 @@ export class RentalOrderController {
     type: String,
     format: 'uuid',
     description: 'ID đơn thuê',
-    example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+    example: '550e8400-e29b-41d4-a716-446655440103',
   })
   @ApiResponse({ status: 200, description: 'Trả về chi tiết đầy đủ của đơn thuê' })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
@@ -206,18 +206,18 @@ export class RentalOrderController {
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'ID đơn thuê cần huỷ' })
   @ApiBody({
-    description: 'Thông tin huỷ đơn',
+    description: 'Gọi GET /api/v1/rental-orders/{id}/cancellation-preview ngay trước bước này, sao chép previewVersion từ phản hồi và expectedVersion từ chi tiết đơn. Giá trị minh họa không dùng được với đơn thật.',
     schema: {
       type: 'object',
       required: ['reason', 'previewVersion', 'expectedVersion'],
       properties: {
         reason: { type: 'string', description: 'Lý do huỷ đơn (1–500 ký tự)', example: 'Thay đổi kế hoạch chuyến đi' },
-        previewVersion: { type: 'string', description: 'Phiên bản preview hoàn tiền đã xem', example: 'v1-abc123' },
-        expectedVersion: { type: 'integer', description: 'Phiên bản đơn mong đợi (optimistic lock)', example: 1 },
+        previewVersion: { type: 'string', description: 'Sao chép nguyên giá trị previewVersion từ API xem trước hủy', example: 'v1-abc123' },
+        expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản đơn hiện tại (optimistic lock)', example: 1 },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Huỷ đơn thành công — trả về đơn đã cập nhật trạng thái CANCELLED' })
+  @ApiResponse({ status: 201, description: 'Huỷ đơn thành công — trả về đơn đã cập nhật trạng thái CANCELLED' })
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'reason không được để trống')
   @ApiErrorResponse(404, 'Không tìm thấy', 'ORDER_NOT_FOUND', 'Đơn thuê không tồn tại')
   @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Đơn đã bị thay đổi bởi thao tác khác')

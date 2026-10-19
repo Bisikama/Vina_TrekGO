@@ -42,13 +42,8 @@ Danh sách toàn bộ sản phẩm thuê dành cho nhân viên quản lý.
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: {
-            items: { type: 'array', items: { type: 'object' } },
-            pagination: { type: 'object', properties: { page: { type: 'number' }, pageSize: { type: 'number' }, totalItems: { type: 'number' }, totalPages: { type: 'number' } } }
-          }
-        }
+        items: { type: 'array', items: { type: 'object' } },
+        pagination: { type: 'object', properties: { page: { type: 'number' }, pageSize: { type: 'number' }, totalItems: { type: 'number' }, totalPages: { type: 'number' } } },
       }
     }
   })
@@ -69,15 +64,18 @@ Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARC
 `
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'RentalProduct UUID', example: '11111111-1111-4111-8111-111111111111' })
-  @ApiResponse({ status: 200, description: 'Trạng thái đã được cập nhật', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'number' } } } } } })
-  @ApiErrorResponse(409, 'Conflict', 'VERSION_CONFLICT', 'Mismatched version')
+  @ApiResponse({ status: 200, description: 'Trạng thái đã được cập nhật', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, version: { type: 'integer' }, status: { type: 'string' } } } })
+  @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Sản phẩm đã thay đổi; lấy version mới rồi thử lại')
   @ApiBody({
+    description: 'Lấy expectedVersion từ kết quả xem hoặc liệt kê sản phẩm. Chọn một trạng thái mới.',
     schema: {
       type: 'object',
+      required: ['status', 'expectedVersion'],
       properties: {
-        status: { type: 'string', example: 'INACTIVE', description: 'ACTIVE, INACTIVE, ARCHIVED' },
-        expectedVersion: { type: 'number', example: 1 }
-      }
+        status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'], example: 'ACTIVE', description: 'Trạng thái muốn chuyển sang' },
+        expectedVersion: { type: 'integer', minimum: 1, example: 1, description: 'Phiên bản hiện tại của sản phẩm' }
+      },
+      example: { status: 'ACTIVE', expectedVersion: 1 },
     }
   })
   @HttpCode(HttpStatus.OK)
@@ -101,13 +99,15 @@ Tạo một sản phẩm (catalog item) mới.
 - Chỉ sau khi hoàn thiện thông tin, nhân viên mới chuyển sang ACTIVE để public.
 `
   })
-  @ApiResponse({ status: 201, description: 'Sản phẩm thuê được tạo thành công', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' } } } } } })
-  @ApiErrorResponse(409, 'Conflict', 'RENTAL_PRODUCT_SKU_EXISTS', 'SKU already exists')
+  @ApiResponse({ status: 201, description: 'Sản phẩm thuê được tạo thành công', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' } } } })
+  @ApiErrorResponse(409, 'SKU đã tồn tại', 'RENTAL_PRODUCT_SKU_EXISTS', 'Hãy dùng mã SKU chưa được tạo')
   @ApiBody({
+    description: 'Dùng categoryId có thật từ GET /api/v1/rental-categories. SKU phải duy nhất; ảnh chỉ gửi khi đã có media ID.',
     schema: {
       type: 'object',
+      required: ['categoryId', 'sku', 'name', 'dailyPrice', 'replacementValue', 'depositPolicy'],
       properties: {
-        categoryId: { type: 'string', example: 'uuid-of-category' },
+        categoryId: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440010', description: 'Thay bằng ID danh mục có thật' },
         sku: { type: 'string', example: 'TENT-4P-001' },
         name: { type: 'string', example: 'Lều cắm trại 4 người' },
         description: { type: 'string', example: 'Lều chống nước 2 lớp' },
@@ -122,10 +122,19 @@ Tạo một sản phẩm (catalog item) mới.
             percentage: { type: 'number', example: 50 }
           }
         },
-        imageMediaIds: { type: 'array', items: { type: 'string' }, example: ['uuid-media-1', 'uuid-media-2'] },
+        imageMediaIds: { type: 'array', items: { type: 'string' }, description: 'ID media đã tải lên; có thể bỏ qua khi test tạo sản phẩm' },
         spec: { type: 'object', example: { weight: '2.5kg', capacity: '4 persons' } },
         recommendationTags: { type: 'array', items: { type: 'string' }, example: ['camping', 'family'] }
-      }
+      },
+      example: {
+        categoryId: '550e8400-e29b-41d4-a716-446655440010',
+        sku: 'TENT-4P-001',
+        name: 'Lều cắm trại 4 người',
+        dailyPrice: 150000,
+        currency: 'VND',
+        replacementValue: 2000000,
+        depositPolicy: { type: 'PERCENT_REPLACEMENT_VALUE', percentage: 50 },
+      },
     }
   })
   @Post()
@@ -142,13 +151,15 @@ Cập nhật các thuộc tính của sản phẩm.
 `
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'RentalProduct UUID', example: '11111111-1111-4111-8111-111111111111' })
-  @ApiResponse({ status: 200, description: 'Sản phẩm thuê được cập nhật thành công', schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'number' } } } } } })
-  @ApiErrorResponse(409, 'Conflict', 'VERSION_CONFLICT', 'Mismatched version')
+  @ApiResponse({ status: 200, description: 'Sản phẩm thuê được cập nhật thành công', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, version: { type: 'integer' } } } })
+  @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Sản phẩm đã thay đổi; lấy version mới rồi thử lại')
   @ApiBody({
+    description: 'Gửi expectedVersion hiện tại và ít nhất một trường cần đổi; imageMediaIds nếu gửi sẽ thay toàn bộ danh sách ảnh.',
     schema: {
       type: 'object',
+      required: ['expectedVersion'],
       properties: {
-        expectedVersion: { type: 'number', example: 1 },
+        expectedVersion: { type: 'integer', minimum: 1, example: 1 },
         name: { type: 'string', example: 'Lều cắm trại 4 người (Updated)' },
         description: { type: 'string', example: 'Đã cập nhật mô tả' },
         dailyPrice: { type: 'number', example: 180000 },
@@ -161,10 +172,11 @@ Cập nhật các thuộc tính của sản phẩm.
             percentage: { type: 'number', example: 0 }
           }
         },
-        imageMediaIds: { type: 'array', items: { type: 'string' }, example: ['uuid-media-new'] },
+        imageMediaIds: { type: 'array', items: { type: 'string' }, description: 'ID media đã tải lên; bỏ qua nếu không đổi ảnh' },
         spec: { type: 'object', example: { weight: '2.5kg' } },
         recommendationTags: { type: 'array', items: { type: 'string' }, example: ['sale'] }
-      }
+      },
+      example: { expectedVersion: 1, name: 'Lều cắm trại 4 người bản mới', dailyPrice: 180000 },
     }
   })
   @Patch(':id')
