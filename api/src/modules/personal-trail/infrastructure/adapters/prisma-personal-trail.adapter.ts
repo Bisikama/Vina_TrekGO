@@ -220,9 +220,28 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       const difficulty = mapDifficulty(params.trailMetadata?.difficulty)
       const visibility = mapVisibility(params.trailMetadata?.visibility)
 
+      // Serialize destination resolution across different recordings as name is not unique.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('personal-trail:destination:hcm'))::text`
+      const destinationName = 'Hồ Chí Minh'
+      const destination =
+        (await tx.destination.findFirst({
+          where: { name: { equals: destinationName, mode: 'insensitive' }, status: RecordStatus.ACTIVE },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        })) ??
+        (await tx.destination.create({
+          data: {
+            name: destinationName,
+            region: 'SOUTH',
+            centerLat: 10.7769,
+            centerLng: 106.7009,
+            status: RecordStatus.ACTIVE,
+          },
+        }))
+
       const personalTrail = await tx.personalTrail.create({
         data: {
           userId: params.userId,
+          destinationId: destination.id,
           title,
           description: params.trailMetadata?.description || null,
           difficulty,

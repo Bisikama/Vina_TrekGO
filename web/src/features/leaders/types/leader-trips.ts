@@ -46,6 +46,7 @@ export interface LeaderTripView {
   pickupPointId: string | null;
   capacity: number;
   price: string | null;
+  priceExplanation: string | null;
   status: TripStatus;
   version: number;
   publishedAt: string | null;
@@ -57,6 +58,7 @@ export interface CreateLeaderPublicTripInput {
   destinationId: string;
   title: string;
   description?: string | null;
+  priceExplanation?: string | null;
   startAt: string;
   endAt: string;
   pickupPointId: string;
@@ -69,6 +71,7 @@ export interface UpdateLeaderPublicTripInput {
   destinationId?: string;
   title?: string;
   description?: string | null;
+  priceExplanation?: string | null;
   startAt?: string;
   endAt?: string;
   pickupPointId?: string;
