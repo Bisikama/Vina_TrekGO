@@ -1,9 +1,20 @@
-import { Body, Controller, Headers, Param, Post, Req, Res } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from '@nestjs/common'
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiHeader,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { z } from 'zod'
+import { UserRole } from '../../../shared/constants'
 import { Auth } from '../../../shared/decorators/auth.decorator'
 import { AuthType } from '../../../shared/constants/auth.constant'
+import { Roles } from '../../../shared/decorators/roles.decorator'
 import { ActiveUser } from '../../../shared/decorators/active-user.decorator'
 import { ZodValidationPipe } from '../../../shared/pipes/zod-validation.pipe'
 import { ApiErrorResponse, ApiErrorResponses } from '../../../shared/swagger/api-error-response.helper'
@@ -12,7 +23,12 @@ import { PaymentMethod } from '../../payments/payment-provider.port'
 import {
   PAYMENT_CHECKOUT_RESPONSE_SCHEMA,
   PAYMENT_PENDING_RESPONSE_SCHEMA,
+  RENTAL_ORDER_PAYMENT_HISTORY_RESPONSE_SCHEMA,
 } from '../../payments/payment-swagger.schemas'
+import {
+  RentalOrderPaymentHistoryQuerySchema,
+  type RentalOrderPaymentHistoryQueryDto,
+} from '../../payments/dtos/rental-order-payment-history.dto'
 
 @ApiTags('Rental payments')
 @ApiBearerAuth('bearer')
@@ -20,6 +36,61 @@ import {
 @Controller('rental-orders')
 export class RentalPaymentsController {
   constructor(private readonly payments: PaymentsPort) {}
+
+  @Get(':id/payments')
+  @Roles(UserRole.USER, UserRole.LEADER, UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN)
+  @ApiOperation({
+    operationId: 'getRentalOrderPaymentHistory',
+    summary: 'Lịch sử thanh toán & hoàn tiền của đơn thuê',
+    description: `
+**Proposed Non-Breaking API Extension — Pending BA Contract Adoption**
+
+- Cho phép USER xem toàn bộ các lần thử thanh toán (payment attempts) và các khoản hoàn tiền (refunds) liên quan đến một RentalOrder.
+- USER chỉ được xem đơn thuộc chính mình (kiểm tra quyền sở hữu order.userId === actorUserId tại application layer).
+- Trả về HTTP 403 khi khác chủ sở hữu, HTTP 404 khi đơn thuê không tồn tại.
+- Phân trang (page, pageSize) và lọc theo status, khoảng thời gian (from, to).
+- Sắp xếp mặc định: createdAt DESC, tie-break: id DESC.
+- Dữ liệu tiền tệ định dạng string chuẩn 2 chữ số thập phân, không dùng float.
+- Bảo mật: Tuyệt đối không để lộ gatewayPayload, provider secrets, idempotencyKey hay credentials.
+`,
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'UUID của đơn thuê',
+    example: '550e8400-e29b-41d4-a716-446655440103',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1, description: 'Số trang (mặc định 1)' })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, example: 20, description: 'Số bản ghi mỗi trang (mặc định 20, tối đa 100)' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED'],
+    description: 'Lọc theo trạng thái thanh toán',
+  })
+  @ApiQuery({ name: 'from', required: false, type: String, example: '2026-10-01T00:00:00.000Z', description: 'Từ thời điểm (ISO-8601)' })
+  @ApiQuery({ name: 'to', required: false, type: String, example: '2026-10-31T23:59:59.999Z', description: 'Đến thời điểm (ISO-8601)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lịch sử thanh toán và hoàn tiền của đơn thuê',
+    schema: RENTAL_ORDER_PAYMENT_HISTORY_RESPONSE_SCHEMA,
+  })
+  @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR')
+  @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHENTICATED', 'Token không hợp lệ hoặc đã hết hạn')
+  @ApiErrorResponse(403, 'Không có quyền truy cập', 'FORBIDDEN', 'Đơn thuê không thuộc user hiện tại')
+  @ApiErrorResponse(404, 'Không tìm thấy', 'RENTAL_ORDER_NOT_FOUND', 'Đơn thuê không tồn tại')
+  async getPaymentHistory(
+    @Param('id', new ZodValidationPipe(z.string().uuid())) rentalOrderId: string,
+    @Query(new ZodValidationPipe(RentalOrderPaymentHistoryQuerySchema)) query: RentalOrderPaymentHistoryQueryDto,
+    @ActiveUser('id') actorUserId: string,
+  ) {
+    return this.payments.getRentalOrderPaymentHistory({
+      rentalOrderId,
+      actorUserId,
+      query,
+    })
+  }
 
   @Post(':id/payments')
   @ApiOperation({
@@ -41,7 +112,7 @@ export class RentalPaymentsController {
     type: String,
     format: 'uuid',
     description: 'ID đơn thuê cần thanh toán',
-    example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+    example: '550e8400-e29b-41d4-a716-446655440103',
   })
   @ApiHeader({
     name: 'Idempotency-Key',
@@ -69,6 +140,7 @@ export class RentalPaymentsController {
           example: 'REDIRECT',
         },
       },
+      example: { paymentMethod: 'REDIRECT' },
     },
   })
   @ApiResponse({
