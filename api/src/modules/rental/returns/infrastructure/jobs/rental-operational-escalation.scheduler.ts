@@ -8,6 +8,7 @@ import { tryCompleteOrder } from '../adapters/prisma-rental-return.adapter';
 @Injectable()
 export class RentalOperationalEscalationScheduler {
  private readonly log = new Logger(RentalOperationalEscalationScheduler.name);
+ private closureCursor?: string;
  constructor(private readonly db: PrismaService) {}
  @Cron(CronExpression.EVERY_MINUTE)
  async check() {
@@ -33,12 +34,20 @@ export class RentalOperationalEscalationScheduler {
    });
   }
 
-  // Phase 09 Order Closure Sweep: Reconciles candidate orders stuck in RETURN_PROCESSING
+  // Phase 09 Order Closure Sweep: Reconciles candidate orders stuck in RETURN_PROCESSING / RETURN_PENDING
   const candidateOrders = await this.db.rentalOrder.findMany({
     where: { status: { in: [RentalOrderStatus.RETURN_PROCESSING, RentalOrderStatus.RETURN_PENDING] } },
     select: { id: true },
     take: 50,
+    skip: this.closureCursor ? 1 : 0,
+    cursor: this.closureCursor ? { id: this.closureCursor } : undefined,
+    orderBy: { id: 'asc' },
   });
+  if (candidateOrders.length > 0) {
+    this.closureCursor = candidateOrders[candidateOrders.length - 1].id;
+  } else {
+    this.closureCursor = undefined;
+  }
   for (const cand of candidateOrders) {
     await this.db.$transaction(async (tx) => {
       await tryCompleteOrder(tx, cand.id, now);
