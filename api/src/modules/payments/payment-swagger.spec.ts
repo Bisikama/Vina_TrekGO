@@ -11,6 +11,7 @@ import { PaymentsPort } from './payments.port'
 import { RentalPaymentsController } from '../rental/payments/rental-payments.controller'
 import { RentalExtensionPaymentsController } from '../rental/payments/rental-extension-payments.controller'
 import { RentalOrderController } from '../rental/ordering/presentation/controllers/rental-order.controller'
+import { UserTransactionsController } from './user-transactions.controller'
 import { CreateRentalOrderUseCase } from '../rental/ordering/application/use-cases/create-rental-order.use-case'
 import { ListRentalOrdersUseCase } from '../rental/ordering/application/use-cases/list-rental-orders.use-case'
 import { GetRentalOrderUseCase } from '../rental/ordering/application/use-cases/get-rental-order.use-case'
@@ -30,6 +31,7 @@ describe('Rental payment Swagger contract', () => {
         RentalPaymentsController,
         RentalExtensionPaymentsController,
         RentalOrderController,
+        UserTransactionsController,
       ],
       providers: [
         { provide: PaymentsService, useValue: { paymentOptions: jest.fn() } },
@@ -121,6 +123,62 @@ describe('Rental payment Swagger contract', () => {
     expect(notFound.content?.['application/json'].schema?.example).toMatchObject({
       error: { code: 'PAYMENT_NOT_FOUND', retryable: false },
       meta: { contractVersion: '0.2.0-final-flow' },
+    })
+
+    const rentalOrderHistory = document.paths['/api/v1/rental-orders/{id}/payments']?.get
+    expect(rentalOrderHistory?.operationId).toBe('getRentalOrderPaymentHistory')
+    const historyResponse = rentalOrderHistory?.responses?.['200'] as {
+      content?: Record<string, { schema?: { example?: Record<string, unknown> } }>
+    }
+    expect(historyResponse.content?.['application/json'].schema?.example).toMatchObject({
+      orderId: '550e8400-e29b-41d4-a716-446655440103',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          paymentId: '550e8400-e29b-41d4-a716-446655440010',
+          purpose: 'RENTAL_PAYMENT',
+          status: 'SUCCEEDED',
+          applicationStatus: 'APPLIED',
+          refunds: expect.arrayContaining([
+            expect.objectContaining({
+              refundId: '550e8400-e29b-41d4-a716-446655440030',
+              status: 'SUCCEEDED',
+              purpose: 'DEPOSIT',
+            }),
+          ]),
+        }),
+      ]),
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    })
+
+    const userTransactions = document.paths['/api/v1/user/transactions']?.get
+    expect(userTransactions?.operationId).toBe('getUserTransactions')
+    const transactionsResponse = userTransactions?.responses?.['200'] as {
+      content?: Record<string, { schema?: { example?: Record<string, unknown> } }>
+    }
+    expect(transactionsResponse.content?.['application/json'].schema?.example).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'PAYMENT',
+          source: 'RENTAL',
+          financialEffect: 'DEBIT',
+        }),
+        expect.objectContaining({
+          kind: 'REFUND',
+          source: 'RENTAL',
+          financialEffect: 'CREDIT',
+        }),
+      ]),
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        totalPages: 1,
+      },
     })
   })
 })
