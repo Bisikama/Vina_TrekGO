@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import { MediaProvenanceAdapter } from './media-provenance.adapter';
 import { MediaStoragePort } from '../../application/ports/media-storage.port';
 import { MediaAssetPort, MediaAssetView } from '../../application/ports/media-asset.port';
