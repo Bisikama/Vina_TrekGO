@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import { createHmac, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { Test } from '@nestjs/testing'
@@ -19,6 +19,7 @@ import { PaymentWebhooksService } from '../src/modules/payments/payment-webhooks
 import { RefundsService } from '../src/modules/payments/refunds.service'
 import { RentalCheckoutService } from '../src/modules/rental/payments/rental-checkout.service'
 import { PaymentRecoveryService } from '../src/modules/payments/payment-recovery.service'
+import { PaymentHistoryService } from '../src/modules/payments/payment-history.service'
 import { PaymentsPort, SharedPaymentsPort } from '../src/modules/payments/payments.port'
 import { PurchaseTrailUseCase } from '../src/modules/system-trail/application/use-cases/purchase-trail.use-case'
 import { TrailPurchaseController } from '../src/modules/system-trail/presentation/controllers/trail-purchase.controller'
@@ -526,6 +527,7 @@ describe('VNPAY collection and concurrent gateway routing', () => {
         PurchaseTrailUseCase,
         { provide: PaymentsPort, useClass: SharedPaymentsPort },
         { provide: PaymentRecoveryService, useValue: {} },
+        { provide: PaymentHistoryService, useValue: {} },
         { provide: PaymentProvider, useValue: router },
         { provide: PrismaService, useValue: db },
         { provide: RefundsService, useValue: {} },

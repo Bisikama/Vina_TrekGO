@@ -6,6 +6,7 @@ import { PrismaService } from '../../shared/services/prisma.service'
 import { VerifiedRefundEvent } from './payment-provider.port'
 import { paymentHash, paymentRecoveryConfig } from './payment-utils'
 import { DepositRefundCommand, RentalRefundsService } from './rental-refunds.service'
+import { isTechnicalReversalReason, type TechnicalReversalReason } from './technical-reversal-reasons'
 
 export type BookingRefundCommand = {
   paymentId: string
@@ -19,7 +20,7 @@ export type TechnicalReversalCommand = {
   paymentId: string
   businessActionId: string
   purpose: 'TECHNICAL_REVERSAL'
-  reasonCode: 'LATE_PAYMENT' | 'DUPLICATE_PAYMENT' | 'DOMAIN_NOT_ELIGIBLE'
+  reasonCode: TechnicalReversalReason
   amount: string
   idempotencyKey: string
   source: Record<string, never>
@@ -177,6 +178,7 @@ export class RefundsService {
         },
       })
       const payload = decision?.payload as Prisma.JsonObject | undefined
+      // Kiểm tra lại trong transaction: event Rental không được mở quyền hoàn cho hóa đơn Booking/Trail.
       if (
         payment.invoiceId !== initial.invoiceId ||
         payment.status !== 'SUCCEEDED' ||
@@ -184,7 +186,7 @@ export class RefundsService {
         payment.application?.status !== 'REJECTED' ||
         payment.application.invoiceId !== payment.invoiceId ||
         payment.application.reasonCode !== input.reasonCode ||
-        !['LATE_PAYMENT', 'DUPLICATE_PAYMENT', 'DOMAIN_NOT_ELIGIBLE'].includes(input.reasonCode) ||
+        !isTechnicalReversalReason(payment.invoice.invoiceType, input.reasonCode) ||
         !decision ||
         decision.eventType !== 'TECHNICAL_REVERSAL_REQUESTED' ||
         decision.aggregateType !== 'Payment' ||
@@ -287,6 +289,9 @@ export class RefundsService {
           })
         return false
       }
+      // Cùng thứ tự khóa với luồng hủy Rental: order trước invoice/payment.
+      if (initial.purpose === 'RENTAL_CANCELLATION' && initial.rentalOrderId)
+        await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${initial.rentalOrderId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${initial.payment.invoiceId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM payments WHERE id = ${initial.paymentId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM payment_allocations WHERE payment_id = ${initial.paymentId}::uuid ORDER BY id FOR UPDATE`
@@ -417,7 +422,13 @@ export class RefundsService {
             },
           })
         }
-        if (event.status === 'SUCCEEDED' && refund.payment.application?.status === 'APPLIED') {
+        // Invoice ghi nhận tiền đã thu; chỉ đổi sang đã hoàn khi cổng xác nhận refund.
+        // Hoàn kỹ thuật của payment bị từ chối áp dụng cũng phải kết thúc trạng thái PAID.
+        if (
+          event.status === 'SUCCEEDED' &&
+          (refund.payment.application?.status === 'APPLIED' ||
+            (refund.purpose === 'TECHNICAL_REVERSAL' && refund.payment.application?.status === 'REJECTED'))
+        ) {
           const total = await tx.refund.aggregate({
             where: { paymentId: refund.paymentId, status: 'SUCCEEDED' },
             _sum: { amount: true },
@@ -429,6 +440,26 @@ export class RefundsService {
               version: { increment: 1 },
             },
           })
+        }
+        if (refund.purpose === 'RENTAL_CANCELLATION' && refund.rentalOrderId) {
+          if (event.status === 'SUCCEEDED') {
+            const total = await tx.refund.aggregate({
+              where: { paymentId: refund.paymentId, status: 'SUCCEEDED' },
+              _sum: { amount: true },
+            })
+            await tx.rentalOrder.updateMany({
+              where: { id: refund.rentalOrderId, status: 'CANCELLED' },
+              data: {
+                financialStatus: total._sum.amount?.equals(refund.payment.amount) ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+                version: { increment: 1 },
+              },
+            })
+          } else if (event.status === 'FAILED' || event.status === 'CANCELLED') {
+            await tx.rentalOrder.updateMany({
+              where: { id: refund.rentalOrderId, status: 'CANCELLED' },
+              data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 } },
+            })
+          }
         }
       } else {
         if (options.lease)

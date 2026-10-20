@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { PaymentsPort } from './payments.port'
 import { TechnicalReversalCommand } from './refunds.service'
+import { isTechnicalReversalReason } from './technical-reversal-reasons'
 
 @Injectable()
 export class TechnicalReversalWorker {
@@ -22,13 +23,17 @@ export class TechnicalReversalWorker {
       event.aggregateType !== 'Payment'
     )
       return
-    const payment = await this.db.payment.findUniqueOrThrow({ where: { id: event.aggregateId } })
+    const payment = await this.db.payment.findUniqueOrThrow({
+      where: { id: event.aggregateId },
+      include: { invoice: { select: { invoiceType: true } } },
+    })
     const payload = event.payload as Record<string, unknown>
+    // Đối chiếu loại hóa đơn trước khi cho phép lý do hoàn tiền riêng của Rental.
     if (
       payload.schemaVersion !== 1 ||
       payload.paymentId !== payment.id ||
       payload.invoiceId !== payment.invoiceId ||
-      !['LATE_PAYMENT', 'DUPLICATE_PAYMENT', 'DOMAIN_NOT_ELIGIBLE'].includes(String(payload.reasonCode))
+      !isTechnicalReversalReason(payment.invoice.invoiceType, payload.reasonCode)
     )
       throw new Error('Invalid technical reversal decision')
     const action = `payment:${payment.id}:technical-reversal:v1`
@@ -36,7 +41,7 @@ export class TechnicalReversalWorker {
       paymentId: payment.id,
       businessActionId: action,
       purpose: 'TECHNICAL_REVERSAL',
-      reasonCode: payload.reasonCode as TechnicalReversalCommand['reasonCode'],
+      reasonCode: payload.reasonCode,
       amount: payment.amount.toFixed(),
       idempotencyKey: action,
       source: {},
