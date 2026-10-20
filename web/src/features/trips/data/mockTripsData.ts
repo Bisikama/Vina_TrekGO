@@ -26,6 +26,8 @@ export interface TripData {
     start: string;
     end: string;
     year: string;
+    rawStart?: string;
+    rawEnd?: string;
   };
   status: {
     label: string;
@@ -37,10 +39,10 @@ export interface TripData {
     name: string;
     avatar: string;
     badge: string;
-    experience: string;
-    rating: number;
-    totalTrips: number;
-    porters: number;
+    experience?: string;
+    rating?: number;
+    totalTrips?: number;
+    porters?: number;
   };
   slots: {
     booked: number;
@@ -55,6 +57,27 @@ export interface TripData {
   // Detailed fields
   maxElevation?: string;
   totalDistance?: string;
+  durationDays?: number;
+  durationNights?: number;
+  pickup?: {
+    id?: string;
+    name: string;
+    address?: string;
+  } | null;
+  checkpoints?: {
+    id?: string;
+    name: string;
+    description?: string | null;
+    sequence?: number;
+    isRequired?: boolean;
+  }[];
+  routes?: {
+    id?: string;
+    snapshotName?: string;
+    snapshotDifficulty?: string | null;
+    snapshotDistanceKm?: string | null;
+    sequence?: number;
+  }[];
   itinerary?: ItineraryDay[];
   includedServices?: string[];
   excludedServices?: string[];

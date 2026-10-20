@@ -10,7 +10,7 @@ import type { BookingSummary } from "@/features/bookings/types/booking.types";
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const { accessToken } = useAuth();
   const [myBooking, setMyBooking] = useState<BookingSummary | null>(null);
-  const [participants, setParticipants] = useState(2);
+  const [participants, setParticipants] = useState(1);
   const isFullyBooked = trip.slots.booked >= trip.slots.total;
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
         <>
           {/* Price Header */}
           <div className="border-b border-gray-100 p-5">
-            <div className="mb-2 flex items-end justify-between">
+            <div className="flex items-end justify-between">
               <div>
                 <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
                   Giá trọn gói / người
@@ -90,12 +90,9 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-[11px] font-bold text-gray-400 line-through">
-                  {(trip.price * 1.15).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}đ
-                </div>
-                <div className="rounded border border-red-100 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-                  -14% Early Bird
-                </div>
+                <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">
+                  Bảo hiểm VFRS
+                </span>
               </div>
             </div>
           </div>
@@ -123,7 +120,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                     ></path>
                   </svg>
                   <div className="text-sm font-bold text-gray-900">
-                    {trip.date.start} - {trip.date.end}/{trip.date.year}
+                    {trip.date.start} – {trip.date.end}/{trip.date.year}
                   </div>
                 </div>
                 <div className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">

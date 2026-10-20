@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { apiClient } from "@/lib/axios";
+import type { CheckpointItem, SystemTrailDetail } from "./StepTwoOverviewMap";
 
-// Cấu hình URL Web Worker cho MapLibre GL trong Next.js client
+// Đảm bảo MapLibre GL worker cấu hình chính xác
 if (typeof window !== "undefined") {
   const workerUrl =
     "https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl-worker.mjs";
@@ -17,44 +18,8 @@ if (typeof window !== "undefined") {
   }
 }
 
-interface CheckpointItem {
-  id: string;
-  name: string;
-  description?: string | null;
-  sequence: number;
-  latitude: number;
-  longitude: number;
-}
-
-interface SystemTrailDetail {
-  id: string;
-  code: string;
-  name: string;
-  distanceKm: number;
-  elevationGainM?: number | null;
-  destination: {
-    name: string;
-    centerLat?: number | null;
-    centerLng?: number | null;
-  };
-  routeGeojson: any;
-  checkpoints: CheckpointItem[];
-  bounds?: {
-    minLng: number;
-    minLat: number;
-    maxLng: number;
-    maxLat: number;
-  } | null;
-  initialCamera?: {
-    center: [number, number];
-    zoom: number;
-    pitch: number;
-    bearing: number;
-  } | null;
-}
-
 export function TripRouteReviewMap({
-  trailCode = "TRAIL_BADEN_COTDIEN",
+  trailCode,
   onTrailLoaded,
 }: {
   trailCode?: string;
@@ -65,20 +30,28 @@ export function TripRouteReviewMap({
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   const [trail, setTrail] = useState<SystemTrailDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(true);
 
   // 1. Gọi API Backend lấy toạ độ GeoJSON & Checkpoints
   useEffect(() => {
     let cancelled = false;
+    const code = trailCode;
 
-    async function fetchTrailData() {
+    if (!code) {
+      setTrail(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    async function fetchTrailData(trailId: string) {
       try {
         setLoading(true);
         setError(null);
         const res = await apiClient.get<SystemTrailDetail>(
-          `/api/v1/system-trails/${encodeURIComponent(trailCode)}`,
+          `/api/v1/system-trails/${encodeURIComponent(trailId)}`,
         );
         if (!cancelled) {
           setTrail(res.data);
@@ -87,7 +60,7 @@ export function TripRouteReviewMap({
       } catch (err: any) {
         if (!cancelled) {
           console.error("Lỗi khi tải toạ độ cung đường:", err);
-          setError("Không thể nạp dữ liệu GPS từ Backend");
+          setError("Không thể nạp dữ liệu GPS từ máy chủ");
         }
       } finally {
         if (!cancelled) {
@@ -96,17 +69,16 @@ export function TripRouteReviewMap({
       }
     }
 
-    fetchTrailData();
+    fetchTrailData(code);
     return () => {
       cancelled = true;
     };
   }, [trailCode]);
 
-  // 2. Khởi tạo MapLibre khi đã có dữ liệu GPS
+  // 2. Render MapLibre khi có dữ liệu
   useEffect(() => {
     if (!mapContainerRef.current || !trail) return;
 
-    // Dọn dẹp bản đồ cũ nếu có
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
@@ -119,7 +91,6 @@ export function TripRouteReviewMap({
       trail.destination.centerLat || 11.3789,
     ];
 
-    // Nguồn bản đồ nền vệ tinh Esri
     const mapStyle: maplibregl.StyleSpecification = {
       version: 8,
       sources: {
@@ -143,35 +114,13 @@ export function TripRouteReviewMap({
       ],
     };
 
-    // Giới hạn khu vực quanh địa danh để khóa camera
-    const pad = 0.06;
-    const maxBounds: [[number, number], [number, number]] | undefined =
-      trail.bounds
-        ? [
-            [trail.bounds.minLng - pad, trail.bounds.minLat - pad],
-            [trail.bounds.maxLng + pad, trail.bounds.maxLat + pad],
-          ]
-        : center
-          ? [
-              [center[0] - 0.08, center[1] - 0.08],
-              [center[0] + 0.08, center[1] + 0.08],
-            ]
-          : undefined;
-
-    const demTileUrl =
-      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: mapStyle,
-      center: center,
-      zoom: 13.5,
-      minZoom: 11.5,
-      maxZoom: 16,
-      maxBounds: maxBounds,
-      renderWorldCopies: false,
-      pitch: is3D ? 60 : 0,
-      bearing: -20,
+      center,
+      zoom: trail.initialCamera?.zoom || 14.5,
+      pitch: is3D ? trail.initialCamera?.pitch || 60 : 0,
+      bearing: is3D ? trail.initialCamera?.bearing || 15 : 0,
       maxPitch: 85,
     });
 
@@ -179,98 +128,89 @@ export function TripRouteReviewMap({
       new maplibregl.NavigationControl({ visualizePitch: true }),
       "top-right",
     );
-    map.addControl(new maplibregl.FullscreenControl(), "top-right");
 
     map.on("load", () => {
-      // A. Nạp 3D Terrain DEM (Ưu tiên local tile tốc độ cao)
-      if (!map.getSource("terrain-dem")) {
-        map.addSource("terrain-dem", {
+      // A. DEM 3D Terrain
+      if (is3D) {
+        map.addSource("mapter-dem", {
           type: "raster-dem",
-          tiles: [demTileUrl],
-          encoding: "terrarium",
+          tiles: [
+            "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+          ],
           tileSize: 256,
-          minzoom: 11,
+          encoding: "terrarium",
           maxzoom: 15,
         });
-      }
 
-      if (is3D) {
         map.setTerrain({
-          source: "terrain-dem",
-          exaggeration: 2.0, // Nổi khối sườn núi rõ nét
+          source: "mapter-dem",
+          exaggeration: 1.5,
+        });
+
+        map.setSky({
+          "sky-color": "#1976d2",
+          "sky-horizon-blend": 0.5,
+          "horizon-color": "#ffffff",
+          "horizon-fog-blend": 0.5,
+          "fog-color": "#f0f8ff",
+          "fog-ground-blend": 0.5,
         });
       }
 
-      // Đổ bóng sườn dốc (Hillshade)
-      if (!map.getLayer("hillshading")) {
+      // B. Tuyến đường GPS GeoJSON
+      if (trail.routeGeojson) {
+        map.addSource("trail-route-source", {
+          type: "geojson",
+          data: trail.routeGeojson,
+        });
+
         map.addLayer({
-          id: "hillshading",
-          type: "hillshade",
-          source: "terrain-dem",
+          id: "trail-route-glow",
+          type: "line",
+          source: "trail-route-source",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
           paint: {
-            "hillshade-exaggeration": 0.7,
-            "hillshade-shadow-color": "#0B1120",
+            "line-color": "#ffffff",
+            "line-width": 8,
+            "line-opacity": 0.6,
+          },
+        });
+
+        map.addLayer({
+          id: "trail-route-line",
+          type: "line",
+          source: "trail-route-source",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#ea580c",
+            "line-width": 5,
           },
         });
       }
 
-      // B. Vẽ tuyến đường leo núi GeoJSON
-      if (trail.routeGeojson) {
-        if (!map.getSource("trail-route")) {
-          map.addSource("trail-route", {
-            type: "geojson",
-            data: trail.routeGeojson,
-          });
-        }
-
-        // Viền dạ quang
-        if (!map.getLayer("trail-glow")) {
-          map.addLayer({
-            id: "trail-glow",
-            type: "line",
-            source: "trail-route",
-            paint: {
-              "line-color": "#FF3D00",
-              "line-width": 8,
-              "line-opacity": 0.4,
-            },
-          });
-        }
-
-        // Đường nét chính
-        if (!map.getLayer("trail-line")) {
-          map.addLayer({
-            id: "trail-line",
-            type: "line",
-            source: "trail-route",
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: {
-              "line-color": "#FF5722",
-              "line-width": 4,
-            },
-          });
-        }
-      }
-
-      // C. Cắm mốc Checkpoints
+      // C. Checkpoints Markers
       if (trail.checkpoints && trail.checkpoints.length > 0) {
-        trail.checkpoints.forEach((cp) => {
-          const isPeak = cp.sequence === trail.checkpoints.length;
+        trail.checkpoints.forEach((cp, idx) => {
           const el = document.createElement("div");
-          el.className = `flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-lg text-[11px] font-bold text-white transition-transform hover:scale-125 cursor-pointer ${
-            isPeak ? "bg-red-600 ring-2 ring-red-400" : "bg-[#125238]"
-          }`;
-          el.innerText = `${cp.sequence}`;
+          el.className =
+            "grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-xs font-bold text-white shadow-lg ring-2 ring-white";
+          el.innerText = `${idx + 1}`;
 
-          const popup = new maplibregl.Popup({ offset: 15, closeButton: false })
-            .setHTML(`
-            <div style="font-size: 12px; font-weight: bold; color: #0f172a; padding: 2px;">
-              ${cp.name}
+          const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
+            <div style="font-family: sans-serif; font-size: 13px; padding: 4px;">
+              <strong style="color: #064e3b; font-size: 14px;">${idx + 1}. ${cp.name}</strong>
+              <p style="margin: 3px 0 0 0; color: #475569; font-size: 12px;">${cp.description || "Trạm dừng an toàn"}</p>
             </div>
           `);
 
           const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([cp.longitude, cp.latitude])
+            .setLngLat([Number(cp.longitude), Number(cp.latitude)])
             .setPopup(popup)
             .addTo(map);
 
@@ -278,25 +218,42 @@ export function TripRouteReviewMap({
         });
       }
 
-      // D. Tự động cân chỉnh Camera vừa trọn vẹn tuyến đường
+      // D. Cân chỉnh Camera
       if (trail.bounds) {
         map.fitBounds(
           [
             [trail.bounds.minLng, trail.bounds.minLat],
             [trail.bounds.maxLng, trail.bounds.maxLat],
           ],
-          { padding: 50, duration: 1200 },
+          { padding: 40, duration: 1000 },
         );
       }
     });
 
     mapRef.current = map;
 
+    const resizeTimer = setTimeout(() => {
+      map.resize();
+    }, 200);
+
     return () => {
+      clearTimeout(resizeTimer);
       markersRef.current.forEach((m) => m.remove());
       map.remove();
     };
   }, [trail, is3D]);
+
+  if (!trailCode) {
+    return (
+      <div className="relative mt-4 flex h-80 w-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+        <span className="text-3xl mb-2">🗺️</span>
+        <p className="text-sm font-semibold text-slate-700">Chưa có cung đường được gán cho chuyến đi</p>
+        <p className="text-xs text-slate-500 mt-1">
+          Vui lòng quay lại Bước 2 để chọn cung đường
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative mt-4 h-80 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm">

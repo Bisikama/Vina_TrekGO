@@ -22,29 +22,12 @@ export const TripDetailClient = ({
     if (!trailDetail) return trip;
     return {
       ...trip,
-      totalDistance: `${trailDetail.distanceKm} km`,
-      maxElevation: trailDetail.elevationGainM ? `${trailDetail.elevationGainM} m` : trip.maxElevation,
+      totalDistance: trailDetail.distanceKm ? `${trailDetail.distanceKm} km` : trip.totalDistance,
+      maxElevation: trailDetail.elevationGainM ? `+${trailDetail.elevationGainM} m` : trip.maxElevation,
       location: {
-        name: trailDetail.destination?.name || trailDetail.name || trip.location.name,
-        distance: `${trailDetail.distanceKm} km`,
+        name: trip.location.name !== "Khu vực trekking" ? trip.location.name : (trailDetail.destination?.name || trailDetail.name || trip.location.name),
+        distance: trailDetail.distanceKm ? `${trailDetail.distanceKm} km` : trip.location.distance,
       },
-      difficulty: trailDetail.difficulty
-        ? {
-            level: trailDetail.difficulty.toLowerCase(),
-            label:
-              trailDetail.difficulty === "EASY"
-                ? "Dễ"
-                : trailDetail.difficulty === "MEDIUM"
-                ? "Trung bình"
-                : "Khó",
-            color:
-              trailDetail.difficulty === "EASY"
-                ? "bg-emerald-100 text-emerald-700"
-                : trailDetail.difficulty === "MEDIUM"
-                ? "bg-blue-100 text-blue-700"
-                : "bg-red-100 text-red-700",
-          }
-        : trip.difficulty,
     };
   }, [trip, trailDetail]);
 
@@ -56,28 +39,104 @@ export const TripDetailClient = ({
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Main Content Column */}
           <div className="flex-1 lg:max-w-[700px] xl:max-w-[800px] space-y-8">
+            {/* Giới thiệu & Mô tả chi tiết chuyến đi */}
+            {enrichedTrip.description ? (
+              <section className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-7 shadow-sm">
+                <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-3">
+                  <span className="text-xl">📝</span>
+                  <h2 className="text-xl font-extrabold text-gray-900">
+                    Giới thiệu &amp; Kế hoạch chuyến đi
+                  </h2>
+                </div>
+                <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 font-normal">
+                  {enrichedTrip.description}
+                </div>
+              </section>
+            ) : null}
+
             {/* Map 3D Section */}
             <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-gray-900">
-                    Bản đồ Cung đường & Toạ độ GPS 3D
+                    Bản đồ Cung đường &amp; Toạ độ GPS 3D
                   </h2>
                   <p className="text-xs text-gray-500 mt-1">
                     Dữ liệu độ cao thực tế và các trạm Checkpoint kiểm duyệt chuẩn VFRS
                   </p>
                 </div>
-                <span className="bg-emerald-50 text-[#125238] text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-100">
-                  ● GPS 3D Ready
-                </span>
+                {trailCode ? (
+                  <span className="bg-emerald-50 text-[#125238] text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-100">
+                    ● GPS 3D Ready
+                  </span>
+                ) : (
+                  <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1.5 rounded-full">
+                    Cung đường tự do
+                  </span>
+                )}
               </div>
 
-              {/* Gọi API lấy toạ độ thực tế theo trailCode của trip */}
-              <TripRouteReviewMap
-                trailCode={trailCode || "TRAIL_BADEN_COTDIEN"}
-                onTrailLoaded={(detail) => setTrailDetail(detail as any)}
-              />
+              {trailCode ? (
+                <TripRouteReviewMap
+                  trailCode={trailCode}
+                  onTrailLoaded={(detail) => setTrailDetail(detail as any)}
+                />
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-2xl text-slate-400">
+                    🗺️
+                  </div>
+                  <h3 className="mt-3 text-sm font-bold text-slate-800">
+                    Cung đường chưa có toạ độ vệ tinh 3D
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                    Chuyến đi này di chuyển theo lộ trình thực địa và sự dẫn dắt trực tiếp của Leader.
+                  </p>
+                </div>
+              )}
             </section>
+
+            {/* Checkpoints Section */}
+            {enrichedTrip.checkpoints && enrichedTrip.checkpoints.length > 0 && (
+              <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🚩</span>
+                    <h2 className="text-xl font-extrabold text-gray-900">
+                      Các trạm kiểm soát (Checkpoints)
+                    </h2>
+                  </div>
+                  <span className="rounded bg-emerald-50 px-2.5 py-1 text-xs font-bold text-[#125238]">
+                    {enrichedTrip.checkpoints.length} trạm
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {enrichedTrip.checkpoints.map((cp, idx) => (
+                    <div
+                      key={cp.id || idx}
+                      className="flex items-center justify-between rounded-xl bg-slate-50 p-3.5 border border-slate-100"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#125238] text-xs font-bold text-white shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <div className="text-sm font-bold text-gray-900">{cp.name}</div>
+                          {cp.description && (
+                            <div className="text-xs text-gray-500">{cp.description}</div>
+                          )}
+                        </div>
+                      </div>
+                      {cp.isRequired && (
+                        <span className="rounded bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                          Bắt buộc
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <ItineraryAccordion trip={enrichedTrip} />
             <ServicesAndPolicy trip={enrichedTrip} />

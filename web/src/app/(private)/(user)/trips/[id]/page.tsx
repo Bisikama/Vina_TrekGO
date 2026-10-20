@@ -1,94 +1,225 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { TripData } from "@/features/trips/data/mockTripsData";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
-import { usePublicTripDetail } from "@/features/trips/hooks/usePublicTripDetail";
-import type { PublicTripItem } from "@/features/trips/types/public-trips";
+import { bookingApiService } from "@/features/bookings/services/booking.api";
 import { apiClient } from "@/lib/axios";
-
-function publicTripToTripData(trip: PublicTripItem): TripData {
-  const startAt = new Date(trip.startAt);
-  const endAt = new Date(trip.endAt);
-  const startDay = startAt.getDate().toString().padStart(2, "0");
-  const endDay = endAt.getDate().toString().padStart(2, "0");
-  const year = startAt.getFullYear().toString();
-  const duration = Math.max(1, Math.ceil((endAt.getTime() - startAt.getTime()) / (1000 * 60 * 60 * 24)));
-  
-  return {
-    id: trip.id,
-    duration: `${duration} ngày`,
-    difficulty: { level: "medium", label: "Trung bình", color: "bg-blue-100 text-blue-700" },
-    isVFRSVerified: true,
-    location: { name: "Khu vực leo núi", distance: "Cung đường thực tế" },
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop",
-    date: { start: startDay, end: endDay, year },
-    status: { label: trip.status === 'OPEN' ? 'Đang mở đăng ký' : trip.status, color: "text-emerald-600" },
-    title: trip.title,
-    description: trip.description || "Chuyến đi tuyệt vời cùng Vina TrekGO",
-    leader: { name: "Leader", avatar: "/images/avatars/avatar-1.png", badge: "WFA Certified", experience: "Kinh nghiệm chuyên nghiệp", rating: 5, totalTrips: 10, porters: 0 },
-    slots: { booked: 0, total: trip.capacity || 15, statusText: "Còn chỗ" },
-    price: Number(trip.price) || 0,
-    action: { label: "Xem chi tiết", variant: "primary" as const },
-  };
-}
 
 export default function TripDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { trip: publicTrip, isLoading, error } = usePublicTripDetail({ tripId: id });
-  const [resolvedTrailCode, setResolvedTrailCode] = useState<string | null>(null);
+  const [trip, setTrip] = useState<TripData | null>(null);
+  const [trailCode, setTrailCode] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
-    async function resolveTrail() {
-      // 1. Thử lấy thông tin chuyến đi chi tiết nếu có token của Leader
+    async function loadTripDetail() {
+      setIsLoading(true);
+      setError(null);
+
       try {
-        const leaderRes = await apiClient.get<any>(`/api/v1/leader/public-trips/${id}`);
-        if (!cancelled && leaderRes.data?.trails?.[0]?.systemTrailId) {
-          setResolvedTrailCode(leaderRes.data.trails[0].systemTrailId);
-          return;
-        }
-      } catch {
-        // Nếu không có quyền Leader, tiếp tục fallback
-      }
+        let rawData: any = null;
 
-      // 2. Tra cứu cung đường System Trail theo destinationId của chuyến đi
-      if (publicTrip?.destinationId) {
+        // 1. Thử lấy từ Public Booking Discovery API (/api/v1/trips/:id)
         try {
-          const res = await apiClient.get<any>("/api/v1/system-trails", {
-            params: { destinationId: publicTrip.destinationId, status: "ACTIVE" },
-          });
-          const items = res.data?.items || res.data;
-          if (!cancelled && Array.isArray(items) && items.length > 0) {
-            setResolvedTrailCode(items[0].id || items[0].code);
-            return;
-          }
-        } catch (err) {
-          console.error("Lỗi khi tìm trail theo destinationId:", err);
+          rawData = await bookingApiService.getPublicTripDetail(id);
+        } catch {
+          // Bỏ qua nếu lỗi 404
         }
-      }
 
-      if (!cancelled) {
-        setResolvedTrailCode("TRAIL_BADEN_COTDIEN");
+        // 2. Thử lấy từ Leader Public Trip (/api/v1/leader/public-trips/:id) nếu có quyền
+        if (!rawData) {
+          try {
+            const leaderRes = await apiClient.get<any>(`/api/v1/leader/public-trips/${id}`);
+            if (leaderRes.data) {
+              rawData = leaderRes.data;
+            }
+          } catch {}
+        }
+
+        // 3. Fallback lấy từ /api/v1/public-trips/:id
+        if (!rawData) {
+          const pubRes = await apiClient.get<any>(`/api/v1/public-trips/${id}`);
+          rawData = pubRes.data;
+        }
+
+        if (!rawData || cancelled) return;
+
+        // 4. Nếu thiếu thông tin destination.name, gọi API destination
+        let destName = rawData.destination?.name;
+        const destId = rawData.destination?.id || rawData.destinationId;
+        if (!destName && destId) {
+          try {
+            const destRes = await apiClient.get<any>(`/api/v1/destinations/${destId}`);
+            destName = destRes.data?.name || destRes.data?.data?.name;
+          } catch {}
+        }
+
+        // 5. Nếu thiếu thông tin pickup, thử tìm theo pickupPointId
+        let pickupInfo = rawData.pickup;
+        const pId = rawData.pickup?.id || rawData.pickupPointId;
+        if (!pickupInfo && pId && destId) {
+          try {
+            const pickupRes = await apiClient.get<any>("/api/v1/leader/trip-options/pickup-points", {
+              params: { destinationId: destId },
+            });
+            const pItems = pickupRes.data?.items || pickupRes.data;
+            if (Array.isArray(pItems)) {
+              const matched = pItems.find((p: any) => p.id === pId);
+              if (matched) {
+                pickupInfo = { id: matched.id, name: matched.name, address: matched.address };
+              }
+            }
+          } catch {}
+        }
+
+        // 6. Xử lý thời gian khởi hành & thời lượng
+        const startAt = new Date(rawData.startAt);
+        const endAt = new Date(rawData.endAt);
+        const sDay = startAt.getDate().toString().padStart(2, "0");
+        const sMonth = (startAt.getMonth() + 1).toString().padStart(2, "0");
+        const eDay = endAt.getDate().toString().padStart(2, "0");
+        const eMonth = (endAt.getMonth() + 1).toString().padStart(2, "0");
+        const year = startAt.getFullYear().toString();
+        const diffDays = Math.max(
+          1,
+          Math.round((endAt.getTime() - startAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+        );
+        const durationStr = diffDays > 1 ? `${diffDays} ngày` : "1 ngày";
+        const durationNights = diffDays > 1 ? diffDays - 1 : 0;
+
+        // 7. Độ khó
+        const diffCode =
+          rawData.routes?.[0]?.snapshotDifficulty ||
+          rawData.trails?.[0]?.snapshotDifficulty ||
+          "MEDIUM";
+        const difficultyMap: Record<string, { level: string; label: string; color: string }> = {
+          EASY: { level: "easy", label: "Cấp 1 – Dễ", color: "bg-emerald-100 text-emerald-800" },
+          MEDIUM: { level: "medium", label: "Cấp 2 – Vừa phải", color: "bg-blue-100 text-blue-800" },
+          HARD: { level: "hard", label: "Cấp 3 – Thử thách", color: "bg-amber-100 text-amber-800" },
+          EXTREME: { level: "extreme", label: "Cấp 4 – Chuyên gia", color: "bg-red-100 text-red-800" },
+        };
+
+        const totalDist =
+          rawData.routes?.[0]?.snapshotDistanceKm
+            ? `${rawData.routes[0].snapshotDistanceKm} km`
+            : rawData.trails?.[0]?.snapshotDistanceKm
+            ? `${rawData.trails[0].snapshotDistanceKm} km`
+            : undefined;
+
+        const maxElev = rawData.trails?.[0]?.snapshotElevationGainM
+          ? `+${rawData.trails[0].snapshotElevationGainM} m`
+          : undefined;
+
+        const capacity = rawData.capacity || 15;
+        const remainingSlots =
+          rawData.remainingSlots !== undefined ? rawData.remainingSlots : capacity;
+        const booked = Math.max(0, capacity - remainingSlots);
+
+        // 8. Cung đường System Trail (CHỈ GÁN NẾU CÓ THẬT, TUYỆT ĐỐI KHÔNG FALLBACK TRAIL_BADEN_COTDIEN)
+        const sysTrailId =
+          rawData.trails?.[0]?.systemTrailId ||
+          rawData.routes?.[0]?.id ||
+          rawData.systemTrailId ||
+          null;
+
+        if (!cancelled) {
+          setTrailCode(sysTrailId);
+          setTrip({
+            id: rawData.id,
+            title: rawData.title,
+            description: rawData.description || "",
+            duration: durationStr,
+            durationDays: diffDays,
+            durationNights,
+            difficulty: difficultyMap[diffCode] || difficultyMap.MEDIUM,
+            isVFRSVerified: true,
+            location: {
+              name: destName || "Khu vực trekking",
+              distance: totalDist || "Theo đoàn",
+            },
+            image:
+              "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+            date: {
+              start: `${sDay}/${sMonth}`,
+              end: `${eDay}/${eMonth}`,
+              year,
+              rawStart: rawData.startAt,
+              rawEnd: rawData.endAt,
+            },
+            status: {
+              label:
+                rawData.status === "OPEN"
+                  ? "Đang mở đăng ký"
+                  : rawData.status === "FULL"
+                  ? "Đã đủ người"
+                  : rawData.status,
+              color: rawData.status === "OPEN" ? "text-emerald-600" : "text-amber-600",
+            },
+            leader: {
+              name: rawData.leader?.fullName || "Leader Vina TrekGO",
+              avatar: "/images/avatars/avatar-1.png",
+              badge: "LEADER ĐÃ XÁC THỰC",
+              experience: "Đội ngũ dẫn đoàn chuyên nghiệp Vina TrekGO",
+            },
+            slots: {
+              booked,
+              total: capacity,
+              statusText: remainingSlots > 0 ? `Còn ${remainingSlots} chỗ` : "Đã hết chỗ",
+            },
+            price: Number(rawData.pricePerPax || rawData.price || 0),
+            totalDistance: totalDist,
+            maxElevation: maxElev,
+            pickup: pickupInfo || null,
+            checkpoints: rawData.checkpoints || [],
+            routes: rawData.routes || rawData.trails || [],
+            action: {
+              label: remainingSlots > 0 ? "Đặt chỗ ngay" : "Hết chỗ",
+              variant: remainingSlots > 0 ? "primary" : "disabled",
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi tải chi tiết chuyến đi:", err);
+        if (!cancelled) {
+          setError("Không thể tải thông tin chuyến đi.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
-    resolveTrail();
+    loadTripDetail();
     return () => {
       cancelled = true;
     };
-  }, [id, publicTrip?.destinationId]);
+  }, [id]);
 
-  const trip = useMemo(() => {
-    if (!publicTrip) return null;
-    return publicTripToTripData(publicTrip);
-  }, [publicTrip]);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
+        <span className="h-8 w-8 animate-spin rounded-full border-3 border-emerald-600 border-t-transparent" />
+        <span className="text-sm font-medium text-slate-500">Đang tải chi tiết chuyến đi...</span>
+      </div>
+    );
+  }
 
-  if (isLoading) return <div className="p-10 text-center">Đang tải chuyến đi...</div>;
-  if (error || !trip) return <div className="p-10 text-center">Không tìm thấy chuyến đi</div>;
-  
-  return <TripDetailClient trip={trip} trailCode={resolvedTrailCode} />;
+  if (error || !trip) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center p-10 text-center">
+        <div className="text-4xl">⚠️</div>
+        <h2 className="mt-2 text-lg font-bold text-slate-800">Không tìm thấy chuyến đi</h2>
+        <p className="mt-1 text-sm text-slate-500">Chuyến đi không tồn tại hoặc chưa được công khai.</p>
+      </div>
+    );
+  }
+
+  return <TripDetailClient trip={trip} trailCode={trailCode} />;
 }
