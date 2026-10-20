@@ -26,6 +26,7 @@ import {
   formatPolicyVersion,
   normalizeQuoteItems,
   parseWholeVnd,
+  RENTAL_PREP_BUFFER_MINUTES,
   resolveRecipient,
   resolveRentalReturn,
   toPrismaDecimalVnd,
@@ -246,6 +247,9 @@ export class CreateRentalQuoteUseCase {
       currency: quoteCurrency,
       policySnapshot: {
         ...context.activePolicy.snapshot,
+        // Snapshot ghi đúng mức giữ công suất baseline đã áp dụng cho quote này.
+        configuredPrepBufferMinutes: context.activePolicy.prepBufferMinutes,
+        prepBufferMinutes: RENTAL_PREP_BUFFER_MINUTES,
         primaryRentalInventoryLocationId: sourceInventoryLocationId,
         // Frozen at order creation, including product-dependent deep-inspection buffer.
         occupiedPostReturnBufferMinutes: (occupiedWindow.occupiedUntil.getTime() - chosenReturn.endAt.getTime()) / 60000,

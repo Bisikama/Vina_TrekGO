@@ -15,6 +15,8 @@ export function usePrivateTripMembership() {
   const [invitation, setInvitation] = useState<PrivateTripInvitation | null>(null);
   const [room, setRoom] = useState<PrivateTripRoom | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
+  const [activeMemberCount, setActiveMemberCount] = useState<number>(0);
+  const [totalMembers, setTotalMembers] = useState<number>(0);
 
   // Lấy chi tiết lời mời
   const loadInvitation = useCallback(async (code: string) => {
@@ -34,11 +36,11 @@ export function usePrivateTripMembership() {
   }, []);
 
   // Tham gia chuyến đi
-  const joinTrip = async (code: string, expectedTripVersion?: number) => {
+  const joinTrip = async (code: string) => {
     setBusy(true);
     setError(null);
     try {
-      const result = await privateTripMembershipApi.join(code, expectedTripVersion);
+      const result = await privateTripMembershipApi.join(code);
       return result;
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tham gia chuyến đi.";
@@ -56,6 +58,9 @@ export function usePrivateTripMembership() {
     try {
       const data = await privateTripMembershipApi.getRoom(tripId);
       setRoom(data);
+      if (typeof data?.trip?.activeMemberCount === 'number') {
+        setActiveMemberCount(data.trip.activeMemberCount);
+      }
       return data;
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tải thông tin phòng chờ.";
@@ -67,30 +72,45 @@ export function usePrivateTripMembership() {
   }, []);
 
   // Lấy danh sách thành viên
-  const loadMembers = useCallback(async (tripId: string, params?: { page?: number; status?: string; role?: string }) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const data = await privateTripMembershipApi.getMembers(tripId, params);
-      // Bạn có thể xử lý nối mảng nếu đang dùng infinite scroll, tạm thời gán luôn mảng mới
-      setMembers(data.items || data as unknown as TripMember[]);
-      return data;
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tải danh sách thành viên.";
-      setError(msg);
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const loadMembers = useCallback(
+    async (
+      tripId: string,
+      params?: { page?: number; pageSize?: number; status?: 'ACTIVE' | 'LEFT' | 'REMOVED' | 'COMPLETED' | 'NO_SHOW' | 'ALL' }
+    ) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const data = await privateTripMembershipApi.getMembers(tripId, params);
+        const list = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? (data as unknown as TripMember[]) : [];
+        setMembers(list);
+        if (typeof data?.activeMemberCount === 'number') {
+          setActiveMemberCount(data.activeMemberCount);
+        } else {
+          setActiveMemberCount(list.filter((m) => m.status === 'ACTIVE').length);
+        }
+        if (typeof data?.total === 'number') {
+          setTotalMembers(data.total);
+        } else {
+          setTotalMembers(list.length);
+        }
+        return data;
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tải danh sách thành viên.";
+        setError(msg);
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
 
   // Rời nhóm
-  const leaveTrip = async (tripId: string) => {
+  const leaveTrip = async (tripId: string, expectedMemberVersion = 1) => {
     setBusy(true);
     setError(null);
     try {
-      await privateTripMembershipApi.leave(tripId);
-      // Cập nhật state nội bộ nếu cần (ví dụ clear room)
+      await privateTripMembershipApi.leave(tripId, expectedMemberVersion);
       setRoom(null);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể rời chuyến đi.";
@@ -102,13 +122,13 @@ export function usePrivateTripMembership() {
   };
 
   // Host kick thành viên
-  const removeMember = async (tripId: string, memberId: string) => {
+  const removeMember = async (tripId: string, memberId: string, expectedMemberVersion = 1) => {
     setBusy(true);
     setError(null);
     try {
-      await privateTripMembershipApi.removeMember(tripId, memberId);
-      // Refresh list members sau khi kick
-      setMembers(prev => prev.filter(m => m.userId !== memberId && m.id !== memberId));
+      await privateTripMembershipApi.removeMember(tripId, memberId, expectedMemberVersion);
+      setMembers((prev) => prev.filter((m) => m.id !== memberId && m.userId !== memberId));
+      setActiveMemberCount((prev) => Math.max(0, prev - 1));
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể loại thành viên này.";
       setError(msg);
@@ -124,6 +144,8 @@ export function usePrivateTripMembership() {
     invitation,
     room,
     members,
+    activeMemberCount,
+    totalMembers,
     loadInvitation,
     joinTrip,
     loadRoom,

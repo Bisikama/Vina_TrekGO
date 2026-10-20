@@ -201,6 +201,9 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
       const member = await this.viewer(tx, userId, trip)
       const isHost = trip.creatorId === userId,
         editable = trip.status === 'OPEN' && trip.startAt > now
+      // Membership permission only; Rental still validates its cutoff, policy and stock.
+      const canRent =
+        member?.status === 'ACTIVE' && trip.startAt > now && ['OPEN', 'FULL', 'CLOSED'].includes(trip.status)
       const pickupPoint = trip.pickupPointId
         ? await tx.pickupPoint.findUnique({
             where: { id: trip.pickupPointId },
@@ -259,9 +262,9 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
           canInvite: isHost && editable,
           canRemoveMembers: isHost && editable,
           canLeave: !isHost && editable && member?.status === 'ACTIVE',
-          canRent: false,
+          canRent,
         },
-        rental: { eligible: false, reason: 'PRIVATE_TRIP_RENTAL_DISABLED' },
+        rental: { eligible: canRent, reason: canRent ? null : 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' },
         plannedRoutes,
         requiredCheckpoints,
       }

@@ -169,6 +169,36 @@ export interface RentalRefundEventCommand {
   correlationId: string;
 }
 
+export interface FinalizeReturnReceiptCommand {
+  actorUserId: string;
+  actorRole?: string;
+  orderId: string;
+  returnSessionId: string;
+  remarks?: string;
+  userRemarks?: string;
+  failureEvidenceId?: string;
+  evidenceIds?: string[];
+  expectedVersion: number;
+  idempotencyKey: string;
+  now: Date;
+}
+
+export interface ListRentalDocumentsQuery {
+  orderId: string;
+  actorUserId: string;
+  actorRole?: string;
+  type?: any;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GetRentalDocumentQuery {
+  documentId: string;
+  actorUserId: string;
+  actorRole?: string;
+  expectedOrderId?: string;
+}
+
 export const RENTAL_RETURN_PORT = Symbol('RENTAL_RETURN_PORT');
 
 export interface RentalReturnPort {
@@ -189,4 +219,7 @@ export interface RentalReturnPort {
   getException(query: GetExceptionQuery): Promise<any>;
   getAssessment(query: GetAssessmentQuery): Promise<any>;
   processRefundEvent(command: RentalRefundEventCommand): Promise<any>;
+  finalizeReturnReceipt(command: FinalizeReturnReceiptCommand): Promise<any>;
+  listRentalDocuments(query: ListRentalDocumentsQuery): Promise<any>;
+  getRentalDocument(query: GetRentalDocumentQuery): Promise<any>;
 }

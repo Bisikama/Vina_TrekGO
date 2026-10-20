@@ -47,7 +47,7 @@ describe('Destination with Pickup Points Use Cases', () => {
       update: jest.fn(),
       delete: jest.fn(),
       countRelated: jest.fn(),
-    } as unknown as jest.Mocked<DestinationPort>
+    }
 
     createUseCase = new CreateDestinationUseCase(destinationPort)
     updateUseCase = new UpdateDestinationUseCase(destinationPort)

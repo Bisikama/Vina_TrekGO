@@ -43,6 +43,10 @@ describe('Personal trail repository regressions', () => {
         update: jest.fn().mockResolvedValue({ id: 'recording', status: 'READY' }),
       },
       trailRecordingPoint: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      destination: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'hcm' }),
+      },
       personalTrail: {
         findUnique: jest.fn(),
         findUniqueOrThrow: jest.fn(),
@@ -78,6 +82,38 @@ describe('Personal trail repository regressions', () => {
     tx.personalTrail.findUniqueOrThrow.mockResolvedValue({ id: 'trail' })
     expect((await adapter.completeRecordingAndCreateTrail(params)).personalTrail.id).toBe('trail')
     expect(tx.personalTrail.create).toHaveBeenCalledTimes(1)
+    expect(tx.destination.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates the HCM destination and links it when finishing a recording', async () => {
+    await adapter.completeRecordingAndCreateTrail(params)
+    expect(tx.destination.create).toHaveBeenCalledWith({
+      data: {
+        name: 'Hồ Chí Minh', region: 'SOUTH', centerLat: 10.7769, centerLng: 106.7009, status: 'ACTIVE',
+      },
+    })
+    expect(tx.personalTrail.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ destinationId: 'hcm' }),
+    })
+  })
+
+  it('reuses the active HCM destination instead of creating another one', async () => {
+    tx.destination.findFirst.mockResolvedValue({ id: 'existing-hcm' })
+    await adapter.completeRecordingAndCreateTrail(params)
+    expect(tx.destination.create).not.toHaveBeenCalled()
+    expect(tx.personalTrail.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ destinationId: 'existing-hcm' }),
+    })
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      tx.destination.findFirst.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('does not finish the recording when destination creation fails', async () => {
+    tx.destination.create.mockRejectedValue(new Error('destination unavailable'))
+    await expect(adapter.completeRecordingAndCreateTrail(params)).rejects.toThrow('destination unavailable')
+    expect(tx.personalTrail.create).not.toHaveBeenCalled()
+    expect(tx.trailRecording.update).not.toHaveBeenCalled()
   })
 
   it('creates START and END personal checkpoints from the route endpoints', async () => {

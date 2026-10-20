@@ -27,14 +27,9 @@ Lấy danh sách các danh mục sản phẩm đang hoạt động.
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: {
-            items: { type: 'array', items: { type: 'object' } },
-            pagination: { type: 'object', properties: { page: { type: 'number' }, pageSize: { type: 'number' }, totalItems: { type: 'number' }, totalPages: { type: 'number' } } }
-          }
-        }
-      }
+        items: { type: 'array', items: { type: 'object' } },
+        pagination: { type: 'object', properties: { page: { type: 'number' }, pageSize: { type: 'number' }, totalItems: { type: 'number' }, totalPages: { type: 'number' } } },
+      },
     }
   })
   @ApiQuery({ name: 'page', required: false, type: Number, minimum: 1, default: 1, example: 1, description: 'Trang hiện tại' })

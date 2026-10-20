@@ -19,6 +19,7 @@ import { PrismaPrivateTripAdapter } from '../src/modules/trips/infrastructure/ad
 import { PrivateMembershipController } from '../src/modules/trips/presentation/controllers/private-membership.controller'
 import { PrivateMembershipPort } from '../src/modules/trips/application/private-membership.port'
 import { REQUEST_USER_KEY } from '../src/shared/constants/auth.constant'
+import { rentalMembershipValid } from '../src/modules/rental/payments/rental-membership.guard'
 
 describe('CF04 Swagger and HTTP inputs without external services', () => {
   let app: INestApplication
@@ -257,14 +258,45 @@ if (url) {
     expect(await member.room(host, trip.id)).toMatchObject({
       trip: { activeMemberCount: 1 },
       viewer: { isHost: true },
-      permissions: { canRent: false },
+      permissions: { canRent: true },
+      rental: { eligible: true, reason: null },
     })
     await expect(member.leave(host, trip.id, h.version)).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await expect(member.remove(host, trip.id, h.id, h.version)).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await db.trip.update({ where: { id: trip.id }, data: { maxPax: 1 } })
     await expect(join()).rejects.toMatchObject({ code: 'CAPACITY_CONFLICT' })
     await db.tripMember.delete({ where: { id: h.id } }) // local fixture: historical trip without HOST
-    expect(await member.room(host, trip.id)).toMatchObject({ viewer: { isHost: true } })
+    expect(await member.room(host, trip.id)).toMatchObject({
+      viewer: { isHost: true },
+      permissions: { canRent: false },
+      rental: { eligible: false, reason: 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' },
+    })
+  })
+  it('allows an ACTIVE private member to rent, but not after departure or cancellation', async () => {
+    const joined = await join()
+    const rentalOwner = { tripId: trip.id, userId: guest.id, membershipRef: joined.membership.id }
+    expect(await db.booking.count({ where: { tripId: trip.id } })).toBe(0)
+    expect(await rentalMembershipValid(db, rentalOwner)).toBe(true)
+    expect(await member.room(guest, trip.id)).toMatchObject({
+      permissions: { canRent: true },
+      rental: { eligible: true, reason: null },
+    })
+    await db.trip.update({ where: { id: trip.id }, data: { status: 'CANCELLED' } })
+    expect(await rentalMembershipValid(db, rentalOwner)).toBe(false)
+    expect(await member.room(guest, trip.id)).toMatchObject({ permissions: { canRent: false } })
+    await db.trip.update({
+      where: { id: trip.id },
+      data: {
+        status: 'IN_PROGRESS',
+        startAt: new Date(Date.now() - 60_000),
+      },
+    })
+    expect(await member.room(guest, trip.id)).toMatchObject({ permissions: { canRent: false } })
+    await db.tripMember.update({
+      where: { tripId_userId: { tripId: trip.id, userId: guest.id } },
+      data: { status: 'LEFT' },
+    })
+    await expect(member.room(guest, trip.id)).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
   it('public preview is minimal, no-store, and does not auto-join', async () => {
     const r = await request(app.getHttpServer()).get(`/api/v1/private-trip-invitations/${code}`).expect(200)
@@ -383,7 +415,7 @@ if (url) {
   it('scopes members and room projections and blocks arbitrary targets', async () => {
     const first = await join()
     const room = await member.room(guest, trip.id)
-    expect(room).toMatchObject({ rental: { eligible: false }, requiredCheckpoints: [{ name: 'Secret checkpoint' }] })
+    expect(room).toMatchObject({ rental: { eligible: true }, requiredCheckpoints: [{ name: 'Secret checkpoint' }] })
     expect(JSON.stringify(room)).not.toContain(host.email)
     expect(JSON.stringify(room)).not.toContain(code)
     await expect(member.room(other, trip.id)).rejects.toMatchObject({ code: 'FORBIDDEN' })

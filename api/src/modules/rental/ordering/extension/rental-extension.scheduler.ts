@@ -20,6 +20,8 @@ export class RentalExtensionScheduler {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async scanOverdueOrders() {
+    const opened = await this.overdueService.openDueReturnTasks();
+    if (opened) this.logger.log(`Opened ${opened} due rental return task(s)`);
     const result = await this.overdueService.scanAndMarkOverdue();
     if (result.overdueOrderIds.length > 0) {
       this.logger.log(`Marked ${result.overdueOrderIds.length} rental order(s) as OVERDUE`);

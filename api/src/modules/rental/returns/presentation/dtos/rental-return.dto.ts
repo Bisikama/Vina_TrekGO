@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RentalDocumentType } from '@prisma/client';
 
 const UUID = z.string().uuid();
 
@@ -139,6 +140,27 @@ export const ListReturnsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const FinalizeReturnReceiptBodySchema = z.object({
+  returnSessionId: UUID,
+  expectedVersion: z.number().int().min(1),
+  remarks: z.string().trim().max(1000).optional(),
+  userRemarks: z.string().trim().max(1000).optional(),
+  failureEvidenceId: UUID.optional(),
+  evidenceIds: z.array(UUID).optional(),
+});
+
+export const RentalDocumentIdParamSchema = z.object({ documentId: UUID });
+export const RentalOrderDocumentParamsSchema = z.object({
+  id: UUID,
+  documentId: UUID,
+});
+
+export const ListRentalDocumentsQuerySchema = z.object({
+  type: z.nativeEnum(RentalDocumentType).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export type ReturnIdParamDto = z.infer<typeof ReturnIdParamSchema>;
 export type RentalOrderIdParamDto = z.infer<typeof RentalOrderIdParamSchema>;
 export type ExceptionIdParamDto = z.infer<typeof ExceptionIdParamSchema>;
@@ -155,3 +177,7 @@ export type ResolveExceptionBodyDto = z.infer<typeof ResolveExceptionBodySchema>
 export type MarkUnitReadyBodyDto = z.infer<typeof MarkUnitReadyBodySchema>;
 export type ListExceptionsQueryDto = z.infer<typeof ListExceptionsQuerySchema>;
 export type ListReturnsQueryDto = z.infer<typeof ListReturnsQuerySchema>;
+export type FinalizeReturnReceiptBodyDto = z.infer<typeof FinalizeReturnReceiptBodySchema>;
+export type RentalDocumentIdParamDto = z.infer<typeof RentalDocumentIdParamSchema>;
+export type RentalOrderDocumentParamsDto = z.infer<typeof RentalOrderDocumentParamsSchema>;
+export type ListRentalDocumentsQueryDto = z.infer<typeof ListRentalDocumentsQuerySchema>;

@@ -198,9 +198,14 @@ export const privateTripResponses = {
       canInvite: z.boolean(),
       canRemoveMembers: z.boolean(),
       canLeave: z.boolean(),
-      canRent: z.literal(false),
+      canRent: z.boolean().describe('Quyền thành viên truy cập luồng thuê; Rental kiểm tra cutoff/policy riêng'),
     }),
-    rental: z.object({ eligible: z.literal(false), reason: z.literal('PRIVATE_TRIP_RENTAL_DISABLED') }),
+    rental: z.object({
+      eligible: z
+        .boolean()
+        .describe('Điều kiện thành viên; gọi rental-eligibility để kiểm tra điều kiện thuê hiện tại'),
+      reason: z.literal('TRIP_MEMBERSHIP_NOT_ELIGIBLE').nullable(),
+    }),
     plannedRoutes: z.array(
       z.object({
         id: uuid,

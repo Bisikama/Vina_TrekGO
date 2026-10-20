@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy';
+import { ensureReturnTaskWithTx } from './rental-return-task';
 
 export interface OverdueEvaluationResult {
   isOverdue: boolean;
@@ -40,6 +41,37 @@ export class RentalOverdueService {
   private readonly logger = new Logger(RentalOverdueService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Job fallback: event đến muộn vẫn tạo được đúng một ReturnTask khi hết quyền thuê. */
+  async openDueReturnTasks(now = new Date()): Promise<number> {
+    const candidates = await this.prisma.rentalOrder.findMany({
+      where: {
+        status: RentalOrderStatus.ACTIVE,
+        rentalEndAt: { lte: now },
+        OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lte: now } }],
+        rentalHandoverViaOrderId: { isNot: null },
+        packageViaOrderId: { isNot: null },
+        deliveryTasksViaOrderId: { none: { taskType: 'RETURN' } },
+      },
+      select: { id: true }, orderBy: { id: 'asc' }, take: 100,
+    });
+    let opened = 0;
+    for (const candidate of candidates) {
+      const taskId = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${candidate.id}::uuid FOR UPDATE`;
+        const current = await tx.rentalOrder.findUnique({
+          where: { id: candidate.id },
+          select: { status: true, rentalEndAt: true, operationalReturnDueAt: true },
+        });
+        if (!current || current.status !== RentalOrderStatus.ACTIVE ||
+            effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt) > now) return null;
+        return ensureReturnTaskWithTx(tx, candidate.id,
+          effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt), 'DUE');
+      });
+      if (taskId) opened += 1;
+    }
+    return opened;
+  }
 
   /**
    * Evaluates overdue thresholds for a given rental order according to Policy 1.5.2 & Business Flow 1.3.2.

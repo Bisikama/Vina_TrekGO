@@ -52,11 +52,12 @@ Tạo báo giá cho việc gia hạn thời gian thuê thiết bị.
   @ApiParam({
     name: 'id',
     type: String,
+    format: 'uuid',
     description: 'ID đơn thuê cần gia hạn',
-    example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+    example: '550e8400-e29b-41d4-a716-446655440103',
   })
   @ApiBody({
-    description: 'Thông tin yêu cầu gia hạn',
+    description: 'Lấy ID từ GET /api/v1/rental-orders/{id}; requestedReturnAt phải sau hạn trả hiện tại và còn trong giới hạn chính sách. Thay thời gian minh họa bằng thời gian phù hợp với đơn thật.',
     schema: {
       type: 'object',
       required: ['requestedReturnAt', 'returnOptionId'],
@@ -112,8 +113,9 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
   @ApiParam({
     name: 'id',
     type: String,
+    format: 'uuid',
     description: 'ID đơn thuê cần gia hạn',
-    example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+    example: '550e8400-e29b-41d4-a716-446655440103',
   })
   @ApiHeader({
     name: 'Idempotency-Key',
@@ -122,7 +124,7 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
     example: 'ext-confirm-abc123',
   })
   @ApiBody({
-    description: 'Thông tin xác nhận gia hạn',
+    description: 'Lấy extensionQuoteId, termsVersion và termsHash từ phản hồi báo giá gia hạn; lấy expectedVersion từ đơn hiện tại. Giữ cùng Idempotency-Key khi thử lại cùng request.',
     schema: {
       type: 'object',
       required: ['extensionQuoteId', 'expectedVersion', 'acceptedTermsVersion'],
@@ -131,7 +133,7 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
           type: 'string',
           format: 'uuid',
           description: 'ID báo giá gia hạn đã tạo ở bước trước',
-          example: 'e5f6a7b8-9012-34ef-0123-567890123def',
+          example: '550e8400-e29b-41d4-a716-446655440105',
         },
         expectedVersion: {
           type: 'integer',
@@ -141,14 +143,19 @@ Xác nhận gia hạn dựa trên báo giá đã tạo.
         },
         acceptedTermsVersion: {
           type: 'string',
-          description: 'Phiên bản điều khoản gia hạn mà user đã chấp nhận',
-          example: 'v1.2',
+          description: 'Giá trị termsVersion từ báo giá gia hạn vừa nhận, không nhập phiên bản cố định',
+          example: 'v1.5.2',
+        },
+        termsHash: {
+          type: 'string',
+          minLength: 64,
+          maxLength: 64,
+          description: 'Tùy chọn: sao chép termsHash 64 ký tự từ báo giá để đối chiếu điều khoản',
         },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Gia hạn miễn phí — áp dụng ngay, trả về đơn đã cập nhật' })
-  @ApiResponse({ status: 201, description: 'Gia hạn có phí — tạo extension request, cần thanh toán bổ sung' })
+  @ApiResponse({ status: 201, description: 'Gia hạn miễn phí được áp dụng ngay; gia hạn có phí tạo yêu cầu chờ thanh toán bổ sung' })
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'extensionQuoteId không đúng định dạng UUID')
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
   @ApiErrorResponse(404, 'Không tìm thấy', 'EXTENSION_QUOTE_NOT_FOUND', 'Báo giá gia hạn không tồn tại hoặc đã hết hạn')
@@ -192,7 +199,7 @@ Lấy danh sách tất cả yêu cầu gia hạn (hiện tại và quá khứ) c
     name: 'id',
     type: String,
     description: 'ID đơn thuê',
-    example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+    example: '550e8400-e29b-41d4-a716-446655440103',
   })
   @ApiResponse({ status: 200, description: 'Trả về danh sách lịch sử gia hạn của đơn thuê' })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')

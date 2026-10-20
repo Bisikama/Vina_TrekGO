@@ -7,6 +7,7 @@ import { HandleTripCancelledUseCase } from '../../application/use-cases/handle-t
 import { HandleBookingCancelledUseCase } from '../../application/use-cases/handle-booking-cancelled.use-case';
 import { TRIP_LIFECYCLE_PORT } from '../../application/ports/trip-lifecycle.port';
 import { GlobalErrorFilter } from 'src/shared/errors/global-error.filter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const VALID_API_KEY = 'secret-test-key-123456';
 
@@ -194,6 +195,25 @@ describe('TripLifecycleWebhookController (HTTP Route Contract & Fail-Closed Secu
   });
 
   describe('Authenticated Functional Routes', () => {
+    it('publishes x-api-key security, request examples, and response schemas in Swagger', () => {
+      const document = SwaggerModule.createDocument(app, new DocumentBuilder().addApiKey(
+        { type: 'apiKey', name: 'x-api-key', in: 'header' },
+        'x-api-key',
+      ).build());
+      const operation = document.paths['/api/v1/internal/rental/trip-events/reschedule']?.post;
+      const requestBody = operation?.requestBody as {
+        content?: Record<string, { schema?: { example?: Record<string, unknown> } }>;
+      };
+      const response = operation?.responses?.['200'] as {
+        content?: Record<string, { schema?: { example?: Record<string, unknown> } }>;
+      };
+
+      expect(operation?.operationId).toBe('handleRentalTripRescheduled');
+      expect(operation?.security).toEqual([{ 'x-api-key': [] }]);
+      expect(requestBody.content?.['application/json'].schema?.example).toMatchObject({ eventType: 'TRIP_RESCHEDULED' });
+      expect(response.content?.['application/json'].schema?.example).toMatchObject({ status: 'PROCESSED' });
+    });
+
     it('POST /api/v1/internal/rental/trip-events/reschedule - accepts valid payload with correct key', async () => {
       const payload = {
         eventId: 'evt-http-1',
@@ -311,6 +331,19 @@ describe('TripLifecycleWebhookController (HTTP Route Contract & Fail-Closed Secu
         .expect(422);
 
       expect(res.body.error.code).toBe('RENTAL_LIFECYCLE_EVENT_UNSUPPORTED');
+    });
+
+    it('POST /api/v1/internal/rental/trip-events - returns validation contract for malformed supported event', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/internal/rental/trip-events')
+        .set('x-api-key', VALID_API_KEY)
+        .send({ eventType: 'TRIP_RESCHEDULED' })
+        .expect(400);
+
+      expect(res.body).toMatchObject({
+        error: { code: 'VALIDATION_ERROR', retryable: false },
+        meta: { contractVersion: '0.2.0-final-flow' },
+      });
     });
   });
 });
