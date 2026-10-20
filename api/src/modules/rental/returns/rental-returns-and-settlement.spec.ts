@@ -2475,7 +2475,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       const res = await adapter.listRentalDocuments({
         orderId: testOrderId,
         actorUserId: testUserA,
@@ -2522,7 +2522,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           }),
         },
       };
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.listRentalDocuments({
           orderId: testOrderId,
@@ -2569,7 +2569,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       const res = await adapter.getRentalDocument({
         documentId: testDocId,
         actorUserId: testUserA,
@@ -2608,7 +2608,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           }),
         },
       };
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.getRentalDocument({
           documentId: testDocId,
@@ -2644,7 +2644,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -2688,7 +2688,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -2756,7 +2756,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       const res = await adapter.finalizeReturnReceipt({
         orderId: testOrderId,
         returnSessionId: testSessionId,
@@ -2789,7 +2789,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -2837,7 +2837,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -2903,7 +2903,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
 
       // Unassigned inventory staff must get 403 on list and get
       await expect(
@@ -2955,7 +2955,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -2990,7 +2990,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           ),
         };
 
-        const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+        const adapter = new PrismaRentalReturnAdapter(mockPrisma);
         await expect(
           adapter.finalizeReturnReceipt({
             orderId: testOrderId,
@@ -3064,7 +3064,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       const res = await adapter.finalizeReturnReceipt({
         orderId: testOrderId,
         returnSessionId: testSessionId,
@@ -3095,7 +3095,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         ),
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       await expect(
         adapter.finalizeReturnReceipt({
           orderId: testOrderId,
@@ -3147,7 +3147,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
       };
 
-      const adapter = new PrismaRentalReturnAdapter(mockPrisma as any);
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
       const res = await adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: testUserA, actorRole: UserRole.USER });
 
       expect(res.items).toHaveLength(1);
