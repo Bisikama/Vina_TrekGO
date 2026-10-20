@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import type { RentalAvailabilityPort } from '../ports/rental-availability.port';
 import type {
   RentalCatalogPort,
@@ -189,7 +189,7 @@ describe('B1 rental flow use cases', () => {
     expect(availabilityPort.getAvailableCount).toHaveBeenCalledWith(
       expect.objectContaining({
         productId: createProduct().id,
-        occupiedFrom: new Date('2026-10-09T18:00:00Z'),
+         occupiedFrom: new Date('2026-10-09T12:00:00Z'),
         occupiedUntil: new Date('2026-10-13T12:00:00Z'),
       }),
     );

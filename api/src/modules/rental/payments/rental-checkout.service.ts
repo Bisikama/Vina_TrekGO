@@ -7,6 +7,7 @@ import { PaymentMethod, ProviderScope } from '../../payments/payment-provider.po
 import { paymentHash, paymentRecoveryConfig } from '../../payments/payment-utils'
 import { rentalComponents } from './rental-payment.rules'
 import { rentalMembershipValid } from './rental-membership.guard'
+import { rentalOccupiedFrom } from '../ordering/application/services/rental-ordering.rules'
 
 export type RentalCheckoutCommand = {
   rentalOrderId: string
@@ -36,7 +37,7 @@ export class RentalCheckoutService {
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
       const initial = await tx.rentalOrder.findUnique({ where: { id: input.rentalOrderId } })
       if (!initial || initial.userId !== input.actorUserId) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
-      await tx.$queryRaw`SELECT id FROM trips WHERE id=${initial.tripId}::uuid FOR UPDATE`
+      // Serialize this order and its reservations; the live Trip/Booking is checked below.
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${initial.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT r.id FROM rental_quantity_reservations r JOIN rental_order_lines l ON l.id=r.order_line_id
         WHERE l.order_id=${initial.id}::uuid ORDER BY r.id FOR UPDATE OF r`
@@ -80,6 +81,7 @@ export class RentalCheckoutService {
         order.status !== 'PENDING_PAYMENT' ||
         !['UNPAID', 'PAYMENT_PENDING'].includes(order.financialStatus) ||
         order.paymentExpiresAt <= now ||
+        order.occupiedStartAt > rentalOccupiedFrom(order.rentalStartAt) ||
         !memberEligible
       ) {
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
