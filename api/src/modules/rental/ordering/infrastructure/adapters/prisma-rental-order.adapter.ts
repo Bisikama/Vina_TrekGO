@@ -1,4 +1,4 @@
-import { reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
+import { cancelPendingRentalChargesWithTx, reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { createHash } from 'node:crypto'
 import { consumeExtensionPaymentWithTx, releaseExtensionWithTx } from '../../extension/rental-extension.service'
@@ -37,7 +37,7 @@ import type {
   RentalPaymentResult,
 } from '../../application/ports/rental-order.port'
 import { RENTAL_CONTEXT_PORT, type RentalContextPort } from '../../application/ports/rental-context.port'
-import { parseWholeVnd, toSafeNumber } from '../../application/services/rental-ordering.rules'
+import { parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
@@ -109,6 +109,12 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           if (quote.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
           if (quote.status !== RentalQuoteStatus.ACTIVE) throw AppError.fromCode(RT.QUOTE_NOT_ACTIVE)
           if (quote.expiresAt.getTime() <= command.now.getTime()) throw AppError.fromCode(RT.QUOTE_EXPIRED)
+          // Quote cũ giữ công suất ngắn hơn 12 giờ không được chuyển thành đơn mới.
+          const baselineOccupiedFrom = rentalOccupiedFrom(quote.rentalStartAt)
+          if (quote.occupiedStartAt > baselineOccupiedFrom ||
+              quote.rentalQuoteLinesViaQuoteId.some((line) =>
+                (line.occupiedFrom ?? quote.occupiedStartAt) > baselineOccupiedFrom))
+            throw AppError.fromCode(RT.STALE_CONTEXT)
           if (
             currentContext.userId !== command.userId ||
             currentContext.membershipRef !== quote.membershipRef ||
@@ -681,23 +687,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           version: { increment: 1 },
         },
       })
-      await tx.invoice.updateMany({
-        where: { rentalOrderId: order.id, status: { in: [InvoiceStatus.DRAFT, InvoiceStatus.PENDING_PAYMENT] } },
-        data: { status: InvoiceStatus.CANCELLED, version: { increment: 1 } },
-      })
-      if (order.status === RentalOrderStatus.PENDING_PAYMENT) {
-        const invoicesViaRentalOrderId = await tx.invoice.findMany({
-          where: { rentalOrderId: order.id },
-          select: { id: true },
-        })
-        await tx.payment.updateMany({
-          where: {
-            invoiceId: { in: invoicesViaRentalOrderId.map((i) => i.id) },
-            status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
-          },
-          data: { status: PaymentStatus.CANCELLED, version: { increment: 1 } },
-        })
-      }
+      await cancelPendingRentalChargesWithTx(tx, order.id)
       return { order: mapOrderSummary(updated), refund, quantityReleaseStatus: 'RELEASED' }
     })
   }
@@ -812,12 +802,17 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         data: { status: InvoiceStatus.PAID, paidAt: now, version: { increment: 1 } },
       })
 
+      const membershipMatches =
+        (!liveContext?.bookingId || !order.bookingId || liveContext.bookingId === order.bookingId) &&
+        (liveContext?.membershipRef === order.membershipRef ||
+          (liveContext?.bookingId != null && order.membershipRef === liveContext.bookingId))
+
       if (
         order.status === RentalOrderStatus.EXPIRED ||
         order.status === RentalOrderStatus.CANCELLED ||
         now > order.paymentExpiresAt ||
         !baseRentalEligible ||
-        liveContext?.membershipRef !== order.membershipRef
+        !membershipMatches
       ) {
         if (order.status === RentalOrderStatus.PENDING_PAYMENT) await expireOrderWithTx(tx, order.id, now)
         const lateRefund = await tx.refund.upsert({

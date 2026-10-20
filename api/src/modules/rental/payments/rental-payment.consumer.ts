@@ -4,6 +4,7 @@ import { PrismaService } from '../../../shared/services/prisma.service'
 import { validateRentalAllocations } from './rental-payment.rules'
 import { rentalMembershipValid } from './rental-membership.guard'
 import { consumeExtensionPaymentWithTx } from '../ordering/extension/rental-extension.service'
+import { rentalOccupiedFrom } from '../ordering/application/services/rental-ordering.rules'
 
 @Injectable()
 export class RentalPaymentConsumer {
@@ -19,7 +20,7 @@ export class RentalPaymentConsumer {
       })
       if (!initial || initial.invoice.invoiceType !== 'RENTAL' || !initial.invoice.rentalOrder) return
       const source = initial.invoice.rentalOrder
-      await tx.$queryRaw`SELECT id FROM trips WHERE id=${source.tripId}::uuid FOR UPDATE`
+      // Avoid contending with Booking GET expiry on trips; lock Rental and payment rows instead.
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${source.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT r.id FROM rental_quantity_reservations r JOIN rental_order_lines l ON l.id=r.order_line_id
         WHERE l.order_id=${source.id}::uuid ORDER BY r.id FOR UPDATE OF r`
@@ -143,6 +144,7 @@ export class RentalPaymentConsumer {
           order.status !== 'PENDING_PAYMENT' ||
           !['UNPAID', 'PAYMENT_PENDING'].includes(order.financialStatus) ||
           !memberEligible ||
+          order.occupiedStartAt > rentalOccupiedFrom(order.rentalStartAt) ||
           payment.invoice.status !== 'PENDING_PAYMENT' ||
           payment.invoice.userId !== order.userId ||
           payment.currency !== order.currency ||
@@ -164,6 +166,8 @@ export class RentalPaymentConsumer {
             const quoteLine = order.quote?.rentalQuoteLinesViaQuoteId?.find((ql) => ql.productId === l.productId)
             let expectedOccupiedFrom: Date | null = quoteLine?.occupiedFrom ?? null
             let expectedOccupiedUntil: Date | null = quoteLine?.occupiedUntil ?? null
+            const baselineOccupiedFrom = rentalOccupiedFrom(order.rentalStartAt)
+            if (expectedOccupiedFrom && expectedOccupiedFrom > baselineOccupiedFrom) return true
 
             if (!expectedOccupiedFrom || !expectedOccupiedUntil) {
               const rawPolicy = order.policySnapshot
@@ -188,15 +192,22 @@ export class RentalPaymentConsumer {
               const deepBufferHours = (deepInspectionMinutes ?? 0) / 60
               const returnBufferHours = requiresDeep ? Math.max(normalBufferHours, deepBufferHours) : normalBufferHours
 
-              if (prepMinutes !== 720 || (requiresDeep ? returnBufferHours !== 48 : returnBufferHours !== 24)) {
-                return true // Fail closed: policy violates SOT buffer invariants
+              // Snapshot cũ có thể ghi prep 0/360; công suất thực tế vẫn phải giữ đủ 12 giờ.
+              if (
+                !Number.isSafeInteger(prepMinutes) || prepMinutes < 0 ||
+                !Number.isSafeInteger(returnBufferMinutes) ||
+                (cleaningBufferMinutes !== null && !Number.isSafeInteger(cleaningBufferMinutes)) ||
+                (requiresDeep && !Number.isSafeInteger(deepInspectionMinutes)) ||
+                returnBufferHours < (requiresDeep ? 48 : 24)
+              ) {
+                return true // Fail closed khi snapshot sai hoặc thiếu mức đệm tối thiểu.
               }
 
               const baseStart = order.plannedHandoverAt ?? order.rentalStartAt
               const baseReturn = order.plannedReturnAt ?? order.rentalEndAt
               if (!baseStart || !baseReturn) return true
 
-              expectedOccupiedFrom = new Date(baseStart.getTime() - prepMinutes * 60_000)
+              expectedOccupiedFrom = rentalOccupiedFrom(baseStart)
               expectedOccupiedUntil = new Date(baseReturn.getTime() + returnBufferHours * 3600_000)
             }
 

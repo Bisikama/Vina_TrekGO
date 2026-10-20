@@ -35,7 +35,13 @@ export class RentalExtensionService {
     if (!order || order.userId !== userId) throw AppError.fromCode('FORBIDDEN');
     checkExtendable(order, now);
     const context = await this.context.getByTripId(order.tripId, userId, now);
-    if (!context || context.membershipRef !== order.membershipRef) throw AppError.fromCode('FORBIDDEN');
+    const membershipMatches =
+      context &&
+      context.membershipStatus === 'ACTIVE' &&
+      (!order.bookingId || !context.bookingId || order.bookingId === context.bookingId) &&
+      (context.membershipRef === order.membershipRef ||
+        (context.bookingId != null && order.membershipRef === context.bookingId));
+    if (!membershipMatches) throw AppError.fromCode('FORBIDDEN');
     const policy = jsonObject(order.policySnapshot);
     const appliedExtensions = await this.prisma.rentalExtensionRequest.count({ where: { orderId, status: RentalExtensionStatus.APPLIED } });
     if (appliedExtensions >= (policy.maxExtensionCount ?? 2)) throw error('EXTENSION_LIMIT_EXCEEDED');
@@ -147,7 +153,13 @@ export class RentalExtensionService {
       throw error('OPERATION_CONFLICT');
     }
     const ctx = await this.context.getByTripId(raw.order.tripId, userId, now);
-    if (!ctx || ctx.membershipRef !== raw.order.membershipRef) throw AppError.fromCode('FORBIDDEN');
+    const membershipMatches =
+      ctx &&
+      ctx.membershipStatus === 'ACTIVE' &&
+      (!raw.order.bookingId || !ctx.bookingId || raw.order.bookingId === ctx.bookingId) &&
+      (ctx.membershipRef === raw.order.membershipRef ||
+        (ctx.bookingId != null && raw.order.membershipRef === ctx.bookingId));
+    if (!membershipMatches) throw AppError.fromCode('FORBIDDEN');
     // Revalidate server-issued option at confirmation: a stale quote cannot invent delivery capacity.
     const option = jsonObject(raw.returnOptionSnapshot);
     const max = requiredPolicyInt(snap.maxRentalAfterTripHours, 'maxRentalAfterTripHours');
@@ -482,7 +494,7 @@ export async function consumeExtensionPaymentWithTx(
   providerRef: string | null | undefined,
   now: Date,
 ): Promise<{ applied: boolean; reasonCode?: string }> {
-  // Row lock extension and order to prevent race conditions with background expiry scheduler
+  // Hai cổng gọi đều đã khóa rental_order trước; khóa extension rồi đọc lại trong transaction.
   await tx.$queryRaw`SELECT id FROM rental_extension_requests WHERE id = ${extensionId}::uuid FOR UPDATE`;
   const ext = await tx.rentalExtensionRequest.findUnique({ where: { id: extensionId } });
   if (!ext || ext.invoiceId !== payment.invoiceId || ext.paymentRef !== payment.id) throw error('EXTENSION_PAYMENT_MISMATCH');
@@ -589,9 +601,13 @@ export async function consumeExtensionPaymentWithTx(
   const isOrderApplicable = !!order && [RentalOrderStatus.ACTIVE].includes(order.status as any)
     && !order.returnInspectionsViaOrderId?.length
     && !order.deliveryTasksViaOrderId?.some((t: any) => ![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED].includes(t.status));
+  // Lịch thuê gốc đã đổi thì khoản vừa thu phải đi vào hoàn kỹ thuật, không retry VERSION_CONFLICT.
+  const isOriginalWindowCurrent = !!order
+    && order.rentalEndAt.getTime() === ext.previousRentalEndAt.getTime()
+    && order.occupiedEndAt.getTime() === ext.previousOccupiedUntil.getTime();
 
   const hasAcceptance = !!ext.acceptedAt && !!ext.acceptedByUserId && !!ext.termsHash;
-  const canApply = isTimely && isPaidBeforeDue && isOrderApplicable && !!rootHandover && (appendixCount + 1 <= 2) && hasAcceptance;
+  const canApply = isTimely && isPaidBeforeDue && isOrderApplicable && isOriginalWindowCurrent && !!rootHandover && (appendixCount + 1 <= 2) && hasAcceptance;
 
   if (!canApply) {
     let rejectionReason = 'LATE_PAYMENT';
@@ -603,7 +619,7 @@ export async function consumeExtensionPaymentWithTx(
       rejectionReason = 'HOLD_EXPIRED_BEFORE_PROCESSING';
     } else if (!isPaidBeforeDue) {
       rejectionReason = 'POST_DUE_PAYMENT';
-    } else if (!isOrderApplicable) {
+    } else if (!isOrderApplicable || !isOriginalWindowCurrent) {
       rejectionReason = 'EXTENSION_NOT_APPLICABLE';
     } else if (!hasAcceptance) {
       rejectionReason = 'EXTENSION_ACCEPTANCE_MISSING';
