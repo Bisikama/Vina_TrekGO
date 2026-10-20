@@ -1019,6 +1019,12 @@ const taskDetailInclude = {
       packageItemsViaPackageId: { include: { equipmentUnit: true } },
     },
   },
+  custodyTransfersViaInventoryTaskId: {
+    where: { status: CustodyTransferStatus.PENDING_RECEIPT },
+    orderBy: { requestedAt: 'desc' as const },
+    take: 1,
+    include: { toStaff: { select: { id: true, fullName: true } } },
+  },
   order: {
     include: {
       pickupPoint: { select: { id: true, name: true } },
@@ -1069,9 +1075,23 @@ function mapTaskDetail(task: TaskDetailRow): PreparationTaskDetailResult {
       version: task.version,
     },
     requiredLines,
-    pickedUnits: assignments.map((assignment) => mapUnitView(assignment.equipmentUnit)),
+    pickedUnits: assignments.map((assignment) => ({
+      ...mapUnitView(assignment.equipmentUnit),
+      evidenceCaptured: assignment.conditionSnapshotsViaAssignmentId.length > 0,
+    })),
     progress: { required, picked, evidenceComplete },
     package: task.package ? mapPackageRow(task.package) : null,
+    pendingTransfer: task.custodyTransfersViaInventoryTaskId[0]
+      ? {
+          id: task.custodyTransfersViaInventoryTaskId[0].id,
+          status: task.custodyTransfersViaInventoryTaskId[0].status,
+          toStaff: {
+            id: task.custodyTransfersViaInventoryTaskId[0].toStaff.id,
+            displayName: task.custodyTransfersViaInventoryTaskId[0].toStaff.fullName,
+          },
+          requestedAt: task.custodyTransfersViaInventoryTaskId[0].requestedAt.toISOString(),
+        }
+      : null,
     pickupContext: {
       pointId: task.order.pickupPoint.id,
       name: task.order.pickupPoint.name,
