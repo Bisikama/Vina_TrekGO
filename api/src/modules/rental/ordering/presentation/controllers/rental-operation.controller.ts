@@ -13,7 +13,7 @@ import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { Roles } from 'src/shared/decorators/roles.decorator';
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
-import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper';
+import { ApiErrorResponse, ApiErrorResponses } from 'src/shared/swagger/api-error-response.helper';
 import { CreateRentalQuoteUseCase } from '../../application/use-cases/create-rental-quote.use-case';
 import { GetRentalAvailabilityUseCase } from '../../application/use-cases/get-rental-availability.use-case';
 import {
@@ -50,14 +50,14 @@ export class RentalOperationController {
     required: true,
     type: String,
     description: 'ID chuyến đi cần kiểm tra tồn kho',
-    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+    example: '550e8400-e29b-41d4-a716-446655440101',
   })
   @ApiQuery({
     name: 'productId',
     required: true,
     type: String,
     description: 'ID sản phẩm thiết bị cần kiểm tra',
-    example: 'b2c3d4e5-6789-01bc-def0-234567890abc',
+    example: '550e8400-e29b-41d4-a716-446655440102',
   })
   @ApiQuery({
     name: 'requestedReturnAt',
@@ -106,7 +106,7 @@ export class RentalOperationController {
 `,
   })
   @ApiBody({
-    description: 'Thông tin tạo báo giá thuê thiết bị',
+    description: 'Authorize bằng Bearer token. Lấy tripId từ chuyến đi đủ điều kiện và productId từ GET /api/v1/rental-products; chỉ gửi requestedReturnAt/returnOptionId khi đã chọn phương án trả hợp lệ.',
     schema: {
       type: 'object',
       required: ['tripId', 'items'],
@@ -115,14 +115,14 @@ export class RentalOperationController {
           type: 'string',
           format: 'uuid',
           description: 'ID chuyến đi',
-          example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+          example: '550e8400-e29b-41d4-a716-446655440101',
         },
         recipientTripMemberId: {
           type: 'string',
           format: 'uuid',
           nullable: true,
           description: 'ID thành viên nhận thiết bị (mặc định là chính user)',
-          example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd',
+          example: '550e8400-e29b-41d4-a716-446655440103',
         },
         requestedReturnAt: {
           type: 'string',
@@ -147,7 +147,7 @@ export class RentalOperationController {
                 type: 'string',
                 format: 'uuid',
                 description: 'ID sản phẩm thiết bị',
-                example: 'b2c3d4e5-6789-01bc-def0-234567890abc',
+                example: '550e8400-e29b-41d4-a716-446655440102',
               },
               quantity: {
                 type: 'integer',
@@ -159,13 +159,19 @@ export class RentalOperationController {
           },
         },
       },
+      example: {
+        tripId: '550e8400-e29b-41d4-a716-446655440101',
+        items: [{ productId: '550e8400-e29b-41d4-a716-446655440102', quantity: 1 }],
+      },
     },
   })
-  @ApiResponse({ status: 200, description: 'Trả về báo giá chi tiết: tổng phí thuê, tiền cọc, số ngày, thời hạn hiệu lực' })
+  @ApiResponse({ status: 201, description: 'Trả về báo giá chi tiết: tổng phí thuê, tiền cọc, số ngày, thời hạn hiệu lực' })
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'items phải có ít nhất 1 sản phẩm')
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
-  @ApiErrorResponse(422, 'Không đủ tồn kho', 'INSUFFICIENT_AVAILABLE_QUANTITY', 'Số lượng yêu cầu vượt quá tồn kho khả dụng')
-  @ApiErrorResponse(422, 'Quá hạn đặt thuê', 'RENTAL_CUTOFF_PASSED', 'Đã qua thời hạn cho phép đặt thuê thiết bị của chuyến đi')
+  @ApiErrorResponses(422, 'Không thể tạo báo giá', [
+    { name: 'insufficientQuantity', summary: 'Không đủ tồn kho', code: 'INSUFFICIENT_AVAILABLE_QUANTITY', message: 'Số lượng yêu cầu vượt quá tồn kho khả dụng' },
+    { name: 'cutoffPassed', summary: 'Quá hạn đặt thuê', code: 'RENTAL_CUTOFF_PASSED', message: 'Đã qua thời hạn cho phép đặt thuê thiết bị của chuyến đi' },
+  ])
   async createQuote(
     @Body(new ZodValidationPipe(RentalQuoteBodySchema)) body: RentalQuoteBodyDto,
     @ActiveUser('id') userId: string,

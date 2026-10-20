@@ -18,6 +18,14 @@ import {
   RentalUnitAssignmentStatus,
   RentalOrderExceptionStatus,
   RentalFinancialStatus,
+  RentalDocumentType,
+  DeliveryTaskType,
+  DeliveryTaskStatus,
+  PackageStatus,
+  RentalExceptionCaseStatus,
+  CustodyTransferStatus,
+  RentalReturnSessionStatus,
+  RentalDocumentRenderStatus,
 } from '@prisma/client';
 import { ROLES_KEY } from '../../../shared/decorators/roles.decorator';
 import { META_AUTH_KEY } from '../../../shared/decorators/auth.decorator';
@@ -31,6 +39,7 @@ import { DeliveryReturnController } from './presentation/controllers/delivery-re
 import { StaffReturnController } from './presentation/controllers/staff-return.controller';
 import { RentalReturnAdminController } from './presentation/controllers/rental-return-admin.controller';
 import { RentalExceptionController } from './presentation/controllers/rental-exception.controller';
+import { RentalDocumentController } from './presentation/controllers/rental-document.controller';
 
 // Use cases to mock for HTTP tests
 import { ReturnScanUseCase } from './application/use-cases/return-scan.use-case';
@@ -49,14 +58,21 @@ import { ListReturnsUseCase } from './application/use-cases/list-returns.use-cas
 import { GetReturnUseCase } from './application/use-cases/get-return.use-case';
 import { GetRentalExceptionUseCase } from './application/use-cases/get-rental-exception.use-case';
 import { GetRentalAssessmentUseCase } from './application/use-cases/get-rental-assessment.use-case';
+import { FinalizeReturnReceiptUseCase } from './application/use-cases/finalize-return-receipt.use-case';
+import { ListRentalDocumentsUseCase } from './application/use-cases/list-rental-documents.use-case';
+import { GetRentalDocumentUseCase } from './application/use-cases/get-rental-document.use-case';
 
 // Domain logic & workers
-import { planDepositRefundGroups } from './application/deposit-grouping.policy';
+import { planDepositRefundGroups, type DepositRefundCandidate } from './application/deposit-grouping.policy';
 import { RETURN_POLICY_152, inspectionDeadlines } from './application/return-policy-152';
 import { RentalDepositWorker } from '../payments/rental-deposit.worker';
 import { RentalRefundsService } from '../../payments/rental-refunds.service';
 import { PaymentsPort } from '../../payments/payments.port';
-import { tryCompleteOrder } from './infrastructure/adapters/prisma-rental-return.adapter';
+import { issueReturnReceiptTx } from '../documents/application/rental-document-events';
+import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../shared/errors/codes/rental-return.error-codes';
+import { AppError } from '../../../shared/errors';
+import { PrismaRentalReturnAdapter, tryCompleteOrder } from './infrastructure/adapters/prisma-rental-return.adapter';
+import { RentalOperationalEscalationScheduler } from './infrastructure/jobs/rental-operational-escalation.scheduler';
 
 describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
   const dummyOrderId = '33333333-3333-4333-8333-333333333333';
@@ -78,6 +94,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           StaffReturnController,
           RentalReturnAdminController,
           RentalExceptionController,
+          RentalDocumentController,
         ],
         providers: [
           { provide: ReturnScanUseCase, useValue: { execute: jest.fn().mockResolvedValue({ returnId: dummyTaskId, receivedUnits: [], missingUnits: [], duplicates: [] }) } },
@@ -96,6 +113,56 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           { provide: GetReturnUseCase, useValue: { execute: jest.fn().mockResolvedValue({ id: dummyTaskId, status: 'INVENTORY_RECEIVED' }) } },
           { provide: GetRentalExceptionUseCase, useValue: { execute: jest.fn().mockResolvedValue({ id: dummyExceptionId, caseType: 'DAMAGE_DISPUTE' }) } },
           { provide: GetRentalAssessmentUseCase, useValue: { execute: jest.fn().mockResolvedValue({ orderId: dummyOrderId, assessments: [] }) } },
+          {
+            provide: FinalizeReturnReceiptUseCase,
+            useValue: {
+              execute: jest.fn().mockResolvedValue({
+                receiptDocumentId: 'doc-receipt-1',
+                documentId: 'doc-receipt-1',
+                documentNo: 'TG-RECEIPT-1',
+                status: 'PENDING_RENDER',
+                renderStatus: 'PENDING_RENDER',
+                receivedUnitCount: 1,
+                notReturnedUnitIds: [],
+              }),
+            },
+          },
+          {
+            provide: ListRentalDocumentsUseCase,
+            useValue: {
+              execute: jest.fn().mockImplementation((query: any) => {
+                if (query.actorRole === UserRole.USER && query.actorUserId === 'unauthorized-user') {
+                  throw AppError.fromCode(RR.FORBIDDEN);
+                }
+                return Promise.resolve({
+                  items: [],
+                  pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+                });
+              }),
+            },
+          },
+          {
+            provide: GetRentalDocumentUseCase,
+            useValue: {
+              execute: jest.fn().mockImplementation((query: any) => {
+                if (query.actorRole === UserRole.USER && query.actorUserId === 'unauthorized-user') {
+                  throw AppError.fromCode(RR.FORBIDDEN);
+                }
+                if (query.expectedOrderId && query.expectedOrderId !== dummyOrderId) {
+                  throw AppError.fromCode(RR.DOCUMENT_NOT_FOUND);
+                }
+                return Promise.resolve({
+                  id: 'doc-1',
+                  documentNo: 'TG-DOC-1',
+                  hash: 'abc123hash',
+                  immutableSnapshot: {},
+                  downloadReady: false,
+                  pdfReady: false,
+                  relatedDocumentIds: [],
+                });
+              }),
+            },
+          },
         ],
       }).compile();
 
@@ -105,7 +172,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
 
       app.use((req: any, _res: any, next: () => void) => {
         req[REQUEST_USER_KEY] = {
-          id: '55555555-5555-4555-8555-555555555555',
+          id: req.headers['x-mock-user-id'] ?? '55555555-5555-4555-8555-555555555555',
           role: req.headers['x-mock-role'] ?? UserRole.STAFF_DELIVERY,
           status: 'ACTIVE',
         };
@@ -356,6 +423,84 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         .get(`/api/v1/rental-orders/${dummyOrderId}/assessment`)
         .set('x-mock-role', UserRole.USER);
       expect(res.status).toBe(200);
+    });
+
+    it('RB-API-1004: POST /api/v1/rental-orders/:id/return-receipts returns 201 with canonical response', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/rental-orders/${dummyOrderId}/return-receipts`)
+        .set('x-mock-role', UserRole.STAFF_DELIVERY)
+        .set('idempotency-key', 'key-receipt-12345')
+        .send({
+          returnSessionId: dummyTaskId,
+          remarks: 'Everything looks good',
+          expectedVersion: 1,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.receiptDocumentId).toBe('doc-receipt-1');
+      expect(res.body.receivedUnitCount).toBe(1);
+    });
+
+    it('RB-API-1004: rejects when expectedVersion is missing', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/rental-orders/${dummyOrderId}/return-receipts`)
+        .set('x-mock-role', UserRole.STAFF_DELIVERY)
+        .set('idempotency-key', 'key-receipt-no-ver')
+        .send({
+          returnSessionId: dummyTaskId,
+          remarks: 'Missing expectedVersion',
+        });
+      expect(res.status).toBe(400);
+    });
+
+    it('RB-API-1001: GET /api/v1/rental-orders/:id/documents returns 200 with items and pagination', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-orders/${dummyOrderId}/documents?page=1&pageSize=10`)
+        .set('x-mock-role', UserRole.USER);
+      expect(res.status).toBe(200);
+      expect(res.body.items).toBeDefined();
+      expect(res.body.pagination).toBeDefined();
+    });
+
+    it('RB-API-1001 security: returns 403 when unauthorized actor accesses documents', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-orders/${dummyOrderId}/documents`)
+        .set('x-mock-role', UserRole.USER)
+        .set('x-mock-user-id', 'unauthorized-user');
+      expect(res.status).toBe(403);
+    });
+
+    it('RB-API-1002: GET /api/v1/rental-documents/:documentId returns 200 with hash and immutableSnapshot', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-documents/${dummyUnitId}`)
+        .set('x-mock-role', UserRole.USER);
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe('doc-1');
+      expect(res.body.hash).toBe('abc123hash');
+      expect(res.body.immutableSnapshot).toBeDefined();
+    });
+
+    it('RB-API-1002 nested: GET /api/v1/rental-orders/:id/documents/:documentId returns 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-orders/${dummyOrderId}/documents/${dummyUnitId}`)
+        .set('x-mock-role', UserRole.USER);
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe('doc-1');
+    });
+
+    it('RB-API-1002 nested: returns 404 when document does not belong to specified orderId', async () => {
+      const otherOrderId = '99999999-9999-4999-8999-999999999999';
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-orders/${otherOrderId}/documents/${dummyUnitId}`)
+        .set('x-mock-role', UserRole.USER);
+      expect(res.status).toBe(404);
+    });
+
+    it('RB-API-1002 security: returns 403 when unauthorized actor accesses document', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-documents/${dummyUnitId}`)
+        .set('x-mock-role', UserRole.USER)
+        .set('x-mock-user-id', 'unauthorized-user');
+      expect(res.status).toBe(403);
     });
   });
 
@@ -1219,4 +1364,1798 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(EquipmentUnitStatus.MAINTENANCE).toBeDefined();
     });
   });
+
+  describe('Part 7: Phase 09 Preflight & Closure Operations Invariants', () => {
+    describe('Preflight 1: RETURN_RECEIPT Invariants', () => {
+      it('throws HANDOVER_DOCUMENT_REQUIRED when order lacks root HANDOVER document', async () => {
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-1',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date(),
+              receivedUnits: [dummyUnitId],
+              remarks: 'Clean return',
+              staffId: 'staff-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue(null), // Missing HANDOVER
+          },
+        };
+
+        await expect(issueReturnReceiptTx(mockTx, 'sess-test-1', new Date())).rejects.toMatchObject({
+          name: 'AppError',
+          code: RR.HANDOVER_DOCUMENT_REQUIRED,
+        });
+      });
+
+      it('throws INVALID_RETURN_STATE when session is not yet FINALIZED', async () => {
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-2',
+              orderId: dummyOrderId,
+              status: 'OPEN', // Not finalized
+              finalizedAt: null,
+            }),
+          },
+        };
+
+        await expect(issueReturnReceiptTx(mockTx, 'sess-test-2', new Date())).rejects.toMatchObject({
+          name: 'AppError',
+          code: RR.INVALID_RETURN_STATE,
+        });
+      });
+
+      it('idempotent retry: returns existing RETURN_RECEIPT snapshot without duplicate document or render event', async () => {
+        const existingDoc = {
+          id: 'doc-existing-receipt',
+          orderId: dummyOrderId,
+          documentType: RentalDocumentType.RETURN_RECEIPT,
+          sourceRef: 'sess-test-3',
+          snapshotJson: { kind: 'RETURN_RECEIPT', sessionId: 'sess-test-3' },
+        };
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-test-3',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date(),
+              receivedUnits: [dummyUnitId],
+              remarks: 'All good',
+              staffId: 'staff-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(existingDoc),
+            create: jest.fn(),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn(),
+          },
+        };
+
+        const result = await issueReturnReceiptTx(mockTx, 'sess-test-3', new Date());
+        expect(result).toBe(existingDoc);
+        expect(mockTx.rentalDocument.create).not.toHaveBeenCalled();
+        expect(mockTx.rentalOutboxEvent.upsert).not.toHaveBeenCalled();
+      });
+
+      it('multiple return sessions on same order create distinct RETURN_RECEIPT documents referencing root HANDOVER', async () => {
+        const createdDocs: any[] = [];
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              return Promise.resolve({
+                id,
+                orderId: dummyOrderId,
+                status: 'FINALIZED',
+                finalizedAt: new Date(),
+                receivedUnits: [dummyUnitId],
+                remarks: `Session ${id}`,
+                staffId: 'staff-1',
+              });
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation(({ data }: any) => {
+              const doc = { id: `doc-${data.sourceRef}`, ...data };
+              createdDocs.push(doc);
+              return Promise.resolve(doc);
+            }),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const doc1 = await issueReturnReceiptTx(mockTx, 'sess-multi-1', new Date());
+        const doc2 = await issueReturnReceiptTx(mockTx, 'sess-multi-2', new Date());
+
+        expect(doc1.sourceRef).toBe('sess-multi-1');
+        expect(doc2.sourceRef).toBe('sess-multi-2');
+        expect(doc1.rootDocumentId).toBe('doc-handover-root');
+        expect(doc2.rootDocumentId).toBe('doc-handover-root');
+        expect(createdDocs.length).toBe(2);
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledTimes(2);
+      });
+
+      it('creates RETURN_RECEIPT with immutable snapshot matching FR Table 43 fields', async () => {
+        let createdDoc: any = null;
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-full-snap',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date('2026-10-18T10:00:00Z'),
+              receivedUnits: [
+                {
+                  unitId: dummyUnitId,
+                  assetCode: 'TREK-001',
+                  receivedAt: '2026-10-18T09:45:00.000Z',
+                  preliminaryCondition: 'GOOD',
+                  preliminaryOutcome: 'NORMAL',
+                  notes: 'Clean and functional',
+                  evidenceIds: ['media-ev-1'],
+                },
+              ],
+              remarks: 'Returned in good shape',
+              staffId: 'staff-del-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation(({ data }: any) => {
+              createdDoc = { id: 'doc-receipt-created', ...data };
+              return Promise.resolve(createdDoc);
+            }),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              policySnapshot: { policyVersion: '1.5.2' },
+              rentalOrderLinesViaOrderId: [
+                {
+                  rentalUnitAssignmentsViaOrderLineId: [
+                    { equipmentUnitId: dummyUnitId, status: 'RETURNED', equipmentUnit: { assetCode: 'TREK-001' } },
+                    { equipmentUnitId: '22222222-2222-2222-2222-222222222222', status: 'HANDED_OVER', equipmentUnit: { assetCode: 'TREK-002' } },
+                  ],
+                },
+              ],
+              deliveryTasksViaOrderId: [{ taskType: 'RETURN', hubId: 'HUB-DISTRICT-1' }],
+            }),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const result = await issueReturnReceiptTx(mockTx, 'sess-full-snap', new Date('2026-10-18T10:00:00Z'));
+        expect(result).toBeDefined();
+        expect(createdDoc).toBeDefined();
+
+        const snap = createdDoc.snapshotJson;
+        expect(snap.kind).toBe('RETURN_RECEIPT');
+        expect(snap.documentNo).toBeDefined();
+        expect(snap.rootDocumentId).toBe('doc-handover-root');
+        expect(snap.returnSessionId).toBe('sess-full-snap');
+        expect(snap.staffId).toBe('staff-del-1');
+        expect(snap.finalizedAt).toBe('2026-10-18T10:00:00.000Z');
+        expect(snap.returnLocationRef).toBe('HUB-DISTRICT-1');
+        expect(snap.remarks).toBe('Returned in good shape');
+        expect(snap.userRemarks).toBeNull();
+        expect(snap.policyVersion).toBe('1.5.2');
+        expect(snap.templateVersion).toBe('1.3.2');
+
+        // Verify receivedUnits enriched fields from verified session observation
+        expect(snap.receivedUnits).toHaveLength(1);
+        expect(snap.receivedUnits[0]).toMatchObject({
+          unitId: dummyUnitId,
+          assetCode: 'TREK-001',
+          receivedAt: '2026-10-18T09:45:00.000Z',
+          condition: 'GOOD',
+          outcome: 'NORMAL',
+          notes: 'Clean and functional',
+          evidenceIds: ['media-ev-1'],
+        });
+
+        // Verify notReturnedUnitIdsAtSessionEnd captures the missing equipment
+        expect(snap.notReturnedUnitIdsAtSessionEnd).toContain('22222222-2222-2222-2222-222222222222');
+      });
+
+      it('does NOT invent condition GOOD or false timestamps when unrecorded', async () => {
+        let createdDoc: any = null;
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'sess-no-cond',
+              orderId: dummyOrderId,
+              status: 'FINALIZED',
+              finalizedAt: new Date('2026-10-18T12:00:00Z'),
+              receivedUnits: [{ unitId: dummyUnitId, assetCode: 'TREK-001' }], // no preliminaryCondition or receivedAt
+              remarks: 'Quick dropoff',
+              staffId: 'staff-del-1',
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'doc-handover-root',
+              orderId: dummyOrderId,
+              documentType: RentalDocumentType.HANDOVER,
+            }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation(({ data }: any) => {
+              createdDoc = { id: 'doc-receipt-no-cond', ...data };
+              return Promise.resolve(createdDoc);
+            }),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              policySnapshot: { policyVersion: '1.4.0' }, // historical version
+              rentalOrderLinesViaOrderId: [
+                {
+                  rentalUnitAssignmentsViaOrderLineId: [
+                    { equipmentUnitId: dummyUnitId, status: 'RETURNED', returnedAt: null, equipmentUnit: { assetCode: 'TREK-001' } },
+                  ],
+                },
+              ],
+              deliveryTasksViaOrderId: [],
+            }),
+          },
+          rentalOutboxEvent: { upsert: jest.fn().mockResolvedValue({}) },
+        };
+
+        await issueReturnReceiptTx(mockTx, 'sess-no-cond', new Date('2026-10-18T12:00:00Z'));
+        const snap = createdDoc.snapshotJson;
+
+        // Condition and outcome must remain null when unobserved — NEVER fabricated GOOD
+        expect(snap.receivedUnits[0].condition).toBeNull();
+        expect(snap.receivedUnits[0].outcome).toBeNull();
+        expect(snap.receivedUnits[0].receivedAt).toBeNull();
+        // Policy version follows frozen order policySnapshot
+        expect(snap.policyVersion).toBe('1.4.0');
+        expect(createdDoc.policyVersion).toBe('1.4.0');
+        expect(snap.returnLocationRef).toBeNull(); // no fake LOC-DEFAULT
+      });
+
+      it('isolates observations between multiple return sessions on the same order', async () => {
+        let createdDocSess1: any = null;
+        let createdDocSess2: any = null;
+
+        const session1Data = {
+          id: 'sess-iso-1',
+          orderId: dummyOrderId,
+          status: 'FINALIZED',
+          finalizedAt: new Date('2026-10-18T09:00:00Z'),
+          receivedUnits: [{ unitId: 'unit-1', preliminaryCondition: 'GOOD', preliminaryOutcome: 'NORMAL' }],
+          staffId: 'staff-1',
+        };
+        const session2Data = {
+          id: 'sess-iso-2',
+          orderId: dummyOrderId,
+          status: 'FINALIZED',
+          finalizedAt: new Date('2026-10-18T11:00:00Z'),
+          receivedUnits: [{ unitId: 'unit-2', preliminaryCondition: 'ISSUE', preliminaryOutcome: 'DAMAGE_CONFIRMED' }],
+          staffId: 'staff-1',
+        };
+
+        const mockTx: any = {
+          rentalReturnSession: {
+            findUnique: jest.fn().mockImplementation(({ where }: any) => {
+              if (where.id === 'sess-iso-1') return Promise.resolve(session1Data);
+              if (where.id === 'sess-iso-2') return Promise.resolve(session2Data);
+              return Promise.resolve(null);
+            }),
+          },
+          rentalDocument: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'root-handover-iso', orderId: dummyOrderId, documentType: RentalDocumentType.HANDOVER }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation(({ data }: any) => {
+              const doc = { id: `doc-${data.sourceRef}`, ...data };
+              if (data.sourceRef === 'sess-iso-1') createdDocSess1 = doc;
+              if (data.sourceRef === 'sess-iso-2') createdDocSess2 = doc;
+              return Promise.resolve(doc);
+            }),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              policySnapshot: { policyVersion: '1.5.2' },
+              rentalOrderLinesViaOrderId: [],
+              deliveryTasksViaOrderId: [],
+            }),
+          },
+          rentalOutboxEvent: { upsert: jest.fn().mockResolvedValue({}) },
+        };
+
+        await issueReturnReceiptTx(mockTx, 'sess-iso-1', new Date('2026-10-18T09:00:00Z'));
+        await issueReturnReceiptTx(mockTx, 'sess-iso-2', new Date('2026-10-18T11:00:00Z'));
+
+        const snap1 = createdDocSess1.snapshotJson;
+        const snap2 = createdDocSess2.snapshotJson;
+
+        expect(snap1.receivedUnits).toHaveLength(1);
+        expect(snap1.receivedUnits[0].unitId).toBe('unit-1');
+        expect(snap1.receivedUnits[0].condition).toBe('GOOD');
+
+        expect(snap2.receivedUnits).toHaveLength(1);
+        expect(snap2.receivedUnits[0].unitId).toBe('unit-2');
+        expect(snap2.receivedUnits[0].condition).toBe('ISSUE');
+      });
+    });
+
+    describe('Preflight 2: FAILED REFUND RECOVERY Invariants', () => {
+      it('REFUND_FAILED: sets order financialStatus to REFUND_PENDING and exceptionStatus to ACTION_REQUIRED', async () => {
+        const mockTx: any = {
+          $queryRaw: jest.fn().mockImplementation((...args: any[]) => {
+            const first = args[0];
+            const sql = Array.isArray(first)
+              ? first.join(' ')
+              : String(first?.text ?? first?.sql ?? (Array.isArray(first?.strings) ? first.strings.join(' ') : first ?? ''));
+            if (sql.includes('payment_outbox_events')) {
+              return Promise.resolve([{ id: 'evt-fail-recov' }]);
+            }
+            if (sql.includes('clock_timestamp')) {
+              return Promise.resolve([{ now: new Date() }]);
+            }
+            return Promise.resolve([]);
+          }),
+          paymentOutboxEvent: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'evt-fail-recov',
+              eventType: 'REFUND_FAILED',
+              aggregateType: 'Refund',
+              aggregateId: 'ref-fail-recov',
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'evt-fail-recov',
+              eventType: 'REFUND_FAILED',
+              payload: { schemaVersion: 1, refundId: 'ref-fail-recov' },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          refund: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'ref-fail-recov',
+              purpose: 'DEPOSIT',
+              paymentId: dummyPaymentId,
+              depositSettlement: { id: dummySettlementId, orderId: dummyOrderId },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'ref-fail-recov',
+              status: 'FAILED',
+              depositSettlementId: dummySettlementId,
+              paymentId: dummyPaymentId,
+              payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          payment: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-recov' }),
+          },
+          paymentAllocation: {
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+          },
+          depositSettlementItem: {
+            findMany: jest.fn().mockImplementation(({ where }: any) => {
+              if (where?.id?.in) {
+                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_PENDING' }]);
+              }
+              return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          depositSettlement: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: dummySettlementId,
+              totalDeposit: new Prisma.Decimal(300000),
+              depositSettlementItemsViaSettlementId: [{ status: 'REFUND_FAILED', depositAmount: new Prisma.Decimal(300000), refundAmount: new Prisma.Decimal(0), deductionAmount: new Prisma.Decimal(0) }],
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          paymentConsumerReceipt: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.REFUND_FAILED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [],
+              packageViaOrderId: null,
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            create: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const worker = new RentalDepositWorker({
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+          $queryRaw: mockTx.$queryRaw,
+        } as any, {} as any);
+
+        await worker.consume('evt-fail-recov');
+
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              financialStatus: 'REFUND_PENDING',
+              exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+            }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              financialStatus: 'PAID',
+            }),
+          }),
+        );
+      });
+
+      it('Recovery flow: re-evaluating succeeded event updates items to SETTLED and completes order', async () => {
+        const mockTx: any = {
+          $queryRaw: jest.fn().mockImplementation((...args: any[]) => {
+            const first = args[0];
+            const sql = Array.isArray(first)
+              ? first.join(' ')
+              : String(first?.text ?? first?.sql ?? (Array.isArray(first?.strings) ? first.strings.join(' ') : first ?? ''));
+            if (sql.includes('payment_outbox_events')) {
+              return Promise.resolve([{ id: 'evt-succ-recov' }]);
+            }
+            if (sql.includes('clock_timestamp')) {
+              return Promise.resolve([{ now: new Date() }]);
+            }
+            return Promise.resolve([]);
+          }),
+          paymentOutboxEvent: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'evt-succ-recov',
+              eventType: 'REFUND_SUCCEEDED',
+              aggregateType: 'Refund',
+              aggregateId: 'ref-succ-recov',
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'evt-succ-recov',
+              eventType: 'REFUND_SUCCEEDED',
+              payload: { schemaVersion: 1, refundId: 'ref-succ-recov' },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          refund: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'ref-succ-recov',
+              purpose: 'DEPOSIT',
+              paymentId: dummyPaymentId,
+              depositSettlement: { id: dummySettlementId, orderId: dummyOrderId },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'ref-succ-recov',
+              status: 'SUCCEEDED',
+              depositSettlementId: dummySettlementId,
+              paymentId: dummyPaymentId,
+              payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
+              depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+            }),
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+            count: jest.fn().mockResolvedValue(0),
+          },
+          payment: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-recov' }),
+          },
+          paymentAllocation: {
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
+          },
+          depositSettlementItem: {
+            findMany: jest.fn().mockImplementation(({ where }: any) => {
+              if (where?.id?.in) {
+                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+              }
+              return Promise.resolve([{ id: 'item-recov-1', status: 'SETTLED' }]);
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          depositSettlement: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: dummySettlementId,
+              totalDeposit: new Prisma.Decimal(300000),
+              depositSettlementItemsViaSettlementId: [{ status: 'SETTLED', depositAmount: new Prisma.Decimal(300000), refundAmount: new Prisma.Decimal(300000), deductionAmount: new Prisma.Decimal(0) }],
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          paymentConsumerReceipt: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [],
+              packageViaOrderId: null,
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            create: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const worker = new RentalDepositWorker({
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+          $queryRaw: mockTx.$queryRaw,
+        } as any, {} as any);
+
+        await worker.consume('evt-succ-recov');
+
+        expect(mockTx.depositSettlementItem.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'item-recov-1' },
+            data: expect.objectContaining({ status: 'SETTLED' }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              financialStatus: 'SETTLED',
+            }),
+          }),
+        );
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              status: RentalOrderStatus.COMPLETED,
+            }),
+          }),
+        );
+      });
+    });
+
+    describe('Phase 09: Order Closure & Operations Invariants', () => {
+      it('tryCompleteOrder: emits RENTAL_ORDER_CLOSED outbox event and writes audit log upon closure', async () => {
+        const now = new Date();
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              userId: 'user-p9-1',
+              bookingId: 'booking-p9-1',
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              version: 3,
+              rentalOrderLinesViaOrderId: [
+                {
+                  rentalUnitAssignmentsViaOrderLineId: [
+                    { id: 'assign-1', status: RentalUnitAssignmentStatus.CLOSED },
+                  ],
+                },
+              ],
+              depositSettlementViaOrderId: {
+                id: dummySettlementId,
+                depositSettlementItemsViaSettlementId: [
+                  { id: 'item-p9-1', status: DepositItemStatus.SETTLED },
+                ],
+              },
+              rentalExceptionCasesViaOrderId: [
+                { id: 'case-p9-1', status: RentalExceptionCaseStatus.RESOLVED },
+              ],
+              deliveryTasksViaOrderId: [
+                { id: dummyTaskId, taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED },
+              ],
+              packageViaOrderId: { id: 'pkg-p9-1', status: PackageStatus.RETURNED_TO_INVENTORY },
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          deliveryTask: {
+            update: jest.fn().mockResolvedValue({}),
+          },
+          package: {
+            update: jest.fn().mockResolvedValue({}),
+          },
+          auditLog: {
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, now);
+        expect(result).toBe(true);
+
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyOrderId },
+            data: expect.objectContaining({
+              status: RentalOrderStatus.COMPLETED,
+              financialStatus: RentalFinancialStatus.SETTLED,
+              exceptionStatus: RentalOrderExceptionStatus.NONE,
+            }),
+          }),
+        );
+
+        expect(mockTx.deliveryTask.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: dummyTaskId },
+            data: expect.objectContaining({ status: DeliveryTaskStatus.CLOSED }),
+          }),
+        );
+
+        expect(mockTx.package.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'pkg-p9-1' },
+            data: expect.objectContaining({ status: PackageStatus.CLOSED }),
+          }),
+        );
+
+        expect(mockTx.auditLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              userId: null,
+              action: 'RENTAL_ORDER_CLOSED',
+              entityType: 'RentalOrder',
+              entityId: dummyOrderId,
+              newValues: expect.objectContaining({ actorType: 'SYSTEM' }),
+            }),
+          }),
+        );
+
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { deduplicationKey: `rental-order-closed:${dummyOrderId}` },
+            create: expect.objectContaining({
+              eventType: 'RENTAL_ORDER_CLOSED',
+              aggregateType: 'RentalOrder',
+              aggregateId: dummyOrderId,
+            }),
+          }),
+        );
+        expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { deduplicationKey: `rental-closed:${dummyOrderId}` },
+            create: expect.objectContaining({
+              eventType: 'RENTAL_CLOSED',
+              aggregateType: 'RentalOrder',
+              aggregateId: dummyOrderId,
+            }),
+          }),
+        );
+      });
+
+      it('tryCompleteOrder: rejects completion if return task is SCHEDULED or COLLECTING', async () => {
+        for (const taskStatus of [DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.COLLECTING]) {
+          const mockTx: any = {
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: dummyOrderId,
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+                depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: taskStatus }],
+                packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+                returnCustodyTransfersViaOrderId: [],
+                rentalReturnSessionsViaOrderId: [],
+              }),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+          };
+          const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+          expect(result).toBe(false);
+          expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+        }
+      });
+
+      it('tryCompleteOrder: rejects completion if package is RETURNING or active', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.RETURNING },
+              returnCustodyTransfersViaOrderId: [],
+              rentalReturnSessionsViaOrderId: [],
+            }),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('tryCompleteOrder: rejects completion if return custody transfer is PENDING_RECEIPT', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+              returnCustodyTransfersViaOrderId: [{ status: CustodyTransferStatus.PENDING_RECEIPT }],
+              rentalReturnSessionsViaOrderId: [],
+            }),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('tryCompleteOrder: rejects completion if any return session is still OPEN', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+              returnCustodyTransfersViaOrderId: [],
+              rentalReturnSessionsViaOrderId: [{ status: RentalReturnSessionStatus.OPEN }],
+            }),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('tryCompleteOrder: rejects completion if order status is ACTIVE or CANCELLED', async () => {
+        for (const orderStatus of [RentalOrderStatus.ACTIVE, RentalOrderStatus.CANCELLED]) {
+          const mockTx: any = {
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: dummyOrderId,
+                status: orderStatus,
+                rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+                depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+                packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+                returnCustodyTransfersViaOrderId: [],
+                rentalReturnSessionsViaOrderId: [],
+              }),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+          };
+          const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+          expect(result).toBe(false);
+          expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+        }
+      });
+
+      it('tryCompleteOrder: rejects completion if deposit items are REFUND_FAILED or REFUND_PENDING', async () => {
+        for (const itemStatus of [DepositItemStatus.REFUND_FAILED, DepositItemStatus.REFUND_PENDING]) {
+          const mockTx: any = {
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: dummyOrderId,
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+                depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: itemStatus }] },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+                packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+                returnCustodyTransfersViaOrderId: [],
+                rentalReturnSessionsViaOrderId: [],
+              }),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+          };
+          const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+          expect(result).toBe(false);
+          expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+        }
+      });
+
+      it('tryCompleteOrder: rejects completion if any exception case is OPEN or UNDER_REVIEW', async () => {
+        for (const caseStatus of [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW]) {
+          const mockTx: any = {
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: dummyOrderId,
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                rentalOrderLinesViaOrderId: [
+                  { rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] },
+                ],
+                depositSettlementViaOrderId: {
+                  depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }],
+                },
+                rentalExceptionCasesViaOrderId: [
+                  { id: 'case-open', status: caseStatus },
+                ],
+                deliveryTasksViaOrderId: [],
+                packageViaOrderId: null,
+                returnCustodyTransfersViaOrderId: [],
+                rentalReturnSessionsViaOrderId: [],
+              }),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+          };
+
+          const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+          expect(result).toBe(false);
+          expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+        }
+      });
+
+      it('tryCompleteOrder: rejects completion if return custody transfer is EXPIRED', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+              returnCustodyTransfersViaOrderId: [{ status: CustodyTransferStatus.EXPIRED }],
+              rentalReturnSessionsViaOrderId: [],
+            }),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('tryCompleteOrder: rejects completion if return task is BLOCKED, NO_SHOW, or REFUSED', async () => {
+        for (const taskStatus of [DeliveryTaskStatus.BLOCKED, DeliveryTaskStatus.NO_SHOW, DeliveryTaskStatus.REFUSED]) {
+          const mockTx: any = {
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: dummyOrderId,
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+                depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: taskStatus }],
+                packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+                returnCustodyTransfersViaOrderId: [],
+                rentalReturnSessionsViaOrderId: [],
+              }),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+          };
+          const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+          expect(result).toBe(false);
+          expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+        }
+      });
+
+      it('tryCompleteOrder: rejects completion if package is TRANSFERRED_TO_DELIVERY', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.TRANSFERRED_TO_DELIVERY },
+              returnCustodyTransfersViaOrderId: [],
+              rentalReturnSessionsViaOrderId: [],
+            }),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      });
+
+      it('tryCompleteOrder: successfully completes when all gates satisfy positive allowlists', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              version: 1,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ id: 'dt-ret-1', taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { id: 'pkg-ret-1', status: PackageStatus.RETURNED_TO_INVENTORY },
+              returnCustodyTransfersViaOrderId: [{ status: CustodyTransferStatus.RECEIVED }],
+              rentalReturnSessionsViaOrderId: [{ status: RentalReturnSessionStatus.FINALIZED }],
+            }),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+          deliveryTask: { update: jest.fn().mockResolvedValue({}) },
+          package: { update: jest.fn().mockResolvedValue({}) },
+          auditLog: { create: jest.fn().mockResolvedValue({}) },
+          rentalOutboxEvent: { upsert: jest.fn().mockResolvedValue({}) },
+        };
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(true);
+        expect(mockTx.deliveryTask.update).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'dt-ret-1' }, data: expect.objectContaining({ status: DeliveryTaskStatus.CLOSED }) }),
+        );
+        expect(mockTx.package.update).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'pkg-ret-1' }, data: expect.objectContaining({ status: PackageStatus.CLOSED }) }),
+        );
+      });
+
+      it('tryCompleteOrder: enforces atomic CAS version check and prevents double-closure race', async () => {
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: dummyOrderId,
+              status: RentalOrderStatus.RETURN_PROCESSING,
+              version: 2,
+              rentalOrderLinesViaOrderId: [{ rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] }],
+              depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }] },
+              rentalExceptionCasesViaOrderId: [],
+              deliveryTasksViaOrderId: [{ taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED }],
+              packageViaOrderId: { status: PackageStatus.RETURNED_TO_INVENTORY },
+              returnCustodyTransfersViaOrderId: [],
+              rentalReturnSessionsViaOrderId: [],
+            }),
+            updateMany: jest.fn().mockResolvedValue({ count: 0 }), // Another process updated first!
+            update: jest.fn(),
+          },
+        };
+
+        const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date());
+        expect(result).toBe(false);
+        expect(mockTx.rentalOrder.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              id: dummyOrderId,
+              version: 2,
+            }),
+          }),
+        );
+      });
+
+      it('RentalOperationalEscalationScheduler: sweep periodically invokes tryCompleteOrder on candidate orders', async () => {
+        const mockCandidateOrders = [{ id: 'order-cand-1' }, { id: 'order-cand-2' }];
+        const completedOrders: string[] = [];
+
+        const mockTx: any = {
+          rentalOrder: {
+            findUnique: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              return Promise.resolve({
+                id,
+                userId: 'user-sweep-1',
+                bookingId: 'booking-sweep-1',
+                status: RentalOrderStatus.RETURN_PROCESSING,
+                version: 1,
+                rentalOrderLinesViaOrderId: [
+                  { rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] },
+                ],
+                depositSettlementViaOrderId: {
+                  depositSettlementItemsViaSettlementId: [{ status: DepositItemStatus.SETTLED }],
+                },
+                rentalExceptionCasesViaOrderId: [],
+                deliveryTasksViaOrderId: [],
+                packageViaOrderId: null,
+              });
+            }),
+            update: jest.fn().mockImplementation(({ where: { id } }: any) => {
+              completedOrders.push(id);
+              return Promise.resolve({});
+            }),
+          },
+          auditLog: {
+            create: jest.fn().mockResolvedValue({}),
+          },
+          rentalOutboxEvent: {
+            upsert: jest.fn().mockResolvedValue({}),
+          },
+        };
+
+        const mockPrisma: any = {
+          returnCustodyTransfer: { findMany: jest.fn().mockResolvedValue([]) },
+          rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([]) },
+          rentalOrder: { findMany: jest.fn().mockResolvedValue(mockCandidateOrders) },
+          $transaction: jest.fn((cb: any) => cb(mockTx)),
+        };
+
+        const scheduler = new RentalOperationalEscalationScheduler(mockPrisma);
+        await scheduler.check();
+
+        expect(mockPrisma.rentalOrder.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { status: { in: [RentalOrderStatus.RETURN_PROCESSING, RentalOrderStatus.RETURN_PENDING] } },
+          }),
+        );
+        expect(completedOrders).toContain('order-cand-1');
+        expect(completedOrders).toContain('order-cand-2');
+      });
+    });
+  });
+
+  describe('Part 8: Phase 10 Final Acceptance — Adapter Direct Verification, Security & Concurrency', () => {
+    const testOrderId = '33333333-3333-4333-8333-333333333333';
+    const testDocId = '55555555-5555-4555-8555-555555555555';
+    const testUserA = 'aaaa1111-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const testUserB = 'bbbb2222-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const testStaffDel = 'dddd3333-dddd-4ddd-8ddd-dddddddddddd';
+    const testSessionId = '66666666-6666-4666-8666-666666666666';
+
+    it('listRentalDocuments: returns canonical FR wire contract and creates LIST access log', async () => {
+      const accessLogsCreated: any[] = [];
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testOrderId,
+            userId: testUserA,
+            deliveryTasksViaOrderId: [],
+            inventoryTaskViaOrderId: null,
+          }),
+        },
+        rentalDocument: {
+          count: jest.fn().mockResolvedValue(1),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: testDocId,
+              orderId: testOrderId,
+              documentType: RentalDocumentType.RETURN_RECEIPT,
+              documentNumber: 'TG-RET-001',
+              sourceRef: testSessionId,
+              rootDocumentId: 'root-handover-id',
+              renderStatus: 'READY',
+              pdfStorageKey: 'storage/doc.pdf',
+              issuedAt: new Date('2026-10-18T10:00:00Z'),
+              policyVersion: '1.5.2',
+              templateVersion: '1.3.2',
+              version: 1,
+            },
+          ]),
+        },
+        rentalDocumentAccessLog: {
+          createMany: jest.fn().mockImplementation(({ data }: any) => {
+            accessLogsCreated.push(...data);
+            return Promise.resolve({ count: data.length });
+          }),
+        },
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      const res = await adapter.listRentalDocuments({
+        orderId: testOrderId,
+        actorUserId: testUserA,
+        actorRole: UserRole.USER,
+        page: 1,
+        pageSize: 10,
+      });
+
+      expect(res.pagination).toEqual({ page: 1, pageSize: 10, total: 1, totalPages: 1 });
+      expect(res.items).toHaveLength(1);
+      const item = res.items[0];
+      // Verify canonical wire fields
+      expect(item.id).toBe(testDocId);
+      expect(item.type).toBe('RETURN_RECEIPT');
+      expect(item.documentNo).toBe('TG-RET-001');
+      expect(item.sourceId).toBe(testSessionId);
+      expect(item.rootDocumentId).toBe('root-handover-id');
+      expect(item.renderStatus).toBe('READY');
+      expect(item.downloadReady).toBe(true);
+      expect(item.pdfReady).toBe(true);
+      // Verify legacy aliases
+      expect(item.documentId).toBe(testDocId);
+      expect(item.documentType).toBe('RETURN_RECEIPT');
+      expect(item.documentNumber).toBe('TG-RET-001');
+      expect(item.sourceRef).toBe(testSessionId);
+
+      // Verify LIST access log created
+      expect(accessLogsCreated).toHaveLength(1);
+      expect(accessLogsCreated[0]).toMatchObject({
+        documentId: testDocId,
+        actorUserId: testUserA,
+        action: 'LIST',
+      });
+    });
+
+    it('listRentalDocuments: blocks USER B from viewing USER A documents (403)', async () => {
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testOrderId,
+            userId: testUserA,
+            deliveryTasksViaOrderId: [],
+            inventoryTaskViaOrderId: null,
+          }),
+        },
+      };
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.listRentalDocuments({
+          orderId: testOrderId,
+          actorUserId: testUserB,
+          actorRole: UserRole.USER,
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.FORBIDDEN }));
+    });
+
+    it('getRentalDocument: returns canonical FR wire contract and creates READ access log', async () => {
+      let createdLog: any = null;
+      const mockPrisma: any = {
+        rentalDocument: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testDocId,
+            orderId: testOrderId,
+            documentType: RentalDocumentType.RETURN_RECEIPT,
+            documentNumber: 'TG-RET-001',
+            sourceRef: testSessionId,
+            rootDocumentId: 'root-handover-id',
+            previousDocumentId: null,
+            renderStatus: 'READY',
+            pdfStorageKey: 'storage/doc.pdf',
+            snapshotHash: 'hash-abc-123',
+            snapshotJson: { kind: 'RETURN_RECEIPT', units: [] },
+            issuedAt: new Date('2026-10-18T10:00:00Z'),
+            policyVersion: '1.5.2',
+            templateVersion: '1.3.2',
+            version: 1,
+            order: {
+              id: testOrderId,
+              userId: testUserA,
+              deliveryTasksViaOrderId: [],
+              inventoryTaskViaOrderId: null,
+            },
+            rootChildren: [{ id: 'child-doc-1' }],
+          }),
+        },
+        rentalDocumentAccessLog: {
+          create: jest.fn().mockImplementation(({ data }: any) => {
+            createdLog = data;
+            return Promise.resolve({ id: 'log-1', ...data });
+          }),
+        },
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      const res = await adapter.getRentalDocument({
+        documentId: testDocId,
+        actorUserId: testUserA,
+        actorRole: UserRole.USER,
+        expectedOrderId: testOrderId,
+      });
+
+      // Verify canonical fields
+      expect(res.id).toBe(testDocId);
+      expect(res.type).toBe('RETURN_RECEIPT');
+      expect(res.status).toBe('READY');
+      expect(res.documentNo).toBe('TG-RET-001');
+      expect(res.sourceId).toBe(testSessionId);
+      expect(res.sourceRef).toBe(testSessionId);
+      expect(res.hash).toBe('hash-abc-123');
+      expect(res.immutableSnapshot).toEqual({ kind: 'RETURN_RECEIPT', units: [] });
+      expect(res.relatedDocumentIds).toEqual(['root-handover-id', 'child-doc-1']);
+      expect(res.pdfReady).toBe(true);
+      expect(res.downloadReady).toBe(true);
+
+      // Verify READ access log created
+      expect(createdLog).toMatchObject({
+        documentId: testDocId,
+        actorUserId: testUserA,
+        action: 'READ',
+      });
+    });
+
+    it('getRentalDocument: rejects with 404 when document does not belong to expectedOrderId (nested route guard)', async () => {
+      const mockPrisma: any = {
+        rentalDocument: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testDocId,
+            orderId: testOrderId,
+            order: { id: testOrderId, userId: testUserA },
+          }),
+        },
+      };
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.getRentalDocument({
+          documentId: testDocId,
+          actorUserId: testUserA,
+          actorRole: UserRole.USER,
+          expectedOrderId: 'wrong-order-uuid',
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.DOCUMENT_NOT_FOUND }));
+    });
+
+    it('finalizeReturnReceipt: rejects when ReturnTask is CANCELLED or BLOCKED (409)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                deliveryTasksViaOrderId: [
+                  {
+                    id: 'task-cancelled',
+                    taskType: DeliveryTaskType.RETURN,
+                    staffId: testStaffDel,
+                    status: DeliveryTaskStatus.CANCELLED, // Non-finalizable
+                  },
+                ],
+              }),
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          idempotencyKey: 'idemp-cancelled-task',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.INVALID_RETURN_STATE }));
+    });
+
+    it('finalizeReturnReceipt: rejects zero scans with comments only but no failure evidence (409)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                deliveryTasksViaOrderId: [
+                  { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: DeliveryTaskStatus.COLLECTING },
+                ],
+              }),
+            },
+            rentalReturnSession: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.OPEN,
+                receivedUnits: [], // 0 units
+                remarks: 'Customer was not there', // comment only
+                version: 1,
+              }),
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          remarks: 'Customer was not there',
+          idempotencyKey: 'idemp-no-scans-no-evidence',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.INVALID_RETURN_STATE }));
+    });
+
+    it('finalizeReturnReceipt: permits zero scans when valid failureEvidenceId is provided', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockResolvedValue({}),
+              update: jest.fn().mockResolvedValue({}),
+            },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                policySnapshot: { policyVersion: '1.5.2' },
+                rentalOrderLinesViaOrderId: [],
+                deliveryTasksViaOrderId: [
+                  { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: DeliveryTaskStatus.COLLECTING },
+                ],
+              }),
+            },
+            rentalReturnSession: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.OPEN,
+                receivedUnits: [],
+                version: 1,
+              }),
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+              findUnique: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.FINALIZED,
+                finalizedAt: new Date('2026-10-18T10:00:00Z'),
+                receivedUnits: [],
+                remarks: 'Failed collection verified',
+              }),
+            },
+            rentalDocument: {
+              findFirst: jest.fn().mockResolvedValue({ id: 'root-handover-doc', orderId: testOrderId, documentType: RentalDocumentType.HANDOVER }),
+              findUnique: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'doc-failed-coll', ...data })),
+            },
+            auditLog: { create: jest.fn().mockResolvedValue({}) },
+            rentalOutboxEvent: { upsert: jest.fn().mockResolvedValue({}) },
+            mediaAsset: { findMany: jest.fn().mockResolvedValue([{ id: 'media-fail-evidence-1' }]) },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      const res = await adapter.finalizeReturnReceipt({
+        orderId: testOrderId,
+        returnSessionId: testSessionId,
+        expectedVersion: 1,
+        remarks: 'Failed collection verified',
+        failureEvidenceId: 'media-fail-evidence-1',
+        idempotencyKey: 'idemp-valid-failure-evidence',
+        actorUserId: testStaffDel,
+        now: new Date('2026-10-18T10:00:00Z'),
+      });
+
+      expect(res.receiptDocumentId).toBe('doc-failed-coll');
+      expect(res.receivedUnitCount).toBe(0);
+      expect((res.immutableSnapshot as any)?.failureEvidenceId).toBe('media-fail-evidence-1');
+    });
+
+    it('finalizeReturnReceipt: rejects reusing same idempotencyKey with different remarks (IDEMPOTENCY_KEY_REUSED)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            idempotencyRecord: {
+              findUnique: jest.fn().mockResolvedValue({
+                scope: 'RB-API-1004:finalize-return-receipt',
+                userId: testStaffDel,
+                idempotencyKey: 'reused-key-1',
+                requestHash: 'different-hash-previously-computed',
+              }),
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          remarks: 'New modified remarks',
+          idempotencyKey: 'reused-key-1',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.IDEMPOTENCY_KEY_REUSED }));
+    });
+
+    it('finalizeReturnReceipt: enforces session version atomic CAS and detects concurrent updates (VERSION_CONFLICT)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                deliveryTasksViaOrderId: [
+                  { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: DeliveryTaskStatus.COLLECTING },
+                ],
+              }),
+            },
+            rentalReturnSession: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.OPEN,
+                receivedUnits: [{ unitId: 'unit-1', duplicate: false }],
+                version: 1,
+              }),
+              updateMany: jest.fn().mockResolvedValue({ count: 0 }), // CAS conflict: version changed or already finalized
+            },
+            rentalDocument: {
+              findFirst: jest.fn().mockResolvedValue({ id: 'root-handover-doc', orderId: testOrderId, documentType: RentalDocumentType.HANDOVER }),
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          idempotencyKey: 'idemp-session-race',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.VERSION_CONFLICT }));
+    });
+
+    it('listRentalDocuments & getRentalDocument: blocks unassigned STAFF_INVENTORY from accessing Order B (403), allows assigned staff (200)', async () => {
+      const staffInvUnassigned = 'staff-inv-unassigned';
+      const staffInvAssigned = 'staff-inv-assigned';
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testOrderId,
+            userId: testUserA,
+            deliveryTasksViaOrderId: [],
+            inventoryTaskViaOrderId: { staffId: staffInvAssigned },
+            rentalReturnSessionsViaOrderId: [],
+            custodyTransfersViaOrderId: [],
+          }),
+        },
+        rentalDocument: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testDocId,
+            orderId: testOrderId,
+            documentType: RentalDocumentType.RETURN_RECEIPT,
+            documentNumber: 'DOC-123',
+            sourceRef: testSessionId,
+            renderStatus: RentalDocumentRenderStatus.READY,
+            pdfStorageKey: 'key/pdf',
+            snapshotHash: 'hash-1',
+            snapshotJson: {},
+            issuedAt: new Date(),
+            order: {
+              id: testOrderId,
+              userId: testUserA,
+              deliveryTasksViaOrderId: [],
+              inventoryTaskViaOrderId: { staffId: staffInvAssigned },
+              rentalReturnSessionsViaOrderId: [],
+              custodyTransfersViaOrderId: [],
+            },
+          }),
+          count: jest.fn().mockResolvedValue(1),
+          findMany: jest.fn().mockResolvedValue([{
+            id: testDocId,
+            documentType: RentalDocumentType.RETURN_RECEIPT,
+            documentNumber: 'DOC-123',
+            sourceRef: testSessionId,
+            renderStatus: RentalDocumentRenderStatus.READY,
+            pdfStorageKey: 'key/pdf',
+            orderId: testOrderId,
+            issuedAt: new Date(),
+          }]),
+        },
+        rentalDocumentAccessLog: {
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+          create: jest.fn().mockResolvedValue({}),
+        },
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+
+      // Unassigned inventory staff must get 403 on list and get
+      await expect(
+        adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: staffInvUnassigned, actorRole: UserRole.STAFF_INVENTORY }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.FORBIDDEN }));
+
+      await expect(
+        adapter.getRentalDocument({ documentId: testDocId, actorUserId: staffInvUnassigned, actorRole: UserRole.STAFF_INVENTORY }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.FORBIDDEN }));
+
+      // Assigned inventory staff must get 200
+      const listRes = await adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: staffInvAssigned, actorRole: UserRole.STAFF_INVENTORY });
+      expect(listRes.items).toHaveLength(1);
+
+      const getRes = await adapter.getRentalDocument({ documentId: testDocId, actorUserId: staffInvAssigned, actorRole: UserRole.STAFF_INVENTORY });
+      expect(getRes.id).toBe(testDocId);
+    });
+
+    it('finalizeReturnReceipt: rejects zero-scan session when failure evidence is missing, UNREADY or foreign (EVIDENCE_NOT_READY)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                deliveryTasksViaOrderId: [
+                  { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: DeliveryTaskStatus.COLLECTING },
+                ],
+              }),
+            },
+            rentalReturnSession: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.OPEN,
+                receivedUnits: [], // zero units
+                version: 1,
+              }),
+            },
+            mediaAsset: {
+              findMany: jest.fn().mockResolvedValue([]), // No matching ready evidence owned by actor
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          failureEvidenceId: 'unready-foreign-media-id',
+          idempotencyKey: 'idemp-unready-evidence',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.EVIDENCE_NOT_READY }));
+    });
+
+    it('finalizeReturnReceipt: rejects ReturnTask in SCHEDULED or PACKAGE_RECEIVED non-collecting state (INVALID_RETURN_STATE)', async () => {
+      for (const invalidStatus of [DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.PACKAGE_RECEIVED]) {
+        const mockPrisma: any = {
+          $transaction: jest.fn((cb: any) =>
+            cb({
+              user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+              $queryRaw: jest.fn().mockResolvedValue([]),
+              idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
+              rentalOrder: {
+                findUnique: jest.fn().mockResolvedValue({
+                  id: testOrderId,
+                  version: 1,
+                  deliveryTasksViaOrderId: [
+                    { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: invalidStatus },
+                  ],
+                }),
+              },
+            }),
+          ),
+        };
+
+        const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+        await expect(
+          adapter.finalizeReturnReceipt({
+            orderId: testOrderId,
+            returnSessionId: testSessionId,
+            expectedVersion: 1,
+            idempotencyKey: `idemp-task-${invalidStatus}`,
+            actorUserId: testStaffDel,
+            now: new Date(),
+          }),
+        ).rejects.toThrow(expect.objectContaining({ code: RR.INVALID_RETURN_STATE }));
+      }
+    });
+
+    it('finalizeReturnReceipt: ensures delivery staff remarks are NOT misattributed to userRemarks in snapshot', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            user: { findUnique: jest.fn().mockResolvedValue({ id: testStaffDel, status: 'ACTIVE', role: UserRole.STAFF_DELIVERY }) },
+            $queryRaw: jest.fn().mockResolvedValue([]),
+            idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
+            rentalOrder: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: testOrderId,
+                version: 1,
+                policySnapshot: { policyVersion: '1.5.2' },
+                rentalOrderLinesViaOrderId: [],
+                deliveryTasksViaOrderId: [
+                  { id: 'task-active', taskType: DeliveryTaskType.RETURN, staffId: testStaffDel, status: DeliveryTaskStatus.COLLECTING },
+                ],
+              }),
+            },
+            rentalReturnSession: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.OPEN,
+                receivedUnits: [{ unitId: 'unit-1', duplicate: false }],
+                version: 1,
+              }),
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+              findUnique: jest.fn().mockResolvedValue({
+                id: testSessionId,
+                orderId: testOrderId,
+                staffId: testStaffDel,
+                status: RentalReturnSessionStatus.FINALIZED,
+                finalizedAt: new Date('2026-10-18T10:00:00Z'),
+                receivedUnits: [{ unitId: 'unit-1', duplicate: false }],
+                remarks: 'Staff notes only',
+              }),
+            },
+            rentalDocument: {
+              findFirst: jest.fn().mockResolvedValue({ id: 'root-handover-doc', orderId: testOrderId, documentType: RentalDocumentType.HANDOVER }),
+              findUnique: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockImplementation(({ data }: any) => {
+                return Promise.resolve({
+                  id: 'doc-remarks-check',
+                  ...data,
+                  documentType: RentalDocumentType.RETURN_RECEIPT,
+                  documentNumber: data.documentNumber,
+                  snapshotHash: data.snapshotHash,
+                  snapshotJson: data.snapshotJson,
+                  renderStatus: RentalDocumentRenderStatus.READY,
+                  pdfStorageKey: 'key/pdf',
+                });
+              }),
+            },
+            auditLog: { create: jest.fn().mockResolvedValue({}) },
+            rentalOutboxEvent: { upsert: jest.fn().mockResolvedValue({}) },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      const res = await adapter.finalizeReturnReceipt({
+        orderId: testOrderId,
+        returnSessionId: testSessionId,
+        expectedVersion: 1,
+        remarks: 'Staff notes only', // Only staff remarks provided
+        idempotencyKey: 'idemp-staff-remarks-clean',
+        actorUserId: testStaffDel,
+        now: new Date('2026-10-18T10:00:00Z'),
+      });
+
+      expect((res.immutableSnapshot as any)?.remarks).toBe('Staff notes only');
+      expect((res.immutableSnapshot as any)?.userRemarks).toBeNull(); // Must NOT be copied
+    });
+
+    it('finalizeReturnReceipt: rejects reusing same idempotencyKey with different evidenceIds array (IDEMPOTENCY_KEY_REUSED)', async () => {
+      const mockPrisma: any = {
+        $transaction: jest.fn((cb: any) =>
+          cb({
+            idempotencyRecord: {
+              findUnique: jest.fn().mockResolvedValue({
+                scope: 'RB-API-1004:finalize-return-receipt',
+                userId: testStaffDel,
+                idempotencyKey: 'reused-key-evidence-array',
+                requestHash: 'hash-with-different-evidence-array',
+              }),
+            },
+          }),
+        ),
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      await expect(
+        adapter.finalizeReturnReceipt({
+          orderId: testOrderId,
+          returnSessionId: testSessionId,
+          expectedVersion: 1,
+          failureEvidenceId: 'media-fail-1',
+          evidenceIds: ['media-fail-1', 'media-fail-extra'],
+          idempotencyKey: 'reused-key-evidence-array',
+          actorUserId: testStaffDel,
+          now: new Date(),
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: RR.IDEMPOTENCY_KEY_REUSED }));
+    });
+
+    it('recordDocumentAccessLog: logs warning and creates fallback outbox event when access log DB write fails', async () => {
+      let createdOutbox: any;
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testOrderId,
+            userId: testUserA,
+            deliveryTasksViaOrderId: [],
+            inventoryTaskViaOrderId: null,
+            rentalReturnSessionsViaOrderId: [],
+            custodyTransfersViaOrderId: [],
+          }),
+        },
+        rentalDocument: {
+          count: jest.fn().mockResolvedValue(1),
+          findMany: jest.fn().mockResolvedValue([{
+            id: testDocId,
+            documentType: RentalDocumentType.RETURN_RECEIPT,
+            documentNumber: 'DOC-123',
+            sourceRef: testSessionId,
+            renderStatus: RentalDocumentRenderStatus.READY,
+            pdfStorageKey: 'key/pdf',
+            orderId: testOrderId,
+            issuedAt: new Date(),
+          }]),
+        },
+        rentalDocumentAccessLog: {
+          createMany: jest.fn().mockRejectedValue(new Error('DB connection reset')),
+        },
+        rentalOutboxEvent: {
+          create: jest.fn().mockImplementation(({ data }: any) => {
+            createdOutbox = data;
+            return Promise.resolve(createdOutbox);
+          }),
+        },
+      };
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma);
+      const res = await adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: testUserA, actorRole: UserRole.USER });
+
+      expect(res.items).toHaveLength(1);
+      expect(createdOutbox).toBeDefined();
+      expect(createdOutbox.eventType).toBe('RENTAL_DOCUMENT_ACCESS_AUDIT_FALLBACK');
+      expect(createdOutbox.aggregateId).toBe(testDocId);
+      expect(createdOutbox.payload.failureReason).toContain('DB connection reset');
+    });
+  });
 });
+

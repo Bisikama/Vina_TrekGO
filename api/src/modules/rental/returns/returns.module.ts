@@ -21,16 +21,28 @@ import { GetReturnUseCase } from './application/use-cases/get-return.use-case';
 import { GetRentalExceptionUseCase } from './application/use-cases/get-rental-exception.use-case';
 import { GetRentalAssessmentUseCase } from './application/use-cases/get-rental-assessment.use-case';
 import { ProcessRentalRefundEventUseCase } from './application/use-cases/process-rental-refund-event.use-case';
+import { FinalizeReturnReceiptUseCase } from './application/use-cases/finalize-return-receipt.use-case';
+import { ListRentalDocumentsUseCase } from './application/use-cases/list-rental-documents.use-case';
+import { GetRentalDocumentUseCase } from './application/use-cases/get-rental-document.use-case';
 import { PrismaRentalReturnAdapter } from './infrastructure/adapters/prisma-rental-return.adapter';
 import { RentalReturnController } from './presentation/controllers/rental-return.controller';
 import { DeliveryReturnController } from './presentation/controllers/delivery-return.controller';
 import { StaffReturnController } from './presentation/controllers/staff-return.controller';
 import { RentalExceptionController } from './presentation/controllers/rental-exception.controller';
 import { RentalReturnAdminController } from './presentation/controllers/rental-return-admin.controller';
+import { RentalDocumentController } from './presentation/controllers/rental-document.controller';
 
 @Module({
   imports: [SharedModule],
-  controllers: [RentalReturnController, DeliveryReturnController, StaffReturnController, RentalExceptionController, RentalReturnAdminController, InternalRentalEvidenceAccessController],
+  controllers: [
+    RentalReturnController,
+    DeliveryReturnController,
+    StaffReturnController,
+    RentalExceptionController,
+    RentalReturnAdminController,
+    InternalRentalEvidenceAccessController,
+    RentalDocumentController,
+  ],
   providers: [
     RentalOperationalEscalationScheduler,
     RentalEvidenceAccessService,
@@ -51,8 +63,11 @@ import { RentalReturnAdminController } from './presentation/controllers/rental-r
     GetRentalExceptionUseCase,
     GetRentalAssessmentUseCase,
     ProcessRentalRefundEventUseCase,
+    FinalizeReturnReceiptUseCase,
+    ListRentalDocumentsUseCase,
+    GetRentalDocumentUseCase,
     { provide: RENTAL_RETURN_PORT, useClass: PrismaRentalReturnAdapter },
   ],
-  exports: [ProcessRentalRefundEventUseCase],
+  exports: [ProcessRentalRefundEventUseCase, FinalizeReturnReceiptUseCase],
 })
 export class RentalReturnsModule {}

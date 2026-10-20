@@ -144,6 +144,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       getByTripId: jest.fn().mockResolvedValue({
         trip: { endAt: new Date('2026-10-26T18:00:00Z') },
         membershipRef: 'mem-1',
+        membershipStatus: 'ACTIVE',
         pickup: { scheduledAt: new Date('2026-10-20T08:00:00Z'), id: 'pu-1' },
         dropoff: { scheduledAt: new Date('2026-10-24T18:00:00Z'), id: 'do-1' },
         activePolicy: { maxRentalAfterTripHours: 48 },
@@ -816,6 +817,38 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         },
       ],
     };
+
+    it('Lịch thuê đổi sau khi khách trả phí gia hạn: từ chối áp dụng và yêu cầu hoàn kỹ thuật', async () => {
+      const paidAt = new Date('2026-10-24T10:00:00Z');
+      const ext = {
+        id: 'ext-rescheduled', orderId: mixedOrder.id, status: RentalExtensionStatus.PENDING_PAYMENT,
+        invoiceId: 'inv-rescheduled', paymentRef: 'pay-rescheduled',
+        currency: 'VND', additionalFee: new Prisma.Decimal('200000.00'),
+        holdExpiresAt: new Date('2026-10-24T10:15:00Z'),
+        previousRentalEndAt: mixedOrder.rentalEndAt,
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        acceptedAt: paidAt, acceptedByUserId: 'user-1', termsHash: 'a'.repeat(64),
+        lines: [],
+      };
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
+      mockTx.rentalOrder.findUnique.mockResolvedValue({
+        ...mixedOrder, rentalEndAt: new Date('2026-10-25T18:00:00Z'),
+      });
+
+      const result = await consumeExtensionPaymentWithTx(mockTx, ext.id, {
+        id: ext.paymentRef, invoiceId: ext.invoiceId, amount: ext.additionalFee,
+        currency: ext.currency, transactionRef: 'provider-1', paidAt,
+      }, 'SUCCEEDED', 'provider-1', paidAt);
+
+      expect(result).toEqual({ applied: false, reasonCode: 'EXTENSION_NOT_APPLICABLE' });
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      expect(mockTx.paymentOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({
+          eventType: 'TECHNICAL_REVERSAL_REQUESTED',
+          payload: expect.objectContaining({ reasonCode: 'EXTENSION_NOT_APPLICABLE' }),
+        }),
+      }));
+    });
 
     it('Scenario 1: Mixed cart normal 24h + deep 48h extended by 1h produces valid per-line contiguous delta windows with occupiedFrom < occupiedUntil', async () => {
       const requestedReturnAt = new Date('2026-10-24T19:00:00Z');

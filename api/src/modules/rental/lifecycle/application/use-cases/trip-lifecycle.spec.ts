@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import {
   Prisma,
   RentalOrderStatus,
@@ -214,6 +214,10 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
           update: jest.fn().mockResolvedValue({}),
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
+        rentalExtensionRequest: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+        bookingCancellation: { findFirst: jest.fn().mockResolvedValue(null) },
+        invoice: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        payment: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
         rentalUnitAssignment: {
           update: jest.fn().mockResolvedValue({}),
         },
@@ -274,6 +278,86 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       cleaningBufferMinutes: 1440,
       deepInspectionBufferMinutes: 2880,
     };
+
+    function mockVerifiedRentalPayment(orderId: string) {
+      const amount = new Prisma.Decimal(150);
+      mockTx.payment.findMany.mockResolvedValue([{ id: 'paid-payment-1', amount }]);
+      mockTx.payment.count = jest.fn().mockResolvedValue(1);
+      mockTx.payment.findUniqueOrThrow = jest.fn().mockResolvedValue({
+        id: 'paid-payment-1', amount, status: 'SUCCEEDED', currency: 'VND',
+        invoice: { rentalOrderId: orderId, invoiceType: 'RENTAL' },
+        application: { status: 'APPLIED' }, reconcileStatus: 'RESOLVED',
+        paymentGateway: 'momo', providerEnvironment: 'MOCK',
+        merchantAccountKey: 'merchant-1', merchantRequestRef: 'request-1',
+        allocations: [
+          { id: 'deposit-1', component: 'RENTAL_DEPOSIT', amount: new Prisma.Decimal(50) },
+          { id: 'fee-1', component: 'RENTAL_FEE', amount: new Prisma.Decimal(100) },
+        ],
+      });
+      mockTx.refund = {
+        findUnique: jest.fn().mockResolvedValue(null),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+        create: jest.fn().mockImplementation(async ({ data }: any) => ({ ...data, status: 'PENDING' })),
+      };
+      mockTx.refundAllocation = { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) };
+    }
+
+    it('Trip hủy trước bàn giao đặt hoàn toàn bộ và hủy khoản thanh toán chờ', async () => {
+      const order = {
+        id: 'paid-trip-order', tripId: 'trip-1', bookingId: null,
+        status: RentalOrderStatus.PAID, financialStatus: 'PAID', version: 1,
+        contextVersionSnapshot: 1,
+        rentalFee: new Prisma.Decimal(100), totalDeposit: new Prisma.Decimal(50),
+        rentalStartAt: new Date('2026-11-01T08:00:00Z'), rentalPolicy: { freeCancellationHours: 24 },
+        rentalOrderLinesViaOrderId: [], inventoryTaskViaOrderId: null, deliveryTasksViaOrderId: [],
+      };
+      mockVerifiedRentalPayment(order.id);
+      mockTx.rentalOrder.findMany.mockResolvedValue([order]);
+      mockTx.invoice.findMany.mockResolvedValue([{ id: 'pending-invoice-1' }]);
+      const effectiveAt = new Date('2026-10-30T08:00:00Z');
+      await adapter.processTripCancelled({
+        eventId: 'trip-financial-event', eventType: 'TRIP_CANCELLED', entityId: 'trip-1',
+        entityVersion: 2, correlationId: 'trip-financial', occurredAt: effectiveAt,
+        payload: { tripId: 'trip-1', reason: 'Operator cancelled', effectiveAt, tripVersion: 2 },
+      });
+      expect(mockTx.refund.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ amount: new Prisma.Decimal(150) }),
+      }));
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ financialStatus: 'REFUND_PENDING' }),
+      }));
+      expect(mockTx.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ status: { in: ['PENDING', 'PROCESSING'] } }),
+      }));
+    });
+
+    it('Booking USER hủy sau hạn: chỉ hoàn cọc cho Rental đã thanh toán', async () => {
+      const order = {
+        id: 'paid-booking-order', tripId: 'trip-1', bookingId: 'booking-1',
+        status: RentalOrderStatus.PAID, financialStatus: 'PAID', version: 1,
+        contextVersionSnapshot: 1,
+        rentalFee: new Prisma.Decimal(100), totalDeposit: new Prisma.Decimal(50),
+        rentalStartAt: new Date('2026-11-01T08:00:00Z'), rentalPolicy: { freeCancellationHours: 24 },
+        rentalOrderLinesViaOrderId: [], inventoryTaskViaOrderId: null, deliveryTasksViaOrderId: [],
+      };
+      mockVerifiedRentalPayment(order.id);
+      mockTx.bookingCancellation.findFirst.mockResolvedValue({
+        source: 'USER', cancelledAt: new Date('2026-10-31T08:00:01Z'),
+      });
+      mockTx.rentalOrder.findMany.mockResolvedValue([order]);
+      const effectiveAt = new Date('2026-10-31T08:00:01Z');
+      await adapter.processBookingCancelled({
+        eventId: 'booking-financial-event', eventType: 'BOOKING_CANCELLED', entityId: 'booking-1',
+        entityVersion: 2, correlationId: 'booking-financial', occurredAt: effectiveAt,
+        payload: { bookingId: 'booking-1', reason: 'User cancelled', effectiveAt, version: 2 },
+      });
+      expect(mockTx.refund.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ amount: new Prisma.Decimal(50) }),
+      }));
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ financialStatus: 'REFUND_PENDING' }),
+      }));
+    });
 
     it('IDEMPOTENCY: returns existing result on duplicate eventId', async () => {
       const cachedResult = {
@@ -799,8 +883,24 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         },
       };
 
+      // Mô phỏng điều kiện version của Prisma: lần update thứ hai với version cũ sẽ lỗi.
+      let persistedVersion = order.version;
+      mockTx.rentalOrder.update.mockImplementation(async ({ where, data }: any) => {
+        if (where.version !== persistedVersion) throw new Error('P2025');
+        persistedVersion += data.version.increment;
+        return { ...order, version: persistedVersion };
+      });
       const result = await adapter.processTripCancelled(cmd);
       expect(result.cancelledOrderIds).toContain('order-warehouse-cancel');
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledTimes(1);
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: order.id, version: order.version },
+        data: expect.objectContaining({
+          cancelledAt: cmd.payload.effectiveAt,
+          contextVersionSnapshot: cmd.payload.tripVersion,
+          version: { increment: 1 },
+        }),
+      }));
 
       // Units at warehouse can safely be set to AVAILABLE
       expect(mockTx.equipmentUnit.update).toHaveBeenCalledWith(

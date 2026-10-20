@@ -269,7 +269,11 @@ export class PaymentWebhooksService {
         return
       }
       let ignoredReason: string | null = null
-      if (!['PENDING', 'PROCESSING'].includes(payment.status)) {
+      // Rental có thể bị hủy sau khi mở phiên cổng. Nếu cổng vẫn xác nhận thu tiền,
+      // ghi nhận SUCCEEDED để consumer từ chối áp dụng đơn và phát hoàn kỹ thuật.
+      const rentalLateSuccess = payment.invoice.invoiceType === 'RENTAL' &&
+        payment.status === 'CANCELLED' && event.status === 'SUCCEEDED'
+      if (!['PENDING', 'PROCESSING'].includes(payment.status) && !rentalLateSuccess) {
         if (payment.status !== event.status && event.status === 'SUCCEEDED') {
           await review('PAYMENT_TERMINAL_CORRECTION')
           return
