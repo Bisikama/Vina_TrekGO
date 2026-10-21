@@ -36,7 +36,7 @@ export function PrivateTrips() {
   }, [destination]);
   useEffect(() => {
     let cancelled = false;
-    if (!trip?.id) { setMembers([]); return; }
+    if (!trip?.id) return;
     privateTripMembershipApi.getMembers(trip.id, { status: 'ACTIVE', pageSize: 50 })
       .then(res => { if (!cancelled) setMembers(res.items || []); })
       .catch(() => { if (!cancelled) setMembers([]); });
@@ -51,7 +51,7 @@ export function PrivateTrips() {
       <button className={button} disabled={busy} onClick={() => void run(async () => { const t = await api.list(); setTrips(t); if (trip) setTrip(t.find(x => x.id === trip.id) ?? null); })}>Tải lại dữ liệu</button>
       <div className="grid gap-6 md:grid-cols-[240px_1fr]"><aside className="space-y-2">{trips.map(t => <button className={`${button} block w-full text-left`} disabled={busy} key={t.id} onClick={() => { setTrip(t); setDestination(t.destinationId); setPickups([]); setInvite(null); }}>{t.title} · {t.status}</button>)}</aside><section className="space-y-5">
         {trip && <p>{trip.status} · phiên bản {trip.version}</p>}
-        {!trip && <><label>Trail nguồn<select className={inputClass} value={sourceKey} disabled={busy} onChange={e => { const s = sources.find(x => `${x.type}:${s.id}` === e.target.value); setSourceKey(e.target.value); setDestination(s?.destinationId || ''); setPickups([]); setSelected([]); }}><option value="">Chọn trail</option>{sources.map(s => <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.name} ({s.type})</option>)}</select></label>
+        {!trip && <><label>Trail nguồn<select className={inputClass} value={sourceKey} disabled={busy} onChange={e => { const s = sources.find(x => `${x.type}:${x.id}` === e.target.value); setSourceKey(e.target.value); setDestination(s?.destinationId || ''); setPickups([]); setSelected([]); }}><option value="">Chọn trail</option>{sources.map(s => <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.name} ({s.type})</option>)}</select></label>
           {source && !source.destinationId && <label>ID điểm đến của trail chưa gắn địa điểm<input className={inputClass} value={destination} onChange={e => { setDestination(e.target.value); setPickups([]); }} placeholder="UUID điểm đến" /></label>}
           <fieldset disabled={busy}><legend>Checkpoint (Tất cả theo thứ tự trail)</legend>{source?.points.map(p => <div key={p.id} className="block">{p.sequence}. {p.name}</div>)}</fieldset></>}
         <form key={trip ? `${trip.id}:${trip.version}` : sourceKey} onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); void run(async () => {
