@@ -3,6 +3,7 @@ import { seedCategories } from './seeds/category.seed'
 import { seedInventoryLocations } from './seeds/inventory-location.seed'
 import { seedRentalProducts } from './seeds/rental-product.seed'
 import { seedEquipmentUnits } from './seeds/equipment-unit.seed'
+import { seedDamageAssessmentRules } from './seeds/damage-assessment-rule.seed'
 import { seedRentalPolicy } from './seeds/rental-policy.seed'
 import { seedBookingPolicies } from './seeds/booking-policy.seed'
 
@@ -15,6 +16,7 @@ async function main() {
   await seedInventoryLocations(prisma)
   await seedRentalProducts(prisma)
   await seedEquipmentUnits(prisma)
+  await seedDamageAssessmentRules(prisma)
   await seedRentalPolicy(prisma)
   await seedBookingPolicies(prisma)
 

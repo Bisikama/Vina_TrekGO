@@ -104,7 +104,8 @@ export class RentalPaymentsController {
 - Sau khi tạo thành công, trả về URL/mã QR để user hoàn tất thanh toán.
 - Webhook sẽ tự động cập nhật trạng thái đơn khi thanh toán thành công.
 
-**Cách test trên Swagger:** Authorize bằng Bearer token → lấy gateway từ GET /api/v1/payments/options → nhập RentalOrder UUID → nhập một Idempotency-Key mới → Execute. Nếu request timeout, retry đúng cùng key và body. Sau thanh toán, kiểm tra GET /api/v1/rental-orders/{id}/payment.
+**Cách test trên Swagger:** Authorize bằng Bearer token → nhập RentalOrder UUID → nhập một Idempotency-Key mới → Execute. Nếu request timeout, retry đúng cùng key và body. Sau thanh toán, kiểm tra GET /api/v1/rental-orders/{id}/payment.
+- **LƯU Ý QUAN TRỌNG VỀ GATEWAY:** Khi môi trường đang chạy \`PAYMENT_PROVIDER=mock\`, trường \`gateway\` trong request body **BẮT BUỘC ĐỂ TRỐNG** (hoặc không truyền). Nếu cố tình điền "momo" hoặc "vnpay" khi chưa cấu hình sandbox keys tương ứng, API sẽ trả về lỗi HTTP 503 \`PAYMENT_PROVIDER_UNAVAILABLE\`. Chỉ điền gateway khi đã cấu hình đầy đủ keys cho cổng đó.
 `,
   })
   @ApiParam({
@@ -130,8 +131,8 @@ export class RentalPaymentsController {
         gateway: {
           type: 'string',
           enum: ['momo', 'vnpay'],
-          description: 'Bỏ trống để dùng cổng mặc định từ GET /api/v1/payments/options',
-          example: 'vnpay',
+          description:
+            'Cổng thanh toán. QUAN TRỌNG: Bắt buộc bỏ trống khi môi trường chạy PAYMENT_PROVIDER=mock. Chỉ điền "momo" hoặc "vnpay" khi backend đã cấu hình thông tin kết nối sandbox tương ứng.',
         },
         paymentMethod: {
           type: 'string',

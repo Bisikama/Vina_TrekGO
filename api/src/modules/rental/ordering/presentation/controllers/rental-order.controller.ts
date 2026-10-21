@@ -139,8 +139,8 @@ export class RentalOrderController {
     name: 'status',
     required: false,
     type: String,
-    description: 'Lọc theo trạng thái đơn (PENDING_PAYMENT, PAID, PREPARING, RENTING, RETURNED, CANCELLED)',
-    example: 'PAID',
+    description: 'Lọc theo trạng thái vòng đời đơn thuê (RentalOrderStatus): PENDING_PAYMENT, PAID, PREPARING, READY_FOR_HANDOVER, ACTIVE, RETURN_PENDING, RETURN_PROCESSING, COMPLETED, CANCELLED, EXPIRED. Lưu ý: Trạng thái tài chính (financialStatus) gồm UNPAID, AUTHORIZED, PARTIALLY_PAID, PAID, REFUND_PENDING, REFUNDED, SETTLED là trục quản lý riêng biệt.',
+    example: 'ACTIVE',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang (mặc định: 1)', example: 1 })
   @ApiQuery({

@@ -1,5 +1,17 @@
 import { DeliveryTaskStatus, DeliveryTaskType, Prisma, RentalOrderStatus } from '@prisma/client';
 
+/** The dispatch appointment is distinct from the contractual overdue clock. */
+export function returnTaskScheduleAt(snapshot: unknown, effectiveDue: Date): Date {
+  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    const slotAt = (snapshot as Record<string, unknown>).slotAt;
+    if (typeof slotAt === 'string') {
+      const parsed = new Date(slotAt);
+      if (Number.isFinite(parsed.getTime())) return parsed;
+    }
+  }
+  return effectiveDue;
+}
+
 /**
  * Baseline 1.3.2: mở task thu hồi khi đến hạn hoặc có sự kiện kết thúc sớm.
  * Caller khóa rental_orders trước khi gọi; unique(orderId, taskType) chặn tạo trùng.

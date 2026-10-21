@@ -6,7 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy';
-import { ensureReturnTaskWithTx } from './rental-return-task';
+import { ensureReturnTaskWithTx, returnTaskScheduleAt } from './rental-return-task';
 
 export interface OverdueEvaluationResult {
   isOverdue: boolean;
@@ -39,13 +39,23 @@ function jsonValue<T>(value: T): Prisma.InputJsonValue {
 @Injectable()
 export class RentalOverdueService {
   private readonly logger = new Logger(RentalOverdueService.name);
+  private returnTaskCursor: string | undefined;
+  private readonly returnTaskFailures = new Map<string, { attempts: number; retryAt: number }>();
+  private overdueCandidateCursor: string | undefined;
+  private overdueMilestoneCursor: string | undefined;
 
   constructor(private readonly prisma: PrismaService) {}
 
   /** Job fallback: event đến muộn vẫn tạo được đúng một ReturnTask khi hết quyền thuê. */
   async openDueReturnTasks(now = new Date()): Promise<number> {
+    let opened = 0;
+    let failures = 0;
+    // Keyset paging prevents a failing first order from starving every later order.
+    // The cursor rotates across scheduler ticks; each tick has a bounded workload.
+    for (let page = 0; page < 10; page++) {
     const candidates = await this.prisma.rentalOrder.findMany({
       where: {
+        ...(this.returnTaskCursor ? { id: { gt: this.returnTaskCursor } } : {}),
         status: RentalOrderStatus.ACTIVE,
         rentalEndAt: { lte: now },
         OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lte: now } }],
@@ -55,21 +65,48 @@ export class RentalOverdueService {
       },
       select: { id: true }, orderBy: { id: 'asc' }, take: 100,
     });
-    let opened = 0;
+    if (!candidates.length) {
+      this.returnTaskCursor = undefined;
+      break;
+    }
     for (const candidate of candidates) {
+      this.returnTaskCursor = candidate.id;
+      const previousFailure = this.returnTaskFailures.get(candidate.id);
+      if (previousFailure && previousFailure.retryAt > now.getTime()) continue;
+      try {
       const taskId = await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${candidate.id}::uuid FOR UPDATE`;
         const current = await tx.rentalOrder.findUnique({
           where: { id: candidate.id },
-          select: { status: true, rentalEndAt: true, operationalReturnDueAt: true },
+          select: { status: true, rentalEndAt: true, operationalReturnDueAt: true, returnOptionSnapshot: true },
         });
         if (!current || current.status !== RentalOrderStatus.ACTIVE ||
             effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt) > now) return null;
+        const due = effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt);
         return ensureReturnTaskWithTx(tx, candidate.id,
-          effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt), 'DUE');
+          returnTaskScheduleAt(current.returnOptionSnapshot, due), 'DUE');
       });
       if (taskId) opened += 1;
+      this.returnTaskFailures.delete(candidate.id);
+      } catch (error) {
+        failures += 1;
+        const reason = error instanceof Error ? error.message.slice(0, 120) : 'UNKNOWN_ERROR';
+        const attempts = (previousFailure?.attempts ?? 0) + 1;
+        this.returnTaskFailures.set(candidate.id, { attempts,
+          retryAt: now.getTime() + Math.min(3_600_000, 30_000 * 2 ** Math.min(attempts - 1, 7)) });
+        this.logger.error(`ReturnTask creation failed for order ${candidate.id}, attempt ${attempts}: ${reason}`);
+        try {
+          await this.prisma.auditLog.create({ data: { action: 'RENTAL_RETURN_TASK_OPEN_FAILED',
+            entityType: 'RentalOrder', entityId: candidate.id,
+            newValues: { attempts, reason, retryAt: new Date(this.returnTaskFailures.get(candidate.id)!.retryAt).toISOString() } } });
+        } catch (auditError) {
+          this.logger.error(`ReturnTask failure audit unavailable for ${candidate.id}: ${auditError instanceof Error ? auditError.message : String(auditError)}`);
+        }
+      }
     }
+    if (candidates.length < 100) { this.returnTaskCursor = undefined; break; }
+    }
+    if (failures) this.logger.error(`${failures} ReturnTask candidate(s) failed this tick; they remain eligible for retry.`);
     return opened;
   }
 
@@ -105,10 +142,16 @@ export class RentalOverdueService {
    * exceptionStatus to OVERDUE with transactional concurrency safety and idempotent outbox emission.
    */
   async scanAndMarkOverdue(now = new Date()): Promise<OverdueScanResult> {
+    const overdueOrderIds: string[] = [];
+    let scannedCount = 0;
+    for (let page = 0; page < 10; page++) {
     const activeOrders = await this.prisma.rentalOrder.findMany({
       where: {
+        ...(this.overdueCandidateCursor ? { id: { gt: this.overdueCandidateCursor } } : {}),
         status: RentalOrderStatus.ACTIVE,
         exceptionStatus: RentalOrderExceptionStatus.NONE,
+        rentalEndAt: { lt: now },
+        OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lt: now } }],
       },
       select: {
         id: true,
@@ -119,18 +162,20 @@ export class RentalOverdueService {
         operationalReturnDueAt: true,
         version: true,
       },
+      orderBy: { id: 'asc' }, take: 100,
     });
-
-    const overdueOrderIds: string[] = [];
+    if (!activeOrders.length) { this.overdueCandidateCursor = undefined; break; }
+    scannedCount += activeOrders.length;
 
     for (const order of activeOrders) {
+      this.overdueCandidateCursor = order.id;
       const effectiveOperationalDueAt = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt);
 
       if (now <= effectiveOperationalDueAt) {
         continue;
       }
 
-      await this.prisma.$transaction(
+      try { const transitioned = await this.prisma.$transaction(
         async (tx) => {
           // Lock order row to prevent concurrent race conditions
           await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${order.id}::uuid FOR UPDATE`;
@@ -155,12 +200,12 @@ export class RentalOverdueService {
             current.status !== RentalOrderStatus.ACTIVE ||
             current.exceptionStatus !== RentalOrderExceptionStatus.NONE
           ) {
-            return;
+            return false;
           }
 
           const currentEffectiveDue = effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt);
           if (now <= currentEffectiveDue) {
-            return;
+            return false;
           }
 
           // 1. Transition exceptionStatus to OVERDUE
@@ -199,10 +244,16 @@ export class RentalOverdueService {
             },
           });
 
-          overdueOrderIds.push(current.id);
+          return true;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
+      if (transitioned) overdueOrderIds.push(order.id);
+      } catch (error) {
+        this.logger.error(`Overdue transition failed for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (activeOrders.length < 100) { this.overdueCandidateCursor = undefined; break; }
     }
 
     if (overdueOrderIds.length > 0) {
@@ -210,10 +261,13 @@ export class RentalOverdueService {
     }
 
     // 3. Follow-up milestone scan for orders already marked OVERDUE (+2h customer contact, >=48h admin review)
+    for (let page = 0; page < 10; page++) {
     const existingOverdueOrders = await this.prisma.rentalOrder.findMany({
       where: {
+        ...(this.overdueMilestoneCursor ? { id: { gt: this.overdueMilestoneCursor } } : {}),
         status: RentalOrderStatus.ACTIVE,
         exceptionStatus: RentalOrderExceptionStatus.OVERDUE,
+        rentalEndAt: { lt: now },
       },
       select: {
         id: true,
@@ -223,11 +277,16 @@ export class RentalOverdueService {
         rentalEndAt: true,
         operationalReturnDueAt: true,
       },
+      orderBy: { id: 'asc' }, take: 100,
     });
+    if (!existingOverdueOrders.length) { this.overdueMilestoneCursor = undefined; break; }
+    scannedCount += existingOverdueOrders.length;
 
     for (const order of existingOverdueOrders) {
+      this.overdueMilestoneCursor = order.id;
       const evaluation = this.evaluateOverdueThresholds(order, now);
 
+      try {
       if (evaluation.missingReviewRequired) {
         // SOT: At +2h mark without return receipt, trigger operational contact required
         await this.prisma.rentalOutboxEvent.upsert({
@@ -275,10 +334,15 @@ export class RentalOverdueService {
           },
         });
       }
+      } catch (error) {
+        this.logger.error(`Overdue milestone failed for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (existingOverdueOrders.length < 100) { this.overdueMilestoneCursor = undefined; break; }
     }
 
     return {
-      scannedCount: activeOrders.length + existingOverdueOrders.length,
+      scannedCount,
       overdueOrderIds,
     };
   }

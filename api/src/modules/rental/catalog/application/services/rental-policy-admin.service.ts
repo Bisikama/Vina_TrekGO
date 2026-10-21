@@ -43,7 +43,29 @@ export class RentalPolicyAdminService {
       where: currentWindow(now), orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }], take: 2,
     });
     if (rows.length !== 1) throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED);
-    return view(rows[0]);
+    const policyView = view(rows[0]);
+    const rules = (this.prisma as any).damageAssessmentRule
+      ? await this.prisma.damageAssessmentRule.findMany({
+          where: {
+            isActive: true,
+            effectiveFrom: { lte: now },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+          },
+          orderBy: [{ productId: 'asc' }, { ruleCode: 'asc' }],
+        })
+      : [];
+    return {
+      ...policyView,
+      damageRules: rules.map((r: any) => ({
+        id: r.id,
+        ruleCode: r.ruleCode,
+        productId: r.productId,
+        severity: r.severity,
+        formulaType: r.deductionType,
+        value: Number(r.deductionValue),
+        description: r.description ?? null,
+      })),
+    };
   }
 
   async publish(input: PublishRentalPolicyDto, adminId: string, requestId?: string) {

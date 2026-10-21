@@ -650,6 +650,26 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
   });
 
   describe('5. P1-04: SOT Overdue Lifecycle & Milestone Follow-up Scans', () => {
+    it('pages more than 1000 overdue orders and continues after one milestone failure', async () => {
+      const dueAt = new Date('2026-10-24T18:00:00Z');
+      const now = new Date('2026-10-24T21:00:00Z');
+      const orders = Array.from({ length: 1001 }, (_, index) => ({
+        id: `order-${String(index).padStart(4, '0')}`,
+        userId: 'user', tripId: 'trip', rentalStartAt: new Date('2026-10-20T08:00:00Z'),
+        rentalEndAt: dueAt, operationalReturnDueAt: dueAt,
+      }));
+      mockPrisma.rentalOrder.findMany.mockImplementation(({ where, take }: any) =>
+        Promise.resolve(where.exceptionStatus === RentalOrderExceptionStatus.NONE ? [] :
+          orders.filter(order => !where.id?.gt || order.id > where.id.gt).slice(0, take)));
+      mockPrisma.rentalOutboxEvent.upsert.mockRejectedValueOnce(new Error('transient outbox failure'));
+
+      const first = await overdueService.scanAndMarkOverdue(now);
+      const second = await overdueService.scanAndMarkOverdue(now);
+      expect(first.scannedCount).toBe(1000);
+      expect(second.scannedCount).toBe(1);
+      expect(mockPrisma.rentalOutboxEvent.upsert).toHaveBeenCalledTimes(1001);
+    });
+
     it('Transitions ACTIVE order to OVERDUE when now > effectiveOperationalDueAt, preserving equipmentUnit and not deducting deposits', async () => {
       const orderOverdue = {
         id: 'order-overdue-1',

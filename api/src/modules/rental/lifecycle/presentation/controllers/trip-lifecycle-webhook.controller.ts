@@ -2,6 +2,7 @@ import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common'
 import { ApiBody, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger'
 import { AuthType } from 'src/shared/constants/auth.constant'
 import { Auth } from 'src/shared/decorators/auth.decorator'
+import envconfig from 'src/shared/config'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from 'src/shared/errors/codes/rental-lifecycle.error-codes'
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe'
@@ -25,7 +26,9 @@ import {
 } from '../rental-lifecycle-swagger.schemas'
 
 function verifyInternalApiKey(apiKey?: string) {
-  const configuredKey = process.env.RENTAL_INTEGRATION_API_KEY
+  const configuredKey =
+    process.env.RENTAL_INTEGRATION_API_KEY ??
+    (process.env.NODE_ENV === 'test' ? undefined : envconfig.RENTAL_INTEGRATION_API_KEY)
   if (!configuredKey || !apiKey || apiKey !== configuredKey) {
     throw AppError.fromCode(LC.API_KEY_INVALID, {
       message: 'Unauthorized internal API access: missing or invalid x-api-key',

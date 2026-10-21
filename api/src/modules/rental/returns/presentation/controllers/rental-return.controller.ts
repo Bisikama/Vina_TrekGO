@@ -353,11 +353,6 @@ export class RentalReturnController {
         returnSessionId: { type: 'string', format: 'uuid', description: 'UUID phiên nhận trả cần chốt' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại của phiên nhận trả' },
         remarks: { type: 'string', maxLength: 1000, description: 'Ghi chú của nhân viên giao hàng, tùy chọn' },
-        userRemarks: {
-          type: 'string',
-          maxLength: 1000,
-          description: 'Ý kiến khách hàng tại thời điểm nhận trả, tùy chọn',
-        },
         failureEvidenceId: {
           type: 'string',
           format: 'uuid',
@@ -392,7 +387,6 @@ export class RentalReturnController {
       orderId: params.id,
       returnSessionId: body.returnSessionId,
       remarks: body.remarks,
-      userRemarks: body.userRemarks,
       failureEvidenceId: body.failureEvidenceId,
       evidenceIds: body.evidenceIds,
       expectedVersion: body.expectedVersion,

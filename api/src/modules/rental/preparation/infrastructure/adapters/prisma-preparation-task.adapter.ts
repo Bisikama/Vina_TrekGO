@@ -356,6 +356,9 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
         if (evidence.length !== evidenceIds.length) {
           throw AppError.fromCode(WH.EVIDENCE_NOT_READY, { details: { requested: evidenceIds.length, valid: evidence.length } });
         }
+        if (evidenceIds.length > 0 && typeof tx.mediaAsset?.updateMany === 'function') {
+          await tx.mediaAsset.updateMany({ where: { id: { in: evidenceIds } }, data: { retentionUntil: null } });
+        }
 
         const snapshot = await tx.conditionSnapshot.create({
           data: {

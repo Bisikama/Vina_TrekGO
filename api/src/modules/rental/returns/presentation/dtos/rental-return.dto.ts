@@ -140,11 +140,10 @@ export const ListReturnsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export const FinalizeReturnReceiptBodySchema = z.object({
+export const FinalizeReturnReceiptBodySchema = z.strictObject({
   returnSessionId: UUID,
   expectedVersion: z.number().int().min(1),
   remarks: z.string().trim().max(1000).optional(),
-  userRemarks: z.string().trim().max(1000).optional(),
   failureEvidenceId: UUID.optional(),
   evidenceIds: z.array(UUID).optional(),
 });

@@ -10,6 +10,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes';
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
@@ -20,6 +21,11 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [RD.INTEGRITY_FAILED]: { status: 409, message: 'Document integrity verification failed', retryable: false },
+  [RD.CORRECTION_NOT_ALLOWED]: { status: 409, message: 'Document correction is not allowed', retryable: false },
+  [RD.RENDER_RETRY_EXHAUSTED]: { status: 409, message: 'Document render retry limit reached', retryable: false },
+  [RD.STORAGE_UNAVAILABLE]: { status: 503, message: 'Private document storage unavailable', retryable: true },
+  [RD.AUDIT_UNAVAILABLE]: { status: 503, message: 'Document access audit unavailable', retryable: true },
   [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
   [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
   [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },

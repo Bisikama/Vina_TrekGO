@@ -130,4 +130,5 @@ export interface MediaAssetPort {
   findEvidenceBySha256(input: FindEvidenceBySha256Input): Promise<MediaAssetView | null>;
   claimForProcessing(input: ClaimForProcessingInput): Promise<MediaAssetView>;
   revertProcessingToPending(input: RevertProcessingToPendingInput): Promise<MediaAssetView>;
+  clearRetentionUntil?(input: { id: string }): Promise<void>;
 }
