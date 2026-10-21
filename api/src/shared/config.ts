@@ -8,7 +8,7 @@ config({
 
 const envConfigSchema = z
   .object({
-    // 1. CORE SERVER, DATABASE & GENERAL SETTINGS
+    // CORE SERVER, DATABASE & GENERAL SETTINGS
     PORT: z.coerce.number().default(3000),
     NODE_ENV: z.string().default('development'),
     DATABASE_URL: z.string(),
@@ -16,11 +16,11 @@ const envConfigSchema = z
     WEB_APP_ORIGIN: z.string().url().optional(),
     TREKGO_TIMEZONE: z.string().default('Asia/Ho_Chi_Minh'),
 
-    // 2. LEADER VERIFICATION & CERTIFICATES
+    //  LEADER VERIFICATION & CERTIFICATES
     LEADER_MAX_CERTIFICATES: z.coerce.number().int().min(1).max(100).default(10),
     LEADER_DOCUMENT_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(300),
 
-    // 3. SUPABASE & AUTHENTICATION (JWT)
+    // SUPABASE & AUTHENTICATION (JWT)
     SUPABASE_URL: z.string(),
     SUPABASE_ANON_KEY: z.string(),
     SUPABASE_SERVICE_ROLE_KEY: z.string(),
@@ -30,7 +30,7 @@ const envConfigSchema = z
     REFRESH_TOKEN_SECRET: z.string().default(''),
     REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
 
-    // 4. MEDIA & CLOUDINARY CONFIGURATION
+    // MEDIA & CLOUDINARY CONFIGURATION
     // M0.1: Warn-only initialization if missing.
     // M0.2+: When Media is enabled, these must be strictly required (validated in superRefine)
     // to fail fast and prevent broken uploads. API secret MUST NEVER be exposed.
@@ -77,7 +77,7 @@ const envConfigSchema = z
     MEDIA_VIDEO_MAX_WIDTH: z.coerce.number().int().positive().default(7680),
     MEDIA_VIDEO_MAX_HEIGHT: z.coerce.number().int().positive().default(4320),
 
-    // 5. RENTAL (AREA B) CONFIGURATION & INTEGRATIONS
+    // RENTAL (AREA B) CONFIGURATION & INTEGRATIONS
     // ID kho chính duy nhất (UUID) cho toàn bộ nghiệp vụ Rental (RB-POL-33)
     RENTAL_PRIMARY_INVENTORY_LOCATION_ID: z.string().uuid().optional(),
     // Secret HMAC-SHA256 (>= 16 ký tự) dùng để băm và xác thực mã OTP nhận hàng (PickupCode)
@@ -93,8 +93,15 @@ const envConfigSchema = z
     RENTAL_PAYMENT_EVENTS_URL: z.string().url().optional(),
     RENTAL_NOTIFICATION_EVENTS_URL: z.string().url().optional(),
     RENTAL_AREA_A_EVENTS_URL: z.string().url().optional(),
+    // Cấu hình sinh & lưu trữ tài liệu PDF mảng Rental (Hợp đồng, Biên lai, Phiếu kiểm tra)
+    RENTAL_DOCUMENT_WORKER_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
+    RENTAL_DOCUMENT_BUCKET: z.string().default('rental-documents'),
+    RENTAL_PDF_FONT_PATH: z.string().optional(),
 
-    // 6. SHARED PAYMENTS, GATEWAYS (MOCK / VNPAY / MOMO) & WORKERS
+    // SHARED PAYMENTS, GATEWAYS (MOCK / VNPAY / MOMO) & WORKERS
     PAYMENT_PROVIDER: z.enum(['mock', 'momo', 'vnpay']).default('mock'),
     PAYMENT_PROVIDER_ENVIRONMENT: z.enum(['MOCK', 'SANDBOX', 'PRODUCTION']).default('MOCK'),
     // Danh sách các cổng thanh toán kích hoạt đồng thời (phân cách bằng dấu phẩy, vd: "mock,vnpay,momo")
@@ -109,7 +116,10 @@ const envConfigSchema = z
     PAYMENT_MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
 
     // VNPay Sandbox Gateway
-    VNPAY_SANDBOX_TMN_CODE: z.string().regex(/^[A-Za-z0-9]{8}$/).optional(),
+    VNPAY_SANDBOX_TMN_CODE: z
+      .string()
+      .regex(/^[A-Za-z0-9]{8}$/)
+      .optional(),
     VNPAY_SANDBOX_HASH_SECRET: z.string().min(1).optional(),
     VNPAY_SANDBOX_RETURN_URL: z.string().url().optional(),
     VNPAY_SANDBOX_API_IP: z.string().min(1).optional(),
@@ -120,9 +130,7 @@ const envConfigSchema = z
     MOMO_SANDBOX_SECRET_KEY: z.string().min(1).optional(),
     MOMO_SANDBOX_IPN_URL: z.string().url().optional(),
     MOMO_SANDBOX_REDIRECT_URL: z.string().url().optional(),
-    MOMO_SANDBOX_REQUEST_TYPE: z
-      .enum(['captureWallet', 'payWithATM', 'payWithMethod'])
-      .default('captureWallet'),
+    MOMO_SANDBOX_REQUEST_TYPE: z.enum(['captureWallet', 'payWithATM', 'payWithMethod']).default('captureWallet'),
 
     // Payment Recovery, Timeouts & Checkout TTL
     PAYMENT_PROVIDER_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(86400).default(35),
@@ -145,7 +153,7 @@ const envConfigSchema = z
       .default('true')
       .transform((val) => val === 'true'),
 
-    // 7. MONGODB, REDIS & NOTIFICATIONS
+    // MONGODB, REDIS & NOTIFICATIONS
     MONGODB_URI: z.string().default('mongodb://localhost:27017/vina_trekgo_notifications'),
     REDIS_URL: z.string(),
     REDIS_ENABLED: z.enum(['true', 'false']).transform((val) => val === 'true'),
@@ -154,7 +162,7 @@ const envConfigSchema = z
       .default('false')
       .transform((val) => val === 'true'),
 
-    // 8. TEST DATABASE OVERRIDES (OPTIONAL)
+    // TEST DATABASE OVERRIDES (OPTIONAL)
     CF01_TEST_DATABASE_URL: z.string().optional(),
     CF02_TEST_DATABASE_URL: z.string().optional(),
     SF01_TEST_DATABASE_URL: z.string().optional(),
