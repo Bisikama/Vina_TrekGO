@@ -20,10 +20,27 @@ const policyResponseSchema = {
       currency: { type: 'string', example: 'VND' },
       dayCountMode: { type: 'string', example: 'CEIL_24H' },
       rentalCutoffHours: { type: 'integer' },
+      damageRules: {
+        type: 'array',
+        description: 'Danh sách các quy tắc đánh giá hư hại theo chính sách',
+        items: {
+          type: 'object',
+          required: ['id', 'ruleCode', 'productId', 'severity', 'formulaType', 'value'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            ruleCode: { type: 'string' },
+            productId: { type: 'string', format: 'uuid' },
+            severity: { type: 'string', enum: ['MINOR', 'MODERATE', 'SEVERE', 'TOTAL_LOSS'] },
+            formulaType: { type: 'string', enum: ['FIXED', 'PERCENT_DEPOSIT', 'PERCENT_REPLACEMENT_VALUE'] },
+            value: { type: 'number' },
+            description: { type: 'string', nullable: true },
+          },
+        },
+      },
     } } },
 };
 
-@ApiTags('Rental Policy Admin')
+@ApiTags('Admin Rental Policy')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
 @Roles(UserRole.ADMIN)
