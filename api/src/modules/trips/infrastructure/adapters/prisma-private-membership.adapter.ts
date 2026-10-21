@@ -67,6 +67,70 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
     if (trip.creatorId !== userId && member?.status !== 'ACTIVE') fail(C.FORBIDDEN)
     return member
   }
+  listMine(userId: string, page: Pick<MemberPage, 'page' | 'pageSize'>) {
+    return this.db.$transaction(
+      async (tx) => {
+        assertMemberActor(await tx.user.findUnique({ where: { id: userId } }))
+
+        const where: Prisma.TripMemberWhereInput = {
+          userId,
+          status: 'ACTIVE',
+          trip: { tripType: 'PRIVATE' },
+        }
+        const [members, total] = await Promise.all([
+          tx.tripMember.findMany({
+            where,
+            include: { trip: true },
+            orderBy: [{ trip: { startAt: 'asc' } }, { id: 'asc' }],
+            take: page.pageSize,
+            skip: (page.page - 1) * page.pageSize,
+          }),
+          tx.tripMember.count({ where }),
+        ])
+        const tripIds = members.map((member) => member.tripId)
+        const groupedCounts = tripIds.length
+          ? await tx.tripMember.groupBy({
+              by: ['tripId'],
+              where: { tripId: { in: tripIds }, status: 'ACTIVE' },
+              _count: { _all: true },
+            })
+          : []
+        const activeCounts = new Map(groupedCounts.map((row) => [row.tripId, row._count._all]))
+        const now = new Date()
+
+        return {
+          items: members.map((member) => {
+            const trip = member.trip
+            const isHost = trip.creatorId === userId
+            const editable = trip.status === 'OPEN' && trip.startAt > now
+            const canRent =
+              trip.startAt > now && ['OPEN', 'FULL', 'CLOSED'].includes(trip.status)
+
+            return {
+              ...trip,
+              activeMemberCount: activeCounts.get(trip.id) ?? 0,
+              viewer: {
+                isHost,
+                membershipId: member.id,
+                membershipVersion: member.version,
+                membershipStatus: member.status,
+              },
+              permissions: {
+                canInvite: isHost && editable,
+                canRemoveMembers: isHost && editable,
+                canLeave: !isHost && editable,
+                canRent,
+              },
+            }
+          }),
+          page: page.page,
+          pageSize: page.pageSize,
+          total,
+        }
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    )
+  }
   preview(code: string) {
     return this.db.$transaction(
       async (tx) => {
