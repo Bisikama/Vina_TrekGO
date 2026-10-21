@@ -148,7 +148,7 @@ export async function claimPreparationTask(taskId: string, expectedVersion: numb
     { expectedVersion },
     { headers: idempotencyHeaders("claim-preparation") },
   );
-  return unwrap<{ taskId: string; version: number }>(response.data);
+  return unwrap<{ taskId: string; assignee: { id: string; displayName: string }; version: number }>(response.data);
 }
 
 export async function getPreparationPickCandidates(

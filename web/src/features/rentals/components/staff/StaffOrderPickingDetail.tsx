@@ -37,7 +37,9 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
     setError(null);
     try {
       const task = await getPreparationTask(taskId, signal);
-      const canLoadCandidates = task.task.status === "PICKING" || task.task.status === "CONDITION_CAPTURED";
+      const canLoadCandidates =
+  Boolean(task.task.assignee) &&
+  ["OPEN", "PICKING", "CONDITION_CAPTURED"].includes(task.task.status);
       const pickCandidates = canLoadCandidates
         ? await getPreparationPickCandidates(taskId, { signal })
         : { items: [] };
@@ -144,7 +146,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Đã có ảnh</p><p className="mt-2 text-2xl font-black">{evidenceComplete}/{detail.progress.picked}</p></article>
         </section>
 
-        {detail.task.status === "OPEN" && (
+        {detail.task.status === "OPEN" && !detail.task.assignee && (
           <section className="mt-5 rounded-xl border border-orange-200 bg-orange-50 p-5">
             <h2 className="font-black">Bước 1 · Nhận task</h2>
             <p className="mt-1 text-sm text-slate-600">Task chưa được gán. Nhận task trước khi quét thiết bị.</p>
@@ -152,7 +154,9 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           </section>
         )}
 
-        {detail.task.status !== "OPEN" && !allPicked && (
+        {Boolean(detail.task.assignee) &&
+          ["OPEN", "PICKING", "CONDITION_CAPTURED"].includes(detail.task.status) &&
+          !allPicked && (
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
             <h2 className="font-black">Bước 2 · Chọn asset còn khả dụng</h2>
             <div className="mt-4 space-y-4">
