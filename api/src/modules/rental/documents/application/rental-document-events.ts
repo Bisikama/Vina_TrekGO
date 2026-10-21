@@ -24,6 +24,7 @@ async function insertEventDocument(tx: Tx, input: {
   orderId: string; documentType: RentalDocumentType; sourceRef: string; issuedAt: Date;
   snapshot: Record<string, unknown>; rootDocumentId?: string; previousDocumentId?: string;
   appendixNo?: number; policyVersion?: string; templateVersion?: string;
+  sourceVersion?: number;
 }) {
   const existing = await tx.rentalDocument.findUnique({
     where: { documentType_sourceRef: { documentType: input.documentType, sourceRef: input.sourceRef } },
@@ -37,6 +38,7 @@ async function insertEventDocument(tx: Tx, input: {
     appendixNo: input.appendixNo ?? null,
     snapshotJson: JSON.parse(canonical(input.snapshot)) as Prisma.InputJsonValue,
     snapshotHash: snapshotHash(input.snapshot),
+    sourceVersion: input.sourceVersion ?? 1,
     policyVersion: input.policyVersion ?? '1.5.2',
     templateVersion: input.templateVersion ?? '1.3.2',
     issuedAt: input.issuedAt,
@@ -64,6 +66,7 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
   if (packageItems.some(x=>!conditionMap.has(x.assignmentId))) throw new Error('HANDOVER_DOCUMENT_CONDITION_MISSING');
   const policyVersion = (order.policySnapshot as any)?.policyVersion ?? '1.5.2';
   return insertEventDocument(tx,{orderId,documentType:RentalDocumentType.HANDOVER,sourceRef:handoverId,issuedAt,
+    sourceVersion: order.version,
     snapshot:{kind:'HANDOVER',orderId,tripId:order.tripId,bookingProvenanceId:order.bookingId,
       handoverId,packageId:handover.packageId,recipient:handover.recipientSnapshot,
       handedOverAt:handover.handedOverAt.toISOString(),staffId:handover.staffId,
@@ -141,13 +144,13 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
     sourcePaymentId: extension.paymentRef ?? null,
     appliedAt: extension.appliedAt instanceof Date ? extension.appliedAt.toISOString() : String(extension.appliedAt),
     policyVersion,
-    templateVersion: '1.0.0',
     originalHandoverUnchanged: true,
   };
   return insertEventDocument(tx, {
     orderId: extension.orderId,
     documentType: RentalDocumentType.EXTENSION_APPENDIX,
     sourceRef: extensionId,
+    sourceVersion: extension.version,
     issuedAt,
     rootDocumentId: root.id,
     previousDocumentId: previous?.id ?? root.id,
@@ -164,6 +167,7 @@ export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:
   if(!order) throw new Error('RENTAL_NOT_FOUND');
   const sourceRef=`${input.eventId}:${order.id}`;
   return insertEventDocument(tx,{orderId:order.id,documentType:RentalDocumentType.SCHEDULE_NOTICE,sourceRef,issuedAt:input.at,
+    sourceVersion: order.version,
     rootDocumentId:root.id,snapshot:{kind:'SCHEDULE_NOTICE',orderId:order.id,tripId:order.tripId,eventId:input.eventId,
       contractualRentalEndAt:order.rentalEndAt.toISOString(),previousOperationalReturnDueAt:input.oldOperationalDueAt?.toISOString()??null,
       operationalReturnDueAt:input.newOperationalDueAt.toISOString(),feeChanged:false,originalDocumentUnchanged:true}});
@@ -282,6 +286,7 @@ export async function issueReturnReceiptTx(
     orderId: session.orderId,
     documentType: RentalDocumentType.RETURN_RECEIPT,
     sourceRef: sessionId,
+    sourceVersion: session.version,
     issuedAt: at,
     rootDocumentId: root.id,
     policyVersion,
@@ -309,11 +314,12 @@ export async function issueReturnReceiptTx(
   });
 }
 
-export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,correctedDisplayDetails:string,at:Date,idempotencyKey:string){
+export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,
+  corrections:Array<{field:string;oldValue:string|null;newValue:string|null}>,at:Date,idempotencyKey:string){
   const source=await tx.rentalDocument.findUnique({where:{id:sourceId}});
   if(!source) throw new Error('RENTAL_DOCUMENT_NOT_FOUND');
-  const correctionSourceRef=`${sourceId}:${createHash('sha256').update(idempotencyKey).digest('hex').slice(0,32)}`;
-  const proposedHash = snapshotHash({sourceId,actorId,reason,correctedDisplayDetails});
+  const correctionSourceRef=`${sourceId}:${createHash('sha256').update(`${actorId}:${idempotencyKey}`).digest('hex').slice(0,32)}`;
+  const proposedHash = snapshotHash({sourceId,actorId,reason,corrections});
   const existing = await tx.rentalDocument.findUnique({where:{documentType_sourceRef:{
     documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef}}});
   if (existing) {
@@ -322,7 +328,8 @@ export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,rea
     return existing;
   }
   return insertEventDocument(tx,{orderId:source.orderId,documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef,
+    sourceVersion: source.version,
     rootDocumentId:source.rootDocumentId??source.id,previousDocumentId:source.id,issuedAt:at,
     snapshot:{kind:'CORRECTION_NOTICE',sourceDocumentId:sourceId,sourceSnapshotHash:source.snapshotHash,
-      actorId,reason,correctedDisplayDetails,requestHash:proposedHash,sourceRemainsImmutable:true}});
+      actorId,reason,corrections,requestHash:proposedHash,sourceRemainsImmutable:true}});
 }

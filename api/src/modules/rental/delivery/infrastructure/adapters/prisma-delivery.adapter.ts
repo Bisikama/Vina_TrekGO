@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config';
 import { issueHandoverDocumentTx } from '../../../documents/application/rental-document-events';
 import { reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund';
 import { confirmedPublicBookingOwnerId, VALID_PUBLIC_BOOKING_STATUSES } from '../../../shared/public-booking-membership';
@@ -952,7 +953,8 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
   // ---------------------------------------------------------------------------
   async listAssignees(query: ListRentalAssigneesQuery): Promise<RentalAssigneeListResult> {
     if (query.actorRole === UserRole.STAFF_INVENTORY && query.role !== UserRole.STAFF_DELIVERY) throw AppError.fromCode('FORBIDDEN');
-    if (![UserRole.STAFF_INVENTORY, UserRole.ADMIN].includes(query.actorRole as any)) throw AppError.fromCode('FORBIDDEN');
+    if (query.actorRole === UserRole.STAFF_DELIVERY && query.role !== UserRole.STAFF_DELIVERY) throw AppError.fromCode('FORBIDDEN');
+    if (![UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN].includes(query.actorRole as any)) throw AppError.fromCode('FORBIDDEN');
 
     let currentAssigneeId: string | null = null;
     if (query.taskId) {
@@ -1246,13 +1248,13 @@ async function generateUniquePickupCode(tx: Prisma.TransactionClient, orderId: s
 }
 
 function fingerprintPickupCode(code: string): string {
-  const secret = process.env.RENTAL_PICKUP_CODE_SECRET;
+  const secret = envconfig.RENTAL_PICKUP_CODE_SECRET ?? process.env.RENTAL_PICKUP_CODE_SECRET;
   if (!secret || secret.length < 16) throw AppError.fromCode(LG.PICKUP_CODE_CONFIG_ERROR, { details: { requiredEnv: 'RENTAL_PICKUP_CODE_SECRET', minLength: 16 } });
   return createHmac('sha256', secret).update(`request:${code}`).digest('hex');
 }
 
 function hashPickupCode(orderId: string, code: string): string {
-  const secret = process.env.RENTAL_PICKUP_CODE_SECRET;
+  const secret = envconfig.RENTAL_PICKUP_CODE_SECRET ?? process.env.RENTAL_PICKUP_CODE_SECRET;
   if (!secret || secret.length < 16) throw AppError.fromCode(LG.PICKUP_CODE_CONFIG_ERROR, { details: { requiredEnv: 'RENTAL_PICKUP_CODE_SECRET', minLength: 16 } });
   return createHmac('sha256', secret).update(`${orderId}:${code}`).digest('hex');
 }
@@ -1299,6 +1301,9 @@ async function validateExceptionEvidence(tx: Prisma.TransactionClient, actorUser
     select: { id: true },
   });
   if (evidence.length !== uniqueIds.length) throw AppError.fromCode(LG.EVIDENCE_NOT_READY, { details: { requested: uniqueIds.length, valid: evidence.length } });
+  if (typeof tx.mediaAsset?.updateMany === 'function') {
+    await tx.mediaAsset.updateMany({ where: { id: { in: uniqueIds } }, data: { retentionUntil: null } });
+  }
 }
 
 async function calculateNoShowRefund(tx: Prisma.TransactionClient, order: any, now: Date, isUserFault: boolean) {

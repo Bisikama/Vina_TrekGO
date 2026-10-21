@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { Auth } from 'src/shared/decorators/auth.decorator';
 import { AuthType } from 'src/shared/constants/auth.constant';
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
@@ -47,7 +47,8 @@ Lấy danh sách sản phẩm hiển thị cho người dùng cuối.
     return this.listRentalProductsUseCase.execute(query);
   }
 
-  @Auth([AuthType.None])
+  @Auth([AuthType.Optional])
+  @ApiBearerAuth('bearer')
   @ApiOperation({ 
     summary: 'Lấy thông tin chi tiết sản phẩm thuê (public)',
     description: `
@@ -60,7 +61,10 @@ Chi tiết thông tin sản phẩm dành cho khách hàng.
   @ApiResponse({ status: 200, description: 'Thông tin chi tiết sản phẩm', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' }, name: { type: 'string' } } } })
   @ApiErrorResponse(404, 'Không tìm thấy sản phẩm', 'RENTAL_PRODUCT_NOT_FOUND', 'Sản phẩm không tồn tại hoặc không hoạt động')
   @Get(':id')
-  async getProduct(@Param('id') id: string, @ActiveUser() user?: ActiveUserData) {
+  async getProduct(
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: 400 })) id: string,
+    @ActiveUser() user?: ActiveUserData,
+  ) {
     return this.getRentalProductUseCase.execute(id, user?.role);
   }
 }

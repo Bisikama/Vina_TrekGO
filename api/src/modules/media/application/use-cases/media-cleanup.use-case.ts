@@ -35,6 +35,9 @@ export class MediaCleanupUseCase {
           if (asset.status === 'READY') {
             const isReferenced = await this.mediaReferencePort.hasActiveReferences(asset.id);
             if (isReferenced) {
+              if (this.mediaAssetPort.clearRetentionUntil) {
+                await this.mediaAssetPort.clearRetentionUntil({ id: asset.id });
+              }
               // Active referenced Evidence must never be deleted.
               // In a real system, we'd extend the retention period, but for now we just skip.
               // We can't let it loop forever, but since we're using batchSize, it might block the queue 

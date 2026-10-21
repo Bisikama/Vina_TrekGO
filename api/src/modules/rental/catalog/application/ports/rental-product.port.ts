@@ -6,6 +6,17 @@ export interface RentalProductCategoryView {
   status: string;
 }
 
+export interface RentalProductImageView {
+  mediaId: string;
+  url: string;
+  thumbnailUrl: string;
+  cardUrl: string;
+  detailUrl: string;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+}
+
 export interface RentalProductView {
   id: string;
   sku: string;
@@ -24,8 +35,10 @@ export interface RentalProductView {
   status: string;
   version: number;
   imageMediaIds: string[];
+  images?: RentalProductImageView[];
   spec: any;
   recommendationTags: string[];
+  requiresDeepInspectionAfterReturn: boolean;
 }
 
 export interface ListRentalProductsParams {
@@ -63,6 +76,7 @@ export interface CreateRentalProductParams {
   imageMediaIds?: string[];
   spec?: any;
   recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
 }
 
 export interface UpdateRentalProductParams {
@@ -79,6 +93,7 @@ export interface UpdateRentalProductParams {
   imageMediaIds?: string[];
   spec?: any;
   recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
   expectedVersion: number;
 }
 

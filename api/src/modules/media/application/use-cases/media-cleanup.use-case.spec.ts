@@ -16,6 +16,7 @@ describe('MediaCleanupUseCase', () => {
       findDeletePendingAssets: jest.fn(),
       markDeletePending: jest.fn(),
       markDeleted: jest.fn(),
+      clearRetentionUntil: jest.fn(),
     } as unknown as jest.Mocked<MediaAssetPort>;
 
     mockStoragePort = {
@@ -92,6 +93,7 @@ describe('MediaCleanupUseCase', () => {
     await useCase.execute();
 
     expect(mockRefPort.hasActiveReferences).toHaveBeenCalledWith('asset-1');
+    expect(mockAssetPort.clearRetentionUntil).toHaveBeenCalledWith({ id: 'asset-1' });
     expect(mockStoragePort.deleteAsset).not.toHaveBeenCalled();
     expect(mockAssetPort.markDeletePending).not.toHaveBeenCalled();
   });

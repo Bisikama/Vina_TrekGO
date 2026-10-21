@@ -101,6 +101,12 @@ describe('RB-API-703/704 Rental policy admin (pure mock)', () => {
 
   it('chặn buffer sai và thay đổi quy tắc hoàn tiền chưa có contract', async () => {
     expect(PublishRentalPolicySchema.safeParse({ ...input,
+      policy: { ...input.policy, lostConfirmationMinutes: 2879 } }).success).toBe(false);
+    expect(PublishRentalPolicySchema.safeParse({ ...input,
+      policy: { ...input.policy, lostConfirmationMinutes: 0 } }).success).toBe(false);
+    expect(PublishRentalPolicySchema.safeParse({ ...input,
+      policy: { ...input.policy, lostConfirmationMinutes: 2880 } }).success).toBe(true);
+    expect(PublishRentalPolicySchema.safeParse({ ...input,
       policy: { ...input.policy, prepBufferMinutes: 0 } }).success).toBe(false);
     expect(PublishRentalPolicySchema.safeParse({ ...input,
       policy: { ...input.policy, maxRentalAfterTripHours: 72 } }).success).toBe(false);
@@ -148,7 +154,7 @@ describe('RB-API-703/704 Rental policy admin (pure mock)', () => {
       const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
       expect(document.paths['/api/v1/admin/rental-policy']).toHaveProperty('get');
       expect(document.paths['/api/v1/admin/rental-policy']).toHaveProperty('put');
-      expect(document.paths['/api/v1/admin/rental-policy'].get?.responses?.['200']?.content?.['application/json']?.schema)
+      expect((document.paths['/api/v1/admin/rental-policy'].get?.responses?.['200'] as any)?.content?.['application/json']?.schema)
         .toMatchObject({ properties: { data: { properties: { policyVersion: { example: '1.5.2' } } } } });
     } finally {
       await app.close();
