@@ -13,6 +13,7 @@ import { getAvailableCountWithTx } from '../infrastructure/adapters/prisma-renta
 import { resolveActivePrimaryRentalLocation } from '../../shared/primary-inventory-location';
 import { effectiveDueAt } from './rental-extension.policy';
 import { issueExtensionAppendixTx } from '../../documents/application/rental-document-events';
+import { returnTaskScheduleAt } from '../../lifecycle/application/services/rental-return-task';
 
 /**
  * Transactional B2 extension workflow. A quote never holds equipment.
@@ -437,7 +438,8 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
   });
 
   for (const task of order.deliveryTasksViaOrderId) {
-    await tx.deliveryTask.update({ where: { id: task.id }, data: { servicePointId: pointId, scheduledAt: finalEffectiveDueAt, version: { increment: 1 } } });
+    await tx.deliveryTask.update({ where: { id: task.id }, data: { servicePointId: pointId,
+      scheduledAt: returnTaskScheduleAt(ext.returnOptionSnapshot, finalEffectiveDueAt), version: { increment: 1 } } });
   }
 
   await tx.rentalExtensionRequest.update({ where: { id }, data: { status: RentalExtensionStatus.APPLIED, appliedAt: now, version: { increment: 1 } } });

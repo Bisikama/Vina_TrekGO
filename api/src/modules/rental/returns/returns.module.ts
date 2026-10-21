@@ -28,9 +28,15 @@ import { PrismaRentalReturnAdapter } from './infrastructure/adapters/prisma-rent
 import { RentalReturnController } from './presentation/controllers/rental-return.controller';
 import { DeliveryReturnController } from './presentation/controllers/delivery-return.controller';
 import { StaffReturnController } from './presentation/controllers/staff-return.controller';
+import { StaffDamageAssessmentRuleController } from './presentation/controllers/staff-damage-assessment-rule.controller';
 import { RentalExceptionController } from './presentation/controllers/rental-exception.controller';
 import { RentalReturnAdminController } from './presentation/controllers/rental-return-admin.controller';
 import { RentalDocumentController } from './presentation/controllers/rental-document.controller';
+import { RentalDocumentAdminController } from '../documents/presentation/rental-document-admin.controller';
+import { RentalDocumentService } from '../documents/application/rental-document.service';
+import { DOCUMENT_STORAGE_PORT, SupabaseDocumentStorage } from '../documents/infrastructure/document-storage.port';
+import { RentalPdfRenderer } from '../documents/infrastructure/rental-pdf.renderer';
+import { RentalDocumentRenderWorker } from '../documents/infrastructure/rental-document-render.worker';
 
 @Module({
   imports: [SharedModule],
@@ -38,10 +44,12 @@ import { RentalDocumentController } from './presentation/controllers/rental-docu
     RentalReturnController,
     DeliveryReturnController,
     StaffReturnController,
+    StaffDamageAssessmentRuleController,
     RentalExceptionController,
     RentalReturnAdminController,
     InternalRentalEvidenceAccessController,
     RentalDocumentController,
+    RentalDocumentAdminController,
   ],
   providers: [
     RentalOperationalEscalationScheduler,
@@ -66,6 +74,10 @@ import { RentalDocumentController } from './presentation/controllers/rental-docu
     FinalizeReturnReceiptUseCase,
     ListRentalDocumentsUseCase,
     GetRentalDocumentUseCase,
+    RentalDocumentService,
+    RentalPdfRenderer,
+    RentalDocumentRenderWorker,
+    { provide: DOCUMENT_STORAGE_PORT, useClass: SupabaseDocumentStorage },
     { provide: RENTAL_RETURN_PORT, useClass: PrismaRentalReturnAdapter },
   ],
   exports: [ProcessRentalRefundEventUseCase, FinalizeReturnReceiptUseCase],

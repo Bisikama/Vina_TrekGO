@@ -1,5 +1,5 @@
 import { DeliveryTaskStatus, DeliveryTaskType, Prisma, RentalOrderStatus } from '@prisma/client';
-import { ensureReturnTaskWithTx } from './rental-return-task';
+import { ensureReturnTaskWithTx, returnTaskScheduleAt } from './rental-return-task';
 import { RentalOverdueService } from './rental-overdue.service';
 
 describe('ReturnTask baseline 1.3.2 (pure mock)', () => {
@@ -10,6 +10,12 @@ describe('ReturnTask baseline 1.3.2 (pure mock)', () => {
     packageViaOrderId: { id: 'package-1' },
     rentalHandoverViaOrderId: { id: 'handover-1' },
   };
+
+  it('uses confirmed return slot for dispatch while overdue due remains separate', () => {
+    const slot = '2026-10-20T08:00:00.000Z';
+    expect(returnTaskScheduleAt({ slotAt: slot }, due).toISOString()).toBe(slot);
+    expect(returnTaskScheduleAt({ pointId: 'point-1' }, due)).toEqual(due);
+  });
 
   it('tạo một task RETURN khi đến hạn và không chuyển custody', async () => {
     const tx = {

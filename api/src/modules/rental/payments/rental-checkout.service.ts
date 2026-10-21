@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
@@ -69,10 +70,12 @@ export class RentalCheckoutService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return { payment: previous, created: false }
       }
+      const isProduction = (envconfig.NODE_ENV ?? process.env.NODE_ENV) === 'production'
+      const mockDisabled = envconfig.PAYMENT_MOCK_ENABLED === false || process.env.PAYMENT_MOCK_ENABLED === 'false'
       if (
         scope.environment === 'MOCK' &&
-        process.env.NODE_ENV === 'production' &&
-        process.env.PAYMENT_MOCK_ENABLED !== 'true'
+        isProduction &&
+        mockDisabled
       )
         throw AppError.fromCode(E.PAYMENT_PROVIDER_UNAVAILABLE)
       let [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
@@ -241,7 +244,9 @@ export class RentalCheckoutService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return { payment: previous, created: false }
       }
-      if (scope.environment === 'MOCK' && process.env.NODE_ENV === 'production' && process.env.PAYMENT_MOCK_ENABLED !== 'true')
+      const isProd = (envconfig.NODE_ENV ?? process.env.NODE_ENV) === 'production'
+      const mockDis = envconfig.PAYMENT_MOCK_ENABLED === false || process.env.PAYMENT_MOCK_ENABLED === 'false'
+      if (scope.environment === 'MOCK' && isProd && mockDis)
         throw AppError.fromCode(E.PAYMENT_PROVIDER_UNAVAILABLE)
       const [{ now }] = await tx.$queryRaw<{now: Date}[]>`SELECT clock_timestamp() AS now`
       if (ext.status !== 'PENDING_PAYMENT' || !ext.holdExpiresAt || ext.holdExpiresAt <= now ||
