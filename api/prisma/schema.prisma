@@ -165,6 +165,17 @@ enum CancellationRequestStatus {
   @@map("cancellation_request_status")
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+  INVALIDATED
+
+  @@map("invitation_status")
+}
+
 enum InviteStatus {
   ACTIVE
   EXPIRED
@@ -871,6 +882,8 @@ model User {
   tripCancellationRequestsViaRequestedBy TripCancellationRequest[]   @relation("R_TripCancellationRequest_requested_by")
   tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
   privateTripInvitesViaCreatedBy         PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
+  privateMemberInvitationsSent           PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationSender")
+  privateMemberInvitationsReceived       PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationRecipient")
   tripMembersViaUserId                   TripMember[]                @relation("R_TripMember_user_id")
   tripMembersViaAttendanceMarkedBy       TripMember[]                @relation("R_TripMember_attendance_marked_by")
   bookingPolicysViaCreatedBy             BookingPolicy[]             @relation("R_BookingPolicy_created_by")
@@ -1370,6 +1383,7 @@ model Trip {
   tripTransportsViaTripId           TripTransport[]           @relation("R_TripTransport_trip_id")
   tripCancellationRequestsViaTripId TripCancellationRequest[] @relation("R_TripCancellationRequest_trip_id")
   privateTripInvitesViaTripId       PrivateTripInvite[]       @relation("R_PrivateTripInvite_trip_id")
+  privateMemberInvitations          PrivateTripMemberInvitation[]
   tripMembersViaTripId              TripMember[]              @relation("R_TripMember_trip_id")
   bookingsViaTripId                 Booking[]                 @relation("R_Booking_trip_id")
   rentalQuotesViaTripId             RentalQuote[]             @relation("R_RentalQuote_trip_id")
@@ -1610,6 +1624,49 @@ model PrivateTripInvite {
   @@map("private_trip_invites")
 }
 
+model PrivateTripMemberInvitation {
+  // Partial unique PENDING per (trip, recipient) is enforced in SQL.
+  id                       String           @id @default(uuid()) @db.Uuid
+  tripId                   String           @map("trip_id") @db.Uuid
+  senderUserId             String           @map("sender_user_id") @db.Uuid
+  recipientUserId          String           @map("recipient_user_id") @db.Uuid
+  recipientEmailSnapshot   String           @map("recipient_email_snapshot") @db.VarChar(255)
+  status                   InvitationStatus @default(PENDING)
+  expiresAt                DateTime         @map("expires_at") @db.Timestamptz(6)
+  respondedAt              DateTime?        @map("responded_at") @db.Timestamptz(6)
+  invalidatedAt            DateTime?        @map("invalidated_at") @db.Timestamptz(6)
+  reason                   String?          @db.VarChar(100)
+  acceptedMemberId         String?          @map("accepted_member_id") @db.Uuid
+  membershipVersionAtAccept Int?            @map("membership_version_at_accept")
+  version                  Int              @default(1)
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip           Trip        @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  sender         User        @relation("PrivateMemberInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  recipient      User        @relation("PrivateMemberInvitationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  acceptedMember TripMember? @relation(fields: [acceptedMemberId], references: [id], onDelete: Restrict)
+
+  @@index([recipientUserId, createdAt, id], map: "private_member_invitation_recipient_idx")
+  @@index([senderUserId, createdAt, id], map: "private_member_invitation_sender_idx")
+  @@index([status, expiresAt], map: "private_member_invitation_expiry_idx")
+  @@index([tripId, createdAt, id], map: "private_member_invitation_trip_idx")
+  @@index([acceptedMemberId], map: "private_member_invitation_member_idx")
+  @@map("private_trip_member_invitations")
+}
+
+// Invitation-only fixed-window counters. No general-purpose rate-limit framework.
+model PrivateInvitationRateBucket {
+  actorId     String   @map("actor_id") @db.Uuid
+  bucket      String   @db.VarChar(32)
+  count       Int      @default(0)
+  resetsAt    DateTime @map("resets_at") @db.Timestamptz(6)
+
+  @@id([actorId, bucket])
+  @@index([resetsAt])
+  @@map("private_invitation_rate_buckets")
+}
+
 model TripMember {
   // Partial unique HOST per trip is enforced by CF04 SQL migration; HOST counts toward capacity.
   id                 String           @id @default(uuid()) @db.Uuid
@@ -1635,6 +1692,7 @@ model TripMember {
   attendanceMarkedByUser User?              @relation("R_TripMember_attendance_marked_by", fields: [attendanceMarkedBy], references: [id])
 
   tripReviewsViaMemberId TripReview[] @relation("R_TripReview_member_id")
+  acceptedPrivateInvitations PrivateTripMemberInvitation[]
 
   @@unique([tripId, userId])
   @@index([userId, status])

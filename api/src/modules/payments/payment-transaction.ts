@@ -48,8 +48,12 @@ export async function paymentTransaction<T>(
     )
     stage('done')
     const entry = { operation, ...context, elapsedMs: Math.round(performance.now() - started), stages }
-    if (entry.elapsedMs >= 2000) logger.warn({ message: 'Slow payment transaction', ...entry })
-    else logger.debug(entry)
+    // Only recovery polling diagnostics are opt-in; failures always remain visible.
+    if (entry.elapsedMs >= 2000) {
+      if (operation !== 'recovery.claim' || process.env.PAYMENT_RECOVERY_CLAIM_SLOW_LOG_ENABLED === 'true')
+        logger.warn({ message: 'Slow payment transaction', ...entry })
+    } else if (operation !== 'recovery.claim' || process.env.PAYMENT_RECOVERY_CLAIM_DEBUG_ENABLED === 'true')
+      logger.debug(entry)
     return result
   } catch (error) {
     const failedStage = stageName

@@ -1,4 +1,11 @@
 import { Module } from '@nestjs/common'
+import { PrivateMemberInvitationService } from './infrastructure/adapters/private-member-invitation.service'
+import { PrivateMemberInvitationController } from './presentation/controllers/private-member-invitation.controller'
+import { PrivateInvitationRequestService } from './infrastructure/adapters/private-invitation-request.service'
+import { TripHistoryController } from './presentation/controllers/trip-history.controller'
+import { TripHistoryUseCase } from './application/use-cases/trip-history.use-case'
+import { TripHistoryPort } from './application/trip-history.port'
+import { PrismaTripHistoryAdapter } from './infrastructure/adapters/prisma-trip-history.adapter'
 import { TransportController } from './transport/transport.controller'
 import { TransportService } from './transport/transport.service'
 import { PrivateInviteRateGuard } from './presentation/private-invite-rate.guard'
@@ -26,6 +33,8 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
 
 @Module({
   controllers: [
+    PrivateMemberInvitationController,
+    TripHistoryController,
     TransportController,
     LeaderPublicTripController,
     TripOptionsController,
@@ -35,6 +44,10 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
     PrivateMembershipController,
   ],
   providers: [
+    PrivateMemberInvitationService,
+    PrivateInvitationRequestService,
+    TripHistoryUseCase,
+    { provide: TripHistoryPort, useClass: PrismaTripHistoryAdapter },
     TransportService,
     PublicTripUseCase,
     PrivateTripUseCase,
