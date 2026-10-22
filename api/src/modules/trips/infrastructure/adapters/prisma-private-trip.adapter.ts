@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common'
+import { syncPendingInvitations } from './private-invitation-transition'
+import { databaseTime } from '../../../bookings/booking-capacity'
 import { Prisma, Trip } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { PrismaService } from '../../../../shared/services/prisma.service'
@@ -208,6 +210,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         data: { status: 'REVOKED', revokedAt: new Date() },
       })
       await this.event(tx, old, next, 'PRIVATE_TRIP_UPDATED')
+      await syncPendingInvitations(tx, id, userId, await databaseTime(tx), { startAt })
       return next
     })
   }
@@ -223,6 +226,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         data: { status: 'REVOKED', revokedAt: new Date() },
       })
       await this.event(tx, old, next, 'PRIVATE_TRIP_CANCELLED', reason)
+      await syncPendingInvitations(tx, id, userId, await databaseTime(tx), { reason: 'TRIP_CANCELLED' })
       return next
     })
   }

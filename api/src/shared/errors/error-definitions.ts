@@ -20,6 +20,9 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
+  [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
+  [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },
   [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
   [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
   [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },
