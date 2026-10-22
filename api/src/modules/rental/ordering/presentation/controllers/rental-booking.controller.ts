@@ -51,7 +51,7 @@ export class RentalTripController {
     type: String,
     format: 'uuid',
     description: 'ID chuyến đi cần kiểm tra',
-    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+    example: '550e8400-e29b-41d4-a716-446655440101',
   })
   @ApiResponse({ status: 200, description: 'Trả về kết quả kiểm tra: eligible (true/false), lý do, cutoff, contextVersion' })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
@@ -86,14 +86,14 @@ export class RentalTripController {
     type: String,
     format: 'uuid',
     description: 'ID chuyến đi',
-    example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+    example: '550e8400-e29b-41d4-a716-446655440101',
   })
   @ApiQuery({
     name: 'categoryId',
     required: false,
     type: String,
     description: 'Lọc gợi ý theo danh mục thiết bị',
-    example: 'd4e5f6a7-8901-23de-f012-456789012cde',
+    example: '550e8400-e29b-41d4-a716-446655440104',
   })
   @ApiQuery({
     name: 'limit',

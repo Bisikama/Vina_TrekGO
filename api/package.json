@@ -17,6 +17,7 @@
     "configure:cf02-policy": "ts-node scripts/configure-cf02-policy.ts",
     "test:payments": "jest --config ./test/jest-payments.json --runInBand",
     "seed:booking-policies": "ts-node prisma/seeds/booking-policy.seed.ts",
+    "seed:damage-rules": "ts-node prisma/seeds/damage-assessment-rule.seed.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

@@ -38,6 +38,7 @@ import { GetRentalHandoverPreviewUseCase } from './delivery/application/use-case
 import { AssignRentalTaskUseCase } from './delivery/application/use-cases/assign-rental-task.use-case';
 import { ListAdminRentalTasksUseCase } from './delivery/application/use-cases/list-admin-rental-tasks.use-case';
 import { ListRentalAssigneesUseCase } from './delivery/application/use-cases/list-rental-assignees.use-case';
+import { PrismaDeliveryAdapter } from './delivery/infrastructure/adapters/prisma-delivery.adapter';
 
 describe('Rental Terminology Hotfix — REST Route Contracts & Aliases', () => {
   describe('Route & RBAC Metadata Reflection', () => {
@@ -97,7 +98,35 @@ describe('Rental Terminology Hotfix — REST Route Contracts & Aliases', () => {
       )?.value;
       const handoverRoles = Reflect.getMetadata(ROLES_KEY, handoverMethod);
       expect(handoverRoles).toEqual([UserRole.STAFF_DELIVERY]);
+
+      const assigneesMethod = Object.getOwnPropertyDescriptor(
+        RentalTaskAdminController.prototype,
+        'assignees',
+      )?.value;
+      expect(Reflect.getMetadata(ROLES_KEY, assigneesMethod)).toEqual([
+        UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN,
+      ]);
     });
+  });
+
+  it('RB-API-412 lets delivery staff list delivery assignees without exposing inventory assignees', async () => {
+    const db = {
+      $transaction: jest.fn(async (queries: Promise<unknown>[]) => Promise.all(queries)),
+      user: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'staff-1', fullName: 'Nhân viên giao',
+          email: 'delivery@example.test', phone: null, role: UserRole.STAFF_DELIVERY }]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      deliveryTask: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    const adapter = new PrismaDeliveryAdapter(db as never);
+    const query = { actorUserId: 'staff-1', actorRole: UserRole.STAFF_DELIVERY,
+      role: UserRole.STAFF_DELIVERY, page: 1, pageSize: 20 };
+    await expect(adapter.listAssignees(query)).resolves.toMatchObject({
+      items: [{ id: 'staff-1', role: UserRole.STAFF_DELIVERY }],
+    });
+    await expect(adapter.listAssignees({ ...query, role: UserRole.STAFF_INVENTORY }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   describe('HTTP Route Endpoints & Status Verification (Supertest)', () => {

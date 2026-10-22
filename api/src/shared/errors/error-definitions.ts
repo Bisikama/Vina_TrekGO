@@ -10,6 +10,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error
 import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
 import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
 import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
+import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes';
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
 
@@ -20,9 +21,17 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+<<<<<<< HEAD
   [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
   [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
   [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },
+=======
+  [RD.INTEGRITY_FAILED]: { status: 409, message: 'Document integrity verification failed', retryable: false },
+  [RD.CORRECTION_NOT_ALLOWED]: { status: 409, message: 'Document correction is not allowed', retryable: false },
+  [RD.RENDER_RETRY_EXHAUSTED]: { status: 409, message: 'Document render retry limit reached', retryable: false },
+  [RD.STORAGE_UNAVAILABLE]: { status: 503, message: 'Private document storage unavailable', retryable: true },
+  [RD.AUDIT_UNAVAILABLE]: { status: 503, message: 'Document access audit unavailable', retryable: true },
+>>>>>>> origin/develop
   [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
   [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
   [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },
@@ -191,6 +200,10 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RR.UNIT_NOT_IN_RENTAL]: { status: 404, message: 'Unit is not part of this rental order', retryable: false },
   [RR.CONDITION_BASELINE_MISSING]: { status: 422, message: 'Condition baseline is missing', retryable: false },
   [RR.POLICY_CONFIG_REQUIRED]: { status: 500, message: 'Return policy configuration required', retryable: false },
+  [RR.HANDOVER_DOCUMENT_REQUIRED]: { status: 409, message: 'Handover root document required to issue return receipt', retryable: false },
+  [RR.RETURN_SESSION_NOT_FOUND]: { status: 404, message: 'Return session not found', retryable: false },
+  [RR.DOCUMENT_NOT_FOUND]: { status: 404, message: 'Rental document not found', retryable: false },
+  [RR.DOCUMENT_NOT_READY]: { status: 409, message: 'Rental document not ready for download', retryable: false },
 
   // Lifecycle (Phase 07A)
   [LC.INVALID_EVENT_PAYLOAD]: { status: 400, message: 'Invalid rental lifecycle event payload', retryable: false },

@@ -7,7 +7,7 @@ import { UserRole } from 'src/shared/constants/enum.constant'
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe'
 import { ActiveUser } from 'src/shared/decorators/active-user.decorator'
 import type { ActiveUserData } from 'src/shared/types/user.type'
-import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper'
+import { ApiErrorResponse, ApiErrorResponses } from 'src/shared/swagger/api-error-response.helper'
 import { z } from 'zod'
 
 import { ListEquipmentUnitsUseCase } from '../../application/use-cases/list-equipment-units.use-case'
@@ -127,35 +127,30 @@ Lấy danh sách thiết bị vật lý thực tế. Quyền: STAFF_INVENTORY | 
     schema: {
       type: 'object',
       properties: {
-        data: {
+        items: { type: 'array', items: { type: 'object' } },
+        pagination: {
           type: 'object',
           properties: {
-            items: { type: 'array', items: { type: 'object' } },
-            pagination: {
-              type: 'object',
-              properties: {
-                page: { type: 'number' },
-                pageSize: { type: 'number' },
-                totalItems: { type: 'number' },
-                totalPages: { type: 'number' },
-              },
-            },
-            counts: {
-              type: 'object',
-              properties: {
-                total: { type: 'number' },
-                available: { type: 'number' },
-                picked: { type: 'number' },
-                packed: { type: 'number' },
-                rented: { type: 'number' },
-                returnPending: { type: 'number' },
-                cleaning: { type: 'number' },
-                maintenance: { type: 'number' },
-                damaged: { type: 'number' },
-                lost: { type: 'number' },
-                retired: { type: 'number' },
-              },
-            },
+            page: { type: 'number' },
+            pageSize: { type: 'number' },
+            totalItems: { type: 'number' },
+            totalPages: { type: 'number' },
+          },
+        },
+        counts: {
+          type: 'object',
+          properties: {
+            total: { type: 'number' },
+            available: { type: 'number' },
+            picked: { type: 'number' },
+            packed: { type: 'number' },
+            rented: { type: 'number' },
+            returnPending: { type: 'number' },
+            cleaning: { type: 'number' },
+            maintenance: { type: 'number' },
+            damaged: { type: 'number' },
+            lost: { type: 'number' },
+            retired: { type: 'number' },
           },
         },
       },
@@ -217,14 +212,15 @@ Tạo một thiết bị vật lý mới trong hệ thống. Quyền: STAFF_INVE
     schema: {
       type: 'object',
       properties: {
-        data: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, assetCode: { type: 'string' } } },
+        id: { type: 'string', format: 'uuid' },
+        assetCode: { type: 'string' },
       },
     },
   })
-  @ApiErrorResponse(400, 'Validation Error', 'VALIDATION_ERROR', 'Validation failed')
-  @ApiErrorResponse(404, 'Not Found', 'RENTAL_PRODUCT_NOT_FOUND', 'Product not found')
-  @ApiErrorResponse(409, 'Conflict', 'EQUIPMENT_ASSET_CODE_EXISTS', 'Asset code exists')
-  @ApiErrorResponse(422, 'Unprocessable Entity', 'RENTAL_PRODUCT_ARCHIVED', 'Product is archived')
+  @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'Kiểm tra các trường bắt buộc và định dạng request')
+  @ApiErrorResponse(404, 'Không tìm thấy sản phẩm', 'RENTAL_PRODUCT_NOT_FOUND', 'productId không tồn tại')
+  @ApiErrorResponse(409, 'Mã tài sản đã tồn tại', 'EQUIPMENT_ASSET_CODE_EXISTS', 'Chọn assetCode khác')
+  @ApiErrorResponse(422, 'Sản phẩm đã lưu trữ', 'RENTAL_PRODUCT_ARCHIVED', 'Không thể tạo thiết bị cho sản phẩm ARCHIVED')
   @Roles(UserRole.STAFF_INVENTORY)
   @Post()
   async createUnit(@Body(new ZodValidationPipe(CreateEquipmentUnitSchema)) body: CreateEquipmentUnitDto) {
@@ -295,22 +291,17 @@ Tạo nhiều thiết bị vật lý cùng lúc thông qua transaction (all-or-n
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: {
-            createdUnits: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' } } } },
-          },
-        },
+        createdUnits: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } },
       },
     },
   })
   @ApiErrorResponse(
     400,
-    'Validation Error',
+    'Dữ liệu không hợp lệ',
     'BATCH_ASSET_CODE_COUNT_MISMATCH',
-    'Asset codes count does not match quantity',
+    'Số mã assetCodes phải bằng quantity',
   )
-  @ApiErrorResponse(409, 'Conflict', 'EQUIPMENT_ASSET_CODE_EXISTS', 'One or more asset codes exist')
+  @ApiErrorResponse(409, 'Mã tài sản đã tồn tại', 'EQUIPMENT_ASSET_CODE_EXISTS', 'Ít nhất một assetCode đã được sử dụng')
   @Roles(UserRole.STAFF_INVENTORY)
   @Post('batch')
   async batchCreateUnits(
@@ -340,32 +331,27 @@ Lấy thông tin cần thiết để in tem nhãn QR cho thiết bị. Quyền: 
     },
   })
   @ApiResponse({
-    status: 200,
-    description: 'Danh sách thông tin in tem mã QR',
+    status: 201,
+    description: 'Danh sách thông tin in tem mã QR (POST chỉ đọc, không đổi trạng thái thiết bị)',
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: {
-            labels: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  unitId: { type: 'string' },
-                  assetCode: { type: 'string' },
-                  qrPayload: { type: 'string' },
-                  printText: { type: 'string' },
-                },
-              },
+        labels: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              unitId: { type: 'string', format: 'uuid' },
+              assetCode: { type: 'string' },
+              qrPayload: { type: 'string' },
+              printText: { type: 'string' },
             },
           },
         },
       },
     },
   })
-  @ApiErrorResponse(404, 'Not Found', 'EQUIPMENT_UNIT_NOT_FOUND', 'One or more units not found')
+  @ApiErrorResponse(404, 'Không tìm thấy thiết bị', 'EQUIPMENT_UNIT_NOT_FOUND', 'Ít nhất một unitId không tồn tại')
   @Roles(UserRole.STAFF_INVENTORY)
   @Post('labels')
   async generateLabels(@Body(new ZodValidationPipe(GenerateEquipmentLabelsSchema)) body: GenerateEquipmentLabelsDto) {
@@ -389,14 +375,12 @@ Lấy thông tin cần thiết để in tem nhãn QR cho thiết bị. Quyền: 
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: { unit: { type: 'object' }, history: { type: 'array', items: { type: 'object' } } },
-        },
+        unit: { type: 'object' },
+        history: { type: 'array', items: { type: 'object' } },
       },
     },
   })
-  @ApiErrorResponse(404, 'Not Found', 'EQUIPMENT_UNIT_NOT_FOUND', 'Unit not found')
+  @ApiErrorResponse(404, 'Không tìm thấy thiết bị', 'EQUIPMENT_UNIT_NOT_FOUND', 'unitId không tồn tại')
   @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
   @Get(':id')
   async getUnit(@Param(new ZodValidationPipe(IdParamSchema)) params: { id: string }) {
@@ -442,10 +426,10 @@ Chỉ cho phép cập nhật các trường metadata: homeInventoryLocationId, s
     description: 'Đơn vị thiết bị sau khi cập nhật',
     schema: {
       type: 'object',
-      properties: { data: { type: 'object', properties: { id: { type: 'string' }, version: { type: 'number' } } } },
+      properties: { id: { type: 'string', format: 'uuid' }, version: { type: 'integer' } },
     },
   })
-  @ApiErrorResponse(409, 'Conflict', 'VERSION_CONFLICT', 'Mismatched version')
+  @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Thiết bị đã thay đổi; lấy version mới rồi thử lại')
   @Roles(UserRole.STAFF_INVENTORY)
   @Patch(':id')
   async updateUnit(
@@ -516,26 +500,23 @@ COMPLETE:
     },
   })
   @ApiResponse({
-    status: 200,
+    status: 201,
     description: 'Thiết bị và bản ghi bảo trì',
     schema: {
       type: 'object',
       properties: {
-        data: {
-          type: 'object',
-          properties: {
-            unit: { type: 'object' },
-            maintenance: { type: 'object' },
-            affectedOrders: { type: 'array', items: { type: 'object' } },
-            affectedOrdersEvaluated: { type: 'boolean' },
-          },
-        },
+        unit: { type: 'object' },
+        maintenance: { type: 'object' },
+        affectedOrders: { type: 'array', items: { type: 'object' } },
+        affectedOrdersEvaluated: { type: 'boolean' },
       },
     },
   })
-  @ApiErrorResponse(409, 'Conflict', 'EQUIPMENT_UNIT_NOT_MAINTAINABLE', 'Unit is not maintainable or rented')
-  @ApiErrorResponse(409, 'Rented', 'EQUIPMENT_UNIT_RENTED', 'Unit is currently rented')
-  @ApiErrorResponse(409, 'Conflict State', 'EQUIPMENT_MAINTENANCE_STATE_CONFLICT', 'Already in maintenance')
+  @ApiErrorResponses(409, 'Không thể chuyển trạng thái bảo trì', [
+    { name: 'invalidState', summary: 'Trạng thái không cho phép bảo trì', code: 'EQUIPMENT_UNIT_NOT_MAINTAINABLE', message: 'Trạng thái thiết bị hiện tại không cho phép bảo trì' },
+    { name: 'rented', summary: 'Thiết bị đang được thuê', code: 'EQUIPMENT_UNIT_RENTED', message: 'Không thể bảo trì thiết bị đang được thuê' },
+    { name: 'alreadyInMaintenance', summary: 'Đã ở trạng thái bảo trì', code: 'EQUIPMENT_MAINTENANCE_STATE_CONFLICT', message: 'Thiết bị đã ở trạng thái MAINTENANCE' },
+  ])
   @Roles(UserRole.STAFF_INVENTORY)
   @Post(':id/maintenance')
   async changeMaintenance(

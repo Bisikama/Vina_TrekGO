@@ -1,5 +1,7 @@
+import envconfig from 'src/shared/config';
 import { issueHandoverDocumentTx } from '../../../documents/application/rental-document-events';
 import { reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund';
+import { confirmedPublicBookingOwnerId, VALID_PUBLIC_BOOKING_STATUSES } from '../../../shared/public-booking-membership';
 import { createHash, createHmac, randomInt, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
@@ -951,7 +953,8 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
   // ---------------------------------------------------------------------------
   async listAssignees(query: ListRentalAssigneesQuery): Promise<RentalAssigneeListResult> {
     if (query.actorRole === UserRole.STAFF_INVENTORY && query.role !== UserRole.STAFF_DELIVERY) throw AppError.fromCode('FORBIDDEN');
-    if (![UserRole.STAFF_INVENTORY, UserRole.ADMIN].includes(query.actorRole as any)) throw AppError.fromCode('FORBIDDEN');
+    if (query.actorRole === UserRole.STAFF_DELIVERY && query.role !== UserRole.STAFF_DELIVERY) throw AppError.fromCode('FORBIDDEN');
+    if (![UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN].includes(query.actorRole as any)) throw AppError.fromCode('FORBIDDEN');
 
     let currentAssigneeId: string | null = null;
     if (query.taskId) {
@@ -1156,14 +1159,66 @@ function recipientUserIdFromSnapshot(snapshot: Prisma.JsonValue): string | null 
 }
 
 async function assertCurrentRentalContext(tx: Prisma.TransactionClient, order: any, now: Date) {
-  // Handover must not require a Booking. Validate the owner/recipient Trip membership and live Trip.
-  // Production with separated Area A should additionally supply its authoritative handover context port.
-  const member = await tx.tripMember.findUnique({ where: { tripId_userId: { tripId: order.tripId, userId: order.userId } },
-    include: { trip: { select: { id: true, status: true, startAt: true, endAt: true } } } });
-  if (!member || member.id !== order.membershipRef || member.status !== 'ACTIVE') throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
-  if (['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED'].includes(member.trip.status)) throw AppError.fromCode(LG.STALE_CONTEXT);
+  // Handover validates live Trip status, owner/recipient Trip membership, and handover timing.
+  const trip = await tx.trip.findUnique({
+    where: { id: order.tripId },
+    select: { id: true, status: true, tripType: true, leaderId: true, startAt: true, endAt: true },
+  });
+  if (!trip || ['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED'].includes(trip.status)) {
+    throw AppError.fromCode(LG.STALE_CONTEXT);
+  }
+
   const snapshot = jsonObject(order.recipientSnapshot);
-  if (snapshot.userId !== order.userId || snapshot.memberId !== member.id) throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+  if (snapshot.userId !== order.userId) {
+    throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+  }
+
+  if (trip.tripType === 'PRIVATE') {
+    const member = await tx.tripMember.findUnique({
+      where: { tripId_userId: { tripId: order.tripId, userId: order.userId } },
+      select: { id: true, status: true },
+    });
+    if (!member || member.id !== order.membershipRef || member.status !== 'ACTIVE') {
+      throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+    }
+    if (snapshot.memberId !== member.id) {
+      throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+    }
+  } else if (trip.leaderId === order.userId) {
+    if (order.membershipRef && order.membershipRef !== trip.leaderId) {
+      throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+    }
+    if (snapshot.memberId && snapshot.memberId !== trip.leaderId) {
+      throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+    }
+  } else {
+    const ownerBookingId = await confirmedPublicBookingOwnerId(tx, order);
+    if (!ownerBookingId || snapshot.memberId !== ownerBookingId) {
+      const participants = await tx.bookingParticipant.findMany({
+        where: {
+          userId: order.userId,
+          booking: { tripId: order.tripId, ...(order.bookingId ? { id: order.bookingId } : {}) },
+        },
+        select: {
+          id: true,
+          bookingId: true,
+          status: true,
+          booking: { select: { id: true, status: true } },
+        },
+      });
+
+      const matches = participants.some(
+        (p) =>
+          p.status === 'ACTIVE' &&
+          VALID_PUBLIC_BOOKING_STATUSES.includes(p.booking.status) &&
+          (!order.bookingId || p.bookingId === order.bookingId) &&
+          (order.membershipRef === p.id || order.membershipRef === p.bookingId) &&
+          (snapshot.memberId === p.id || snapshot.memberId === p.bookingId),
+      );
+      if (!matches) throw AppError.fromCode(LG.RECIPIENT_CONTEXT_INVALID);
+    }
+  }
+
   if (!order.pickupPointId || order.plannedHandoverAt > order.rentalEndAt || now > order.rentalEndAt) {
     throw AppError.fromCode(LG.PICKUP_CODE_INVALID_OR_EXPIRED);
   }
@@ -1181,13 +1236,13 @@ async function generateUniquePickupCode(tx: Prisma.TransactionClient, orderId: s
 }
 
 function fingerprintPickupCode(code: string): string {
-  const secret = process.env.RENTAL_PICKUP_CODE_SECRET;
+  const secret = envconfig.RENTAL_PICKUP_CODE_SECRET ?? process.env.RENTAL_PICKUP_CODE_SECRET;
   if (!secret || secret.length < 16) throw AppError.fromCode(LG.PICKUP_CODE_CONFIG_ERROR, { details: { requiredEnv: 'RENTAL_PICKUP_CODE_SECRET', minLength: 16 } });
   return createHmac('sha256', secret).update(`request:${code}`).digest('hex');
 }
 
 function hashPickupCode(orderId: string, code: string): string {
-  const secret = process.env.RENTAL_PICKUP_CODE_SECRET;
+  const secret = envconfig.RENTAL_PICKUP_CODE_SECRET ?? process.env.RENTAL_PICKUP_CODE_SECRET;
   if (!secret || secret.length < 16) throw AppError.fromCode(LG.PICKUP_CODE_CONFIG_ERROR, { details: { requiredEnv: 'RENTAL_PICKUP_CODE_SECRET', minLength: 16 } });
   return createHmac('sha256', secret).update(`${orderId}:${code}`).digest('hex');
 }
@@ -1234,6 +1289,9 @@ async function validateExceptionEvidence(tx: Prisma.TransactionClient, actorUser
     select: { id: true },
   });
   if (evidence.length !== uniqueIds.length) throw AppError.fromCode(LG.EVIDENCE_NOT_READY, { details: { requested: uniqueIds.length, valid: evidence.length } });
+  if (typeof tx.mediaAsset?.updateMany === 'function') {
+    await tx.mediaAsset.updateMany({ where: { id: { in: uniqueIds } }, data: { retentionUntil: null } });
+  }
 }
 
 async function calculateNoShowRefund(tx: Prisma.TransactionClient, order: any, now: Date, isUserFault: boolean) {

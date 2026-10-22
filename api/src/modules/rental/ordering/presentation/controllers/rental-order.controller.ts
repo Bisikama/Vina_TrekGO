@@ -1,21 +1,30 @@
-import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { UserRole } from 'src/shared/constants';
-import { AuthType } from 'src/shared/constants/auth.constant';
-import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
-import { Auth } from 'src/shared/decorators/auth.decorator';
-import { Roles } from 'src/shared/decorators/roles.decorator';
-import { AppError } from 'src/shared/errors/app-error';
-import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes';
-import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
-import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper';
-import { CancelRentalOrderUseCase } from '../../application/use-cases/cancel-rental-order.use-case';
-import { CreateRentalOrderUseCase } from '../../application/use-cases/create-rental-order.use-case';
-import { CreateRentalPaymentUseCase } from '../../application/use-cases/create-rental-payment.use-case';
-import { GetRentalOrderUseCase } from '../../application/use-cases/get-rental-order.use-case';
-import { GetRentalPaymentUseCase } from '../../application/use-cases/get-rental-payment.use-case';
-import { ListRentalOrdersUseCase } from '../../application/use-cases/list-rental-orders.use-case';
-import { PreviewRentalCancellationUseCase } from '../../application/use-cases/preview-rental-cancellation.use-case';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiHeader,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger'
+import { UserRole } from 'src/shared/constants'
+import { AuthType } from 'src/shared/constants/auth.constant'
+import { ActiveUser } from 'src/shared/decorators/active-user.decorator'
+import { Auth } from 'src/shared/decorators/auth.decorator'
+import { Roles } from 'src/shared/decorators/roles.decorator'
+import { AppError } from 'src/shared/errors/app-error'
+import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
+import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe'
+import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper'
+import { RENTAL_PAYMENT_STATUS_RESPONSE_SCHEMA } from '../../../../payments/payment-swagger.schemas'
+import { CancelRentalOrderUseCase } from '../../application/use-cases/cancel-rental-order.use-case'
+import { CreateRentalOrderUseCase } from '../../application/use-cases/create-rental-order.use-case'
+import { GetRentalOrderUseCase } from '../../application/use-cases/get-rental-order.use-case'
+import { GetRentalPaymentUseCase } from '../../application/use-cases/get-rental-payment.use-case'
+import { ListRentalOrdersUseCase } from '../../application/use-cases/list-rental-orders.use-case'
+import { PreviewRentalCancellationUseCase } from '../../application/use-cases/preview-rental-cancellation.use-case'
 import {
   CancelRentalOrderBodySchema,
   CreateRentalOrderBodySchema,
@@ -26,7 +35,7 @@ import {
   type CreateRentalOrderBodyDto,
   type ListRentalOrdersQueryDto,
   type RentalOrderIdParamDto,
-} from '../dtos/rental-order.dto';
+} from '../dtos/rental-order.dto'
 
 @ApiTags('Rental Orders - Đơn thuê thiết bị')
 @ApiBearerAuth('bearer')
@@ -36,7 +45,6 @@ export class RentalOrderController {
     private readonly createOrderUseCase: CreateRentalOrderUseCase,
     private readonly listOrdersUseCase: ListRentalOrdersUseCase,
     private readonly getOrderUseCase: GetRentalOrderUseCase,
-    private readonly createPaymentUseCase: CreateRentalPaymentUseCase,
     private readonly cancelOrderUseCase: CancelRentalOrderUseCase,
     private readonly getPaymentUseCase: GetRentalPaymentUseCase,
     private readonly previewCancellationUseCase: PreviewRentalCancellationUseCase,
@@ -46,6 +54,7 @@ export class RentalOrderController {
   @Auth([AuthType.Bearer])
   @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
+    operationId: 'createRentalOrder',
     summary: 'Tạo đơn thuê thiết bị',
     description: `
 **RB-API-201** — Tạo RentalOrder từ báo giá (Quote) đã có.
@@ -63,7 +72,7 @@ export class RentalOrderController {
     example: 'order-abc123-xyz',
   })
   @ApiBody({
-    description: 'Thông tin tạo đơn thuê',
+    description: 'Trước tiên gọi POST /api/v1/rentals/quote, sau đó sao chép quoteId từ phản hồi còn hiệu lực vào đây. Thay UUID minh họa bằng ID thật.',
     schema: {
       type: 'object',
       required: ['quoteId'],
@@ -72,7 +81,7 @@ export class RentalOrderController {
           type: 'string',
           format: 'uuid',
           description: 'ID của báo giá (Quote) đã tạo trước đó',
-          example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+          example: '550e8400-e29b-41d4-a716-446655440101',
         },
       },
     },
@@ -91,13 +100,18 @@ export class RentalOrderController {
     @Headers('idempotency-key') rawKey: string | undefined,
     @ActiveUser('id') userId: string,
   ) {
-    return this.createOrderUseCase.execute({ userId, quoteId: body.quoteId, idempotencyKey: requireIdempotencyKey(rawKey) });
+    return this.createOrderUseCase.execute({
+      userId,
+      quoteId: body.quoteId,
+      idempotencyKey: requireIdempotencyKey(rawKey),
+    })
   }
 
   @Get()
   @Auth([AuthType.Bearer])
   @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
+    operationId: 'listRentalOrders',
     summary: 'Danh sách đơn thuê của người dùng',
     description: `
 **RB-API-202 / RB-API-501** — Lấy danh sách RentalOrder của user hiện tại.
@@ -107,18 +121,42 @@ export class RentalOrderController {
 - Dùng chung cho cả luồng B2 (đặt đơn) và B5 (theo dõi đơn đang thuê).
 `,
   })
-  @ApiQuery({ name: 'tripId', required: false, type: String, description: 'Lọc theo ID chuyến đi', example: 'a1b2c3d4-5678-90ab-cdef-1234567890ab' })
-  @ApiQuery({ name: 'bookingId', required: false, type: String, description: 'Lọc theo ID booking', example: 'b2c3d4e5-6789-01bc-def0-234567890abc' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Lọc theo trạng thái đơn (PENDING_PAYMENT, PAID, PREPARING, RENTING, RETURNED, CANCELLED)', example: 'PAID' })
+  @ApiQuery({
+    name: 'tripId',
+    required: false,
+    type: String,
+    description: 'Lọc theo ID chuyến đi',
+    example: '550e8400-e29b-41d4-a716-446655440101',
+  })
+  @ApiQuery({
+    name: 'bookingId',
+    required: false,
+    type: String,
+    description: 'Lọc theo ID booking',
+    example: '550e8400-e29b-41d4-a716-446655440102',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Lọc theo trạng thái vòng đời đơn thuê (RentalOrderStatus): PENDING_PAYMENT, PAID, PREPARING, READY_FOR_HANDOVER, ACTIVE, RETURN_PENDING, RETURN_PROCESSING, COMPLETED, CANCELLED, EXPIRED. Lưu ý: Trạng thái tài chính (financialStatus) gồm UNPAID, AUTHORIZED, PARTIALLY_PAID, PAID, REFUND_PENDING, REFUNDED, SETTLED là trục quản lý riêng biệt.',
+    example: 'ACTIVE',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Số trang (mặc định: 1)', example: 1 })
-  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số đơn trên mỗi trang (tối đa 100, mặc định: 20)', example: 20 })
+  @ApiQuery({
+    name: 'pageSize',
+    required: false,
+    type: Number,
+    description: 'Số đơn trên mỗi trang (tối đa 100, mặc định: 20)',
+    example: 20,
+  })
   @ApiResponse({ status: 200, description: 'Trả về danh sách đơn thuê kèm thông tin phân trang' })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
   async listOrders(
     @Query(new ZodValidationPipe(ListRentalOrdersQuerySchema)) query: ListRentalOrdersQueryDto,
     @ActiveUser('id') userId: string,
   ) {
-    return this.listOrdersUseCase.execute({ userId, ...query });
+    return this.listOrdersUseCase.execute({ userId, ...query })
   }
 
   @Get(':id')
@@ -134,7 +172,13 @@ export class RentalOrderController {
 - Trả về đầy đủ: thông tin đơn, danh sách sản phẩm, reservation, payment, invoice.
 `,
   })
-  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'ID đơn thuê', example: 'c3d4e5f6-7890-12cd-ef01-345678901bcd' })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'ID đơn thuê',
+    example: '550e8400-e29b-41d4-a716-446655440103',
+  })
   @ApiResponse({ status: 200, description: 'Trả về chi tiết đầy đủ của đơn thuê' })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
   @ApiErrorResponse(403, 'Không có quyền', 'FORBIDDEN', 'Bạn không có quyền xem đơn thuê này')
@@ -144,7 +188,7 @@ export class RentalOrderController {
     @ActiveUser('id') actorUserId: string,
     @ActiveUser('role') actorRole: string,
   ) {
-    return this.getOrderUseCase.execute({ actorUserId, actorRole, orderId: params.id });
+    return this.getOrderUseCase.execute({ actorUserId, actorRole, orderId: params.id })
   }
 
   @Post(':id/cancel')
@@ -162,18 +206,18 @@ export class RentalOrderController {
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'ID đơn thuê cần huỷ' })
   @ApiBody({
-    description: 'Thông tin huỷ đơn',
+    description: 'Gọi GET /api/v1/rental-orders/{id}/cancellation-preview ngay trước bước này, sao chép previewVersion từ phản hồi và expectedVersion từ chi tiết đơn. Giá trị minh họa không dùng được với đơn thật.',
     schema: {
       type: 'object',
       required: ['reason', 'previewVersion', 'expectedVersion'],
       properties: {
         reason: { type: 'string', description: 'Lý do huỷ đơn (1–500 ký tự)', example: 'Thay đổi kế hoạch chuyến đi' },
-        previewVersion: { type: 'string', description: 'Phiên bản preview hoàn tiền đã xem', example: 'v1-abc123' },
-        expectedVersion: { type: 'integer', description: 'Phiên bản đơn mong đợi (optimistic lock)', example: 1 },
+        previewVersion: { type: 'string', description: 'Sao chép nguyên giá trị previewVersion từ API xem trước hủy', example: 'v1-abc123' },
+        expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản đơn hiện tại (optimistic lock)', example: 1 },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Huỷ đơn thành công — trả về đơn đã cập nhật trạng thái CANCELLED' })
+  @ApiResponse({ status: 201, description: 'Huỷ đơn thành công — trả về đơn đã cập nhật trạng thái CANCELLED' })
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'reason không được để trống')
   @ApiErrorResponse(404, 'Không tìm thấy', 'ORDER_NOT_FOUND', 'Đơn thuê không tồn tại')
   @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Đơn đã bị thay đổi bởi thao tác khác')
@@ -183,30 +227,44 @@ export class RentalOrderController {
     @Body(new ZodValidationPipe(CancelRentalOrderBodySchema)) body: CancelRentalOrderBodyDto,
     @ActiveUser('id') userId: string,
   ) {
-    return this.cancelOrderUseCase.execute({ userId, orderId: params.id, ...body });
+    return this.cancelOrderUseCase.execute({ userId, orderId: params.id, ...body })
   }
 
   @Get(':id/payment')
   @Auth([AuthType.Bearer])
   @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
+    operationId: 'getRentalOrderPaymentStatus',
     summary: 'Trạng thái thanh toán của đơn thuê',
     description: `
 **RB-API-206** — Kiểm tra trạng thái thanh toán hiện tại của RentalOrder.
 
-- Trả về thông tin payment: trạng thái (PENDING, PAID, FAILED, EXPIRED), số tiền, phương thức, thời gian.
+- Trả về trạng thái payment (PENDING, PROCESSING, SUCCEEDED, FAILED, CANCELLED, EXPIRED), invoice, application và reconciliation.
 - Dùng để FE hiển thị trạng thái thanh toán và quyết định hiện nút "Thanh toán lại" hay không.
+- Payment SUCCEEDED chỉ hoàn tất nghiệp vụ khi application APPLIED và RentalOrder đã PAID.
+- Khi chưa tạo payment, API vẫn trả HTTP 200 với status = NOT_STARTED và nextAction.type = CREATE_PAYMENT.
 `,
   })
-  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'ID đơn thuê' })
-  @ApiResponse({ status: 200, description: 'Trả về trạng thái thanh toán chi tiết' })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'ID đơn thuê',
+    example: '550e8400-e29b-41d4-a716-446655440021',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Trạng thái payment, invoice, application, reconciliation và RentalOrder',
+    schema: RENTAL_PAYMENT_STATUS_RESPONSE_SCHEMA,
+  })
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
-  @ApiErrorResponse(404, 'Không tìm thấy', 'ORDER_NOT_FOUND', 'Đơn thuê không tồn tại hoặc chưa có payment')
+  @ApiErrorResponse(403, 'Không có quyền', 'FORBIDDEN', 'Đơn thuê không thuộc user hiện tại')
+  @ApiErrorResponse(404, 'Không tìm thấy', 'RENTAL_ORDER_NOT_FOUND', 'Đơn thuê không tồn tại')
   async getPayment(
     @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,
     @ActiveUser('id') userId: string,
   ) {
-    return this.getPaymentUseCase.execute({ userId, orderId: params.id });
+    return this.getPaymentUseCase.execute({ userId, orderId: params.id })
   }
 
   @Get(':id/cancellation-preview')
@@ -230,12 +288,12 @@ export class RentalOrderController {
     @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,
     @ActiveUser('id') userId: string,
   ) {
-    return this.previewCancellationUseCase.execute({ userId, orderId: params.id });
+    return this.previewCancellationUseCase.execute({ userId, orderId: params.id })
   }
 }
 
 function requireIdempotencyKey(raw: string | undefined): string {
-  const parsed = RentalIdempotencyKeySchema.safeParse(raw);
-  if (!parsed.success) throw AppError.fromCode(RT.IDEMPOTENCY_KEY_REQUIRED);
-  return parsed.data;
+  const parsed = RentalIdempotencyKeySchema.safeParse(raw)
+  if (!parsed.success) throw AppError.fromCode(RT.IDEMPOTENCY_KEY_REQUIRED)
+  return parsed.data
 }

@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
@@ -7,6 +8,7 @@ import { PaymentMethod, ProviderScope } from '../../payments/payment-provider.po
 import { paymentHash, paymentRecoveryConfig } from '../../payments/payment-utils'
 import { rentalComponents } from './rental-payment.rules'
 import { rentalMembershipValid } from './rental-membership.guard'
+import { rentalOccupiedFrom } from '../ordering/application/services/rental-ordering.rules'
 
 export type RentalCheckoutCommand = {
   rentalOrderId: string
@@ -16,6 +18,16 @@ export type RentalCheckoutCommand = {
   gateway?: 'momo' | 'vnpay'
   clientIp?: string
 }
+
+export type RentalExtensionCheckoutCommand = {
+  extensionId: string
+  actorUserId: string
+  idempotencyKey: string
+  paymentMethod: PaymentMethod
+  gateway?: 'momo' | 'vnpay'
+  clientIp?: string
+}
+
 @Injectable()
 export class RentalCheckoutService {
   constructor(private readonly db: PrismaService) {}
@@ -26,7 +38,7 @@ export class RentalCheckoutService {
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
       const initial = await tx.rentalOrder.findUnique({ where: { id: input.rentalOrderId } })
       if (!initial || initial.userId !== input.actorUserId) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
-      await tx.$queryRaw`SELECT id FROM trips WHERE id=${initial.tripId}::uuid FOR UPDATE`
+      // Serialize this order and its reservations; the live Trip/Booking is checked below.
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${initial.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT r.id FROM rental_quantity_reservations r JOIN rental_order_lines l ON l.id=r.order_line_id
         WHERE l.order_id=${initial.id}::uuid ORDER BY r.id FOR UPDATE OF r`
@@ -58,10 +70,12 @@ export class RentalCheckoutService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return { payment: previous, created: false }
       }
+      const isProduction = (envconfig.NODE_ENV ?? process.env.NODE_ENV) === 'production'
+      const mockDisabled = envconfig.PAYMENT_MOCK_ENABLED === false || process.env.PAYMENT_MOCK_ENABLED === 'false'
       if (
         scope.environment === 'MOCK' &&
-        process.env.NODE_ENV === 'production' &&
-        process.env.PAYMENT_MOCK_ENABLED !== 'true'
+        isProduction &&
+        mockDisabled
       )
         throw AppError.fromCode(E.PAYMENT_PROVIDER_UNAVAILABLE)
       let [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
@@ -70,6 +84,7 @@ export class RentalCheckoutService {
         order.status !== 'PENDING_PAYMENT' ||
         !['UNPAID', 'PAYMENT_PENDING'].includes(order.financialStatus) ||
         order.paymentExpiresAt <= now ||
+        order.occupiedStartAt > rentalOccupiedFrom(order.rentalStartAt) ||
         !memberEligible
       ) {
         throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
@@ -165,6 +180,7 @@ export class RentalCheckoutService {
       const requestSnapshot = {
         actor: input.actorUserId,
         operation: 'rental-checkout',
+        gateway: scope.gateway,
         rentalOrderId: order.id,
         invoiceId: invoice.id,
         revision: invoice.revisionNo,
@@ -209,7 +225,7 @@ export class RentalCheckoutService {
   /** Additional rental fee. Uses the SAME scoped payment provider/outbox/webhook
    * as initial Rental checkout; never creates an unverified payment stub.
    */
-  async reserveExtension(input: { extensionId: string; actorUserId: string; idempotencyKey: string; paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' }, scope: ProviderScope) {
+  async reserveExtension(input: RentalExtensionCheckoutCommand, scope: ProviderScope) {
     const key = paymentHash([input.actorUserId, 'rental-extension-checkout', input.idempotencyKey])
     return this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`
@@ -228,7 +244,9 @@ export class RentalCheckoutService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return { payment: previous, created: false }
       }
-      if (scope.environment === 'MOCK' && process.env.NODE_ENV === 'production' && process.env.PAYMENT_MOCK_ENABLED !== 'true')
+      const isProd = (envconfig.NODE_ENV ?? process.env.NODE_ENV) === 'production'
+      const mockDis = envconfig.PAYMENT_MOCK_ENABLED === false || process.env.PAYMENT_MOCK_ENABLED === 'false'
+      if (scope.environment === 'MOCK' && isProd && mockDis)
         throw AppError.fromCode(E.PAYMENT_PROVIDER_UNAVAILABLE)
       const [{ now }] = await tx.$queryRaw<{now: Date}[]>`SELECT clock_timestamp() AS now`
       if (ext.status !== 'PENDING_PAYMENT' || !ext.holdExpiresAt || ext.holdExpiresAt <= now ||
@@ -259,7 +277,7 @@ export class RentalCheckoutService {
         (invoice.expiresAt && invoice.expiresAt <= now)) throw AppError.fromCode(E.PAYMENT_INVALID_STATE)
       const running = await tx.payment.findFirst({ where: { invoiceId: invoice.id, status: { in: ['PENDING','PROCESSING','SUCCEEDED'] } } })
       if (running) throw AppError.fromCode(E.PAYMENT_ATTEMPT_IN_PROGRESS)
-      const requestSnapshot = { actor: input.actorUserId, operation: 'rental-extension-checkout',
+      const requestSnapshot = { actor: input.actorUserId, operation: 'rental-extension-checkout', gateway: scope.gateway,
         extensionId: ext.id, orderId: ext.orderId, invoiceId: invoice.id, revision: invoice.revisionNo,
         amount: ext.additionalFee.toFixed(), currency: ext.currency, paymentMethod: input.paymentMethod }
       const id = randomUUID()
