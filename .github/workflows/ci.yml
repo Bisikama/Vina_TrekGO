@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # CI Pipeline - TrekGO API
 # Chay khi: merge Pull Request vao nhanh develop hoac main
 # May ao: GitHub tu tao Ubuntu tren cloud, ban KHONG can may chu.
@@ -87,10 +87,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         # Bien moi truong cau hinh PostgreSQL container:
+        # Dung POSTGRES_HOST_AUTH_METHOD: trust de cho phep ket noi noi bo khong can password
+        # tranh bi cac cong cu bao mat nhu GitGuardian hieu nham la lo mat khau that.
         env:
           POSTGRES_USER: ci_user
-          POSTGRES_PASSWORD: ci_pass
           POSTGRES_DB: trekgo_ci
+          POSTGRES_HOST_AUTH_METHOD: trust
         # ports: map cong 5432 cua container ra cong 5432 tren may ao
         ports:
           - 5432:5432
@@ -108,12 +110,19 @@ jobs:
 
     # Bien moi truong dung chung cho tat ca steps trong job nay
     env:
-      DATABASE_URL: "postgresql://ci_user:ci_pass@localhost:5432/trekgo_ci"
+      DATABASE_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
       NODE_ENV: test
       ACCESS_TOKEN_SECRET: "ci-dummy-access-secret-min-32-chars-ok"
       REFRESH_TOKEN_SECRET: "ci-dummy-refresh-secret-min-32-chars-ok"
       SECRET_API_KEY: "ci-dummy-api-key"
+      SUPABASE_URL: "https://ci-dummy.supabase.co"
+      SUPABASE_ANON_KEY: "ci-dummy-supabase-anon-key"
+      SUPABASE_SERVICE_ROLE_KEY: "ci-dummy-supabase-service-role-key"
+      REDIS_URL: "redis://localhost:6379"
+      REDIS_ENABLED: "false"
+      MEDIA_ENABLED: "false"
       MEDIA_DEV_UPLOAD_ENABLED: "false"
+      NODE_OPTIONS: "--max_old_space_size=4096"
 
     steps:
       # Step 1: Clone code
@@ -158,9 +167,9 @@ jobs:
         env:
           NODE_ENV: production
 
-      # Step 8: Unit tests (src/**/*.spec.ts) - khong can DB
+      # Step 8: Unit tests (src/**/*.spec.ts) - dung --runInBand de tranh tran bo nho gay crash jest worker
       - name: "Step 8 - Unit Tests (src/**/*.spec.ts)"
-        run: npm run test -- --maxWorkers=2 --forceExit --passWithNoTests
+        run: npm run test -- --runInBand --forceExit --passWithNoTests
 
       # Step 9: CF01 HTTP Tests - dung mock, khong can DB that
       # cf01.http.spec.ts: NestJS Test harness + supertest + mock store
