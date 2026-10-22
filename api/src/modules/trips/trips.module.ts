@@ -30,12 +30,15 @@ import { GetNavigationContextUseCase } from './application/use-cases/get-navigat
 import { SwitchTrailUseCase } from './application/use-cases/switch-trail.use-case'
 import { NavigationContextPort } from './application/port/navigation-context.port'
 import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma-navigation-context.adapter'
+import { TripPricingController } from './pricing/trip-pricing.controller'
+import { TripPricingService } from './pricing/trip-pricing.service'
 
 @Module({
   controllers: [
     PrivateMemberInvitationController,
     TripHistoryController,
     TransportController,
+    TripPricingController,
     LeaderPublicTripController,
     TripOptionsController,
     PublicTripController,
@@ -49,6 +52,7 @@ import { PrismaNavigationContextAdapter } from './infrastructure/adapters/prisma
     TripHistoryUseCase,
     { provide: TripHistoryPort, useClass: PrismaTripHistoryAdapter },
     TransportService,
+    TripPricingService,
     PublicTripUseCase,
     PrivateTripUseCase,
     GetNavigationContextUseCase,

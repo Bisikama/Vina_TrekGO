@@ -13,6 +13,7 @@ import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-cod
 import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes';
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
+import { TRIP_PRICING_ERROR_CODES as TP } from './codes/trip-pricing.error-codes';
 
 export interface ErrorDefinition {
   status: number;
@@ -21,17 +22,14 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
-<<<<<<< HEAD
   [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
   [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
   [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },
-=======
   [RD.INTEGRITY_FAILED]: { status: 409, message: 'Document integrity verification failed', retryable: false },
   [RD.CORRECTION_NOT_ALLOWED]: { status: 409, message: 'Document correction is not allowed', retryable: false },
   [RD.RENDER_RETRY_EXHAUSTED]: { status: 409, message: 'Document render retry limit reached', retryable: false },
   [RD.STORAGE_UNAVAILABLE]: { status: 503, message: 'Private document storage unavailable', retryable: true },
   [RD.AUDIT_UNAVAILABLE]: { status: 503, message: 'Document access audit unavailable', retryable: true },
->>>>>>> origin/develop
   [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
   [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
   [TT.LOCKED]: { status: 409, message: 'Không được sửa xe đã hủy hoặc chuyến đã bắt đầu/kết thúc/hủy.', retryable: false },
@@ -225,4 +223,12 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
   [PT.DEM_PROCESSING_FAILED]: { status: 500, message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM', retryable: true },
   [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: { status: 400, message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh', retryable: false },
+  [TP.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến đi hoặc bảng dự toán chi phí.', retryable: false },
+  [TP.LOCKED]: { status: 409, message: 'Chuyến đi đã bắt đầu, kết thúc hoặc bị hủy nên không thể điều chỉnh giá.', retryable: false },
+  [TP.VERSION_CONFLICT]: { status: 409, message: 'Dữ liệu chuyến đi hoặc bảng giá đã thay đổi. Vui lòng tải lại.', retryable: false },
+  [TP.COST_PLAN_INVALID]: { status: 422, message: 'Cấu hình bảng chi phí hoặc bậc tăng chi phí không hợp lệ.', retryable: false },
+  [TP.PAX_INVALID]: { status: 422, message: 'Số lượng khách mục tiêu hoặc khách tối thiểu không hợp lệ.', retryable: false },
+  [TP.IMPOSSIBLE]: { status: 422, message: 'Tổng tỷ lệ phí và lợi nhuận mục tiêu vượt quá 100% doanh thu.', retryable: false },
+  [TP.LOSS_INTERVAL]: { status: 409, message: 'Tồn tại quy mô đoàn từ ngưỡng tối thiểu bị lỗ âm. Hãy điều chỉnh giá bán hoặc ngưỡng khách.', retryable: false },
+  [TP.STALE]: { status: 409, message: 'Thông số chuyến đi hoặc cấu hình phí đã thay đổi sau khi chốt giá. Hãy xác nhận lại bảng giá.', retryable: false },
 };

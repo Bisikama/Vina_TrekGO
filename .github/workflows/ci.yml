@@ -1,0 +1,246 @@
+﻿# =============================================================================
+# CI Pipeline - TrekGO API
+# Chay khi: merge Pull Request vao nhanh develop hoac main
+# May ao: GitHub tu tao Ubuntu tren cloud, ban KHONG can may chu.
+# =============================================================================
+
+name: CI - TrekGO API
+
+# -----------------------------------------------------------------------------
+# TRIGGERS
+# Chi chay khi co Pull Request duoc MERGE vao develop hoac main.
+# push: la event xay ra sau khi merge thanh cong.
+# pull_request: la event kiem tra truoc khi merge (preview).
+# Giu ca hai de ban thay ket qua ngay tren PR truoc khi bam "Merge".
+# -----------------------------------------------------------------------------
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+
+# -----------------------------------------------------------------------------
+# CONCURRENCY - Huy chay cu, chi giu chay moi nhat
+# Van de: push 3 commit lien tiep len cung 1 nhanh → GitHub chay ca 3 lan,
+#   gay nghen hang doi, ton minute.
+# Giai phap: cancel-in-progress: true → tu dong huy commit #1, #2, giu lai #3.
+# group key = ten workflow + ten ref (branch/PR) → moi nhanh co hang doi rieng.
+# -----------------------------------------------------------------------------
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# =============================================================================
+# BUOC TIEN XU LY: Phat hien thu muc nao thay doi
+# Neu chi sua web/ thi khong can chay lai test api/, tiet kiem thoi gian.
+# =============================================================================
+jobs:
+  # ---------------------------------------------------------------------------
+  # JOB 0: paths-filter - quet xem co file nao thay doi khong
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: "Detect changed paths"
+    runs-on: ubuntu-latest
+    # outputs: bien dau ra de cac job sau co the doc
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+            web:
+              - 'web/**'
+            mobile:
+              - 'mobile/**'
+          # dorny/paths-filter so sanh diff giua base branch va HEAD.
+          # Neu khong co file nao trong api/ thay doi → outputs.api = 'false'
+          # → job api-ci se bi skip hoan toan → tiet kiem ~3-4 phut.
+
+  # ---------------------------------------------------------------------------
+  # JOB 1: Kiem tra API (chi chay khi co file trong api/ thay doi)
+  # ---------------------------------------------------------------------------
+  api-ci:
+    name: "API - Migration, Build & Tests"
+    needs: detect-changes
+    # Dieu kien skip: neu detect-changes bao api khong doi → bo qua job nay
+    if: ${{ needs.detect-changes.outputs.api == 'true' }}
+    runs-on: ubuntu-latest
+
+    # -------------------------------------------------------------------------
+    # SERVICE CONTAINER: PostgreSQL thuan (KHONG can PostGIS)
+    # Ly do: Sau khi kiem tra toan bo migrations va schema.prisma, du an
+    # KHONG su dung PostGIS / geography / geometry. Chi dung PostgreSQL bieu thong.
+    # → Dung image postgres:16-alpine nhe hon (180MB vs 800MB cua postgis).
+    # Neu tuong lai them PostGIS, doi sang: postgis/postgis:16-3.4-alpine
+    # -------------------------------------------------------------------------
+    services:
+      postgres:
+        image: postgres:16-alpine
+        # Bien moi truong cau hinh PostgreSQL container:
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_pass
+          POSTGRES_DB: trekgo_ci
+        # ports: map cong 5432 cua container ra cong 5432 tren may ao
+        ports:
+          - 5432:5432
+        # health check: doi cho den khi PostgreSQL san sang nhan ket noi
+        # truoc khi bat dau cac buoc ben duoi.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: ./api
+
+    # Bien moi truong dung chung cho tat ca steps trong job nay
+    env:
+      DATABASE_URL: "postgresql://ci_user:ci_pass@localhost:5432/trekgo_ci"
+      NODE_ENV: test
+      ACCESS_TOKEN_SECRET: "ci-dummy-access-secret-min-32-chars-ok"
+      REFRESH_TOKEN_SECRET: "ci-dummy-refresh-secret-min-32-chars-ok"
+      SECRET_API_KEY: "ci-dummy-api-key"
+      MEDIA_DEV_UPLOAD_ENABLED: "false"
+
+    steps:
+      # Step 1: Clone code
+      - name: "Step 1 - Checkout source code"
+        uses: actions/checkout@v4
+
+      # Step 2: Cai Node.js 20 voi cache npm
+      - name: "Step 2 - Setup Node.js 20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: api/package-lock.json
+
+      # Step 3: Cai dependencies
+      - name: "Step 3 - Install dependencies"
+        run: npm ci
+
+      # Step 4: Validate schema.prisma
+      # prisma validate: kiem tra cu phap schema, quan he, kieu du lieu.
+      # Neu ai vua them model moi ma thieu foreign key hay sai kieu → fail ngay.
+      - name: "Step 4 - Validate Prisma Schema"
+        run: npx prisma validate
+
+      # Step 5: Generate Prisma Client tu schema da validate
+      - name: "Step 5 - Generate Prisma Client"
+        run: npx prisma generate
+
+      # Step 6: Chay THAT migrations vao PostgreSQL container
+      # prisma migrate deploy: ap dung tat ca file migration.sql len DB that.
+      # Day la buoc QUAN TRONG NHAT:
+      #   - Neu migration.sql co loi cu phap SQL → fail
+      #   - Neu migration lech voi schema.prisma → fail
+      #   - Vi du: table trip_cost_plans vua tao ma thieu column → bi bat ngay
+      # Buoc nay BAO VE ca nhom: khong ai merge migration hong vao develop/main.
+      - name: "Step 6 - Run Prisma Migrations (real PostgreSQL)"
+        run: npx prisma migrate deploy
+
+      # Step 7: Build TypeScript - kiem tra toan bo type errors
+      - name: "Step 7 - Build TypeScript"
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # Step 8: Unit tests (src/**/*.spec.ts) - khong can DB
+      - name: "Step 8 - Unit Tests (src/**/*.spec.ts)"
+        run: npm run test -- --maxWorkers=2 --forceExit --passWithNoTests
+
+      # Step 9: CF01 HTTP Tests - dung mock, khong can DB that
+      # cf01.http.spec.ts: NestJS Test harness + supertest + mock store
+      # cf01.integration.spec.ts: tu dong SKIP vi CF01_TEST_DATABASE_URL khong set
+      - name: "Step 9 - CF01 HTTP Tests (mock, no external DB)"
+        run: npm run test:cf01
+
+  # ---------------------------------------------------------------------------
+  # JOB 2: Kiem tra Web (Next.js) - chi chay khi co file trong web/ thay doi
+  # ---------------------------------------------------------------------------
+  web-ci:
+    name: "Web - Lint & Build"
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+      - name: "Step 1 - Checkout source code"
+        uses: actions/checkout@v4
+
+      - name: "Step 2 - Setup Node.js 20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: "Step 3 - Install dependencies"
+        run: npm ci
+
+      - name: "Step 4 - Lint"
+        run: npm run lint
+        continue-on-error: true
+        # continue-on-error: true → lint fail khong chặn build
+        # Doi nhu co the bat thanh false khi code base da on dinh
+
+      - name: "Step 5 - Build Next.js"
+        run: npm run build
+        # next build: compile TypeScript + toi uu bundle
+        # Neu co loi type hoac import sai → fail ngay
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:3000"
+
+  # ---------------------------------------------------------------------------
+  # JOB 3: Kiem tra Mobile (Expo) - chi chay khi co file trong mobile/ thay doi
+  # ---------------------------------------------------------------------------
+  mobile-ci:
+    name: "Mobile - Lint & TypeCheck"
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.mobile == 'true' }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./mobile
+
+    steps:
+      - name: "Step 1 - Checkout source code"
+        uses: actions/checkout@v4
+
+      - name: "Step 2 - Setup Node.js 20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: "Step 3 - Install dependencies"
+        run: npm ci
+
+      - name: "Step 4 - Lint"
+        run: npm run lint
+        continue-on-error: true
+
+      - name: "Step 5 - TypeScript type check"
+        run: npx tsc --noEmit
+        # --noEmit: chi kiem tra kieu, khong build ra file
+        # Expo khong co "build" chay duoc tren CI khong co may ao ARM/iOS/Android
+        # nen typecheck la cach thuc te nhat

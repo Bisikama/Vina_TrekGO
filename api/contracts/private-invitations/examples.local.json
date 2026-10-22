@@ -1,0 +1,293 @@
+[
+  {
+    "name": "create for decline",
+    "status": 201,
+    "body": {
+      "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "PENDING",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:03.880Z",
+      "reason": null,
+      "version": 1,
+      "reservesCapacity": false,
+      "recipientDisplay": "M2 fixture"
+    }
+  },
+  {
+    "name": "host list",
+    "status": 200,
+    "body": {
+      "items": [
+        {
+          "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+          "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+          "status": "PENDING",
+          "expiresAt": "2026-10-23T11:12:02.415Z",
+          "createdAt": "2026-10-22T11:12:03.880Z",
+          "reason": null,
+          "version": 1,
+          "reservesCapacity": false,
+          "recipientDisplay": "M2 fixture"
+        }
+      ],
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  },
+  {
+    "name": "recipient list",
+    "status": 200,
+    "body": {
+      "items": [
+        {
+          "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+          "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+          "status": "PENDING",
+          "expiresAt": "2026-10-23T11:12:02.415Z",
+          "createdAt": "2026-10-22T11:12:03.880Z",
+          "reason": null,
+          "version": 1,
+          "reservesCapacity": false,
+          "recipientDisplay": "M2 fixture"
+        }
+      ],
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  },
+  {
+    "name": "preview",
+    "status": 200,
+    "body": {
+      "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "PENDING",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:03.880Z",
+      "reason": null,
+      "version": 1,
+      "reservesCapacity": false,
+      "senderDisplay": "M2 fixture",
+      "recipientDisplay": "M2 fixture",
+      "trip": {
+        "id": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+        "title": "M2 trip",
+        "startAt": "2026-10-23T11:12:03.415Z",
+        "endAt": "2026-10-24T11:12:03.415Z",
+        "status": "OPEN"
+      },
+      "actions": {
+        "canAccept": true,
+        "canEnterRoom": false,
+        "canDecline": true,
+        "canRevoke": false
+      }
+    }
+  },
+  {
+    "name": "decline",
+    "status": 200,
+    "body": {
+      "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "DECLINED",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:03.880Z",
+      "reason": null,
+      "version": 2,
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "decline replay",
+    "status": 200,
+    "body": {
+      "id": "08fd8651-458b-4973-a146-bf1b50c713a5",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "DECLINED",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:03.880Z",
+      "reason": null,
+      "version": 2,
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "create for revoke",
+    "status": 201,
+    "body": {
+      "id": "22df0120-b70b-4ac2-89c8-4996b8a58942",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "PENDING",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:04.240Z",
+      "reason": null,
+      "version": 1,
+      "reservesCapacity": false,
+      "recipientDisplay": "M2 fixture"
+    }
+  },
+  {
+    "name": "revoke",
+    "status": 200,
+    "body": {
+      "id": "22df0120-b70b-4ac2-89c8-4996b8a58942",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "REVOKED",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:04.240Z",
+      "reason": null,
+      "version": 2,
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "revoke replay",
+    "status": 200,
+    "body": {
+      "id": "22df0120-b70b-4ac2-89c8-4996b8a58942",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "REVOKED",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:04.240Z",
+      "reason": null,
+      "version": 2,
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "create short expiry",
+    "status": 201,
+    "body": {
+      "id": "ed491a9e-115f-412e-9593-030dc1b86deb",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "PENDING",
+      "expiresAt": "2026-10-22T11:12:06.344Z",
+      "createdAt": "2026-10-22T11:12:04.397Z",
+      "reason": null,
+      "version": 1,
+      "reservesCapacity": false,
+      "recipientDisplay": "M2 fixture"
+    }
+  },
+  {
+    "name": "expired accept",
+    "status": 410,
+    "body": {
+      "error": {
+        "code": "INVITE_EXPIRED",
+        "message": "Invite has expired",
+        "retryable": false
+      },
+      "meta": {
+        "requestId": "5afea2e3-c4be-4ecf-b1c7-d59e1064e1a3",
+        "serverTime": "2026-10-22T11:12:06.752Z",
+        "contractVersion": "0.2.0-final-flow"
+      }
+    }
+  },
+  {
+    "name": "create for accept",
+    "status": 201,
+    "body": {
+      "id": "5ad6956a-7ebf-421c-be0e-1f60857a36ae",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "status": "PENDING",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "createdAt": "2026-10-22T11:12:06.792Z",
+      "reason": null,
+      "version": 1,
+      "reservesCapacity": false,
+      "recipientDisplay": "M2 fixture"
+    }
+  },
+  {
+    "name": "create replay",
+    "status": 201,
+    "body": {
+      "id": "5ad6956a-7ebf-421c-be0e-1f60857a36ae",
+      "reason": null,
+      "status": "PENDING",
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "version": 1,
+      "createdAt": "2026-10-22T11:12:06.792Z",
+      "expiresAt": "2026-10-23T11:12:02.415Z",
+      "recipientDisplay": "M2 fixture",
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "accept",
+    "status": 200,
+    "body": {
+      "invitationStatus": "ACCEPTED",
+      "resolutionReason": null,
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "memberId": "0e754c4b-5685-4ac7-93de-da05a0116791",
+      "membershipStatus": "ACTIVE",
+      "membershipVersion": 1,
+      "membershipVersionAtAccept": 1,
+      "canEnterRoom": true,
+      "alreadyMember": false,
+      "rejoined": false
+    }
+  },
+  {
+    "name": "accept replay",
+    "status": 200,
+    "body": {
+      "invitationStatus": "ACCEPTED",
+      "resolutionReason": null,
+      "tripId": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+      "memberId": "0e754c4b-5685-4ac7-93de-da05a0116791",
+      "membershipStatus": "ACTIVE",
+      "membershipVersion": 1,
+      "membershipVersionAtAccept": 1,
+      "canEnterRoom": true,
+      "alreadyMember": true,
+      "rejoined": false
+    }
+  },
+  {
+    "name": "room",
+    "status": 200,
+    "body": {
+      "trip": {
+        "id": "4ed8ccda-dee3-4948-b90b-b740d150f99c",
+        "tripType": "PRIVATE",
+        "title": "M2 trip",
+        "description": null,
+        "status": "OPEN",
+        "version": 2,
+        "startAt": "2026-10-23T11:12:03.415Z",
+        "endAt": "2026-10-24T11:12:03.415Z",
+        "capacity": 2,
+        "activeMemberCount": 2,
+        "pickupPoint": null
+      },
+      "viewer": {
+        "isHost": false,
+        "membershipId": "0e754c4b-5685-4ac7-93de-da05a0116791",
+        "membershipVersion": 1,
+        "membershipStatus": "ACTIVE"
+      },
+      "permissions": {
+        "canInvite": false,
+        "canRemoveMembers": false,
+        "canLeave": true,
+        "canRent": true
+      },
+      "rental": {
+        "eligible": true,
+        "reason": null
+      },
+      "plannedRoutes": [],
+      "requiredCheckpoints": []
+    }
+  }
+]
