@@ -1,3 +1,4 @@
+import { ApiMemberInvitation } from '../private-member-invitation.swagger'
 import {
   Body,
   Controller,
@@ -11,7 +12,7 @@ import {
   Query,
   Res,
 } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import type { Response } from 'express'
 import { z } from 'zod'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
@@ -33,7 +34,7 @@ import {
   invitationIdempotencyKeySchema,
 } from '../dtos/private-member-invitation.dto'
 
-const bodyDoc = (schema: z.ZodType) => ApiBody({ schema: z.toJSONSchema(schema, { io: 'input' }) as SchemaObject })
+const bodyDoc = (schema: z.ZodType) => ApiBody({ schema: z.toJSONSchema(schema, { io: 'input' }) as SchemaObject, required: schema === createPrivateMemberInvitationSchema })
 @ApiTags('Private member invitations')
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
@@ -51,8 +52,8 @@ export class PrivateMemberInvitationController {
   }
   @Post('private-trips/:id/member-invitations')
   @ApiOperation({ summary: 'Host sends a direct invitation; no capacity is reserved' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
-  @ApiResponse({ status: 201, description: 'Invitation snapshot; refetch current state after replay' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, schema: { type: 'string', minLength: 1, maxLength: 200, pattern: '^[!-~]+$' } })
+  @ApiMemberInvitation('create')
   @Header('Cache-Control', 'no-store')
   @bodyDoc(createPrivateMemberInvitationSchema)
   create(
@@ -71,9 +72,10 @@ export class PrivateMemberInvitationController {
     })
   }
   @Get('private-trips/:id/member-invitations')
+  @ApiMemberInvitation('page', true)
   @ApiOperation({ summary: 'Host invitation history with effective status' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -89,9 +91,10 @@ export class PrivateMemberInvitationController {
     return this.invitations.list(actor.id, page, id)
   }
   @Get('me/private-trip-member-invitations')
+  @ApiMemberInvitation('page', false)
   @ApiOperation({ summary: 'Current recipient private invitations (M2 paginated inbox)' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -106,6 +109,7 @@ export class PrivateMemberInvitationController {
     return this.invitations.list(actor.id, page)
   }
   @Get('private-trip-member-invitations/:id')
+  @ApiMemberInvitation('preview', true)
   @ApiOperation({ summary: 'Authorized minimal preview; does not grant room access' })
   @Header('Cache-Control', 'no-store')
   preview(@ActiveUser() actor: Actor, @Param('id', new ParseUUIDPipe()) id: string) {
@@ -113,6 +117,7 @@ export class PrivateMemberInvitationController {
     return this.invitations.preview(actor.id, id)
   }
   @Post('private-trip-member-invitations/:id/accept')
+  @ApiMemberInvitation('accept')
   @HttpCode(200)
   @ApiOperation({ summary: 'Accept or replay invitation; navigate only when canEnterRoom is true' })
   @Header('Cache-Control', 'no-store')
@@ -128,6 +133,7 @@ export class PrivateMemberInvitationController {
   }
 
   @Post('private-trip-member-invitations/:id/decline')
+  @ApiMemberInvitation('change')
   @HttpCode(200)
   @ApiOperation({ summary: 'Recipient declines; repeat is idempotent' })
   @Header('Cache-Control', 'no-store')
@@ -142,6 +148,7 @@ export class PrivateMemberInvitationController {
     return this.mutation(res, () => this.invitations.change(actor.id, id, 'DECLINED', input.reason))
   }
   @Post('private-trip-member-invitations/:id/revoke')
+  @ApiMemberInvitation('change')
   @HttpCode(200)
   @ApiOperation({ summary: 'Sender with current host permission revokes; repeat is idempotent' })
   @Header('Cache-Control', 'no-store')

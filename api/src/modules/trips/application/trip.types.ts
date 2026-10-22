@@ -9,8 +9,9 @@ export interface TripInput {
   startAt: string
   endAt: string
   pickupPointId: string
+  minPax?: number
   capacity: number
-  price: string
+  price?: string | null
   priceExplanation?: string | null
 }
 export interface Checkpoint {
@@ -68,9 +69,13 @@ export interface TripView {
   startAt: string
   endAt: string
   pickupPointId: string | null
+  minPax?: number
   capacity: number
   price: string | null
   priceExplanation?: string | null
+  costPlanStatus?: string | null
+  includedServices?: string[]
+  excludedServices?: string[]
   status: TripStatus
   version: number
   publishedAt: string | null
