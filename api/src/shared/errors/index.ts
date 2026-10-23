@@ -15,3 +15,4 @@ export * from './codes/rental-document.error-codes';
 export * from './codes/leader.error-codes';
 export * from './codes/rental-lifecycle.error-codes';
 export * from './codes/personal-trail.error-codes';
+export * from './codes/gear.error-codes';
