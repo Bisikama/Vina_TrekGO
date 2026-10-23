@@ -61,6 +61,7 @@ function buildCommunityPostTemplate(params: {
   meetingTime: string;
   priceFormatted: string;
   capacity: number;
+  minCapacity?: number;
   selectedCategories?: string[];
 }) {
   const dest = params.destinationName || "Núi Rừng";
@@ -86,7 +87,7 @@ Một ngày đổi tiếng còi xe lấy tiếng lá rừng, đổi màn hình �
 ♻️ Nhặt rác dọc đường, cùng chung tay góp một chút xanh cho núi rừng.
 🍗 Nghỉ ngơi ăn trưa dã ngoại, tiếp sức và chuyện trò gắn kết cùng cả hội.
 ${gearLine}📅 Khởi hành: ${params.startDateFormatted}${params.endDateFormatted && params.endDateFormatted !== params.startDateFormatted ? ` – ${params.endDateFormatted}` : ""} (Thời lượng: ${params.durationDays > 1 ? `${params.durationDays} ngày` : "Đi trong ngày"}).
-💰 Chi phí đóng góp: ${params.priceFormatted}đ/người (Quy mô tối đa: ${params.capacity} thành viên).
+💰 Chi phí đóng góp: ${params.priceFormatted}đ/người (Quy mô: Tối thiểu ${params.minCapacity || 5} – Tối đa ${params.capacity} thành viên).
 🚌 Điểm đón tập kết: Lúc ${params.meetingTime} tại ${params.pickupName}.
 ---------------
 Đi một mình cũng được, lên xe rồi mình sẽ có đồng đội! 🙌
@@ -115,6 +116,7 @@ type DraftData = {
   destinationName?: string;
   price?: string;
   capacity?: number;
+  minCapacity?: number;
   difficulty?: number;
 };
 
@@ -397,7 +399,9 @@ export function LeaderCreateTripReview() {
   const priceNum = Number(trip?.price || draftData.price || "2850000") || 0;
   const priceFormatted = priceNum.toLocaleString("vi-VN");
   const capacityNum = trip?.capacity || draftData.capacity || 15;
+  const minCapacityNum = trip?.minCapacity || draftData.minCapacity || 5;
   const totalRevenue = (priceNum * capacityNum).toLocaleString("vi-VN");
+  const minRevenue = (priceNum * minCapacityNum).toLocaleString("vi-VN");
 
   const plannedTrail = trip?.trails?.[0];
   const trailCode = plannedTrail?.systemTrailId || "";
@@ -448,6 +452,7 @@ export function LeaderCreateTripReview() {
       meetingTime,
       priceFormatted,
       capacity: capacityNum,
+      minCapacity: minCapacityNum,
       selectedCategories: recommendedCats,
     });
 
@@ -852,11 +857,11 @@ export function LeaderCreateTripReview() {
                       </span>
 
                       <strong className="mt-1 block text-sm">
-                        Tối đa {capacityNum} người
+                        {minCapacityNum} – {capacityNum} người
                       </strong>
 
                       <span className="text-xs text-orange-700">
-                        Slot: 0/{capacityNum}
+                        Slot: 0/{capacityNum} (Tối thiểu {minCapacityNum})
                       </span>
                     </div>
 
@@ -1043,7 +1048,7 @@ export function LeaderCreateTripReview() {
 
                 <div className="rounded-xl bg-[#eef3fb] p-5">
                   <span className="text-xs text-slate-500">
-                    Dự toán doanh thu ({capacityNum} vé)
+                    Dự toán doanh thu tối đa ({capacityNum} vé)
                   </span>
 
                   <strong className="mt-2 block text-2xl text-slate-950">
@@ -1051,7 +1056,7 @@ export function LeaderCreateTripReview() {
                   </strong>
 
                   <span className="mt-1 block text-xs text-orange-700">
-                    Tạm giữ tại VFRS Escrow
+                    Tối thiểu ({minCapacityNum} vé): {minRevenue}₫ • Tạm giữ VFRS Escrow
                   </span>
                 </div>
 

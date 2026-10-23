@@ -116,7 +116,8 @@ export default function TripDetailPage() {
           ? `+${rawData.trails[0].snapshotElevationGainM} m`
           : undefined;
 
-        const capacity = rawData.capacity || 15;
+        const capacity = rawData.capacity || rawData.maxPax || 15;
+        const minCapacity = rawData.minCapacity || rawData.minPax || rawData.minSlots || 5;
         const remainingSlots =
           rawData.remainingSlots !== undefined ? rawData.remainingSlots : capacity;
         const booked = Math.max(0, capacity - remainingSlots);
@@ -170,6 +171,7 @@ export default function TripDetailPage() {
             slots: {
               booked,
               total: capacity,
+              min: minCapacity,
               statusText: remainingSlots > 0 ? `Còn ${remainingSlots} chỗ` : "Đã hết chỗ",
             },
             price: Number(rawData.pricePerPax || rawData.price || 0),

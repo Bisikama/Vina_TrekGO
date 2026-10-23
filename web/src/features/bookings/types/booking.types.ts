@@ -38,6 +38,8 @@ export interface PublicBookingTrip {
   pricePerPax: string | null;
   currency: string;
   capacity: number;
+  minCapacity?: number;
+  minPax?: number;
   remainingSlots: number;
   pickup: {
     id: string;

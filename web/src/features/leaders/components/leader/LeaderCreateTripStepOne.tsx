@@ -19,6 +19,18 @@ function dateInputValue(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
+function getMinTripStartDate(daysAdvance = 3) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAdvance);
+  return dateInputValue(date);
+}
+
+function getDefaultTripEndDate(daysAdvance = 4) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAdvance);
+  return dateInputValue(date);
+}
+
 function nextMeetingTime() {
   const date = new Date();
   date.setMinutes(date.getMinutes() + 60);
@@ -107,14 +119,11 @@ export function LeaderCreateTripStepOne() {
   const [titleError, setTitleError] = useState("");
 
   const [capacity, setCapacity] = useState(15);
+  const [minCapacity, setMinCapacity] = useState(5);
   const [price, setPrice] = useState("2850000");
   const [priceExplanation, setPriceExplanation] = useState("");
-  const [startDate, setStartDate] = useState(() => dateInputValue(new Date()));
-  const [endDate, setEndDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return dateInputValue(tomorrow);
-  });
+  const [startDate, setStartDate] = useState(() => getMinTripStartDate(3));
+  const [endDate, setEndDate] = useState(() => getDefaultTripEndDate(4));
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
   const [pickupPointId, setPickupPointId] = useState<string>("");
   const [dateError, setDateError] = useState("");
@@ -126,6 +135,7 @@ export function LeaderCreateTripStepOne() {
       if (trip.title) setTitle(trip.title);
       if (trip.description) setDescription(trip.description);
       if (trip.capacity) setCapacity(Number(trip.capacity));
+      if (trip.minCapacity) setMinCapacity(Number(trip.minCapacity));
       if (trip.price) {
         const num = parseInt(trip.price.replace(/\D/g, ""), 10);
         if (!isNaN(num)) setPrice(String(num));
@@ -168,6 +178,7 @@ export function LeaderCreateTripStepOne() {
           if (draft.name && !draft.title) setTitle(draft.name);
           if (draft.description) setDescription(draft.description);
           if (draft.capacity) setCapacity(Number(draft.capacity));
+          if (draft.minCapacity) setMinCapacity(Number(draft.minCapacity));
           if (draft.price) setPrice(String(draft.price));
           if (draft.priceExplanation) setPriceExplanation(String(draft.priceExplanation));
           if (draft.startDate) setStartDate(draft.startDate);
@@ -235,24 +246,24 @@ export function LeaderCreateTripStepOne() {
       setDateError("Vui lòng chọn Địa điểm tập kết đón đoàn.");
       return;
     }
-    const today = dateInputValue(new Date());
-    if (startDate < today) {
-      setDateError("Ngày khởi hành không được là ngày trong quá khứ.");
+    const minStart = getMinTripStartDate(3);
+    if (startDate < minStart) {
+      setDateError(
+        "Theo chuẩn vận hành & an toàn VFRS, chuyến đi ghép đoàn cần được tạo trước ngày khởi hành tối thiểu 3 ngày (để kịp gom đoàn, mở thuê trang bị và nộp danh sách kiểm lâm).",
+      );
       return;
     }
     if (endDate < startDate) {
       setDateError("Ngày kết thúc phải từ ngày khởi hành trở đi.");
       return;
     }
-    if (startDate === today) {
-      const now = new Date();
-      const [hours, minutes] = meetingTime.split(":").map(Number);
-      const meeting = new Date();
-      meeting.setHours(hours, minutes, 0, 0);
-      if (meeting <= now) {
-        setDateError("Giờ tập trung hôm nay phải lớn hơn thời gian hiện tại.");
-        return;
-      }
+    if (minCapacity < 1) {
+      setDateError("Số thành viên tối thiểu để khởi hành phải từ 1 người trở lên.");
+      return;
+    }
+    if (minCapacity > capacity) {
+      setDateError("Số thành viên tối thiểu không được vượt quá số thành viên tối đa.");
+      return;
     }
     setDateError("");
     setTitleError("");
@@ -335,6 +346,7 @@ export function LeaderCreateTripStepOne() {
           meetingTime,
           price: cleanPrice,
           capacity: savedTrip.capacity,
+          minCapacity: savedTrip.minCapacity ?? Number(minCapacity),
         })
       );
 
@@ -515,14 +527,14 @@ export function LeaderCreateTripStepOne() {
                     type="date"
                     className={inputClass}
                     value={startDate}
-                    min={dateInputValue(new Date())}
+                    min={getMinTripStartDate(3)}
                     onChange={(event) => {
                       const nextStartDate = event.target.value;
                       setStartDate(nextStartDate);
-                      const today = dateInputValue(new Date());
-                      if (nextStartDate && nextStartDate < today) {
+                      const minAllowed = getMinTripStartDate(3);
+                      if (nextStartDate && nextStartDate < minAllowed) {
                         setDateError(
-                          "Ngày khởi hành không được là ngày trong quá khứ.",
+                          "Theo chuẩn an toàn VFRS, chuyến đi ghép đoàn cần tạo trước ngày khởi hành tối thiểu 3 ngày.",
                         );
                       } else {
                         setDateError("");
@@ -541,7 +553,7 @@ export function LeaderCreateTripStepOne() {
                     type="date"
                     className={inputClass}
                     value={endDate}
-                    min={startDate}
+                    min={startDate || getMinTripStartDate(3)}
                     onChange={(event) => {
                       const nextEndDate = event.target.value;
                       setEndDate(nextEndDate);
@@ -555,6 +567,13 @@ export function LeaderCreateTripStepOne() {
                     }}
                   />
                 </label>
+
+                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-slate-700 flex items-start gap-2.5">
+                  <span className="text-base leading-none">💡</span>
+                  <div>
+                    <strong className="text-emerald-950 font-bold">Quy chuẩn an toàn VFRS:</strong> Chuyến đi ghép đoàn cần mở trước ngày khởi hành tối thiểu <strong>3 ngày</strong> để đảm bảo đủ thời gian gom đoàn, xử lý các đơn thuê trang bị (Rental Cutoff 24h) và nộp danh sách khai báo kiểm lâm.
+                  </div>
+                </div>
                 {dateError && (
                   <p className="text-sm text-red-600 md:col-span-2" role="alert">
                     {dateError}
@@ -667,13 +686,47 @@ export function LeaderCreateTripStepOne() {
             >
               <div className="grid gap-5 md:grid-cols-2">
                 <div>
-                  <FieldLabel required>Số thành viên tối đa</FieldLabel>
+                  <FieldLabel required>Số thành viên tối thiểu để khởi hành</FieldLabel>
 
                   <div className="flex h-12 overflow-hidden rounded-xl border border-slate-200 bg-[#f6f8fc]">
                     <button
                       type="button"
                       onClick={() =>
-                        setCapacity((current) => Math.max(1, current - 1))
+                        setMinCapacity((current) => Math.max(1, current - 1))
+                      }
+                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                    >
+                      -
+                    </button>
+
+                    <div className="flex flex-1 items-center justify-center font-bold text-slate-900">
+                      {minCapacity} thành viên
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMinCapacity((current) => Math.min(capacity, current + 1))
+                      }
+                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Chuyến đi đạt số lượng tối thiểu này sẽ chắc chắn khởi hành.
+                  </p>
+                </div>
+
+                <div>
+                  <FieldLabel required>Số thành viên tối đa (quy mô đoàn)</FieldLabel>
+
+                  <div className="flex h-12 overflow-hidden rounded-xl border border-slate-200 bg-[#f6f8fc]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCapacity((current) => Math.max(minCapacity, current - 1))
                       }
                       className="w-12 font-bold text-slate-600 hover:bg-slate-200"
                     >

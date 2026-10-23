@@ -47,6 +47,7 @@ export interface TripData {
   slots: {
     booked: number;
     total: number;
+    min?: number;
     statusText?: string;
   };
   price: number;

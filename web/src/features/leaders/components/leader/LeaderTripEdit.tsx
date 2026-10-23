@@ -43,6 +43,13 @@ const navigationItems = [
   },
 ];
 
+function getMinTripStartDate(daysAdvance = 3) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAdvance);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
 function FormSection({
   id,
   number,
@@ -107,6 +114,7 @@ export function LeaderTripEdit({
   const [description, setDescription] = useState("");
   const [priceExplanation, setPriceExplanation] = useState("");
   const [capacity, setCapacity] = useState(15);
+  const [minCapacity, setMinCapacity] = useState(5);
   const [price, setPrice] = useState("2850000");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -125,6 +133,7 @@ export function LeaderTripEdit({
       if (trip.startAt) setStartDate(trip.startAt.slice(0, 10));
       if (trip.endAt) setEndDate(trip.endAt.slice(0, 10));
       if (trip.capacity) setCapacity(trip.capacity);
+      if (trip.minCapacity) setMinCapacity(trip.minCapacity);
       if (trip.price) setPrice(trip.price);
     }
   }, [trip]);
@@ -469,6 +478,7 @@ export function LeaderTripEdit({
                     type="date"
                     className={inputClass}
                     value={startDate}
+                    min={getMinTripStartDate(3)}
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                 </label>
@@ -482,9 +492,17 @@ export function LeaderTripEdit({
                     type="date"
                     className={inputClass}
                     value={endDate}
+                    min={startDate || getMinTripStartDate(3)}
                     onChange={(e) => setEndDate(e.target.value)}
                   />
                 </label>
+
+                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-slate-700 flex items-start gap-2.5">
+                  <span className="text-base leading-none">💡</span>
+                  <div>
+                    <strong className="text-emerald-950 font-bold">Quy chuẩn an toàn VFRS:</strong> Chuyến đi ghép đoàn cần mở trước ngày khởi hành tối thiểu <strong>3 ngày</strong> để đảm bảo đủ thời gian gom đoàn, xử lý các đơn thuê trang bị (Rental Cutoff 24h) và nộp danh sách khai báo kiểm lâm.
+                  </div>
+                </div>
               </div>
             </FormSection>
 
@@ -497,16 +515,37 @@ export function LeaderTripEdit({
               <div className="grid gap-5 md:grid-cols-2">
                 <label>
                   <FieldLabel required>
-                    Số thành viên tối đa
+                    Số thành viên tối thiểu (để khởi hành)
                   </FieldLabel>
 
                   <input
                     type="number"
                     min={1}
+                    max={capacity}
+                    className={inputClass}
+                    value={minCapacity}
+                    onChange={(e) => setMinCapacity(Number(e.target.value))}
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Chuyến đi sẽ chắc chắn khởi hành khi đạt số lượng này.
+                  </span>
+                </label>
+
+                <label>
+                  <FieldLabel required>
+                    Số thành viên tối đa (quy mô đoàn)
+                  </FieldLabel>
+
+                  <input
+                    type="number"
+                    min={minCapacity}
                     className={inputClass}
                     value={capacity}
                     onChange={(e) => setCapacity(Number(e.target.value))}
                   />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Giới hạn số lượng thành viên tối đa có thể tham gia.
+                  </span>
                 </label>
 
                 <label>

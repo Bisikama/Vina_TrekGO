@@ -129,6 +129,47 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
               </div>
             </div>
 
+        {/* Quy mô & Tiến độ gom chỗ */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-gray-700">Quy mô đoàn</span>
+            <span className="font-extrabold text-gray-900">
+              {trip.slots.min || 1} – {trip.slots.total} người
+            </span>
+          </div>
+
+          <div>
+            <div className="flex justify-between text-[11px] mb-1">
+              <span className="text-gray-500 font-medium">
+                Đã đặt: <strong className="text-gray-900">{trip.slots.booked}/{trip.slots.total} chỗ</strong>
+              </span>
+              <span className="font-bold text-emerald-700">
+                Còn {Math.max(0, trip.slots.total - trip.slots.booked)} chỗ
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full bg-[#1B5E41] transition-all duration-300 rounded-full"
+                style={{
+                  width: `${Math.min(100, Math.round((trip.slots.booked / Math.max(1, trip.slots.total)) * 100))}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="text-[11px] leading-tight">
+            {trip.slots.booked >= (trip.slots.min || 1) ? (
+              <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                <span className="text-xs">✓</span> Đã đủ số lượng tối thiểu để khởi hành ({trip.slots.booked}/{trip.slots.min || 1})
+              </span>
+            ) : (
+              <span className="text-amber-800 font-semibold flex items-center gap-1">
+                <span>⚡</span> Đang gom đoàn (còn thiếu {(trip.slots.min || 1) - trip.slots.booked} người để đạt tối thiểu {trip.slots.min || 1})
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Participants Selector */}
         <div>
           <div className="mb-2 flex items-center justify-between">

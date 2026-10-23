@@ -154,9 +154,11 @@ export const TripHeader = ({ trip }: { trip: TripData }) => {
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                 QUY MÔ ĐOÀN
               </div>
-              <div className="text-lg font-extrabold text-gray-900">Tối đa {trip.slots.total} người</div>
+              <div className="text-base sm:text-lg font-extrabold text-gray-900 leading-tight">
+                {trip.slots.min ? `${trip.slots.min} – ${trip.slots.total} người` : `Tối đa ${trip.slots.total} người`}
+              </div>
               <div className="text-[10px] text-emerald-600 font-bold mt-1">
-                Đã có {trip.slots.booked} người đặt • Còn {remainingSlots} chỗ
+                Đã có {trip.slots.booked}/{trip.slots.total} chỗ • Còn {remainingSlots} chỗ
               </div>
             </div>
           </div>
