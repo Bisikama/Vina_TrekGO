@@ -18,6 +18,7 @@ import { WeatherModule } from './modules/weather/weather.module'
 import { WebsocketModule } from './websockets/websocket.module'
 import { ElevationModule } from './modules/elevation/elevation.module'
 import { PersonalTrailModule } from './modules/personal-trail/personal-trail.module'
+import { GearModule } from './modules/gear/gear.module'
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PersonalTrailModule } from './modules/personal-trail/personal-trail.mod
     WebsocketModule,
     ElevationModule,
     PersonalTrailModule,
+    GearModule,
   ],
   controllers: [],
   providers: [],
