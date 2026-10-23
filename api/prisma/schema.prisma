@@ -4201,6 +4201,9 @@ model ProductTechnicalProfile {
 
   @@index([category], map: "product_technical_profile_category_idx")
   @@map("product_technical_profiles")
+}
+
+// =========================================================
 // TRIP COST PLANNING & PRICING SIMULATOR (TG-PTR-PRICING-01)
 // =========================================================
 
