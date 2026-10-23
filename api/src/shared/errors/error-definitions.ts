@@ -13,6 +13,7 @@ import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-cod
 import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes'
 import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes'
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes'
+import { TRIP_PRICING_ERROR_CODES as TP } from './codes/trip-pricing.error-codes'
 import { GEAR_ERROR_CODES as G } from './codes/gear.error-codes'
 
 export interface ErrorDefinition {
@@ -559,27 +560,107 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh',
     retryable: false,
   },
+  [TP.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến đi hoặc bảng dự toán chi phí.', retryable: false },
+  [TP.LOCKED]: {
+    status: 409,
+    message: 'Chuyến đi đã bắt đầu, kết thúc hoặc bị hủy nên không thể điều chỉnh giá.',
+    retryable: false,
+  },
+  [TP.VERSION_CONFLICT]: {
+    status: 409,
+    message: 'Dữ liệu chuyến đi hoặc bảng giá đã thay đổi. Vui lòng tải lại.',
+    retryable: false,
+  },
+  [TP.COST_PLAN_INVALID]: {
+    status: 422,
+    message: 'Cấu hình bảng chi phí hoặc bậc tăng chi phí không hợp lệ.',
+    retryable: false,
+  },
+  [TP.PAX_INVALID]: {
+    status: 422,
+    message: 'Số lượng khách mục tiêu hoặc khách tối thiểu không hợp lệ.',
+    retryable: false,
+  },
+  [TP.IMPOSSIBLE]: {
+    status: 422,
+    message: 'Tổng tỷ lệ phí và lợi nhuận mục tiêu vượt quá 100% doanh thu.',
+    retryable: false,
+  },
+  [TP.LOSS_INTERVAL]: {
+    status: 409,
+    message: 'Tồn tại quy mô đoàn từ ngưỡng tối thiểu bị lỗ âm. Hãy điều chỉnh giá bán hoặc ngưỡng khách.',
+    retryable: false,
+  },
+  [TP.STALE]: {
+    status: 409,
+    message: 'Thông số chuyến đi hoặc cấu hình phí đã thay đổi sau khi chốt giá. Hãy xác nhận lại bảng giá.',
+    retryable: false,
+  },
+
   [G.GEAR_ITEM_NOT_FOUND]: { status: 404, message: 'Không tìm thấy món đồ cá nhân', retryable: false },
   [G.GEAR_ITEM_VERSION_CONFLICT]: { status: 409, message: 'Xung đột phiên bản món đồ cá nhân', retryable: true },
   [G.GEAR_PLAN_NOT_FOUND]: { status: 404, message: 'Không tìm thấy kế hoạch trang bị', retryable: false },
   [G.GEAR_REVISION_NOT_FOUND]: { status: 404, message: 'Không tìm thấy phiên bản kế hoạch trang bị', retryable: false },
-  [G.GEAR_EXTRACTION_DRAFT_NOT_FOUND]: { status: 404, message: 'Không tìm thấy bản nháp trích xuất trang bị', retryable: false },
+  [G.GEAR_EXTRACTION_DRAFT_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy bản nháp trích xuất trang bị',
+    retryable: false,
+  },
   [G.GEAR_DRAFT_EXPIRED]: { status: 410, message: 'Bản nháp trích xuất trang bị đã hết hạn', retryable: false },
-  [G.GEAR_DRAFT_PAYLOAD_MISMATCH]: { status: 409, message: 'Dữ liệu xác nhận không khớp với bản nháp ban đầu', retryable: false },
+  [G.GEAR_DRAFT_PAYLOAD_MISMATCH]: {
+    status: 409,
+    message: 'Dữ liệu xác nhận không khớp với bản nháp ban đầu',
+    retryable: false,
+  },
   [G.GEAR_DRAFT_ALREADY_CONFIRMED]: { status: 409, message: 'Bản nháp đã được xác nhận', retryable: false },
-  [G.GEAR_PLAN_CAS_CONFLICT]: { status: 409, message: 'Xung đột phiên bản ngữ cảnh kế hoạch trang bị (CAS conflict)', retryable: true },
-  [G.GEAR_PROGRESS_CAS_CONFLICT]: { status: 409, message: 'Xung đột phiên bản tiến độ kế hoạch trang bị', retryable: true },
+  [G.GEAR_PLAN_CAS_CONFLICT]: {
+    status: 409,
+    message: 'Xung đột phiên bản ngữ cảnh kế hoạch trang bị (CAS conflict)',
+    retryable: true,
+  },
+  [G.GEAR_PROGRESS_CAS_CONFLICT]: {
+    status: 409,
+    message: 'Xung đột phiên bản tiến độ kế hoạch trang bị',
+    retryable: true,
+  },
   [G.GEAR_CONCURRENCY_CONFLICT]: { status: 409, message: 'Xung đột khóa xử lý tác vụ đồng thời', retryable: true },
-  [G.GEAR_CATEGORY_REQUIRES_PLAN]: { status: 400, message: 'Danh mục trang bị mở rộng yêu cầu sử dụng tính năng Kế hoạch trang bị (Gear Plan)', retryable: false },
-  [G.GEAR_CATEGORY_MISMATCH]: { status: 400, message: 'Danh mục trang bị không khớp với thuộc tính kỹ thuật', retryable: false },
+  [G.GEAR_CATEGORY_REQUIRES_PLAN]: {
+    status: 400,
+    message: 'Danh mục trang bị mở rộng yêu cầu sử dụng tính năng Kế hoạch trang bị (Gear Plan)',
+    retryable: false,
+  },
+  [G.GEAR_CATEGORY_MISMATCH]: {
+    status: 400,
+    message: 'Danh mục trang bị không khớp với thuộc tính kỹ thuật',
+    retryable: false,
+  },
   [G.GEAR_QUOTE_NOT_FOUND]: { status: 404, message: 'Không tìm thấy báo giá thuê liên kết', retryable: false },
-  [G.GEAR_QUOTE_NOT_OWNED]: { status: 403, message: 'Không có quyền liên kết báo giá của người dùng khác', retryable: false },
+  [G.GEAR_QUOTE_NOT_OWNED]: {
+    status: 403,
+    message: 'Không có quyền liên kết báo giá của người dùng khác',
+    retryable: false,
+  },
   [G.GEAR_TRIP_NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến đi tương ứng', retryable: false },
-  [G.GEAR_TRIP_NOT_ELIGIBLE]: { status: 400, message: 'Chuyến đi không đủ điều kiện lập kế hoạch trang bị', retryable: false },
+  [G.GEAR_TRIP_NOT_ELIGIBLE]: {
+    status: 400,
+    message: 'Chuyến đi không đủ điều kiện lập kế hoạch trang bị',
+    retryable: false,
+  },
   [G.GEAR_FORBIDDEN]: { status: 403, message: 'Không có quyền truy cập tài nguyên trang bị này', retryable: false },
-  [G.GEAR_EXTRACTION_FAILED]: { status: 502, message: 'Không thể trích xuất dữ liệu từ nguồn đã cung cấp', retryable: true },
+  [G.GEAR_EXTRACTION_FAILED]: {
+    status: 502,
+    message: 'Không thể trích xuất dữ liệu từ nguồn đã cung cấp',
+    retryable: true,
+  },
   [G.GEAR_DRAFT_NOT_READY]: { status: 400, message: 'Bản nháp chưa sẵn sàng để xác nhận', retryable: false },
-  [G.GEAR_PROFILE_VERSION_CONFLICT]: { status: 409, message: 'Xung đột phiên bản hồ sơ kỹ thuật sản phẩm', retryable: true },
-  [G.GEAR_QUOTE_NOT_ELIGIBLE]: { status: 400, message: 'Báo giá thuê không đủ điều kiện liên kết (hết hạn hoặc trạng thái không hợp lệ)', retryable: false },
+  [G.GEAR_PROFILE_VERSION_CONFLICT]: {
+    status: 409,
+    message: 'Xung đột phiên bản hồ sơ kỹ thuật sản phẩm',
+    retryable: true,
+  },
+  [G.GEAR_QUOTE_NOT_ELIGIBLE]: {
+    status: 400,
+    message: 'Báo giá thuê không đủ điều kiện liên kết (hết hạn hoặc trạng thái không hợp lệ)',
+    retryable: false,
+  },
 }
-

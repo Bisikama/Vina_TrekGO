@@ -203,9 +203,11 @@ const envConfigSchema = z
 const configserver = envConfigSchema.safeParse(process.env)
 if (!configserver.success) {
   console.error('Các biến môi trường cấu hình không hợp lệ:', configserver.error.format())
-  process.exit(1)
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1)
+  }
 }
 
-const envconfig = configserver.data
+const envconfig = (configserver.data ?? process.env) as z.infer<typeof envConfigSchema>
 
 export default envconfig

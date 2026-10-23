@@ -1404,6 +1404,8 @@ model Trip {
   tripReviewsViaTripId              TripReview[]              @relation("R_TripReview_trip_id")
   leaderReviewsViaTripId            LeaderReview[]            @relation("R_LeaderReview_trip_id")
   gearPlans                         GearPlan[]                @relation("R_GearPlan_trip_id")
+  tripCostPlanViaTripId             TripCostPlan?             @relation("R_TripCostPlan_trip_id")
+  tripPricingVersionsViaTripId      TripPricingVersion[]      @relation("R_TripPricingVersion_trip_id")
 
   @@index([tripType, status, startAt])
   @@index([destinationId, startAt])
@@ -4199,4 +4201,133 @@ model ProductTechnicalProfile {
 
   @@index([category], map: "product_technical_profile_category_idx")
   @@map("product_technical_profiles")
+// TRIP COST PLANNING & PRICING SIMULATOR (TG-PTR-PRICING-01)
+// =========================================================
+
+enum TripCostCategory {
+  TRANSPORT
+  STAFF
+  FOOD
+  ACCOMMODATION
+  ACCESS
+  SAFETY
+  LOGISTICS
+  OTHER
+
+  @@map("trip_cost_category")
+}
+
+enum TripCostKind {
+  FIXED
+  VARIABLE
+  STEP
+
+  @@map("trip_cost_kind")
+}
+
+enum TripCostBasis {
+  PER_TRIP
+  PER_DAY
+  PER_PERSON
+  PER_PERSON_PER_DAY
+  PER_CAPACITY_UNIT
+  PER_GROUP_TIER
+
+  @@map("trip_cost_basis")
+}
+
+enum StepTierOperation {
+  ADDITIVE
+  REPLACEMENT
+
+  @@map("step_tier_operation")
+}
+
+enum TripCostPlanStatus {
+  DRAFT
+  CONFIRMED
+  PUBLISHED
+
+  @@map("trip_cost_plan_status")
+}
+
+model TripCostPlan {
+  id               String             @id @default(uuid()) @db.Uuid
+  tripId           String             @unique @map("trip_id") @db.Uuid
+  currency         String             @default("VND") @db.Char(3)
+  targetPax        Int                @map("target_pax")
+  targetMarginBps  Int                @default(1200) @map("target_margin_bps")
+  contingencyBps   Int                @default(500) @map("contingency_bps")
+  selectedPrice    Decimal?           @map("selected_price") @db.Decimal(12, 2)
+  selectedMinPax   Int?               @map("selected_min_pax")
+  calcVersion      String             @default("pricing-v1") @map("calc_version") @db.VarChar(40)
+  policyVersionRef String?            @map("policy_version_ref") @db.VarChar(80)
+  status           TripCostPlanStatus @default(DRAFT)
+  version          Int                @default(1)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip  Trip           @relation("R_TripCostPlan_trip_id", fields: [tripId], references: [id], onDelete: Cascade)
+  items TripCostItem[] @relation("R_TripCostItem_cost_plan_id")
+
+  @@map("trip_cost_plans")
+}
+
+model TripCostItem {
+  id                String           @id @default(uuid()) @db.Uuid
+  costPlanId        String           @map("cost_plan_id") @db.Uuid
+  category          TripCostCategory
+  nameSnapshot      String           @map("name_snapshot") @db.VarChar(160)
+  kind              TripCostKind
+  basis             TripCostBasis
+  unitPrice         Decimal          @default(0) @map("unit_price") @db.Decimal(12, 2)
+  quantity          Int              @default(1)
+  durationUnits     Int              @default(1) @map("duration_units")
+  capacityPerUnit   Int?             @map("capacity_per_unit")
+  extraNonPayingPax Int              @default(0) @map("extra_non_paying_pax")
+  includedInPrice   Boolean          @default(true) @map("included_in_price")
+  isEnabled         Boolean          @default(true) @map("is_enabled")
+  sourceNote        String?          @map("source_note") @db.VarChar(500)
+  sortOrder         Int              @default(0) @map("sort_order")
+
+  costPlan  TripCostPlan       @relation("R_TripCostItem_cost_plan_id", fields: [costPlanId], references: [id], onDelete: Cascade)
+  stepTiers TripCostStepTier[] @relation("R_TripCostStepTier_cost_item_id")
+
+  @@index([costPlanId, sortOrder])
+  @@map("trip_cost_items")
+}
+
+model TripCostStepTier {
+  id            String            @id @default(uuid()) @db.Uuid
+  costItemId    String            @map("cost_item_id") @db.Uuid
+  triggerMinPax Int               @map("trigger_min_pax")
+  triggerMaxPax Int               @map("trigger_max_pax")
+  operation     StepTierOperation
+  amount        Decimal           @db.Decimal(12, 2)
+  note          String?           @db.VarChar(200)
+
+  costItem TripCostItem @relation("R_TripCostStepTier_cost_item_id", fields: [costItemId], references: [id], onDelete: Cascade)
+
+  @@index([costItemId, triggerMinPax])
+  @@map("trip_cost_step_tiers")
+}
+
+model TripPricingVersion {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tripId                String   @map("trip_id") @db.Uuid
+  versionNo             Int      @map("version_no")
+  selectedPrice         Decimal  @map("selected_price") @db.Decimal(12, 2)
+  selectedMinPax        Int      @map("selected_min_pax")
+  targetPax             Int      @map("target_pax")
+  costInputSnapshot     Json     @map("cost_input_snapshot")
+  feeAssumptionSnapshot Json     @map("fee_assumption_snapshot")
+  pricingResultSnapshot Json     @map("pricing_result_snapshot")
+  createdBy             String   @map("created_by") @db.Uuid
+  publishedAt           DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  trip Trip @relation("R_TripPricingVersion_trip_id", fields: [tripId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, versionNo])
+  @@index([tripId, publishedAt])
+  @@map("trip_pricing_versions")
 }

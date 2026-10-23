@@ -1,4 +1,9 @@
 import { randomUUID } from 'crypto'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { resolve } from 'path'
+import { PrivateMembershipController } from './presentation/controllers/private-membership.controller'
+import { PrivateMembershipUseCase } from './application/use-cases/private-membership.use-case'
 import { PrismaClient } from '@prisma/client'
 import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
@@ -67,9 +72,10 @@ suite('M2 HTTP and PostgreSQL invitation flow', () => {
       .send({ recipientEmail: f.recipient.email })
   beforeAll(async () => {
     const module = await Test.createTestingModule({
-      controllers: [PrivateMemberInvitationController],
+      controllers: [PrivateMemberInvitationController, PrivateMembershipController],
       providers: [
         PrivateMemberInvitationService,
+        PrivateMembershipUseCase,
         PrivateInvitationRequestService,
         { provide: PrivateMembershipPort, useClass: PrismaPrivateMembershipAdapter },
         { provide: PrismaService, useValue: db },
@@ -91,9 +97,15 @@ suite('M2 HTTP and PostgreSQL invitation flow', () => {
 
   it('registers seven bearer-protected operations and documents strict create input', () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    const operations = Object.values(document.paths).flatMap((path) => [path.get, path.post].filter(Boolean))
+    const operations = Object.entries(document.paths).filter(([path]) => path.includes('member-invitations'))
+      .flatMap(([,path]) => [path.get, path.post].filter(Boolean))
     expect(operations).toHaveLength(7)
     for (const operation of operations) expect(operation!.security).toContainEqual({ bearer: [] })
+    for (const operation of operations) {
+      const success = operation!.responses['200'] ?? operation!.responses['201']
+      expect((success as any).content['application/json'].schema.type).toBe('object')
+      expect((operation!.responses['403'] as any).content['application/json'].schema.properties.error).toBeDefined()
+    }
     const create = document.paths['/private-trips/{id}/member-invitations'].post!
     expect(create.parameters).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'Idempotency-Key', in: 'header', required: true })]),
@@ -107,6 +119,24 @@ suite('M2 HTTP and PostgreSQL invitation flow', () => {
     await db.trip.update({ where: { id: f.trip.id }, data: { maxPax: 2 } })
     return f
   }
+  it('M4 executes the standalone handoff collection through HTTP with host and recipient accounts', async () => {
+    const f = await openFixture()
+    await app.listen(0, '127.0.0.1')
+    const base = await app.getUrl()
+    const evidence = process.env.INVITATION_EXPORT_EXAMPLES === 'true'
+      ? resolve('contracts/private-invitations/examples.local.json') : ''
+    try {
+      const { stdout } = await promisify(execFile)(process.execPath, [resolve('scripts/run-private-invitation-smoke.cjs')], {
+        env: { ...process.env, INVITATION_API_BASE_URL: base, INVITATION_HOST_TOKEN: f.host.id,
+          INVITATION_RECIPIENT_TOKEN: f.recipient.id, INVITATION_TRIP_ID: f.trip.id,
+          INVITATION_RECIPIENT_EMAIL: f.recipient.email, INVITATION_SMOKE_ALLOW_MUTATIONS: 'true',
+          INVITATION_SMOKE_EVIDENCE_FILE: evidence },
+        timeout: 30000,
+      })
+      expect(stdout).toContain('PASS expired accept')
+      expect(stdout).toContain('PASS room')
+    } catch { throw new Error('M4 handoff HTTP collection failed; run the runner with dedicated test fixtures for step diagnostics.') }
+  }, 35000)
   const link = (f: Awaited<ReturnType<typeof fixture>>) =>
     db.privateTripInvite.create({
       data: {

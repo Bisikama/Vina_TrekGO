@@ -19,8 +19,9 @@ export function routeIssues(required: string[], trails: Pick<Trail, 'id' | 'chec
   return cursor === required.length ? [] : issue('Route chưa đi qua required checkpoints đúng thứ tự.')
 }
 export function basicIssues(
-  data: Pick<TripInput, 'startAt' | 'endAt' | 'capacity'> & { price: string | null },
+  data: Pick<TripInput, 'startAt' | 'endAt' | 'capacity'> & { price?: string | null; minPax?: number },
   now: Date,
+  options: { requirePrice?: boolean } = { requirePrice: true },
 ): Issue[] {
   const issues: Issue[] = []
   const start = Date.parse(data.startAt),
@@ -33,11 +34,24 @@ export function basicIssues(
     })
   if (!Number.isInteger(data.capacity) || data.capacity <= 0 || data.capacity > 2147483647)
     issues.push({ code: 'INVALID_CAPACITY', field: 'capacity', message: 'Số người phải là số nguyên dương hợp lệ.' })
-  if (!data.price || !/^\d{1,10}$/.test(data.price) || !/[1-9]/.test(data.price))
+  if (
+    data.minPax !== undefined &&
+    (!Number.isInteger(data.minPax) || data.minPax <= 0 || data.minPax > data.capacity)
+  ) {
     issues.push({
-      code: 'INVALID_PRICE',
-      field: 'price',
-      message: 'Giá/người phải là số nguyên dương, tối đa 10 chữ số.',
+      code: 'INVALID_CAPACITY',
+      field: 'minPax',
+      message: 'Số khách tối thiểu phải nguyên dương và không vượt quá sức chứa tối đa.',
     })
+  }
+  const hasPrice = data.price !== undefined && data.price !== null
+  if (options.requirePrice || hasPrice) {
+    if (!data.price || !/^\d{1,10}$/.test(data.price) || !/[1-9]/.test(data.price))
+      issues.push({
+        code: 'INVALID_PRICE',
+        field: 'price',
+        message: 'Giá/người phải là số nguyên dương, tối đa 10 chữ số.',
+      })
+  }
   return issues
 }
