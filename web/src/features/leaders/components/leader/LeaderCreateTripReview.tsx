@@ -1,5 +1,6 @@
 "use client";
 
+import { TripPricingManager } from "../pricing/TripPricingManager";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TripRouteReviewMap } from "./TripRouteReviewMap";
@@ -1016,104 +1017,41 @@ export function LeaderCreateTripReview() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-              <div className="flex items-center justify-between gap-3">
+            <section
+              id="section-price"
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-6">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-[#125238]">
                     Mục 04 · Tài chính đoàn
                   </p>
 
                   <h2 className="mt-1 text-lg font-bold text-slate-950">
-                    Cơ cấu Giá vé &amp; Dự toán Doanh thu
+                    Bảng Dự Toán Chi Phí &amp; Trekking Pricing Simulator
                   </h2>
                 </div>
 
                 <span className="text-xs text-slate-500">Đơn vị: VNĐ</span>
               </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                <div className="rounded-xl bg-[#eef3fb] p-5">
-                  <span className="text-xs text-slate-500">
-                    Giá vé niêm yết/khách
-                  </span>
-
-                  <strong className="mt-2 block text-2xl text-[#125238]">
-                    {priceFormatted}₫
-                  </strong>
-
-                  <span className="mt-1 block text-xs text-slate-500">
-                    Bao gồm trọn gói dịch vụ
-                  </span>
-                </div>
-
-                <div className="rounded-xl bg-[#eef3fb] p-5">
-                  <span className="text-xs text-slate-500">
-                    Dự toán doanh thu tối đa ({capacityNum} vé)
-                  </span>
-
-                  <strong className="mt-2 block text-2xl text-slate-950">
-                    {totalRevenue}₫
-                  </strong>
-
-                  <span className="mt-1 block text-xs text-orange-700">
-                    Tối thiểu ({minCapacityNum} vé): {minRevenue}₫ • Tạm giữ VFRS Escrow
-                  </span>
-                </div>
-
-                <div className="rounded-xl bg-[#125238] p-5 text-white">
-                  <span className="text-xs text-emerald-100">
-                    Phụ cấp Leader dự kiến
-                  </span>
-
-                  <strong className="mt-2 block text-2xl">
-                    ~{(priceNum * capacityNum * 0.35).toLocaleString("vi-VN")}₫
-                  </strong>
-
-                  <span className="mt-1 block text-xs text-emerald-100">
-                    Giải ngân sau khi kết thúc chuyến
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 rounded-xl bg-[#eef3fb] p-4 text-xs sm:grid-cols-2">
-                <span>✓ Bảo hiểm cứu hộ dã ngoại 600 triệu/người</span>
-                <span>✓ Phương tiện di chuyển điểm đón ↔ điểm bắt đầu</span>
-                <span>✓ Toàn bộ bữa ăn chính và hỗ trợ tiếp tế</span>
-                <span>✓ Phí quản lý rừng và sinh môi trường</span>
-              </div>
-
-              <div className="mt-4 rounded-xl border border-slate-200 bg-[#f8fafc] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <strong className="text-sm text-slate-900">
-                      Cơ sở tính giá &amp; Giải trình chi phí nội bộ (priceExplanation)
-                    </strong>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Bắt buộc trước khi công khai chuyến đi. Không hiển thị công khai cho khách hàng.
-                    </p>
-                  </div>
-                  {trip?.status === "DRAFT" && (
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={handleSavePriceExplanation}
-                      className="rounded-lg bg-[#125238] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2f6b4f] disabled:bg-slate-400"
-                    >
-                      {isSubmitting ? "Đang lưu..." : "Lưu cơ sở tính giá"}
-                    </button>
-                  )}
-                </div>
-
-                <textarea
-                  rows={3}
-                  maxLength={5000}
-                  disabled={trip?.status !== undefined && trip?.status !== "DRAFT"}
-                  value={priceExplanationInput}
-                  onChange={(e) => setPriceExplanationInput(e.target.value)}
-                  placeholder="Nhập chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận..."
-                  className="mt-3 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 outline-none focus:border-[#2f6b4f] disabled:bg-slate-100"
-                />
-              </div>
+              <TripPricingManager
+                tripId={tripId || trip?.id}
+                tripVersion={trip?.version || 1}
+                capacity={capacityNum}
+                minPax={minCapacityNum}
+                durationDays={durationDays}
+                initialPrice={trip?.price || draftData.price || "2850000"}
+                onPriceConfirmed={({ selectedPrice, selectedMinPax }) => {
+                  setDraftData((prev) => ({
+                    ...prev,
+                    price: selectedPrice,
+                    minCapacity: selectedMinPax,
+                  }));
+                  refetchTrip();
+                  refetchReadiness();
+                }}
+              />
             </section>
           </div>
 

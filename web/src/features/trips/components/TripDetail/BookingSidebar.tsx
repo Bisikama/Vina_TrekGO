@@ -88,6 +88,10 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                 <div className="text-2xl font-extrabold text-[#1B5E41]">
                   {trip.price.toLocaleString("vi-VN")}đ
                 </div>
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-800">
+                  <span>✓</span>
+                  <span>Đã gồm xe đưa đón, ăn uống, vé & bảo hiểm</span>
+                </div>
               </div>
               <div className="text-right">
                 <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">

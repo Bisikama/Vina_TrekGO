@@ -309,6 +309,7 @@ export function LeaderCreateTripStepOne() {
           startAt,
           endAt,
           capacity: Number(capacity),
+          minCapacity: Number(minCapacity),
           price: cleanPrice,
         });
       } else {
@@ -322,6 +323,7 @@ export function LeaderCreateTripStepOne() {
           startAt,
           endAt,
           capacity: Number(capacity),
+          minCapacity: Number(minCapacity),
           price: cleanPrice,
         });
       }
@@ -754,7 +756,7 @@ export function LeaderCreateTripStepOne() {
                 </div>
 
                 <label>
-                  <FieldLabel required>Giá tour trọn gói/người</FieldLabel>
+                  <FieldLabel required>Giá tour tạm tính / người</FieldLabel>
 
                   <div className="relative">
                     <input
@@ -771,37 +773,21 @@ export function LeaderCreateTripStepOne() {
                   </div>
 
                   <p className="mt-2 text-xs text-slate-500">
-                    Đã gồm bảo hiểm VFRS 600 triệu/người.
+                    Mức giá tạm tính. Bạn có thể lập bảng chi phí chi tiết và chạy mô phỏng lợi nhuận ở Bước 3.
                   </p>
                 </label>
 
-                <label className="md:col-span-2 block">
-                  <FieldLabel required>
-                    Cơ sở tính giá &amp; Giải trình chi phí (Nội bộ)
-                  </FieldLabel>
-
-                  <textarea
-                    rows={4}
-                    maxLength={5000}
-                    className="w-full resize-y rounded-xl border border-slate-200 bg-[#f6f8fc] p-4 text-sm leading-6 text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
-                    value={priceExplanation}
-                    onChange={(event) => setPriceExplanation(event.target.value)}
-                    placeholder="Nhập cơ sở tính giá nội bộ: chi phí chung (xe, porter, lều trại), chi phí/người (ăn uống, vé rừng, bảo hiểm), số khách dự toán, dự phòng và lợi nhuận..."
-                  />
-
-                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                    <span>
-                      Có thể tạm để trống khi lưu nháp, nhưng{" "}
-                      <strong className="text-slate-700">
-                        bắt buộc phải nhập trước khi công khai (Publish)
-                      </strong>
-                      . Không hiển thị công khai cho khách.
-                    </span>
-                    <span className="text-slate-400">
-                      {priceExplanation.length}/5000 ký tự
-                    </span>
+                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-xs text-slate-700 flex items-start gap-3">
+                  <span className="text-xl leading-none">📊</span>
+                  <div className="space-y-1">
+                    <strong className="text-emerald-950 font-bold block text-sm">
+                      Dự toán chi phí &amp; Trekking Pricing Simulator tự động:
+                    </strong>
+                    <p className="text-slate-600 leading-relaxed">
+                      Bạn không cần phải tự giải trình cơ sở tính giá bằng tay. Ở <strong>Bước 3 (Xem lại &amp; Công khai)</strong>, hệ thống sẽ cung cấp <strong>Bảng kê chi phí</strong> (xe cộ, ăn uống, porter, bảo hiểm) cùng <strong>Simulator kéo thả</strong> để tính toán điểm hòa vốn, biên lợi nhuận và tự động sinh bản giải trình cho bạn.
+                    </p>
                   </div>
-                </label>
+                </div>
               </div>
             </FormCard>
 

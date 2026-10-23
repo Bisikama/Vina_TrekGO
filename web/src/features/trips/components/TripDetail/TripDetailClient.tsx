@@ -5,6 +5,7 @@ import { TripData } from "../../data/mockTripsData";
 import { TripHeader } from "./TripHeader";
 import { ItineraryAccordion } from "./ItineraryAccordion";
 import { ServicesAndPolicy } from "./ServicesAndPolicy";
+import { TripCostBreakdown } from "./TripCostBreakdown";
 import { BookingSidebar } from "./BookingSidebar";
 import { TripRouteReviewMap } from "@/features/leaders/components/leader/TripRouteReviewMap";
 import type { SystemTrailDetail } from "@/features/leaders/components/leader/StepTwoOverviewMap";
@@ -139,6 +140,7 @@ export const TripDetailClient = ({
             )}
 
             <ItineraryAccordion trip={enrichedTrip} />
+            <TripCostBreakdown trip={enrichedTrip} />
             <ServicesAndPolicy trip={enrichedTrip} />
           </div>
 

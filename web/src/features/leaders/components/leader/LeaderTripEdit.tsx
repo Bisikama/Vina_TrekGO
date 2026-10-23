@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { TripPricingManager } from "../pricing/TripPricingManager";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 type LeaderTripEditProps = {
   tripId: string;
@@ -107,7 +108,7 @@ export function LeaderTripEdit({
   tripId,
 }: LeaderTripEditProps) {
   const cleanTripId = tripId.replace(/^#/, "");
-  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId: cleanTripId });
+  const { trip, isLoading: isLoadingTrip, refetch: refetchTrip } = useLeaderTripDetail({ tripId: cleanTripId });
   const { updateTrip, cancelTrip, isSubmitting } = useLeaderTripMutations();
 
   const [title, setTitle] = useState("");
@@ -118,6 +119,13 @@ export function LeaderTripEdit({
   const [price, setPrice] = useState("2850000");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const durationDays = useMemo(() => {
+    if (!startDate || !endDate) return 2;
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, diff);
+  }, [startDate, endDate]);
 
   const [savedMessage, setSavedMessage] = useState("");
   const [showCancelModal, setShowCancelModal] =
@@ -548,37 +556,21 @@ export function LeaderTripEdit({
                   </span>
                 </label>
 
-                <label>
-                  <FieldLabel required>
-                    Giá vé mỗi người (VNĐ)
-                  </FieldLabel>
-
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
+                <div className="md:col-span-2 pt-2">
+                  <TripPricingManager
+                    tripId={cleanTripId}
+                    tripVersion={trip?.version || 1}
+                    capacity={capacity}
+                    minPax={minCapacity}
+                    durationDays={durationDays}
+                    initialPrice={price}
+                    onPriceConfirmed={({ selectedPrice, selectedMinPax }) => {
+                      setPrice(selectedPrice);
+                      setMinCapacity(selectedMinPax);
+                      refetchTrip();
+                    }}
                   />
-                </label>
-
-                <label className="md:col-span-2 block">
-                  <FieldLabel required>
-                    Cơ sở tính giá &amp; Giải trình chi phí nội bộ (priceExplanation)
-                  </FieldLabel>
-
-                  <textarea
-                    rows={4}
-                    maxLength={5000}
-                    className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-sm leading-6 text-slate-950 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
-                    value={priceExplanation}
-                    onChange={(e) => setPriceExplanation(e.target.value)}
-                    placeholder="Nhập cơ sở tính giá nội bộ: chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận..."
-                  />
-
-                  <span className="mt-1 block text-xs text-slate-400">
-                    Bắt buộc trước khi xuất bản chuyến đi. Không hiển thị công khai. ({priceExplanation.length}/5000 ký tự)
-                  </span>
-                </label>
+                </div>
               </div>
 
               <div className="mt-5 rounded-xl bg-emerald-50 p-4">

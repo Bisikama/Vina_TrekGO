@@ -8,6 +8,19 @@ export interface ItineraryDay {
   }[];
 }
 
+export interface TripCostBreakdownItem {
+  id?: string;
+  category: string;
+  name: string;
+  kind?: string;
+  basis?: string;
+  unitPrice: number;
+  quantity?: number;
+  durationUnits?: number;
+  capacityPerUnit?: number | null;
+  includedInPrice: boolean;
+  sourceNote?: string | null;
+}
 export interface TripData {
   id: string;
   duration: string;
@@ -84,6 +97,8 @@ export interface TripData {
   excludedServices?: string[];
   requiredEquipment?: { name: string; action: string }[];
   suggestedEquipment?: { name: string; action: string }[];
+  costItems?: TripCostBreakdownItem[];
+  priceExplanation?: string | null;
 }
 
 export const mockTripsData: TripData[] = [

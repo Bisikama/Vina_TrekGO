@@ -48,6 +48,10 @@ export interface LeaderTripView {
   minCapacity?: number;
   price: string | null;
   priceExplanation: string | null;
+  minPax?: number;
+  costPlanStatus?: "DRAFT" | "CONFIRMED" | "PUBLISHED" | null;
+  includedServices?: string[];
+  excludedServices?: string[];
   status: TripStatus;
   version: number;
   publishedAt: string | null;

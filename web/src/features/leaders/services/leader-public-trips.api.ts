@@ -83,9 +83,14 @@ export async function createLeaderPublicTrip(
   input: CreateLeaderPublicTripInput,
   signal?: AbortSignal
 ): Promise<LeaderTripView> {
+  const { minCapacity, ...rest } = input;
+  const payload = {
+    ...rest,
+    ...(minCapacity !== undefined ? { minPax: minCapacity } : {}),
+  };
   const response = await apiClient.post<LeaderTripView>(
     "/api/v1/leader/public-trips",
-    input,
+    payload,
     { signal }
   );
   return response.data;
@@ -137,9 +142,14 @@ export async function updateLeaderPublicTrip(
   input: UpdateLeaderPublicTripInput,
   signal?: AbortSignal
 ): Promise<LeaderTripView> {
+  const { minCapacity, ...rest } = input;
+  const payload = {
+    ...rest,
+    ...(minCapacity !== undefined ? { minPax: minCapacity } : {}),
+  };
   const response = await apiClient.patch<LeaderTripView>(
     `/api/v1/leader/public-trips/${tripId}`,
-    input,
+    payload,
     { signal }
   );
   return response.data;

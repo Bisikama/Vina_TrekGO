@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { TripData } from "@/features/trips/data/mockTripsData";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
 import { bookingApiService } from "@/features/bookings/services/booking.api";
+import { getTripCostPlan } from "@/features/leaders/services/leader-pricing.api";
 import { apiClient } from "@/lib/axios";
 
 export default function TripDetailPage() {
@@ -122,6 +123,28 @@ export default function TripDetailPage() {
           rawData.remainingSlots !== undefined ? rawData.remainingSlots : capacity;
         const booked = Math.max(0, capacity - remainingSlots);
 
+        // 7.5. Lấy bảng chi phí chi tiết nếu có
+        let costItems = rawData.costItems || [];
+        let priceExplanation = rawData.priceExplanation || null;
+        try {
+          const planRes = await getTripCostPlan(id);
+          if (planRes?.plan?.items && planRes.plan.items.length > 0) {
+            costItems = planRes.plan.items.map((i: any) => ({
+              id: i.id,
+              category: i.category,
+              name: i.name,
+              kind: i.kind,
+              basis: i.basis,
+              unitPrice: i.unitPrice,
+              quantity: i.quantity,
+              durationUnits: i.durationUnits,
+              capacityPerUnit: i.capacityPerUnit,
+              includedInPrice: i.includedInPrice,
+              sourceNote: i.sourceNote,
+            }));
+          }
+        } catch {}
+
         // 8. Cung đường System Trail (CHỈ GÁN NẾU CÓ THẬT, TUYỆT ĐỐI KHÔNG FALLBACK TRAIL_BADEN_COTDIEN)
         const sysTrailId =
           rawData.trails?.[0]?.systemTrailId ||
@@ -180,6 +203,10 @@ export default function TripDetailPage() {
             pickup: pickupInfo || null,
             checkpoints: rawData.checkpoints || [],
             routes: rawData.routes || rawData.trails || [],
+            includedServices: rawData.includedServices || [],
+            excludedServices: rawData.excludedServices || [],
+            costItems: costItems.length > 0 ? costItems : (rawData.costItems || []),
+            priceExplanation: priceExplanation || rawData.priceExplanation || null,
             action: {
               label: remainingSlots > 0 ? "Đặt chỗ ngay" : "Hết chỗ",
               variant: remainingSlots > 0 ? "primary" : "disabled",

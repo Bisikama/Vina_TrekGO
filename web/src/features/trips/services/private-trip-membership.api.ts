@@ -88,6 +88,60 @@ export interface PrivateTripRoom {
   myMembership?: TripMember;
 }
 
+export type DirectInvitationStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'REVOKED'
+  | 'EXPIRED'
+  | 'INVALIDATED';
+
+export interface DirectMemberInvitationItem {
+  id: string;
+  tripId: string;
+  status: DirectInvitationStatus;
+  expiresAt: string;
+  createdAt: string;
+  reason?: string | null;
+  version: number;
+  reservesCapacity: boolean;
+  recipientDisplay?: string;
+  senderDisplay?: string;
+  trip?: {
+    id: string;
+    title: string;
+    startAt: string;
+    endAt: string;
+    status: string;
+  };
+}
+
+export interface DirectInvitationPageResponse {
+  items: DirectMemberInvitationItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface DirectInvitationPreviewResponse extends DirectMemberInvitationItem {
+  senderDisplay: string;
+  recipientDisplay: string;
+  trip: {
+    id: string;
+    title: string;
+    startAt: string;
+    endAt: string;
+    status: string;
+  };
+  actions: {
+    canAccept: boolean;
+    canEnterRoom: boolean;
+    canDecline: boolean;
+    canRevoke: boolean;
+  };
+}
+
 export const privateTripMembershipApi = {
   // Lấy chi tiết lời mời công khai
   getInvitation: async (code: string) => {
@@ -142,6 +196,69 @@ export const privateTripMembershipApi = {
     const { data } = await apiClient.delete(`/api/v1/private-trips/${tripId}/members/${memberId}`, {
       params: { expectedMemberVersion },
     });
+    return data;
+  },
+
+  // M1: Gửi lời mời đích danh theo email (Host)
+  createDirectInvitation: async (tripId: string, recipientEmail: string, idempotencyKey = crypto.randomUUID()) => {
+    const { data } = await apiClient.post<DirectMemberInvitationItem>(
+      `/api/v1/private-trips/${tripId}/member-invitations`,
+      { recipientEmail },
+      { headers: { 'Idempotency-Key': idempotencyKey } }
+    );
+    return data;
+  },
+
+  // M1: Danh sách lời mời Host đã gửi
+  getHostDirectInvitations: async (tripId: string, params: { page?: number; pageSize?: number; status?: string } = {}) => {
+    const { data } = await apiClient.get<DirectInvitationPageResponse>(
+      `/api/v1/private-trips/${tripId}/member-invitations`,
+      { params }
+    );
+    return data;
+  },
+
+  // M2: Hộp thư lời mời nhận được của User hiện tại (Recipient Inbox)
+  getMyDirectInvitations: async (params: { page?: number; pageSize?: number; status?: string } = {}) => {
+    const { data } = await apiClient.get<DirectInvitationPageResponse>(
+      `/api/v1/me/private-trip-member-invitations`,
+      { params }
+    );
+    return data;
+  },
+
+  // M3: Xem trước thông tin lời mời
+  previewDirectInvitation: async (invitationId: string) => {
+    const { data } = await apiClient.get<DirectInvitationPreviewResponse>(
+      `/api/v1/private-trip-member-invitations/${invitationId}`
+    );
+    return data;
+  },
+
+  // M3: Chấp nhận lời mời tham gia
+  acceptDirectInvitation: async (invitationId: string) => {
+    const { data } = await apiClient.post<DirectMemberInvitationItem>(
+      `/api/v1/private-trip-member-invitations/${invitationId}/accept`,
+      {}
+    );
+    return data;
+  },
+
+  // M3: Từ chối lời mời
+  declineDirectInvitation: async (invitationId: string, reason?: 'NOT_INTERESTED' | 'SCHEDULE_CONFLICT' | 'OTHER') => {
+    const { data } = await apiClient.post<DirectMemberInvitationItem>(
+      `/api/v1/private-trip-member-invitations/${invitationId}/decline`,
+      { reason }
+    );
+    return data;
+  },
+
+  // M4: Host thu hồi lời mời
+  revokeDirectInvitation: async (invitationId: string) => {
+    const { data } = await apiClient.post<DirectMemberInvitationItem>(
+      `/api/v1/private-trip-member-invitations/${invitationId}/revoke`,
+      {}
+    );
     return data;
   },
 };
