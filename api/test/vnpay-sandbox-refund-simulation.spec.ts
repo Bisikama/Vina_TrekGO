@@ -33,6 +33,7 @@ import { SandboxRefundSimulationService } from '../src/modules/payments/sandbox-
 import { VnpayPaymentProvider, vnpaySignature } from '../src/modules/payments/vnpay-payment.provider'
 import { RefundsService, refundSummary } from '../src/modules/payments/refunds.service'
 import { PrismaRentalReturnAdapter } from '../src/modules/rental/returns/infrastructure/adapters/prisma-rental-return.adapter'
+import * as paymentUtils from '../src/modules/payments/payment-utils'
 
 describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworked for MERGE Review)', () => {
   const originalEnv = { ...process.env }
@@ -298,6 +299,39 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
       )
     })
 
+    it('RG-01: rejects simulation if DATABASE_URL has masquerading attacker domain (localhost.attacker.example)', () => {
+      process.env.DATABASE_URL = 'postgresql://user:pass@localhost.attacker.example:5432/app'
+      expect(() => service.assertEnvironmentSafe()).toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_ENV_UNSAFE })
+      )
+    })
+
+    it('RG-01: rejects simulation if DATABASE_URL has query param application_name=localhost', () => {
+      process.env.DATABASE_URL = 'postgresql://user:pass@db.example.com:5432/app?application_name=localhost'
+      expect(() => service.assertEnvironmentSafe()).toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_ENV_UNSAFE })
+      )
+    })
+
+    it('RG-01: rejects simulation if DATABASE_URL has username localhost pointing to remote host', () => {
+      process.env.DATABASE_URL = 'postgresql://user:localhost@remote.database.example:5432/app'
+      expect(() => service.assertEnvironmentSafe()).toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_ENV_UNSAFE })
+      )
+    })
+
+    it('RG-01: permits simulation on exact 127.0.0.1 and [::1] local test DB', () => {
+      process.env.NODE_ENV = 'test'
+      process.env.PAYMENT_PROVIDER_ENVIRONMENT = 'SANDBOX'
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
+
+      process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/vina_trekgo_test'
+      expect(() => service.assertEnvironmentSafe()).not.toThrow()
+
+      process.env.DATABASE_URL = 'postgresql://postgres:postgres@[::1]:5432/vina_trekgo_test'
+      expect(() => service.assertEnvironmentSafe()).not.toThrow()
+    })
+
     it('permits simulation when environment is SANDBOX on verified isolated local test DB and flag is enabled', () => {
       process.env.NODE_ENV = 'test'
       process.env.PAYMENT_PROVIDER_ENVIRONMENT = 'SANDBOX'
@@ -320,7 +354,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
     const reflector = new Reflector()
     const rolesGuard = new RolesGuard(reflector)
 
-    const createMockExecutionContext = (role: UserRole | string, userStatus = 'ACTIVE'): ExecutionContext =>
+    const createMockExecutionContext = (role: UserRole, userStatus = 'ACTIVE'): ExecutionContext =>
       ({
         getHandler: () => PaymentOperationsController.prototype.simulateRefund,
         getClass: () => PaymentOperationsController,
@@ -606,8 +640,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
       }
       const serviceSame = new SandboxRefundSimulationService(mockPrismaSame)
 
-      const hashUtil = require('../src/modules/payments/payment-utils')
-      jest.spyOn(hashUtil, 'paymentHash').mockReturnValue('e697cfc1f365d95d8cddeee0dcf3824f8d9bfa3732c253d7ca9704eefeb4b30e')
+      jest.spyOn(paymentUtils, 'paymentHash').mockReturnValue('e697cfc1f365d95d8cddeee0dcf3824f8d9bfa3732c253d7ca9704eefeb4b30e')
 
       const replayRes = await serviceSame.simulateRefundSettlement({
         refundId,
@@ -622,7 +655,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
       expect(replayRes).toEqual(cachedResponse)
 
       // Reusing key with different hash throws 409
-      jest.spyOn(hashUtil, 'paymentHash').mockReturnValue('different-hash-value-1234')
+      jest.spyOn(paymentUtils, 'paymentHash').mockReturnValue('different-hash-value-1234')
       await expect(
         serviceSame.simulateRefundSettlement({
           refundId,
@@ -637,6 +670,102 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
       ).rejects.toThrow(
         expect.objectContaining({ code: P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD })
       )
+    })
+
+    it('RG-04: recovers outside transaction when concurrent race triggers P2002 on idempotency creation', async () => {
+      const refundId = randomUUID()
+      const adminId = randomUUID()
+      const orderId = randomUUID()
+      const settlementId = randomUUID()
+      const itemId = randomUUID()
+      const key = 'idemp-p2002-race-001'
+      const cachedResponse = { simulationId: 'cached-sim-p2002' }
+
+      const mockTx = {
+        idempotencyRecord: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockRejectedValue({ code: 'P2002', message: 'Unique constraint failed on idempotency_records' }),
+        },
+        $queryRaw: jest.fn().mockResolvedValue([{ now: new Date() }]),
+        refund: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: refundId,
+            rentalOrderId: orderId,
+            depositSettlementId: settlementId,
+          }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: refundId,
+            purpose: 'DEPOSIT',
+            paymentGateway: 'vnpay',
+            providerEnvironment: 'SANDBOX',
+            status: 'PROCESSING',
+            version: 1,
+            amount: new Prisma.Decimal(500000),
+            currency: 'VND',
+            depositRefundItems: [],
+            depositSettlementId: settlementId,
+            depositSettlementItemId: itemId,
+            providerPayload: {
+              vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
+            },
+          }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        depositSettlementItem: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: itemId,
+              settlementId: settlementId,
+              depositAmount: new Prisma.Decimal(500000),
+              refundAmount: new Prisma.Decimal(500000),
+              deductionAmount: new Prisma.Decimal(0),
+              status: DepositItemStatus.REFUND_PENDING,
+              currency: 'VND',
+              decisionSnapshot: {},
+            },
+          ]),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        depositSettlement: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: settlementId, depositSettlementItemsViaSettlementId: [] }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: orderId, status: 'COMPLETED', financialStatus: 'SETTLED' }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        mockPaymentOperation: { upsert: jest.fn().mockResolvedValue({}) },
+        auditLog: { create: jest.fn().mockResolvedValue({}) },
+        paymentOutboxEvent: { create: jest.fn().mockResolvedValue({}) },
+        rentalExceptionCase: { findFirst: jest.fn().mockResolvedValue(null) },
+      }
+
+      const mockPrisma: any = {
+        $transaction: jest.fn().mockImplementation((fn: any) => fn(mockTx)),
+        idempotencyRecord: {
+          findUnique: jest.fn().mockResolvedValue({
+            requestHash: 'e697cfc1f365d95d8cddeee0dcf3824f8d9bfa3732c253d7ca9704eefeb4b30e',
+            responseBody: cachedResponse,
+          }),
+        },
+      }
+
+      const service = new SandboxRefundSimulationService(mockPrisma)
+      jest.spyOn(paymentUtils, 'paymentHash').mockReturnValue('e697cfc1f365d95d8cddeee0dcf3824f8d9bfa3732c253d7ca9704eefeb4b30e')
+
+      const res = await service.simulateRefundSettlement({
+        refundId,
+        actorUserId: adminId,
+        idempotencyKey: key,
+        body: {
+          reason: 'Race test reason',
+          acknowledgeSandboxSimulation: true,
+          expectedProviderStatus: 'PROCESSING',
+        },
+      })
+
+      expect(res).toEqual(cachedResponse)
     })
   })
 
@@ -664,7 +793,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
         depositRefundItems: [],
         providerPayload: {
           vnpayDispatch: { vnp_Command: 'refund' },
-          vnpayResponse: { vnp_TransactionStatus: '05' },
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
         },
         amount: new Prisma.Decimal(500000),
         currency: 'VND',
@@ -720,10 +849,59 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
       ).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
     })
 
-    it('MERGE-08: rejects refund if provider status is not in 01/05/06', async () => {
+    it('RG-02: rejects refund if vnpayResponse is missing entirely (dispatch-only)', async () => {
       const service = setupMockTxWithRefund({
         providerPayload: {
-          vnpayResponse: { vnp_TransactionStatus: '02' }, // FAILED
+          vnpayDispatch: { vnp_Command: 'refund' },
+          // No vnpayResponse!
+        },
+      })
+      await expect(
+        service.simulateRefundSettlement({
+          refundId,
+          actorUserId: adminId,
+          idempotencyKey: 'idemp-no-resp',
+          body: { reason: 'Test reason', acknowledgeSandboxSimulation: true, expectedProviderStatus: 'PROCESSING' },
+        })
+      ).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
+    })
+
+    it('RG-02: rejects refund if vnp_ResponseCode is not 00 (e.g. 99 error)', async () => {
+      const service = setupMockTxWithRefund({
+        providerPayload: {
+          vnpayResponse: { vnp_ResponseCode: '99', vnp_TransactionStatus: '05' },
+        },
+      })
+      await expect(
+        service.simulateRefundSettlement({
+          refundId,
+          actorUserId: adminId,
+          idempotencyKey: 'idemp-err-code-99',
+          body: { reason: 'Test reason', acknowledgeSandboxSimulation: true, expectedProviderStatus: 'PROCESSING' },
+        })
+      ).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
+    })
+
+    it('RG-02: rejects refund if vnp_TransactionStatus is 01 (pending payment, not refund processing)', async () => {
+      const service = setupMockTxWithRefund({
+        providerPayload: {
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '01' },
+        },
+      })
+      await expect(
+        service.simulateRefundSettlement({
+          refundId,
+          actorUserId: adminId,
+          idempotencyKey: 'idemp-status-01',
+          body: { reason: 'Test reason', acknowledgeSandboxSimulation: true, expectedProviderStatus: 'PROCESSING' },
+        })
+      ).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
+    })
+
+    it('RG-02: rejects refund if provider status is 02 (FAILED)', async () => {
+      const service = setupMockTxWithRefund({
+        providerPayload: {
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '02' }, // FAILED
         },
       })
       await expect(
@@ -851,7 +1029,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
         ],
         providerPayload: {
           vnpayDispatch: { vnp_Command: 'refund' },
-          vnpayResponse: { vnp_TransactionStatus: '05' },
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
         },
       }
 
@@ -985,7 +1163,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
         depositRefundItems: [],
         providerPayload: {
           vnpayDispatch: { vnp_Command: 'refund' },
-          vnpayResponse: { vnp_TransactionStatus: '05' },
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
         },
       }
 
@@ -1358,7 +1536,7 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
         depositRefundItems: [],
         providerPayload: {
           vnpayDispatch: { vnp_Command: 'refund' },
-          vnpayResponse: { vnp_TransactionStatus: '05' },
+          vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
         },
       }
 
@@ -1484,8 +1662,142 @@ describe('VNPay Sandbox Admin Refund Simulation (Prompt V2, 23/10/2026 - Reworke
 
       // Simulation metric: Demo settled
       expect(depositDto.simulatedSettledAmount).toBe(780000)
+      expect(depositDto.unconfirmedSimulatedAmount).toBe(780000)
       expect(depositDto.effectiveHeldAmount).toBe(0)
       expect(depositDto.warnings).toContain('NO_REAL_MONEY_RETURNED')
+    })
+
+    it('RG-03: getDeposit() prevents double-subtraction when late provider SUCCEEDED arrives on simulated item', async () => {
+      const settlementId = randomUUID()
+      const orderId = randomUUID()
+      const actorUserId = randomUUID()
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: orderId,
+            userId: actorUserId,
+            recipientSnapshot: null,
+            depositSettlementViaOrderId: {
+              id: settlementId,
+              depositSettlementItemsViaSettlementId: [
+                {
+                  id: 'item-sim-1',
+                  unitId: 'unit-1',
+                  depositAmount: new Prisma.Decimal(780000),
+                  deductionAmount: new Prisma.Decimal(0),
+                  refundAmount: new Prisma.Decimal(780000),
+                  status: DepositItemStatus.SETTLED,
+                  decisionSnapshot: {
+                    settlementMode: 'SANDBOX_SIMULATED',
+                  },
+                  unit: { id: 'unit-1', assetCode: 'TENT-001' },
+                  inspection: { outcome: ReturnInspectionOutcome.NORMAL },
+                  depositRefundAllocations: [],
+                  refundViaDepositSettlementItemId: {
+                    id: 'refund-vnp-1',
+                    status: 'SUCCEEDED', // Real provider SUCCEEDED arrived late!
+                    amount: new Prisma.Decimal(780000),
+                    currency: 'VND',
+                  },
+                  reason: null,
+                },
+              ],
+            },
+          }),
+        },
+        returnInspectionTask: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      }
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma)
+      const depositDto = await adapter.getDeposit({ orderId, actorUserId })
+
+      // Financial truth: Real provider SUCCEEDED!
+      expect(depositDto.financialTruth.providerRefundedAmount).toBe(780000)
+      expect(depositDto.financialTruth.providerRefundPendingAmount).toBe(0)
+      expect(depositDto.financialTruth.realMoneyReturned).toBe(true)
+
+      // RG-03 Invariant: unconfirmedSimulatedAmount is 0 (since provider already confirmed)
+      expect(depositDto.unconfirmedSimulatedAmount).toBe(0)
+      // effectiveHeldAmount: 780000 - 780000 - 0 = 0 (NO double deduction!)
+      expect(depositDto.effectiveHeldAmount).toBe(0)
+      expect(depositDto.heldAmount).toBe(0)
+    })
+
+    it('RG-03: getDeposit() accurately calculates partial settlement with 1M deposit, 300k confirmed, 700k pending', async () => {
+      const settlementId = randomUUID()
+      const orderId = randomUUID()
+      const actorUserId = randomUUID()
+      const mockPrisma: any = {
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: orderId,
+            userId: actorUserId,
+            recipientSnapshot: null,
+            depositSettlementViaOrderId: {
+              id: settlementId,
+              depositSettlementItemsViaSettlementId: [
+                {
+                  id: 'item-1',
+                  unitId: 'unit-1',
+                  depositAmount: new Prisma.Decimal(300000),
+                  deductionAmount: new Prisma.Decimal(0),
+                  refundAmount: new Prisma.Decimal(300000),
+                  status: DepositItemStatus.SETTLED,
+                  decisionSnapshot: { settlementMode: 'SANDBOX_SIMULATED' },
+                  unit: { id: 'unit-1', assetCode: 'GEAR-01' },
+                  inspection: { outcome: ReturnInspectionOutcome.NORMAL },
+                  depositRefundAllocations: [],
+                  refundViaDepositSettlementItemId: {
+                    id: 'refund-1',
+                    status: 'SUCCEEDED', // Confirmed late
+                    amount: new Prisma.Decimal(300000),
+                    currency: 'VND',
+                  },
+                  reason: null,
+                },
+                {
+                  id: 'item-2',
+                  unitId: 'unit-2',
+                  depositAmount: new Prisma.Decimal(700000),
+                  deductionAmount: new Prisma.Decimal(0),
+                  refundAmount: new Prisma.Decimal(700000),
+                  status: DepositItemStatus.REFUND_PENDING,
+                  decisionSnapshot: {},
+                  unit: { id: 'unit-2', assetCode: 'GEAR-02' },
+                  inspection: { outcome: ReturnInspectionOutcome.NORMAL },
+                  depositRefundAllocations: [],
+                  refundViaDepositSettlementItemId: {
+                    id: 'refund-2',
+                    status: 'PROCESSING', // Still unconfirmed
+                    amount: new Prisma.Decimal(700000),
+                    currency: 'VND',
+                  },
+                  reason: null,
+                },
+              ],
+            },
+          }),
+        },
+        returnInspectionTask: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      }
+
+      const adapter = new PrismaRentalReturnAdapter(mockPrisma)
+      const depositDto = await adapter.getDeposit({ orderId, actorUserId })
+
+      // Collected: 1,000,000. Refunded: 300,000.
+      expect(depositDto.collectedAmount).toBe(1000000)
+      expect(depositDto.refundedAmount).toBe(300000)
+      expect(depositDto.refundPendingAmount).toBe(700000)
+
+      // unconfirmedSimulatedAmount is 0 for item 1 (SUCCEEDED) and 0 for item 2 (standard, not simulated)
+      expect(depositDto.unconfirmedSimulatedAmount).toBe(0)
+      // effectiveHeldAmount is exactly 700,000 (NOT 400,000)!
+      expect(depositDto.effectiveHeldAmount).toBe(700000)
+      expect(depositDto.heldAmount).toBe(700000)
     })
   })
 

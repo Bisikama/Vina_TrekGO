@@ -55,8 +55,8 @@ export class SandboxRefundSimulationService {
       })
     }
 
-    // Fail-closed verification of DATABASE_URL:
-    // Disallow shared NeonDB, AWS pooler, RDS, Supabase, Azure, GCP, or any non-local database
+    // RG-01 Fix: Fail-closed verification of DATABASE_URL using exact URL hostname parsing
+    // Disallows query parameter tricks, path/auth masquerading, cloud/shared hosts, or non-local instances
     const dbUrl = process.env.DATABASE_URL || ''
     if (!dbUrl) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
@@ -64,18 +64,25 @@ export class SandboxRefundSimulationService {
       })
     }
 
-    const isSharedHost = /neon\.tech|pooler|\.aws\.|\.azure\.|\.supabase\.|cloudsql|prod/i.test(dbUrl)
-    if (isSharedHost) {
+    let parsedHostname = ''
+    try {
+      const parsed = new URL(dbUrl)
+      parsedHostname = (parsed.hostname || '').toLowerCase().trim()
+    } catch {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
-        message:
-          'Shared/cloud database (e.g. NeonDB) detected in DATABASE_URL. Simulation requires an isolated local test database.',
+        message: 'DATABASE_URL is not a valid URL format',
       })
     }
 
-    const isExplicitLocal = /localhost|127\.0\.0\.1|::1|host\.docker\.internal/i.test(dbUrl)
-    if (!isExplicitLocal) {
+    // Strip IPv6 brackets if present e.g. [::1] -> ::1
+    if (parsedHostname.startsWith('[') && parsedHostname.endsWith(']')) {
+      parsedHostname = parsedHostname.slice(1, -1)
+    }
+
+    const ALLOWED_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+    if (!ALLOWED_LOCAL_HOSTS.has(parsedHostname)) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
-        message: 'Database host is not recognized as an isolated local instance. Simulation requires localhost/127.0.0.1.',
+        message: `Database host "${parsedHostname}" is not recognized as an isolated local instance. Simulation requires localhost or 127.0.0.1.`,
       })
     }
   }
@@ -92,7 +99,8 @@ export class SandboxRefundSimulationService {
     const scope = `admin-simulate-refund:${refundId}`
     const requestHash = paymentHash({ refundId, ...body })
 
-    return this.db.$transaction(async (tx) => {
+    try {
+      return await this.db.$transaction(async (tx) => {
       // 1. Check idempotency record first
       const existingIdempotency = await tx.idempotencyRecord.findUnique({
         where: {
@@ -204,15 +212,38 @@ export class SandboxRefundSimulationService {
         })
       }
 
-      // MERGE-08 Fix: Server-side verification that refund has genuine VNPay 05/06 dispatch provenance
-      const vnpayDispatch = existingPayload?.vnpayDispatch as Record<string, unknown> | undefined
+      // RG-02 Fix: Strict fail-closed verification that refund has genuine VNPay 05/06 response provenance
       const vnpayResponse = existingPayload?.vnpayResponse as Record<string, unknown> | undefined
-      const vnpayTxnStatus = (vnpayResponse?.vnp_TransactionStatus ??
-        vnpayDispatch?.vnp_TransactionStatus) as string | undefined
-
-      if (vnpayResponse && vnpayTxnStatus && !['01', '05', '06'].includes(vnpayTxnStatus)) {
+      if (!vnpayResponse || typeof vnpayResponse !== 'object') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Lệnh hoàn tiền có mã trạng thái VNPay ${vnpayTxnStatus}, không thuộc nhóm 05/06 PROCESSING`,
+          message: 'Thiếu kết quả phản hồi hoàn tiền từ VNPay (vnpayResponse). Không thể xác minh provenance.',
+        })
+      }
+
+      const vnpResponseCode =
+        typeof vnpayResponse.vnp_ResponseCode === 'string'
+          ? vnpayResponse.vnp_ResponseCode
+          : typeof vnpayResponse.vnp_ResponseCode === 'number'
+            ? `${vnpayResponse.vnp_ResponseCode}`
+            : ''
+      const vnpTxnStatus =
+        typeof vnpayResponse.vnp_TransactionStatus === 'string'
+          ? vnpayResponse.vnp_TransactionStatus
+          : typeof vnpayResponse.vnp_TransactionStatus === 'number'
+            ? `${vnpayResponse.vnp_TransactionStatus}`
+            : ''
+
+      // VNPay must have acknowledged the refund request with response code '00'
+      if (vnpResponseCode !== '00') {
+        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+          message: `Phản hồi VNPay có vnp_ResponseCode='${vnpResponseCode}', yêu cầu hoàn tiền không được VNPay tiếp nhận thành công`,
+        })
+      }
+
+      // Transaction status must be strictly '05' or '06' (PROCESSING)
+      if (!['05', '06'].includes(vnpTxnStatus)) {
+        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+          message: `Trạng thái giao dịch VNPay là '${vnpTxnStatus}', chỉ hỗ trợ mô phỏng hoàn cọc khi giao dịch đang ở nhóm 05 hoặc 06 (PROCESSING)`,
         })
       }
 
@@ -511,26 +542,45 @@ export class SandboxRefundSimulationService {
         },
       }
 
-      // Record in IdempotencyRecord table (with race safety)
-      try {
-        await tx.idempotencyRecord.create({
-          data: {
-            scope,
-            userId: actorUserId,
-            idempotencyKey,
-            requestHash,
-            responseStatus: 200,
-            responseBody: responseData as unknown as Prisma.InputJsonValue,
-            completedAt: now,
-          },
-        })
-      } catch (err: any) {
-        if (err?.code !== 'P2002') throw err
-      }
+      // RG-04: Record in IdempotencyRecord table within transaction
+      await tx.idempotencyRecord.create({
+        data: {
+          scope,
+          userId: actorUserId,
+          idempotencyKey,
+          requestHash,
+          responseStatus: 200,
+          responseBody: responseData as unknown as Prisma.InputJsonValue,
+          completedAt: now,
+        },
+      })
 
       return responseData
     })
+  } catch (err: any) {
+    // RG-04: Handle concurrent same-key race cleanly OUTSIDE the transaction
+    if (err?.code === 'P2002' || err?.message?.includes('idempotency_records')) {
+      const concurrent = await this.db.idempotencyRecord.findUnique({
+        where: {
+          scope_userId_idempotencyKey: {
+            scope,
+            userId: actorUserId,
+            idempotencyKey,
+          },
+        },
+      })
+      if (concurrent) {
+        if (concurrent.requestHash !== requestHash) {
+          throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
+        }
+        if (concurrent.responseBody) {
+          return concurrent.responseBody as unknown as SandboxSimulateRefundResponseDto
+        }
+      }
+    }
+    throw err
   }
+}
 
   async getSimulationDetail(refundId: string) {
     this.assertEnvironmentSafe()

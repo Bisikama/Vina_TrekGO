@@ -329,7 +329,7 @@ class Session implements TripSession {
             targetMarginBps: plan.targetMarginBps,
             contingencyBps: plan.contingencyBps,
             items,
-          } as unknown as Prisma.InputJsonValue,
+          },
           feeAssumptionSnapshot: evaluation.feePolicy as unknown as Prisma.InputJsonValue,
           pricingResultSnapshot: {
             summary: evaluation.summary,
