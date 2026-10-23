@@ -49,11 +49,14 @@ const publicProjection = (t: TripView) => ({
   destinationId: t.destinationId,
   startAt: t.startAt,
   endAt: t.endAt,
+  minPax: t.minPax ?? 1,
   capacity: t.capacity,
   price: t.price,
   pickupPointId: t.pickupPointId,
   status: t.status,
   publishedAt: t.publishedAt,
+  ...(t.includedServices ? { includedServices: t.includedServices } : {}),
+  ...(t.excludedServices ? { excludedServices: t.excludedServices } : {}),
 })
 
 @Injectable()
@@ -70,7 +73,7 @@ export class PublicTripUseCase {
     })
   }
   private async basic(s: TripSession, data: TripInput) {
-    const issues = basicIssues(data, new Date())
+    const issues = basicIssues(data, new Date(), { requirePrice: false })
     if (issues.length) fail(400, 'VALIDATION_ERROR', 'Thông tin Trip không hợp lệ.', issues)
     const destination = await s.destination(data.destinationId)
     if (!destination) fail(404, 'NOT_FOUND', 'Destination không tồn tại.')
@@ -108,8 +111,8 @@ export class PublicTripUseCase {
       )
         fail(409, 'INVALID_STATE_TRANSITION', 'Xóa kế hoạch checkpoint/trail trước khi đổi Destination.')
       const next = { ...trip, ...data }
-      if (!next.pickupPointId || !next.price) fail(400, 'VALIDATION_ERROR', 'Cần giá và điểm tập kết.')
-      await this.basic(s, { ...next, pickupPointId: next.pickupPointId, price: next.price })
+      if (!next.pickupPointId) fail(400, 'VALIDATION_ERROR', 'Cần điểm tập kết.')
+      await this.basic(s, { ...next, pickupPointId: next.pickupPointId })
       await this.conflict(s, actor.id, next, id)
       return s.update(id, data)
     })
@@ -144,11 +147,16 @@ export class PublicTripUseCase {
     })
   }
   private async readinessIn(s: TripSession, trip: TripView): Promise<Readiness> {
-    const issues = basicIssues(trip, new Date())
+    const issues = basicIssues(trip, new Date(), { requirePrice: true })
     const add = (field: string, message: string, code = 'TRIP_NOT_READY_TO_PUBLISH') =>
       issues.push({ code, field, message })
     if (trip.status !== 'DRAFT') add('status', 'Trip không còn ở DRAFT.', 'INVALID_STATE_TRANSITION')
-    if (!trip.priceExplanation?.trim()) add('priceExplanation', 'Cần bổ sung cơ sở tính giá trước khi publish.')
+    const hasConfirmedCostPlan = trip.costPlanStatus === 'CONFIRMED' || trip.costPlanStatus === 'PUBLISHED'
+    if (trip.costPlanStatus === 'DRAFT') {
+      add('costPlan', 'Bảng chi phí đang ở trạng thái nháp; cần xác nhận chốt giá trước khi publish.')
+    } else if (!hasConfirmedCostPlan && !trip.priceExplanation?.trim()) {
+      add('priceExplanation', 'Cần hoàn tất lập ngân sách định giá (hoặc bổ sung cơ sở tính giá) trước khi publish.')
+    }
     if ((await s.destination(trip.destinationId))?.status !== 'ACTIVE')
       add('destinationId', 'Destination không sử dụng được.')
     const pickup = trip.pickupPointId ? await s.pickup(trip.pickupPointId) : null

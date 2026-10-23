@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { DifficultyLevel, Prisma } from '@prisma/client'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { OCCUPYING_STATES } from '../../application/trip.policy'
+import { evaluateTripPricing } from '../../pricing/pricing-calculator'
 import type {
   Checkpoint,
   Json,
@@ -17,9 +18,26 @@ import type {
 const include = {
   tripCheckpointsViaTripId: { orderBy: { sequence: 'asc' as const } },
   tripTrailPlansViaTripId: { orderBy: { sequence: 'asc' as const } },
+  tripCostPlanViaTripId: {
+    include: {
+      items: {
+        orderBy: { sortOrder: 'asc' as const },
+        include: {
+          stepTiers: { orderBy: { triggerMinPax: 'asc' as const } },
+        },
+      },
+    },
+  },
 }
 type Row = Prisma.TripGetPayload<{ include: typeof include }>
 function view(row: Row): TripView {
+  const plan = row.tripCostPlanViaTripId
+  const activeItems = plan?.items?.filter((i) => i.isEnabled) ?? []
+  const includedServices = activeItems.filter((i) => i.includedInPrice).map((i) => i.nameSnapshot)
+  const excludedServices = activeItems
+    .filter((i) => !i.includedInPrice)
+    .map((i) => (i.sourceNote?.trim() ? `${i.nameSnapshot} (${i.sourceNote.trim()})` : i.nameSnapshot))
+
   return {
     id: row.id,
     tripType: row.tripType,
@@ -31,9 +49,12 @@ function view(row: Row): TripView {
     startAt: row.startAt.toISOString(),
     endAt: row.endAt.toISOString(),
     pickupPointId: row.pickupPointId,
+    minPax: row.minPax,
     capacity: row.maxPax,
     price: row.pricePerPax?.toString() ?? null,
     priceExplanation: row.priceExplanation,
+    costPlanStatus: plan?.status ?? null,
+    ...(plan ? { includedServices, excludedServices } : {}),
     status: row.status,
     version: row.version,
     publishedAt: row.publishedAt?.toISOString() ?? null,
@@ -49,10 +70,18 @@ function view(row: Row): TripView {
       isEnabled: c.isEnabled,
     })),
     trails: row.tripTrailPlansViaTripId.map((t) => ({
-      systemTrailId: t.systemTrailId ?? (() => { throw new Error('Public trip requires system trail'); })(),
+      systemTrailId:
+        t.systemTrailId ??
+        (() => {
+          throw new Error('Public trip requires system trail')
+        })(),
       sequence: t.sequence,
       snapshotName: t.snapshotName,
-      snapshotDifficulty: t.snapshotDifficulty ?? (() => { throw new Error('Public trip requires trail difficulty'); })(),
+      snapshotDifficulty:
+        t.snapshotDifficulty ??
+        (() => {
+          throw new Error('Public trip requires trail difficulty')
+        })(),
       snapshotGeojson: t.snapshotGeojson as Json,
       snapshotDistanceKm: t.snapshotDistanceKm?.toString() ?? null,
       snapshotElevationGainM: t.snapshotElevationGainM,
@@ -97,6 +126,7 @@ function tripData(data: Partial<TripInput>) {
     startAt: data.startAt ? new Date(data.startAt) : undefined,
     endAt: data.endAt ? new Date(data.endAt) : undefined,
     pickupPointId: data.pickupPointId,
+    minPax: data.minPax,
     maxPax: data.capacity,
     pricePerPax: data.price,
     priceExplanation: data.priceExplanation,
@@ -185,6 +215,7 @@ class Session implements TripSession {
           destinationId: d.destinationId,
           startAt: new Date(d.startAt),
           endAt: new Date(d.endAt),
+          minPax: d.minPax ?? 1,
           maxPax: d.capacity,
           tripType: 'PUBLIC',
           creatorId: actorId,
@@ -239,6 +270,76 @@ class Session implements TripSession {
     return this.update(id, {})
   }
   async publish(id: string) {
+    const existing = await this.db.trip.findUnique({ where: { id }, include })
+    if (existing?.tripCostPlanViaTripId) {
+      const plan = existing.tripCostPlanViaTripId
+      await this.db.tripCostPlan.update({
+        where: { id: plan.id },
+        data: { status: 'PUBLISHED', version: { increment: 1 } },
+      })
+      const items = plan.items.map((item) => ({
+        category: item.category,
+        name: item.nameSnapshot,
+        kind: item.kind,
+        basis: item.basis,
+        unitPrice: item.unitPrice.toFixed(0),
+        quantity: item.quantity,
+        durationUnits: item.durationUnits,
+        capacityPerUnit: item.capacityPerUnit,
+        extraNonPayingPax: item.extraNonPayingPax,
+        includedInPrice: item.includedInPrice,
+        isEnabled: item.isEnabled,
+        sourceNote: item.sourceNote,
+        stepTiers: item.stepTiers.map((t) => ({
+          triggerMinPax: t.triggerMinPax,
+          triggerMaxPax: t.triggerMaxPax,
+          operation: t.operation,
+          amount: t.amount.toFixed(0),
+          note: t.note,
+        })),
+      }))
+      const feePolicy = {
+        policyVersion: plan.policyVersionRef ?? 'fee-2026-v1',
+        platformFeeBps: 800,
+        paymentFeeBps: 200,
+        defaultContingencyBps: 500,
+        defaultTargetMarginBps: 1200,
+        roundingStepVnd: '10000',
+      }
+      const evaluation = evaluateTripPricing({
+        maxPax: existing.maxPax,
+        targetPax: Math.min(plan.targetPax, existing.maxPax),
+        targetMarginBps: plan.targetMarginBps,
+        contingencyBps: plan.contingencyBps,
+        selectedPrice: (plan.selectedPrice ?? existing.pricePerPax)!.toFixed(0),
+        selectedMinPax: plan.selectedMinPax ?? existing.minPax,
+        items,
+        feePolicy,
+      })
+      await this.db.tripPricingVersion.create({
+        data: {
+          tripId: id,
+          versionNo: 1,
+          selectedPrice: plan.selectedPrice ?? existing.pricePerPax!,
+          selectedMinPax: plan.selectedMinPax ?? existing.minPax,
+          targetPax: plan.targetPax,
+          costInputSnapshot: {
+            currency: plan.currency,
+            targetPax: plan.targetPax,
+            targetMarginBps: plan.targetMarginBps,
+            contingencyBps: plan.contingencyBps,
+            items,
+          } as unknown as Prisma.InputJsonValue,
+          feeAssumptionSnapshot: evaluation.feePolicy as unknown as Prisma.InputJsonValue,
+          pricingResultSnapshot: {
+            summary: evaluation.summary,
+            riskIntervals: evaluation.riskIntervals,
+            scenarios: evaluation.scenarios,
+          } as unknown as Prisma.InputJsonValue,
+          createdBy: existing.leaderId ?? existing.creatorId,
+        },
+      })
+    }
     return view(
       await this.db.trip.update({
         where: { id },

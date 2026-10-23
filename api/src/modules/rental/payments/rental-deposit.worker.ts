@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma, RentalOrderExceptionStatus } from '@prisma/client'
@@ -437,7 +438,8 @@ export class RentalDepositWorker {
 
   @Interval(2000)
   async tick() {
-    if (this.running || process.env.PAYMENT_EVENTS_WORKER_ENABLED === 'false') return
+    const isWorkerEnabled = envconfig.PAYMENT_EVENTS_WORKER_ENABLED && process.env.PAYMENT_EVENTS_WORKER_ENABLED !== 'false'
+    if (this.running || !isWorkerEnabled) return
     this.running = true
     try {
       const items = await this.db.depositSettlementItem.findMany({

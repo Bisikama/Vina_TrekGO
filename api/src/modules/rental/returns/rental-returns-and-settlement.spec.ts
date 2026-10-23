@@ -40,6 +40,8 @@ import { StaffReturnController } from './presentation/controllers/staff-return.c
 import { RentalReturnAdminController } from './presentation/controllers/rental-return-admin.controller';
 import { RentalExceptionController } from './presentation/controllers/rental-exception.controller';
 import { RentalDocumentController } from './presentation/controllers/rental-document.controller';
+import { RentalDocumentService } from '../documents/application/rental-document.service';
+import { RentalDocumentAdminController } from '../documents/presentation/rental-document-admin.controller';
 
 // Use cases to mock for HTTP tests
 import { ReturnScanUseCase } from './application/use-cases/return-scan.use-case';
@@ -95,8 +97,20 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           RentalReturnAdminController,
           RentalExceptionController,
           RentalDocumentController,
+          RentalDocumentAdminController,
         ],
         providers: [
+          { provide: RentalDocumentService, useValue: {
+            download: jest.fn().mockResolvedValue({ downloadUrl: 'https://private.example/signed',
+              expiresAt: '2026-10-20T12:10:00Z', fileName: 'TG-DOC-1.pdf',
+              contentType: 'application/pdf', sha256: 'a'.repeat(64) }),
+            verify: jest.fn().mockResolvedValue({ documentNo: 'TG-DOC-1', snapshotVerified: true,
+              pdfVerified: true, verified: true }),
+            correct: jest.fn().mockResolvedValue({ correctionDocumentId: dummyOrderId,
+              originalDocumentId: dummyOrderId, renderStatus: 'PENDING_RENDER' }),
+            retry: jest.fn().mockResolvedValue({ documentId: dummyOrderId,
+              renderStatus: 'PENDING_RENDER', attemptCount: 1 }),
+          } },
           { provide: ReturnScanUseCase, useValue: { execute: jest.fn().mockResolvedValue({ returnId: dummyTaskId, receivedUnits: [], missingUnits: [], duplicates: [] }) } },
           { provide: ReturnInspectionUseCase, useValue: { execute: jest.fn().mockResolvedValue({ returnSessionId: 'sess-1', observations: [], discrepancies: [] }) } },
           { provide: ReturnToInventoryLocationUseCase, useValue: { execute: jest.fn().mockResolvedValue({ custodyTransferId: 'trans-1', status: 'PENDING_TRANSFER' }) } },
@@ -217,6 +231,33 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
 
       const resolveMethod = Object.getOwnPropertyDescriptor(RentalReturnAdminController.prototype, 'resolve')?.value;
       expect(Reflect.getMetadata(ROLES_KEY, resolveMethod)).toEqual([UserRole.ADMIN]);
+    });
+
+    it('Phase 11 routes 1003/1005/1006/1007 have exact methods and response codes', async () => {
+      const base = `/api/v1/rental-documents/${dummyOrderId}`;
+      const download = await request(app.getHttpServer()).get(`${base}/download`);
+      expect(download.status).toBe(200);
+      expect(download.body.data.contentType).toBe('application/pdf');
+      const verification = await request(app.getHttpServer()).get(`${base}/verification`);
+      expect(verification.status).toBe(200);
+      expect(verification.body.data.verified).toBe(true);
+      const correction = await request(app.getHttpServer())
+        .post(`/api/v1/admin/rental-documents/${dummyOrderId}/corrections`)
+        .set('idempotency-key', 'correction-1')
+        .send({ reason: 'Correct display name', expectedVersion: 1,
+          corrections: [{ field: 'recipientNotes', oldValue: null, newValue: 'Đúng' }] });
+      expect(correction.status).toBe(201);
+      const retry = await request(app.getHttpServer())
+        .post(`/api/v1/admin/rental-documents/${dummyOrderId}/retry-render`)
+        .set('idempotency-key', 'retry-1').send({ reason: 'Storage outage recovered' });
+      expect(retry.status).toBe(202);
+      const invalid = await request(app.getHttpServer())
+        .post(`/api/v1/admin/rental-documents/${dummyOrderId}/corrections`)
+        .set('idempotency-key', 'correction-2')
+        .send({ reason: 'Change financial value', expectedVersion: 1,
+          corrections: [{ field: 'totalDeposit', oldValue: '0', newValue: '1' }] });
+      expect(invalid.status).toBe(400);
+      expect(invalid.body.error).toMatchObject({ code: expect.any(String) });
     });
 
     it('RB-API-601: POST /api/v1/rental-orders/:id/return-scan returns 200', async () => {
@@ -3155,6 +3196,15 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(createdOutbox.eventType).toBe('RENTAL_DOCUMENT_ACCESS_AUDIT_FALLBACK');
       expect(createdOutbox.aggregateId).toBe(testDocId);
       expect(createdOutbox.payload.failureReason).toContain('DB connection reset');
+    });
+
+    it('fails closed when both access audit writes fail', async () => {
+      const adapter = new PrismaRentalReturnAdapter({
+        rentalDocumentAccessLog: { createMany: jest.fn().mockRejectedValue(new Error('audit table unavailable')) },
+        rentalOutboxEvent: { create: jest.fn().mockRejectedValue(new Error('audit outbox unavailable')) },
+      } as any);
+      await expect((adapter as any).recordDocumentAccessLog([testDocId], testUserA, 'READ'))
+        .rejects.toMatchObject({ code: 'RENTAL_DOCUMENT_AUDIT_UNAVAILABLE' });
     });
   });
 });

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { Prisma, RentalOrderStatus } from '@prisma/client'
 import { PrismaService } from 'src/shared/services/prisma.service'
+import envconfig from 'src/shared/config'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
 import { VALID_PUBLIC_BOOKING_STATUSES } from '../../../shared/public-booking-membership'
@@ -84,13 +85,28 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       orderBy: { createdAt: 'desc' },
     })
     // Production calls Area A's authoritative resolver; do not silently fall back to a stale DB on HTTP errors.
-    if (process.env.AREA_A_INTERNAL_BASE_URL) {
-      const base = process.env.AREA_A_INTERNAL_BASE_URL.replace(/\/$/, '')
+    const internalBaseUrl =
+      process.env.NODE_ENV !== 'test'
+        ? (envconfig.AREA_A_INTERNAL_BASE_URL ?? process.env.AREA_A_INTERNAL_BASE_URL)
+        : undefined
+    if (internalBaseUrl) {
+      const base = internalBaseUrl.replace(/\/$/, '')
       const response = await fetch(
         `${base}/internal/trips/${tripId}/rental-context?userId=${encodeURIComponent(userId)}`,
         {
-          headers: { 'x-api-key': process.env.RENTAL_INTEGRATION_API_KEY ?? '' },
-          signal: AbortSignal.timeout(Number(process.env.RENTAL_HTTP_TIMEOUT_MS ?? '5000')),
+          headers: {
+            'x-api-key':
+              envconfig.RENTAL_INTEGRATION_API_KEY ??
+              process.env.RENTAL_INTEGRATION_API_KEY ??
+              '',
+          },
+          signal: AbortSignal.timeout(
+            Number(
+              envconfig.RENTAL_HTTP_TIMEOUT_MS ??
+                process.env.RENTAL_HTTP_TIMEOUT_MS ??
+                5000,
+            ),
+          ),
         },
       )
       if (response.status === 404) return null
@@ -208,7 +224,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       tripType: trip.tripType,
       startAt: trip.startAt,
       endAt: trip.endAt,
-      timezone: process.env.TREKGO_TIMEZONE ?? 'Asia/Ho_Chi_Minh',
+      timezone: envconfig.TREKGO_TIMEZONE ?? process.env.TREKGO_TIMEZONE ?? 'Asia/Ho_Chi_Minh',
       difficulty,
       weatherSummary,
       rainProbabilityPercent,
