@@ -24,12 +24,27 @@ const include = {
     select: { id: true, name: true, sequence: true, isRequired: true },
   },
   tripTransportsViaTripId: { where: { status: { not: 'CANCELLED' as const } }, select: { vehicleType: true } },
+  tripCostPlanViaTripId: {
+    select: {
+      items: {
+        where: { isEnabled: true },
+        orderBy: { sortOrder: 'asc' as const },
+        select: { nameSnapshot: true, includedInPrice: true, sourceNote: true },
+      },
+    },
+  },
 } satisfies Prisma.TripInclude
 
 @Injectable()
 export class BookingDiscoveryService {
   constructor(private readonly db: PrismaService) {}
   private async project(trip: Prisma.TripGetPayload<{ include: typeof include }>) {
+    const costItems = trip.tripCostPlanViaTripId?.items ?? []
+    const includedServices = costItems.filter((i) => i.includedInPrice).map((i) => i.nameSnapshot)
+    const excludedServices = costItems
+      .filter((i) => !i.includedInPrice)
+      .map((i) => (i.sourceNote?.trim() ? `${i.nameSnapshot} (${i.sourceNote.trim()})` : i.nameSnapshot))
+
     return {
       id: trip.id,
       title: trip.title,
@@ -41,6 +56,7 @@ export class BookingDiscoveryService {
       leader: trip.leader,
       pricePerPax: trip.pricePerPax?.toFixed() ?? null,
       currency: 'VND',
+      minPax: trip.minPax,
       capacity: trip.maxPax,
       remainingSlots: Math.max(0, trip.maxPax - (await occupiedSeats(this.db, trip.id, new Date()))),
       pickup: trip.pickupPoint,
@@ -48,6 +64,8 @@ export class BookingDiscoveryService {
       checkpoints: trip.tripCheckpointsViaTripId,
       transportAvailable: trip.tripTransportsViaTripId.length > 0,
       transport: trip.tripTransportsViaTripId,
+      includedServices,
+      excludedServices,
     }
   }
   async list(query: TripSearch) {

@@ -199,12 +199,15 @@ export class BookingsService {
         if (p.id) await tx.bookingParticipant.update({ where: { id: p.id }, data })
         else await tx.bookingParticipant.create({ data: { ...data, bookingId: id, checkinCode: randomUUID() } })
       }
-      const total = booking.pricePerPaxSnapshot.mul(input.participantCount)
+      const latestPricePerPax = booking.trip.pricePerPax ?? booking.pricePerPaxSnapshot
+      if (!latestPricePerPax.isPositive() || !latestPricePerPax.isInteger()) fail(B.INVALID_STATE_TRANSITION)
+      const total = latestPricePerPax.mul(input.participantCount)
       if (total.gt('9999999999')) fail(B.INVALID_STATE_TRANSITION)
       const updated = await tx.booking.update({
         where: { id },
         data: {
           participantCount: input.participantCount,
+          pricePerPaxSnapshot: latestPricePerPax,
           subtotalAmount: total,
           totalAmount: total,
           discountAmount: 0,
