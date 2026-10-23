@@ -22,6 +22,9 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [B.PARTICIPANT_ALREADY_LINKED]: { status: 409, message: 'Participant is already linked to another account', retryable: false },
+  [B.TRIP_PARTICIPATION_EXISTS]: { status: 409, message: 'Account already has a valid participant for this trip', retryable: false },
+  [B.PARTICIPANT_CLAIM_NOT_ALLOWED]: { status: 409, message: 'Participant cannot be claimed in the current state', retryable: false },
   [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
   [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
   [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },

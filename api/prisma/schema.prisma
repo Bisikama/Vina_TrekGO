@@ -883,6 +883,8 @@ model User {
   tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
   privateTripInvitesViaCreatedBy         PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
   privateMemberInvitationsSent           PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationSender")
+  participantInvitationsSent             BookingParticipantInvitation[] @relation("ParticipantInvitationSender")
+  participantInvitationsReceived         BookingParticipantInvitation[] @relation("ParticipantInvitationRecipient")
   privateMemberInvitationsReceived       PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationRecipient")
   tripMembersViaUserId                   TripMember[]                @relation("R_TripMember_user_id")
   tripMembersViaAttendanceMarkedBy       TripMember[]                @relation("R_TripMember_attendance_marked_by")
@@ -1786,6 +1788,7 @@ model Booking {
 }
 
 model BookingParticipant {
+  invitations           BookingParticipantInvitation[]
   id                    String            @id @default(uuid()) @db.Uuid
   bookingId             String            @map("booking_id") @db.Uuid
   /// Nullable for non-account participant.
@@ -1815,6 +1818,30 @@ model BookingParticipant {
   @@index([bookingId, status])
   @@index([userId, status])
   @@map("booking_participants")
+}
+
+model BookingParticipantInvitation {
+  id                       String @id @default(uuid()) @db.Uuid
+  bookingParticipantId     String @map("booking_participant_id") @db.Uuid
+  senderUserId             String @map("sender_user_id") @db.Uuid
+  recipientUserId          String @map("recipient_user_id") @db.Uuid
+  recipientEmailSnapshot   String @map("recipient_email_snapshot") @db.VarChar(255)
+  status                   InvitationStatus @default(PENDING)
+  expiresAt                DateTime @map("expires_at") @db.Timestamptz(6)
+  respondedAt              DateTime? @map("responded_at") @db.Timestamptz(6)
+  invalidatedAt            DateTime? @map("invalidated_at") @db.Timestamptz(6)
+  reason                   String? @db.VarChar(100)
+  version                  Int @default(1)
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  participant BookingParticipant @relation(fields: [bookingParticipantId], references: [id], onDelete: Restrict)
+  sender User @relation("ParticipantInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  recipient User @relation("ParticipantInvitationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  @@index([recipientUserId, createdAt, id], map: "public_invitation_recipient_idx")
+  @@index([senderUserId, createdAt, id], map: "public_invitation_sender_idx")
+  @@index([status, expiresAt], map: "booking_participant_invitations_status_expires_at_idx")
+  @@index([bookingParticipantId, createdAt, id], map: "public_invitation_participant_idx")
+  @@map("booking_participant_invitations")
 }
 
 model BookingCancellation {
