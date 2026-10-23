@@ -146,6 +146,26 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Payment provider is temporarily unavailable',
     retryable: true,
   },
+  [P.SANDBOX_SIMULATION_DISABLED]: {
+    status: 403,
+    message: 'Sandbox refund simulation is disabled',
+    retryable: false,
+  },
+  [P.SANDBOX_SIMULATION_ENV_UNSAFE]: {
+    status: 403,
+    message: 'Sandbox refund simulation is not allowed in this environment or database',
+    retryable: false,
+  },
+  [P.SANDBOX_SIMULATION_INVALID_REFUND]: {
+    status: 409,
+    message: 'Refund is not eligible for sandbox simulation',
+    retryable: false,
+  },
+  [P.SANDBOX_SIMULATION_ALREADY_SIMULATED]: {
+    status: 409,
+    message: 'Refund has already been simulated',
+    retryable: false,
+  },
   [B.INVITE_RATE_LIMITED]: { status: 429, message: 'Too many invite requests; retry later', retryable: true },
   [B.CAPACITY_CONFLICT]: { status: 409, message: 'Trip has no remaining slots', retryable: false },
   [B.MEMBERSHIP_VERSION_CONFLICT]: { status: 409, message: 'Reload membership before retrying', retryable: false },

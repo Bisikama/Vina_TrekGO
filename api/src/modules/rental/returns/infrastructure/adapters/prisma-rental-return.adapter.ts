@@ -1346,8 +1346,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         deduction: decimalToInteger(item.deductionAmount),
         refundAmount: itemRefundAmount,
         reason: item.reason,
+        settlementMode: (item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD',
+        simulationNotice: (item.decisionSnapshot as any)?.simulationProvenance?.notice ?? null,
       }
     })
+    const hasSimulatedItems = settlement.depositSettlementItemsViaSettlementId.some(
+      (item) => (item.decisionSnapshot as any)?.settlementMode === 'SANDBOX_SIMULATED',
+    )
     const collectedAmount = items.reduce((sum, item) => sum + item.depositAmount, 0)
     const refundedAmount = items
       .filter((item) => item.refundStatus === RefundStatus.SUCCEEDED)
@@ -1358,7 +1363,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     const deductionAmount = items
       .filter((item) => item.status === 'DEDUCTED' || item.status === 'SETTLED')
       .reduce((sum, item) => sum + item.deduction, 0)
+    const simulatedSettledAmount = items
+      .filter((item) => item.settlementMode === 'SANDBOX_SIMULATED')
+      .reduce((sum, item) => sum + item.refundAmount, 0)
     const heldAmount = Math.max(0, collectedAmount - refundedAmount - deductionAmount)
+    const effectiveHeldAmount = Math.max(0, collectedAmount - refundedAmount - simulatedSettledAmount - deductionAmount)
     return {
       collectedAmount,
       heldAmount,
@@ -1367,6 +1376,20 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       deductionAmount,
       items,
       groupedRefunds: [...refundById.values()],
+      financialTruth: {
+        providerRefundedAmount: refundedAmount,
+        providerRefundPendingAmount: refundPendingAmount,
+        realMoneyReturned: refundedAmount > 0,
+      },
+      ...(hasSimulatedItems
+        ? {
+            settlementMode: 'SANDBOX_SIMULATED',
+            simulatedSettledAmount,
+            effectiveHeldAmount,
+            notice: 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
+            warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+          }
+        : {}),
     }
   }
 
