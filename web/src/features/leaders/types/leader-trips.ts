@@ -45,8 +45,13 @@ export interface LeaderTripView {
   endAt: string;
   pickupPointId: string | null;
   capacity: number;
+  minCapacity?: number;
   price: string | null;
   priceExplanation: string | null;
+  minPax?: number;
+  costPlanStatus?: "DRAFT" | "CONFIRMED" | "PUBLISHED" | null;
+  includedServices?: string[];
+  excludedServices?: string[];
   status: TripStatus;
   version: number;
   publishedAt: string | null;
@@ -63,6 +68,7 @@ export interface CreateLeaderPublicTripInput {
   endAt: string;
   pickupPointId: string;
   capacity: number;
+  minCapacity?: number;
   price: string;
 }
 
@@ -76,6 +82,7 @@ export interface UpdateLeaderPublicTripInput {
   endAt?: string;
   pickupPointId?: string;
   capacity?: number;
+  minCapacity?: number;
   price?: string;
 }
 

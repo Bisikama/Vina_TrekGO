@@ -5,6 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { usePrivateTrips } from "@/features/trips/hooks/usePrivateTrips";
 import Link from "next/link";
 import { PrivateTripMap } from "./PrivateTripMap";
+import { PrivateTripDirectInviteModal } from "../PrivateTripDirectInviteModal";
 import { usePrivateTripMembership } from "@/features/trips/hooks/usePrivateTripMembership";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
@@ -17,6 +18,7 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [trip, setTrip] = useState(initialTrip);
   const [memberStatusFilter, setMemberStatusFilter] = useState<'ACTIVE' | 'ALL'>('ACTIVE');
+  const [isDirectInviteModalOpen, setIsDirectInviteModalOpen] = useState(false);
 
   // Lấy tên thay vì ID (sử dụng initialPickups lấy từ server)
   const pickupName = initialPickups?.find(p => p.id === trip?.pickupPointId)?.name || trip?.pickupPointId || "Đang tải...";
@@ -162,24 +164,45 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
               <p className="text-gray-500 text-xs mt-1">Điều hành nhóm và trạng thái.</p>
             </div>
             
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-2.5">
               {trip.status !== 'CANCELLED' && (
                 <>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleGenerateInvite}
+                      disabled={busy}
+                      className="flex-1 flex justify-center items-center gap-2 px-4 py-2.5 bg-[#125238] text-white rounded-xl hover:bg-[#0f402c] transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                    >
+                      <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+                      {inviteCode ? "Tạo lại QR mời" : "Tạo mã QR mời"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      disabled={busy}
+                      className="px-4 py-2.5 bg-white text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                    >
+                      Huỷ
+                    </button>
+                  </div>
+
                   <button
-                    onClick={handleGenerateInvite}
-                    disabled={busy}
-                    className="flex-1 flex justify-center items-center gap-2 px-4 py-2.5 bg-[#125238] text-white rounded-xl hover:bg-[#0f402c] transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    onClick={() => setIsDirectInviteModalOpen(true)}
+                    className="w-full flex justify-center items-center gap-2 px-4 py-2.5 bg-emerald-50 text-[#125238] border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors text-sm font-bold shadow-sm cursor-pointer"
                   >
-                    <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
-                    {inviteCode ? "Tạo lại QR mời" : "Tạo mã QR mời"}
+                    <span>✉️</span>
+                    Mời bạn bè qua Email
                   </button>
-                  <button
-                    onClick={handleCancel}
-                    disabled={busy}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-sm font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+
+                  <Link
+                    href={`/trip-room/${trip.id}`}
+                    className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors text-xs font-semibold"
                   >
-                    Huỷ
-                  </button>
+                    <span>👥</span>
+                    Vào phòng chờ đoàn (Trip Room)
+                  </Link>
                 </>
               )}
             </div>
@@ -428,6 +451,12 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
         </div>
 
       </div>
+      <PrivateTripDirectInviteModal
+        tripId={trip.id}
+        isOpen={isDirectInviteModalOpen}
+        onClose={() => setIsDirectInviteModalOpen(false)}
+        onMemberJoined={() => loadMembers(trip.id, { status: memberStatusFilter, pageSize: 50 })}
+      />
     </div>
   );
 }
