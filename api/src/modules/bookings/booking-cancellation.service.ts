@@ -1,3 +1,4 @@
+import { invalidatePublicBookingInvitations } from './public-invitation-projection'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
@@ -74,6 +75,7 @@ export class BookingCancellationService {
           where: { id: booking.id },
           data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } },
         })
+        await invalidatePublicBookingInvitations(tx, booking, input.actorId, now)
         await tx.bookingParticipant.updateMany({
           where: { bookingId: booking.id, status: 'ACTIVE' },
           data: { status: 'CANCELLED' },
@@ -163,6 +165,7 @@ export class BookingCancellationService {
         where: { id: booking.id },
         data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } },
       })
+      await invalidatePublicBookingInvitations(tx, booking, input.actorId, now)
       await tx.bookingOutboxEvent.create({
         data: {
           deduplicationKey: `booking-cancellation:${record.id}:v1`,
