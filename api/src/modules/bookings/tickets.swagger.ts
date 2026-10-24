@@ -11,7 +11,7 @@ const obj = (properties: Record<string, SchemaObject>): SchemaObject => ({
 })
 const access = obj({
   participantActive: bool,
-  canNavigate: { type: 'boolean', enum: [false] },
+  canNavigate: { type: 'boolean' },
   canRent: { type: 'boolean', enum: [false] },
   canCheckIn: bool,
   reason: { type: 'string', enum: ['INTEGRATION_NOT_VERIFIED'] },
@@ -36,6 +36,33 @@ const ticket = obj({
   }),
 })
 const schemas = {
+  history: obj({
+    items: {
+      type: 'array',
+      items: obj({
+        id: uuid,
+        tripType: { type: 'string', enum: ['PUBLIC'] },
+        title: str,
+        status: { type: 'string', enum: ['COMPLETED', 'CANCELLED', 'INTERRUPTED'] },
+        startAt: { type: 'string', format: 'date-time' },
+        endAt: { type: 'string', format: 'date-time' },
+        completedAt: { type: 'string', format: 'date-time', nullable: true },
+        cancelledAt: { type: 'string', format: 'date-time', nullable: true },
+        destination: obj({ id: uuid, name: str }),
+        participationSource: { type: 'string', enum: ['PUBLIC_PARTICIPANT'] },
+        permissions: obj({
+          canNavigate: { type: 'boolean', enum: [false] },
+          canRent: { type: 'boolean', enum: [false] },
+          canCheckIn: { type: 'boolean', enum: [false] },
+          reason: { type: 'string', enum: ['HISTORICAL_ONLY'] },
+        }),
+      }),
+    },
+    page: { type: 'integer', minimum: 1 },
+    pageSize: { type: 'integer', minimum: 1, maximum: 50 },
+    total: { type: 'integer', minimum: 0 },
+    totalPages: { type: 'integer', minimum: 0 },
+  }),
   ticket,
   list: obj({
     items: { type: 'array', items: ticket },
@@ -76,7 +103,8 @@ export const ApiTicket = (kind: keyof typeof schemas) =>
     ApiResponse({
       status: 200,
       schema: schemas[kind],
-      description: 'Personal projection. Active tickets expose checkinCode for QR check-in; historical/cancelled tickets return null.',
+      description:
+        'Personal projection. Active tickets expose checkinCode for QR check-in; historical/cancelled tickets return null.',
       headers: { 'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } } },
     }),
     ...[400, 401, 403, 404, ...(kind === 'claim' ? [409] : []), 500].map((status) =>

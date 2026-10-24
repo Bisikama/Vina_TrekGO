@@ -51,6 +51,48 @@ export class TicketsService {
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     )
   }
+  async participationHistory(userId: string, page: number, pageSize: number) {
+    return this.db.$transaction(
+      async (tx) => {
+        await assertTicketActor(tx, userId)
+        const where: Prisma.TripWhereInput = {
+          tripType: 'PUBLIC',
+          status: { in: ['COMPLETED', 'CANCELLED', 'INTERRUPTED'] },
+          bookingsViaTripId: { some: { bookingParticipantsViaBookingId: { some: { userId } } } },
+        }
+        const total = await tx.trip.count({ where })
+        const trips = await tx.trip.findMany({
+          where,
+          select: {
+            id: true,
+            tripType: true,
+            title: true,
+            status: true,
+            startAt: true,
+            endAt: true,
+            completedAt: true,
+            cancelledAt: true,
+            destination: { select: { id: true, name: true } },
+          },
+          orderBy: [{ startAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        })
+        return {
+          items: trips.map((trip) => ({
+            ...trip,
+            participationSource: 'PUBLIC_PARTICIPANT' as const,
+            permissions: { canNavigate: false, canRent: false, canCheckIn: false, reason: 'HISTORICAL_ONLY' },
+          })),
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        }
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    )
+  }
   async detail(userId: string, id: string) {
     return this.db.$transaction(
       async (tx) => {

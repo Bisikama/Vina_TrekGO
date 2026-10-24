@@ -60,6 +60,7 @@ export class GetNavigationContextUseCase {
       tripId: data.id,
       title: data.title,
       tripStatus: data.status,
+      accessSource: isAdmin ? 'ADMIN' : isOwnerOrLeader ? 'TRIP_MANAGER' : data.accessSource ?? 'LEGACY_MEMBERSHIP',
       activeTrail: activePlan
         ? {
             planId: activePlan.id,
