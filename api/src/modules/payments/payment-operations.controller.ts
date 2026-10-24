@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Body, Controller, Get, Headers, HttpCode, Param, Post } from '@nestjs/common'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 import { ActiveUser } from '../../shared/decorators/active-user.decorator'
 import { Auth } from '../../shared/decorators/auth.decorator'
@@ -11,6 +11,13 @@ import type { ActiveUserData } from '../../shared/types/user.type'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { PaymentRecoveryService } from './payment-recovery.service'
 import { refundSummary } from './refunds.service'
+import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
+import {
+  SandboxSimulateRefundBodySchema,
+  SandboxSimulateRefundParamSchema,
+  type SandboxSimulateRefundBodyDto,
+  type SandboxSimulateRefundParamDto,
+} from './dtos/sandbox-refund-simulation.dto'
 
 const reasonSchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict()
 
@@ -20,7 +27,10 @@ const reasonSchema = z.object({ reason: z.string().trim().min(1).max(500) }).str
 @Auth([AuthType.Bearer])
 @Roles('ADMIN')
 export class PaymentOperationsController {
-  constructor(private readonly recovery: PaymentRecoveryService) {}
+  constructor(
+    private readonly recovery: PaymentRecoveryService,
+    private readonly simulation: SandboxRefundSimulationService,
+  ) {}
 
   @Post('payments/:id/reconcile')
   @HttpCode(202)
@@ -103,6 +113,86 @@ export class PaymentOperationsController {
     @ActiveUser('id') actorId: string,
   ) {
     return this.recovery.schedule('refund', id, actorId, body.reason)
+  }
+
+  @Post('payment-refunds/:refundId/sandbox-simulate-settlement')
+  @ApiOperation({
+    summary: 'Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+    description:
+      'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING. ' +
+      'Admin thực hiện mô phỏng để tiếp tục luồng hoàn cọc và đóng đơn demo. ' +
+      'Không đổi trạng thái VNPay 05/06 thành 00 và không giả tiền đã về tài khoản.',
+  })
+  @ApiParam({ name: 'refundId', type: String, format: 'uuid', description: 'UUID của lệnh hoàn cọc' })
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description: 'Khóa chống lặp (8 - 200 ký tự)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mô phỏng hoàn cọc thành công, đơn hàng và settlement được cập nhật',
+  })
+  @ApiResponse({ status: 401, description: 'Chưa xác thực' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Lệnh hoàn tiền không hợp lệ, xung đột phiên bản hoặc đã được mô phỏng',
+  })
+  async simulateRefund(
+    @Param(new ZodValidationPipe(SandboxSimulateRefundParamSchema))
+    params: SandboxSimulateRefundParamDto,
+    @Body(new ZodValidationPipe(SandboxSimulateRefundBodySchema))
+    body: SandboxSimulateRefundBodyDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser('id') actorUserId: string,
+  ) {
+    if (!rawKey || rawKey.trim().length < 8 || rawKey.trim().length > 200) {
+      throw AppError.fromCode('IDEMPOTENCY_KEY_REQUIRED', {
+        message: 'Header Idempotency-Key bắt buộc có độ dài từ 8 đến 200 ký tự',
+      })
+    }
+    return {
+      data: await this.simulation.simulateRefundSettlement({
+        refundId: params.refundId,
+        actorUserId,
+        idempotencyKey: rawKey.trim(),
+        body,
+      }),
+    }
+  }
+
+  @Post('refunds/:refundId/sandbox-simulate-settlement')
+  @ApiOperation({
+    summary: 'Alias: Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+  })
+  async simulateRefundAlias(
+    @Param(new ZodValidationPipe(SandboxSimulateRefundParamSchema))
+    params: SandboxSimulateRefundParamDto,
+    @Body(new ZodValidationPipe(SandboxSimulateRefundBodySchema))
+    body: SandboxSimulateRefundBodyDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser('id') actorUserId: string,
+  ) {
+    return this.simulateRefund(params, body, rawKey, actorUserId)
+  }
+
+  @Get('payment-refunds/:refundId/sandbox-simulation')
+  @ApiOperation({
+    summary: 'Chi tiết bằng chứng mô phỏng hoàn cọc (TEST ONLY)',
+    description: 'Truy vấn thông tin provenance và trạng thái mô phỏng hoàn cọc của một refund.',
+  })
+  async getSimulation(
+    @Param(new ZodValidationPipe(SandboxSimulateRefundParamSchema))
+    params: SandboxSimulateRefundParamDto,
+  ) {
+    return {
+      data: await this.simulation.getSimulationDetail(params.refundId),
+    }
   }
 }
 
