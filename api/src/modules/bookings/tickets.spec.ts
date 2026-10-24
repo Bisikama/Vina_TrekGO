@@ -1,8 +1,12 @@
+jest.mock('@nestjs/schedule', () => ({ Interval: () => () => {}, Cron: () => () => {} }))
 import { PublicInvitationsController } from './public-invitations.controller'
+
 import { PublicInvitationsService, PublicInvitationRequestService } from './public-invitations.service'
 import { BookingsService } from './bookings.service'
 import { BookingsController } from './bookings.controller'
 import { BookingPolicyService } from './booking-policy.service'
+import { LeaderCheckinController } from './leader-checkin.controller'
+import { LeaderCheckinService } from './leader-checkin.service'
 import { randomUUID } from 'crypto'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import { writeFileSync } from 'fs'
@@ -25,13 +29,18 @@ import { ApiKeyGuard } from '../../shared/guards/api-key.guard'
 import { GlobalErrorFilter } from '../../shared/errors'
 
 const url = process.env.PUBLIC_CLAIM_TEST_DATABASE_URL
-if (
-  !url ||
-  !['localhost', '127.0.0.1'].includes(new URL(url).hostname) ||
-  !new URL(url).pathname.startsWith('/cf01_test_invitation_m5')
-)
-  throw new Error('M5 requires isolated localhost cf01_test_invitation_m5* database')
-describe('M5 real PostgreSQL and HTTP contract', () => {
+if (url) {
+  const parsed = new URL(url)
+  if (
+    !['localhost', '127.0.0.1'].includes(parsed.hostname) ||
+    !parsed.pathname.startsWith('/cf01_test_invitation_m5')
+  ) {
+    throw new Error('M5 requires isolated localhost cf01_test_invitation_m5* database')
+  }
+}
+const suite = url ? describe : describe.skip
+suite('M5 real PostgreSQL and HTTP contract', () => {
+
   const db = new PrismaClient({ datasourceUrl: url })
   const claims = new ParticipantClaimService(db as unknown as PrismaService)
   const tickets = new TicketsService(db as unknown as PrismaService)
@@ -122,7 +131,7 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       .send(body)
   beforeAll(async () => {
     const m = await Test.createTestingModule({
-      controllers: [TicketsController, PublicInvitationsController, BookingsController],
+      controllers: [TicketsController, PublicInvitationsController, BookingsController, LeaderCheckinController],
       providers: [
         PublicInvitationsService,
         {
@@ -132,6 +141,7 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
         PublicInvitationRequestService,
         ParticipantClaimService,
         TicketsService,
+        LeaderCheckinService,
         { provide: PrismaService, useValue: db },
       ],
     }).compile()
@@ -178,8 +188,10 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       .get(`/me/tickets/${f.p.id}`)
       .auth(f.buyer.id, { type: 'bearer' })
       .expect(200)
-    for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', p.checkinCode, f.sibling.fullName, 'totalAmount', 'invoice'])
+    for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', f.p.checkinCode, f.sibling.fullName, 'totalAmount', 'invoice'])
       expect(JSON.stringify(detail.body)).not.toContain(secret)
+    expect(detail.body.checkinCode).toBe(p.checkinCode)
+    expect(detail.body.permissions.canCheckIn).toBe(true)
     expect(detail.headers['cache-control']).toBe('no-store')
     await request(app.getHttpServer()).get(`/me/tickets/${f.p.id}`).auth(f.other.id, { type: 'bearer' }).expect(404)
     const list = await request(app.getHttpServer())
@@ -188,8 +200,9 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       .expect(200)
     expect(list.body.total).toBe(1)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    expect(Object.keys(doc.paths)).toHaveLength(13)
-    const ajv = new Ajv({ strict: false })
+    const m5m6Paths = Object.keys(doc.paths).filter((k) => !k.startsWith('/leader/'))
+    expect(m5m6Paths).toHaveLength(13)
+    const ajv = new Ajv({ strict: false, nullable: true })
     for (const [path, method, body] of [
       ['/bookings/{id}/participants/{pid}/self-claim', 'post', results[0].body],
       ['/me/tickets', 'get', list.body],
@@ -367,7 +380,10 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
     if (current.userId) {
       const replay = await post(f).expect(200)
       expect(replay.body.currentAccess.participantActive).toBe(false)
-      expect((await tickets.detail(f.buyer.id, f.p.id)).bookingStatus).toBe('CANCELLED')
+      const cancelledTicket = await tickets.detail(f.buyer.id, f.p.id)
+      expect(cancelledTicket.bookingStatus).toBe('CANCELLED')
+      expect(cancelledTicket.checkinCode).toBeNull()
+      expect(cancelledTicket.permissions.canCheckIn).toBe(false)
     } else await post(f).expect(409)
     expect((await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })).checkinCode).toBe(
       current.checkinCode,
@@ -768,5 +784,127 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
     }
     expect((await db.bookingParticipant.findUniqueOrThrow({ where: { id: p.id } })).checkinCode).toBe(p.checkinCode)
     expect((await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).userId).toBe(f.buyer.id)
+  })
+  it('Leader check-in lists participants, scans rotated QR idempotently, syncs booking status, invalidates pending invitations and blocks cancellation', async () => {
+    const f = await fixture()
+    const leader = f.buyer
+    await db.user.update({ where: { id: leader.id }, data: { role: 'LEADER' } })
+
+    // Non-owner cannot list or check in
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'LEADER' } })
+    await request(app.getHttpServer())
+      .get(`/leader/public-trips/${f.trip.id}/participants`)
+      .auth(f.other.id, { type: 'bearer' })
+      .expect(403)
+
+    // Self-claim slot p (rotates QR) and send pending invitation on sibling slot
+    await post(f).expect(200)
+    const claimedP = await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })
+    const pendingInvite = await request(app.getHttpServer())
+      .post(`/bookings/${f.booking.id}/participants/${f.sibling.id}/invitations`)
+      .auth(leader.id, { type: 'bearer' })
+      .set('Idempotency-Key', randomUUID())
+      .send({ recipientEmail: f.other.email })
+      .expect(201)
+
+    // Old pre-claim QR code is rejected with 422 CHECKIN_TOKEN_INVALID
+    const invalidQr = await request(app.getHttpServer())
+      .post(`/leader/trips/${f.trip.id}/checkin`)
+      .auth(leader.id, { type: 'bearer' })
+      .send({ checkinCode: f.p.checkinCode, method: 'QR' })
+      .expect(422)
+    expect(invalidQr.body.error.code).toBe('CHECKIN_TOKEN_INVALID')
+
+    // List participants before check-in
+    const listBefore = await request(app.getHttpServer())
+      .get(`/leader/public-trips/${f.trip.id}/participants`)
+      .auth(leader.id, { type: 'bearer' })
+      .expect(200)
+    expect(listBefore.body.summary).toMatchObject({
+      totalParticipants: 2,
+      checkedInCount: 0,
+      notCheckedInCount: 2,
+      noShowCount: 0,
+    })
+
+    // First QR check-in of slot p transitions booking to PARTIAL_CHECKIN
+    const firstScan = await request(app.getHttpServer())
+      .post(`/leader/trips/${f.trip.id}/checkin`)
+      .auth(leader.id, { type: 'bearer' })
+      .send({ checkinCode: claimedP.checkinCode, method: 'QR' })
+      .expect(200)
+    expect(firstScan.body).toMatchObject({
+      alreadyCheckedIn: false,
+      replayed: false,
+      participant: {
+        id: f.p.id,
+        checkinStatus: 'CHECKED_IN',
+        checkinMethod: 'QR',
+        bookingStatus: 'PARTIAL_CHECKIN',
+      },
+      summary: {
+        totalParticipants: 2,
+        checkedInCount: 1,
+        notCheckedInCount: 1,
+      },
+    })
+
+    // Second QR scan of same code is idempotent (alreadyCheckedIn: true, replayed: true)
+    const secondScan = await request(app.getHttpServer())
+      .post(`/leader/trips/${f.trip.id}/checkin`)
+      .auth(leader.id, { type: 'bearer' })
+      .send({ checkinCode: claimedP.checkinCode, method: 'QR' })
+      .expect(200)
+    expect(secondScan.body).toMatchObject({
+      alreadyCheckedIn: true,
+      replayed: true,
+    })
+
+    // Ticket detail now shows canCheckIn: false and checkinStatus: CHECKED_IN
+    const ticketAfter = await request(app.getHttpServer())
+      .get(`/me/tickets/${f.p.id}`)
+      .auth(leader.id, { type: 'bearer' })
+      .expect(200)
+    expect(ticketAfter.body.checkinStatus).toBe('CHECKED_IN')
+    expect(ticketAfter.body.permissions.canCheckIn).toBe(false)
+
+    // Manual check-in of sibling slot transitions booking to CHECKED_IN and invalidates its PENDING invitation
+    const manualCheckin = await request(app.getHttpServer())
+      .post(`/leader/public-trips/${f.trip.id}/participants/${f.sibling.id}/checkin`)
+      .auth(leader.id, { type: 'bearer' })
+      .send({ checkinStatus: 'CHECKED_IN' })
+      .expect(200)
+    expect(manualCheckin.body).toMatchObject({
+      alreadyCheckedIn: false,
+      replayed: false,
+      participant: {
+        id: f.sibling.id,
+        checkinStatus: 'CHECKED_IN',
+        checkinMethod: 'MANUAL',
+        bookingStatus: 'CHECKED_IN',
+      },
+      summary: {
+        totalParticipants: 2,
+        checkedInCount: 2,
+        notCheckedInCount: 0,
+      },
+    })
+    expect(
+      await db.bookingParticipantInvitation.findUniqueOrThrow({ where: { id: pendingInvite.body.id } }),
+    ).toMatchObject({
+      status: 'INVALIDATED',
+      reason: 'PARTICIPANT_NOT_ELIGIBLE',
+    })
+
+    // Cancellation is blocked once booking has checked-in participants
+    await expect(
+      cancellation.cancel({
+        bookingId: f.booking.id,
+        actorId: leader.id,
+        actorRole: 'LEADER',
+        idempotencyKey: randomUUID(),
+        reason: 'after checkin',
+      }),
+    ).rejects.toMatchObject({ code: 'BOOKING_CANCELLATION_NOT_ALLOWED' })
   })
 })

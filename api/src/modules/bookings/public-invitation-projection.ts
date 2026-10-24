@@ -14,7 +14,7 @@ export async function publicBookingLinkage(
   now: Date,
 ) {
   const recipientIds = [
-    ...new Set([booking.userId, ...participants.flatMap((p) => p.invitations.map((i) => i.recipientUserId))]),
+    ...new Set([booking.userId, ...participants.flatMap((p) => (p.invitations ?? []).map((i) => i.recipientUserId))]),
   ]
   const linked = await tx.bookingParticipant.findMany({
     where: {
@@ -25,7 +25,8 @@ export async function publicBookingLinkage(
     select: { id: true, userId: true },
   })
   return participants.map((p) => {
-    const invitations = p.invitations.map((i) => {
+    const invitations = (p.invitations ?? []).map((i) => {
+
       let state = publicInvitationState(i, p, booking, trip, now)
       if (
         state.status === 'PENDING' &&

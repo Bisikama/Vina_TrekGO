@@ -15,15 +15,16 @@ export async function assertTicketActor(tx: Prisma.TransactionClient, userId: st
   if (actor.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(actor.role)) fail(C.FORBIDDEN)
 }
 export function ticketAccess(participant: BookingParticipant, booking: Booking, trip: Trip) {
+  const participantActive =
+    participant.status === 'ACTIVE' &&
+    ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
+    ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(trip.status)
   return {
-    participantActive:
-      participant.status === 'ACTIVE' &&
-      ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
-      ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(trip.status),
+    participantActive,
     // These capabilities require integration gates M7/M9, not merely a successful claim.
     canNavigate: false,
     canRent: false,
-    canCheckIn: false,
+    canCheckIn: participantActive && participant.checkinStatus === 'NOT_CHECKED_IN',
     reason: 'INTEGRATION_NOT_VERIFIED',
   }
 }

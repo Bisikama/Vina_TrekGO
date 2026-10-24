@@ -145,6 +145,8 @@ export class PublicInvitationsService {
       b = p.booking,
       t = b.trip
     const state = await this.state(tx, row, now)
+    const access = ticketAccess(p, b, t)
+    const isLinkedOwner = p.userId === actorId
     return {
       ...this.base(row),
       ...state,
@@ -168,10 +170,11 @@ export class PublicInvitationsService {
         canDecline: state.status === 'PENDING' && row.recipientUserId === actorId,
         canRevoke: state.status === 'PENDING' && row.senderUserId === actorId && b.userId === actorId,
       },
-      ticketId: row.status === 'ACCEPTED' && p.userId === actorId ? p.id : null,
+      ticketId: row.status === 'ACCEPTED' && isLinkedOwner ? p.id : null,
       currentAccess: {
-        ...ticketAccess(p, b, t),
-        participantActive: p.userId === actorId && ticketAccess(p, b, t).participantActive,
+        ...access,
+        participantActive: isLinkedOwner && access.participantActive,
+        canCheckIn: isLinkedOwner && access.canCheckIn,
       },
     }
   }

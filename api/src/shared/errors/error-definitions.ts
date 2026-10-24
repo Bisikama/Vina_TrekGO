@@ -197,6 +197,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Chuyến đi đã đủ số lượng người tối đa',
     retryable: false,
   },
+  [B.CHECKIN_TOKEN_INVALID]: {
+    status: 422,
+    message: 'Mã QR điểm danh không hợp lệ, đã được thay thế hoặc không thuộc chuyến đi này',
+    retryable: false,
+  },
+  [B.CHECKIN_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Không thể thực hiện điểm danh ở trạng thái chuyến đi hoặc đặt chỗ hiện tại',
+    retryable: false,
+  },
   // Common
   [COMMON_ERROR_CODES.VALIDATION_ERROR]: { status: 400, message: 'Validation failed', retryable: false },
   [COMMON_ERROR_CODES.UNAUTHENTICATED]: { status: 401, message: 'Unauthenticated access', retryable: false },

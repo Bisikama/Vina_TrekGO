@@ -44,7 +44,7 @@ const preview = obj({
     participantActive: bool,
     canNavigate: { type: 'boolean', enum: [false] },
     canRent: { type: 'boolean', enum: [false] },
-    canCheckIn: { type: 'boolean', enum: [false] },
+    canCheckIn: bool,
     reason: { type: 'string', enum: ['INTEGRATION_NOT_VERIFIED'] },
   }),
 })
@@ -76,6 +76,10 @@ export const bookingLinkageSchema = obj({
     items: obj({
       id: uuid,
       fullName: str,
+      checkinStatus: { type: 'string', enum: ['NOT_CHECKED_IN', 'CHECKED_IN', 'NO_SHOW'] },
+      checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null as unknown as string], nullable: true },
+      checkedInAt: { ...time, nullable: true },
+      checkinCode: { type: 'string', nullable: true },
       linkageStatus: { type: 'string', enum: ['UNLINKED', 'INVITATION_PENDING', 'CLAIMED'] },
       pendingInvitationId: { ...uuid, nullable: true },
       recipientDisplay: { type: 'string', nullable: true },

@@ -59,7 +59,10 @@ export interface PublicBookingTrip {
   transport: { vehicleType: string }[];
 }
 
+export type PublicTrip = PublicBookingTrip;
 export type PaymentMethod = 'QR' | 'REDIRECT';
+
+
 export type PaymentGateway = 'momo' | 'vnpay';
 
 export interface Checkout {

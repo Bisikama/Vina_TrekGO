@@ -12,11 +12,15 @@ type Ticket = Prisma.BookingParticipantGetPayload<{ include: typeof include }>
 export class TicketsService {
   constructor(private readonly db: PrismaService) {}
   private view(row: Ticket) {
+    const permissions = ticketAccess(row, row.booking, row.booking.trip)
     return {
       id: row.id,
       participantName: row.fullName,
       participantStatus: row.status,
       checkinStatus: row.checkinStatus,
+      checkinMethod: row.checkinMethod ?? null,
+      checkedInAt: row.checkedInAt?.toISOString() ?? null,
+      checkinCode: permissions.participantActive ? row.checkinCode : null,
       trip: {
         id: row.booking.trip.id,
         title: row.booking.trip.title,
@@ -26,7 +30,7 @@ export class TicketsService {
         destination: row.booking.trip.destination,
       },
       bookingStatus: row.booking.status,
-      permissions: ticketAccess(row, row.booking, row.booking.trip),
+      permissions,
     }
   }
   async list(userId: string, page: number, pageSize: number) {

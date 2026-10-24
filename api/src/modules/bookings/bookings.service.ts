@@ -35,7 +35,7 @@ const detailInclude = {
         take: 10,
       },
     },
-    where: { status: 'ACTIVE' as const },
+    where: { status: { in: ['ACTIVE', 'NO_SHOW', 'COMPLETED'] } },
     orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
   },
   invoicesViaBookingId: {
@@ -347,15 +347,26 @@ export class BookingsService {
       },
       pickup: booking.pickupPoint,
       returnPoint: booking.returnPoint,
-      participants: booking.bookingParticipantsViaBookingId.map((p, index) => ({
-        ...linkage[index],
-        id: p.id,
-        fullName: p.fullName,
-        phone: p.phone,
-        dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null,
-        emergencyContactName: p.emergencyContactName,
-        emergencyContactPhone: p.emergencyContactPhone,
-      })),
+      participants: booking.bookingParticipantsViaBookingId.map((p, index) => {
+        const canBuyerAccessQr =
+          ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
+          ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(booking.trip.status) &&
+          p.status === 'ACTIVE' &&
+          (!p.userId || p.userId === booking.userId)
+        return {
+          ...linkage[index],
+          id: p.id,
+          fullName: p.fullName,
+          phone: p.phone,
+          dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+          emergencyContactName: p.emergencyContactName,
+          emergencyContactPhone: p.emergencyContactPhone,
+          checkinStatus: p.checkinStatus,
+          checkinMethod: p.checkinMethod ?? null,
+          checkedInAt: p.checkedInAt?.toISOString() ?? null,
+          checkinCode: canBuyerAccessQr ? p.checkinCode : null,
+        }
+      }),
       transport: booking.trip.tripTransportsViaTripId
         .filter((t) => t.status !== 'CANCELLED')
         .map((t) => ({
