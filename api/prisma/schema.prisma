@@ -165,6 +165,17 @@ enum CancellationRequestStatus {
   @@map("cancellation_request_status")
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+  INVALIDATED
+
+  @@map("invitation_status")
+}
+
 enum InviteStatus {
   ACTIVE
   EXPIRED
@@ -730,6 +741,7 @@ enum MediaScope {
   CONDITION_EVIDENCE
   RETURN_EVIDENCE
   EXCEPTION_EVIDENCE
+  USER_GEAR
 
   @@map("media_scope")
 }
@@ -770,6 +782,7 @@ enum MediaC2paStatus {
 
 model MediaAsset {
   leaderCertificate LeaderCertificate?
+  userGearItems     UserGearItem[]      @relation("R_UserGearItem_photo_ref")
   id          String  @id @default(uuid()) @db.Uuid
   ownerUserId String? @map("owner_user_id") @db.Uuid
   owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -871,6 +884,8 @@ model User {
   tripCancellationRequestsViaRequestedBy TripCancellationRequest[]   @relation("R_TripCancellationRequest_requested_by")
   tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
   privateTripInvitesViaCreatedBy         PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
+  privateMemberInvitationsSent           PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationSender")
+  privateMemberInvitationsReceived       PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationRecipient")
   tripMembersViaUserId                   TripMember[]                @relation("R_TripMember_user_id")
   tripMembersViaAttendanceMarkedBy       TripMember[]                @relation("R_TripMember_attendance_marked_by")
   bookingPolicysViaCreatedBy             BookingPolicy[]             @relation("R_BookingPolicy_created_by")
@@ -914,6 +929,10 @@ model User {
   notificationsViaUserId                 Notification[]              @relation("R_Notification_user_id")
   auditLogsViaUserId                     AuditLog[]                  @relation("R_AuditLog_user_id")
   mediaAssetsViaOwnerUserId              MediaAsset[]                @relation("R_MediaAsset_owner_user_id")
+  userGearItems                          UserGearItem[]              @relation("R_UserGearItem_user_id")
+  gearExtractionDrafts                   GearExtractionDraft[]       @relation("R_GearExtractionDraft_user_id")
+  gearPlans                              GearPlan[]                  @relation("R_GearPlan_user_id")
+  gearQuoteLinks                         GearQuoteLink[]             @relation("R_GearQuoteLink_user_id")
 
   returnCustodyTransfersViaFromStaffId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_fromStaffId")
 
@@ -1370,6 +1389,7 @@ model Trip {
   tripTransportsViaTripId           TripTransport[]           @relation("R_TripTransport_trip_id")
   tripCancellationRequestsViaTripId TripCancellationRequest[] @relation("R_TripCancellationRequest_trip_id")
   privateTripInvitesViaTripId       PrivateTripInvite[]       @relation("R_PrivateTripInvite_trip_id")
+  privateMemberInvitations          PrivateTripMemberInvitation[]
   tripMembersViaTripId              TripMember[]              @relation("R_TripMember_trip_id")
   bookingsViaTripId                 Booking[]                 @relation("R_Booking_trip_id")
   rentalQuotesViaTripId             RentalQuote[]             @relation("R_RentalQuote_trip_id")
@@ -1383,6 +1403,9 @@ model Trip {
   userBadgesViaTripId               UserBadge[]               @relation("R_UserBadge_trip_id")
   tripReviewsViaTripId              TripReview[]              @relation("R_TripReview_trip_id")
   leaderReviewsViaTripId            LeaderReview[]            @relation("R_LeaderReview_trip_id")
+  gearPlans                         GearPlan[]                @relation("R_GearPlan_trip_id")
+  tripCostPlanViaTripId             TripCostPlan?             @relation("R_TripCostPlan_trip_id")
+  tripPricingVersionsViaTripId      TripPricingVersion[]      @relation("R_TripPricingVersion_trip_id")
 
   @@index([tripType, status, startAt])
   @@index([destinationId, startAt])
@@ -1610,6 +1633,49 @@ model PrivateTripInvite {
   @@map("private_trip_invites")
 }
 
+model PrivateTripMemberInvitation {
+  // Partial unique PENDING per (trip, recipient) is enforced in SQL.
+  id                       String           @id @default(uuid()) @db.Uuid
+  tripId                   String           @map("trip_id") @db.Uuid
+  senderUserId             String           @map("sender_user_id") @db.Uuid
+  recipientUserId          String           @map("recipient_user_id") @db.Uuid
+  recipientEmailSnapshot   String           @map("recipient_email_snapshot") @db.VarChar(255)
+  status                   InvitationStatus @default(PENDING)
+  expiresAt                DateTime         @map("expires_at") @db.Timestamptz(6)
+  respondedAt              DateTime?        @map("responded_at") @db.Timestamptz(6)
+  invalidatedAt            DateTime?        @map("invalidated_at") @db.Timestamptz(6)
+  reason                   String?          @db.VarChar(100)
+  acceptedMemberId         String?          @map("accepted_member_id") @db.Uuid
+  membershipVersionAtAccept Int?            @map("membership_version_at_accept")
+  version                  Int              @default(1)
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip           Trip        @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  sender         User        @relation("PrivateMemberInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  recipient      User        @relation("PrivateMemberInvitationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  acceptedMember TripMember? @relation(fields: [acceptedMemberId], references: [id], onDelete: Restrict)
+
+  @@index([recipientUserId, createdAt, id], map: "private_member_invitation_recipient_idx")
+  @@index([senderUserId, createdAt, id], map: "private_member_invitation_sender_idx")
+  @@index([status, expiresAt], map: "private_member_invitation_expiry_idx")
+  @@index([tripId, createdAt, id], map: "private_member_invitation_trip_idx")
+  @@index([acceptedMemberId], map: "private_member_invitation_member_idx")
+  @@map("private_trip_member_invitations")
+}
+
+// Invitation-only fixed-window counters. No general-purpose rate-limit framework.
+model PrivateInvitationRateBucket {
+  actorId     String   @map("actor_id") @db.Uuid
+  bucket      String   @db.VarChar(32)
+  count       Int      @default(0)
+  resetsAt    DateTime @map("resets_at") @db.Timestamptz(6)
+
+  @@id([actorId, bucket])
+  @@index([resetsAt])
+  @@map("private_invitation_rate_buckets")
+}
+
 model TripMember {
   // Partial unique HOST per trip is enforced by CF04 SQL migration; HOST counts toward capacity.
   id                 String           @id @default(uuid()) @db.Uuid
@@ -1635,6 +1701,7 @@ model TripMember {
   attendanceMarkedByUser User?              @relation("R_TripMember_attendance_marked_by", fields: [attendanceMarkedBy], references: [id])
 
   tripReviewsViaMemberId TripReview[] @relation("R_TripReview_member_id")
+  acceptedPrivateInvitations PrivateTripMemberInvitation[]
 
   @@unique([tripId, userId])
   @@index([userId, status])
@@ -1880,6 +1947,7 @@ model RentalProduct {
   rentalQuantityReservationsViaProductId RentalQuantityReservation[] @relation("R_RentalQuantityReservation_product_id")
   damageAssessmentRulesViaProductId      DamageAssessmentRule[]      @relation("R_DamageAssessmentRule_product_id")
   rentalReviewsViaProductId              RentalReview[]              @relation("R_RentalReview_product_id")
+  technicalProfile                       ProductTechnicalProfile?    @relation("R_ProductTechnicalProfile_product_id")
 
   @@index([categoryId, status])
   @@index([name])
@@ -2072,6 +2140,7 @@ model RentalQuote {
 
   rentalQuoteLinesViaQuoteId RentalQuoteLine[] @relation("R_RentalQuoteLine_quote_id")
   rentalOrderViaQuoteId      RentalOrder?      @relation("R_RentalOrder_quote_id")
+  gearQuoteLinks             GearQuoteLink[]   @relation("R_GearQuoteLink_quote_id")
 
   @@index([userId, status])
   @@index([tripId, status])
@@ -3841,4 +3910,427 @@ model RentalCapacityAlert {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   @@index([productId, status])
   @@map("rental_capacity_alerts")
+}
+
+
+// =========================================================
+// AI GEAR ADVISOR V3.1.1 ENUMS & MODELS (STEP 02 FOUNDATION)
+// =========================================================
+
+enum GearCategory {
+  JACKET
+  FOOTWEAR
+  PANTS
+  BACKPACK
+  SLEEPING_BAG
+  TENT
+  TREKKING_POLE
+  RAIN_GEAR
+
+  @@map("gear_category")
+}
+
+enum GearRuleCategory {
+  JACKET
+  FOOTWEAR
+  PANTS
+  BACKPACK
+  SLEEPING_BAG
+  GENERAL
+
+  @@map("gear_rule_category")
+}
+
+enum GearCondition {
+  NEW
+  GOOD
+  WORN
+  POOR
+
+  @@map("gear_condition")
+}
+
+enum GearItemSource {
+  MANUAL
+  AI_IMAGE
+  AI_LINK
+
+  @@map("gear_item_source")
+}
+
+enum GearExtractionSourceType {
+  IMAGE
+  LINK
+
+  @@map("gear_extraction_source_type")
+}
+
+enum GearExtractionStatus {
+  PENDING
+  READY
+  FAILED
+  CONFIRMED
+
+  @@map("gear_extraction_status")
+}
+
+enum GearPlanContextMode {
+  TRIP
+  MANUAL
+
+  @@map("gear_plan_context_mode")
+}
+
+enum GearOptionObjective {
+  ECONOMICAL
+  LIGHTWEIGHT
+  BALANCED
+
+  @@map("gear_option_objective")
+}
+
+enum GearAdviceSource {
+  AI
+  CACHE
+  RULE_FALLBACK
+
+  @@map("gear_advice_source")
+}
+
+enum GearVerdict {
+  SUITABLE
+  NOT_SUITABLE
+
+  @@map("gear_verdict")
+}
+
+model UserGearItem {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  user      User          @relation("R_UserGearItem_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  name      String        @db.VarChar(200)
+  category  GearCategory  @map("category")
+  brand     String?       @db.VarChar(100)
+  condition GearCondition @default(GOOD) @map("condition")
+  attributes Json         @default("{}") @map("attributes")
+  photoRef  String?       @map("photo_ref") @db.Uuid
+  photo     MediaAsset?   @relation("R_UserGearItem_photo_ref", fields: [photoRef], references: [id], onDelete: SetNull)
+  source    GearItemSource @default(MANUAL) @map("source")
+  version   Int           @default(1) @map("version")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  confirmedDraft GearExtractionDraft? @relation("R_GearExtractionDraft_confirmed_item_id")
+
+  @@index([userId], map: "user_gear_item_user_idx")
+  @@index([category], map: "user_gear_item_category_idx")
+  @@map("user_gear_items")
+}
+
+model GearRequirementRule {
+  id             String           @id @db.VarChar(10)
+  category       GearRuleCategory @map("category")
+  defaultVerdict GearVerdict?     @map("default_verdict")
+  templateVi     String           @map("template_vi") @db.Text
+  isActive       Boolean          @default(true) @map("is_active")
+  ruleVersion    String           @default("3.1") @map("rule_version") @db.VarChar(20)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([category], map: "gear_requirement_rule_category_idx")
+  @@map("gear_requirement_rules")
+}
+
+model GearExtractionDraft {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  userId                 String                   @map("user_id") @db.Uuid
+  user                   User                     @relation("R_GearExtractionDraft_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  sourceType             GearExtractionSourceType @map("source_type")
+  sourceHash             String                   @map("source_hash") @db.VarChar(64)
+  status                 GearExtractionStatus     @default(PENDING) @map("status")
+  extractedData          Json?                    @map("extracted_data")
+  confirmedItemId        String?                  @unique @map("confirmed_item_id") @db.Uuid
+  confirmedItem          UserGearItem?            @relation("R_GearExtractionDraft_confirmed_item_id", fields: [confirmedItemId], references: [id], onDelete: SetNull)
+  confirmationPayloadHash String?                 @map("confirmation_payload_hash") @db.VarChar(64)
+  version                Int                      @default(1) @map("version")
+  expiresAt              DateTime                 @map("expires_at") @db.Timestamptz(6)
+  createdAt              DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "gear_extraction_draft_user_idx")
+  @@index([sourceHash], map: "gear_extraction_draft_source_hash_idx")
+  @@index([expiresAt], map: "gear_extraction_draft_expires_idx")
+  @@map("gear_extraction_drafts")
+}
+
+model GearExtractionCache {
+  id            String   @id @default(uuid()) @db.Uuid
+  ownerScope    String   @map("owner_scope") @db.VarChar(64)
+  contentHash   String   @map("content_hash") @db.VarChar(64)
+  promptVersion String   @map("prompt_version") @db.VarChar(20)
+  modelVersion  String   @map("model_version") @db.VarChar(50)
+  schemaVersion String   @map("schema_version") @db.VarChar(20)
+  status        String   @default("SUCCESS") @map("status") @db.VarChar(20)
+  resultJson    Json     @map("result_json")
+  expiresAt     DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([ownerScope, contentHash, promptVersion, modelVersion, schemaVersion], map: "gear_extraction_cache_identity_key")
+  @@index([expiresAt], map: "gear_extraction_cache_expires_idx")
+  @@map("gear_extraction_cache")
+}
+
+model GearExtractionLease {
+  id             String   @id @default(uuid()) @db.Uuid
+  resourceKey    String   @unique @map("resource_key") @db.VarChar(255)
+  ownerToken     String   @map("owner_token") @db.VarChar(64)
+  fencingToken   Int      @default(1) @map("fencing_token")
+  leaseExpiresAt DateTime @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([leaseExpiresAt], map: "gear_extraction_lease_expires_idx")
+  @@map("gear_extraction_leases")
+}
+
+model GearPlan {
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  user               User                @relation("R_GearPlan_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  title              String              @db.VarChar(220)
+  contextMode        GearPlanContextMode @default(TRIP) @map("context_mode")
+  tripId             String?             @map("trip_id") @db.Uuid
+  trip               Trip?               @relation("R_GearPlan_trip_id", fields: [tripId], references: [id], onDelete: Restrict)
+  selectedItemIds    Json                @default("[]") @map("selected_item_ids")
+  preferences        Json                @default("{}") @map("preferences")
+  canonicalContext   Json                @default("{}") @map("canonical_context")
+  inputRevision      Int                 @default(1) @map("input_revision")
+  evaluatedRevision  Int?                @map("evaluated_revision")
+  progressVersion    Int                 @default(1) @map("progress_version")
+  progressJson       Json                @default("[]") @map("progress_json")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  revisions GearPlanRevision[]
+
+  @@index([userId], map: "gear_plan_user_idx")
+  @@index([tripId], map: "gear_plan_trip_idx")
+  @@map("gear_plans")
+}
+
+model GearPlanRevision {
+  id             String   @id @default(uuid()) @db.Uuid
+  planId         String   @map("plan_id") @db.Uuid
+  plan           GearPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  revision       Int      @map("revision")
+  contentHash    String   @map("content_hash") @db.VarChar(64)
+  inputSnapshot  Json     @map("input_snapshot")
+  resultSnapshot Json     @map("result_snapshot")
+  contextVersion String   @default("3.1") @map("context_version") @db.VarChar(20)
+  ruleVersions   Json     @default("{}") @map("rule_versions")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  optionSets GearPlanOptionSet[]
+  adviceRuns GearAdviceRun[]
+  quoteLinks GearQuoteLink[]
+
+  @@unique([planId, revision], map: "gear_plan_revision_plan_id_revision_key")
+  @@index([planId], map: "gear_plan_revision_plan_idx")
+  @@map("gear_plan_revisions")
+}
+
+model GearPlanOptionSet {
+  id             String              @id @default(uuid()) @db.Uuid
+  planRevisionId String              @map("plan_revision_id") @db.Uuid
+  planRevision   GearPlanRevision    @relation(fields: [planRevisionId], references: [id], onDelete: Cascade)
+  objective      GearOptionObjective @default(BALANCED) @map("objective")
+  searchScope    Json                @default("{}") @map("search_scope")
+  optionsJson    Json                @default("[]") @map("options_json")
+  expiresAt      DateTime            @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([planRevisionId], map: "gear_plan_option_set_plan_rev_idx")
+  @@index([expiresAt], map: "gear_plan_option_set_expires_idx")
+  @@map("gear_plan_option_sets")
+}
+
+model GearAdviceRun {
+  id             String           @id @default(uuid()) @db.Uuid
+  planRevisionId String           @map("plan_revision_id") @db.Uuid
+  planRevision   GearPlanRevision @relation(fields: [planRevisionId], references: [id], onDelete: Cascade)
+  source         GearAdviceSource @default(AI) @map("source")
+  contextHash    String           @map("context_hash") @db.VarChar(64)
+  narrativeVi    String           @map("narrative_vi") @db.Text
+  factRefs       Json             @default("[]") @map("fact_refs")
+  actionRefs     Json             @default("[]") @map("action_refs")
+  candidateRefs  Json             @default("[]") @map("candidate_refs")
+  disclaimerVi   String           @map("disclaimer_vi") @db.Text
+  latencyMs      Int?             @map("latency_ms")
+  tokenUsage     Json?            @map("token_usage")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([planRevisionId], map: "gear_advice_run_plan_rev_idx")
+  @@map("gear_advice_runs")
+}
+
+model GearQuoteLink {
+  id             String           @id @default(uuid()) @db.Uuid
+  planRevisionId String           @map("plan_revision_id") @db.Uuid
+  planRevision   GearPlanRevision @relation(fields: [planRevisionId], references: [id], onDelete: Cascade)
+  quoteId        String           @map("quote_id") @db.Uuid
+  quote          RentalQuote      @relation("R_GearQuoteLink_quote_id", fields: [quoteId], references: [id], onDelete: Restrict)
+  userId         String           @map("user_id") @db.Uuid
+  user           User             @relation("R_GearQuoteLink_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  verifiedAt     DateTime         @default(now()) @map("verified_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([planRevisionId, quoteId], map: "gear_quote_link_plan_rev_quote_key")
+  @@index([userId], map: "gear_quote_link_user_idx")
+  @@map("gear_quote_links")
+}
+
+model ProductTechnicalProfile {
+  id         String        @id @default(uuid()) @db.Uuid
+  productId  String        @unique @map("product_id") @db.Uuid
+  product    RentalProduct @relation("R_ProductTechnicalProfile_product_id", fields: [productId], references: [id], onDelete: Cascade)
+  category   GearCategory  @map("category")
+  attributes Json          @default("{}") @map("attributes")
+  version    Int           @default(1) @map("version")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([category], map: "product_technical_profile_category_idx")
+  @@map("product_technical_profiles")
+}
+
+// =========================================================
+// TRIP COST PLANNING & PRICING SIMULATOR (TG-PTR-PRICING-01)
+// =========================================================
+
+enum TripCostCategory {
+  TRANSPORT
+  STAFF
+  FOOD
+  ACCOMMODATION
+  ACCESS
+  SAFETY
+  LOGISTICS
+  OTHER
+
+  @@map("trip_cost_category")
+}
+
+enum TripCostKind {
+  FIXED
+  VARIABLE
+  STEP
+
+  @@map("trip_cost_kind")
+}
+
+enum TripCostBasis {
+  PER_TRIP
+  PER_DAY
+  PER_PERSON
+  PER_PERSON_PER_DAY
+  PER_CAPACITY_UNIT
+  PER_GROUP_TIER
+
+  @@map("trip_cost_basis")
+}
+
+enum StepTierOperation {
+  ADDITIVE
+  REPLACEMENT
+
+  @@map("step_tier_operation")
+}
+
+enum TripCostPlanStatus {
+  DRAFT
+  CONFIRMED
+  PUBLISHED
+
+  @@map("trip_cost_plan_status")
+}
+
+model TripCostPlan {
+  id               String             @id @default(uuid()) @db.Uuid
+  tripId           String             @unique @map("trip_id") @db.Uuid
+  currency         String             @default("VND") @db.Char(3)
+  targetPax        Int                @map("target_pax")
+  targetMarginBps  Int                @default(1200) @map("target_margin_bps")
+  contingencyBps   Int                @default(500) @map("contingency_bps")
+  selectedPrice    Decimal?           @map("selected_price") @db.Decimal(12, 2)
+  selectedMinPax   Int?               @map("selected_min_pax")
+  calcVersion      String             @default("pricing-v1") @map("calc_version") @db.VarChar(40)
+  policyVersionRef String?            @map("policy_version_ref") @db.VarChar(80)
+  status           TripCostPlanStatus @default(DRAFT)
+  version          Int                @default(1)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip  Trip           @relation("R_TripCostPlan_trip_id", fields: [tripId], references: [id], onDelete: Cascade)
+  items TripCostItem[] @relation("R_TripCostItem_cost_plan_id")
+
+  @@map("trip_cost_plans")
+}
+
+model TripCostItem {
+  id                String           @id @default(uuid()) @db.Uuid
+  costPlanId        String           @map("cost_plan_id") @db.Uuid
+  category          TripCostCategory
+  nameSnapshot      String           @map("name_snapshot") @db.VarChar(160)
+  kind              TripCostKind
+  basis             TripCostBasis
+  unitPrice         Decimal          @default(0) @map("unit_price") @db.Decimal(12, 2)
+  quantity          Int              @default(1)
+  durationUnits     Int              @default(1) @map("duration_units")
+  capacityPerUnit   Int?             @map("capacity_per_unit")
+  extraNonPayingPax Int              @default(0) @map("extra_non_paying_pax")
+  includedInPrice   Boolean          @default(true) @map("included_in_price")
+  isEnabled         Boolean          @default(true) @map("is_enabled")
+  sourceNote        String?          @map("source_note") @db.VarChar(500)
+  sortOrder         Int              @default(0) @map("sort_order")
+
+  costPlan  TripCostPlan       @relation("R_TripCostItem_cost_plan_id", fields: [costPlanId], references: [id], onDelete: Cascade)
+  stepTiers TripCostStepTier[] @relation("R_TripCostStepTier_cost_item_id")
+
+  @@index([costPlanId, sortOrder])
+  @@map("trip_cost_items")
+}
+
+model TripCostStepTier {
+  id            String            @id @default(uuid()) @db.Uuid
+  costItemId    String            @map("cost_item_id") @db.Uuid
+  triggerMinPax Int               @map("trigger_min_pax")
+  triggerMaxPax Int               @map("trigger_max_pax")
+  operation     StepTierOperation
+  amount        Decimal           @db.Decimal(12, 2)
+  note          String?           @db.VarChar(200)
+
+  costItem TripCostItem @relation("R_TripCostStepTier_cost_item_id", fields: [costItemId], references: [id], onDelete: Cascade)
+
+  @@index([costItemId, triggerMinPax])
+  @@map("trip_cost_step_tiers")
+}
+
+model TripPricingVersion {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tripId                String   @map("trip_id") @db.Uuid
+  versionNo             Int      @map("version_no")
+  selectedPrice         Decimal  @map("selected_price") @db.Decimal(12, 2)
+  selectedMinPax        Int      @map("selected_min_pax")
+  targetPax             Int      @map("target_pax")
+  costInputSnapshot     Json     @map("cost_input_snapshot")
+  feeAssumptionSnapshot Json     @map("fee_assumption_snapshot")
+  pricingResultSnapshot Json     @map("pricing_result_snapshot")
+  createdBy             String   @map("created_by") @db.Uuid
+  publishedAt           DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  trip Trip @relation("R_TripPricingVersion_trip_id", fields: [tripId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, versionNo])
+  @@index([tripId, publishedAt])
+  @@map("trip_pricing_versions")
 }

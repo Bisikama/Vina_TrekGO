@@ -1,3 +1,4 @@
+import { syncPendingInvitations, transitionInvitation } from './private-invitation-transition'
 import { Injectable } from '@nestjs/common'
 import { Prisma, PrivateTripInvite, Trip, TripMember } from '@prisma/client'
 import { PrismaService } from '../../../../shared/services/prisma.service'
@@ -29,7 +30,7 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
   }
   private async transaction<T>(
     userId: string,
-    target: { tripId: string } | { code: string },
+    target: { tripId: string } | { code: string } | { invitationId: string },
     joining: boolean,
     work: (tx: Prisma.TransactionClient, trip: Trip, invite: PrivateTripInvite | null, now: Date) => Promise<T>,
   ): Promise<T> {
@@ -41,13 +42,21 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
             assertMemberActor(await tx.user.findUnique({ where: { id: userId } }), joining)
             const found =
               'code' in target ? await tx.privateTripInvite.findUnique({ where: { code: target.code } }) : null
-            const tripId = 'tripId' in target ? target.tripId : found?.tripId
+            const direct =
+              'invitationId' in target
+                ? await tx.privateTripMemberInvitation.findFirst({
+                    where: { id: target.invitationId, recipientUserId: userId },
+                  })
+                : null
+            const tripId = 'tripId' in target ? target.tripId : (found?.tripId ?? direct?.tripId)
             if (!tripId) return fail(B.NOT_FOUND)
             await tx.$queryRaw`SELECT id FROM trips WHERE id=${tripId}::uuid FOR UPDATE`
             const trip = await tx.trip.findFirst({ where: { id: tripId, tripType: 'PRIVATE' } })
             if (!trip) return fail(B.NOT_FOUND)
             if (found) await tx.$queryRaw`SELECT id FROM private_trip_invites WHERE id=${found.id}::uuid FOR UPDATE`
             const invite = found ? await tx.privateTripInvite.findUniqueOrThrow({ where: { id: found.id } }) : null
+            if (direct)
+              await tx.$queryRaw`SELECT id FROM private_trip_member_invitations WHERE id=${direct.id}::uuid FOR UPDATE`
             const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
             return work(tx, trip, invite, now)
           },
@@ -206,6 +215,45 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
       },
     })
   }
+  private async joinCore(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    trip: Trip,
+    member: TripMember | null,
+    count: number,
+    now: Date,
+    invite: PrivateTripInvite | null,
+  ) {
+    if (member?.status === 'REMOVED') return fail(C.FORBIDDEN, 'MEMBER_REMOVED')
+    if (member && member.status !== 'LEFT') return fail(B.INVALID_STATE_TRANSITION)
+    joinable(trip, now)
+    if (invite) validInvite(invite, trip, now)
+    const host = await tx.tripMember.findFirst({
+      where: { tripId: trip.id, userId: trip.creatorId, role: 'HOST', status: 'ACTIVE' },
+    })
+    if (!host) fail(B.INVALID_STATE_TRANSITION, 'HOST_MEMBERSHIP_MISSING')
+    if (invite && invite.maxUses !== null && invite.usedCount >= invite.maxUses) fail(B.INVITE_USAGE_LIMIT_REACHED)
+    if (count >= trip.maxPax) fail(B.CAPACITY_CONFLICT)
+    const data = {
+      status: 'ACTIVE' as const,
+      role: 'MEMBER' as const,
+      joinedAt: now,
+      leftAt: null,
+      joinedByInviteId: invite?.id ?? null,
+      pickupPointId: trip.pickupPointId,
+      attendanceStatus: 'NOT_MARKED' as const,
+      attendedAt: null,
+      attendanceMarkedBy: null,
+    }
+    const next = member
+      ? await tx.tripMember.update({ where: { id: member.id }, data: { ...data, version: { increment: 1 } } })
+      : await tx.tripMember.create({ data: { ...data, tripId: trip.id, userId } })
+    if (invite) await tx.privateTripInvite.update({ where: { id: invite.id }, data: { usedCount: { increment: 1 } } })
+    const nextTrip = await tx.trip.update({ where: { id: trip.id }, data: { version: { increment: 1 } } })
+    await this.event(tx, userId, nextTrip, next, member?.status ?? null, 'PRIVATE_TRIP_MEMBER_JOINED', now)
+
+    return { next, nextTrip }
+  }
   join(userId: string, code: string) {
     return this.transaction(userId, { code }, true, async (tx, trip, invite, now) => {
       if (!invite) return fail(B.NOT_FOUND)
@@ -229,36 +277,69 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
         redirectTo: `/private-trips/${t.id}`,
       })
       // Creator access is independent from historical membership backfill.
-      if (trip.creatorId === userId || member?.status === 'ACTIVE') return result(member, trip, true, false, count)
-      if (member?.status === 'REMOVED') return fail(C.FORBIDDEN, 'MEMBER_REMOVED')
-      if (member && member.status !== 'LEFT') return fail(B.INVALID_STATE_TRANSITION)
-      joinable(trip, now)
-      validInvite(invite, trip, now)
-      const host = await tx.tripMember.findFirst({
-        where: { tripId: trip.id, userId: trip.creatorId, role: 'HOST', status: 'ACTIVE' },
-      })
-      if (!host) fail(B.INVALID_STATE_TRANSITION, 'HOST_MEMBERSHIP_MISSING')
-      if (invite.maxUses !== null && invite.usedCount >= invite.maxUses) fail(B.INVITE_USAGE_LIMIT_REACHED)
-      if (count >= trip.maxPax) fail(B.CAPACITY_CONFLICT)
-      const data = {
-        status: 'ACTIVE' as const,
-        role: 'MEMBER' as const,
-        joinedAt: now,
-        leftAt: null,
-        joinedByInviteId: invite.id,
-        pickupPointId: trip.pickupPointId,
-        attendanceStatus: 'NOT_MARKED' as const,
-        attendedAt: null,
-        attendanceMarkedBy: null,
+      if (trip.creatorId === userId || member?.status === 'ACTIVE') {
+        await syncPendingInvitations(tx, trip.id, userId, now, { recipientUserId: userId, reason: 'ALREADY_MEMBER' })
+        return result(member, trip, true, false, count)
       }
-      const next = member
-        ? await tx.tripMember.update({ where: { id: member.id }, data: { ...data, version: { increment: 1 } } })
-        : await tx.tripMember.create({ data: { ...data, tripId: trip.id, userId } })
-      await tx.privateTripInvite.update({ where: { id: invite.id }, data: { usedCount: { increment: 1 } } })
-      const nextTrip = await tx.trip.update({ where: { id: trip.id }, data: { version: { increment: 1 } } })
-      await this.event(tx, userId, nextTrip, next, member?.status ?? null, 'PRIVATE_TRIP_MEMBER_JOINED', now)
+      const { next, nextTrip } = await this.joinCore(tx, userId, trip, member, count, now, invite)
+      await syncPendingInvitations(tx, trip.id, userId, now, { recipientUserId: userId, reason: 'ALREADY_MEMBER' })
       return result(next, nextTrip, false, !!member, count + 1)
     })
+  }
+  async accept(userId: string, invitationId: string) {
+    const outcome = await this.transaction(userId, { invitationId }, false, async (tx, trip, _link, now) => {
+      const row = await tx.privateTripMemberInvitation.findUniqueOrThrow({ where: { id: invitationId } })
+      const member = await tx.tripMember.findUnique({ where: { tripId_userId: { tripId: trip.id, userId } } })
+      const response = (
+        invitation: typeof row,
+        current: TripMember | null,
+        alreadyMember: boolean,
+        rejoined: boolean,
+      ) => ({
+        invitationStatus: invitation.status,
+        resolutionReason: invitation.reason,
+        tripId: trip.id,
+        memberId: current?.id ?? null,
+        membershipStatus: current?.status ?? null,
+        membershipVersion: current?.version ?? null,
+        membershipVersionAtAccept: invitation.membershipVersionAtAccept,
+        canEnterRoom: trip.creatorId === userId || current?.status === 'ACTIVE',
+        alreadyMember,
+        rejoined,
+      })
+      if (row.status === 'ACCEPTED') return { body: response(row, member, member?.status === 'ACTIVE', false) }
+      if (row.status === 'INVALIDATED' && row.reason === 'ALREADY_MEMBER' && member?.status === 'ACTIVE')
+        return { body: response(row, member, member?.status === 'ACTIVE', false) }
+      if (row.status === 'EXPIRED') return { error: B.INVITE_EXPIRED }
+      if (row.status !== 'PENDING') return { error: B.INVITATION_NOT_ACTIONABLE, reason: row.reason ?? row.status }
+      if (trip.status === 'CANCELLED') {
+        await transitionInvitation(tx, row, userId, now, 'INVALIDATED', 'TRIP_CANCELLED')
+        return { error: B.INVITATION_NOT_ACTIONABLE }
+      }
+      if (Math.min(+row.expiresAt, +trip.startAt - 1000) <= +now) {
+        await transitionInvitation(tx, row, userId, now, 'EXPIRED', 'EXPIRED')
+        return { error: B.INVITE_EXPIRED }
+      }
+      if (member?.status === 'ACTIVE') {
+        const invalidated = await transitionInvitation(tx, row, userId, now, 'INVALIDATED', 'ALREADY_MEMBER')
+        return { body: response(invalidated, member, true, false) }
+      }
+      if (member?.status === 'REMOVED') {
+        await transitionInvitation(tx, row, userId, now, 'INVALIDATED', 'MEMBER_REMOVED')
+        return { error: C.FORBIDDEN, reason: 'MEMBER_REMOVED' }
+      }
+      assertMemberActor(await tx.user.findUnique({ where: { id: userId } }), true)
+      const count = await tx.tripMember.count({ where: { tripId: trip.id, status: 'ACTIVE' } })
+      const { next } = await this.joinCore(tx, userId, trip, member, count, now, null)
+      const accepted = await transitionInvitation(tx, row, userId, now, 'ACCEPTED', null, {
+        acceptedMemberId: next.id,
+        membershipVersionAtAccept: next.version,
+        respondedAt: now,
+      })
+      return { body: response(accepted, next, false, member?.status === 'LEFT') }
+    })
+    if (outcome.error) fail(outcome.error, outcome.reason)
+    return outcome.body
   }
   room(userId: string, tripId: string) {
     return this.transaction(userId, { tripId }, false, async (tx, trip, _invite, now) => {
@@ -397,6 +478,8 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
         memberId ? 'PRIVATE_TRIP_MEMBER_REMOVED' : 'PRIVATE_TRIP_MEMBER_LEFT',
         now,
       )
+      if (memberId)
+        await syncPendingInvitations(tx, tripId, userId, now, { recipientUserId: old.userId, reason: 'MEMBER_REMOVED' })
       return result(next, nextTrip, true)
     })
   }

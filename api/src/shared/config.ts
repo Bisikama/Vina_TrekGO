@@ -123,6 +123,11 @@ const envConfigSchema = z
     VNPAY_SANDBOX_HASH_SECRET: z.string().min(1).optional(),
     VNPAY_SANDBOX_RETURN_URL: z.string().url().optional(),
     VNPAY_SANDBOX_API_IP: z.string().min(1).optional(),
+    // Sandbox Refund Simulation (TEST/DEMO only - strictly forbidden in production)
+    PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
 
     // MoMo Sandbox Gateway
     MOMO_SANDBOX_PARTNER_CODE: z.string().min(1).max(100).optional(),
@@ -198,9 +203,11 @@ const envConfigSchema = z
 const configserver = envConfigSchema.safeParse(process.env)
 if (!configserver.success) {
   console.error('Các biến môi trường cấu hình không hợp lệ:', configserver.error.format())
-  process.exit(1)
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1)
+  }
 }
 
-const envconfig = configserver.data
+const envconfig = (configserver.data ?? process.env) as z.infer<typeof envConfigSchema>
 
 export default envconfig

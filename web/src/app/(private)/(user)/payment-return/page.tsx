@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { bookingApi, dateTime, money } from '@/features/bookings/booking.api';
 import type { Booking } from '@/features/bookings/booking.api';
+import { useStaticDataStore } from '@/lib/staticDataStore';
 
 function getVnpayErrorMessage(code: string | null): string {
   switch (code) {
@@ -115,24 +116,84 @@ function PaymentReturnContent() {
       return null;
     });
 
-  // Load thông tin chi tiết đơn đặt chỗ và chuyến đi
+  // Load thông tin chi tiết đơn đặt chỗ và chuyến đi (hoặc cung đường vừa mua)
   const [booking, setBooking] = useState<Booking | null>(null);
 
+  const [trailPurchase] = useState<{
+    trailId: string;
+    trailCode?: string;
+    trailName: string;
+    price?: number;
+  } | null>(() => {
+    if (typeof window === 'undefined' || rawBookingId) {
+      return null;
+    }
+
+    try {
+      const raw = sessionStorage.getItem('last_trail_purchase');
+
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw) as {
+        trailId?: string;
+        trailCode?: string;
+        trailName?: string;
+        price?: number;
+      };
+
+      if (
+        typeof parsed.trailId !== 'string' ||
+        typeof parsed.trailName !== 'string'
+      ) {
+        return null;
+      }
+
+      return {
+        trailId: parsed.trailId,
+        trailCode: parsed.trailCode,
+        trailName: parsed.trailName,
+        price: parsed.price,
+      };
+    } catch {
+      return null;
+    }
+  });
+
   useEffect(() => {
-    if (!rawBookingId) return;
-    let active = true;
+    if (rawBookingId) {
+      let active = true;
 
-    bookingApi
-      .detail(rawBookingId)
-      .then((data) => {
-        if (active) setBooking(data);
-      })
-      .catch(() => {});
+      bookingApi
+        .detail(rawBookingId)
+        .then((data) => {
+          if (active) setBooking(data);
+        })
+        .catch(() => {});
 
-    return () => {
-      active = false;
-    };
-  }, [rawBookingId]);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      trailPurchase &&
+      (vnpResponseCode === '00' || momoResultCode === '0')
+    ) {
+      localStorage.setItem(
+        `trail_unlocked:${trailPurchase.trailId}`,
+        'true',
+      );
+      useStaticDataStore.getState().clearStaticCache();
+      void useStaticDataStore.getState().loadPrivateSources(true);
+    }
+  }, [
+    rawBookingId,
+    trailPurchase,
+    vnpResponseCode,
+    momoResultCode,
+  ]);
+
 
   // Xác định trạng thái thành công
   let isSuccess = false;
@@ -251,6 +312,8 @@ function PaymentReturnContent() {
             {isSuccess
               ? rentalContext
                 ? `Cổng ${gatewayName} đã trả kết quả thành công. TrekGo đang tái xác minh giao dịch trước khi chuyển đơn thuê sang PAID.`
+                : trailPurchase && !booking
+                  ? `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Cung đường 3D và dữ liệu lộ trình GPS của bạn đã được mở khóa.`
                 : `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Chỗ của bạn đã được đảm bảo và vé điện tử đã được xác nhận.`
               : failureReason}
           </p>
@@ -284,6 +347,24 @@ function PaymentReturnContent() {
               <span>📅 Khởi hành: <strong>{dateTime(booking.trip.startAt)}</strong></span>
               <span>👥 Số lượng: <strong>{booking.participantCount} người</strong></span>
               <span>💰 Tổng tiền: <strong className="text-[#125238]">{money(booking.totalAmount)}</strong></span>
+            </div>
+          </div>
+        )}
+
+        {/* Card thông tin cung đường 3D đã mở khóa */}
+        {!booking && trailPurchase && (
+          <div className="mt-6 rounded-2xl bg-emerald-50/60 border border-emerald-100 p-4 text-left">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+              Cung đường mở khóa
+            </span>
+            <h3 className="mt-1 font-bold text-gray-900 text-base">{trailPurchase.trailName}</h3>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+              {trailPurchase.trailCode && (
+                <span>🗺️ Mã cung đường: <strong className="font-mono">{trailPurchase.trailCode}</strong></span>
+              )}
+              {trailPurchase.price !== undefined && (
+                <span>💰 Giá mở khóa: <strong className="text-[#125238]">{money(trailPurchase.price)}</strong></span>
+              )}
             </div>
           </div>
         )}
@@ -372,21 +453,37 @@ function PaymentReturnContent() {
             </>
           ) : isSuccess ? (
             <>
-              {/* Nút Xem chi tiết chuyến đi đã đặt (chuyển thẳng tới trang vé & thông tin booking) */}
-              <Link
-                href={rawBookingId ? `/bookings/${rawBookingId}` : '/my-trips'}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f] cursor-pointer"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                Xem chi tiết chuyến đi
-              </Link>
+              {!rawBookingId && trailPurchase ? (
+                <Link
+                  href={`/explore/${trailPurchase.trailId}`}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f] cursor-pointer"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                    />
+                  </svg>
+                  Xem bản đồ 3D cung đường
+                </Link>
+              ) : (
+                <Link
+                  href={rawBookingId ? `/bookings/${rawBookingId}` : '/my-trips'}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f] cursor-pointer"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                  Xem chi tiết chuyến đi
+                </Link>
+              )}
 
               {/* Nút Xem bản đồ cung đường GPS 3D nếu có */}
               {tripId && (
@@ -408,7 +505,7 @@ function PaymentReturnContent() {
 
               {/* Nút Quay lại trang chủ */}
               <Link
-                href="/"
+                href={!rawBookingId && trailPurchase ? '/explore' : '/'}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-xs font-bold text-gray-700 shadow-xs transition hover:bg-gray-50 hover:border-emerald-300 hover:text-[#125238] cursor-pointer"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -419,7 +516,7 @@ function PaymentReturnContent() {
                     d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                   />
                 </svg>
-                Quay lại trang chủ
+                {!rawBookingId && trailPurchase ? 'Khám phá thêm cung đường' : 'Quay lại trang chủ'}
               </Link>
             </>
           ) : (
@@ -439,6 +536,21 @@ function PaymentReturnContent() {
                     />
                   </svg>
                   Thử lại thanh toán
+                </Link>
+              ) : trailPurchase ? (
+                <Link
+                  href={`/explore/${trailPurchase.trailId}`}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-7 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f] cursor-pointer"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Quay lại thử thanh toán
                 </Link>
               ) : (
                 <Link

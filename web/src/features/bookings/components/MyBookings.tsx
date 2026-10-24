@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/features/auth';
 import { useMyBookings } from '../hooks';
@@ -24,6 +25,15 @@ export function MyBookings() {
     setPage,
     refetch,
   } = useMyBookings();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('vnp_ResponseCode') || url.searchParams.has('resultCode')) {
+        window.location.replace(`/payment-return?${url.searchParams.toString()}`);
+      }
+    }
+  }, []);
 
   if (!accessToken) {
     return (

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { TripPricingManager } from "../pricing/TripPricingManager";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 type LeaderTripEditProps = {
   tripId: string;
@@ -42,6 +43,13 @@ const navigationItems = [
     label: "An toàn & Hủy tour",
   },
 ];
+
+function getMinTripStartDate(daysAdvance = 3) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAdvance);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
 
 function FormSection({
   id,
@@ -100,16 +108,24 @@ export function LeaderTripEdit({
   tripId,
 }: LeaderTripEditProps) {
   const cleanTripId = tripId.replace(/^#/, "");
-  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({ tripId: cleanTripId });
+  const { trip, isLoading: isLoadingTrip, refetch: refetchTrip } = useLeaderTripDetail({ tripId: cleanTripId });
   const { updateTrip, cancelTrip, isSubmitting } = useLeaderTripMutations();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priceExplanation, setPriceExplanation] = useState("");
   const [capacity, setCapacity] = useState(15);
+  const [minCapacity, setMinCapacity] = useState(5);
   const [price, setPrice] = useState("2850000");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const durationDays = useMemo(() => {
+    if (!startDate || !endDate) return 2;
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, diff);
+  }, [startDate, endDate]);
 
   const [savedMessage, setSavedMessage] = useState("");
   const [showCancelModal, setShowCancelModal] =
@@ -125,6 +141,7 @@ export function LeaderTripEdit({
       if (trip.startAt) setStartDate(trip.startAt.slice(0, 10));
       if (trip.endAt) setEndDate(trip.endAt.slice(0, 10));
       if (trip.capacity) setCapacity(trip.capacity);
+      if (trip.minCapacity) setMinCapacity(trip.minCapacity);
       if (trip.price) setPrice(trip.price);
     }
   }, [trip]);
@@ -469,6 +486,7 @@ export function LeaderTripEdit({
                     type="date"
                     className={inputClass}
                     value={startDate}
+                    min={getMinTripStartDate(3)}
                     onChange={(e) => setStartDate(e.target.value)}
                   />
                 </label>
@@ -482,9 +500,17 @@ export function LeaderTripEdit({
                     type="date"
                     className={inputClass}
                     value={endDate}
+                    min={startDate || getMinTripStartDate(3)}
                     onChange={(e) => setEndDate(e.target.value)}
                   />
                 </label>
+
+                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-slate-700 flex items-start gap-2.5">
+                  <span className="text-base leading-none">💡</span>
+                  <div>
+                    <strong className="text-emerald-950 font-bold">Quy chuẩn an toàn VFRS:</strong> Chuyến đi ghép đoàn cần mở trước ngày khởi hành tối thiểu <strong>3 ngày</strong> để đảm bảo đủ thời gian gom đoàn, xử lý các đơn thuê trang bị (Rental Cutoff 24h) và nộp danh sách khai báo kiểm lâm.
+                  </div>
+                </div>
               </div>
             </FormSection>
 
@@ -497,49 +523,54 @@ export function LeaderTripEdit({
               <div className="grid gap-5 md:grid-cols-2">
                 <label>
                   <FieldLabel required>
-                    Số thành viên tối đa
+                    Số thành viên tối thiểu (để khởi hành)
                   </FieldLabel>
 
                   <input
                     type="number"
                     min={1}
+                    max={capacity}
                     className={inputClass}
-                    value={capacity}
-                    onChange={(e) => setCapacity(Number(e.target.value))}
+                    value={minCapacity}
+                    onChange={(e) => setMinCapacity(Number(e.target.value))}
                   />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Chuyến đi sẽ chắc chắn khởi hành khi đạt số lượng này.
+                  </span>
                 </label>
 
                 <label>
                   <FieldLabel required>
-                    Giá vé mỗi người (VNĐ)
+                    Số thành viên tối đa (quy mô đoàn)
                   </FieldLabel>
 
                   <input
-                    type="text"
+                    type="number"
+                    min={minCapacity}
                     className={inputClass}
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
+                    value={capacity}
+                    onChange={(e) => setCapacity(Number(e.target.value))}
                   />
-                </label>
-
-                <label className="md:col-span-2 block">
-                  <FieldLabel required>
-                    Cơ sở tính giá &amp; Giải trình chi phí nội bộ (priceExplanation)
-                  </FieldLabel>
-
-                  <textarea
-                    rows={4}
-                    maxLength={5000}
-                    className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fafc] p-4 text-sm leading-6 text-slate-950 outline-none focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15"
-                    value={priceExplanation}
-                    onChange={(e) => setPriceExplanation(e.target.value)}
-                    placeholder="Nhập cơ sở tính giá nội bộ: chi phí chung, chi phí/người, số khách dự toán, dự phòng và lợi nhuận..."
-                  />
-
-                  <span className="mt-1 block text-xs text-slate-400">
-                    Bắt buộc trước khi xuất bản chuyến đi. Không hiển thị công khai. ({priceExplanation.length}/5000 ký tự)
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Giới hạn số lượng thành viên tối đa có thể tham gia.
                   </span>
                 </label>
+
+                <div className="md:col-span-2 pt-2">
+                  <TripPricingManager
+                    tripId={cleanTripId}
+                    tripVersion={trip?.version || 1}
+                    capacity={capacity}
+                    minPax={minCapacity}
+                    durationDays={durationDays}
+                    initialPrice={price}
+                    onPriceConfirmed={({ selectedPrice, selectedMinPax }) => {
+                      setPrice(selectedPrice);
+                      setMinCapacity(selectedMinPax);
+                      refetchTrip();
+                    }}
+                  />
+                </div>
               </div>
 
               <div className="mt-5 rounded-xl bg-emerald-50 p-4">

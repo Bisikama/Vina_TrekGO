@@ -50,6 +50,10 @@ export type RentalCategory = {
   status?: string;
 };
 
+export type RentalDepositPolicyType =
+  | "FIXED"
+  | "PERCENT_REPLACEMENT_VALUE";
+
 export type RentalDepositPolicy = {
   type: string;
   amount: number;
@@ -241,6 +245,47 @@ export type RentalPaymentCheckoutResponse = {
 
 export type StaffRentalProductStatus = "ACTIVE" | "INACTIVE" | "ARCHIVED";
 
+export type CreateStaffRentalProductInput = {
+  categoryId: string;
+  sku: string;
+  name: string;
+  description?: string | null;
+  dailyPrice: number;
+  currency: string;
+  replacementValue: number;
+  depositPolicy: {
+    type: RentalDepositPolicyType;
+    amount?: number | null;
+    percentage?: number | null;
+  };
+  imageMediaIds?: string[];
+  spec?: Record<string, unknown>;
+  recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
+};
+
+export type UpdateStaffRentalProductInput = {
+  expectedVersion: number;
+  name?: string;
+  description?: string | null;
+  dailyPrice?: number;
+  replacementValue?: number;
+  depositPolicy?: {
+    type: RentalDepositPolicyType;
+    amount?: number | null;
+    percentage?: number | null;
+  };
+  imageMediaIds?: string[];
+  spec?: Record<string, unknown>;
+  recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
+};
+
+export type ChangeStaffRentalProductStatusInput = {
+  expectedVersion: number;
+  status: StaffRentalProductStatus;
+};
+
 export type EquipmentUnitStatus =
   | "AVAILABLE"
   | "PICKED"
@@ -376,8 +421,6 @@ export type ChangeEquipmentMaintenanceInput =
       expectedVersion: number;
     };
 
-export type RentalDepositPolicyType = "FIXED" | "PERCENT_REPLACEMENT_VALUE";
-
 export type StaffRentalDepositPolicyInput =
   | {
       type: "FIXED";
@@ -387,34 +430,3 @@ export type StaffRentalDepositPolicyInput =
       type: "PERCENT_REPLACEMENT_VALUE";
       percentage: number;
     };
-
-export type CreateStaffRentalProductInput = {
-  categoryId: string;
-  sku: string;
-  name: string;
-  description: string | null;
-  dailyPrice: number;
-  replacementValue: number;
-  currency: string;
-  depositPolicy: StaffRentalDepositPolicyInput;
-  imageMediaIds: string[];
-  spec: Record<string, unknown>;
-  recommendationTags: string[];
-};
-
-export type UpdateStaffRentalProductInput = {
-  expectedVersion: number;
-  name: string;
-  description: string | null;
-  dailyPrice: number;
-  replacementValue: number;
-  depositPolicy: StaffRentalDepositPolicyInput;
-  imageMediaIds: string[];
-  spec: Record<string, unknown>;
-  recommendationTags: string[];
-};
-
-export type ChangeStaffRentalProductStatusInput = {
-  status: StaffRentalProductStatus;
-  expectedVersion: number;
-};
