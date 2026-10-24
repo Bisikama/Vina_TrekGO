@@ -42,7 +42,7 @@ const preview = obj({
   ticketId: { ...uuid, nullable: true },
   currentAccess: obj({
     participantActive: bool,
-    canNavigate: { type: 'boolean', enum: [false] },
+    canNavigate: { type: 'boolean' },
     canRent: { type: 'boolean', enum: [false] },
     canCheckIn: bool,
     reason: { type: 'string', enum: ['INTEGRATION_NOT_VERIFIED'] },

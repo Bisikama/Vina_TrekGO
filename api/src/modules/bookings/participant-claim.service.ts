@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, COMMON_ERROR_CODES as C } from '../../shared/errors'
 import { databaseTime } from './booking-capacity'
+import { hasPublicParticipationAccess } from './public-participation.policy'
 
 const fail = (code: string): never => {
   throw AppError.fromCode(code)
@@ -14,15 +15,12 @@ export async function assertTicketActor(tx: Prisma.TransactionClient, userId: st
   if (!actor) return fail(C.UNAUTHENTICATED)
   if (actor.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(actor.role)) fail(C.FORBIDDEN)
 }
-export function ticketAccess(participant: BookingParticipant, booking: Booking, trip: Trip) {
-  const participantActive =
-    participant.status === 'ACTIVE' &&
-    ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
-    ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(trip.status)
+export function ticketAccess(participant: BookingParticipant, booking: Booking, trip: Trip, actorId = participant.userId) {
+  const participantActive = hasPublicParticipationAccess(participant, booking, trip, actorId)
   return {
     participantActive,
-    // These capabilities require integration gates M7/M9, not merely a successful claim.
-    canNavigate: false,
+    // Rental integration remains a separate gate; preserve the current check-in contract.
+    canNavigate: participantActive,
     canRent: false,
     canCheckIn: participantActive && participant.checkinStatus === 'NOT_CHECKED_IN',
     reason: 'INTEGRATION_NOT_VERIFIED',
