@@ -27,6 +27,9 @@ const preview = obj({
   ...base,
   senderDisplay: str,
   participantName: str,
+  participantStatus: str,
+  checkinStatus: str,
+  bookingStatus: str,
   trip: obj({
     id: uuid,
     title: str,
@@ -41,7 +44,7 @@ const preview = obj({
     participantActive: bool,
     canNavigate: { type: 'boolean', enum: [false] },
     canRent: { type: 'boolean', enum: [false] },
-    canCheckIn: { type: 'boolean', enum: [false] },
+    canCheckIn: bool,
     reason: { type: 'string', enum: ['INTEGRATION_NOT_VERIFIED'] },
   }),
 })
@@ -67,6 +70,42 @@ const error: SchemaObject = {
     meta: obj({ requestId: str, serverTime: time, contractVersion: str }),
   },
 }
+export const bookingLinkageSchema = obj({
+  participants: {
+    type: 'array',
+    items: obj({
+      id: uuid,
+      fullName: str,
+      checkinStatus: { type: 'string', enum: ['NOT_CHECKED_IN', 'CHECKED_IN', 'NO_SHOW'] },
+      checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null as unknown as string], nullable: true },
+      checkedInAt: { ...time, nullable: true },
+      checkinCode: { type: 'string', nullable: true },
+      linkageStatus: { type: 'string', enum: ['UNLINKED', 'INVITATION_PENDING', 'CLAIMED'] },
+      pendingInvitationId: { ...uuid, nullable: true },
+      recipientDisplay: { type: 'string', nullable: true },
+      invitations: {
+        type: 'array',
+        maxItems: 10,
+        items: obj({
+          id: uuid,
+          status: base.status,
+          reason: base.reason,
+          version: base.version,
+          expiresAt: time,
+          recipientDisplay: str,
+        }),
+      },
+      actions: obj({ canInvite: bool, canSelfClaim: bool, canRevoke: bool }),
+    }),
+  },
+})
+export const ApiBookingLinkage = () =>
+  ApiResponse({
+    status: 200,
+    description:
+      'Existing buyer booking detail with additive participant linkage fields. This schema documents the M6 projection only; other booking fields are unchanged. Invitation history is limited to the latest 10 per participant.',
+    schema: bookingLinkageSchema,
+  })
 export const ApiPublicInvitation = (kind: 'create' | 'preview' | 'list' | 'action') =>
   applyDecorators(
     ApiResponse({

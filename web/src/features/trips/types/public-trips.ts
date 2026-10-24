@@ -7,11 +7,17 @@ export interface PublicTripItem {
   destinationId: string;
   startAt: string;
   endAt: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
   capacity: number;
   price: string | null;
   pickupPointId: string | null;
   status: TripStatus;
   publishedAt: string | null;
+  closedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   systemTrailId?: string | null;
 }
 

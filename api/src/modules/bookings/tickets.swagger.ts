@@ -13,7 +13,7 @@ const access = obj({
   participantActive: bool,
   canNavigate: { type: 'boolean', enum: [false] },
   canRent: { type: 'boolean', enum: [false] },
-  canCheckIn: { type: 'boolean', enum: [false] },
+  canCheckIn: bool,
   reason: { type: 'string', enum: ['INTEGRATION_NOT_VERIFIED'] },
 })
 const ticket = obj({
@@ -21,6 +21,9 @@ const ticket = obj({
   participantName: str,
   participantStatus: str,
   checkinStatus: str,
+  checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null as unknown as string], nullable: true },
+  checkedInAt: { type: 'string', format: 'date-time', nullable: true },
+  checkinCode: { type: 'string', nullable: true },
   bookingStatus: str,
   permissions: access,
   trip: obj({
@@ -73,7 +76,7 @@ export const ApiTicket = (kind: keyof typeof schemas) =>
     ApiResponse({
       status: 200,
       schema: schemas[kind],
-      description: 'Personal projection. Operational capability gates M7/M9 are not verified.',
+      description: 'Personal projection. Active tickets expose checkinCode for QR check-in; historical/cancelled tickets return null.',
       headers: { 'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } } },
     }),
     ...[400, 401, 403, 404, ...(kind === 'claim' ? [409] : []), 500].map((status) =>

@@ -9,7 +9,7 @@ import {
   claimEligible,
   publicInvitationConfig,
   publicInvitationExpiry,
-  publicInvitationState,
+  resolvedPublicInvitationState,
   recordPublicInvitation,
   transitionPublicInvitation,
 } from './public-invitation.policy'
@@ -83,7 +83,7 @@ export class PublicInvitationsService {
         await tx.$queryRaw`SELECT id FROM booking_participant_invitations WHERE id=${pending.id}::uuid FOR UPDATE`
       const now = await databaseTime(tx)
       if (pending) {
-        const state = publicInvitationState(pending, participant, booking, trip, now)
+        const state = await resolvedPublicInvitationState(tx, pending, participant, booking, trip, now)
         if (state.status !== 'PENDING') {
           await transitionPublicInvitation(tx, pending, booking, actorId, now, state.status, state.reason)
           pending = null
@@ -137,20 +137,16 @@ export class PublicInvitationsService {
     const p = row.participant,
       b = p.booking,
       t = b.trip
-    const state = publicInvitationState(row, p, b, t, now)
-    if (state.status === 'PENDING') {
-      if (row.recipient.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(row.recipient.role))
-        return { status: 'INVALIDATED' as const, reason: 'RECIPIENT_UNAVAILABLE' }
-      if (await this.duplicate(tx, row.recipientUserId, t.id, p.id))
-        return { status: 'INVALIDATED' as const, reason: B.TRIP_PARTICIPATION_EXISTS }
-    }
-    return state
+    return resolvedPublicInvitationState(tx, row, p, b, t, now)
   }
+
   private async view(tx: Prisma.TransactionClient, row: Row, actorId: string, now: Date) {
     const p = row.participant,
       b = p.booking,
       t = b.trip
     const state = await this.state(tx, row, now)
+    const access = ticketAccess(p, b, t)
+    const isLinkedOwner = p.userId === actorId
     return {
       ...this.base(row),
       ...state,
@@ -158,6 +154,9 @@ export class PublicInvitationsService {
       senderDisplay: row.sender.fullName,
       recipientDisplay: row.recipient.fullName,
       participantName: p.fullName,
+      participantStatus: p.status,
+      checkinStatus: p.checkinStatus,
+      bookingStatus: b.status,
       trip: {
         id: t.id,
         title: t.title,
@@ -171,10 +170,11 @@ export class PublicInvitationsService {
         canDecline: state.status === 'PENDING' && row.recipientUserId === actorId,
         canRevoke: state.status === 'PENDING' && row.senderUserId === actorId && b.userId === actorId,
       },
-      ticketId: row.status === 'ACCEPTED' && p.userId === actorId ? p.id : null,
+      ticketId: row.status === 'ACCEPTED' && isLinkedOwner ? p.id : null,
       currentAccess: {
-        ...ticketAccess(p, b, t),
-        participantActive: p.userId === actorId && ticketAccess(p, b, t).participantActive,
+        ...access,
+        participantActive: isLinkedOwner && access.participantActive,
+        canCheckIn: isLinkedOwner && access.canCheckIn,
       },
     }
   }

@@ -16,6 +16,8 @@ const basic = z.object({
     .describe('Cơ sở tính giá nội bộ (tự động sinh khi dùng bảng Cost Plan hoặc nhập thủ công). Không hiển thị công khai.'),
   startAt: datetime,
   endAt: datetime,
+  registrationOpenAt: datetime.nullable().optional(),
+  registrationDeadlineAt: datetime.nullable().optional(),
   pickupPointId: uuid,
   minPax: z.number().int().positive().max(2147483647).optional(),
   capacity: z.number().int().positive().max(2147483647),

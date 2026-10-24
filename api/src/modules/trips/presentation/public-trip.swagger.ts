@@ -14,11 +14,17 @@ const publicTrip = z.object({
   destinationId: uuid,
   startAt: time,
   endAt: time,
+  registrationOpenAt: time.nullable().optional(),
+  registrationDeadlineAt: time.nullable().optional(),
   capacity: z.number().int(),
   price: z.string().nullable(),
   pickupPointId: uuid.nullable(),
   status: z.string(),
   publishedAt: time.nullable(),
+  closedAt: time.nullable().optional(),
+  startedAt: time.nullable().optional(),
+  completedAt: time.nullable().optional(),
+  cancelledAt: time.nullable().optional(),
 })
 const checkpoint = z.object({
   id: uuid,
