@@ -1,3 +1,5 @@
+import { PublicInvitationsController } from './public-invitations.controller'
+import { PublicInvitationsService, PublicInvitationRequestService } from './public-invitations.service'
 import { Module } from '@nestjs/common'
 import { TicketsController } from './tickets.controller'
 import { TicketsService } from './tickets.service'
@@ -11,6 +13,7 @@ import { BookingDiscoveryController, BookingDiscoveryService } from './booking-d
 
 @Module({
   controllers: [
+    PublicInvitationsController,
     TicketsController,
     BookingsController,
     BookingRentalContextController,
@@ -18,6 +21,8 @@ import { BookingDiscoveryController, BookingDiscoveryService } from './booking-d
     BookingPolicyController,
   ],
   providers: [
+    PublicInvitationsService,
+    PublicInvitationRequestService,
     ParticipantClaimService,
     TicketsService,
     BookingPaymentConsumer,

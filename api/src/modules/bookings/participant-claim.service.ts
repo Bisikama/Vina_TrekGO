@@ -1,3 +1,4 @@
+import { publicInvitationState, transitionPublicInvitation } from './public-invitation.policy'
 import { Injectable } from '@nestjs/common'
 import { Booking, BookingParticipant, Prisma, Trip } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -127,31 +128,11 @@ export class ParticipantClaimService {
         const now = await databaseTime(tx)
         await assertTicketActor(tx, actorId)
         if (participant.userId !== actorId && pending) {
-          if (Math.min(+pending.expiresAt, +trip.startAt - 1000) > +now) return fail(B.PENDING_INVITATION_EXISTS)
-          await tx.bookingParticipantInvitation.update({
-            where: { id: pending.id },
-            data: { status: 'EXPIRED', reason: 'EXPIRED', version: { increment: 1 } },
-          })
-          await tx.auditLog.create({
-            data: {
-              userId: actorId,
-              action: 'PUBLIC_INVITATION_EXPIRED',
-              entityType: 'BookingParticipantInvitation',
-              entityId: pending.id,
-              oldValues: { status: 'PENDING' },
-              newValues: { status: 'EXPIRED', version: pending.version + 1 },
-            },
-          })
-          await tx.bookingOutboxEvent.create({
-            data: {
-              eventType: 'PUBLIC_INVITATION_EXPIRED',
-              aggregateType: 'Booking',
-              aggregateId: bookingId,
-              deduplicationKey: `PUBLIC_INVITATION_EXPIRED:${pending.id}:${pending.version + 1}`,
-              payload: { invitationId: pending.id, participantId, bookingId, tripId: trip.id },
-            },
-          })
+          const state = publicInvitationState(pending, participant, booking, trip, now)
+          if (state.status === 'PENDING') return fail(B.PENDING_INVITATION_EXISTS)
+          await transitionPublicInvitation(tx, pending, booking, actorId, now, state.status, state.reason)
         }
+
         // Business failures before mutation must not roll back a lazy-expiry transition.
         let result: Awaited<ReturnType<ParticipantClaimService['claimLocked']>>
         try {

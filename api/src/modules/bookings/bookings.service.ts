@@ -1,3 +1,4 @@
+import { publicBookingLinkage } from './public-invitation-projection'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
@@ -19,6 +20,14 @@ const detailInclude = {
   pickupPoint: { select: pickupSelect },
   returnPoint: { select: pickupSelect },
   bookingParticipantsViaBookingId: {
+    include: {
+      user: { select: { fullName: true } },
+      invitations: {
+        include: { recipient: { select: { fullName: true, status: true, role: true } } },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
+        take: 10,
+      },
+    },
     where: { status: 'ACTIVE' as const },
     orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
   },
@@ -31,7 +40,10 @@ const detailInclude = {
 export class BookingsService {
   private running = false
   private readonly logger = new Logger(BookingsService.name)
-  constructor(private readonly db: PrismaService, private readonly policies: BookingPolicyService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly policies: BookingPolicyService,
+  ) {}
 
   async create(tripId: string, userId: string, key: string, input: CreateBookingInput) {
     if (!userId) fail('UNAUTHENTICATED')
@@ -247,7 +259,14 @@ export class BookingsService {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
     const payment = payments.find((p) => p.application?.status === 'APPLIED') ?? payments[0]
     const confirmed = ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED'].includes(booking.status)
-    const now = new Date()
+    const now = await databaseTime(this.db)
+    const linkage = await publicBookingLinkage(
+      this.db,
+      booking,
+      booking.trip,
+      booking.bookingParticipantsViaBookingId,
+      now,
+    )
     const hoursBeforeStart = (booking.trip.startAt.getTime() - now.getTime()) / 3600000
     const canCancel =
       hoursBeforeStart > 0 &&
@@ -289,7 +308,8 @@ export class BookingsService {
       },
       pickup: booking.pickupPoint,
       returnPoint: booking.returnPoint,
-      participants: booking.bookingParticipantsViaBookingId.map((p) => ({
+      participants: booking.bookingParticipantsViaBookingId.map((p, index) => ({
+        ...linkage[index],
         id: p.id,
         fullName: p.fullName,
         phone: p.phone,

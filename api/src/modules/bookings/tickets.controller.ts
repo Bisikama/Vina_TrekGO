@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 import { Auth } from '../../shared/decorators/auth.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
@@ -44,16 +44,6 @@ export class TicketsController {
       additionalProperties: false,
       properties: { confirmParticipantIdentity: { type: 'boolean', enum: [true] } },
     },
-  })
-  @ApiResponse({
-    status: 200,
-    description:
-      'ticketId, tripId, alreadyClaimed, participantStatus, bookingVersion, currentAccess. No QR, invoice or payment data.',
-  })
-  @ApiResponse({
-    status: 409,
-    description:
-      'PARTICIPANT_ALREADY_LINKED / TRIP_PARTICIPATION_EXISTS / PENDING_INVITATION_EXISTS / PARTICIPANT_CLAIM_NOT_ALLOWED',
   })
   claim(
     @ActiveUser() actor: { id: string },
