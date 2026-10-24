@@ -1366,6 +1366,8 @@ model Trip {
   leaderId      String?      @map("leader_id") @db.Uuid
   startAt       DateTime     @map("start_at") @db.Timestamptz(6)
   endAt         DateTime     @map("end_at") @db.Timestamptz(6)
+  registrationOpenAt     DateTime?    @map("registration_open_at") @db.Timestamptz(6)
+  registrationDeadlineAt DateTime?    @map("registration_deadline_at") @db.Timestamptz(6)
   minPax        Int          @default(1) @map("min_pax")
   maxPax        Int          @map("max_pax")
   /// Required for PUBLIC; null/0 for PRIVATE
@@ -1373,6 +1375,7 @@ model Trip {
   priceExplanation String? @map("price_explanation") @db.Text
   status        TripStatus   @default(DRAFT)
   publishedAt   DateTime?    @map("published_at") @db.Timestamptz(6)
+  closedAt      DateTime?    @map("closed_at") @db.Timestamptz(6)
   startedAt     DateTime?    @map("started_at") @db.Timestamptz(6)
   completedAt   DateTime?    @map("completed_at") @db.Timestamptz(6)
   cancelledAt   DateTime?    @map("cancelled_at") @db.Timestamptz(6)

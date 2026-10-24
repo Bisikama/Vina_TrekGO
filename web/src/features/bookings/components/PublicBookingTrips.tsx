@@ -10,7 +10,7 @@ import {
   useBookingMutations,
 } from '../hooks';
 import { formatBookingDateTime, formatMoneyVND } from '../services/booking.api';
-import type { Participant } from '../types/booking.types';
+import type { Participant, PublicTrip } from '../types/booking.types';
 import { BookingSignIn } from './BookingSignIn';
 
 export function PublicBookingTrips() {
@@ -143,7 +143,7 @@ export function PublicBookingTrips() {
         )}
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {trips.map((trip) => (
+          {trips.map((trip: PublicTrip) => (
             <article
               key={trip.id}
               className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md"
@@ -158,8 +158,13 @@ export function PublicBookingTrips() {
                   </Link>
                 </h2>
                 <p className="mt-3 text-xs text-stone-500">
-                  📅 {formatBookingDateTime(trip.startAt)}
+                  📅 Khởi hành: {formatBookingDateTime(trip.startAt)}
                 </p>
+                {trip.registrationDeadlineAt && (
+                  <p className="mt-1 text-xs text-amber-700 font-medium">
+                    ⏳ Đóng form: {formatBookingDateTime(trip.registrationDeadlineAt)}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-stone-500">
                   👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}
                 </p>
@@ -324,6 +329,23 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
 
   const error = mutationError?.message || fetchError;
 
+  const nowMs = Date.now();
+  const openAtMs = trip?.registrationOpenAt
+    ? new Date(trip.registrationOpenAt).getTime()
+    : trip?.publishedAt
+    ? new Date(trip.publishedAt).getTime()
+    : null;
+  const deadlineMs = trip?.registrationDeadlineAt
+    ? new Date(trip.registrationDeadlineAt).getTime()
+    : null;
+  const isNotOpenYet = openAtMs !== null && Number.isFinite(openAtMs) && nowMs < openAtMs;
+  const isPastDeadline = deadlineMs !== null && Number.isFinite(deadlineMs) && nowMs >= deadlineMs;
+  const canCreateNewBooking =
+    trip?.status === 'OPEN' &&
+    !isNotOpenYet &&
+    !isPastDeadline &&
+    (trip?.remainingSlots ?? 0) > 0;
+
   return (
     <div className="min-h-screen bg-[#F7F7F4] px-4 pb-20 pt-28">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -367,7 +389,12 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                   Thông tin hành trình
                 </h2>
                 <div className="space-y-2 text-sm text-stone-700">
-                  <p>📅 {formatBookingDateTime(trip.startAt)} – {formatBookingDateTime(trip.endAt)}</p>
+                  <p>📅 Khởi hành: {formatBookingDateTime(trip.startAt)} – {formatBookingDateTime(trip.endAt)}</p>
+                  {trip.registrationDeadlineAt && (
+                    <p className="text-amber-800 font-medium">
+                      ⏳ Hạn chót đăng ký: {formatBookingDateTime(trip.registrationDeadlineAt)}
+                    </p>
+                  )}
                   <p>👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}</p>
                   <p>📍 Điểm tập kết: {trip.pickup ? `${trip.pickup.name} (${trip.pickup.address})` : 'Đang cập nhật'}</p>
                 </div>
@@ -376,7 +403,7 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                   <div>
                     <h3 className="text-xs font-bold uppercase text-stone-400">Tuyến đường</h3>
                     <ul className="mt-2 space-y-1 text-sm text-stone-700">
-                      {trip.routes.map((r) => (
+                      {trip.routes.map((r: NonNullable<PublicTrip['routes']>[number]) => (
                         <li key={r.id} className="flex items-center gap-1.5">
                           • {r.snapshotName} ({r.snapshotDifficulty || 'Cấp 2'}{r.snapshotDistanceKm && ` - ${r.snapshotDistanceKm} km`})
                         </li>
@@ -389,7 +416,7 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                   <div>
                     <h3 className="text-xs font-bold uppercase text-stone-400">Trạm kiểm soát</h3>
                     <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-stone-700">
-                      {trip.checkpoints.map((c) => (
+                      {trip.checkpoints.map((c: NonNullable<PublicTrip['checkpoints']>[number]) => (
                         <li key={c.id}>
                           {c.name}{c.isRequired ? ' (bắt buộc)' : ''}
                         </li>
@@ -410,7 +437,7 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                 </div>
 
                 {accessToken ? (
-                  trip.status === 'OPEN' && trip.remainingSlots > 0 ? (
+                  canCreateNewBooking ? (
                     <SimpleParticipantForm
                       key={`participants-${participantCount}`}
                       initial={Array.from(
@@ -423,9 +450,24 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                       onSubmit={handleCreate}
                     />
                   ) : (
-                    <p className="text-sm text-amber-700 bg-amber-50 p-4 rounded-xl">
-                      Chuyến đi hiện không còn nhận đặt chỗ.
-                    </p>
+                    <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      <p className="font-bold">
+                        {isNotOpenYet
+                          ? 'Chuyến đi chưa đến giờ mở form đăng ký.'
+                          : trip.status === 'CLOSED' || isPastDeadline
+                          ? 'Chuyến đi đã đóng sổ đăng ký tạo đơn mới.'
+                          : trip.status === 'FULL' || trip.remainingSlots <= 0
+                          ? 'Chuyến đi đã đủ số lượng thành viên tối đa.'
+                          : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'}
+                      </p>
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn vẫn có thể hoàn tất thanh toán trong thời hạn giữ chỗ tại mục{' '}
+                        <Link href="/bookings" className="font-bold underline">
+                          Đặt chỗ của tôi
+                        </Link>
+                        .
+                      </p>
+                    </div>
                   )
                 ) : (
                   <BookingSignIn />

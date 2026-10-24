@@ -19,6 +19,17 @@ function dateInputValue(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
+function toDateTimeLocalValue(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function computeDeadlineBeforeStart(startDate: string, meetingTime: string, hoursBefore = 48) {
+  const startObj = new Date(`${startDate}T${meetingTime || "06:00"}:00`);
+  if (isNaN(startObj.getTime())) return "";
+  return toDateTimeLocalValue(new Date(startObj.getTime() - hoursBefore * 3600_000));
+}
+
 function getMinTripStartDate(daysAdvance = 3) {
   const date = new Date();
   date.setDate(date.getDate() + daysAdvance);
@@ -99,7 +110,7 @@ export function LeaderCreateTripStepOne() {
     }
   }, [tripIdFromParam]);
 
-  const { trip, isLoading: isLoadingTrip } = useLeaderTripDetail({
+  const { trip } = useLeaderTripDetail({
     tripId: tripId || undefined,
   });
 
@@ -125,9 +136,22 @@ export function LeaderCreateTripStepOne() {
   const [startDate, setStartDate] = useState(() => getMinTripStartDate(3));
   const [endDate, setEndDate] = useState(() => getDefaultTripEndDate(4));
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
+  const [registrationOpenLocal, setRegistrationOpenLocal] = useState<string>("");
+  const [registrationDeadlineLocal, setRegistrationDeadlineLocal] = useState<string>(() =>
+    computeDeadlineBeforeStart(getMinTripStartDate(3), nextMeetingTime(), 48)
+  );
+  const [customDeadlineTouched, setCustomDeadlineTouched] = useState(false);
   const [pickupPointId, setPickupPointId] = useState<string>("");
   const [dateError, setDateError] = useState("");
   const [submitError, setSubmitError] = useState("");
+
+  // Tự động cập nhật hạn đóng form mặc định (trước 2 ngày = 48h) khi đổi ngày/giờ khởi hành nếu Leader chưa chỉnh tay
+  useEffect(() => {
+    if (!customDeadlineTouched && startDate && meetingTime) {
+      const nextDefault = computeDeadlineBeforeStart(startDate, meetingTime, 48);
+      if (nextDefault) setRegistrationDeadlineLocal(nextDefault);
+    }
+  }, [startDate, meetingTime, customDeadlineTouched]);
 
   // Khôi phục dữ liệu: ưu tiên dữ liệu thực tế từ chuyến đi đã tạo (nếu quay lại Bước 1)
   useEffect(() => {
@@ -167,6 +191,19 @@ export function LeaderCreateTripStepOne() {
           setEndDate(dateInputValue(endObj));
         }
       }
+      if (trip.registrationOpenAt) {
+        const openObj = new Date(trip.registrationOpenAt);
+        if (!isNaN(openObj.getTime())) {
+          setRegistrationOpenLocal(toDateTimeLocalValue(openObj));
+        }
+      }
+      if (trip.registrationDeadlineAt) {
+        const deadlineObj = new Date(trip.registrationDeadlineAt);
+        if (!isNaN(deadlineObj.getTime())) {
+          setRegistrationDeadlineLocal(toDateTimeLocalValue(deadlineObj));
+          setCustomDeadlineTouched(true);
+        }
+      }
     } else {
       // Khôi phục bản nháp local nếu chưa có chuyến trên server
       const savedDraft = window.sessionStorage.getItem("leader-create-trip-draft");
@@ -184,6 +221,11 @@ export function LeaderCreateTripStepOne() {
           if (draft.startDate) setStartDate(draft.startDate);
           if (draft.endDate) setEndDate(draft.endDate);
           if (draft.meetingTime) setMeetingTime(draft.meetingTime);
+          if (draft.registrationOpenLocal) setRegistrationOpenLocal(draft.registrationOpenLocal);
+          if (draft.registrationDeadlineLocal) {
+            setRegistrationDeadlineLocal(draft.registrationDeadlineLocal);
+            setCustomDeadlineTouched(true);
+          }
           if (draft.destinationId) {
             setDestinationId(draft.destinationId);
             fetchPickups(draft.destinationId).then((pickups) => {
@@ -218,6 +260,8 @@ export function LeaderCreateTripStepOne() {
   const durationText =
     nightsCount > 0 ? `${daysCount} ngày ${nightsCount} đêm` : `${daysCount} ngày`;
 
+  const maxAllowedDeadlineLocal = computeDeadlineBeforeStart(startDate, meetingTime, 24);
+
   function handleStartNewTrip() {
     window.sessionStorage.removeItem("leader-create-trip-id");
     window.sessionStorage.removeItem("leader-create-trip-draft");
@@ -229,6 +273,8 @@ export function LeaderCreateTripStepOne() {
     setDestinationId("");
     setPickupPointId("");
     setApiPickups([]);
+    setRegistrationOpenLocal("");
+    setCustomDeadlineTouched(false);
     setSubmitError("");
     router.replace("/leader/create-trip");
   }
@@ -265,13 +311,38 @@ export function LeaderCreateTripStepOne() {
       setDateError("Số thành viên tối thiểu không được vượt quá số thành viên tối đa.");
       return;
     }
+
+    const startAtDate = new Date(`${startDate}T${meetingTime}:00`);
+    const maxDeadlineMs = startAtDate.getTime() - 24 * 3600_000;
+    const deadlineDate = registrationDeadlineLocal
+      ? new Date(registrationDeadlineLocal)
+      : new Date(startAtDate.getTime() - 48 * 3600_000);
+
+    if (isNaN(deadlineDate.getTime()) || deadlineDate.getTime() > maxDeadlineMs) {
+      setDateError(
+        "Hạn chót đóng form đăng ký phải trước giờ khởi hành ít nhất 1 ngày (24 giờ). Không được phép đóng form sát giờ xuất phát hơn 1 ngày.",
+      );
+      return;
+    }
+
+    let openDate: Date | null = null;
+    if (registrationOpenLocal.trim()) {
+      openDate = new Date(registrationOpenLocal);
+      if (isNaN(openDate.getTime()) || openDate.getTime() >= deadlineDate.getTime()) {
+        setDateError("Giờ mở đăng ký phải trước thời điểm đóng form đăng ký.");
+        return;
+      }
+    }
+
     setDateError("");
     setTitleError("");
     setSubmitError("");
 
     try {
-      const startAt = new Date(`${startDate}T${meetingTime}:00`).toISOString();
+      const startAt = startAtDate.toISOString();
       const endAt = new Date(`${endDate}T23:59:59`).toISOString();
+      const registrationDeadlineAt = deadlineDate.toISOString();
+      const registrationOpenAt = openDate ? openDate.toISOString() : null;
       const cleanPrice = String(price).replace(/\D/g, "") || "1000000";
       const cleanPriceExplanation = priceExplanation.trim() || null;
 
@@ -308,6 +379,8 @@ export function LeaderCreateTripStepOne() {
           priceExplanation: cleanPriceExplanation,
           startAt,
           endAt,
+          registrationOpenAt,
+          registrationDeadlineAt,
           capacity: Number(capacity),
           minCapacity: Number(minCapacity),
           price: cleanPrice,
@@ -322,6 +395,8 @@ export function LeaderCreateTripStepOne() {
           priceExplanation: cleanPriceExplanation,
           startAt,
           endAt,
+          registrationOpenAt,
+          registrationDeadlineAt,
           capacity: Number(capacity),
           minCapacity: Number(minCapacity),
           price: cleanPrice,
@@ -346,6 +421,10 @@ export function LeaderCreateTripStepOne() {
           startDate,
           endDate,
           meetingTime,
+          registrationOpenLocal,
+          registrationDeadlineLocal,
+          registrationOpenAt: savedTrip.registrationOpenAt ?? registrationOpenAt,
+          registrationDeadlineAt: savedTrip.registrationDeadlineAt ?? registrationDeadlineAt,
           price: cleanPrice,
           capacity: savedTrip.capacity,
           minCapacity: savedTrip.minCapacity ?? Number(minCapacity),
@@ -518,12 +597,12 @@ export function LeaderCreateTripStepOne() {
 
             <FormCard
               number={2}
-              title="Thời gian &amp; Điểm tập kết đoàn"
-              description="Lịch xuất phát chính xác và tọa độ trạm hội quân."
+              title="Thời gian Dự kiến, Hạn Đóng/Mở Form &amp; Điểm tập kết"
+              description="Lịch xuất phát dự kiến, thời gian mở/đóng nhận đăng ký và tọa độ trạm hội quân."
             >
               <div className="grid gap-5 md:grid-cols-2">
                 <label>
-                  <FieldLabel required>Ngày bắt đầu khởi hành</FieldLabel>
+                  <FieldLabel required>Ngày bắt đầu khởi hành (dự kiến)</FieldLabel>
 
                   <input
                     type="date"
@@ -549,7 +628,7 @@ export function LeaderCreateTripStepOne() {
                 </label>
 
                 <label>
-                  <FieldLabel required>Ngày hoàn thành kết thúc</FieldLabel>
+                  <FieldLabel required>Ngày hoàn thành kết thúc (dự kiến)</FieldLabel>
 
                   <input
                     type="date"
@@ -570,6 +649,109 @@ export function LeaderCreateTripStepOne() {
                   />
                 </label>
 
+                <label>
+                  <FieldLabel required>Giờ tập trung xuất phát</FieldLabel>
+
+                  <input
+                    type="time"
+                    className={inputClass}
+                    value={meetingTime}
+                    onChange={(event) => {
+                      setMeetingTime(event.target.value);
+                      setDateError("");
+                    }}
+                  />
+                </label>
+
+                <div className="rounded-xl bg-emerald-50 p-3 flex items-center justify-between">
+                  <div className="text-xs">
+                    <span className="text-slate-600 block">◷ Tổng thời lượng dự kiến:</span>
+                    <strong className="text-sm text-slate-900">{durationText}</strong>
+                  </div>
+                  <span className="rounded bg-emerald-100 px-2.5 py-1 text-xs font-bold text-[#125238]">
+                    Lịch trình chuẩn
+                  </span>
+                </div>
+
+                {/* Khung cấu hình Thời gian Mở & Đóng Form Đăng ký */}
+                <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        ⏰ Thời gian Mở &amp; Đóng Form Đăng Ký (Booking Gate)
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Mặc định đóng form trước <strong>2 ngày (48h)</strong> so với giờ khởi hành. Tối đa cho phép chỉnh sát nhất là <strong>trước 1 ngày (24h)</strong>.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: "Trước 3 ngày", hours: 72 },
+                        { label: "Trước 2 ngày (Mặc định)", hours: 48 },
+                        { label: "Trước 1 ngày (Tối đa)", hours: 24 },
+                      ].map((preset) => {
+                        const presetVal = computeDeadlineBeforeStart(startDate, meetingTime, preset.hours);
+                        const isActive = registrationDeadlineLocal === presetVal;
+                        return (
+                          <button
+                            key={preset.hours}
+                            type="button"
+                            onClick={() => {
+                              setRegistrationDeadlineLocal(presetVal);
+                              setCustomDeadlineTouched(preset.hours !== 48);
+                              setDateError("");
+                            }}
+                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                              isActive
+                                ? "bg-[#125238] text-white"
+                                : "bg-white border border-slate-200 text-slate-700 hover:border-[#2f6b4f]"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label>
+                      <FieldLabel>Giờ mở nhận đăng ký (Tùy chọn)</FieldLabel>
+                      <input
+                        type="datetime-local"
+                        className={inputClass}
+                        value={registrationOpenLocal}
+                        max={registrationDeadlineLocal || maxAllowedDeadlineLocal}
+                        onChange={(e) => {
+                          setRegistrationOpenLocal(e.target.value);
+                          setDateError("");
+                        }}
+                      />
+                      <span className="mt-1 block text-[11px] text-slate-500">
+                        Để trống nếu muốn mở đăng ký ngay lập tức khi Publish chuyến đi.
+                      </span>
+                    </label>
+
+                    <label>
+                      <FieldLabel required>Hạn chót đóng form đăng ký</FieldLabel>
+                      <input
+                        type="datetime-local"
+                        className={inputClass}
+                        value={registrationDeadlineLocal}
+                        max={maxAllowedDeadlineLocal}
+                        onChange={(e) => {
+                          setRegistrationDeadlineLocal(e.target.value);
+                          setCustomDeadlineTouched(true);
+                          setDateError("");
+                        }}
+                      />
+                      <span className="mt-1 block text-[11px] text-amber-800">
+                        Sau mốc này sẽ chặn tạo đơn mới. Khách đã giữ chỗ trước khi đóng form vẫn được thanh toán nốt trong thời gian giữ chỗ.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
                 <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-slate-700 flex items-start gap-2.5">
                   <span className="text-base leading-none">💡</span>
                   <div>
@@ -581,21 +763,6 @@ export function LeaderCreateTripStepOne() {
                     {dateError}
                   </p>
                 )}
-
-                <div className="rounded-xl bg-emerald-50 p-3 md:col-span-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-slate-600">
-                      ◷ Tổng thời lượng:
-                      <strong className="ml-1 text-slate-900">
-                        {durationText}
-                      </strong>
-                    </span>
-
-                    <span className="rounded bg-emerald-100 px-2 py-1 font-bold text-[#125238]">
-                      Lịch trình chuẩn
-                    </span>
-                  </div>
-                </div>
 
                 <label className="md:col-span-2">
                   <FieldLabel required>Điểm đến (Destination)</FieldLabel>
@@ -633,21 +800,7 @@ export function LeaderCreateTripStepOne() {
                   </select>
                 </label>
 
-                <label>
-                  <FieldLabel required>Giờ tập trung</FieldLabel>
-
-                  <input
-                    type="time"
-                    className={inputClass}
-                    value={meetingTime}
-                    onChange={(event) => {
-                      setMeetingTime(event.target.value);
-                      setDateError("");
-                    }}
-                  />
-                </label>
-
-                <label>
+                <label className="md:col-span-2">
                   <FieldLabel required>Địa điểm tập kết đón đoàn</FieldLabel>
 
                   <select
@@ -751,7 +904,7 @@ export function LeaderCreateTripStepOne() {
                   </div>
 
                   <p className="mt-2 text-xs text-orange-700">
-                    Hạn ngạch Leader hiện tại tối đa 15 người.
+                    Khi đủ số người tối đa, hệ thống sẽ tự động đóng đăng ký (FULL).
                   </p>
                 </div>
 
@@ -833,13 +986,13 @@ export function LeaderCreateTripStepOne() {
           <aside className="sticky top-20 hidden space-y-5 xl:block">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="font-bold text-slate-950">
-                Quy tắc an toàn VFRS cho Leader
+                Quy tắc 3 Điều kiện Mở/Đóng Đăng ký
               </h2>
 
               <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
-                <li>✓ Tỷ lệ kiểm soát đoàn tối đa 15 người.</li>
-                <li>✓ Bắt buộc Leader chịu trách nhiệm kiểm tra GPS.</li>
-                <li>✓ Kiểm tra thiết bị cá nhân trước khi khởi hành.</li>
+                <li>✓ <strong>Hạn chót đăng ký:</strong> Tự động đóng form trước giờ khởi hành 2 ngày (có thể chỉnh tối đa sát nhất trước 1 ngày).</li>
+                <li>✓ <strong>Bảo vệ giữ chỗ:</strong> Khách đã vào form giữ chỗ trước giờ đóng sổ vẫn được thanh toán nốt trong thời gian giữ chỗ.</li>
+                <li>✓ <strong>Sức chứa tối đa:</strong> Đủ số người tối đa sẽ tự động chuyển sang trạng thái Đủ chỗ (FULL).</li>
               </ul>
             </section>
           </aside>

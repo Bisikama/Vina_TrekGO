@@ -67,6 +67,33 @@ export function publicInvitationState(
   if (!claimEligible(p, b, t, now)) return { status: 'INVALIDATED', reason: 'TRIP_NOT_ELIGIBLE' }
   return { status: 'PENDING', reason: null }
 }
+export async function resolvedPublicInvitationState(
+  tx: Prisma.TransactionClient,
+  row: BookingParticipantInvitation,
+  participant: BookingParticipant,
+  booking: Booking,
+  trip: Trip,
+  now: Date,
+) {
+  const state = publicInvitationState(row, participant, booking, trip, now)
+  if (state.status !== 'PENDING') return state
+  const recipient = await tx.user.findUnique({
+    where: { id: row.recipientUserId },
+    select: { role: true, status: true },
+  })
+  if (!recipient || recipient.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(recipient.role))
+    return { status: 'INVALIDATED' as const, reason: 'RECIPIENT_UNAVAILABLE' }
+  const duplicate = await tx.bookingParticipant.findFirst({
+    where: {
+      id: { not: participant.id },
+      userId: row.recipientUserId,
+      status: 'ACTIVE',
+      booking: { tripId: trip.id, status: { in: ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED'] } },
+    },
+    select: { id: true },
+  })
+  return duplicate ? { status: 'INVALIDATED' as const, reason: 'TRIP_PARTICIPATION_EXISTS' } : state
+}
 export async function recordPublicInvitation(
   tx: Prisma.TransactionClient,
   row: BookingParticipantInvitation,

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { DifficultyLevel, Prisma } from '@prisma/client'
 import { PrismaService } from '../../../../shared/services/prisma.service'
-import { OCCUPYING_STATES } from '../../application/trip.policy'
+import { DEFAULT_REGISTRATION_LEAD_MS, OCCUPYING_STATES } from '../../application/trip.policy'
 import { evaluateTripPricing } from '../../pricing/pricing-calculator'
 import type {
   Checkpoint,
@@ -38,6 +38,8 @@ function view(row: Row): TripView {
     .filter((i) => !i.includedInPrice)
     .map((i) => (i.sourceNote?.trim() ? `${i.nameSnapshot} (${i.sourceNote.trim()})` : i.nameSnapshot))
 
+  const defaultDeadline = new Date(row.startAt.getTime() - DEFAULT_REGISTRATION_LEAD_MS)
+
   return {
     id: row.id,
     tripType: row.tripType,
@@ -48,6 +50,8 @@ function view(row: Row): TripView {
     destinationId: row.destinationId,
     startAt: row.startAt.toISOString(),
     endAt: row.endAt.toISOString(),
+    registrationOpenAt: (row.registrationOpenAt ?? row.publishedAt)?.toISOString() ?? null,
+    registrationDeadlineAt: (row.registrationDeadlineAt ?? defaultDeadline).toISOString(),
     pickupPointId: row.pickupPointId,
     minPax: row.minPax,
     capacity: row.maxPax,
@@ -58,6 +62,10 @@ function view(row: Row): TripView {
     status: row.status,
     version: row.version,
     publishedAt: row.publishedAt?.toISOString() ?? null,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
     checkpoints: row.tripCheckpointsViaTripId.map((c) => ({
       sourceCheckpointId: c.sourceCheckpointId,
       name: c.name,
@@ -125,6 +133,18 @@ function tripData(data: Partial<TripInput>) {
     destinationId: data.destinationId,
     startAt: data.startAt ? new Date(data.startAt) : undefined,
     endAt: data.endAt ? new Date(data.endAt) : undefined,
+    registrationOpenAt:
+      data.registrationOpenAt === null
+        ? null
+        : data.registrationOpenAt
+          ? new Date(data.registrationOpenAt)
+          : undefined,
+    registrationDeadlineAt:
+      data.registrationDeadlineAt === null
+        ? null
+        : data.registrationDeadlineAt
+          ? new Date(data.registrationDeadlineAt)
+          : undefined,
     pickupPointId: data.pickupPointId,
     minPax: data.minPax,
     maxPax: data.capacity,
@@ -133,7 +153,7 @@ function tripData(data: Partial<TripInput>) {
   }
 }
 class Session implements TripSession {
-  constructor(private readonly db: Prisma.TransactionClient) { }
+  constructor(private readonly db: Prisma.TransactionClient) {}
   actor(id: string) {
     return this.db.user.findUnique({ where: { id }, select: { id: true, role: true, status: true } })
   }
@@ -207,14 +227,18 @@ class Session implements TripSession {
     return rows.map((r) => ({ ...r, startAt: r.startAt.toISOString(), endAt: r.endAt.toISOString() }))
   }
   async create(actorId: string, d: TripInput) {
+    const startAtDate = new Date(d.startAt)
+    const defaultDeadline = new Date(startAtDate.getTime() - DEFAULT_REGISTRATION_LEAD_MS)
     return view(
       await this.db.trip.create({
         data: {
           ...tripData(d),
           title: d.title,
           destinationId: d.destinationId,
-          startAt: new Date(d.startAt),
+          startAt: startAtDate,
           endAt: new Date(d.endAt),
+          registrationOpenAt: d.registrationOpenAt ? new Date(d.registrationOpenAt) : null,
+          registrationDeadlineAt: d.registrationDeadlineAt ? new Date(d.registrationDeadlineAt) : defaultDeadline,
           minPax: d.minPax ?? 1,
           maxPax: d.capacity,
           tripType: 'PUBLIC',
@@ -340,36 +364,92 @@ class Session implements TripSession {
         },
       })
     }
+    const now = new Date()
+    const defaultDeadline = existing
+      ? new Date(existing.startAt.getTime() - DEFAULT_REGISTRATION_LEAD_MS)
+      : undefined
     return view(
       await this.db.trip.update({
         where: { id },
-        data: { status: 'OPEN', publishedAt: new Date(), version: { increment: 1 } },
+        data: {
+          status: 'OPEN',
+          publishedAt: now,
+          registrationOpenAt: existing?.registrationOpenAt ?? now,
+          registrationDeadlineAt: existing?.registrationDeadlineAt ?? defaultDeadline,
+          version: { increment: 1 },
+        },
+        include,
+      }),
+    )
+  }
+  async closeRegistration(id: string) {
+    const existing = await this.db.trip.findUnique({ where: { id }, select: { closedAt: true } })
+    const now = new Date()
+    return view(
+      await this.db.trip.update({
+        where: { id },
+        data: {
+          status: 'CLOSED',
+          closedAt: existing?.closedAt ?? now,
+          version: { increment: 1 },
+        },
+        include,
+      }),
+    )
+  }
+  async start(id: string) {
+    const existing = await this.db.trip.findUnique({ where: { id }, select: { closedAt: true, startedAt: true } })
+    const now = new Date()
+    return view(
+      await this.db.trip.update({
+        where: { id },
+        data: {
+          status: 'IN_PROGRESS',
+          closedAt: existing?.closedAt ?? now,
+          startedAt: existing?.startedAt ?? now,
+          version: { increment: 1 },
+        },
+        include,
+      }),
+    )
+  }
+  async complete(id: string) {
+    const existing = await this.db.trip.findUnique({ where: { id }, select: { completedAt: true } })
+    const now = new Date()
+    return view(
+      await this.db.trip.update({
+        where: { id },
+        data: {
+          status: 'COMPLETED',
+          completedAt: existing?.completedAt ?? now,
+          version: { increment: 1 },
+        },
         include,
       }),
     )
   }
   async pendingCancellation(id: string) {
-  return !!(await this.db.tripCancellationRequest.findFirst({
-    where: { tripId: id, status: 'PENDING' },
-    select: { id: true },
-  }))
-}
+    return !!(await this.db.tripCancellationRequest.findFirst({
+      where: { tripId: id, status: 'PENDING' },
+      select: { id: true },
+    }))
+  }
   async cancel(id: string, actorId: string, previousStatus: TripStatus, reason: string, evidenceUrls: string[]) {
-  await this.db.tripCancellationRequest.create({
-    data: { tripId: id, requestedBy: actorId, previousTripStatus: previousStatus, reason, evidenceUrls },
-  })
-  return view(
-    await this.db.trip.update({
-      where: { id },
-      data: { status: 'CANCEL_PENDING', version: { increment: 1 } },
-      include,
-    }),
-  )
-}
+    await this.db.tripCancellationRequest.create({
+      data: { tripId: id, requestedBy: actorId, previousTripStatus: previousStatus, reason, evidenceUrls },
+    })
+    return view(
+      await this.db.trip.update({
+        where: { id },
+        data: { status: 'CANCEL_PENDING', version: { increment: 1 } },
+        include,
+      }),
+    )
+  }
 }
 @Injectable()
 export class PrismaTripAdapter implements TripStore {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
   async transaction<T>(actorId: string, tripId: string | undefined, work: (s: TripSession) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -411,7 +491,12 @@ export class PrismaTripAdapter implements TripStore {
   }
   async publicDetail(id: string) {
     const row = await this.prisma.trip.findFirst({
-      where: { id, tripType: 'PUBLIC', status: { in: ['OPEN', 'FULL'] }, publishedAt: { not: null } },
+      where: {
+        id,
+        tripType: 'PUBLIC',
+        status: { in: ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS', 'COMPLETED'] },
+        publishedAt: { not: null },
+      },
       include,
     })
     return row ? view(row) : null

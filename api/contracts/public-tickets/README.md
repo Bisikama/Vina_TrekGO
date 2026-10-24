@@ -47,3 +47,7 @@ Frontend: đặt thao tác “Đây là vé của tôi” ở participant card c
 - Test dùng PostgreSQL và Nest HTTP thật, shared auth guards/error filter; Supabase token verification được stub bằng account fixture. Không kiểm thử live Supabase hoặc payment gateway bên ngoài.
 - Chỉ áp migration vào DB test local. Chưa VERIFIED_ENV/DEPLOYED; chưa kiểm chứng replay toàn bộ lịch sử migration. Rental/Check-in cần owner và SOT ở M9 trước rollout khả năng hoạt động.
 - Kết quả ngày 23/10/2026: M5 12/12, booking policy 13/13, CF02 booking/payment/cancel 21/21; production TypeScript và Prisma validate đạt. Database CF02 có thêm constraints/trigger nguyên bản từ migration booking_policy_management; baseline schema Prisma đơn thuần không thay thế các constraint SQL của lịch sử migration.
+
+## Cập nhật M6
+
+Ngày 24/10/2026: API gửi/nhận/thu hồi vé và booking linkage đã có [contract M6](../public-invitations/README.md). Pending mất điều kiện recipient hoặc đã có participation khác cũng được vô hiệu khi self-claim/create; booking/trip/participant mất điều kiện ưu tiên INVALIDATED trước expiry. Schema self-claim/vé không thay đổi. Quota invitation Public/Private dùng chung actor counters.

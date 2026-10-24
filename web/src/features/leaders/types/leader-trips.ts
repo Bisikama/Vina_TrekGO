@@ -43,6 +43,8 @@ export interface LeaderTripView {
   description: string | null;
   startAt: string;
   endAt: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
   pickupPointId: string | null;
   capacity: number;
   minCapacity?: number;
@@ -55,6 +57,10 @@ export interface LeaderTripView {
   status: TripStatus;
   version: number;
   publishedAt: string | null;
+  closedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   checkpoints: PlannedCheckpoint[];
   trails: PlannedTrail[];
 }
@@ -66,6 +72,8 @@ export interface CreateLeaderPublicTripInput {
   priceExplanation?: string | null;
   startAt: string;
   endAt: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
   pickupPointId: string;
   capacity: number;
   minCapacity?: number;
@@ -80,6 +88,8 @@ export interface UpdateLeaderPublicTripInput {
   priceExplanation?: string | null;
   startAt?: string;
   endAt?: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
   pickupPointId?: string;
   capacity?: number;
   minCapacity?: number;

@@ -1,4 +1,4 @@
-import { publicInvitationState, transitionPublicInvitation } from './public-invitation.policy'
+import { resolvedPublicInvitationState, transitionPublicInvitation } from './public-invitation.policy'
 import { Injectable } from '@nestjs/common'
 import { Booking, BookingParticipant, Prisma, Trip } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -15,15 +15,16 @@ export async function assertTicketActor(tx: Prisma.TransactionClient, userId: st
   if (actor.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(actor.role)) fail(C.FORBIDDEN)
 }
 export function ticketAccess(participant: BookingParticipant, booking: Booking, trip: Trip) {
+  const participantActive =
+    participant.status === 'ACTIVE' &&
+    ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
+    ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(trip.status)
   return {
-    participantActive:
-      participant.status === 'ACTIVE' &&
-      ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
-      ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(trip.status),
+    participantActive,
     // These capabilities require integration gates M7/M9, not merely a successful claim.
     canNavigate: false,
     canRent: false,
-    canCheckIn: false,
+    canCheckIn: participantActive && participant.checkinStatus === 'NOT_CHECKED_IN',
     reason: 'INTEGRATION_NOT_VERIFIED',
   }
 }
@@ -128,7 +129,7 @@ export class ParticipantClaimService {
         const now = await databaseTime(tx)
         await assertTicketActor(tx, actorId)
         if (participant.userId !== actorId && pending) {
-          const state = publicInvitationState(pending, participant, booking, trip, now)
+          const state = await resolvedPublicInvitationState(tx, pending, participant, booking, trip, now)
           if (state.status === 'PENDING') return fail(B.PENDING_INVITATION_EXISTS)
           await transitionPublicInvitation(tx, pending, booking, actorId, now, state.status, state.reason)
         }
