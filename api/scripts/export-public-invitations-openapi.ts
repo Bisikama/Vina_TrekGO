@@ -1,3 +1,5 @@
+import { BookingsController } from '../src/modules/bookings/bookings.controller'
+import { BookingsService } from '../src/modules/bookings/bookings.service'
 import 'reflect-metadata'
 import { Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
@@ -9,9 +11,10 @@ import { PublicInvitationsService } from '../src/modules/bookings/public-invitat
 
 // Metadata-only export: no database connection, tokens, workers or business calls.
 @Module({
-  controllers: [PublicInvitationsController],
+  controllers: [PublicInvitationsController, BookingsController],
   providers: [
     { provide: PublicInvitationsService, useValue: {} },
+    { provide: BookingsService, useValue: {} },
   ],
 })
 class ContractModule {}
@@ -25,10 +28,13 @@ async function main() {
         .setTitle('TrekGo Public participant invitations')
         .setVersion('1.0.0')
         .setDescription(
-          'M6 backend contract. Six invitation operations; buyer linkage projection documented separately. Operational gates M7/M9 remain pending. Deployment not implied.',
+          'M6 backend contract. Six invitation operations; additive buyer linkage projection included. Operational gates M7/M9 remain pending. Deployment not implied.',
         )
         .addBearerAuth(undefined, 'bearer')
         .build(),
+    )
+    doc.paths = Object.fromEntries(
+      Object.entries(doc.paths).filter(([path]) => path.includes('invitations') || path === '/api/v1/bookings/{id}'),
     )
     const output = resolve('contracts/openapi/public-invitations.json')
     mkdirSync(resolve('contracts/openapi'), { recursive: true })
@@ -39,6 +45,6 @@ async function main() {
   }
 }
 main().catch(() => {
-  console.error('Public tickets contract export failed')
+  console.error('Public invitation contract export failed')
   process.exitCode = 1
 })

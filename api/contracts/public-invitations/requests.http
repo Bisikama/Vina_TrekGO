@@ -1,0 +1,54 @@
+# Replace variables with isolated integration fixtures. Never commit actual tokens.
+@baseUrl = http://localhost:3000/api/v1
+@buyerToken = REPLACE_BUYER_TOKEN
+@recipientToken = REPLACE_RECIPIENT_TOKEN
+@bookingId = REPLACE_BOOKING_UUID
+@participantId = REPLACE_PARTICIPANT_UUID
+@invitationId = REPLACE_INVITATION_UUID_FROM_CREATE
+@recipientEmail = recipient@example.test
+@createKey = public-invitation-test-001
+
+### Buyer sends (retry with same key/body; for a new invitation use a new key)
+POST {{baseUrl}}/bookings/{{bookingId}}/participants/{{participantId}}/invitations
+Authorization: Bearer {{buyerToken}}
+Idempotency-Key: {{createKey}}
+Content-Type: application/json
+
+{"recipientEmail":"{{recipientEmail}}"}
+
+### Buyer checks participant linkage
+GET {{baseUrl}}/bookings/{{bookingId}}
+Authorization: Bearer {{buyerToken}}
+
+### Recipient list
+GET {{baseUrl}}/me/booking-participant-invitations?page=1&pageSize=20&status=PENDING
+Authorization: Bearer {{recipientToken}}
+
+### Recipient preview
+GET {{baseUrl}}/booking-participant-invitations/{{invitationId}}
+Authorization: Bearer {{recipientToken}}
+
+### Accept only if the declared traveller is the authenticated recipient
+POST {{baseUrl}}/booking-participant-invitations/{{invitationId}}/accept
+Authorization: Bearer {{recipientToken}}
+Content-Type: application/json
+
+{"confirmParticipantIdentity":true}
+
+### Accepted ticket (use participantId from invitation)
+GET {{baseUrl}}/me/tickets/{{participantId}}
+Authorization: Bearer {{recipientToken}}
+
+### Alternative to accept: decline a fresh PENDING invitation
+POST {{baseUrl}}/booking-participant-invitations/{{invitationId}}/decline
+Authorization: Bearer {{recipientToken}}
+Content-Type: application/json
+
+{"reason":"IDENTITY_MISMATCH"}
+
+### Alternative to accept: buyer revokes a fresh PENDING invitation
+POST {{baseUrl}}/booking-participant-invitations/{{invitationId}}/revoke
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{}

@@ -47,7 +47,7 @@ export async function publicBookingLinkage(
     return {
       linkageStatus: p.userId ? 'CLAIMED' : pending ? 'INVITATION_PENDING' : 'UNLINKED',
       pendingInvitationId: pending?.id ?? null,
-      recipientDisplay: p.userId ? p.user?.fullName ?? null : pending?.recipientDisplay ?? null,
+      recipientDisplay: p.userId ? (p.user?.fullName ?? null) : (pending?.recipientDisplay ?? null),
       invitations,
       actions: {
         canInvite: eligible && !pending,

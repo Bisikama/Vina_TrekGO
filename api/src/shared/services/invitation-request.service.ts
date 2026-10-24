@@ -94,7 +94,7 @@ export class InvitationRequestService {
           if (existing.requestHash !== requestHash)
             throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
           if (!existing.completedAt || !existing.responseBody || existing.responseStatus !== 201) {
-            throw AppError.fromCode(B.PRIVATE_TRIP_VERSION_CONFLICT)
+            throw AppError.fromCode(this.domain === 'private' ? B.PRIVATE_TRIP_VERSION_CONFLICT : B.INVALID_STATE_TRANSITION)
           }
           return { replayed: true, status: existing.responseStatus, body: existing.responseBody as T }
         }

@@ -99,6 +99,10 @@ export interface TripData {
   suggestedEquipment?: { name: string; action: string }[];
   costItems?: TripCostBreakdownItem[];
   priceExplanation?: string | null;
+  rawStatus?: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
+  closedAt?: string | null;
 }
 
 export const mockTripsData: TripData[] = [

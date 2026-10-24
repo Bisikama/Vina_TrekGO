@@ -1,6 +1,7 @@
 import { PublicInvitationsController } from './public-invitations.controller'
 import { PublicInvitationsService, PublicInvitationRequestService } from './public-invitations.service'
 import { BookingsService } from './bookings.service'
+import { BookingsController } from './bookings.controller'
 import { BookingPolicyService } from './booking-policy.service'
 import { randomUUID } from 'crypto'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
@@ -121,9 +122,13 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       .send(body)
   beforeAll(async () => {
     const m = await Test.createTestingModule({
-      controllers: [TicketsController, PublicInvitationsController],
+      controllers: [TicketsController, PublicInvitationsController, BookingsController],
       providers: [
         PublicInvitationsService,
+        {
+          provide: BookingsService,
+          useValue: new BookingsService(db as unknown as PrismaService, {} as BookingPolicyService),
+        },
         PublicInvitationRequestService,
         ParticipantClaimService,
         TicketsService,
@@ -183,7 +188,7 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       .expect(200)
     expect(list.body.total).toBe(1)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    expect(Object.keys(doc.paths)).toHaveLength(9)
+    expect(Object.keys(doc.paths)).toHaveLength(13)
     const ajv = new Ajv({ strict: false })
     for (const [path, method, body] of [
       ['/bookings/{id}/participants/{pid}/self-claim', 'post', results[0].body],
@@ -410,6 +415,14 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
       pendingInvitationId: id,
       actions: { canSelfClaim: false, canInvite: false, canRevoke: true },
     })
+    const bookingResponse = await request(app.getHttpServer())
+      .get('/bookings/' + f.booking.id)
+      .auth(f.buyer.id, { type: 'bearer' })
+      .expect(200)
+    await request(app.getHttpServer())
+      .get('/bookings/' + f.booking.id)
+      .auth(f.other.id, { type: 'bearer' })
+      .expect(404)
     const before = await preview(id, f.other.id).expect(200)
     expect(before.body.actions.canAccept).toBe(true)
     for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', f.p.checkinCode, f.sibling.fullName, 'invoice', 'totalAmount'])
@@ -466,6 +479,7 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build()),
       ajv = new Ajv({ strict: false, nullable: true })
     const cases = [
+      ['/bookings/{id}', 'get', 200, bookingResponse.body],
       ['/bookings/{id}/participants/{pid}/invitations', 'post', 201, sent[0].body],
       ['/booking-participant-invitations/{id}', 'get', 200, before.body],
       ['/me/booking-participant-invitations', 'get', 200, listed.body],
@@ -484,6 +498,7 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
         'contracts/public-invitations/examples.local.json',
         JSON.stringify(
           {
+            buyerParticipants: bookingResponse.body.participants,
             create: sent[0].body,
             preview: before.body,
             list: listed.body,
@@ -509,7 +524,9 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
     await db.user.update({ where: { id: f.other.id }, data: { role: 'ADMIN' } })
     expect((await invite(f).expect(422)).body.error.code).toBe('INVITATION_RECIPIENT_UNAVAILABLE')
     await db.user.update({ where: { id: f.other.id }, data: { role: 'USER' } })
-    await db.user.create({ data: { email: f.other.email.toUpperCase(), fullName: 'ambiguous' } })
+    await db.user.create({
+      data: { email: f.other.email.toUpperCase(), fullName: 'ambiguous', authUserId: randomUUID() },
+    })
     await invite(f).expect(422)
     await db.user.update({ where: { id: f.buyer.id }, data: { role: 'ADMIN' } })
     await invite(f).expect(403)
@@ -629,6 +646,53 @@ describe('M5 real PostgreSQL and HTTP contract', () => {
         where: { aggregateId: f.booking.id, eventType: 'PUBLIC_PARTICIPANT_CLAIMED' },
       }),
     ).toBeLessThanOrEqual(1)
+  })
+  it('M6 create and self-claim reconcile stale pending recipients consistently with buyer actions', async () => {
+    const f = await fixture(),
+      id = (await invite(f).expect(201)).body.id
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'ADMIN' } })
+    expect((await buyerDetail(f)).participants.find((p) => p.id === f.p.id)).toMatchObject({
+      linkageStatus: 'UNLINKED',
+      actions: { canSelfClaim: true, canInvite: true },
+    })
+    await post(f).expect(200)
+    expect(await db.bookingParticipantInvitation.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      status: 'INVALIDATED',
+      reason: 'RECIPIENT_UNAVAILABLE',
+    })
+    const g = await fixture(),
+      old = (await invite(g).expect(201)).body.id
+    await db.bookingParticipant.create({
+      data: { bookingId: g.booking.id, userId: g.other.id, fullName: 'Already linked', checkinCode: randomUUID() },
+    })
+    const replacement = await user()
+    await invite(g, randomUUID(), { recipientEmail: replacement.email }).expect(201)
+    expect(await db.bookingParticipantInvitation.findUniqueOrThrow({ where: { id: old } })).toMatchObject({
+      status: 'INVALIDATED',
+      reason: 'TRIP_PARTICIPATION_EXISTS',
+    })
+    const h = await fixture(),
+      pending = (await invite(h).expect(201)).body.id
+    await db.trip.update({ where: { id: h.trip.id }, data: { status: 'CANCEL_PENDING' } })
+    expect((await preview(pending, h.other.id).expect(200)).body).toMatchObject({
+      status: 'INVALIDATED',
+      actions: { canAccept: false },
+    })
+    await action(pending, h.other.id).expect(409)
+    expect((await db.bookingParticipantInvitation.findUniqueOrThrow({ where: { id: pending } })).status).toBe(
+      'INVALIDATED',
+    )
+  })
+  it('M6 create replay after cancellation retains history without producing a new invitation', async () => {
+    const f = await fixture(),
+      key = randomUUID(),
+      first = await invite(f, key).expect(201)
+    await db.booking.update({ where: { id: f.booking.id }, data: { status: 'CANCELLED' } })
+    const replay = await invite(f, key).expect(201)
+    expect(replay.headers['idempotency-replayed']).toBe('true')
+    expect(replay.body).toEqual(first.body)
+    expect((await preview(first.body.id, f.other.id).expect(200)).body.status).toBe('INVALIDATED')
+    expect(await db.bookingParticipantInvitation.count({ where: { bookingParticipantId: f.p.id } })).toBe(1)
   })
   it('M6 accept rollback is atomic when invitation outbox fails after the claim write', async () => {
     const f = await fixture(),

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../shared/services/prisma.service'
+import { syncTripRegistrationState } from './booking-capacity'
 
 const CONSUMER = 'booking-payment-application-v1'
 
@@ -71,7 +72,7 @@ export class BookingPaymentConsumer {
         else if (
           booking.status !== 'PENDING_PAYMENT' ||
           booking.trip.tripType !== 'PUBLIC' ||
-          !['OPEN', 'FULL'].includes(booking.trip.status) ||
+          !['OPEN', 'FULL', 'CLOSED'].includes(booking.trip.status) ||
           booking.trip.startAt <= now ||
           invoice.status !== 'PENDING_PAYMENT' ||
           invoice.invoiceType !== 'BOOKING' ||
@@ -143,6 +144,7 @@ export class BookingPaymentConsumer {
             where: { paymentId: payment.id },
             data: { status: 'APPLIED', appliedAt: now, decidedAt: now },
           })
+          await syncTripRegistrationState(tx, booking.tripId, now)
           await tx.bookingOutboxEvent.create({
             data: {
               deduplicationKey: `booking:${booking.id}:confirmed:v1`,

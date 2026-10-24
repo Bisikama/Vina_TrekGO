@@ -364,7 +364,7 @@ export class PaymentsService {
           if (
             booking.status !== 'PENDING_PAYMENT' ||
             booking.trip.tripType !== 'PUBLIC' ||
-            !['OPEN', 'FULL'].includes(booking.trip.status) ||
+            !['OPEN', 'FULL', 'CLOSED'].includes(booking.trip.status) ||
             booking.trip.startAt <= now
           )
             fail(E.PAYMENT_INVALID_STATE)

@@ -1,4 +1,4 @@
-import { publicInvitationState, transitionPublicInvitation } from './public-invitation.policy'
+import { resolvedPublicInvitationState, transitionPublicInvitation } from './public-invitation.policy'
 import { Injectable } from '@nestjs/common'
 import { Booking, BookingParticipant, Prisma, Trip } from '@prisma/client'
 import { randomUUID } from 'crypto'
@@ -128,7 +128,7 @@ export class ParticipantClaimService {
         const now = await databaseTime(tx)
         await assertTicketActor(tx, actorId)
         if (participant.userId !== actorId && pending) {
-          const state = publicInvitationState(pending, participant, booking, trip, now)
+          const state = await resolvedPublicInvitationState(tx, pending, participant, booking, trip, now)
           if (state.status === 'PENDING') return fail(B.PENDING_INVITATION_EXISTS)
           await transitionPublicInvitation(tx, pending, booking, actorId, now, state.status, state.reason)
         }
