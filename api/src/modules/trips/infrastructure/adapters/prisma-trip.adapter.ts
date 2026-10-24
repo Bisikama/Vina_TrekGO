@@ -133,7 +133,7 @@ function tripData(data: Partial<TripInput>) {
   }
 }
 class Session implements TripSession {
-  constructor(private readonly db: Prisma.TransactionClient) {}
+  constructor(private readonly db: Prisma.TransactionClient) { }
   actor(id: string) {
     return this.db.user.findUnique({ where: { id }, select: { id: true, role: true, status: true } })
   }
@@ -349,27 +349,27 @@ class Session implements TripSession {
     )
   }
   async pendingCancellation(id: string) {
-    return !!(await this.db.tripCancellationRequest.findFirst({
-      where: { tripId: id, status: 'PENDING' },
-      select: { id: true },
-    }))
-  }
+  return !!(await this.db.tripCancellationRequest.findFirst({
+    where: { tripId: id, status: 'PENDING' },
+    select: { id: true },
+  }))
+}
   async cancel(id: string, actorId: string, previousStatus: TripStatus, reason: string, evidenceUrls: string[]) {
-    await this.db.tripCancellationRequest.create({
-      data: { tripId: id, requestedBy: actorId, previousTripStatus: previousStatus, reason, evidenceUrls },
-    })
-    return view(
-      await this.db.trip.update({
-        where: { id },
-        data: { status: 'CANCEL_PENDING', version: { increment: 1 } },
-        include,
-      }),
-    )
-  }
+  await this.db.tripCancellationRequest.create({
+    data: { tripId: id, requestedBy: actorId, previousTripStatus: previousStatus, reason, evidenceUrls },
+  })
+  return view(
+    await this.db.trip.update({
+      where: { id },
+      data: { status: 'CANCEL_PENDING', version: { increment: 1 } },
+      include,
+    }),
+  )
+}
 }
 @Injectable()
 export class PrismaTripAdapter implements TripStore {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
   async transaction<T>(actorId: string, tripId: string | undefined, work: (s: TripSession) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {

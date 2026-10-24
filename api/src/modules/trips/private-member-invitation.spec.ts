@@ -41,7 +41,7 @@ suite('M2 HTTP and PostgreSQL invitation flow', () => {
     const row = await db.user.create({
       data: { email: `${randomUUID()}@m2.test`, fullName: 'M2 fixture', authUserId: randomUUID() },
     })
-    tokens.set(row.id, { id: row.authUserId! })
+    tokens.set(row.id, { id: row.authUserId })
     return row
   }
   const fixture = async () => {

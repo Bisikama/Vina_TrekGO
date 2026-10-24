@@ -58,7 +58,7 @@ describe('Private invitation foundation contract', () => {
   ])('formats %s through GlobalErrorFilter', async (code, status) => {
     const res = await request(app.getHttpServer())
       .get(`/foundation/${code}`)
-      .expect(status as number)
+      .expect(status)
     expect(res.body.error.code).toBe(code)
     expect(res.body.error.retryable).toBe(code === B.INVITE_RATE_LIMITED)
     expect(res.body.meta.serverTime).toBeTruthy()

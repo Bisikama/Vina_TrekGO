@@ -10,7 +10,7 @@ import type { BookingSummary } from "@/features/bookings/types/booking.types";
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const { accessToken } = useAuth();
   const [myBooking, setMyBooking] = useState<BookingSummary | null>(null);
-  const [participants, setParticipants] = useState(2);
+  const [participants, setParticipants] = useState(1);
   const isFullyBooked = trip.slots.booked >= trip.slots.total;
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
         <>
           {/* Price Header */}
           <div className="border-b border-gray-100 p-5">
-            <div className="mb-2 flex items-end justify-between">
+            <div className="flex items-end justify-between">
               <div>
                 <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
                   Giá trọn gói / người
@@ -88,14 +88,15 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                 <div className="text-2xl font-extrabold text-[#1B5E41]">
                   {trip.price.toLocaleString("vi-VN")}đ
                 </div>
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-800">
+                  <span>✓</span>
+                  <span>Đã gồm xe đưa đón, ăn uống, vé & bảo hiểm</span>
+                </div>
               </div>
               <div className="text-right">
-                <div className="text-[11px] font-bold text-gray-400 line-through">
-                  {(trip.price * 1.15).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}đ
-                </div>
-                <div className="rounded border border-red-100 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
-                  -14% Early Bird
-                </div>
+                <span className="rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">
+                  Bảo hiểm VFRS
+                </span>
               </div>
             </div>
           </div>
@@ -123,7 +124,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                     ></path>
                   </svg>
                   <div className="text-sm font-bold text-gray-900">
-                    {trip.date.start} - {trip.date.end}/{trip.date.year}
+                    {trip.date.start} – {trip.date.end}/{trip.date.year}
                   </div>
                 </div>
                 <div className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">
@@ -131,6 +132,47 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                 </div>
               </div>
             </div>
+
+        {/* Quy mô & Tiến độ gom chỗ */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-gray-700">Quy mô đoàn</span>
+            <span className="font-extrabold text-gray-900">
+              {trip.slots.min || 1} – {trip.slots.total} người
+            </span>
+          </div>
+
+          <div>
+            <div className="flex justify-between text-[11px] mb-1">
+              <span className="text-gray-500 font-medium">
+                Đã đặt: <strong className="text-gray-900">{trip.slots.booked}/{trip.slots.total} chỗ</strong>
+              </span>
+              <span className="font-bold text-emerald-700">
+                Còn {Math.max(0, trip.slots.total - trip.slots.booked)} chỗ
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full bg-[#1B5E41] transition-all duration-300 rounded-full"
+                style={{
+                  width: `${Math.min(100, Math.round((trip.slots.booked / Math.max(1, trip.slots.total)) * 100))}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="text-[11px] leading-tight">
+            {trip.slots.booked >= (trip.slots.min || 1) ? (
+              <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                <span className="text-xs">✓</span> Đã đủ số lượng tối thiểu để khởi hành ({trip.slots.booked}/{trip.slots.min || 1})
+              </span>
+            ) : (
+              <span className="text-amber-800 font-semibold flex items-center gap-1">
+                <span>⚡</span> Đang gom đoàn (còn thiếu {(trip.slots.min || 1) - trip.slots.booked} người để đạt tối thiểu {trip.slots.min || 1})
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Participants Selector */}
         <div>

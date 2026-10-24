@@ -27,17 +27,38 @@ export type TechnicalReversalCommand = {
 }
 export type RefundCommand = BookingRefundCommand | TechnicalReversalCommand | DepositRefundCommand
 export type RecoveryLease = { token: string; version: number }
-export const refundSummary = (r: Refund) => ({
-  refundId: r.id,
-  paymentId: r.paymentId,
-  purpose: r.purpose,
-  reasonCode: r.reasonCode,
-  amount: r.amount.toFixed(),
-  currency: r.currency,
-  status: r.status,
-  refundedAt: r.refundedAt?.toISOString() ?? null,
-  reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(r.reconcileStatus),
-})
+export const refundSummary = (r: Refund) => {
+  const payload = r.providerPayload as Prisma.JsonObject | null
+  const simulation = payload?.sandboxSimulation as Record<string, unknown> | undefined
+  const hasDiscrepancy = Boolean(simulation && r.status === 'FAILED')
+  return {
+    refundId: r.id,
+    paymentId: r.paymentId,
+    purpose: r.purpose,
+    reasonCode: r.reasonCode,
+    amount: r.amount.toFixed(),
+    currency: r.currency,
+    status: r.status,
+    refundedAt: r.refundedAt?.toISOString() ?? null,
+    reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(r.reconcileStatus),
+    ...(simulation
+      ? {
+          simulationStatus: 'SIMULATED',
+          settlementMode: 'SANDBOX_SIMULATED',
+          warnings: [
+            'TEST_ONLY',
+            'NO_REAL_MONEY_RETURNED',
+            ...(hasDiscrepancy
+              ? ['DISCREPANCY_DETECTED: Real provider reported FAILED after sandbox simulation settled demo items.']
+              : []),
+          ],
+          simulationNotice:
+            'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
+          ...(hasDiscrepancy ? { discrepancy: 'SIMULATION_DIVERGED_FROM_PROVIDER_FAILURE' } : {}),
+        }
+      : {}),
+  }
+}
 
 @Injectable()
 export class RefundsService {
@@ -397,6 +418,37 @@ export class RefundsService {
             version: { increment: 1 },
           },
         })
+        const existingPayload = refund.providerPayload as Prisma.JsonObject | null
+        if (existingPayload?.sandboxSimulation) {
+          await tx.auditLog.create({
+            data: {
+              action:
+                event.status === 'SUCCEEDED'
+                  ? 'REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION'
+                  : 'REAL_PROVIDER_REFUND_FAILED_AFTER_SIMULATION',
+              entityType: 'Refund',
+              entityId: refund.id,
+              newValues: {
+                eventStatus: event.status,
+                refundTransactionRef: event.refundTransactionRef,
+                simulationProvenance: existingPayload.sandboxSimulation,
+                discrepancyNote:
+                  event.status === 'FAILED'
+                    ? 'Provider terminal failure received after sandbox simulation had settled demo items. Flagged for review.'
+                    : null,
+              },
+            },
+          })
+          if (event.status === 'FAILED') {
+            await tx.refund.update({
+              where: { id: refund.id },
+              data: {
+                reconcileStatus: 'NEEDS_REVIEW',
+                lastErrorCode: 'LATE_PROVIDER_REFUND_FAILED_AFTER_SIMULATION',
+              },
+            })
+          }
+        }
         if (event.status === 'SUCCEEDED' || event.status === 'FAILED') {
           await tx.paymentOutboxEvent.create({
             data: {

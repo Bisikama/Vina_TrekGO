@@ -2,6 +2,8 @@ import { ExploreHero } from "@/features/routes/components/ExploreHero";
 import { SystemTrailList } from "@/features/routes/components/SystemTrailList";
 import { PaginatedSystemTrails } from "@/features/routes/services/system-trails.api";
 
+export const dynamic = 'force-dynamic';
+
 // This is a Server Component, it runs on the server and fetches data directly
 async function fetchTrails() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

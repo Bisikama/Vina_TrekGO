@@ -1,7 +1,7 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": "..",
-  "testRegex": "payments\\.spec\\.ts$",
+  "testRegex": "(payments|vnpay-sandbox-refund-simulation)\\.spec\\.ts$",
   "transform": {
     "^.+\\.(t|j)s$": [
       "ts-jest",

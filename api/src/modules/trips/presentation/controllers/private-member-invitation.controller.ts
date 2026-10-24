@@ -45,8 +45,16 @@ export class PrivateMemberInvitationController {
     try {
       return await work()
     } catch (error) {
-      if (error instanceof AppError && error.code === B.INVITE_RATE_LIMITED)
-        res.setHeader('Retry-After', String(error.details?.retryAfterSeconds ?? 60))
+      if (error instanceof AppError && error.code === B.INVITE_RATE_LIMITED) {
+        const retryAfter =
+          typeof error.details === 'object' &&
+          error.details !== null &&
+          'retryAfterSeconds' in error.details &&
+          typeof (error.details).retryAfterSeconds === 'number'
+            ? String((error.details).retryAfterSeconds)
+            : '60'
+        res.setHeader('Retry-After', retryAfter)
+      }
       throw error
     }
   }
