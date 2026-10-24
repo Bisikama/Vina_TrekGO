@@ -13,9 +13,10 @@ export const CreateRentalProductSchema = z.object({
     amount: z.number().min(0).optional(),
     percentage: z.number().min(0).max(100).optional(),
   }),
-  imageMediaIds: z.array(z.string()).optional(),
+  imageMediaIds: z.array(z.string().uuid()).optional(),
   spec: z.any().optional(),
   recommendationTags: z.array(z.string()).optional(),
+  requiresDeepInspectionAfterReturn: z.boolean().optional(),
 });
 
 export type CreateRentalProductDto = z.infer<typeof CreateRentalProductSchema>;

@@ -129,6 +129,15 @@ describe('rental-ordering.rules', () => {
     expect(window.occupiedUntil.toISOString()).toBe('2026-10-13T12:00:00.000Z');
   });
 
+  it('giữ công suất đủ 12 giờ dù policy cũ cấu hình 0 hoặc 360 phút', () => {
+    for (const legacyMinutes of [0, 360]) {
+      const context = createContext();
+      context.activePolicy.prepBufferMinutes = legacyMinutes;
+      expect(calculateOccupiedWindow(context).occupiedFrom.toISOString())
+        .toBe('2026-10-09T12:00:00.000Z');
+    }
+  });
+
   it('tính chargedDays bằng ceil 24h baseline', () => {
     expect(
       calculateChargedDays(

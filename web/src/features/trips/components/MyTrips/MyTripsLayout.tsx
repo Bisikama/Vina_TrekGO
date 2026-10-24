@@ -4,12 +4,13 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { MyTripsHeader } from './MyTripsHeader';
+import { PrivateTripInvitationsInbox } from '../PrivateTripInvitationsInbox';
 import { usePrivateTrips } from '../../hooks/usePrivateTrips';
 import { bookingApiService, formatMoneyVND, BOOKING_STATUS_LABELS } from '@/features/bookings/services/booking.api';
 import type { BookingSummary, PageResponse } from '@/features/bookings/types/booking.types';
 import type { PrivateTrip } from '../../services/private-trips.api';
 
-type TabType = 'ALL' | 'BOOKINGS' | 'PRIVATE';
+type TabType = 'ALL' | 'BOOKINGS' | 'PRIVATE' | 'INVITATIONS';
 
 export const MyTripsLayout = () => {
   const { trips, busy, error, cancel } = usePrivateTrips();
@@ -123,7 +124,19 @@ export const MyTripsLayout = () => {
             </svg>
             <p className="text-sm font-medium text-gray-500">Đang tải danh sách chuyến đi của bạn...</p>
           </div>
-        ) : (
+        ) : activeTab === 'INVITATIONS' ? (
+            <div className="mt-8">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <span>✉️</span> Hộp thư lời mời tham gia chuyến đi riêng (Private Trip)
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Xem và phản hồi các lời mời do Host chuyến đi gửi trực tiếp tới email tài khoản của bạn.
+                </p>
+              </div>
+              <PrivateTripInvitationsInbox />
+            </div>
+          ) : (
           <div className="mt-8 space-y-12">
             {/* Sắp tới */}
             <section>

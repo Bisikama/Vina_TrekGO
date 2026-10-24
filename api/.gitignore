@@ -74,3 +74,6 @@ jest_output.txt
 /docs
 /handoffs/rental
 /handoffs
+
+/design
+/.invitation-test-pg

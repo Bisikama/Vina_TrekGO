@@ -18,7 +18,6 @@ const leaderItems: NavItem[] = [
     label: "Chuyến đi của tôi",
     href: "/leader/trips",
     icon: "♙",
-    badge: "5",
   },
   {
     label: "Tạo chuyến đi mới",
@@ -40,7 +39,7 @@ const trekkerItems: NavItem[] = [
   },
   {
     label: "Thuê thiết bị",
-    href: "/rentals?bookingId=booking_001",
+    href: "/rentals",
     icon: "♧",
   },
 ];
@@ -113,6 +112,16 @@ export function LeaderShell({
   children: ReactNode;
 }) {
   const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user);
+
+  const displayName = user?.fullName || user?.email?.split("@")[0] || "Leader";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(-2)
+    .map((word) => word[0]?.toUpperCase())
+    .join("") || "LD";
+  const userRole = user?.role === "LEADER" ? "Leader PRO" : user?.role || "Leader";
 
   const handleLogout = () => {
     logout();
@@ -158,26 +167,19 @@ export function LeaderShell({
           />
         </nav>
 
-        <div className="mt-auto space-y-3 border-t border-slate-200 p-3">
-          <a
-            href="tel:18009988"
-            className="flex h-11 items-center justify-center gap-2 rounded-lg bg-red-600 text-sm font-bold text-white hover:bg-red-700"
-          >
-            ✣ SOS Hotline 1800-9988
-          </a>
-
+        <div className="mt-auto border-t border-slate-200 p-3">
           <div className="flex items-center gap-3 rounded-xl bg-[#e5edfb] p-3">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-xs font-bold text-white">
-              NH
+              {initials}
             </span>
 
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">
-                Nguyễn Hùng
+                {displayName}
               </p>
 
               <p className="text-[11px] text-amber-800">
-                Leader PRO
+                {userRole}
               </p>
             </div>
 
@@ -196,8 +198,7 @@ export function LeaderShell({
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="rounded-full bg-emerald-50 px-3 py-2 text-emerald-900">
-              ◎ Hệ thống radar cảnh báo thời tiết núi hoạt
-              động tốt
+              ◎ Hệ thống radar cảnh báo thời tiết núi hoạt động tốt
             </span>
 
             <span className="rounded-lg bg-[#edf2fc] px-3 py-2">
@@ -210,31 +211,20 @@ export function LeaderShell({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <a
-              href="tel:18009988"
-              className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700"
-            >
-              SOS 1800-9988
-            </a>
-
             <span className="rounded-lg bg-amber-600 px-3 py-2 text-[11px] font-bold text-white">
-              LEADER PRO
+              {userRole}
             </span>
 
             <button
               type="button"
               aria-label="Thông báo"
-              className="relative grid h-9 w-9 place-items-center rounded-lg bg-[#edf2fc]"
+              className="relative grid h-9 w-9 place-items-center rounded-lg bg-[#edf2fc] text-slate-700 hover:bg-[#dce7f7] transition"
             >
               ♟
-
-              <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-red-600 text-[9px] text-white">
-                3
-              </span>
             </button>
 
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-white">
-              ♙
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-xs font-bold text-white">
+              {initials}
             </span>
 
             <button

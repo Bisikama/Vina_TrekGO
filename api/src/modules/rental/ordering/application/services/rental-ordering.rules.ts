@@ -7,6 +7,11 @@ import type {
 export type RentalEligibilityReason = 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' | 'RENTAL_CUTOFF_PASSED' | null;
 export interface RentalEligibilityDecision { eligible: boolean; reason: RentalEligibilityReason; }
 export interface OccupiedWindow { occupiedFrom: Date; occupiedUntil: Date; }
+/** SOT 1.5.2: giữ công suất từ 12 giờ trước rentalStartAt. */
+export const RENTAL_PREP_BUFFER_MINUTES = 12 * 60;
+export function rentalOccupiedFrom(rentalStartAt: Date): Date {
+  return new Date(rentalStartAt.getTime() - RENTAL_PREP_BUFFER_MINUTES * 60_000);
+}
 export function evaluateRentalEligibility(context: RentalEligibilityContext, now: Date): RentalEligibilityDecision {
   if (!context.rentalEligible || context.membershipStatus !== 'ACTIVE') return { eligible: false, reason: 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' };
   if (now >= context.rentalCutoffAt) return { eligible: false, reason: 'RENTAL_CUTOFF_PASSED' };
@@ -33,7 +38,7 @@ export function resolveRentalReturn(context: RentalEligibilityContext, requested
   } };
 }
 export function calculateOccupiedWindow(context: RentalEligibilityContext, returnAt = context.dropoff.scheduledAt, requiresDeepInspection = false): OccupiedWindow {
-  const occupiedFrom = new Date(context.pickup.scheduledAt.getTime() - context.activePolicy.prepBufferMinutes * 60000);
+  const occupiedFrom = rentalOccupiedFrom(context.pickup.scheduledAt);
   // Policy v1.4.2: post-return 24h OR deep-inspection 48h, never 24+48.
   // For older snapshots with missing deep config use the larger existing configured buffer (conservative).
   const normalBuffer = Math.max(context.activePolicy.returnBufferMinutes, context.activePolicy.cleaningBufferMinutes);

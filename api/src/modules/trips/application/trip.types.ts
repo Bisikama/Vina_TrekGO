@@ -8,9 +8,12 @@ export interface TripInput {
   description?: string | null
   startAt: string
   endAt: string
+  registrationOpenAt?: string | null
+  registrationDeadlineAt?: string | null
   pickupPointId: string
+  minPax?: number
   capacity: number
-  price: string
+  price?: string | null
   priceExplanation?: string | null
 }
 export interface Checkpoint {
@@ -67,13 +70,23 @@ export interface TripView {
   description: string | null
   startAt: string
   endAt: string
+  registrationOpenAt?: string | null
+  registrationDeadlineAt?: string | null
   pickupPointId: string | null
+  minPax?: number
   capacity: number
   price: string | null
   priceExplanation?: string | null
+  costPlanStatus?: string | null
+  includedServices?: string[]
+  excludedServices?: string[]
   status: TripStatus
   version: number
   publishedAt: string | null
+  closedAt?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
+  cancelledAt?: string | null
   checkpoints: PlannedCheckpoint[]
   trails: PlannedTrail[]
 }
@@ -122,6 +135,9 @@ export interface TripSession extends CatalogReader {
   replaceCheckpoints(id: string, checkpoints: Checkpoint[]): Promise<TripView>
   replaceTrails(id: string, trails: Trail[]): Promise<TripView>
   publish(id: string): Promise<TripView>
+  closeRegistration?(id: string): Promise<TripView>
+  start?(id: string): Promise<TripView>
+  complete?(id: string): Promise<TripView>
   cancel(
     id: string,
     actorId: string,

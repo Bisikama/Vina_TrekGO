@@ -4,6 +4,8 @@
  */
 import { createHash } from 'node:crypto';
 import { Prisma, RentalDocumentType } from '@prisma/client';
+import { AppError } from '../../../../shared/errors';
+import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../../shared/errors/codes/rental-return.error-codes';
 
 type Tx = Prisma.TransactionClient;
 
@@ -21,7 +23,8 @@ export function snapshotHash(value: unknown): string { return createHash('sha256
 async function insertEventDocument(tx: Tx, input: {
   orderId: string; documentType: RentalDocumentType; sourceRef: string; issuedAt: Date;
   snapshot: Record<string, unknown>; rootDocumentId?: string; previousDocumentId?: string;
-  appendixNo?: number; policyVersion?: string;
+  appendixNo?: number; policyVersion?: string; templateVersion?: string;
+  sourceVersion?: number;
 }) {
   const existing = await tx.rentalDocument.findUnique({
     where: { documentType_sourceRef: { documentType: input.documentType, sourceRef: input.sourceRef } },
@@ -35,7 +38,10 @@ async function insertEventDocument(tx: Tx, input: {
     appendixNo: input.appendixNo ?? null,
     snapshotJson: JSON.parse(canonical(input.snapshot)) as Prisma.InputJsonValue,
     snapshotHash: snapshotHash(input.snapshot),
-    policyVersion: input.policyVersion ?? '1.5.2', issuedAt: input.issuedAt,
+    sourceVersion: input.sourceVersion ?? 1,
+    policyVersion: input.policyVersion ?? '1.5.2',
+    templateVersion: input.templateVersion ?? '1.3.2',
+    issuedAt: input.issuedAt,
   }});
   await tx.rentalOutboxEvent.upsert({
     where: { deduplicationKey: `rental-document-render:${document.id}` }, update: {},
@@ -60,6 +66,7 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
   if (packageItems.some(x=>!conditionMap.has(x.assignmentId))) throw new Error('HANDOVER_DOCUMENT_CONDITION_MISSING');
   const policyVersion = (order.policySnapshot as any)?.policyVersion ?? '1.5.2';
   return insertEventDocument(tx,{orderId,documentType:RentalDocumentType.HANDOVER,sourceRef:handoverId,issuedAt,
+    sourceVersion: order.version,
     snapshot:{kind:'HANDOVER',orderId,tripId:order.tripId,bookingProvenanceId:order.bookingId,
       handoverId,packageId:handover.packageId,recipient:handover.recipientSnapshot,
       handedOverAt:handover.handedOverAt.toISOString(),staffId:handover.staffId,
@@ -89,7 +96,7 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
   const previous = await tx.rentalDocument.findFirst({ where: { orderId: extension.orderId, documentType: RentalDocumentType.EXTENSION_APPENDIX }, orderBy: { issuedAt: 'desc' } });
   
   const order = extension.order ?? await tx.rentalOrder.findUnique({ where: { id: extension.orderId } });
-  const policyVersion = (order?.policySnapshot as any)?.policyVersion ?? '1.5.2';
+  const policyVersion = (order?.policySnapshot)?.policyVersion ?? '1.5.2';
 
   const oldEffectiveDue = extension.oldEffectiveOperationalDueAt
     ? (extension.oldEffectiveOperationalDueAt instanceof Date ? extension.oldEffectiveOperationalDueAt.toISOString() : String(extension.oldEffectiveOperationalDueAt))
@@ -109,7 +116,7 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
         ? (order.occupiedEndAt instanceof Date ? order.occupiedEndAt.toISOString() : String(order.occupiedEndAt))
         : (extension.requestedOccupiedUntil instanceof Date ? extension.requestedOccupiedUntil.toISOString() : String(extension.requestedOccupiedUntil)));
 
-  const quoteId = extension.quoteId ?? (extension as any).quoteId ?? extensionId;
+  const quoteId = extension.quoteId ?? (extension).quoteId ?? extensionId;
 
   const snap = {
     kind: 'EXTENSION_APPENDIX',
@@ -137,13 +144,13 @@ export async function issueExtensionAppendixTx(tx: Tx, extensionId: string, issu
     sourcePaymentId: extension.paymentRef ?? null,
     appliedAt: extension.appliedAt instanceof Date ? extension.appliedAt.toISOString() : String(extension.appliedAt),
     policyVersion,
-    templateVersion: '1.0.0',
     originalHandoverUnchanged: true,
   };
   return insertEventDocument(tx, {
     orderId: extension.orderId,
     documentType: RentalDocumentType.EXTENSION_APPENDIX,
     sourceRef: extensionId,
+    sourceVersion: extension.version,
     issuedAt,
     rootDocumentId: root.id,
     previousDocumentId: previous?.id ?? root.id,
@@ -160,27 +167,159 @@ export async function issueScheduleNoticeTx(tx:Tx,input:{orderId:string;eventId:
   if(!order) throw new Error('RENTAL_NOT_FOUND');
   const sourceRef=`${input.eventId}:${order.id}`;
   return insertEventDocument(tx,{orderId:order.id,documentType:RentalDocumentType.SCHEDULE_NOTICE,sourceRef,issuedAt:input.at,
+    sourceVersion: order.version,
     rootDocumentId:root.id,snapshot:{kind:'SCHEDULE_NOTICE',orderId:order.id,tripId:order.tripId,eventId:input.eventId,
       contractualRentalEndAt:order.rentalEndAt.toISOString(),previousOperationalReturnDueAt:input.oldOperationalDueAt?.toISOString()??null,
       operationalReturnDueAt:input.newOperationalDueAt.toISOString(),feeChanged:false,originalDocumentUnchanged:true}});
 }
 
-export async function issueReturnReceiptTx(tx:Tx,sessionId:string,at:Date){
-  const session=await tx.rentalReturnSession.findUnique({where:{id:sessionId}});
-  if(!session || session.status!=='FINALIZED' || !session.finalizedAt) throw new Error('RETURN_SESSION_NOT_FINALIZED');
-  const root=await tx.rentalDocument.findFirst({where:{orderId:session.orderId,documentType:RentalDocumentType.HANDOVER}});
-  if(!root) throw new Error('HANDOVER_DOCUMENT_REQUIRED');
-  return insertEventDocument(tx,{orderId:session.orderId,documentType:RentalDocumentType.RETURN_RECEIPT,sourceRef:sessionId,issuedAt:at,
-    rootDocumentId:root.id,snapshot:{kind:'RETURN_RECEIPT',orderId:session.orderId,sessionId,staffId:session.staffId,
-      units:session.receivedUnits,remarks:session.remarks,finalizedAt:session.finalizedAt.toISOString(),
-      inspectionAndDepositSettlement:'SEPARATE_PER_UNIT_WORKFLOW',originalDocumentUnchanged:true}});
+export async function issueReturnReceiptTx(
+  tx: Tx,
+  sessionId: string,
+  at: Date,
+  options?: { failureEvidenceId?: string | null; evidenceIds?: string[] | null; userRemarks?: string | null },
+) {
+  const session = await tx.rentalReturnSession.findUnique({ where: { id: sessionId } });
+  if (!session || session.status !== 'FINALIZED' || !session.finalizedAt) {
+    throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'RETURN_SESSION_NOT_FINALIZED', sessionId } });
+  }
+  const root = await tx.rentalDocument.findFirst({
+    where: { orderId: session.orderId, documentType: RentalDocumentType.HANDOVER },
+  });
+  if (!root) {
+    throw AppError.fromCode(RR.HANDOVER_DOCUMENT_REQUIRED, { details: { orderId: session.orderId, sessionId } });
+  }
+
+  const existing = await tx.rentalDocument.findUnique({
+    where: { documentType_sourceRef: { documentType: RentalDocumentType.RETURN_RECEIPT, sourceRef: sessionId } },
+  });
+  if (existing) return existing;
+
+  const order = tx.rentalOrder?.findUnique
+    ? await tx.rentalOrder.findUnique({
+        where: { id: session.orderId },
+        include: {
+          rentalOrderLinesViaOrderId: {
+            include: { rentalUnitAssignmentsViaOrderLineId: { include: { equipmentUnit: true } } },
+          },
+          deliveryTasksViaOrderId: true,
+        },
+      })
+    : null;
+
+  const allAssignments = (order?.rentalOrderLinesViaOrderId ?? [])
+    .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
+    .filter((a) => !['REPLACED', 'UNASSIGNED'].includes(a.status as any));
+
+  const notReturnedUnitIdsAtSessionEnd = allAssignments
+    .filter((a) => a.status !== 'RETURNED' && a.status !== 'CLOSED')
+    .map((a) => a.equipmentUnitId);
+
+  const rawReceived = Array.isArray(session.receivedUnits)
+    ? (session.receivedUnits as any[]).filter((u: any) => !u.duplicate)
+    : [];
+
+  const failureEvidenceId = options?.failureEvidenceId ?? (session as any)?.failureEvidenceId ?? null;
+  const evidenceIds = options?.evidenceIds ?? (failureEvidenceId ? [failureEvidenceId] : []);
+
+  if (rawReceived.length === 0 && !failureEvidenceId && evidenceIds.length === 0) {
+    throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+      details: { reason: 'ZERO_SCAN_REQUIRES_FAILURE_EVIDENCE', sessionId },
+    });
+  }
+
+  const returnTask = order?.deliveryTasksViaOrderId.find(
+    (t) => (t as any).taskType === 'RETURN',
+  );
+  const returnLocationRef =
+    (returnTask as any)?.hubId ??
+    (returnTask as any)?.toLocationId ??
+    (returnTask as any)?.address ??
+    (session as any)?.locationRef ??
+    null;
+
+  const orderPolicySnapshot = (order?.policySnapshot as Record<string, any>) ?? null;
+  const policyVersion =
+    orderPolicySnapshot?.policyVersion ??
+    orderPolicySnapshot?.version ??
+    '1.5.2';
+
+  const enrichedUnits = rawReceived.map((u) => {
+    const unitId = typeof u === 'string' ? u : u.unitId;
+    const assignment = allAssignments.find((a) => a.equipmentUnitId === unitId);
+    const assetCode = (typeof u === 'object' && u.assetCode) ? u.assetCode : (assignment?.equipmentUnit?.assetCode ?? unitId);
+    const receivedAt = (typeof u === 'object' && u.receivedAt)
+      ? u.receivedAt
+      : (assignment?.returnedAt ? assignment.returnedAt.toISOString() : null);
+
+    const condition = (typeof u === 'object' && (u.preliminaryCondition ?? u.condition))
+      ? (u.preliminaryCondition ?? u.condition)
+      : null;
+    const outcome = (typeof u === 'object' && (u.preliminaryOutcome ?? u.outcome))
+      ? (u.preliminaryOutcome ?? u.outcome)
+      : null;
+    const accessories = (typeof u === 'object' && Array.isArray(u.accessories))
+      ? u.accessories
+      : (typeof u === 'object' && Array.isArray(u.accessoryIssues))
+        ? u.accessoryIssues
+        : [];
+    const evidenceIds = (typeof u === 'object' && Array.isArray(u.evidenceIds))
+      ? u.evidenceIds
+      : [];
+    const notes = (typeof u === 'object' && u.notes) ? u.notes : null;
+
+    return {
+      unitId,
+      assetCode,
+      receivedAt,
+      condition,
+      outcome,
+      accessories,
+      evidenceIds,
+      notes,
+    };
+  });
+
+  const docNo = `TG-RETURN_RECEIPT-${createHash('sha256').update(sessionId).digest('hex').slice(0, 32)}`;
+
+  return insertEventDocument(tx, {
+    orderId: session.orderId,
+    documentType: RentalDocumentType.RETURN_RECEIPT,
+    sourceRef: sessionId,
+    sourceVersion: session.version,
+    issuedAt: at,
+    rootDocumentId: root.id,
+    policyVersion,
+    templateVersion: '1.3.2',
+    snapshot: {
+      kind: 'RETURN_RECEIPT',
+      documentNo: docNo,
+      rootDocumentId: root.id,
+      orderId: session.orderId,
+      returnSessionId: session.id,
+      staffId: session.staffId,
+      finalizedAt: session.finalizedAt.toISOString(),
+      returnLocationRef,
+      receivedUnits: enrichedUnits,
+      notReturnedUnitIdsAtSessionEnd,
+      remarks: session.remarks ?? null,
+      userRemarks: options?.userRemarks ?? null,
+      failureEvidenceId,
+      evidenceIds,
+      policyVersion,
+      templateVersion: '1.3.2',
+      outcomeNote: 'Outcome ISSUE remains preliminary; settlement is independent.',
+      originalDocumentUnchanged: true,
+    },
+  });
 }
 
-export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,correctedDisplayDetails:string,at:Date,idempotencyKey:string){
+export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,reason:string,
+  corrections:Array<{field:string;oldValue:string|null;newValue:string|null}>,at:Date,idempotencyKey:string){
   const source=await tx.rentalDocument.findUnique({where:{id:sourceId}});
   if(!source) throw new Error('RENTAL_DOCUMENT_NOT_FOUND');
-  const correctionSourceRef=`${sourceId}:${createHash('sha256').update(idempotencyKey).digest('hex').slice(0,32)}`;
-  const proposedHash = snapshotHash({sourceId,actorId,reason,correctedDisplayDetails});
+  const correctionSourceRef=`${sourceId}:${createHash('sha256').update(`${actorId}:${idempotencyKey}`).digest('hex').slice(0,32)}`;
+  const proposedHash = snapshotHash({sourceId,actorId,reason,corrections});
   const existing = await tx.rentalDocument.findUnique({where:{documentType_sourceRef:{
     documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef}}});
   if (existing) {
@@ -189,7 +328,8 @@ export async function issueCorrectionTx(tx:Tx,sourceId:string,actorId:string,rea
     return existing;
   }
   return insertEventDocument(tx,{orderId:source.orderId,documentType:RentalDocumentType.CORRECTION_NOTICE,sourceRef:correctionSourceRef,
+    sourceVersion: source.version,
     rootDocumentId:source.rootDocumentId??source.id,previousDocumentId:source.id,issuedAt:at,
     snapshot:{kind:'CORRECTION_NOTICE',sourceDocumentId:sourceId,sourceSnapshotHash:source.snapshotHash,
-      actorId,reason,correctedDisplayDetails,requestHash:proposedHash,sourceRemainsImmutable:true}});
+      actorId,reason,corrections,requestHash:proposedHash,sourceRemainsImmutable:true}});
 }

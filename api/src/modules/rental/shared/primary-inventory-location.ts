@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config';
 /** RB-POL-33 / MVP_SINGLE_LOCATION_01.
  * Server-owned primary location. Never infer a primary from a list of ACTIVE inventory locations.
  * Strictly uses RENTAL_PRIMARY_INVENTORY_LOCATION_ID.
@@ -10,7 +11,7 @@ import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/renta
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function primaryRentalInventoryLocationId(): string {
-  const primary = process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID?.trim();
+  const primary = (process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID !== undefined ? process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID : envconfig.RENTAL_PRIMARY_INVENTORY_LOCATION_ID)?.trim();
   if (!primary || !UUID_RE.test(primary)) {
     throw AppError.fromCode(RT.INVENTORY_LOCATION_NOT_CONFIGURED, {
       details: { reason: 'PRIMARY_RENTAL_INVENTORY_LOCATION_MISSING' },

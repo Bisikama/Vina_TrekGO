@@ -1,24 +1,29 @@
+import envconfig from 'src/shared/config';
 import { assertPrimaryRentalLocation, primaryRentalInventoryLocationId, resolveActivePrimaryRentalLocation } from './primary-inventory-location';
 
 describe('primaryRentalInventoryLocationId (RB-POL-33)', () => {
   const originalPrimary = process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
   const originalDefault = process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID;
+  const originalConfigPrimary = envconfig.RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
   const idA = '11111111-1111-4111-8111-111111111111';
   const idB = '22222222-2222-4222-8222-222222222222';
 
   afterEach(() => {
     process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = originalPrimary;
     process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID = originalDefault;
+    (envconfig as any).RENTAL_PRIMARY_INVENTORY_LOCATION_ID = originalConfigPrimary;
   });
 
   it('fails closed if primary config is absent', () => {
     delete process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
+    delete (envconfig as any).RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
     delete process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID;
     expect(() => primaryRentalInventoryLocationId()).toThrow();
   });
 
   it('fails closed if only legacy DEFAULT is configured and canonical PRIMARY is missing', () => {
     delete process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
+    delete (envconfig as any).RENTAL_PRIMARY_INVENTORY_LOCATION_ID;
     process.env.RENTAL_DEFAULT_INVENTORY_LOCATION_ID = idA;
     expect(() => primaryRentalInventoryLocationId()).toThrow();
   });

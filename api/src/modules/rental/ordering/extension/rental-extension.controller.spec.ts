@@ -1,30 +1,30 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ExecutionContext, CallHandler } from '@nestjs/common';
-import request from 'supertest';
+import { Test, TestingModule } from '@nestjs/testing'
+import { INestApplication, ExecutionContext, CallHandler } from '@nestjs/common'
+import request from 'supertest'
 
 jest.mock('@nestjs/schedule', () => ({
   Cron: jest.fn(() => () => {}),
   CronExpression: {},
   Interval: jest.fn(() => () => {}),
-}));
+}))
 
-import { RentalExtensionController } from './rental-extension.controller';
-import { RentalExtensionService } from './rental-extension.service';
-import { RentalExtensionPaymentsController } from '../../payments/rental-extension-payments.controller';
-import { PaymentsPort } from '../../../payments/payments.port';
-import { GlobalErrorFilter } from '../../../../shared/errors/global-error.filter';
-import { REQUEST_USER_KEY } from '../../../../shared/constants/auth.constant';
-import { UserRole } from '../../../../shared/constants';
+import { RentalExtensionController } from './rental-extension.controller'
+import { RentalExtensionService } from './rental-extension.service'
+import { RentalExtensionPaymentsController } from '../../payments/rental-extension-payments.controller'
+import { PaymentsPort } from '../../../payments/payments.port'
+import { GlobalErrorFilter } from '../../../../shared/errors/global-error.filter'
+import { REQUEST_USER_KEY } from '../../../../shared/constants/auth.constant'
+import { UserRole } from '../../../../shared/constants'
 
 describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..804)', () => {
-  let app: INestApplication;
-  let mockExtensionService: jest.Mocked<Partial<RentalExtensionService>>;
-  let mockPaymentsPort: jest.Mocked<Partial<PaymentsPort>>;
+  let app: INestApplication
+  let mockExtensionService: jest.Mocked<Partial<RentalExtensionService>>
+  let mockPaymentsPort: jest.Mocked<Partial<PaymentsPort>>
 
-  const dummyOrderId = '11111111-1111-4111-8111-111111111111';
-  const dummyQuoteId = '22222222-2222-4222-8222-222222222222';
-  const dummyExtensionId = '33333333-3333-4333-8333-333333333333';
-  const testUserId = 'user-test-uuid-001';
+  const dummyOrderId = '11111111-1111-4111-8111-111111111111'
+  const dummyQuoteId = '22222222-2222-4222-8222-222222222222'
+  const dummyExtensionId = '33333333-3333-4333-8333-333333333333'
+  const testUserId = 'user-test-uuid-001'
 
   beforeEach(async () => {
     mockExtensionService = {
@@ -57,7 +57,7 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           },
         ],
       }),
-    };
+    }
 
     mockPaymentsPort = {
       createRentalExtensionCheckout: jest.fn().mockResolvedValue({
@@ -69,7 +69,23 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           paymentStatus: 'PENDING',
         },
       }),
-    };
+      getRentalExtensionPayment: jest.fn().mockResolvedValue({
+        extensionId: dummyExtensionId,
+        rentalOrderId: dummyOrderId,
+        extensionStatus: 'APPLIED',
+        invoiceStatus: 'PAID',
+        paymentRef: '44444444-4444-4444-8444-444444444444',
+        paymentStatus: 'SUCCEEDED',
+        applicationStatus: 'APPLIED',
+        applicationReasonCode: null,
+        reconciliationStatus: 'RESOLVED',
+        reconciliationRequired: false,
+        amount: '150000',
+        currency: 'VND',
+        expiresAt: null,
+        paidAt: '2026-10-20T08:10:00.000Z',
+      }),
+    }
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [RentalExtensionController, RentalExtensionPaymentsController],
@@ -77,11 +93,11 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
         { provide: RentalExtensionService, useValue: mockExtensionService },
         { provide: PaymentsPort, useValue: mockPaymentsPort },
       ],
-    }).compile();
+    }).compile()
 
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
-    app.useGlobalFilters(new GlobalErrorFilter());
+    app = moduleFixture.createNestApplication()
+    app.setGlobalPrefix('api/v1')
+    app.useGlobalFilters(new GlobalErrorFilter())
 
     // Inject mock user middleware for ActiveUser decorator
     app.use((req: any, _res: any, next: () => void) => {
@@ -89,16 +105,16 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
         id: testUserId,
         role: UserRole.USER,
         email: 'test@example.com',
-      };
-      next();
-    });
+      }
+      next()
+    })
 
-    await app.init();
-  });
+    await app.init()
+  })
 
   afterEach(async () => {
-    if (app) await app.close();
-  });
+    if (app) await app.close()
+  })
 
   describe('RB-API-801: POST /api/v1/rental-orders/:id/extension-quotes', () => {
     it('generates extension quote with termsVersion and termsHash', async () => {
@@ -108,18 +124,18 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           requestedReturnAt: '2026-10-21T10:00:00.000Z',
           returnOptionId: 'RETURN_AT_BASE',
         })
-        .expect(200); // RB-API-801 specifies 200 OK
+        .expect(200) // RB-API-801 specifies 200 OK
 
       expect(mockExtensionService.quote).toHaveBeenCalledWith(
         testUserId,
         dummyOrderId,
         expect.any(Date),
         'RETURN_AT_BASE',
-      );
-      expect(res.body.extensionQuoteId).toBe(dummyQuoteId);
-      expect(res.body.termsVersion).toBe('v1.5.2');
-      expect(res.body.termsHash).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
-    });
+      )
+      expect(res.body.extensionQuoteId).toBe(dummyQuoteId)
+      expect(res.body.termsVersion).toBe('v1.5.2')
+      expect(res.body.termsHash).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    })
 
     it('rejects invalid uuid in route param with 400', async () => {
       await request(app.getHttpServer())
@@ -128,9 +144,9 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           requestedReturnAt: '2026-10-21T10:00:00.000Z',
           returnOptionId: 'RETURN_AT_BASE',
         })
-        .expect(400);
-    });
-  });
+        .expect(400)
+    })
+  })
 
   describe('RB-API-802: POST /api/v1/rental-orders/:id/extensions', () => {
     it('confirms extension with Idempotency-Key and accepted terms contract', async () => {
@@ -143,7 +159,7 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           acceptedTermsVersion: 'v1.5.2',
           termsHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
         })
-        .expect(201);
+        .expect(201)
 
       expect(mockExtensionService.confirm).toHaveBeenCalledWith(
         testUserId,
@@ -153,10 +169,10 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
         'idemp-ext-test-123',
         'v1.5.2',
         'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      );
-      expect(res.body.extensionRequestId).toBe(dummyExtensionId);
-      expect(res.body.status).toBe('PENDING_PAYMENT');
-    });
+      )
+      expect(res.body.extensionRequestId).toBe(dummyExtensionId)
+      expect(res.body.status).toBe('PENDING_PAYMENT')
+    })
 
     it('rejects missing Idempotency-Key header with 400', async () => {
       await request(app.getHttpServer())
@@ -166,9 +182,9 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           expectedVersion: 1,
           acceptedTermsVersion: 'v1.5.2',
         })
-        .expect(400);
-    });
-  });
+        .expect(400)
+    })
+  })
 
   describe('RB-API-803: POST /api/v1/rental-extensions/:id/payments', () => {
     it('creates extension checkout session via PaymentsPort', async () => {
@@ -179,7 +195,7 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           paymentMethod: 'QR',
           gateway: 'momo',
         })
-        .expect(201);
+        .expect(201)
 
       expect(mockPaymentsPort.createRentalExtensionCheckout).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -189,21 +205,40 @@ describe('RentalExtensionController & Payments (HTTP Route Contract RB-API-801..
           paymentMethod: 'QR',
           gateway: 'momo',
         }),
-      );
-      expect(res.body.checkoutSessionId).toBe('sess-ext-123');
-      expect(res.body.checkoutUrl).toBe('https://pay.example.com/checkout/sess-ext-123');
-    });
-  });
+      )
+      expect(res.body.checkoutSessionId).toBe('sess-ext-123')
+      expect(res.body.checkoutUrl).toBe('https://pay.example.com/checkout/sess-ext-123')
+    })
+
+    it('returns authoritative extension payment state', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/rental-extensions/${dummyExtensionId}/payment`)
+        .expect(200)
+
+      expect(mockPaymentsPort.getRentalExtensionPayment).toHaveBeenCalledWith({
+        extensionId: dummyExtensionId,
+        actorUserId: testUserId,
+      })
+      expect(res.body).toMatchObject({
+        extensionStatus: 'APPLIED',
+        paymentStatus: 'SUCCEEDED',
+        applicationStatus: 'APPLIED',
+        invoiceStatus: 'PAID',
+      })
+    })
+
+    it('rejects a non-UUID extension payment status parameter', async () => {
+      await request(app.getHttpServer()).get('/api/v1/rental-extensions/not-a-uuid/payment').expect(400)
+    })
+  })
 
   describe('RB-API-804: GET /api/v1/rental-orders/:id/extensions', () => {
     it('retrieves extension history for the order', async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/api/v1/rental-orders/${dummyOrderId}/extensions`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get(`/api/v1/rental-orders/${dummyOrderId}/extensions`).expect(200)
 
-      expect(mockExtensionService.list).toHaveBeenCalledWith(testUserId, dummyOrderId);
-      expect(Array.isArray(res.body.items)).toBe(true);
-      expect(res.body.items[0].id).toBe(dummyExtensionId);
-    });
-  });
-});
+      expect(mockExtensionService.list).toHaveBeenCalledWith(testUserId, dummyOrderId)
+      expect(Array.isArray(res.body.items)).toBe(true)
+      expect(res.body.items[0].id).toBe(dummyExtensionId)
+    })
+  })
+})

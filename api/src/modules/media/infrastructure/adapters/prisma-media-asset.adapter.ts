@@ -368,6 +368,13 @@ export class PrismaMediaAssetAdapter implements MediaAssetPort {
     return this.mapToView(asset as RawMediaAsset);
   }
 
+  async clearRetentionUntil(input: { id: string }): Promise<void> {
+    await this.prisma.mediaAsset.updateMany({
+      where: { id: input.id },
+      data: { retentionUntil: null },
+    });
+  }
+
   async revertProcessingToPending(input: import('../../application/ports/media-asset.port').RevertProcessingToPendingInput): Promise<MediaAssetView> {
     const updated = await this.prisma.mediaAsset.updateMany({
       where: {

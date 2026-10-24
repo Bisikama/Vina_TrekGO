@@ -77,7 +77,7 @@ describe('CF01 Swagger and HTTP responses without external services', () => {
           )
       }
     }
-    expect(count).toBe(17)
+    expect(count).toBe(20)
     const prefix = '/api/v1/'
     for (const path of [
       'leader/public-trips',

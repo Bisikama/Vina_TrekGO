@@ -17,6 +17,9 @@ import { issueScheduleNoticeTx } from '../../../documents/application/rental-doc
 import { getVerifiedCapacitySnapshot } from '../../../ordering/infrastructure/adapters/rental-capacity-snapshot';
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy';
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location';
+import { cancelPendingRentalChargesWithTx, reserveLifecycleRentalRefundWithTx } from '../../../payments/rental-cancellation-refund';
+import { releaseExtensionWithTx } from '../../../ordering/extension/rental-extension.service';
+import { ensureReturnTaskWithTx } from '../../application/services/rental-return-task';
 import type {
   TripLifecyclePort,
   TripRescheduledCommand,
@@ -577,12 +580,17 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
         },
       });
 
+      // Khóa đơn trước khi đọc trạng thái tài chính, cùng thứ tự với payment consumer.
+      await tx.$queryRaw`SELECT id FROM rental_orders WHERE trip_id = ${command.payload.tripId}::uuid
+        AND status::text IN ('PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER', 'ACTIVE')
+        ORDER BY id FOR UPDATE`;
       const orders = await tx.rentalOrder.findMany({
         where: {
           tripId: command.payload.tripId,
           status: { in: OPEN_STATUSES },
         },
         include: {
+          rentalPolicy: { select: { freeCancellationHours: true } },
           rentalOrderLinesViaOrderId: {
             include: {
               rentalUnitAssignmentsViaOrderLineId: {
@@ -622,6 +630,27 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
         const isBeforeHandover = BEFORE_HANDOVER_STATUSES.includes(order.status);
 
         if (isBeforeHandover) {
+          await cancelPendingRentalChargesWithTx(tx, order.id);
+          const pendingExtensions = await tx.rentalExtensionRequest.findMany({
+            where: { orderId: order.id, status: 'PENDING_PAYMENT' }, select: { id: true, orderId: true },
+          });
+          for (const pending of pendingExtensions) {
+            await releaseExtensionWithTx(tx, pending, 'CANCELLED', effectiveAt);
+          }
+          const financial = await reserveLifecycleRentalRefundWithTx(tx, {
+            order, source: 'TRIP', eventVersion, now: effectiveAt, reason: command.payload.reason,
+          });
+          if (financial.reviewReason) {
+            await tx.rentalOutboxEvent.upsert({
+              where: { deduplicationKey: `trip-cancel-financial-review:${order.id}:${eventVersion}` }, update: {},
+              create: {
+                deduplicationKey: `trip-cancel-financial-review:${order.id}:${eventVersion}`,
+                eventType: 'RENTAL_ACTION_REQUIRED', aggregateType: 'RentalOrder', aggregateId: order.id,
+                payload: jsonValue({ orderId: order.id, reason: financial.reviewReason, paymentReviewRequired: true }),
+              },
+            });
+            actionRequiredOrderIds.push(order.id);
+          }
           // Check physical custody
           const pkg =
             order.inventoryTaskViaOrderId?.package ??
@@ -649,6 +678,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
               data: {
                 status: RentalOrderStatus.CANCELLED,
                 exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+                financialStatus: financial.financialStatus ?? order.financialStatus,
                 cancelledAt: effectiveAt,
                 contextVersionSnapshot: eventVersion,
                 version: { increment: 1 },
@@ -712,26 +742,16 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                   tripId: order.tripId,
                   reason: command.payload.reason,
                   status: 'CANCELLED',
-                  financialStatus: order.financialStatus,
+                  financialStatus: financial.financialStatus ?? order.financialStatus,
                   custodyPendingReturn: true,
                 }),
               },
             });
 
-            actionRequiredOrderIds.push(order.id);
+            if (!actionRequiredOrderIds.includes(order.id)) actionRequiredOrderIds.push(order.id);
             cancelledOrderIds.push(order.id);
           } else {
             // Still in inventory location / not picked
-            await tx.rentalOrder.update({
-              where: { id: order.id, version: order.version },
-              data: {
-                status: RentalOrderStatus.CANCELLED,
-                cancelledAt: effectiveAt,
-                contextVersionSnapshot: eventVersion,
-                version: { increment: 1 },
-              },
-            });
-
             await tx.rentalQuantityReservation.updateMany({
               where: {
                 orderLine: { orderId: order.id },
@@ -834,10 +854,13 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
               where: { id: order.id, version: order.version },
               data: {
                 status: RentalOrderStatus.CANCELLED,
-                exceptionStatus: hasUnsafeUnits
+                cancelledAt: effectiveAt,
+                financialStatus: financial.financialStatus ?? order.financialStatus,
+                exceptionStatus: hasUnsafeUnits || financial.reviewReason
                   ? RentalOrderExceptionStatus.ACTION_REQUIRED
                   : RentalOrderExceptionStatus.NONE,
-                contextVersionSnapshot: command.payload.tripVersion,
+                // Một lần tăng version sau khi đã xác định trạng thái thiết bị.
+                contextVersionSnapshot: eventVersion,
                 version: { increment: 1 },
               },
             });
@@ -855,7 +878,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                   tripId: order.tripId,
                   reason: command.payload.reason,
                   status: 'CANCELLED',
-                  financialStatus: order.financialStatus,
+                  financialStatus: financial.financialStatus ?? order.financialStatus,
                   custodyPendingReturn: false,
                 }),
               },
@@ -879,7 +902,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                   }),
                 },
               });
-              actionRequiredOrderIds.push(order.id);
+              if (!actionRequiredOrderIds.includes(order.id)) actionRequiredOrderIds.push(order.id);
             }
 
             cancelledOrderIds.push(order.id);
@@ -888,6 +911,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           // ACTIVE: Trip aborted mid-way.
           // Invariant: Do NOT cancel order or revoke user custody!
           // RB-POL-15: Protect contractual rentalEndAt! Do NOT truncate operationalReturnDueAt if rentalEndAt is later.
+          await ensureReturnTaskWithTx(tx, order.id, effectiveAt, 'TRIP_ENDED_EARLY');
           await tx.rentalOrder.update({
             where: { id: order.id, version: order.version },
             data: {
@@ -955,7 +979,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
       });
 
       return executionResult;
-      });
+      }, { timeout: 30_000, maxWait: 10_000 });
     } catch (err: any) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const existing = await this.prisma.rentalInboxEvent.findUnique({
@@ -1050,12 +1074,16 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           },
         });
 
+        await tx.$queryRaw`SELECT id FROM rental_orders WHERE booking_id = ${command.payload.bookingId}::uuid
+          AND status::text IN ('PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER', 'ACTIVE')
+          ORDER BY id FOR UPDATE`;
         const orders = await tx.rentalOrder.findMany({
           where: {
             bookingId: command.payload.bookingId,
             status: { in: OPEN_STATUSES },
           },
           include: {
+            rentalPolicy: { select: { freeCancellationHours: true } },
             rentalOrderLinesViaOrderId: {
               include: {
                 rentalUnitAssignmentsViaOrderLineId: {
@@ -1090,6 +1118,28 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           const isBeforeHandover = BEFORE_HANDOVER_STATUSES.includes(order.status);
 
           if (isBeforeHandover) {
+            await cancelPendingRentalChargesWithTx(tx, order.id);
+            const pendingExtensions = await tx.rentalExtensionRequest.findMany({
+              where: { orderId: order.id, status: 'PENDING_PAYMENT' }, select: { id: true, orderId: true },
+            });
+            for (const pending of pendingExtensions) {
+              await releaseExtensionWithTx(tx, pending, 'CANCELLED', effectiveAt);
+            }
+            const financial = await reserveLifecycleRentalRefundWithTx(tx, {
+              order, source: 'BOOKING', eventVersion: canonicalVersion,
+              now: effectiveAt, reason: command.payload.reason,
+            });
+            if (financial.reviewReason) {
+              await tx.rentalOutboxEvent.upsert({
+                where: { deduplicationKey: `booking-cancel-financial-review:${order.id}:${canonicalVersion}` }, update: {},
+                create: {
+                  deduplicationKey: `booking-cancel-financial-review:${order.id}:${canonicalVersion}`,
+                  eventType: 'RENTAL_ACTION_REQUIRED', aggregateType: 'RentalOrder', aggregateId: order.id,
+                  payload: jsonValue({ orderId: order.id, reason: financial.reviewReason, paymentReviewRequired: true }),
+                },
+              });
+              actionRequiredOrderIds.push(order.id);
+            }
             const pkg =
               order.inventoryTaskViaOrderId?.package ??
               order.deliveryTasksViaOrderId?.[0]?.package;
@@ -1115,6 +1165,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 data: {
                   status: RentalOrderStatus.CANCELLED,
                   exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+                  financialStatus: financial.financialStatus ?? order.financialStatus,
                   cancelledAt: effectiveAt,
                   version: { increment: 1 },
                 },
@@ -1177,13 +1228,13 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                     tripId: order.tripId,
                     reason: command.payload.reason,
                     status: 'CANCELLED',
-                    financialStatus: order.financialStatus,
+                    financialStatus: financial.financialStatus ?? order.financialStatus,
                     custodyPendingReturn: true,
                   }),
                 },
               });
 
-              actionRequiredOrderIds.push(order.id);
+              if (!actionRequiredOrderIds.includes(order.id)) actionRequiredOrderIds.push(order.id);
               cancelledOrderIds.push(order.id);
             } else {
               // Pre-handover: Package in warehouse. Release reservations.
@@ -1289,7 +1340,8 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 where: { id: order.id, version: order.version },
                 data: {
                   status: RentalOrderStatus.CANCELLED,
-                  exceptionStatus: hasUnsafeUnits
+                  financialStatus: financial.financialStatus ?? order.financialStatus,
+                  exceptionStatus: hasUnsafeUnits || financial.reviewReason
                     ? RentalOrderExceptionStatus.ACTION_REQUIRED
                     : RentalOrderExceptionStatus.NONE,
                   cancelledAt: effectiveAt,
@@ -1311,7 +1363,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                     tripId: order.tripId,
                     reason: command.payload.reason,
                     status: 'CANCELLED',
-                    financialStatus: order.financialStatus,
+                    financialStatus: financial.financialStatus ?? order.financialStatus,
                     custodyPendingReturn: false,
                   }),
                 },
@@ -1337,13 +1389,14 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                     }),
                   },
                 });
-                actionRequiredOrderIds.push(order.id);
+                if (!actionRequiredOrderIds.includes(order.id)) actionRequiredOrderIds.push(order.id);
               }
 
               cancelledOrderIds.push(order.id);
             }
           } else {
             // ACTIVE: user custody preserved. Protect contractual rentalEndAt per RB-POL-15!
+            await ensureReturnTaskWithTx(tx, order.id, effectiveAt, 'BOOKING_CANCELLED_AFTER_HANDOVER');
             await tx.rentalOrder.update({
               where: { id: order.id, version: order.version },
               data: {
@@ -1411,7 +1464,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
         });
 
         return executionResult;
-      });
+      }, { timeout: 30_000, maxWait: 10_000 });
     } catch (err: any) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const existing = await this.prisma.rentalInboxEvent.findUnique({
