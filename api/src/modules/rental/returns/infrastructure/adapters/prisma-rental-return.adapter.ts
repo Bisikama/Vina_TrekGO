@@ -1311,6 +1311,10 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     const items = settlement.depositSettlementItemsViaSettlementId.map((item) => {
       const grouped = item.depositRefundAllocations[0]
       const refund = grouped?.refund ?? item.refundViaDepositSettlementItemId
+      const simulation = (refund?.providerPayload as any)?.sandboxSimulation
+      const settlementMode = simulation
+        ? 'SANDBOX_SIMULATED'
+        : ((item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD')
       const itemRefundAmount = grouped ? decimalToInteger(grouped.amount) : decimalToInteger(item.refundAmount)
       if (grouped && refund) {
         const existing = refundById.get(refund.id) ?? {
@@ -1346,13 +1350,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         deduction: decimalToInteger(item.deductionAmount),
         refundAmount: itemRefundAmount,
         reason: item.reason,
-        settlementMode: (item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD',
-        simulationNotice: (item.decisionSnapshot as any)?.simulationProvenance?.notice ?? null,
+        settlementMode,
+        simulationNotice: simulation
+          ? 'Hoàn cọc mô phỏng (VNPay Sandbox) - không phải bằng chứng tiền đã về tài khoản khách'
+          : ((item.decisionSnapshot as any)?.simulationProvenance?.notice ?? null),
       }
     })
-    const hasSimulatedItems = settlement.depositSettlementItemsViaSettlementId.some(
-      (item) => (item.decisionSnapshot as any)?.settlementMode === 'SANDBOX_SIMULATED',
-    )
+    const hasSimulatedItems = items.some((item) => item.settlementMode === 'SANDBOX_SIMULATED')
     const collectedAmount = items.reduce((sum, item) => sum + item.depositAmount, 0)
     const refundedAmount = items
       .filter((item) => item.refundStatus === RefundStatus.SUCCEEDED)
@@ -1391,7 +1395,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       financialTruth: {
         providerRefundedAmount: refundedAmount,
         providerRefundPendingAmount: refundPendingAmount,
-        realMoneyReturned: refundedAmount > 0,
+        realMoneyReturned: items.some(
+          (item) => item.refundStatus === RefundStatus.SUCCEEDED && item.settlementMode !== 'SANDBOX_SIMULATED',
+        ),
       },
       ...(hasSimulatedItems
         ? {
@@ -3435,8 +3441,7 @@ function publicDepositStatus(
 ): string {
   if (status === DepositItemStatus.HELD) return 'HELD'
   if (status === DepositItemStatus.REVIEW_REQUIRED) return 'REVIEW_REQUIRED'
-  if (status === DepositItemStatus.REFUND_PENDING)
-    return refundStatus === RefundStatus.SUCCEEDED ? 'REFUNDED' : 'REFUND_PENDING'
+  if (status === DepositItemStatus.REFUND_PENDING) return 'REFUND_PENDING'
   if (status === DepositItemStatus.REFUND_FAILED) return 'REFUND_FAILED'
   if (status === DepositItemStatus.DEDUCTION_APPROVED) return 'DEDUCTED'
   if (status === DepositItemStatus.DEDUCTION_REJECTED) return 'REVIEW_REQUIRED'

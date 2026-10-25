@@ -322,6 +322,11 @@ export class RefundsService {
         include: { payment: { include: { application: true } } },
       })
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+      const existingPayload = refund.providerPayload as Prisma.JsonObject | null
+      const sandboxSimulation = existingPayload?.sandboxSimulation as Record<string, unknown> | undefined
+      const isSandboxSimulationEvent =
+        sandboxSimulation?.origin === 'ADMIN_SANDBOX_SIMULATION' &&
+        sandboxSimulation.providerEventId === event.providerEventId
       if (
         options.lease &&
         (options.refundId !== refund.id ||
@@ -378,6 +383,8 @@ export class RefundsService {
       const terminal = !['PENDING', 'PROCESSING'].includes(refund.status)
       if (terminal && refund.status !== event.status && event.status === 'SUCCEEDED')
         reason = 'REFUND_TERMINAL_CORRECTION'
+      if (terminal && sandboxSimulation && !isSandboxSimulationEvent && refund.status !== event.status)
+        reason = 'SANDBOX_SIMULATION_PROVIDER_CONFLICT'
       if (reason) {
         await tx.refund.update({
           where: { id: refund.id },
@@ -418,12 +425,12 @@ export class RefundsService {
             version: { increment: 1 },
           },
         })
-        const existingPayload = refund.providerPayload as Prisma.JsonObject | null
         if (existingPayload?.sandboxSimulation) {
           await tx.auditLog.create({
             data: {
-              action:
-                event.status === 'SUCCEEDED'
+              action: isSandboxSimulationEvent
+                ? 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED'
+                : event.status === 'SUCCEEDED'
                   ? 'REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION'
                   : 'REAL_PROVIDER_REFUND_FAILED_AFTER_SIMULATION',
               entityType: 'Refund',
@@ -433,13 +440,13 @@ export class RefundsService {
                 refundTransactionRef: event.refundTransactionRef,
                 simulationProvenance: existingPayload.sandboxSimulation,
                 discrepancyNote:
-                  event.status === 'FAILED'
+                  !isSandboxSimulationEvent && event.status === 'FAILED'
                     ? 'Provider terminal failure received after sandbox simulation had settled demo items. Flagged for review.'
                     : null,
               },
             },
           })
-          if (event.status === 'FAILED') {
+          if (!isSandboxSimulationEvent && event.status === 'FAILED') {
             await tx.refund.update({
               where: { id: refund.id },
               data: {
@@ -528,7 +535,10 @@ export class RefundsService {
           })
         await tx.auditLog.create({
           data: {
-            action: 'REFUND_RESULT_IGNORED',
+            action:
+              sandboxSimulation && !isSandboxSimulationEvent && event.status === refund.status
+                ? 'REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION'
+                : 'REFUND_RESULT_IGNORED',
             entityType: 'Refund',
             entityId: refund.id,
             newValues: {

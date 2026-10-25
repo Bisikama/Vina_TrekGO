@@ -30,7 +30,7 @@ export interface SandboxSimulateRefundResponseDto {
   rentalOrderId: string
   depositSettlementId: string
   provider: 'VNPAY_SANDBOX'
-  providerRefundStatus: string
+  providerRefundStatus: 'SUCCEEDED'
   simulationStatus: 'SIMULATED'
   simulatedAmount: string
   currency: string
@@ -38,6 +38,7 @@ export interface SandboxSimulateRefundResponseDto {
   financialStatus: string
   completionMode: 'SANDBOX_SIMULATED' | 'STANDARD'
   settlementMode: 'SANDBOX_SIMULATED'
+  settlementProcessingStatus: 'PENDING' | 'APPLIED'
   simulatedAt: string
   actorAdminId: string
   reason: string
