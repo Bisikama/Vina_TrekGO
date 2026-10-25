@@ -65,6 +65,22 @@ export class TicketsController {
   ) {
     return this.tickets.list(actorId(actor), q.page, q.pageSize)
   }
+  @Get('me/public-trip-participations/history')
+  @ApiTicket('history')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Public trip participation history for the current linked account',
+    description:
+      'Terminal trips only; deduplicated by trip. Includes cancelled/no-show participants. Does not replace buyer booking history or grant navigation access.',
+  })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } })
+  history(
+    @ActiveUser() actor: { id: string },
+    @Query(new ZodValidationPipe(ticketPageSchema)) q: { page: number; pageSize: number },
+  ) {
+    return this.tickets.participationHistory(actorId(actor), q.page, q.pageSize)
+  }
   @Get('me/tickets/:participantId')
   @ApiTicket('ticket')
   @Header('Cache-Control', 'no-store')
