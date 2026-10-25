@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Post, UseFilters } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
+import { Body, Controller, Get, Header, Param, Post, UseFilters } from '@nestjs/common'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { z } from 'zod'
+import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { Auth } from '../../../../shared/decorators/auth.decorator'
 import { ActiveUser } from '../../../../shared/decorators/active-user.decorator'
 import { AuthType } from '../../../../shared/constants/auth.constant'
@@ -7,7 +9,7 @@ import { ZodValidationPipe } from '../../../../shared/pipes/zod-validation.pipe'
 import { GetNavigationContextUseCase } from '../../application/use-cases/get-navigation-context.use-case'
 import { SwitchTrailUseCase } from '../../application/use-cases/switch-trail.use-case'
 import { TripErrorFilter } from '../trip-error.filter'
-import { navigationContextParamSchema } from '../dtos/navigation-context.dto'
+import { navigationContextParamSchema, navigationContextResponseSchema } from '../dtos/navigation-context.dto'
 import type { NavigationContextParam } from '../dtos/navigation-context.dto'
 import { switchTrailSchema } from '../dtos/switch-trail.dto'
 import type { SwitchTrailDto } from '../dtos/switch-trail.dto'
@@ -24,6 +26,19 @@ export class TripNavigationController {
   ) {}
 
   @Get(':tripId/navigation-context')
+  @Header('Cache-Control', 'no-store')
+  @ApiResponse({
+    status: 200,
+    schema: z.toJSONSchema(navigationContextResponseSchema, { target: 'openapi-3.0' }) as SchemaObject,
+    description:
+      'Includes accessSource. Linked Public participants require current ACTIVE participant, CONFIRMED/PARTIAL_CHECKIN/CHECKED_IN booking and OPEN/FULL/CLOSED/IN_PROGRESS trip. Legacy buyer/member and manager/admin permissions are preserved.',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'No current navigation access. This existing endpoint retains the legacy TripErrorFilter envelope: statusCode/code/message.',
+  })
+  @ApiResponse({ status: 404, description: 'Trip not found; existing legacy error envelope.' })
   @ApiOperation({ summary: 'RC-API-101 Lấy dữ liệu context hành trình & GeoJSON bản đồ 3D' })
   @ApiParam({
     name: 'tripId',

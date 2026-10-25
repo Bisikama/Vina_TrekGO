@@ -145,7 +145,7 @@ export class PublicInvitationsService {
       b = p.booking,
       t = b.trip
     const state = await this.state(tx, row, now)
-    const access = ticketAccess(p, b, t)
+    const access = ticketAccess(p, b, t, actorId)
     const isLinkedOwner = p.userId === actorId
     return {
       ...this.base(row),
