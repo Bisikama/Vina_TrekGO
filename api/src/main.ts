@@ -20,8 +20,6 @@ async function bootstrap() {
 
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
-    .setTitle('Trekking API')
-    .setDescription('Tài liệu API cho hệ thống Trekking Tour & E-Commerce')
     .setVersion('1.0')
     .addBearerAuth(
       {

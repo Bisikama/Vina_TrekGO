@@ -167,6 +167,19 @@ const envConfigSchema = z
       .default('false')
       .transform((val) => val === 'true'),
 
+    // AI GEAR ADVISOR (GEMINI & FIRECRAWL)
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL_EXTRACTION: z.string().default('gemini-2.5-flash'),
+    GEMINI_MODEL_ADVISOR: z.string().default('gemini-2.5-flash'),
+    GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    GEMINI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+
+    FIRECRAWL_API_KEY: z.string().optional(),
+    FIRECRAWL_API_URL: z.string().url().default('https://api.firecrawl.dev'),
+    FIRECRAWL_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+
+    GEAR_EXTRACTION_DAILY_QUOTA: z.coerce.number().int().positive().default(20),
+
     // TEST DATABASE OVERRIDES (OPTIONAL)
     CF01_TEST_DATABASE_URL: z.string().optional(),
     CF02_TEST_DATABASE_URL: z.string().optional(),

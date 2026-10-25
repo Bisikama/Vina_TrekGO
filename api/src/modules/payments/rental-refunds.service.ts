@@ -194,6 +194,7 @@ export class RentalRefundsService {
           amount: amountDecimal,
           currency: payment.currency,
           depositSettlementId: settlementId,
+          rentalOrderId: orderId,
           depositSettlementItemId:
             itemAllocations.length === 1 ? itemAllocations[0].depositSettlementItemId : null,
           idempotencyKey: key,
