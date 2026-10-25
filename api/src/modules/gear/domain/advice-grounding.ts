@@ -1,6 +1,12 @@
 export interface NarrativeGroundingInput {
   narrativeVi: string;
   tripDays: number;
+  tripDifficulty?: number;
+  climate?: {
+    temp_min_c?: number;
+    temp_max_c?: number;
+    rain_prob_pct?: number;
+  };
   totalRentalFee: number;
   allowedCandidateNames: string[];
   allowedCandidateIds: Set<string>;
@@ -25,6 +31,8 @@ export function validateNarrativeViGrounding(
   const {
     narrativeVi,
     tripDays,
+    tripDifficulty,
+    climate,
     totalRentalFee,
     allowedCandidateNames,
     allowedCandidateIds,
@@ -85,7 +93,69 @@ export function validateNarrativeViGrounding(
     }
   }
 
-  // 5. Rental fee grounding: verify stated fee against server totalRentalFee
+  // 5. Trip difficulty grounding: any mention of difficulty level must match tripDifficulty
+  if (tripDifficulty !== undefined) {
+    const diffMatches = lower.matchAll(/(?:độ khó|cấp độ khó)\s*(?:cấp|level)?\s*(\d+)(?:\s*\/\s*5)?/gi);
+    for (const m of diffMatches) {
+      const diffVal = parseInt(m[1], 10);
+      if (diffVal !== tripDifficulty) {
+        return {
+          isValid: false,
+          reason: `Difficulty mismatch: narrative claims độ khó ${diffVal}, but trip difficulty is ${tripDifficulty}`,
+        };
+      }
+    }
+  }
+
+  // 6. Climate facts grounding: temperature and rain probability
+  if (climate) {
+    if (climate.temp_min_c !== undefined) {
+      const minTempMatches = lower.matchAll(
+        /(?:nhiệt độ thấp nhất|nhiệt độ tối thiểu|lạnh nhất)\s*(?:là|khoảng|xuống|tới)?\s*(-?\d+)\s*(?:°c|độ c|c\b)/gi,
+      );
+      for (const m of minTempMatches) {
+        const val = parseInt(m[1], 10);
+        if (val !== climate.temp_min_c) {
+          return {
+            isValid: false,
+            reason: `Minimum temperature mismatch: narrative claims ${val}°C, but trip min temp is ${climate.temp_min_c}°C`,
+          };
+        }
+      }
+    }
+
+    if (climate.temp_max_c !== undefined) {
+      const maxTempMatches = lower.matchAll(
+        /(?:nhiệt độ cao nhất|nhiệt độ tối đa|nóng nhất)\s*(?:là|khoảng|lên|tới)?\s*(-?\d+)\s*(?:°c|độ c|c\b)/gi,
+      );
+      for (const m of maxTempMatches) {
+        const val = parseInt(m[1], 10);
+        if (val !== climate.temp_max_c) {
+          return {
+            isValid: false,
+            reason: `Maximum temperature mismatch: narrative claims ${val}°C, but trip max temp is ${climate.temp_max_c}°C`,
+          };
+        }
+      }
+    }
+
+    if (climate.rain_prob_pct !== undefined) {
+      const rainMatches = lower.matchAll(
+        /(?:xác suất mưa|khả năng mưa|tỉ lệ mưa|tỷ lệ mưa)\s*(?:là|khoảng|đạt|lên tới)?\s*(\d+)\s*%/gi,
+      );
+      for (const m of rainMatches) {
+        const val = parseInt(m[1], 10);
+        if (val !== climate.rain_prob_pct) {
+          return {
+            isValid: false,
+            reason: `Rain probability mismatch: narrative claims ${val}%, but trip rain probability is ${climate.rain_prob_pct}%`,
+          };
+        }
+      }
+    }
+  }
+
+  // 7. Rental fee grounding: verify stated fee against server totalRentalFee
   const feeMatches = lower.matchAll(
     /(?:phí thuê|tiền thuê|chi phí thuê|tổng phí thuê|giá thuê|chi phí)\s*(?:khoảng|là|hết|chỉ|tổng cộng|dự kiến)?\s*([0-9.,]+)\s*(k|đ|vnd|đồng|nghìn|ngàn)?\b/gi,
   );
@@ -107,14 +177,20 @@ export function validateNarrativeViGrounding(
     }
   }
 
-  // 6. Product mentions grounding: verify any specific product recommended to rent against allowedCandidateNames
+  // 8. Product mentions grounding: verify any specific product recommended to rent against allowedCandidateNames
   const normalizedAllowedNames = allowedCandidateNames.map((n) => n.trim().toLowerCase());
   const rentMatches = lower.matchAll(
-    /(?:thuê|mượn|chọn thuê)\s+([a-zA-Z0-9_\u00C0-\u1EF9\s]+?)(?:\s+(?:giá|với|tại|ở|cho|cỡ|size|\.|,|$))/gi,
+    /(?<!không\s+(?:cần\s+|nên\s+)?|chưa\s+(?:cần\s+)?)(?:thuê|mượn|chọn thuê)[:\s]+([a-zA-Z0-9_\u00C0-\u1EF9\s]+?)(?:[.,:;!?\n\r(]|\s+(?:giá|với|tại|ở|cho|cỡ|size|\.|,)|\s*$)/gi,
   );
   for (const m of rentMatches) {
     const candidatePhrase = m[1].trim();
     if (candidatePhrase && candidatePhrase.length > 2) {
+      if (normalizedAllowedNames.length === 0) {
+        return {
+          isValid: false,
+          reason: `Unapproved product mentioned for rental when no rental products are approved: "${candidatePhrase}"`,
+        };
+      }
       const isKnown = normalizedAllowedNames.some(
         (name) => name.includes(candidatePhrase) || candidatePhrase.includes(name),
       );

@@ -421,8 +421,8 @@ export function solveDeterministicPlannerOption(
       }
       if (
         currentFee === state.bestComplete.totalFee &&
-        currentUnknownCount >= state.bestComplete.unknownWeightCount &&
-        currentKnownWeight >= state.bestComplete.totalKnownWeight
+        (currentUnknownCount > state.bestComplete.unknownWeightCount || (currentUnknownCount === state.bestComplete.unknownWeightCount && currentKnownWeight > state.bestComplete.totalKnownWeight))
+
       ) {
         return;
       }
@@ -439,7 +439,7 @@ export function solveDeterministicPlannerOption(
       if (
         currentUnknownCount === state.bestComplete.unknownWeightCount &&
         currentKnownWeight === state.bestComplete.totalKnownWeight &&
-        currentFee >= state.bestComplete.totalFee
+        currentFee > state.bestComplete.totalFee
       ) {
         return;
       }

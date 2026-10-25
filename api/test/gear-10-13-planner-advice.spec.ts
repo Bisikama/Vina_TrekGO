@@ -435,6 +435,15 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
           if (where.evaluatedRevision !== undefined && plan.evaluatedRevision !== where.evaluatedRevision) return null;
           return { ...plan };
         }),
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          const plan = plans.get(where.id);
+          if (!plan) return { count: 0 };
+          if (where.userId && plan.userId !== where.userId) return { count: 0 };
+          if (where.inputRevision !== undefined && plan.inputRevision !== where.inputRevision) return { count: 0 };
+          if (where.evaluatedRevision !== undefined && plan.evaluatedRevision !== where.evaluatedRevision) return { count: 0 };
+          Object.assign(plan, data);
+          return { count: 1 };
+        }),
       },
       $transaction: jest.fn(async (cb: any) => {
         if (typeof cb === 'function') {
@@ -862,6 +871,131 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
         expect(adviceRes.body.source).toBe('RULE_FALLBACK');
       } finally {
         mockAiPort.generateAdvice = origGenerate;
+      }
+    });
+
+    it('Blocker B.2: refuses narrative and falls back to RULE_FALLBACK when narrative recommends unapproved rental product (e.g. Bạn nên thuê lều X999.)', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        });
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 });
+
+      const origGenerate = mockAiPort.generateAdvice;
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Bạn nên thuê lều X999.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }));
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          });
+
+        expect(adviceRes.status).toBe(200);
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK');
+      } finally {
+        mockAiPort.generateAdvice = origGenerate;
+      }
+    });
+
+    it('Blocker B.2: refuses narrative and falls back to RULE_FALLBACK when narrative contradicts saved climate or difficulty facts', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 5,
+            temp_max_c: 20,
+            temp_min_night_c: 4,
+            rain_prob_pct: 80,
+          },
+        });
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 });
+
+      const origGenerate = mockAiPort.generateAdvice;
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Nhiệt độ thấp nhất là 40°C, xác suất mưa 0%, độ khó 1/5.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }));
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          });
+
+        expect(adviceRes.status).toBe(200);
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK');
+      } finally {
+        mockAiPort.generateAdvice = origGenerate;
+      }
+    });
+
+    it('Blocker B.1: refuses advice publish with GEAR_PLAN_STALE when concurrent mutation modified plan head during AI wait', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        });
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 });
+
+      const origUpdateMany = mockPrisma.gearPlan.updateMany;
+      // Simulate concurrent CAS mutation incrementing inputRevision so updateMany matches 0 rows
+      mockPrisma.gearPlan.updateMany = jest.fn(async () => ({ count: 0 }));
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          });
+
+        expect(adviceRes.status).toBe(409);
+        expect(adviceRes.body.error.code).toBe('GEAR_PLAN_STALE');
+      } finally {
+        mockPrisma.gearPlan.updateMany = origUpdateMany;
       }
     });
   });

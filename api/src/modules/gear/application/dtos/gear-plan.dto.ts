@@ -103,7 +103,12 @@ export type CreateQuoteIntentDto = z.infer<typeof createQuoteIntentSchema>;
 export const linkQuoteSchema = z.object({
   expectedRevision: z.number().int().min(1),
   quoteId: z.string().uuid('quoteId phải là UUID hợp lệ'),
+  optionRef: z
+    .object({
+      setId: z.string().uuid('setId phải là UUID hợp lệ'),
+      optionId: z.string().min(1, 'optionId không được để trống'),
+    })
+    .optional(),
 });
 
 export type LinkQuoteDto = z.infer<typeof linkQuoteSchema>;
-

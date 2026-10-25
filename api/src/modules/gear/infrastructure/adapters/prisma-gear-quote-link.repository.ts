@@ -24,7 +24,12 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
     return record ? this.toDomain(record) : null
   }
 
-  async linkQuote(planRevisionId: string, quoteId: string, userId: string): Promise<GearQuoteLinkDomain> {
+  async linkQuote(
+    planRevisionId: string,
+    quoteId: string,
+    userId: string,
+    intendedOptionRef?: { setId: string; optionId: string },
+  ): Promise<GearQuoteLinkDomain> {
     // 0. Idempotent check for historical / existing links (B07)
     const existing = this.prisma.gearQuoteLink?.findUnique
       ? await this.prisma.gearQuoteLink.findUnique({
@@ -88,34 +93,79 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
       })
     }
 
+    // Verify rental window alignment with trip dates if trip exists
+    if (rev.plan?.tripId && this.prisma.trip) {
+      const trip = await this.prisma.trip.findUnique({
+        where: { id: rev.plan.tripId },
+        select: { id: true, startAt: true, endAt: true },
+      })
+      if (trip && quote.rentalStartAt && quote.rentalEndAt) {
+        if (new Date(quote.rentalEndAt) < trip.startAt || new Date(quote.rentalStartAt) > trip.endAt) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+            message: 'Khoảng thời gian thuê của báo giá không phù hợp với thời gian chuyến đi',
+          })
+        }
+      }
+    }
+
     if (quote.status === 'EXPIRED' || (quote.expiresAt && quote.expiresAt < new Date())) {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
         message: 'Báo giá thuê đã hết hạn, không thể liên kết vào kế hoạch',
       })
     }
 
-    // 3. Fail-closed: option sets must exist for this plan revision
-    const optionSets = this.prisma.gearPlanOptionSet
-      ? await this.prisma.gearPlanOptionSet.findMany({
-          where: { planRevisionId },
+    // 3. Option sets must exist and be active for this plan revision
+    let selectedOptionFromRef: any = null
+    let activeOptionSets: any[] = []
+
+    if (intendedOptionRef) {
+      const optionSet = this.prisma.gearPlanOptionSet
+        ? await this.prisma.gearPlanOptionSet.findUnique({
+            where: { id: intendedOptionRef.setId },
+          })
+        : null
+
+      if (!optionSet || optionSet.planRevisionId !== planRevisionId) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_OPTION_SET_NOT_FOUND, {
+          message: 'Không tìm thấy tập phương án trang bị của ý định báo giá',
         })
-      : []
+      }
 
-    if (optionSets.length === 0) {
-      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
-        message: 'Phiên bản kế hoạch chưa có tập phương án nào để đối chiếu báo giá',
-      })
+      if (optionSet.expiresAt && new Date(optionSet.expiresAt).getTime() < Date.now()) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_OPTION_SET_EXPIRED, {
+          message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới trước khi liên kết báo giá.',
+        })
+      }
+
+      const options = (optionSet.optionsJson as any[]) || []
+      selectedOptionFromRef = options.find((o: any) => o.id === intendedOptionRef.optionId)
+      if (!selectedOptionFromRef) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_OPTION_NOT_FOUND, {
+          message: 'Không tìm thấy phương án trang bị được chọn trong tập phương án',
+        })
+      }
+    } else {
+      const optionSets = this.prisma.gearPlanOptionSet
+        ? await this.prisma.gearPlanOptionSet.findMany({
+            where: { planRevisionId },
+          })
+        : []
+
+      if (optionSets.length === 0) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+          message: 'Phiên bản kế hoạch chưa có tập phương án nào để đối chiếu báo giá',
+        })
+      }
+
+      activeOptionSets = optionSets.filter((s) => !s.expiresAt || new Date(s.expiresAt).getTime() > Date.now())
+      if (activeOptionSets.length === 0) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_OPTION_SET_EXPIRED, {
+          message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới trước khi liên kết báo giá.',
+        })
+      }
     }
 
-    // For new links, must have at least one active, unexpired option set (B07)
-    const activeOptionSets = optionSets.filter((s) => !s.expiresAt || new Date(s.expiresAt).getTime() > Date.now())
-    if (activeOptionSets.length === 0) {
-      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_OPTION_SET_EXPIRED, {
-        message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới trước khi liên kết báo giá.',
-      })
-    }
-
-    // 4. Fail-closed: quote must have quote lines
+    // 4. Quote must have quote lines
     const quoteLines = this.prisma.rentalQuoteLine
       ? await this.prisma.rentalQuoteLine.findMany({
           where: { quoteId },
@@ -134,44 +184,69 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
       quoteQtyMap.set(ql.productId, (quoteQtyMap.get(ql.productId) ?? 0) + (ql.quantity ?? 1))
     }
 
-    // 6. Match against a specific valid option (never union mutually exclusive options!)
+    // 6. Match against intended selection or active option sets
     let matchedOption = false
 
-    for (const set of activeOptionSets) {
-      const options = (set.optionsJson as any[]) || []
-      for (const opt of options) {
-        const optLines = opt.rentalLines || []
-        if (optLines.length === 0 && quoteQtyMap.size === 0) {
-          matchedOption = true
-          break
+    if (selectedOptionFromRef) {
+      const optLines = selectedOptionFromRef.rentalLines || []
+      const optQtyMap = new Map<string, number>()
+      for (const line of optLines) {
+        if (line.productId) {
+          optQtyMap.set(line.productId, (optQtyMap.get(line.productId) ?? 0) + (line.quantity ?? 1))
         }
+      }
 
-        const optQtyMap = new Map<string, number>()
-        for (const line of optLines) {
-          if (line.productId) {
-            optQtyMap.set(line.productId, (optQtyMap.get(line.productId) ?? 0) + (line.quantity ?? 1))
+      if (optQtyMap.size !== quoteQtyMap.size) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+          message: 'Sản phẩm hoặc số lượng trong báo giá không khớp với phương án đã chọn',
+        })
+      }
+
+      for (const [prodId, neededQty] of optQtyMap.entries()) {
+        if (quoteQtyMap.get(prodId) !== neededQty) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+            message: 'Sản phẩm hoặc số lượng trong báo giá không khớp với phương án đã chọn',
+          })
+        }
+      }
+      matchedOption = true
+    } else {
+      for (const set of activeOptionSets) {
+        const options = (set.optionsJson as any[]) || []
+        for (const opt of options) {
+          const optLines = opt.rentalLines || []
+          if (optLines.length === 0 && quoteQtyMap.size === 0) {
+            matchedOption = true
+            break
           }
-        }
 
-        if (optQtyMap.size !== quoteQtyMap.size) {
-          continue
-        }
+          const optQtyMap = new Map<string, number>()
+          for (const line of optLines) {
+            if (line.productId) {
+              optQtyMap.set(line.productId, (optQtyMap.get(line.productId) ?? 0) + (line.quantity ?? 1))
+            }
+          }
 
-        let isMatch = true
-        for (const [prodId, neededQty] of optQtyMap.entries()) {
-          const actualQty = quoteQtyMap.get(prodId)
-          if (actualQty !== neededQty) {
-            isMatch = false
+          if (optQtyMap.size !== quoteQtyMap.size) {
+            continue
+          }
+
+          let isMatch = true
+          for (const [prodId, neededQty] of optQtyMap.entries()) {
+            const actualQty = quoteQtyMap.get(prodId)
+            if (actualQty !== neededQty) {
+              isMatch = false
+              break
+            }
+          }
+
+          if (isMatch) {
+            matchedOption = true
             break
           }
         }
-
-        if (isMatch) {
-          matchedOption = true
-          break
-        }
+        if (matchedOption) break
       }
-      if (matchedOption) break
     }
 
     if (!matchedOption) {

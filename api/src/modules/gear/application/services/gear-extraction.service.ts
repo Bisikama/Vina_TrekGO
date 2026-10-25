@@ -168,12 +168,7 @@ export class GearExtractionService {
       return await this.prisma.$transaction(async (tx) => {
         // Atomic user row lock for quota serialization if on real DB
         if (typeof tx.$executeRaw === 'function') {
-          try {
-            await tx.$executeRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
-          } catch (err: any) {
-            if (err instanceof AppError) throw err;
-            // Let query execute or allow mock if executeRaw isn't connected to real PG
-          }
+          await tx.$executeRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
         }
 
         const chargedDrafts = await tx.gearExtractionDraft.findMany({
@@ -200,12 +195,15 @@ export class GearExtractionService {
           });
         }
 
-        return this.draftRepo.createDraft({
-          userId,
-          sourceType,
-          sourceHash,
-          expiresAt,
-        });
+        return this.draftRepo.createDraft(
+          {
+            userId,
+            sourceType,
+            sourceHash,
+            expiresAt,
+          },
+          tx,
+        );
       });
     } finally {
       if (quotaLeaseAcquired) {

@@ -908,11 +908,24 @@ export class GearPlanService {
         try {
           const occupiedFrom = rentalOccupiedFrom(trip.startAt);
           const activePolicy = this.prisma.rentalPolicy?.findFirst
-            ? await this.prisma.rentalPolicy.findFirst({ where: { isActive: true } })
+            ? (await this.prisma.rentalPolicy.findFirst({
+                where: {
+                  isActive: true,
+                  effectiveFrom: { lte: new Date() },
+                  OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+                },
+                orderBy: { effectiveFrom: 'desc' },
+              })) || (await this.prisma.rentalPolicy.findFirst({ where: { isActive: true } }))
             : null;
-          const bufferMinutes = activePolicy?.returnBufferMinutes
-            ? Math.max(activePolicy.returnBufferMinutes, activePolicy.cleaningBufferMinutes || 0)
-            : 1440;
+          const returnBuf =
+            activePolicy?.returnBufferMinutes !== undefined && activePolicy?.returnBufferMinutes !== null
+              ? Number(activePolicy.returnBufferMinutes)
+              : 1440;
+          const cleaningBuf =
+            activePolicy?.cleaningBufferMinutes !== undefined && activePolicy?.cleaningBufferMinutes !== null
+              ? Number(activePolicy.cleaningBufferMinutes)
+              : 0;
+          const bufferMinutes = Math.max(returnBuf, cleaningBuf);
           const occupiedUntil = new Date(trip.endAt.getTime() + bufferMinutes * 60_000);
 
           const capacitySnapshot = await getVerifiedCapacitySnapshot(this.prisma, {
@@ -923,24 +936,9 @@ export class GearPlanService {
           });
           availableCount = capacitySnapshot.availableCount;
         } catch (err: any) {
-          // Fail closed in production: if capacity snapshot cannot be verified, mark unavailable
-          if (
-            this.prisma.equipmentUnit &&
-            typeof (this.prisma.equipmentUnit as any).count === 'function' &&
-            process.env.NODE_ENV === 'test'
-          ) {
-            const unitsCount = await (this.prisma.equipmentUnit as any).count({
-              where: {
-                productId: product.id,
-                status: 'AVAILABLE',
-                condition: { notIn: ['DAMAGED', 'LOST'] },
-              },
-            });
-            availableCount = Math.max(0, unitsCount);
-          } else {
-            this.logger.warn(`Failed to verify capacity snapshot for product ${product.id}: ${err?.message}`);
-            availableCount = 0;
-          }
+          // Fail closed: if capacity snapshot cannot be verified, mark unavailable
+          this.logger.warn(`Failed to verify capacity snapshot for product ${product.id}: ${err?.message}`);
+          availableCount = 0;
         }
 
         const weight_g =
@@ -1254,6 +1252,12 @@ export class GearPlanService {
       const groundingCheck = validateNarrativeViGrounding({
         narrativeVi: adviceResult.narrativeVi || '',
         tripDays: days,
+        tripDifficulty: diff,
+        climate: {
+          temp_min_c: climate.temp_min_c,
+          temp_max_c: climate.temp_max_c,
+          rain_prob_pct: climate.rain_prob_pct,
+        },
         totalRentalFee,
         allowedCandidateNames,
         allowedCandidateIds,
@@ -1283,18 +1287,21 @@ export class GearPlanService {
       await this.tripContextPort.getTripContext(plan.tripId, userId);
     }
 
-    // F03: 2. Atomic conditional publish in short transaction
+    // F03: 2. Atomic conditional publish in short transaction coordinating with mutation paths
     const adviceRun = await this.prisma.$transaction(async (tx) => {
-      const head = await tx.gearPlan.findFirst({
+      const lockRes = await tx.gearPlan.updateMany({
         where: {
           id: planId,
           userId,
           inputRevision: plan.inputRevision,
           evaluatedRevision: plan.evaluatedRevision,
         },
+        data: {
+          updatedAt: new Date(),
+        },
       });
 
-      if (!head) {
+      if (lockRes.count === 0) {
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PLAN_STALE, {
           message: 'Kế hoạch đã thay đổi trong quá trình tạo tư vấn, không thể xuất bản kết quả cũ',
         });
@@ -1499,7 +1506,7 @@ export class GearPlanService {
       });
     }
 
-    const linked = await this.quoteLinkRepo.linkQuote(revision.id, dto.quoteId, userId);
+    const linked = await this.quoteLinkRepo.linkQuote(revision.id, dto.quoteId, userId, dto.optionRef);
 
     return {
       linked: true,
