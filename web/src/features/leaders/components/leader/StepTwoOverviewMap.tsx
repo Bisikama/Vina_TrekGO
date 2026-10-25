@@ -68,7 +68,7 @@ export interface StepTwoOverviewMapProps {
 }
 
 export function StepTwoOverviewMap({
-  trailCode = "TRAIL_BADEN_COTDIEN",
+  trailCode,
   onTrailLoaded,
 }: StepTwoOverviewMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -76,20 +76,28 @@ export function StepTwoOverviewMap({
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   const [trail, setTrail] = useState<SystemTrailDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(true);
 
-  // 1. Gọi API Backend lấy toạ độ GeoJSON & Checkpoints
+  // 1. Gọi API Backend lấy toạ độ GeoJSON & Checkpoints khi có trailCode
   useEffect(() => {
     let cancelled = false;
+    const code = trailCode;
 
-    async function fetchTrailData() {
+    if (!code) {
+      setTrail(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    async function fetchTrailData(trailId: string) {
       try {
         setLoading(true);
         setError(null);
         const res = await apiClient.get<SystemTrailDetail>(
-          `/api/v1/system-trails/${encodeURIComponent(trailCode)}`
+          `/api/v1/system-trails/${encodeURIComponent(trailId)}`
         );
         if (!cancelled) {
           setTrail(res.data);
@@ -109,7 +117,7 @@ export function StepTwoOverviewMap({
       }
     }
 
-    fetchTrailData();
+    fetchTrailData(code);
     return () => {
       cancelled = true;
     };
@@ -159,10 +167,10 @@ export function StepTwoOverviewMap({
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: mapStyle,
-      center: center,
-      zoom: 13.5,
-      pitch: is3D ? 60 : 0,
-      bearing: -20,
+      center,
+      zoom: trail.initialCamera?.zoom || 14.2,
+      pitch: is3D ? trail.initialCamera?.pitch || 60 : 0,
+      bearing: is3D ? trail.initialCamera?.bearing || 15 : 0,
       maxPitch: 85,
     });
 
@@ -172,99 +180,89 @@ export function StepTwoOverviewMap({
     );
 
     map.on("load", () => {
-      // Đảm bảo map resize đúng kích thước khung
-      map.resize();
-
-      // A. Nạp 3D Terrain DEM từ AWS Terrarium
-      if (!map.getSource("terrain-dem")) {
-        map.addSource("terrain-dem", {
+      // A. Thêm nguồn DEM địa hình 3D (nếu ở chế độ 3D)
+      if (is3D) {
+        map.addSource("mapter-dem", {
           type: "raster-dem",
           tiles: [
             "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
           ],
-          encoding: "terrarium",
           tileSize: 256,
+          encoding: "terrarium",
+          maxzoom: 15,
         });
-      }
 
-      if (is3D) {
         map.setTerrain({
-          source: "terrain-dem",
-          exaggeration: 2.0,
+          source: "mapter-dem",
+          exaggeration: 1.5,
+        });
+
+        map.setSky({
+          "sky-color": "#1976d2",
+          "sky-horizon-blend": 0.5,
+          "horizon-color": "#ffffff",
+          "horizon-fog-blend": 0.5,
+          "fog-color": "#f0f8ff",
+          "fog-ground-blend": 0.5,
         });
       }
 
-      // Đổ bóng sườn dốc (Hillshade)
-      if (!map.getLayer("hillshading")) {
+      // B. Vẽ LineString cung đường GPS GeoJSON
+      if (trail.routeGeojson) {
+        map.addSource("trail-route-source", {
+          type: "geojson",
+          data: trail.routeGeojson,
+        });
+
+        // Lớp glow viền ngoài
         map.addLayer({
-          id: "hillshading",
-          type: "hillshade",
-          source: "terrain-dem",
+          id: "trail-route-glow",
+          type: "line",
+          source: "trail-route-source",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
           paint: {
-            "hillshade-exaggeration": 0.7,
-            "hillshade-shadow-color": "#0B1120",
+            "line-color": "#ffffff",
+            "line-width": 8,
+            "line-opacity": 0.6,
+          },
+        });
+
+        // Lớp line chính nổi bật
+        map.addLayer({
+          id: "trail-route-line",
+          type: "line",
+          source: "trail-route-source",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#ea580c",
+            "line-width": 5,
           },
         });
       }
 
-      // B. Vẽ tuyến đường leo núi GeoJSON
-      if (trail.routeGeojson) {
-        if (!map.getSource("trail-route")) {
-          map.addSource("trail-route", {
-            type: "geojson",
-            data: trail.routeGeojson,
-          });
-        }
-
-        // Viền dạ quang
-        if (!map.getLayer("trail-glow")) {
-          map.addLayer({
-            id: "trail-glow",
-            type: "line",
-            source: "trail-route",
-            paint: {
-              "line-color": "#FF3D00",
-              "line-width": 7,
-              "line-opacity": 0.4,
-            },
-          });
-        }
-
-        // Tuyến nét chính
-        if (!map.getLayer("trail-line")) {
-          map.addLayer({
-            id: "trail-line",
-            type: "line",
-            source: "trail-route",
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: {
-              "line-color": "#FF5722",
-              "line-width": 3.5,
-            },
-          });
-        }
-      }
-
-      // C. Cắm mốc Checkpoints
+      // C. Đánh dấu các mốc Checkpoint
       if (trail.checkpoints && trail.checkpoints.length > 0) {
-        trail.checkpoints.forEach((cp) => {
-          const isPeak = cp.sequence === trail.checkpoints.length;
+        trail.checkpoints.forEach((cp, idx) => {
           const el = document.createElement("div");
-          el.className = `flex h-6 w-6 items-center justify-center rounded-full border-2 border-white shadow-md text-[10px] font-bold text-white transition-transform hover:scale-125 cursor-pointer ${isPeak ? "bg-red-600 ring-2 ring-red-400" : "bg-[#125238]"
-            }`;
-          el.innerText = `${cp.sequence}`;
+          el.className =
+            "grid h-6 w-6 place-items-center rounded-full bg-emerald-600 text-xs font-bold text-white shadow-md ring-2 ring-white";
+          el.innerText = `${idx + 1}`;
 
-          const popup = new maplibregl.Popup({
-            offset: 12,
-            closeButton: false,
-          }).setHTML(`
-            <div style="font-size: 11px; font-weight: bold; color: #0f172a; padding: 2px;">
-              ${cp.name}
+          const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
+            <div style="font-family: sans-serif; font-size: 12px; padding: 4px;">
+              <strong style="color: #064e3b; font-size: 13px;">${idx + 1}. ${cp.name}</strong>
+              <p style="margin: 2px 0 0 0; color: #475569;">${cp.description || "Mốc kiểm soát an toàn"}</p>
             </div>
           `);
 
           const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([cp.longitude, cp.latitude])
+            .setLngLat([Number(cp.longitude), Number(cp.latitude)])
             .setPopup(popup)
             .addTo(map);
 
@@ -298,6 +296,18 @@ export function StepTwoOverviewMap({
     };
   }, [trail, is3D]);
 
+  if (!trailCode) {
+    return (
+      <div className="relative mt-4 flex h-52 w-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+        <span className="text-2xl mb-1">🗺️</span>
+        <p className="text-xs font-semibold text-slate-700">Chưa chọn cung đường</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Vui lòng chọn một cung đường để xem bản đồ 3D GPS
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative mt-4 h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm">
       {/* Container gắn canvas bản đồ */}
@@ -323,7 +333,7 @@ export function StepTwoOverviewMap({
       {/* Badges thông tin góc trên */}
       <div className="absolute left-2.5 top-2.5 z-10 flex flex-wrap gap-1.5">
         <span className="rounded-full bg-slate-950/80 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 backdrop-blur border border-slate-700">
-          ● {trailCode === "TRAIL_BADEN_COTDIEN" ? "Tuyến Cột Điện - GPS 3D" : "GPS 3D Ready"}
+          ● {trail?.name ? `${trail.name} - GPS 3D` : "GPS 3D Ready"}
         </span>
         <button
           type="button"

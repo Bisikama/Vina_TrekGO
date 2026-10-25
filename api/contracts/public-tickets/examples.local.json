@@ -1,0 +1,88 @@
+{
+  "claim": {
+    "ticketId": "1d725b5f-2f34-49f1-bafa-966d917df97e",
+    "tripId": "3bde7a79-5569-42a4-8004-7babcae3a92c",
+    "alreadyClaimed": false,
+    "participantStatus": "ACTIVE",
+    "bookingVersion": 2,
+    "currentAccess": {
+      "participantActive": true,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  },
+  "replay": {
+    "ticketId": "1d725b5f-2f34-49f1-bafa-966d917df97e",
+    "tripId": "3bde7a79-5569-42a4-8004-7babcae3a92c",
+    "alreadyClaimed": true,
+    "participantStatus": "ACTIVE",
+    "bookingVersion": 2,
+    "currentAccess": {
+      "participantActive": true,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  },
+  "list": {
+    "items": [
+      {
+        "id": "1d725b5f-2f34-49f1-bafa-966d917df97e",
+        "participantName": "Declared traveller",
+        "participantStatus": "ACTIVE",
+        "checkinStatus": "NOT_CHECKED_IN",
+        "trip": {
+          "id": "3bde7a79-5569-42a4-8004-7babcae3a92c",
+          "title": "M5 trip",
+          "status": "OPEN",
+          "startAt": "2026-10-24T14:49:19.159Z",
+          "endAt": "2026-10-25T14:49:19.159Z",
+          "destination": {
+            "id": "357bad15-ee46-482d-9078-d5c2900a9248",
+            "name": "M5 destination"
+          }
+        },
+        "bookingStatus": "CONFIRMED",
+        "permissions": {
+          "participantActive": true,
+          "canNavigate": false,
+          "canRent": false,
+          "canCheckIn": false,
+          "reason": "INTEGRATION_NOT_VERIFIED"
+        }
+      }
+    ],
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  },
+  "detail": {
+    "id": "1d725b5f-2f34-49f1-bafa-966d917df97e",
+    "participantName": "Declared traveller",
+    "participantStatus": "ACTIVE",
+    "checkinStatus": "NOT_CHECKED_IN",
+    "trip": {
+      "id": "3bde7a79-5569-42a4-8004-7babcae3a92c",
+      "title": "M5 trip",
+      "status": "OPEN",
+      "startAt": "2026-10-24T14:49:19.159Z",
+      "endAt": "2026-10-25T14:49:19.159Z",
+      "destination": {
+        "id": "357bad15-ee46-482d-9078-d5c2900a9248",
+        "name": "M5 destination"
+      }
+    },
+    "bookingStatus": "CONFIRMED",
+    "permissions": {
+      "participantActive": true,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { basicIssues, routeIssues } from './trip.policy'
+import { basicIssues, resolveDefaultRegistrationDeadline, routeIssues } from './trip.policy'
 import { createSchema, updateSchema, parse } from '../presentation/dtos/public-trip.dto'
 import { PublicTripUseCase } from './use-cases/public-trip.use-case'
 import type { TripStore, TripView } from './trip.types'
@@ -62,6 +62,37 @@ describe('CF01 policies', () => {
     expect(basicIssues({ ...input, capacity: 1.5 }, now)).not.toEqual([])
     expect(basicIssues({ ...input, endAt: input.startAt }, now)).not.toEqual([])
     expect(basicIssues(input, new Date('2031-01-01'))).not.toEqual([])
+  })
+  it('defaults registrationDeadlineAt to 2 days (48h) before startAt and enforces >= 1 day (24h) lead time', () => {
+    const now = new Date('2030-01-01T00:00:00Z')
+    const base = { startAt: '2030-01-10T06:00:00Z', endAt: '2030-01-12T18:00:00Z', price: '500000', capacity: 10 }
+    expect(resolveDefaultRegistrationDeadline(base.startAt)).toBe('2030-01-08T06:00:00.000Z')
+
+    // Exactly 24h before startAt is allowed (maximum boundary)
+    expect(
+      basicIssues({ ...base, registrationDeadlineAt: '2030-01-09T06:00:00Z' }, now),
+    ).toEqual([])
+
+    // Closer than 24h before startAt is rejected
+    expect(
+      basicIssues({ ...base, registrationDeadlineAt: '2030-01-09T06:00:01Z' }, now),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'registrationDeadlineAt', code: 'INVALID_TIME' })]),
+    )
+
+    // registrationOpenAt must be before registrationDeadlineAt
+    expect(
+      basicIssues(
+        {
+          ...base,
+          registrationOpenAt: '2030-01-08T12:00:00Z',
+          registrationDeadlineAt: '2030-01-08T06:00:00Z',
+        },
+        now,
+      ),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'registrationOpenAt', code: 'INVALID_TIME' })]),
+    )
   })
   it('rejects client-assigned state, actor and numeric money at the HTTP boundary', () => {
     const data = {
