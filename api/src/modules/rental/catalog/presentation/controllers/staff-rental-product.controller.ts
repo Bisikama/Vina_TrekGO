@@ -161,6 +161,7 @@ Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARC
 Tạo một sản phẩm (catalog item) mới.
 - Khởi tạo mặc định ở trạng thái ACTIVE để sẵn sàng phục vụ thuê.
 - Nếu muốn tạm ẩn, nhân viên có thể gọi PATCH /api/v1/staff/rental-products/{id}/status để chuyển sang INACTIVE.
+- **TÍCH HỢP VỚI GEAR ADVISOR:** Sau khi tạo sản phẩm, nhân viên kho có thể mở endpoint \`PUT /api/v1/staff/gear/product-profiles/{productId}\` để cấu hình thông số kỹ thuật (độ chống nước, giữ nhiệt, dung tích...), giúp sản phẩm tham gia vào các thuật toán gợi ý tối ưu của Gear Advisor.
 `,
   })
   @ApiResponse({

@@ -55,7 +55,7 @@ export class RentalOrderController {
   @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
     operationId: 'createRentalOrder',
-    summary: 'Tạo đơn thuê thiết bị',
+    summary: 'Tạo đơn thuê thiết bị (từ Quote đã tạo hoặc từ Gear Plan)',
     description: `
 **RB-API-201** — Tạo RentalOrder từ báo giá (Quote) đã có.
 
@@ -63,6 +63,13 @@ export class RentalOrderController {
 - Yêu cầu header \`Idempotency-Key\` để tránh tạo đơn trùng lặp.
 - Quote phải chưa hết hạn và thuộc về user hiện tại.
 - Sau khi tạo thành công, đơn ở trạng thái **PENDING_PAYMENT**.
+
+**HƯỚNG DẪN TEST VỚI GEAR ADVISOR & BÁO GIÁ:**
+1. Lấy quoteId từ kết quả gọi POST /api/v1/rentals/quote (hoặc sau khi liên kết với Gear Plan tại POST /api/v1/gear/plans/{id}/quote-links).
+2. Điền quoteId vào request body bên dưới.
+3. Nhập khóa duy nhất vào header Idempotency-Key (ví dụ: order-test-001).
+4. Nhấn Execute để tạo đơn thuê. Đơn được tạo ở trạng thái PENDING_PAYMENT.
+5. Tiếp tục gọi POST /api/v1/rental-orders/{id}/payments để thực hiện thanh toán đơn hàng.
 `,
   })
   @ApiHeader({
