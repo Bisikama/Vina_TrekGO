@@ -68,6 +68,10 @@ type ApiRentalProduct = {
   recommendationTags?: string[];
 };
 
+type MediaDelivery = {
+  url: string;
+};
+
 const PRODUCT_FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1200&q=85";
 
@@ -168,6 +172,48 @@ function mapProduct(
       ...(product.recommendationTags ?? []),
     ],
   };
+}
+
+async function resolveProductImages(
+  product: RentalProduct,
+  variant: "CATALOG_CARD" | "CATALOG_DETAIL",
+  signal?: AbortSignal,
+): Promise<RentalProduct> {
+  const mediaIds = (product.imageMediaIds ?? []).filter(
+    (value) =>
+      !value.startsWith("http://") &&
+      !value.startsWith("https://"),
+  );
+
+  if (mediaIds.length === 0) {
+    return product;
+  }
+
+  const deliveries = await Promise.allSettled(
+    mediaIds.map(async (mediaId) => {
+      const response = await apiClient.get<unknown>(
+        `/api/v1/media/${encodeURIComponent(
+          mediaId,
+        )}/delivery`,
+        {
+          params: { variant, format: "WEBP" },
+          signal,
+        },
+      );
+
+      return unwrapApiData<MediaDelivery>(response.data).url;
+    }),
+  );
+
+  const resolvedUrls = deliveries.flatMap((delivery) =>
+    delivery.status === "fulfilled" && delivery.value
+      ? [delivery.value]
+      : [],
+  );
+
+  return resolvedUrls.length > 0
+    ? { ...product, imageUrls: resolvedUrls }
+    : product;
 }
 
 export function getRentalApiErrorMessage(
@@ -279,8 +325,18 @@ export async function getRentalProducts(
       ApiPaginatedResult<ApiRentalProduct>
     >(response.data);
 
+    const items = await Promise.all(
+      result.items.map((product) =>
+        resolveProductImages(
+          mapProduct(product),
+          "CATALOG_CARD",
+          options?.signal,
+        ),
+      ),
+    );
+
     return {
-      items: result.items.map(mapProduct),
+      items,
       pagination: result.pagination,
     };
   } catch (error) {
@@ -305,8 +361,12 @@ export async function getRentalProduct(
       { signal },
     );
 
-    return mapProduct(
-      unwrapApiData<ApiRentalProduct>(response.data),
+    return resolveProductImages(
+      mapProduct(
+        unwrapApiData<ApiRentalProduct>(response.data),
+      ),
+      "CATALOG_DETAIL",
+      signal,
     );
   } catch (error) {
     throw new Error(
@@ -547,11 +607,17 @@ export async function getRentalCatalog(
     };
   }
 
-  const recommendationResult =
-    await getRentalRecommendations(bookingId, {
+  const [recommendationResult, availabilityResults] = await Promise.all([
+    getRentalRecommendations(bookingId, {
       limit: Math.min(productResult.items.length || 1, 50),
       signal,
-    });
+    }),
+    Promise.allSettled(
+      productResult.items.map((product) =>
+        getRentalAvailability(bookingId, product.id, signal),
+      ),
+    ),
+  ]);
 
   const recommendationMap = new Map(
     recommendationResult.recommendations.map((item) => [
@@ -563,12 +629,19 @@ export async function getRentalCatalog(
   return {
     eligibility,
     categories: categoryResult.items,
-    items: productResult.items.map((product) => ({
-      ...product,
-      availableCount: null,
-      recommendation:
-        recommendationMap.get(product.id) ?? null,
-    })),
+    items: productResult.items.map((product, index) => {
+      const availability = availabilityResults[index];
+
+      return {
+        ...product,
+        availableCount:
+          availability.status === "fulfilled"
+            ? availability.value.availableCount
+            : null,
+        recommendation:
+          recommendationMap.get(product.id) ?? null,
+      };
+    }),
     pagination: productResult.pagination,
   };
 }

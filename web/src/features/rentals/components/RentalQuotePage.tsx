@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import {
   createRentalOrder,
   createRentalPayment,
@@ -26,15 +27,42 @@ import type {
 
 type RentalQuotePageProps = {
   bookingId: string;
-  productId: string;
+  productId?: string;
   initialQuantity?: number;
+};
+
+type CheckoutLine = {
+  product: RentalProduct;
+  quantity: number;
+  availability: RentalAvailability;
 };
 
 type PageData = {
   eligibility: RentalEligibility;
-  availability: RentalAvailability;
-  product: RentalProduct;
+  lines: CheckoutLine[];
 };
+
+function formatMoney(value: number, currency = "VND") {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("vi-VN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+}
+
+function shortCode(value: string) {
+  return value.replaceAll("-", "").slice(-6).toUpperCase();
+}
 
 function createIdempotencyKey(scope: string) {
   if (
@@ -43,42 +71,15 @@ function createIdempotencyKey(scope: string) {
   ) {
     return `${scope}-${crypto.randomUUID()}`;
   }
-
-  return `${scope}-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
-}
-
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: currency || "VND",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function shortCode(value: string) {
-  return value.replaceAll("-", "").slice(-6).toUpperCase();
+  return `${scope}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
   const [remaining, setRemaining] = useState(0);
 
   useEffect(() => {
-    const tick = () => setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
+    const tick = () =>
+      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
@@ -86,12 +87,15 @@ function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
 
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1_000);
-
   return (
     <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center">
-      <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-amber-800">Thời gian còn lại để chuyển khoản</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-800">
+        Thời gian còn lại để chuyển khoản
+      </p>
       <p className="mt-2 text-3xl font-black tabular-nums text-amber-950">
-        {remaining > 0 ? `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : "Đã hết hạn"}
+        {remaining > 0
+          ? `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+          : "Đã hết hạn"}
       </p>
     </div>
   );
@@ -99,145 +103,144 @@ function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
 
 export function RentalQuotePage({
   bookingId,
-  productId,
+  productId = "",
   initialQuantity = 1,
 }: RentalQuotePageProps) {
+  const cart = useRentalCart(bookingId);
   const [data, setData] = useState<PageData | null>(null);
-  const [quantity, setQuantity] = useState(
-    Math.max(1, Math.floor(initialQuantity)),
-  );
   const [recipientId, setRecipientId] = useState("");
   const [quote, setQuote] = useState<RentalQuote | null>(null);
   const [orderResult, setOrderResult] =
     useState<CreateRentalOrderResult | null>(null);
-  const [payment, setPayment] =
-    useState<RentalPaymentCheckoutResponse | null>(null);
-  const [gateway, setGateway] =
-    useState<RentalPaymentGateway>("vnpay");
+  const [payment, setPayment] = useState<RentalPaymentCheckoutResponse | null>(
+    null,
+  );
+  const [gateway, setGateway] = useState<RentalPaymentGateway>("vnpay");
   const [paymentGateways, setPaymentGateways] = useState<
     RentalPaymentGateway[]
   >([]);
-  const orderKeyRef = useRef<string | null>(null);
-  const paymentKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const orderKeyRef = useRef<string | null>(null);
+  const paymentKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!cart.hydrated) return;
     const controller = new AbortController();
 
-    Promise.all([
-      getRentalEligibility(bookingId, controller.signal),
-      getRentalProduct(productId, controller.signal),
-      getRentalAvailability(
-        bookingId,
-        productId,
-        controller.signal,
-      ),
-      getRentalPaymentOptions(controller.signal).catch(
-        () => ({ gateways: [] }),
-      ),
-    ])
-      .then(
-        ([
-          eligibility,
-          product,
-          availability,
-          paymentOptions,
-        ]) => {
-        if (controller.signal.aborted) {
-          return;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [eligibility, paymentOptions] = await Promise.all([
+          getRentalEligibility(bookingId, controller.signal),
+          getRentalPaymentOptions(controller.signal).catch(() => ({
+            gateways: [],
+          })),
+        ]);
+
+        let requested = cart.items.map((item) => ({
+          product: item.product,
+          quantity: item.quantity,
+        }));
+
+        if (requested.length === 0 && productId) {
+          const product = await getRentalProduct(productId, controller.signal);
+          requested = [
+            { product, quantity: Math.max(1, Math.floor(initialQuantity)) },
+          ];
         }
 
-        setData({ eligibility, product, availability });
-        const availableGateways =
-          paymentOptions.gateways.map(
-            (option) => option.gateway,
-          );
-        setPaymentGateways(availableGateways);
-        setGateway((current) =>
-          availableGateways.includes(current)
-            ? current
-            : availableGateways[0] ?? "vnpay",
+        const lines = await Promise.all(
+          requested.map(async (item) => ({
+            ...item,
+            availability: await getRentalAvailability(
+              bookingId,
+              item.product.id,
+              controller.signal,
+            ),
+          })),
         );
+
+        if (controller.signal.aborted) return;
+        setData({ eligibility, lines });
         setRecipientId(
-          eligibility.recipientOptions[0]?.id ?? "",
+          (current) => current || eligibility.recipientOptions[0]?.id || "",
         );
-        setQuantity((current) =>
-          Math.min(
-            Math.max(current, 1),
-            Math.max(availability.availableCount, 1),
-          ),
+        const gateways = paymentOptions.gateways.map(
+          (option) => option.gateway,
         );
-        setError(null);
-        },
-      )
-      .catch((loadError: unknown) => {
+        setPaymentGateways(gateways);
+        setGateway((current) =>
+          gateways.includes(current) ? current : (gateways[0] ?? "vnpay"),
+        );
+      } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(
             getRentalApiErrorMessage(
               loadError,
-              "Không thể chuẩn bị báo giá thuê thiết bị.",
+              "Không thể kiểm tra giỏ thiết bị.",
             ),
           );
+          setData(null);
         }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
 
+    void load();
     return () => controller.abort();
-  }, [bookingId, productId]);
+  }, [bookingId, cart.hydrated, cart.items, initialQuantity, productId]);
+
+  const shortages = useMemo(
+    () =>
+      data?.lines.filter(
+        (line) => line.quantity > line.availability.availableCount,
+      ) ?? [],
+    [data],
+  );
+
+  const estimatedDays = useMemo(() => {
+    if (!data) return 1;
+    const duration =
+      new Date(data.eligibility.trip.endAt).getTime() -
+      new Date(data.eligibility.trip.startAt).getTime();
+    return Math.max(1, Math.ceil(Math.max(0, duration) / 86_400_000));
+  }, [data]);
+
+  const estimatedFee = useMemo(
+    () =>
+      (data?.lines ?? []).reduce(
+        (sum, line) =>
+          sum + line.product.dailyPrice * line.quantity * estimatedDays,
+        0,
+      ),
+    [data, estimatedDays],
+  );
 
   const canCreateRental =
     data?.eligibility.eligible === true &&
-    data.eligibility.allowedActions.includes(
-      "CREATE_RENTAL",
-    );
-
-  const estimatedFee = useMemo(() => {
-    if (!data) {
-      return 0;
-    }
-
-    const startAt = new Date(data.eligibility.trip.startAt);
-    const endAt = new Date(data.eligibility.trip.endAt);
-    const durationMs = Math.max(
-      endAt.getTime() - startAt.getTime(),
-      0,
-    );
-    const estimatedDays = Math.max(
-      1,
-      Math.ceil(durationMs / 86_400_000),
-    );
-
-    return data.product.dailyPrice * quantity * estimatedDays;
-  }, [data, quantity]);
+    data.eligibility.allowedActions.includes("CREATE_RENTAL") &&
+    data.lines.length > 0 &&
+    shortages.length === 0;
 
   async function handleCreateQuote() {
-    if (!data || submitting || !canCreateRental) {
-      return;
-    }
-
+    if (!data || !canCreateRental || submitting) return;
     setSubmitting(true);
     setError(null);
-
     try {
-      const result = await createRentalQuote({
-        tripId: data.eligibility.trip.id,
-        recipientTripMemberId:
-          recipientId || undefined,
-        items: [
-          {
-            productId,
-            quantity,
-          },
-        ],
-      });
-
-      setQuote(result);
+      setQuote(
+        await createRentalQuote({
+          tripId: data.eligibility.trip.id,
+          recipientTripMemberId: recipientId || undefined,
+          items: data.lines.map((line) => ({
+            productId: line.product.id,
+            quantity: line.quantity,
+          })),
+        }),
+      );
     } catch (quoteError) {
       setError(
         getRentalApiErrorMessage(
@@ -251,56 +254,34 @@ export function RentalQuotePage({
   }
 
   async function handleCreateOrderAndPayment() {
-    if (!quote || submitting) {
-      return;
-    }
-
+    if (!quote || submitting) return;
     if (!paymentGateways.includes(gateway)) {
-      setError(
-        "Backend hiện chưa bật cổng thanh toán khả dụng.",
-      );
+      setError("Backend hiện chưa bật cổng thanh toán khả dụng.");
       return;
     }
 
     setSubmitting(true);
     setError(null);
-
     try {
-      if (!orderKeyRef.current) {
-        orderKeyRef.current = createIdempotencyKey(
-          `rental-order-${quote.id}`,
-        );
-      }
-
+      orderKeyRef.current ??= createIdempotencyKey(`rental-order-${quote.id}`);
       const nextOrder =
-        orderResult ??
-        (await createRentalOrder(
-          quote.id,
-          orderKeyRef.current,
-        ));
-
+        orderResult ?? (await createRentalOrder(quote.id, orderKeyRef.current));
       setOrderResult(nextOrder);
 
-      if (!paymentKeyRef.current) {
-        paymentKeyRef.current = createIdempotencyKey(
-          `rental-payment-${nextOrder.order.id}-${gateway}`,
-        );
-      }
-
+      paymentKeyRef.current ??= createIdempotencyKey(
+        `rental-payment-${nextOrder.order.id}-${gateway}`,
+      );
       const nextPayment =
         payment ??
         (await createRentalPayment(
           nextOrder.order.id,
-          {
-            paymentMethod: "REDIRECT",
-            gateway,
-          },
+          { paymentMethod: "REDIRECT", gateway },
           paymentKeyRef.current,
         ));
-
       setPayment(nextPayment);
 
       if (nextPayment.checkout?.url) {
+        cart.clear();
         sessionStorage.setItem(
           "trekgo:rental-payment-return",
           JSON.stringify({
@@ -312,7 +293,6 @@ export function RentalQuotePage({
         window.location.assign(nextPayment.checkout.url);
         return;
       }
-
       setError(
         nextPayment.reconciliationRequired
           ? "Cổng thanh toán đang xác minh giao dịch. Vui lòng chờ ít phút rồi thử lại."
@@ -330,9 +310,9 @@ export function RentalQuotePage({
     }
   }
 
-  if (loading) {
+  if (loading || !cart.hydrated) {
     return (
-      <div className="min-h-[650px] bg-[#F7F7F4] px-4 py-12">
+      <div className="min-h-[650px] bg-[#F4F6F1] px-4 py-12">
         <div className="mx-auto grid max-w-5xl animate-pulse gap-8 lg:grid-cols-[1fr_360px]">
           <div className="h-[520px] rounded-3xl bg-gray-200" />
           <div className="h-[520px] rounded-3xl bg-gray-200" />
@@ -341,172 +321,154 @@ export function RentalQuotePage({
     );
   }
 
-  if (!data) {
+  if (!data || data.lines.length === 0) {
     return (
-      <div className="min-h-[650px] bg-[#F7F7F4] px-4 py-20">
-        <div className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-extrabold text-gray-900">
-            Không thể tạo báo giá
+      <div className="min-h-[650px] bg-[#F4F6F1] px-4 py-20">
+        <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 text-center shadow-sm">
+          <div className="text-5xl">🎒</div>
+          <h1 className="mt-4 text-xl font-black text-gray-950">
+            Giỏ hành trang đang trống
           </h1>
-
           <p className="mt-3 text-sm text-gray-600">
-            {error ?? "Dữ liệu thuê thiết bị không hợp lệ."}
+            {error ?? "Hãy chọn ít nhất một thiết bị trước khi tạo báo giá."}
           </p>
-
           <Link
-            href={`/rentals?bookingId=${encodeURIComponent(
-              bookingId,
-            )}`}
-            className="mt-6 inline-flex rounded-xl bg-[#1B5E41] px-5 py-3 text-sm font-bold text-white"
+            href={`/rentals?bookingId=${encodeURIComponent(bookingId)}`}
+            className="mt-6 inline-flex rounded-xl bg-[#174B36] px-5 py-3 text-sm font-black text-white"
           >
-            Quay lại danh sách
+            Quay lại chọn thiết bị
           </Link>
         </div>
       </div>
     );
   }
 
-  const { eligibility, availability, product } = data;
-  const available = availability.availableCount > 0;
+  const { eligibility, lines } = data;
 
   if (quote) {
     return (
-      <div className="min-h-screen bg-[#F7F7F4] px-4 py-12">
-        <main className="mx-auto max-w-3xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm sm:p-10">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-700">
+      <div className="min-h-screen bg-[#F4F6F1] px-4 py-12">
+        <main className="mx-auto max-w-3xl rounded-[28px] border border-emerald-100 bg-white p-6 shadow-[0_18px_50px_rgba(22,63,45,0.10)] sm:p-10">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-3xl text-emerald-700">
             ✓
           </div>
-
           <h1 className="mt-5 text-center text-3xl font-black text-gray-950">
-            Đã tạo báo giá thuê
+            Báo giá hành trang đã sẵn sàng
           </h1>
-
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Mã quote: <strong>{quote.id}</strong>
+          <p className="mt-2 text-center text-xs font-semibold text-gray-500">
+            Mã báo giá #{shortCode(quote.id)} · {quote.chargedDays} ngày tính
+            phí
           </p>
 
-          <div className="mt-8 rounded-2xl bg-[#F7F7F4] p-5">
-            <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-4">
-              <div>
-                <p className="font-extrabold text-gray-900">
-                  {quote.items[0]?.name ?? product.name}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {quote.items[0]?.quantity ?? quantity} thiết bị · {quote.chargedDays} ngày tính phí
-                </p>
-              </div>
-
-              <p className="font-black text-[#1B5E41]">
-                {formatMoney(
-                  quote.amounts.feeAmount,
-                  quote.amounts.currency,
-                )}
-              </p>
-            </div>
-
-            <dl className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-gray-500">Phí thuê</dt>
-                <dd className="font-bold text-gray-900">
-                  {formatMoney(
-                    quote.amounts.feeAmount,
-                    quote.amounts.currency,
-                  )}
-                </dd>
-              </div>
-
-              <div className="flex justify-between gap-4">
-                <dt className="text-gray-500">Tiền cọc</dt>
-                <dd className="font-bold text-gray-900">
-                  {formatMoney(
-                    quote.amounts.depositAmount,
-                    quote.amounts.currency,
-                  )}
-                </dd>
-              </div>
-
-              <div className="flex justify-between gap-4 border-t border-gray-200 pt-3 text-base">
-                <dt className="font-extrabold text-gray-900">
-                  Tổng cộng
-                </dt>
-                <dd className="font-black text-[#1B5E41]">
-                  {formatMoney(
-                    quote.amounts.totalAmount,
-                    quote.amounts.currency,
-                  )}
-                </dd>
-              </div>
-            </dl>
+          <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-[#FAFBF8] px-5">
+            {quote.items.map((item) => {
+              const product = lines.find(
+                (line) => line.product.id === item.productId,
+              )?.product;
+              return (
+                <div
+                  key={item.productId}
+                  className="flex items-center gap-4 py-4"
+                >
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#EEF3EF]">
+                    {product?.imageUrls[0] ? (
+                      <img
+                        src={product.imageUrls[0]}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-full place-items-center text-2xl">
+                        🏕️
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-gray-950">{item.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Số lượng {item.quantity} ·{" "}
+                      {formatMoney(item.dailyPrice, quote.amounts.currency)}
+                      /ngày
+                    </p>
+                  </div>
+                  <p className="text-sm font-black text-[#174B36]">
+                    {formatMoney(item.feeAmount, quote.amounts.currency)}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <dl className="mt-5 space-y-3 rounded-2xl bg-[#F0F6EF] p-5 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-gray-600">Phí thuê</dt>
+              <dd className="font-black">
+                {formatMoney(quote.amounts.feeAmount, quote.amounts.currency)}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-600">Tiền cọc</dt>
+              <dd className="font-black">
+                {formatMoney(
+                  quote.amounts.depositAmount,
+                  quote.amounts.currency,
+                )}
+              </dd>
+            </div>
+            <div className="flex justify-between border-t border-emerald-900/10 pt-3 text-base">
+              <dt className="font-black">Tổng thanh toán</dt>
+              <dd className="text-xl font-black text-[#174B36]">
+                {formatMoney(quote.amounts.totalAmount, quote.amounts.currency)}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-gray-200 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500">
                 Nhận thiết bị
               </p>
-              <p className="mt-2 font-extrabold text-gray-900">
-                {quote.pickup.name}
-              </p>
-              <p className="mt-1 text-xs text-gray-600">
+              <p className="mt-2 text-sm font-black">{quote.pickup.name}</p>
+              <p className="mt-1 text-xs text-gray-500">
                 {formatDate(quote.pickup.scheduledAt)}
               </p>
             </div>
-
             <div className="rounded-2xl border border-gray-200 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500">
                 Trả thiết bị
               </p>
-              <p className="mt-2 font-extrabold text-gray-900">
-                {quote.dropoff.name}
-              </p>
-              <p className="mt-1 text-xs text-gray-600">
+              <p className="mt-2 text-sm font-black">{quote.dropoff.name}</p>
+              <p className="mt-1 text-xs text-gray-500">
                 {formatDate(quote.dropoff.scheduledAt)}
               </p>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-            Báo giá hết hạn lúc {formatDate(quote.expiresAt)}.
-            Khi tiếp tục, hệ thống sẽ giữ toàn bộ số lượng thiết bị
-            rồi mới mở cổng thanh toán.
-          </div>
+          <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            Báo giá có hiệu lực đến{" "}
+            <strong>{formatDate(quote.expiresAt)}</strong>. Hệ thống chỉ giữ
+            thiết bị sau khi tạo đơn.
+          </p>
 
-          <section className="mt-7 rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-                  Shared Payment
-                </p>
-                <h2 className="mt-1 text-xl font-black text-gray-950">
-                  Chọn cổng thanh toán
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-gray-600">
-                  Thiết bị chỉ được giữ khi tạo đơn thành công.
-                  Trạng thái PAID sẽ do Backend xác minh lại.
-                </p>
-              </div>
-
+          <section className="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+              Thanh toán an toàn
+            </p>
+            <h2 className="mt-1 text-xl font-black text-gray-950">
+              Chọn cổng thanh toán
+            </h2>
             {paymentGateways.length === 0 && (
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
                 Backend chưa trả về VNPay hoặc MoMo khả dụng.
-                Kiểm tra cấu hình Shared Payment rồi tải lại trang.
-              </div>
+              </p>
             )}
-
-            {orderResult && (
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700 shadow-sm">
-                  Đã giữ thiết bị
-                </span>
-              )}
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {(
                 [
                   {
                     id: "vnpay",
                     title: "VNPay",
-                    detail: "Thẻ ATM, QR và ngân hàng",
+                    detail: "ATM, QR và ngân hàng",
                     icon: "VN",
                   },
                   {
@@ -517,13 +479,8 @@ export function RentalQuotePage({
                   },
                 ] as const
               )
-                .filter((option) =>
-                  paymentGateways.includes(option.id),
-                )
-                .map((option) => {
-                const selected = gateway === option.id;
-
-                return (
+                .filter((option) => paymentGateways.includes(option.id))
+                .map((option) => (
                   <button
                     key={option.id}
                     type="button"
@@ -533,81 +490,64 @@ export function RentalQuotePage({
                       paymentKeyRef.current = null;
                       setPayment(null);
                     }}
-                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition ${selected
-                      ? "border-emerald-500 bg-white shadow-[0_12px_30px_rgba(16,185,129,0.16)]"
-                      : "border-emerald-100 bg-white/70 hover:border-emerald-300"} disabled:cursor-not-allowed disabled:opacity-70`}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition ${gateway === option.id ? "border-emerald-500 bg-white shadow-lg" : "border-emerald-100 bg-white/70 hover:border-emerald-300"}`}
                   >
                     <span
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${selected
-                        ? "bg-[#1B5E41] text-white"
-                        : "bg-emerald-100 text-emerald-800"}`}
+                      className={`grid h-11 w-11 place-items-center rounded-2xl text-sm font-black ${gateway === option.id ? "bg-[#174B36] text-white" : "bg-emerald-100 text-emerald-800"}`}
                     >
                       {option.icon}
                     </span>
                     <span>
-                      <span className="block font-black text-gray-950">
-                        {option.title}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-gray-500">
+                      <span className="block font-black">{option.title}</span>
+                      <span className="block text-xs text-gray-500">
                         {option.detail}
                       </span>
                     </span>
                   </button>
-                );
-              })}
+                ))}
             </div>
-
             {orderResult && (
-              <div className="mt-4 rounded-2xl bg-white p-4 text-xs leading-5 text-gray-600">
+              <div className="mt-4 rounded-2xl bg-white p-4 text-xs text-gray-600">
                 <p>
-                  Mã đơn thuê:{" "}
-                  <strong className="text-gray-900">
+                  Mã đơn thuê{" "}
+                  <strong className="text-gray-950">
                     #{shortCode(orderResult.order.id)}
                   </strong>
                 </p>
-                <p>
-                  Giữ đến:{" "}
-                  <strong className="text-gray-900">
-                    {formatDate(
-                      orderResult.order.paymentExpiresAt,
-                    )}
+                <p className="mt-1">
+                  Giữ đến{" "}
+                  <strong className="text-gray-950">
+                    {formatDate(orderResult.order.paymentExpiresAt)}
                   </strong>
                 </p>
-                <PaymentCountdown expiresAt={orderResult.order.paymentExpiresAt} />
+                <PaymentCountdown
+                  expiresAt={orderResult.order.paymentExpiresAt}
+                />
               </div>
             )}
-
             {error && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+              <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
                 {error}
-              </div>
+              </p>
             )}
-
             <button
               type="button"
               onClick={handleCreateOrderAndPayment}
-              disabled={
-                submitting || paymentGateways.length === 0
-              }
-              className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[#163F2D] px-6 py-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(22,63,45,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F5132] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={submitting || paymentGateways.length === 0}
+              className="mt-5 flex w-full justify-center rounded-2xl bg-[#174B36] px-6 py-4 text-sm font-black text-white shadow-lg transition hover:bg-[#0F5A3B] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting
                 ? orderResult
                   ? "Đang mở cổng thanh toán..."
                   : "Đang giữ thiết bị..."
-                : `Giữ thiết bị & thanh toán qua ${
-                    gateway === "vnpay" ? "VNPay" : "MoMo"
-                  }`}
+                : `Giữ thiết bị & thanh toán qua ${gateway === "vnpay" ? "VNPay" : "MoMo"}`}
             </button>
           </section>
-
           <Link
-            href={`/rentals?bookingId=${encodeURIComponent(
-              bookingId,
-            )}`}
-            className="mt-4 flex w-full justify-center rounded-xl border border-gray-200 bg-white px-6 py-4 text-sm font-extrabold text-gray-700 hover:border-emerald-300 hover:text-emerald-800"
+            href={`/rentals?bookingId=${encodeURIComponent(bookingId)}`}
+            className="mt-4 flex justify-center rounded-xl border border-gray-200 px-6 py-4 text-sm font-black text-gray-700 hover:border-emerald-400"
           >
-            Quay lại danh mục thuê
+            Quay lại danh mục
           </Link>
         </main>
       </div>
@@ -615,142 +555,150 @@ export function RentalQuotePage({
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F4]">
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <nav className="mb-6 flex flex-wrap items-center gap-2 text-xs font-semibold text-gray-500">
+    <div className="min-h-screen bg-[#F4F6F1]">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <nav className="mb-6 flex items-center gap-2 text-xs font-bold text-gray-500">
           <Link
-            href={`/rentals?bookingId=${encodeURIComponent(
-              bookingId,
-            )}`}
-            className="hover:text-[#1B5E41]"
+            href={`/rentals?bookingId=${encodeURIComponent(bookingId)}`}
+            className="hover:text-emerald-700"
           >
-            Thuê thiết bị
+            Danh mục thuê
           </Link>
           <span>/</span>
-          <span className="text-gray-900">Tạo báo giá</span>
+          <span className="text-gray-900">Kiểm tra giỏ hành trang</span>
         </nav>
-
-        <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
-            <h1 className="text-3xl font-black text-gray-950">
-              Xác nhận thiết bị thuê
+        <div className="grid gap-7 lg:grid-cols-[1fr_380px]">
+          <section className="rounded-[28px] border border-gray-100 bg-white p-6 shadow-[0_12px_35px_rgba(22,63,45,0.08)] sm:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+              Bước 1 · Kiểm tra hành trang
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-gray-950">
+              Giỏ thiết bị thuê
             </h1>
-
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Server sẽ kiểm tra lại tồn kho và tính chính xác phí thuê, tiền cọc trước khi tạo quote.
+              Kiểm tra lại số lượng. Backend sẽ xác nhận tồn kho và tính chính
+              xác phí thuê, tiền cọc cho toàn bộ giỏ.
             </p>
 
-            <div className="mt-7 flex gap-5 rounded-2xl border border-gray-200 p-4">
-              <div className="h-28 w-32 shrink-0 overflow-hidden rounded-xl bg-[#EEF3EF]">
-                <img
-                  src={product.imageUrls[0]}
-                  alt={product.name}
-                  className="h-full w-full object-contain p-3"
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                  {product.category.name}
-                </p>
-                <h2 className="mt-2 text-lg font-extrabold text-gray-900">
-                  {product.name}
-                </h2>
-                <p className="mt-2 text-sm font-black text-[#1B5E41]">
-                  {formatMoney(
-                    product.dailyPrice,
-                    product.currency,
-                  )}
-                  /ngày
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-7">
-              <label className="text-sm font-extrabold text-gray-900">
-                Số lượng
-              </label>
-
-              <div className="mt-3 flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setQuantity((current) =>
-                      Math.max(1, current - 1),
-                    )
-                  }
-                  disabled={quantity <= 1}
-                  className="h-11 w-11 rounded-xl border border-gray-200 text-xl font-bold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  −
-                </button>
-
-                <span className="min-w-10 text-center text-lg font-black text-gray-900">
-                  {quantity}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setQuantity((current) =>
-                      Math.min(
-                        availability.availableCount,
-                        current + 1,
-                      ),
-                    )
-                  }
-                  disabled={
-                    quantity >= availability.availableCount
-                  }
-                  className="h-11 w-11 rounded-xl border border-gray-200 text-xl font-bold disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  +
-                </button>
-
-                <span className="text-xs font-semibold text-gray-500">
-                  Còn {availability.availableCount} thiết bị
-                </span>
-              </div>
+            <div className="mt-7 space-y-3">
+              {lines.map((line) => {
+                const shortage =
+                  line.quantity > line.availability.availableCount;
+                return (
+                  <div
+                    key={line.product.id}
+                    className={`flex gap-4 rounded-2xl border p-4 ${shortage ? "border-red-200 bg-red-50" : "border-gray-200"}`}
+                  >
+                    <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-[#EEF3EF]">
+                      {line.product.imageUrls[0] ? (
+                        <img
+                          src={line.product.imageUrls[0]}
+                          alt={line.product.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-full place-items-center text-3xl">
+                          🏕️
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
+                        {line.product.category.name}
+                      </p>
+                      <h2 className="mt-1 font-black text-gray-950">
+                        {line.product.name}
+                      </h2>
+                      {line.product.sku && (
+                        <p className="mt-1 text-[10px] font-bold uppercase text-gray-400">
+                          SKU {line.product.sku}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-black text-[#174B36]">
+                          {formatMoney(
+                            line.product.dailyPrice,
+                            line.product.currency,
+                          )}
+                          /ngày
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              cart.setQuantity(
+                                line.product,
+                                line.availability.availableCount,
+                                line.quantity - 1,
+                              )
+                            }
+                            className="grid h-9 w-9 place-items-center rounded-xl border border-gray-200 font-black"
+                          >
+                            −
+                          </button>
+                          <span className="min-w-6 text-center text-sm font-black">
+                            {line.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={
+                              line.quantity >= line.availability.availableCount
+                            }
+                            onClick={() =>
+                              cart.setQuantity(
+                                line.product,
+                                line.availability.availableCount,
+                                line.quantity + 1,
+                              )
+                            }
+                            className="grid h-9 w-9 place-items-center rounded-xl border border-gray-200 font-black disabled:text-gray-300"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <p
+                        className={`mt-2 text-xs font-bold ${shortage ? "text-red-700" : "text-gray-500"}`}
+                      >
+                        {shortage
+                          ? `Chỉ còn ${line.availability.availableCount} thiết bị`
+                          : `Tồn kho khả dụng: ${line.availability.availableCount}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {eligibility.recipientOptions.length > 0 && (
               <div className="mt-7">
                 <label
                   htmlFor="rental-recipient"
-                  className="text-sm font-extrabold text-gray-900"
+                  className="text-sm font-black text-gray-900"
                 >
                   Người nhận thiết bị
                 </label>
-
                 <select
                   id="rental-recipient"
                   value={recipientId}
-                  onChange={(event) =>
-                    setRecipientId(event.target.value)
-                  }
-                  className="mt-3 h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold outline-none focus:border-[#1B5E41]"
+                  onChange={(event) => setRecipientId(event.target.value)}
+                  className="mt-3 h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm font-bold outline-none focus:border-emerald-600"
                 >
-                  {eligibility.recipientOptions.map(
-                    (recipient) => (
-                      <option
-                        key={recipient.id}
-                        value={recipient.id}
-                      >
-                        {recipient.displayName}
-                      </option>
-                    ),
-                  )}
+                  {eligibility.recipientOptions.map((recipient) => (
+                    <option key={recipient.id} value={recipient.id}>
+                      {recipient.displayName}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
-
             <div className="mt-7 grid gap-4 sm:grid-cols-2">
               {eligibility.pickup && (
-                <div className="rounded-2xl bg-[#F7F7F4] p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                <div className="rounded-2xl bg-[#F4F6F1] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-500">
                     Nhận thiết bị
                   </p>
-                  <p className="mt-2 text-sm font-extrabold text-gray-900">
+                  <p className="mt-2 text-sm font-black">
                     {eligibility.pickup.name}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-gray-600">
@@ -760,13 +708,12 @@ export function RentalQuotePage({
                   </p>
                 </div>
               )}
-
               {eligibility.dropoff && (
-                <div className="rounded-2xl bg-[#F7F7F4] p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                <div className="rounded-2xl bg-[#F4F6F1] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-gray-500">
                     Trả thiết bị
                   </p>
-                  <p className="mt-2 text-sm font-extrabold text-gray-900">
+                  <p className="mt-2 text-sm font-black">
                     {eligibility.dropoff.name}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-gray-600">
@@ -777,89 +724,59 @@ export function RentalQuotePage({
                 </div>
               )}
             </div>
-
-            {error && (
-              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-                {error}
-              </div>
-            )}
-
-            {!eligibility.eligible && (
-              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                {eligibility.reason ??
-                  "Booking chưa đủ điều kiện thuê thiết bị."}
-              </div>
-            )}
-
-            {eligibility.existingOpenOrderId && (
-              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                Booking đã có một đơn thuê đang mở. Mã đơn: {eligibility.existingOpenOrderId}
-              </div>
-            )}
           </section>
 
-          <aside className="h-fit rounded-3xl border border-gray-100 bg-white p-6 shadow-sm lg:sticky lg:top-6">
-            <h2 className="text-lg font-extrabold text-gray-900">
-              Tạm tính
-            </h2>
-
-            <dl className="mt-5 space-y-4 text-sm">
+          <aside className="h-fit rounded-[28px] bg-[#123D2C] p-6 text-white shadow-[0_18px_45px_rgba(18,61,44,0.22)] lg:sticky lg:top-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-lime-300">
+              Chuyến đi
+            </p>
+            <h2 className="mt-2 text-xl font-black">{eligibility.trip.name}</h2>
+            <p className="mt-2 text-xs leading-5 text-emerald-50/70">
+              {estimatedDays} ngày · {lines.length} loại ·{" "}
+              {lines.reduce((sum, line) => sum + line.quantity, 0)} thiết bị
+            </p>
+            <dl className="mt-6 space-y-4 border-y border-white/15 py-5 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-gray-500">
-                  Số lượng
-                </dt>
-                <dd className="font-bold text-gray-900">
-                  {quantity}
-                </dd>
+                <dt className="text-emerald-50/70">Phí thuê dự kiến</dt>
+                <dd className="font-black">{formatMoney(estimatedFee)}</dd>
               </div>
-
               <div className="flex justify-between gap-4">
-                <dt className="text-gray-500">
-                  Phí thuê dự kiến
-                </dt>
-                <dd className="text-right font-bold text-gray-900">
-                  {formatMoney(
-                    estimatedFee,
-                    product.currency,
-                  )}
-                </dd>
-              </div>
-
-              <div className="flex justify-between gap-4">
-                <dt className="text-gray-500">
-                  Cọc dự kiến
-                </dt>
-                <dd className="text-right font-bold text-gray-900">
-                  {formatMoney(
-                    product.depositPolicy.amount * quantity,
-                    product.currency,
-                  )}
-                </dd>
+                <dt className="text-emerald-50/70">Tiền cọc</dt>
+                <dd className="font-bold text-lime-300">Backend sẽ tính</dd>
               </div>
             </dl>
-
-            <p className="mt-5 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">
-              Đây chỉ là tạm tính trên giao diện. Số tiền chính thức do API Quote tính lại theo chính sách hiện hành.
-            </p>
-
+            {!eligibility.eligible && (
+              <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-xs font-bold text-amber-100">
+                {eligibility.reason ?? "Chuyến đi chưa đủ điều kiện thuê."}
+              </p>
+            )}
+            {shortages.length > 0 && (
+              <p className="mt-4 rounded-xl border border-red-300/30 bg-red-300/10 p-3 text-xs font-bold text-red-100">
+                Có thiết bị vượt số lượng tồn kho. Hãy giảm số lượng để tiếp
+                tục.
+              </p>
+            )}
+            {error && (
+              <p className="mt-4 rounded-xl border border-red-300/30 bg-red-300/10 p-3 text-xs font-bold text-red-100">
+                {error}
+              </p>
+            )}
             <button
               type="button"
-              onClick={() => void handleCreateQuote()}
-              disabled={
-                submitting ||
-                !available ||
-                !canCreateRental
-              }
-              className="mt-6 w-full rounded-xl bg-[#1B5E41] px-5 py-4 text-sm font-extrabold text-white transition hover:bg-[#154B36] disabled:cursor-not-allowed disabled:bg-gray-300"
+              onClick={handleCreateQuote}
+              disabled={!canCreateRental || submitting}
+              className="mt-5 flex w-full justify-center rounded-2xl bg-lime-300 px-5 py-4 text-sm font-black text-[#123D2C] shadow-lg transition hover:bg-lime-200 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/50"
             >
               {submitting
-                ? "Đang tạo báo giá..."
-                : "Tạo báo giá chính thức"}
+                ? "Đang kiểm tra tồn kho..."
+                : "Tạo báo giá cho toàn bộ giỏ →"}
             </button>
-
-            <p className="mt-3 text-center text-[11px] leading-5 text-gray-500">
-              Quote không giữ tồn kho và chưa tạo thanh toán.
-            </p>
+            <Link
+              href={`/rentals?bookingId=${encodeURIComponent(bookingId)}`}
+              className="mt-3 flex w-full justify-center rounded-2xl border border-white/20 px-5 py-3 text-xs font-black text-white hover:bg-white/10"
+            >
+              Chọn thêm thiết bị
+            </Link>
           </aside>
         </div>
       </main>

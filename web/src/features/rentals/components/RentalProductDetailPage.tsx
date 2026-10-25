@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import { getRentalProductDetail } from "@/features/rentals/services/rental.api";
 import type { RentalProductDetailData } from "@/features/rentals/types/rental";
 
@@ -65,6 +66,7 @@ export function RentalProductDetailPage({
   productId,
   bookingId,
 }: RentalProductDetailPageProps) {
+  const cart = useRentalCart(bookingId);
   const [data, setData] =
     useState<RentalProductDetailData | null>(null);
   const [selectedImage, setSelectedImage] = useState("");
@@ -153,11 +155,9 @@ export function RentalProductDetailPage({
   } = data;
 
   const available = availability.availableCount > 0;
-  const quoteUrl = `/rentals/quote?bookingId=${encodeURIComponent(
-    bookingId,
-  )}&productId=${encodeURIComponent(
-    productId,
-  )}&quantity=${quantity}`;
+  const cartEntry = cart.items.find(
+    (item) => item.product.id === product.id,
+  );
 
   return (
     <div className="min-h-screen bg-[#F7F7F4]">
@@ -356,12 +356,30 @@ export function RentalProductDetailPage({
             </div>
 
             {available ? (
-              <Link
-                href={quoteUrl}
-                className="mt-6 flex w-full justify-center rounded-xl bg-[#1B5E41] px-6 py-4 text-sm font-extrabold text-white transition hover:bg-[#154B36]"
-              >
-                Tiếp tục tạo báo giá
-              </Link>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    cart.setQuantity(
+                      product,
+                      availability.availableCount,
+                      (cartEntry?.quantity ?? 0) + quantity,
+                    )
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1B5E41] bg-emerald-50 px-6 py-4 text-sm font-extrabold text-[#1B5E41] transition hover:bg-emerald-100"
+                >
+                  <span className="text-lg">+</span>
+                  Thêm vào giỏ thuê
+                </button>
+                <Link
+                  href={`/rentals?bookingId=${encodeURIComponent(
+                    bookingId,
+                  )}`}
+                  className="flex w-full items-center justify-center rounded-xl bg-[#1B5E41] px-6 py-4 text-sm font-extrabold text-white transition hover:bg-[#154B36]"
+                >
+                  Xem giỏ &amp; chọn thêm
+                </Link>
+              </div>
             ) : (
               <button
                 type="button"
@@ -372,8 +390,13 @@ export function RentalProductDetailPage({
               </button>
             )}
 
+            {cartEntry && (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-800">
+                Giỏ hành trang đang có {cartEntry.quantity} sản phẩm này.
+              </div>
+            )}
             <p className="mt-3 text-center text-[11px] leading-5 text-gray-500">
-              Bước tiếp theo sẽ kiểm tra lại tồn kho và tính phí, tiền cọc phía server.
+              Bạn có thể chọn thêm nhiều món trước khi kiểm tra tồn kho và tạo báo giá.
             </p>
           </section>
         </div>
