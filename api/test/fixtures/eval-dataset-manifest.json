@@ -1,0 +1,1047 @@
+{
+  "metadata": {
+    "version": "3.1.5",
+    "datasetName": "VinaTrekGO Gear Advisor Evaluation Benchmark",
+    "totalCases": 45,
+    "categories": [
+      "JACKET",
+      "FOOTWEAR",
+      "BACKPACK",
+      "SLEEPING_BAG",
+      "TENT",
+      "TREKKING_POLE",
+      "RAIN_GEAR",
+      "PANTS"
+    ],
+    "sources": ["MANUAL", "AI_IMAGE", "AI_LINK"],
+    "createdAt": "2026-10-24T23:30:00.000Z"
+  },
+  "cases": [
+    {
+      "id": "TC-JKT-01",
+      "category": "JACKET",
+      "name": "The North Face DryVent Mountain Shell",
+      "source": "AI_LINK",
+      "input": {
+        "text": "The North Face DryVent Mountain Shell. Lớp màng DryVent chống nước 15,000mm, cản gió tuyệt đối 100%. Trọng lượng 480g. Thích hợp nhiệt độ xuống đến 5 độ C.",
+        "url": "https://example.com/tnf-dryvent"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 15000,
+          "windproof": true,
+          "weight_g": 480,
+          "temp_rating_c": 5
+        },
+        "evidence": {
+          "waterproof_mm": "chống nước 15,000mm",
+          "windproof": "cản gió tuyệt đối 100%",
+          "weight_g": "Trọng lượng 480g",
+          "temp_rating_c": "nhiệt độ xuống đến 5 độ C"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-JKT-02",
+      "category": "JACKET",
+      "name": "Decathlon Quechua MH500 Waterproof Hiking Jacket",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Nhãn áo MH500 Quechua: Màng chống nước 20000mm Schmerber. Trọng lượng cỡ L: 540g.",
+        "photoRef": "media/mock-mh500.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 20000,
+          "weight_g": 540
+        },
+        "evidence": {
+          "waterproof_mm": "Màng chống nước 20000mm Schmerber",
+          "weight_g": "Trọng lượng cỡ L: 540g"
+        },
+        "unknownFields": ["temp_rating_c", "windproof"]
+      }
+    },
+    {
+      "id": "TC-JKT-03",
+      "category": "JACKET",
+      "name": "Patagonia Torrentshell 3L",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Patagonia Torrentshell 3L Jacket H2No Performance Standard shell, 20k mm waterproof, 394g, 100% recycled nylon.",
+        "url": "https://patagonia.com/torrentshell-3l"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 20000,
+          "weight_g": 394
+        },
+        "evidence": {
+          "waterproof_mm": "20k mm waterproof",
+          "weight_g": "394g"
+        },
+        "unknownFields": ["temp_rating_c", "windproof"]
+      }
+    },
+    {
+      "id": "TC-JKT-04",
+      "category": "JACKET",
+      "name": "Columbia Steens Mountain 2.0 Fleece",
+      "source": "MANUAL",
+      "input": {
+        "text": "Áo khoác nỉ Columbia Steens Mountain 2.0, giữ ấm tốt ở 12°C, trọng lượng 450g. Không chống nước.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": 12,
+          "weight_g": 450,
+          "waterproof_mm": 0
+        },
+        "evidence": {
+          "temp_rating_c": "giữ ấm tốt ở 12°C",
+          "weight_g": "trọng lượng 450g",
+          "waterproof_mm": "Không chống nước"
+        },
+        "unknownFields": ["windproof"]
+      }
+    },
+    {
+      "id": "TC-JKT-05",
+      "category": "JACKET",
+      "name": "Black Diamond StormLine Stretch Rain Shell",
+      "source": "AI_LINK",
+      "input": {
+        "text": "BD StormLine Stretch, BD.dry 2.5L waterproof 10,000mm, windproof, DWR finish, weight 282 grams.",
+        "url": "https://blackdiamondequipment.com/stormline"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 10000,
+          "windproof": true,
+          "weight_g": 282
+        },
+        "evidence": {
+          "waterproof_mm": "waterproof 10,000mm",
+          "windproof": "windproof",
+          "weight_g": "weight 282 grams"
+        },
+        "unknownFields": ["temp_rating_c"]
+      }
+    },
+    {
+      "id": "TC-JKT-06",
+      "category": "JACKET",
+      "name": "Montbell Versalite Ultralight Jacket",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Montbell Versalite Gore-Tex Windstopper. Waterproof rating 30000mm. Weight: 134g.",
+        "url": "https://montbell.com/versalite"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 30000,
+          "windproof": true,
+          "weight_g": 134
+        },
+        "evidence": {
+          "waterproof_mm": "Waterproof rating 30000mm",
+          "windproof": "Windstopper",
+          "weight_g": "Weight: 134g"
+        },
+        "unknownFields": ["temp_rating_c"]
+      }
+    },
+    {
+      "id": "TC-JKT-07",
+      "category": "JACKET",
+      "name": "Marmot Precip Eco Rain Jacket",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Marmot Precip Eco with NanoPro 10k waterproof/17k breathability, 100% taped seams, 290g.",
+        "url": "https://marmot.com/precip"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 10000,
+          "weight_g": 290
+        },
+        "evidence": {
+          "waterproof_mm": "NanoPro 10k waterproof",
+          "weight_g": "290g"
+        },
+        "unknownFields": ["temp_rating_c", "windproof"]
+      }
+    },
+    {
+      "id": "TC-JKT-08",
+      "category": "JACKET",
+      "name": "Rab Microlight Alpine Down Jacket",
+      "source": "MANUAL",
+      "input": {
+        "text": "Áo lông vũ Rab Microlight Alpine 750FP, chịu lạnh -5 độ C, nặng 467g. Vải Pertex Quantum cản gió.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": -5,
+          "weight_g": 467,
+          "windproof": true
+        },
+        "evidence": {
+          "temp_rating_c": "chịu lạnh -5 độ C",
+          "weight_g": "nặng 467g",
+          "windproof": "cản gió"
+        },
+        "unknownFields": ["waterproof_mm"]
+      }
+    },
+    {
+      "id": "TC-JKT-09",
+      "category": "JACKET",
+      "name": "Generic Market Raincoat",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Áo mưa dơi tiện lợi nhựa PVC mỏng màu xanh rêu.",
+        "photoRef": "media/pvc-poncho.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 2000
+        },
+        "evidence": {
+          "waterproof_mm": "nhựa PVC"
+        },
+        "unknownFields": ["temp_rating_c", "windproof", "weight_g"]
+      }
+    },
+    {
+      "id": "TC-JKT-10",
+      "category": "JACKET",
+      "name": "Arc'teryx Beta AR Shell",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Arc'teryx Beta AR Jacket. GORE-TEX Pro Most Rugged 28,000mm. Windproof 100%. Weight: 455g. Regular fit.",
+        "url": "https://arcteryx.com/beta-ar"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 28000,
+          "windproof": true,
+          "weight_g": 455
+        },
+        "evidence": {
+          "waterproof_mm": "28,000mm",
+          "windproof": "Windproof 100%",
+          "weight_g": "Weight: 455g"
+        },
+        "unknownFields": ["temp_rating_c"]
+      }
+    },
+    {
+      "id": "TC-FTW-01",
+      "category": "FOOTWEAR",
+      "name": "Salomon Quest 4 GTX Hiking Boots",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Salomon Quest 4 GORE-TEX: Màng chống nước Gore-Tex, cổ cao bảo vệ mắt cá chân tốt (ankle support: high). Đế Contagrip độ bám cấp 5. Nặng 655g/chiếc.",
+        "url": "https://salomon.com/quest-4"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": true,
+          "grip_level": 5,
+          "weight_g": 1310
+        },
+        "evidence": {
+          "waterproof": "Màng chống nước Gore-Tex",
+          "ankle_support": "cổ cao bảo vệ mắt cá chân tốt",
+          "grip_level": "độ bám cấp 5",
+          "weight_g": "655g/chiếc"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-02",
+      "category": "FOOTWEAR",
+      "name": "Hoka One One Speedgoat 5 Low",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Hoka Speedgoat 5 Trail Running Shoe. Vibram Megagrip lug 5mm (grip_level 4). Cổ thấp (low cut, không có ankle support). Trọng lượng 291g.",
+        "url": "https://hoka.com/speedgoat-5"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": false,
+          "ankle_support": false,
+          "grip_level": 4,
+          "weight_g": 582
+        },
+        "evidence": {
+          "ankle_support": "Cổ thấp (low cut, không có ankle support)",
+          "grip_level": "grip_level 4",
+          "weight_g": "Trọng lượng 291g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-03",
+      "category": "FOOTWEAR",
+      "name": "Altra Lone Peak 7",
+      "source": "MANUAL",
+      "input": {
+        "text": "Giày chạy trail Altra Lone Peak 7 Zero Drop, MaxTrac outsole độ bám 3. Thoáng khí, không chống nước.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": false,
+          "ankle_support": false,
+          "grip_level": 3,
+          "weight_g": 628
+        },
+        "evidence": {
+          "waterproof": "không chống nước",
+          "grip_level": "độ bám 3"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-04",
+      "category": "FOOTWEAR",
+      "name": "Lowa Renegade GTX Mid",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Lowa Renegade GTX Mid Hiking Boots. Nubuck leather, Gore-Tex lining waterproof, Vibram Evo grip 4, ankle support mid-high. Weight 1110g per pair.",
+        "url": "https://lowa.com/renegade-gtx"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": true,
+          "grip_level": 4,
+          "weight_g": 1110
+        },
+        "evidence": {
+          "waterproof": "Gore-Tex lining waterproof",
+          "ankle_support": "ankle support mid-high",
+          "grip_level": "Vibram Evo grip 4",
+          "weight_g": "Weight 1110g per pair"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-05",
+      "category": "FOOTWEAR",
+      "name": "Scarpa Zodiac Plus GTX",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Scarpa Zodiac Plus GTX Mountain Boot. Perwanger suede, Gore-Tex, Vibram Drumlin grip level 5, high ankle collar. 1090g.",
+        "url": "https://scarpa.com/zodiac-plus"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": true,
+          "grip_level": 5,
+          "weight_g": 1090
+        },
+        "evidence": {
+          "waterproof": "Gore-Tex",
+          "ankle_support": "high ankle collar",
+          "grip_level": "grip level 5",
+          "weight_g": "1090g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-06",
+      "category": "FOOTWEAR",
+      "name": "Merrell Moab 3 Mid Waterproof",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Merrell Moab 3 Mid: màng chống ẩm Merrell M-Select, cổ lửng hỗ trợ mắt cá, đế Vibram TC5+ bám 4.",
+        "photoRef": "media/moab3.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": true,
+          "grip_level": 4
+        },
+        "evidence": {
+          "waterproof": "màng chống ẩm Merrell M-Select",
+          "ankle_support": "cổ lửng hỗ trợ mắt cá",
+          "grip_level": "bám 4"
+        },
+        "unknownFields": ["weight_g"]
+      }
+    },
+    {
+      "id": "TC-FTW-07",
+      "category": "FOOTWEAR",
+      "name": "La Sportiva Ultra Raptor II Mid GTX",
+      "source": "AI_LINK",
+      "input": {
+        "text": "La Sportiva Ultra Raptor 2 Mid GTX. FriXion White ultra clingy rubber (grip 5), Gore-Tex waterproof, soft collar ankle wrap. 470g single.",
+        "url": "https://lasportiva.com/ultra-raptor-ii"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": true,
+          "grip_level": 5,
+          "weight_g": 940
+        },
+        "evidence": {
+          "waterproof": "Gore-Tex waterproof",
+          "ankle_support": "soft collar ankle wrap",
+          "grip_level": "grip 5",
+          "weight_g": "470g single"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-08",
+      "category": "FOOTWEAR",
+      "name": "Keen Newport H2 Sandal",
+      "source": "MANUAL",
+      "input": {
+        "text": "Sandal lội suối Keen Newport H2, quai dù chống nước, ngón chân bọc cao su, không có bảo vệ cổ chân, bám 3 trên đá ướt. 800g.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": true,
+          "ankle_support": false,
+          "grip_level": 3,
+          "weight_g": 800
+        },
+        "evidence": {
+          "waterproof": "quai dù chống nước",
+          "ankle_support": "không có bảo vệ cổ chân",
+          "grip_level": "bám 3",
+          "weight_g": "800g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-09",
+      "category": "FOOTWEAR",
+      "name": "Decathlon Quechua NH100 Mid",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Giày dã ngoại Quechua NH100 Mid cổ lửng, đi đường bằng nhẹ nhàng, không chống nước, độ bám cơ bản 2. 750g.",
+        "photoRef": "media/nh100.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": false,
+          "ankle_support": true,
+          "grip_level": 2,
+          "weight_g": 750
+        },
+        "evidence": {
+          "waterproof": "không chống nước",
+          "ankle_support": "cổ lửng",
+          "grip_level": "độ bám cơ bản 2",
+          "weight_g": "750g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-FTW-10",
+      "category": "FOOTWEAR",
+      "name": "Salomon Speedcross 6",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Salomon Speedcross 6 Mud running shoe. Deep chevron lugs (grip 5), low collar, non-GTX version, 298g.",
+        "url": "https://salomon.com/speedcross-6"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof": false,
+          "ankle_support": false,
+          "grip_level": 5,
+          "weight_g": 596
+        },
+        "evidence": {
+          "waterproof": "non-GTX version",
+          "ankle_support": "low collar",
+          "grip_level": "grip 5",
+          "weight_g": "298g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-BPK-01",
+      "category": "BACKPACK",
+      "name": "Osprey Atmos AG 65",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Osprey Atmos AG 65L Men's Backpack. Dung tích 65L, khung AntiGravity trợ lực, có áo mưa trùm đi kèm (rain cover included), nặng 2.18kg.",
+        "url": "https://osprey.com/atmos-ag-65"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 65,
+          "rain_cover": true,
+          "weight_g": 2180,
+          "waterproof": false
+        },
+        "evidence": {
+          "capacity_l": "Dung tích 65L",
+          "rain_cover": "áo mưa trùm đi kèm",
+          "weight_g": "2.18kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-BPK-02",
+      "category": "BACKPACK",
+      "name": "Deuter Aircontact Lite 50+10",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Deuter Aircontact Lite 50+10 trekking pack. 50L + 10L mở rộng, đai hông dày dặn, không kèm bọc balo che mưa, 1750g.",
+        "url": "https://deuter.com/aircontact-lite-50"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 60,
+          "rain_cover": false,
+          "weight_g": 1750
+        },
+        "evidence": {
+          "capacity_l": "50L + 10L",
+          "rain_cover": "không kèm bọc balo che mưa",
+          "weight_g": "1750g"
+        },
+        "unknownFields": ["waterproof"]
+      }
+    },
+    {
+      "id": "TC-BPK-03",
+      "category": "BACKPACK",
+      "name": "Hyperlite Mountain Gear Southwest 55",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Hyperlite Mountain Gear 3400 Southwest (55 Liters). Vải Dyneema composite chống nước hoàn toàn (fully waterproof), nặng 900g.",
+        "url": "https://hyperlitemountaingear.com/3400-southwest"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 55,
+          "waterproof": true,
+          "rain_cover": true,
+          "weight_g": 900
+        },
+        "evidence": {
+          "capacity_l": "55 Liters",
+          "waterproof": "chống nước hoàn toàn (fully waterproof)",
+          "weight_g": "nặng 900g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-BPK-04",
+      "category": "BACKPACK",
+      "name": "Decathlon Forclaz MT500 Air 50L",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Balo leo núi Forclaz MT500 Air dung tích 50 lít, lưng lưới thoáng khí, tích hợp áo mưa balo màu cam dưới đáy. 1600g.",
+        "photoRef": "media/mt500.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 50,
+          "rain_cover": true,
+          "weight_g": 1600
+        },
+        "evidence": {
+          "capacity_l": "dung tích 50 lít",
+          "rain_cover": "tích hợp áo mưa balo",
+          "weight_g": "1600g"
+        },
+        "unknownFields": ["waterproof"]
+      }
+    },
+    {
+      "id": "TC-BPK-05",
+      "category": "BACKPACK",
+      "name": "Gregory Baltoro 75 Pro",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Gregory Baltoro 75 Pro pack. Volume: 75L. Includes custom-fit raincover in zippered pocket. Weight: 2400g.",
+        "url": "https://gregorypacks.com/baltoro-75"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 75,
+          "rain_cover": true,
+          "weight_g": 2400
+        },
+        "evidence": {
+          "capacity_l": "Volume: 75L",
+          "rain_cover": "Includes custom-fit raincover",
+          "weight_g": "Weight: 2400g"
+        },
+        "unknownFields": ["waterproof"]
+      }
+    },
+    {
+      "id": "TC-BPK-06",
+      "category": "BACKPACK",
+      "name": "Osprey Talon 22 Daypack",
+      "source": "MANUAL",
+      "input": {
+        "text": "Balo đi trong ngày Osprey Talon 22 lít, siêu gọn nhẹ 900g, không có bọc che mưa đi kèm.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 22,
+          "rain_cover": false,
+          "weight_g": 900
+        },
+        "evidence": {
+          "capacity_l": "22 lít",
+          "rain_cover": "không có bọc che mưa",
+          "weight_g": "900g"
+        },
+        "unknownFields": ["waterproof"]
+      }
+    },
+    {
+      "id": "TC-BPK-07",
+      "category": "BACKPACK",
+      "name": "Naturehike Rock 60L+5L",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Naturehike Rock Series Hiking Backpack 60L+5L. Khung hợp kim nhôm, chống thấm nhẹ, tặng kèm áo mưa balo, 1.3kg.",
+        "url": "https://naturehike.com/rock-60"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 65,
+          "rain_cover": true,
+          "weight_g": 1300
+        },
+        "evidence": {
+          "capacity_l": "60L+5L",
+          "rain_cover": "tặng kèm áo mưa balo",
+          "weight_g": "1.3kg"
+        },
+        "unknownFields": ["waterproof"]
+      }
+    },
+    {
+      "id": "TC-BPK-08",
+      "category": "BACKPACK",
+      "name": "Decathlon Quechua NH Arpenaz 100 20L",
+      "source": "MANUAL",
+      "input": {
+        "text": "Balo dã ngoại Arpenaz 100 20L, vải polyester không chống mưa, không áo mưa balo, trọng lượng 470g.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_l": 20,
+          "rain_cover": false,
+          "waterproof": false,
+          "weight_g": 470
+        },
+        "evidence": {
+          "capacity_l": "20L",
+          "rain_cover": "không áo mưa balo",
+          "waterproof": "không chống mưa",
+          "weight_g": "470g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-01",
+      "category": "SLEEPING_BAG",
+      "name": "Sea to Summit Spark SpI Down",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Sea to Summit Spark SpI. 850+ Loft RDS Down. Comfort rating: 9°C, Lower Limit: 5°C, Extreme: -9°C. Nặng chỉ 340g.",
+        "url": "https://seatosummit.com/spark-spi"
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": 5,
+          "weight_g": 340
+        },
+        "evidence": {
+          "temp_rating_c": "Lower Limit: 5°C",
+          "weight_g": "340g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-02",
+      "category": "SLEEPING_BAG",
+      "name": "Marmot Never Summer -18C",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Marmot Never Summer 650FP Down Sleeping Bag. Đánh giá nhiệt độ giới hạn -18 độ C. Trọng lượng 1450g.",
+        "url": "https://marmot.com/never-summer"
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": -18,
+          "weight_g": 1450
+        },
+        "evidence": {
+          "temp_rating_c": "-18 độ C",
+          "weight_g": "1450g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-03",
+      "category": "SLEEPING_BAG",
+      "name": "Decathlon Forclaz Trek 500 10°C",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Túi ngủ Forclaz Trek 500: Nhiệt độ thoải mái 10°C, nhiệt độ giới hạn 5°C. Bông tổng hợp, nặng 970g.",
+        "photoRef": "media/trek500-bag.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": 5,
+          "weight_g": 970
+        },
+        "evidence": {
+          "temp_rating_c": "nhiệt độ giới hạn 5°C",
+          "weight_g": "nặng 970g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-04",
+      "category": "SLEEPING_BAG",
+      "name": "Naturehike C180 Cotton Envelope",
+      "source": "MANUAL",
+      "input": {
+        "text": "Túi ngủ phong bì Naturehike C180, thích hợp mùa hè thu 15°C đến 20°C, nặng 1.2kg.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": 15,
+          "weight_g": 1200
+        },
+        "evidence": {
+          "temp_rating_c": "15°C",
+          "weight_g": "1.2kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-05",
+      "category": "SLEEPING_BAG",
+      "name": "Mountain Hardwear Phantom 0F/-18C",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Mountain Hardwear Phantom 0F. 850-fill goose down, temperature rating -18C / 0F, weight 1220g.",
+        "url": "https://mountainhardwear.com/phantom-0"
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": -18,
+          "weight_g": 1220
+        },
+        "evidence": {
+          "temp_rating_c": "-18C",
+          "weight_g": "1220g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-SLP-06",
+      "category": "SLEEPING_BAG",
+      "name": "Coleman Silverton 250",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Coleman Silverton 250 mummy bag. Comfort 1°C, Limit -5°C, Extreme -22°C. Weight 1750g.",
+        "url": "https://coleman.eu/silverton-250"
+      },
+      "groundTruth": {
+        "attributes": {
+          "temp_rating_c": -5,
+          "weight_g": 1750
+        },
+        "evidence": {
+          "temp_rating_c": "Limit -5°C",
+          "weight_g": "1750g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-TNT-01",
+      "category": "TENT",
+      "name": "MSR Hubba Hubba 2-Person",
+      "source": "AI_LINK",
+      "input": {
+        "text": "MSR Hubba Hubba 2-Person Tent. 3-season, capacity: 2 persons. Rainfly waterproof 1200mm Durashield, floor 1200mm. Weight: 1.47kg.",
+        "url": "https://msrgear.com/hubba-hubba-2"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_persons": 2,
+          "waterproof_mm": 1200,
+          "weight_g": 1470
+        },
+        "evidence": {
+          "capacity_persons": "2 persons",
+          "waterproof_mm": "1200mm",
+          "weight_g": "1.47kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-TNT-02",
+      "category": "TENT",
+      "name": "Naturehike Cloud Up 2 20D",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Naturehike Cloud Up 2 người bản vải 20D tráng silicon chống nước 4000mm. Cọc nhôm 7001, nặng 1.7kg.",
+        "url": "https://naturehike.com/cloud-up-2"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_persons": 2,
+          "waterproof_mm": 4000,
+          "weight_g": 1700
+        },
+        "evidence": {
+          "capacity_persons": "2 người",
+          "waterproof_mm": "chống nước 4000mm",
+          "weight_g": "1.7kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-TNT-03",
+      "category": "TENT",
+      "name": "Decathlon Quechua MH100 3-Person",
+      "source": "MANUAL",
+      "input": {
+        "text": "Lều cắm trại Quechua MH100 cho 3 người, vải lều chống mưa 2000mm, trọng lượng 3.4kg.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_persons": 3,
+          "waterproof_mm": 2000,
+          "weight_g": 3400
+        },
+        "evidence": {
+          "capacity_persons": "3 người",
+          "waterproof_mm": "chống mưa 2000mm",
+          "weight_g": "3.4kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-TNT-04",
+      "category": "TENT",
+      "name": "Big Agnes Copper Spur HV UL3",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Big Agnes Copper Spur HV UL3. Ultralight 3-person backpacking tent. Double wall, 1200mm waterproof silicone treated nylon, packed weight 1.79kg.",
+        "url": "https://bigagnes.com/copper-spur-hv-ul3"
+      },
+      "groundTruth": {
+        "attributes": {
+          "capacity_persons": 3,
+          "waterproof_mm": 1200,
+          "weight_g": 1790
+        },
+        "evidence": {
+          "capacity_persons": "3-person",
+          "waterproof_mm": "1200mm",
+          "weight_g": "1.79kg"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-POL-01",
+      "category": "TREKKING_POLE",
+      "name": "Black Diamond Trail Pro Shock",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Black Diamond Trail Pro Shock Trekking Poles (Pair). FlickLock Pro khóa nhôm, tay cầm xốp EVA, thân hợp kim nhôm, nặng 590g/cặp.",
+        "url": "https://blackdiamondequipment.com/trail-pro-shock"
+      },
+      "groundTruth": {
+        "attributes": {
+          "weight_g": 590,
+          "material": "ALUMINUM"
+        },
+        "evidence": {
+          "weight_g": "590g/cặp",
+          "material": "hợp kim nhôm"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-POL-02",
+      "category": "TREKKING_POLE",
+      "name": "Leki Makalu FX Carbon",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Leki Makalu FX Carbon gập 3 đoạn. Vật liệu 100% Carbon siêu nhẹ, Aergon Air grip, khóa Speed Lock 2 Plus, 508g.",
+        "url": "https://leki.com/makalu-fx-carbon"
+      },
+      "groundTruth": {
+        "attributes": {
+          "weight_g": 508,
+          "material": "CARBON"
+        },
+        "evidence": {
+          "weight_g": "508g",
+          "material": "100% Carbon"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-POL-03",
+      "category": "TREKKING_POLE",
+      "name": "Naturehike Carbon Trekking Pole",
+      "source": "AI_IMAGE",
+      "input": {
+        "text": "Gậy leo núi Naturehike sợi carbon khóa ngoài, 135cm, trọng lượng 185g 1 cây.",
+        "photoRef": "media/nh-pole.jpg"
+      },
+      "groundTruth": {
+        "attributes": {
+          "weight_g": 370,
+          "material": "CARBON"
+        },
+        "evidence": {
+          "weight_g": "185g 1 cây",
+          "material": "sợi carbon"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-RNG-01",
+      "category": "RAIN_GEAR",
+      "name": "Sea to Summit Ultra-Sil Nano Tarp Poncho",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Sea to Summit Ultra-Sil Nano Poncho Tarp. 15D Ultra-Sil silicone nylon, waterproof 1200mm, trọng lượng siêu nhẹ 230g, trùm được cả balo.",
+        "url": "https://seatosummit.com/ultrasil-poncho"
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 1200,
+          "weight_g": 230
+        },
+        "evidence": {
+          "waterproof_mm": "waterproof 1200mm",
+          "weight_g": "230g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-RNG-02",
+      "category": "RAIN_GEAR",
+      "name": "Decathlon Forclaz Rain Poncho 75L",
+      "source": "MANUAL",
+      "input": {
+        "text": "Áo mưa trùm cánh dơi Forclaz đi kèm khoang mở rộng trùm balo 75 lít, vải EVA chống nước 2000mm, nặng 400g.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "waterproof_mm": 2000,
+          "weight_g": 400
+        },
+        "evidence": {
+          "waterproof_mm": "chống nước 2000mm",
+          "weight_g": "nặng 400g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-PNT-01",
+      "category": "PANTS",
+      "name": "Columbia Silver Ridge Convertible Pants",
+      "source": "AI_LINK",
+      "input": {
+        "text": "Columbia Men's Silver Ridge Convertible Pants. Omni-Shade UPF 50, Omni-Wick quick-dry nylon, tháo ống thành quần short. Không chống mưa. 310g.",
+        "url": "https://columbia.com/silver-ridge-pants"
+      },
+      "groundTruth": {
+        "attributes": {
+          "quick_dry": true,
+          "convertible": true,
+          "waterproof": false,
+          "weight_g": 310
+        },
+        "evidence": {
+          "quick_dry": "quick-dry",
+          "convertible": "tháo ống thành quần short",
+          "waterproof": "Không chống mưa",
+          "weight_g": "310g"
+        },
+        "unknownFields": []
+      }
+    },
+    {
+      "id": "TC-PNT-02",
+      "category": "PANTS",
+      "name": "PrAna Stretch Zion Pant II",
+      "source": "MANUAL",
+      "input": {
+        "text": "Quần leo núi PrAna Stretch Zion II. Vải ReZion co giãn 4 chiều, phủ DWR kháng nước nhẹ, chống trầy xước đá dốc, nặng 380g.",
+        "photoRef": null
+      },
+      "groundTruth": {
+        "attributes": {
+          "quick_dry": true,
+          "convertible": false,
+          "waterproof": false,
+          "weight_g": 380
+        },
+        "evidence": {
+          "quick_dry": "phủ DWR kháng nước nhẹ",
+          "weight_g": "380g"
+        },
+        "unknownFields": []
+      }
+    }
+  ]
+}

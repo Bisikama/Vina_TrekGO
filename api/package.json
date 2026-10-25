@@ -17,8 +17,10 @@
     "openapi:sf01": "cross-env NODE_ENV=production MEDIA_DEV_UPLOAD_ENABLED=false ts-node scripts/generate-openapi.ts --sf01",
     "test:cf02": "jest --config ./test/jest-cf02.json --runInBand",
     "configure:cf02-policy": "ts-node scripts/configure-cf02-policy.ts",
+    "audit:repair-sandbox-deposit": "ts-node scripts/audit-repair-sandbox-deposit-settlement.ts",
     "test:payments": "jest --config ./test/jest-payments.json --runInBand",
     "test:gear": "jest --config test/jest-gear.json --runInBand",
+    "smoke:boot": "ts-node scripts/smoke-boot.ts",
     "seed:booking-policies": "ts-node prisma/seeds/booking-policy.seed.ts",
     "seed:gear-rules": "ts-node prisma/seeds/gear-rule.seed.ts",
     "seed:damage-rules": "ts-node prisma/seeds/damage-assessment-rule.seed.ts",
@@ -42,6 +44,7 @@
     "openapi:generate:dev": "cross-env NODE_ENV=development MEDIA_DEV_UPLOAD_ENABLED=true ts-node scripts/generate-openapi.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.31.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^12.0.1",

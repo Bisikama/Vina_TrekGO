@@ -84,6 +84,15 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
   const dummyExceptionId = '99999999-9999-4999-8999-999999999999';
   const dummyPaymentId = '44444444-4444-4444-8444-444444444444';
   const dummySettlementId = '77777777-7777-4777-8777-777777777777';
+  const depositRefundAllocation = (amount: number) => ({
+    amount: new Prisma.Decimal(amount),
+    paymentAllocation: {
+      paymentId: dummyPaymentId,
+      component: 'RENTAL_DEPOSIT',
+      amount: new Prisma.Decimal(amount),
+      rentalOrderLine: { orderId: dummyOrderId },
+    },
+  });
 
   describe('Part 1: REST Route Contracts RB-API-601..616, RBAC & Aliases', () => {
     let app: INestApplication;
@@ -960,8 +969,8 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
         depositSettlementItem: {
           findMany: jest.fn().mockResolvedValue([
-            { id: 'item-1', status: 'SETTLED' },
-            { id: 'item-2', status: 'SETTLED' },
+            { id: 'item-1', settlementId: dummySettlementId, status: 'SETTLED' },
+            { id: 'item-2', settlementId: dummySettlementId, status: 'SETTLED' },
           ]),
           update: jest.fn().mockResolvedValue({}),
         },
@@ -1024,6 +1033,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       mockTx.refund.findUniqueOrThrow.mockResolvedValue({
         id: 'ref-1',
         status: 'SUCCEEDED',
+        rentalOrderId: dummyOrderId,
         amount: new Prisma.Decimal(1000000),
         depositSettlementId: dummySettlementId,
         paymentId: dummyPaymentId,
@@ -1032,6 +1042,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           { depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) },
           { depositSettlementItemId: 'item-2', amount: new Prisma.Decimal(500000) },
         ],
+        allocations: [depositRefundAllocation(1000000)],
       });
       mockTx.payment.findUniqueOrThrow.mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-1' });
 
@@ -1090,15 +1101,21 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       mockTx.refund.findUniqueOrThrow.mockResolvedValue({
         id: 'ref-1',
         status: 'SUCCEEDED',
+        amount: new Prisma.Decimal(500000),
+        rentalOrderId: dummyOrderId,
         depositSettlementId: dummySettlementId,
         paymentId: dummyPaymentId,
         payment: { invoiceId: 'inv-1', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
         depositRefundItems: [{ depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) }],
+        allocations: [depositRefundAllocation(500000)],
       });
       mockTx.payment.findUniqueOrThrow.mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-1' });
 
       // Receipt ALREADY exists!
       mockTx.paymentConsumerReceipt.findUnique.mockResolvedValue({ id: 'rec-1' });
+      mockTx.depositSettlementItem.findMany.mockResolvedValue([
+        { id: 'item-1', settlementId: dummySettlementId, status: 'SETTLED' },
+      ]);
 
       await worker.consume('event-1');
 
@@ -1326,10 +1343,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           findUniqueOrThrow: jest.fn().mockResolvedValue({
             id: 'ref-fail-1',
             status: 'FAILED',
+            amount: new Prisma.Decimal(500000),
+            rentalOrderId: dummyOrderId,
             depositSettlementId: dummySettlementId,
             paymentId: dummyPaymentId,
             payment: { invoiceId: 'inv-1', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
             depositRefundItems: [{ depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) }],
+            allocations: [depositRefundAllocation(500000)],
           }),
           aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
           count: jest.fn().mockResolvedValue(0),
@@ -1341,7 +1361,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(500000) } }),
         },
         depositSettlementItem: {
-          findMany: jest.fn().mockResolvedValue([{ id: 'item-1', status: 'REFUND_PENDING' }]),
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'item-1', settlementId: dummySettlementId, status: 'REFUND_PENDING' },
+          ]),
           update: jest.fn().mockResolvedValue({}),
         },
         depositSettlement: {
@@ -1787,10 +1809,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             findUniqueOrThrow: jest.fn().mockResolvedValue({
               id: 'ref-fail-recov',
               status: 'FAILED',
+              amount: new Prisma.Decimal(300000),
+              rentalOrderId: dummyOrderId,
               depositSettlementId: dummySettlementId,
               paymentId: dummyPaymentId,
               payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
               depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+              allocations: [depositRefundAllocation(300000)],
             }),
             aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
             count: jest.fn().mockResolvedValue(0),
@@ -1804,7 +1829,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           depositSettlementItem: {
             findMany: jest.fn().mockImplementation(({ where }: any) => {
               if (where?.id?.in) {
-                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_PENDING' }]);
+                return Promise.resolve([
+                  { id: 'item-recov-1', settlementId: dummySettlementId, status: 'REFUND_PENDING' },
+                ]);
               }
               return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
             }),
@@ -1905,10 +1932,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             findUniqueOrThrow: jest.fn().mockResolvedValue({
               id: 'ref-succ-recov',
               status: 'SUCCEEDED',
+              amount: new Prisma.Decimal(300000),
+              rentalOrderId: dummyOrderId,
               depositSettlementId: dummySettlementId,
               paymentId: dummyPaymentId,
               payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
               depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+              allocations: [depositRefundAllocation(300000)],
             }),
             aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
             count: jest.fn().mockResolvedValue(0),
@@ -1922,7 +1952,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           depositSettlementItem: {
             findMany: jest.fn().mockImplementation(({ where }: any) => {
               if (where?.id?.in) {
-                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+                return Promise.resolve([
+                  { id: 'item-recov-1', settlementId: dummySettlementId, status: 'REFUND_FAILED' },
+                ]);
               }
               return Promise.resolve([{ id: 'item-recov-1', status: 'SETTLED' }]);
             }),
