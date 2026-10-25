@@ -40,5 +40,6 @@ export interface GearPlanRepositoryPort {
     userId: string,
     evaluatedRevision: number,
     expectedInputRevision?: number,
+    canonicalContext?: Record<string, unknown>,
   ): Promise<GearPlanDomain>;
 }

@@ -1,5 +1,5 @@
 /**
- * AI Gear Advisor V3.1.3 — Requirement Constraint Evaluator (Pure TypeScript)
+ * AI Gear Advisor V3.1.5 — Requirement Constraint Evaluator (Pure TypeScript)
  * Zero NestJS, Prisma, AI SDK, or I/O imports.
  * Implements namespaces GR-CONSTRAINT-GTE, GR-CONSTRAINT-LTE, GR-CONSTRAINT-EQ according to MASTER Section 7.
  */
@@ -27,6 +27,8 @@ export interface CanonicalFieldDefinition {
   valueType: 'number' | 'boolean' | 'string';
   canonicalUnit?: string;
   allowedOperators: readonly ConstraintOperator[];
+  isInteger?: boolean;
+  allowedValues?: readonly string[];
   min?: number;
   max?: number;
 }
@@ -38,6 +40,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'mm',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 0,
   },
   temp_rating_c: {
@@ -46,13 +49,13 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'C',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
   },
   weight_g: {
     field: 'weight_g',
     categories: [
       'JACKET',
       'FOOTWEAR',
-      'PANTS',
       'BACKPACK',
       'SLEEPING_BAG',
       'TENT',
@@ -62,6 +65,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'g',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 0,
   },
   windproof: {
@@ -87,6 +91,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     categories: ['FOOTWEAR'],
     valueType: 'number',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 1,
     max: 5,
   },
@@ -102,6 +107,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'L',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 0,
   },
   rain_cover: {
@@ -115,6 +121,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     categories: ['TENT'],
     valueType: 'number',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 1,
   },
   flysheet_waterproof_mm: {
@@ -123,6 +130,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'mm',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 0,
   },
   floor_waterproof_mm: {
@@ -131,6 +139,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     valueType: 'number',
     canonicalUnit: 'mm',
     allowedOperators: ['GTE', 'LTE', 'EQ'],
+    isInteger: true,
     min: 0,
   },
   adjustable: {
@@ -160,6 +169,7 @@ export const CANONICAL_FIELD_DEFINITIONS: Record<string, CanonicalFieldDefinitio
     categories: ['RAIN_GEAR'],
     valueType: 'string',
     allowedOperators: ['EQ'],
+    allowedValues: ['UPPER_BODY', 'FULL_BODY'],
   },
 };
 
@@ -223,8 +233,10 @@ const ALLOWED_SOURCES: readonly ConstraintSourceType[] = [
 ];
 
 /**
- * Validates a constraint configuration strictly against canonical schemas, categories, and units.
- * Rejects invalid operators, cross-category fields, wrong types, non-finite numbers, and unit mismatches.
+ * Validates a constraint configuration strictly against canonical schemas, categories, units, and provenance.
+ * R1: Enforces mandatory provenance source and reference (no fabricated defaults).
+ * R2: Checks that constraint category matches subject category if specified.
+ * R3: Checks integer/enum/range constraints on expected values.
  */
 export function validateConstraintConfiguration(
   constraint: RequirementConstraintInput,
@@ -256,7 +268,12 @@ export function validateConstraintConfiguration(
     );
   }
 
-  // 3. Determine target category and validate cross-category
+  // 3. R2: Determine target category and validate cross-category / mismatch
+  if (category && constraint.category && category !== constraint.category) {
+    throw new ConstraintValidationError(
+      `Constraint category mismatch: constraint specifies '${constraint.category}' but target subject has category '${category}'.`
+    );
+  }
   const targetCategory = category ?? constraint.category;
   if (!targetCategory) {
     throw new ConstraintValidationError(
@@ -276,7 +293,7 @@ export function validateConstraintConfiguration(
     );
   }
 
-  // 5. Validate expected value type and bounds
+  // 5. R3: Validate expected value type, bounds, integer, and enum
   if (fieldDef.valueType === 'number') {
     if (
       typeof constraint.expected !== 'number' ||
@@ -285,6 +302,11 @@ export function validateConstraintConfiguration(
     ) {
       throw new ConstraintValidationError(
         `Expected value for numeric field '${constraint.field}' must be a finite number, got '${typeof constraint.expected}'.`
+      );
+    }
+    if (fieldDef.isInteger && !Number.isInteger(constraint.expected)) {
+      throw new ConstraintValidationError(
+        `Expected value for field '${constraint.field}' must be an integer, got ${constraint.expected}.`
       );
     }
     if (fieldDef.min !== undefined && constraint.expected < fieldDef.min) {
@@ -309,6 +331,14 @@ export function validateConstraintConfiguration(
         `Expected value for string field '${constraint.field}' must be a non-empty string.`
       );
     }
+    if (fieldDef.allowedValues) {
+      const normalizedExp = constraint.expected.trim().toUpperCase();
+      if (!fieldDef.allowedValues.includes(normalizedExp)) {
+        throw new ConstraintValidationError(
+          `Invalid value '${constraint.expected}' for field '${constraint.field}'. Allowed values: ${fieldDef.allowedValues.join(', ')}.`
+        );
+      }
+    }
   }
 
   // 6. Validate canonical unit compatibility
@@ -326,19 +356,26 @@ export function validateConstraintConfiguration(
     );
   }
 
-  // 7. Validate provenance source and reference
-  const source = (constraint.source ?? 'USER_REQUEST') as ConstraintSourceType;
+  // 7. R1: Strictly validate provenance source and reference (no fabricated defaults)
+  if (!constraint.source || typeof constraint.source !== 'string' || constraint.source.trim() === '') {
+    throw new ConstraintValidationError(
+      `Constraint provenance source is mandatory. Allowed sources: ${ALLOWED_SOURCES.join(', ')}.`
+    );
+  }
+  const source = constraint.source.trim() as ConstraintSourceType;
   if (!ALLOWED_SOURCES.includes(source)) {
     throw new ConstraintValidationError(
       `Invalid constraint source '${constraint.source}'. Allowed sources: ${ALLOWED_SOURCES.join(', ')}.`
     );
   }
-  const reference = constraint.reference ?? constraint.evidence ?? 'User configured constraint';
-  if (typeof reference !== 'string' || reference.trim() === '') {
+
+  const rawRef = constraint.reference ?? constraint.evidence;
+  if (!rawRef || typeof rawRef !== 'string' || rawRef.trim() === '') {
     throw new ConstraintValidationError(
-      `Constraint provenance reference must be a non-empty string.`
+      `Constraint provenance reference (or evidence) is mandatory and must be a non-empty string.`
     );
   }
+  const reference = rawRef.trim();
 
   return { fieldDef, operator, source, reference, targetCategory };
 }
@@ -346,6 +383,7 @@ export function validateConstraintConfiguration(
 /**
  * Pure evaluation function for a single requirement constraint against a specific subject (item).
  * Strictly preserves item identity, verifies canonical types, handles unknown without coercion to 0.
+ * R3: Validates actual values against schema domains (min, max, integer, enum, relational bounds).
  */
 export function evaluateRequirementConstraint(
   constraint: RequirementConstraintInput,
@@ -382,13 +420,48 @@ export function evaluateRequirementConstraint(
 
   if (fieldDef.valueType === 'number') {
     if (typeof actual === 'number' && Number.isFinite(actual) && !Number.isNaN(actual)) {
-      const exp = constraint.expected as number;
-      if (operator === 'GTE') {
-        status = actual >= exp ? 'SATISFIED' : 'NOT_SATISFIED';
-      } else if (operator === 'LTE') {
-        status = actual <= exp ? 'SATISFIED' : 'NOT_SATISFIED';
-      } else if (operator === 'EQ') {
-        status = actual === exp ? 'SATISFIED' : 'NOT_SATISFIED';
+      // R3: validate actual bounds and integer domain
+      let actualValid = true;
+      if (fieldDef.isInteger && !Number.isInteger(actual)) {
+        actualValid = false;
+      }
+      if (fieldDef.min !== undefined && actual < fieldDef.min) {
+        actualValid = false;
+      }
+      if (fieldDef.max !== undefined && actual > fieldDef.max) {
+        actualValid = false;
+      }
+
+      // R3: relational check for TREKKING_POLE length_min_cm vs length_max_cm
+      if (
+        subject.category === 'TREKKING_POLE' &&
+        (constraint.field === 'length_min_cm' || constraint.field === 'length_max_cm')
+      ) {
+        const minVal = subject.attributes['length_min_cm'];
+        const maxVal = subject.attributes['length_max_cm'];
+        if (
+          typeof minVal === 'number' &&
+          Number.isFinite(minVal) &&
+          typeof maxVal === 'number' &&
+          Number.isFinite(maxVal)
+        ) {
+          if (minVal > maxVal) {
+            actualValid = false;
+          }
+        }
+      }
+
+      if (!actualValid) {
+        status = 'NOT_SATISFIED';
+      } else {
+        const exp = constraint.expected as number;
+        if (operator === 'GTE') {
+          status = actual >= exp ? 'SATISFIED' : 'NOT_SATISFIED';
+        } else if (operator === 'LTE') {
+          status = actual <= exp ? 'SATISFIED' : 'NOT_SATISFIED';
+        } else if (operator === 'EQ') {
+          status = actual === exp ? 'SATISFIED' : 'NOT_SATISFIED';
+        }
       }
     } else {
       // Type mismatch on actual value
@@ -402,10 +475,15 @@ export function evaluateRequirementConstraint(
     }
   } else if (fieldDef.valueType === 'string') {
     if (typeof actual === 'string') {
-      status =
-        actual.trim().toLowerCase() === String(constraint.expected).trim().toLowerCase()
-          ? 'SATISFIED'
-          : 'NOT_SATISFIED';
+      const normalizedActual = actual.trim().toUpperCase();
+      if (fieldDef.allowedValues && !fieldDef.allowedValues.includes(normalizedActual)) {
+        status = 'NOT_SATISFIED';
+      } else {
+        status =
+          normalizedActual === String(constraint.expected).trim().toUpperCase()
+            ? 'SATISFIED'
+            : 'NOT_SATISFIED';
+      }
     } else {
       status = 'NOT_SATISFIED';
     }
@@ -437,8 +515,17 @@ export function evaluateSubjectRequirementConstraints(
   requirementId: string,
   constraints: RequirementConstraintInput[]
 ): SubjectRequirementEvaluationResult {
+  // B04-07: Verify that constraint requirementId (if present) matches the evaluated requirementId
+  for (const c of constraints) {
+    if (c.requirementId && c.requirementId !== requirementId) {
+      throw new ConstraintValidationError(
+        `Constraint '${c.id}' belongs to requirement '${c.requirementId}', which does not match evaluated requirement '${requirementId}'.`
+      );
+    }
+  }
+
   const constraintResults = constraints.map((c) =>
-    evaluateRequirementConstraint({ ...c, requirementId }, subject)
+    evaluateRequirementConstraint({ ...c, requirementId: c.requirementId ?? requirementId }, subject)
   );
 
   let status: ConstraintEvaluationStatus = 'SATISFIED';
@@ -457,4 +544,3 @@ export function evaluateSubjectRequirementConstraints(
     constraintResults,
   };
 }
-

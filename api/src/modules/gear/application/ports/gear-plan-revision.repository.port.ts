@@ -14,6 +14,6 @@ export interface CreatePlanRevisionInput {
 
 export interface GearPlanRevisionRepositoryPort {
   findByPlanAndRevision(planId: string, revision: number): Promise<GearPlanRevisionDomain | null>;
+  findAllByPlan(planId: string): Promise<GearPlanRevisionDomain[]>;
   saveRevision(input: CreatePlanRevisionInput): Promise<GearPlanRevisionDomain>;
 }
-

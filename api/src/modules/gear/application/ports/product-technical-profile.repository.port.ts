@@ -9,5 +9,8 @@ export interface ProductTechnicalProfileRepositoryPort {
     category: GearCategory,
     attributes: Record<string, unknown>,
     expectedVersion?: number,
+    schemaVersion?: string,
+    sources?: Record<string, unknown>,
+    actorId?: string,
   ): Promise<ProductTechnicalProfileDomain>;
 }

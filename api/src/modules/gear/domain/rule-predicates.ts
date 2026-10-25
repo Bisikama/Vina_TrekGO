@@ -1,7 +1,7 @@
 /**
- * AI Gear Advisor V3.1.3 — Rule Predicates & Metadata Definitions (Pure TypeScript)
+ * AI Gear Advisor V3.1.5 — Rule Predicates & Metadata Definitions (Pure TypeScript)
  * Zero NestJS, Prisma, AI SDK, or I/O imports.
- * Exactly implements MASTER V3.1.3 Section D, D1, D2, and Section 7.1.
+ * Exactly implements MASTER V3.1.5 Section D, D1, D2, and Section 7.1.
  */
 
 import {
@@ -119,7 +119,10 @@ export function normalizeCoreGearItemInput(item: unknown): CoreGearItemInput {
   }
 
   const raw = item as Record<string, unknown>;
-  const id = typeof raw.id === 'string' && raw.id.trim() !== '' ? raw.id.trim() : 'item';
+  if (!raw.id || typeof raw.id !== 'string' || raw.id.trim() === '') {
+    throw new InvalidAttributeValueError('id', 'Item id is mandatory and cannot be empty.');
+  }
+  const id = raw.id.trim();
   const categoryStr = typeof raw.category === 'string' ? raw.category.trim() : '';
 
   if (isExtendedGearCategory(categoryStr)) {
@@ -131,10 +134,30 @@ export function normalizeCoreGearItemInput(item: unknown): CoreGearItemInput {
   }
   const category: CoreGearCategory = categoryStr;
 
-  const condition = typeof raw.condition === 'string' ? raw.condition.trim() : 'good';
-  const rawAttrs = (raw.attributes && typeof raw.attributes === 'object'
-    ? raw.attributes
-    : {}) as Record<string, unknown>;
+  if (
+    !raw.condition ||
+    typeof raw.condition !== 'string' ||
+    !['new', 'good', 'worn', 'poor', 'NEW', 'GOOD', 'WORN', 'POOR'].includes(raw.condition.trim())
+  ) {
+    throw new InvalidAttributeValueError(
+      'condition',
+      'Valid condition (new, good, worn, poor) is mandatory.'
+    );
+  }
+  const condition = raw.condition.trim().toLowerCase();
+
+  // B04-07: Explicit null, array or primitive attributes must be rejected with typed error.
+  // Absent attributes (undefined) is tolerated as unknown attributes ({}).
+  if (raw.attributes !== undefined) {
+    if (raw.attributes === null || typeof raw.attributes !== 'object' || Array.isArray(raw.attributes)) {
+      throw new InvalidAttributeValueError(
+        'attributes',
+        'attributes must be a valid object when provided; explicit null, array or primitive is not allowed.'
+      );
+    }
+  }
+
+  const rawAttrs = (raw.attributes ?? {}) as Record<string, unknown>;
 
   const allowedFields = CORE_CATEGORY_ALLOWED_FIELDS[category];
   const normalizedAttrs: Record<string, unknown> = {};
@@ -163,6 +186,19 @@ export function normalizeCoreGearItemInput(item: unknown): CoreGearItemInput {
           key,
           `Field '${key}' must be a finite number, received '${typeof val}' (${valRepr}).`
         );
+      }
+      if (
+        key === 'waterproof_mm' ||
+        key === 'temp_rating_c' ||
+        key === 'weight_g' ||
+        key === 'capacity_l'
+      ) {
+        if (!Number.isInteger(val)) {
+          throw new InvalidAttributeValueError(
+            key,
+            `Field '${key}' must be an integer, received ${val}.`
+          );
+        }
       }
       if (key === 'waterproof_mm' || key === 'weight_g' || key === 'capacity_l') {
         if (val < 0) {

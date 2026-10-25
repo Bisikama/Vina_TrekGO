@@ -48,6 +48,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
       expect(item).not.toBeNull();
       expect(mockPrisma.userGearItem.findFirst).toHaveBeenCalledWith({
         where: { id: 'item-1', userId: 'user-a' },
+        include: { photos: { orderBy: { position: 'asc' } } },
       });
     });
 
@@ -58,6 +59,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
       expect(item).toBeNull();
       expect(mockPrisma.userGearItem.findFirst).toHaveBeenCalledWith({
         where: { id: 'item-1', userId: 'user-b' },
+        include: { photos: { orderBy: { position: 'asc' } } },
       });
     });
 
@@ -76,7 +78,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
         name: 'Old Name',
         category: 'JACKET',
         condition: 'GOOD',
-        attributes: { waterproof_mm: 5000, to_delete: 'value' },
+        attributes: { waterproof_mm: 5000, weight_g: 500 },
         version: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -89,7 +91,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
         name: 'New Name',
         category: 'JACKET',
         condition: 'GOOD',
-        attributes: { waterproof_mm: 8000, to_delete: null },
+        attributes: { waterproof_mm: 8000, weight_g: null },
         version: 2,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -100,7 +102,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
         'user-a',
         {
           name: 'New Name',
-          attributes: { waterproof_mm: 8000, to_delete: null },
+          attributes: { waterproof_mm: 8000, weight_g: null },
         },
         1,
       );
@@ -110,7 +112,7 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
           where: { id: 'item-1', userId: 'user-a', version: 1 },
           data: expect.objectContaining({
             name: 'New Name',
-            attributes: { waterproof_mm: 8000, to_delete: null },
+            attributes: { waterproof_mm: 8000, weight_g: null },
             version: { increment: 1 },
           }),
         }),
@@ -638,7 +640,14 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
           findUnique: jest.fn(),
         },
         gearQuoteLink: {
+          findUnique: jest.fn().mockResolvedValue(null),
           upsert: jest.fn(),
+        },
+        gearPlanOptionSet: {
+          findMany: jest.fn(),
+        },
+        rentalQuoteLine: {
+          findMany: jest.fn(),
         },
       };
       quoteRepo = new PrismaGearQuoteLinkRepository(mockPrisma);
@@ -683,6 +692,28 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
         expiresAt: new Date(Date.now() + 60000),
       });
 
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([
+        {
+          id: 'set-1',
+          expiresAt: new Date(Date.now() + 60000),
+          optionsJson: [
+            {
+              id: 'opt-1',
+              rentalLines: [{ productId: 'prod-1', quantity: 1 }],
+            },
+          ],
+        },
+      ]);
+
+      mockPrisma.rentalQuoteLine.findMany.mockResolvedValue([
+        {
+          id: 'line-1',
+          quoteId: 'quote-1',
+          productId: 'prod-1',
+          quantity: 1,
+        },
+      ]);
+
       mockPrisma.gearQuoteLink.upsert.mockResolvedValue({
         id: 'link-1',
         planRevisionId: 'rev-1',
@@ -703,6 +734,122 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
             },
           },
         }),
+      );
+    });
+
+    it('should reject when quote has wrong quantity for the same product (e.g. quote qty 999 vs option qty 1)', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      });
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([
+        {
+          id: 'set-1',
+          expiresAt: new Date(Date.now() + 60000),
+          optionsJson: [
+            {
+              id: 'opt-1',
+              rentalLines: [{ productId: 'prod-1', quantity: 1 }],
+            },
+          ],
+        },
+      ]);
+      mockPrisma.rentalQuoteLine.findMany.mockResolvedValue([
+        {
+          id: 'line-1',
+          quoteId: 'quote-1',
+          productId: 'prod-1',
+          quantity: 999, // Mismatched quantity!
+        },
+      ]);
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      );
+    });
+
+    it('should reject when quote mixes products from mutually exclusive options', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      });
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([
+        {
+          id: 'set-1',
+          expiresAt: new Date(Date.now() + 60000),
+          optionsJson: [
+            {
+              id: 'opt-p-only',
+              rentalLines: [{ productId: 'P', quantity: 1 }],
+            },
+            {
+              id: 'opt-q-only',
+              rentalLines: [{ productId: 'Q', quantity: 1 }],
+            },
+          ],
+        },
+      ]);
+      mockPrisma.rentalQuoteLine.findMany.mockResolvedValue([
+        { id: 'line-1', quoteId: 'quote-1', productId: 'P', quantity: 1 },
+        { id: 'line-2', quoteId: 'quote-1', productId: 'Q', quantity: 1 },
+      ]);
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      );
+    });
+
+    it('should fail closed when optionSets is empty', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      });
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([]); // Empty option sets!
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      );
+    });
+
+    it('should reject when all option sets are expired with GEAR_OPTION_SET_EXPIRED', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      });
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([
+        {
+          id: 'set-expired',
+          expiresAt: new Date(Date.now() - 10000),
+          optionsJson: [],
+        },
+      ]);
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_OPTION_SET_EXPIRED }),
       );
     });
   });

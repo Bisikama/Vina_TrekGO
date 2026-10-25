@@ -24,6 +24,14 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
     return record ? this.toDomain(record) : null;
   }
 
+  async findAllByPlan(planId: string): Promise<GearPlanRevisionDomain[]> {
+    const records = await this.prisma.gearPlanRevision.findMany({
+      where: { planId },
+      orderBy: { revision: 'desc' },
+    });
+    return records.map((r) => this.toDomain(r));
+  }
+
   async saveRevision(input: CreatePlanRevisionInput): Promise<GearPlanRevisionDomain> {
     const existing = await this.prisma.gearPlanRevision.findUnique({
       where: {
@@ -89,4 +97,3 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
     };
   }
 }
-

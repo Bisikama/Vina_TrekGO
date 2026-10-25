@@ -35,10 +35,10 @@ sequenceDiagram
     U->>FE: Chụp/chọn 1 ảnh hoặc dán link sản phẩm
     FE->>BE: Upload ảnh qua media của app, lấy uploadId
     FE->>BE: POST /gear/extractions (source: IMAGE uploadId hoặc LINK url)
-    BE->>BE: Kiểm tra quota ngày (server quyết định; cache hit không tốn lượt)
+    BE->>BE: Kiểm tra quota ngày (server quyết định, cache hit không tốn lượt)
     alt Hết quota và không có cache hợp lệ
         BE-->>FE: Lỗi hết lượt kèm thời điểm reset nếu có
-        FE-->>U: Thông báo; tủ đồ và nhập tay vẫn dùng bình thường
+        FE-->>U: Thông báo, tủ đồ và nhập tay vẫn dùng bình thường
     else Được xử lý
         BE->>AI: Đọc ảnh/link, trích xuất thuộc tính
         AI-->>BE: Thuộc tính + bằng chứng theo field
@@ -58,7 +58,7 @@ sequenceDiagram
             BE-->>FE: Item vừa lưu hoặc item cũ của draft đã confirm
         end
     end
-    Note over BE,AI: Trích xuất lỗi thì draft FAILED — FE hiện lỗi, cho thử lại hoặc nhập tay; không confirm draft lỗi
+    Note over BE,AI: Trích xuất lỗi thì draft FAILED — FE hiện lỗi, cho thử lại hoặc nhập tay, không confirm draft lỗi
 ```
 
 ### 2.2. Kiểm tra đồ theo chuyến đi (luồng chính)
@@ -104,7 +104,7 @@ sequenceDiagram
     U->>FE: Chọn một phương án
     FE->>BE: POST /gear/plans/:id/quote-intents (revision + optionRef)
     BE-->>FE: Prefill cho luồng thuê (chưa phải quote, chưa giữ tồn)
-    FE->>RE: Mở màn Rental với prefill; user xem lại và xác nhận
+    FE->>RE: Mở màn Rental với prefill, user xem lại và xác nhận
     RE-->>FE: Quote thật (giá, cọc, hạn quote)
     FE->>BE: POST /gear/plans/:id/quote-links (quoteId + planRevision)
     Note over FE,RE: Đơn hàng, cọc, thanh toán chạy tiếp trong Rental như bình thường — tính năng này không tự tạo đơn, không tự thanh toán

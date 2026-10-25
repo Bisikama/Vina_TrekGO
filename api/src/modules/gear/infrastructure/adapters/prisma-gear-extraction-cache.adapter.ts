@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../shared/services/prisma.service';
 import { AppError } from '../../../../shared/errors/app-error';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
+import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes';
 import { GearExtractionCacheDomain } from '../../domain/gear.types';
 import {
   GearExtractionCachePort,
@@ -50,17 +51,47 @@ export class PrismaGearExtractionCacheAdapter implements GearExtractionCachePort
     data: Omit<GearExtractionCacheDomain, 'id' | 'createdAt'>,
     leaseValidation?: LeaseValidationContext,
   ): Promise<GearExtractionCacheDomain> {
+    if (data.status !== 'SUCCESS') {
+      throw AppError.fromCode(COMMON_ERROR_CODES.VALIDATION_ERROR, {
+        message: `Chỉ lưu trữ kết quả trích xuất thành công (SUCCESS) vào cache, từ chối lưu trạng thái: ${data.status}`,
+      });
+    }
+
     const performUpsert = async (tx: any) => {
-      // Validate lease if provided (conditional publish)
+      // Validate lease if provided (conditional publish with row lock to eliminate worker race)
       if (leaseValidation) {
-        const validLease = await tx.gearExtractionLease.findFirst({
-          where: {
-            resourceKey: leaseValidation.resourceKey,
-            ownerToken: leaseValidation.ownerToken,
-            fencingToken: leaseValidation.fencingToken,
-            leaseExpiresAt: { gt: new Date() },
-          },
-        });
+        let validLease: any = null;
+        if (typeof tx.$queryRawUnsafe === 'function') {
+          try {
+            const rows = await tx.$queryRawUnsafe(
+              `SELECT id, fencing_token FROM gear_extraction_leases WHERE resource_key = $1 AND owner_token = $2 AND fencing_token = $3 AND lease_expires_at > NOW() FOR UPDATE`,
+              leaseValidation.resourceKey,
+              leaseValidation.ownerToken,
+              leaseValidation.fencingToken,
+            );
+            if (Array.isArray(rows) && rows.length > 0) {
+              validLease = rows[0];
+            }
+          } catch {
+            validLease = await tx.gearExtractionLease?.findFirst({
+              where: {
+                resourceKey: leaseValidation.resourceKey,
+                ownerToken: leaseValidation.ownerToken,
+                fencingToken: leaseValidation.fencingToken,
+                leaseExpiresAt: { gt: new Date() },
+              },
+            });
+          }
+        } else {
+          validLease = await tx.gearExtractionLease?.findFirst({
+            where: {
+              resourceKey: leaseValidation.resourceKey,
+              ownerToken: leaseValidation.ownerToken,
+              fencingToken: leaseValidation.fencingToken,
+              leaseExpiresAt: { gt: new Date() },
+            },
+          });
+        }
 
         if (!validLease) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT, {

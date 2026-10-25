@@ -155,6 +155,7 @@ export class PrismaGearPlanRepository implements GearPlanRepositoryPort {
     userId: string,
     evaluatedRevision: number,
     expectedInputRevision?: number,
+    canonicalContext?: Record<string, unknown>,
   ): Promise<GearPlanDomain> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.gearPlan.findFirst({
@@ -200,12 +201,16 @@ export class PrismaGearPlanRepository implements GearPlanRepositoryPort {
         where: {
           id,
           userId,
+          ...(expectedInputRevision !== undefined ? { inputRevision: expectedInputRevision } : {}),
           OR: [
             { evaluatedRevision: null },
             { evaluatedRevision: { lte: evaluatedRevision } },
           ],
         },
-        data: { evaluatedRevision },
+        data: {
+          evaluatedRevision,
+          ...(canonicalContext ? { canonicalContext: canonicalContext as any } : {}),
+        },
       });
 
       if (updateResult.count === 0) {

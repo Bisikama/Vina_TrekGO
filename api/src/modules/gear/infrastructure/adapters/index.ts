@@ -9,4 +9,9 @@ export * from './prisma-gear-plan-option-set.repository';
 export * from './prisma-gear-advice-run.repository';
 export * from './prisma-gear-quote-link.repository';
 export * from './prisma-product-technical-profile.repository';
+export * from './prisma-trip-context-read.adapter';
+export * from './openai-gear-ai.adapter';
+export * from './gemini-gear-ai.adapter';
+export * from './firecrawl-page-reader.adapter';
+export * from './safe-link-fetcher';
 

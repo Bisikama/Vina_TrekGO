@@ -1,7 +1,7 @@
 /**
- * AI Gear Advisor V3.1.3 — Pure Gear Engine & Constraint Evaluator (Pure TypeScript)
+ * AI Gear Advisor V3.1.5 — Pure Gear Engine & Constraint Evaluator (Pure TypeScript)
  * Zero NestJS, Prisma, AI SDK, I/O, network, system time, or random imports.
- * Exactly implements MASTER V3.1.3 Section 6, 7, 8, Phụ lục A (Section D, E, F).
+ * Exactly implements MASTER V3.1.5 Section 6, 7, 8, Phụ lục A (Section D, E, F).
  */
 
 import {
@@ -28,6 +28,7 @@ import {
   RequirementConstraintInput,
   ConstraintEvaluationResult,
   SubjectRequirementEvaluationResult,
+  ConstraintValidationError,
   evaluateRequirementConstraint,
   evaluateSubjectRequirementConstraints,
 } from './constraint-evaluator';
@@ -219,6 +220,20 @@ export function evaluateGearCheck(
   trip: TripContext,
   options?: GearCheckOptions
 ): GearCheckResult {
+  // B04-07: Reject duplicate item IDs before evaluation
+  const seenItemIds = new Set<string>();
+  for (const it of items) {
+    const rawId = (it && typeof it === 'object' && 'id' in it && typeof (it as any).id === 'string')
+      ? (it as any).id.trim()
+      : '';
+    if (rawId) {
+      if (seenItemIds.has(rawId)) {
+        throw new InvalidAttributeValueError('id', `Duplicate item id '${rawId}' detected in gear check input.`);
+      }
+      seenItemIds.add(rawId);
+    }
+  }
+
   // 1. Boundary validation: all items must be core gear categories
   const normalizedItems: CoreGearItemInput[] = items.map((it) =>
     normalizeCoreGearItemInput(it)
@@ -274,12 +289,21 @@ export function evaluateGearCheck(
   if (options?.subjectConstraints && options.subjectConstraints.length > 0) {
     subjectConstraintEvaluations = options.subjectConstraints.map((binding) => {
       const targetItem = normalizedItems.find((it) => it.id === binding.subjectId);
-      const subjectAttrs = targetItem ? targetItem.attributes : {};
+      if (!targetItem) {
+        throw new ConstraintValidationError(
+          `Subject item '${binding.subjectId}' specified in requirement binding was not found in selected items.`
+        );
+      }
+      if (binding.category && targetItem.category !== binding.category) {
+        throw new ConstraintValidationError(
+          `Category mismatch for subject '${binding.subjectId}': item has category '${targetItem.category}', but binding specified '${binding.category}'.`
+        );
+      }
       return evaluateSubjectRequirementConstraints(
         {
-          id: binding.subjectId,
-          category: binding.category,
-          attributes: subjectAttrs,
+          id: targetItem.id,
+          category: targetItem.category,
+          attributes: targetItem.attributes,
         },
         binding.requirementId,
         binding.constraints

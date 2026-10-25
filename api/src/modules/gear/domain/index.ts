@@ -4,3 +4,8 @@ export * from './gear-mappers';
 export * from './rule-predicates';
 export * from './constraint-evaluator';
 export * from './pure-gear-engine';
+export * from './duplicate-detector';
+export * from './climate-estimate.registry';
+export * from './plan-coverage-resolver';
+export * from './pure-planner';
+export * from './advice-grounding';

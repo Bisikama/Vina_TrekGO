@@ -9,4 +9,7 @@ export * from './gear-plan-option-set.repository.port';
 export * from './gear-advice-run.repository.port';
 export * from './gear-quote-link.repository.port';
 export * from './product-technical-profile.repository.port';
+export * from './trip-context-read.port';
+export * from './gear-ai.port';
+export * from './page-reader.port';
 

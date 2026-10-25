@@ -76,6 +76,17 @@ export interface UserGearItemDomain {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  photos?: UserGearItemPhotoDomain[];
+}
+
+
+
+export interface UserGearItemPhotoDomain {
+  id: string;
+  itemId: string;
+  storageRef: string;
+  position: number;
+  createdAt: Date;
 }
 
 export interface GearRequirementRuleMetadata {
@@ -119,7 +130,7 @@ export interface GearExtractionCacheDomain {
   contentHash: string;
   promptVersion: string;
   modelVersion: string;
-  schemaVersion: string;
+  schemaVersion?: string;
   status: string;
   resultJson: Record<string, unknown>;
   expiresAt: Date;
@@ -215,7 +226,7 @@ export interface ProductTechnicalProfileDomain {
   productId: string;
   category: GearCategory;
   attributes: Record<string, unknown>;
-  schemaVersion: string;
+  schemaVersion?: string;
   sources?: Record<string, unknown>;
   version: number;
   createdAt: Date;

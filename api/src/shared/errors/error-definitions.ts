@@ -15,6 +15,7 @@ import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.err
 import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes'
 import { TRIP_PRICING_ERROR_CODES as TP } from './codes/trip-pricing.error-codes'
 import { GEAR_ERROR_CODES as G } from './codes/gear.error-codes'
+import { RENTAL_REVIEW_ERROR_CODES as RV } from './codes/rental-review.error-codes'
 
 export interface ErrorDefinition {
   status: number
@@ -293,6 +294,48 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     status: 409,
     message: 'Multiple active maintenance records found',
     retryable: false,
+  },
+  [RV.RENTAL_ORDER_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
+  [RV.RENTAL_ORDER_NOT_ELIGIBLE_FOR_REVIEW]: {
+    status: 409,
+    message: 'Rental order is not eligible for product reviews',
+    retryable: false,
+  },
+  [RV.PRODUCT_NOT_IN_RENTAL_ORDER]: {
+    status: 400,
+    message: 'Product is not part of this rental order',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_PRODUCT_NOT_HANDED_OVER]: {
+    status: 409,
+    message: 'Product has not been handed over for this rental order',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_ALREADY_EXISTS]: {
+    status: 409,
+    message: 'This rental product has already been reviewed for the order',
+    retryable: false,
+  },
+  [RV.INVALID_RATING_VALUE]: { status: 400, message: 'Rating must be an integer from 1 to 5', retryable: false },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_REQUIRED]: {
+    status: 400,
+    message: 'Idempotency-Key is required',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_INVALID]: {
+    status: 400,
+    message: 'Idempotency-Key must contain 8 to 200 characters',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_REUSED]: {
+    status: 409,
+    message: 'Idempotency-Key was already used with a different request',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_OPERATION_IN_PROGRESS]: {
+    status: 409,
+    message: 'A rental review request with this Idempotency-Key is still in progress',
+    retryable: true,
   },
   // --- MEDIA ---
   [MEDIA_ERROR_CODES.MEDIA_NOT_FOUND]: { status: 404, message: 'Media asset not found', retryable: false },
@@ -663,4 +706,104 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Báo giá thuê không đủ điều kiện liên kết (hết hạn hoặc trạng thái không hợp lệ)',
     retryable: false,
   },
-}
+  [G.GEAR_ITEM_POSSIBLE_DUPLICATE]: {
+    status: 409,
+    message: 'Phát hiện món đồ có thông số tương tự trong tủ đồ',
+    retryable: false,
+  },
+  [G.GEAR_ITEM_LIMIT_EXCEEDED]: {
+    status: 400,
+    message: 'Tủ đồ đã đạt giới hạn tối đa 50 món',
+    retryable: false,
+  },
+  [G.GEAR_CLIMATE_NOT_CONFIRMED]: {
+    status: 400,
+    message: 'Điều kiện thời tiết của chuyến đi chưa được xác nhận',
+    retryable: false,
+  },
+  [G.GEAR_PHOTO_LIMIT_EXCEEDED]: {
+    status: 400,
+    message: 'Mỗi món đồ chỉ được tối đa 3 ảnh',
+    retryable: false,
+  },
+  [G.GEAR_NEEDS_CONTEXT]: {
+    status: 400,
+    message: 'Chuyến đi thiếu dữ kiện ngữ cảnh cần thiết (độ khó, địa hình hoặc số ngày)',
+    retryable: false,
+  },
+  [G.GEAR_CONFIGURATION_ERROR]: {
+    status: 500,
+    message: 'Lỗi cấu hình quy tắc trang bị trong hệ thống',
+    retryable: false,
+  },
+  [G.GEAR_AI_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ nhận diện AI hiện chưa được cấu hình. Vui lòng nhập thông số bằng tay.',
+    retryable: false,
+  },
+  [G.GEAR_AI_TIMEOUT]: {
+    status: 504,
+    message: 'Quá thời gian chờ phản hồi từ dịch vụ AI',
+    retryable: true,
+  },
+  [G.GEAR_AI_REFUSED]: {
+    status: 502,
+    message: 'Dịch vụ AI từ chối xử lý yêu cầu',
+    retryable: false,
+  },
+  [G.GEAR_EXTRACTION_SCHEMA_MISMATCH]: {
+    status: 502,
+    message: 'Dữ liệu trả về từ AI không đúng cấu trúc quy định',
+    retryable: true,
+  },
+  [G.GEAR_AI_RATE_LIMITED]: {
+    status: 429,
+    message: 'Dịch vụ AI vượt quá giới hạn tần suất, vui lòng thử lại sau',
+    retryable: true,
+  },
+  [G.GEAR_EXTRACTION_QUOTA_EXCEEDED]: {
+    status: 429,
+    message: 'Bạn đã sử dụng hết hạn mức 20 lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.',
+    retryable: false,
+  },
+  [G.GEAR_PAGE_READER_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ đọc link sản phẩm chưa được cấu hình hoặc không khả dụng. Vui lòng tải ảnh hoặc nhập bằng tay.',
+    retryable: false,
+  },
+  [G.GEAR_PAGE_FETCH_FAILED]: {
+    status: 502,
+    message: 'Không thể đọc nội dung từ đường dẫn sản phẩm đã cung cấp',
+    retryable: true,
+  },
+  [G.GEAR_SSRF_BLOCKED]: {
+    status: 400,
+    message: 'Đường dẫn không hợp lệ hoặc trỏ đến địa chỉ mạng nội bộ bị cấm',
+    retryable: false,
+  },
+  [G.GEAR_PLAN_NOT_EVALUATED]: {
+    status: 400,
+    message: 'Kế hoạch chưa được đánh giá trước khi thực hiện thao tác',
+    retryable: false,
+  },
+  [G.GEAR_PLAN_STALE]: {
+    status: 409,
+    message: 'Kế hoạch trang bị đã thay đổi sau lần đánh giá cuối, vui lòng đánh giá lại',
+    retryable: true,
+  },
+  [G.GEAR_OPTION_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy phương án trang bị được yêu cầu',
+    retryable: false,
+  },
+  [G.GEAR_OPTION_SET_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy tập phương án trang bị tương ứng',
+    retryable: false,
+  },
+  [G.GEAR_OPTION_SET_EXPIRED]: {
+    status: 410,
+    message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới.',
+    retryable: false,
+  },
+};
