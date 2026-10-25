@@ -77,7 +77,7 @@ export const bookingLinkageSchema = obj({
       id: uuid,
       fullName: str,
       checkinStatus: { type: 'string', enum: ['NOT_CHECKED_IN', 'CHECKED_IN', 'NO_SHOW'] },
-      checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null as unknown as string], nullable: true },
+      checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null], nullable: true },
       checkedInAt: { ...time, nullable: true },
       checkinCode: { type: 'string', nullable: true },
       linkageStatus: { type: 'string', enum: ['UNLINKED', 'INVITATION_PENDING', 'CLAIMED'] },

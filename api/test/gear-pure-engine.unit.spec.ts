@@ -1724,5 +1724,87 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
       expect(res.summary.searchStatus).toBe('BOUNDED_RECOMMENDATION')
       expect(res.summary.searchScope?.hitNodeLimit || res.summary.searchScope?.hitAllocationLimit).toBe(true)
     })
+
+    it('Regression D: preserves canonical tie-break on equal fee and weight (A->P, B->Q)', () => {
+      const needA_tie = {
+        requirementId: 'need-A',
+        category: 'JACKET' as const,
+        priority: 'REQUIRED' as const,
+        quantity: 1,
+        constraints: [],
+      }
+      const needB_tie = {
+        requirementId: 'need-B',
+        category: 'JACKET' as const,
+        priority: 'REQUIRED' as const,
+        quantity: 1,
+        constraints: [
+          {
+            field: 'waterproof_mm',
+            operator: 'GTE' as const,
+            expected: 100,
+            category: 'JACKET' as const,
+            source: 'USER_REQUEST' as const,
+            reference: 'user-pref-waterproof',
+          },
+        ],
+      }
+
+      const candP = {
+        id: 'P',
+        name: 'Product P',
+        category: 'JACKET' as const,
+        rentalFee: 1,
+        depositValue: 0,
+        replacementValue: 100,
+        weight_g: 1,
+        attributes: { waterproof_mm: 100, temp_rating_c: 15, weight_g: 1, windproof: true },
+        availableCount: 1,
+      }
+      const candQ = {
+        id: 'Q',
+        name: 'Product Q',
+        category: 'JACKET' as const,
+        rentalFee: 1,
+        depositValue: 0,
+        replacementValue: 100,
+        weight_g: 1,
+        attributes: { waterproof_mm: 100, temp_rating_c: 15, weight_g: 1, windproof: true },
+        availableCount: 1,
+      }
+      const candR = {
+        id: 'R',
+        name: 'Product R',
+        category: 'JACKET' as const,
+        rentalFee: 100,
+        depositValue: 0,
+        replacementValue: 100,
+        weight_g: 1,
+        attributes: { waterproof_mm: 10, temp_rating_c: 15, weight_g: 1, windproof: true },
+        availableCount: 1,
+      }
+
+      const candsMap = new Map([['JACKET', [candP, candQ, candR]]])
+
+      const res = solveDeterministicPlannerOption(
+        {
+          ownedAssignments: [],
+          uncoveredNeeds: [needA_tie, needB_tie],
+          candidatesPerCategory: candsMap,
+          tripContext,
+          nodeLimit: 5000,
+        },
+        'MIN_RENTAL_FEE',
+      )
+
+      expect(res.summary.totalRentalFee).toBe(2)
+      expect(res.summary.isComplete).toBe(true)
+
+      // Verify canonical signature: need-A -> P, need-B -> Q (since A:P;B:Q < A:Q;B:P)
+      const assignmentA = res.rentalLines.find((l: any) => l.requirementId === 'need-A')
+      const assignmentB = res.rentalLines.find((l: any) => l.requirementId === 'need-B')
+      expect(assignmentA?.productId).toBe('P')
+      expect(assignmentB?.productId).toBe('Q')
+    })
   })
 })

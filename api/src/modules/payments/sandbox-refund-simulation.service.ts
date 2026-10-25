@@ -331,7 +331,14 @@ export class SandboxRefundSimulationService {
         })
         const successOutbox = await tx.paymentOutboxEvent.findUnique({
           where: { deduplicationKey: `refund:${refund.id}:succeeded:v1` },
-          select: { status: true },
+          select: {
+            status: true,
+            receipts: {
+              where: { consumerName: 'rental-deposit-v1' },
+              select: { processedAt: true },
+              take: 1,
+            },
+          },
         })
         if (!successOutbox) {
           throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
@@ -369,7 +376,9 @@ export class SandboxRefundSimulationService {
           financialStatus: order.financialStatus,
           completionMode: 'STANDARD',
           settlementMode: 'SANDBOX_SIMULATED',
-          settlementProcessingStatus: successOutbox.status === 'PROCESSED' ? 'APPLIED' : 'PENDING',
+          // PROCESSED is transport state. The Rental consumer receipt is the
+          // projection-scoped fact proving that the worker transaction committed.
+          settlementProcessingStatus: successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
           simulatedAt: refund.refundedAt.toISOString(),
           actorAdminId: prepared.actorUserId,
           reason: prepared.reason,
