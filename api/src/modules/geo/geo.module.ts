@@ -10,6 +10,7 @@ import { TripMapStateController } from './presentation/controllers/trip-map-stat
 import { GetTripMapStateUseCase } from './application/use-cases/get-trip-map-state.use-case'
 import { PrismaTripMapStateAdapter } from './infrastructure/adapters/prisma-trip-map-state.adapter'
 import { TripMapStatePort } from './application/ports/trip-map-state.port'
+import { GpsTrackRefreshWorker } from './infrastructure/workers/gps-track-refresh.worker'
 
 @Module({
   imports: [CheckpointModule],
@@ -20,6 +21,7 @@ import { TripMapStatePort } from './application/ports/trip-map-state.port'
     GpsTrackService,
     TripGpsGateway,
     TripGpsRecordingService,
+    GpsTrackRefreshWorker,
     GetTripMapStateUseCase,
     {
       provide: TripMapStatePort,

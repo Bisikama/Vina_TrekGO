@@ -18,5 +18,7 @@ export interface RecordingState {
   trackContextHash?: string
   rawPurgedAt?: string
   rate?: { minute: number; count: number }
+  /** A durable, coalesced request for the post-commit track processor. */
+  trackRefreshPending?: boolean
 }
 export const recordingState = (s: GpsSession) => s.recordingState as unknown as RecordingState

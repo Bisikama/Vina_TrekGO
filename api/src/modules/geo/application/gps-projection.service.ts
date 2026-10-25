@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { Prisma, Trip, GpsSession, CheckpointEvent } from '@prisma/client'
 import { createHash, randomUUID } from 'node:crypto'
 import { GpsAccessService, GpsMember } from './gps-access.service'
+import { recordingState } from './gps-recording-state'
 import type { FrozenGpsPolicy } from './gps-policy'
 import type {
   CheckpointProgressDto,
@@ -317,6 +318,40 @@ export class GpsProjectionService {
         routeVersion: data.routeVersion,
         rosterVersion: data.rosterVersion,
       })
+    return data
+  }
+
+  /**
+   * The live marker has a deliberately small projection path.  Route/deviation and
+   * checkpoint projection is performed by the post-commit track worker instead.
+   */
+  async updateLiveMember(tx: Prisma.TransactionClient, trip: Trip, session: GpsSession, userId: string): Promise<Projection> {
+    const prior = await tx.tripGpsProjection.findUnique({ where: { tripId: trip.id } })
+    if (!prior) return this.refresh(tx, trip)
+    const data = prior.data as unknown as Projection
+    const saved = data.members[userId]
+    if (!saved?.active) return this.refresh(tx, trip)
+    const state = recordingState(session)
+    const dto = sessionDto(session)
+    const version = saved.version + 1
+    const value: MemberStateDto = {
+      ...saved.value,
+      memberVersion: version,
+      session: {
+        id: dto.id,
+        status: dto.status,
+        startedAt: dto.startedAt,
+        endedAt: dto.endedAt,
+        sampleCount: dto.sampleCount,
+        totalDistanceMeters: dto.totalDistanceMeters,
+      },
+      lastLocation: state.lastLocation ?? null,
+      lastSyncAt: state.lastSyncAt ?? null,
+      locationStatus: session.status === 'PAUSED' ? 'PAUSED' : session.status === 'STOPPED' ? 'STOPPED' : 'LIVE',
+    }
+    data.members[userId] = { version, hash: fingerprint(value), value, active: true }
+    await tx.tripGpsProjection.update({ where: { tripId: trip.id }, data: { data: json(data) } })
+    await enqueueGps(tx, trip.id, 'gps:member.updated', { member: value })
     return data
   }
 

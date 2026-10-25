@@ -65,6 +65,17 @@ export class TripGpsRecordingService {
     }
   }
 
+  // Uploads serialize only with the same recording session.  A position update
+  // must not hold the trip-wide lifecycle lock used by administrative commands.
+  private async uploadTransaction<T>(tripId: string, sessionId: string, run: (tx: Tx, trip: Trip) => Promise<T>): Promise<T> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM gps_sessions WHERE id = ${sessionId}::uuid FOR UPDATE`
+      const trip = await tx.trip.findUnique({ where: { id: tripId } })
+      if (!trip) return fail(E.NOT_FOUND)
+      return run(tx, trip)
+    }, { timeout: 15000 })
+  }
+
   private state(session: GpsSession): RecordingState {
     const state = recordingState(session)
     if (!state?.policy?.id) return fail(E.INVALID_STATE)
@@ -329,7 +340,8 @@ export class TripGpsRecordingService {
     deviceId: string,
     input: GpsSamples,
   ): Promise<SamplesResponse> {
-    return this.transaction(tripId, userId, async (tx, trip) => {
+    const started = Date.now()
+    const result = await this.uploadTransaction(tripId, sessionId, async (tx, trip) => {
       const member = await this.access.require(tx, trip, userId)
       if (![...RECORDABLE, 'COMPLETED', 'INTERRUPTED'].includes(trip.status)) fail(E.TRIP_NOT_RECORDABLE)
       let session = await this.session(tx, tripId, userId, sessionId, deviceId)
@@ -351,7 +363,6 @@ export class TripGpsRecordingService {
         (a, b) =>
           Date.parse(a.recordedAt) - Date.parse(b.recordedAt) || a.clientSampleId.localeCompare(b.clientSampleId),
       )
-      const track = await this.tracks.load(tx, tripId, userId)
       const rows = await tx.gpsLocation.findMany({
         where: { sessionId, clientSampleId: { in: ordered.map((s) => s.clientSampleId) } },
       })
@@ -401,13 +412,23 @@ export class TripGpsRecordingService {
           headingDeg: sample.headingDeg ?? null,
         }
         if (!code && state.policy.maxPlausibleSpeedMps > 0) {
-          const all = [...track.points, candidate].sort(
+          // Only neighbouring points can establish an implausible speed. Avoid
+          // loading and reprocessing the entire historical track on every ping.
+          const [before, after] = await Promise.all([
+            tx.gpsLocation.findFirst({ where: { sessionId, recordedAt: { lt: recordedAt } }, orderBy: [{ recordedAt: 'desc' }, { clientSampleId: 'desc' }] }),
+            tx.gpsLocation.findFirst({ where: { sessionId, recordedAt: { gt: recordedAt } }, orderBy: [{ recordedAt: 'asc' }, { clientSampleId: 'asc' }] }),
+          ])
+          const point = (row: typeof before): TrackPoint | null => row ? ({
+            sessionId: row.sessionId, clientSampleId: row.clientSampleId, latitude: Number(row.latitude), longitude: Number(row.longitude),
+            accuracyM: Number(row.accuracyM ?? 0), altitudeM: row.altitudeM == null ? null : Number(row.altitudeM), speedMps: row.speedMps == null ? null : Number(row.speedMps), headingDeg: row.headingDeg == null ? null : Number(row.headingDeg), recordedAt: row.recordedAt.toISOString(), receivedAt: row.receivedAt.toISOString(),
+          }) : null
+          const all = [point(before), candidate, point(after)].filter((p): p is TrackPoint => p !== null).sort(
             (a, b) => a.recordedAt.localeCompare(b.recordedAt) || a.clientSampleId.localeCompare(b.clientSampleId),
           )
           const index = all.indexOf(candidate)
           for (const neighbor of [all[index - 1], all[index + 1]].filter(Boolean)) {
             const [a, b] = neighbor.recordedAt <= time ? [neighbor, candidate] : [candidate, neighbor]
-            if (gapReason(a, b, track.intervals, state.policy.signalGapSeconds)) continue
+            if (gapReason(a, b, new Map([[sessionId, state.intervals]]), state.policy.signalGapSeconds)) continue
             const seconds = (Date.parse(b.recordedAt) - Date.parse(a.recordedAt)) / 1000
             if (seconds > 0 && meters(a, b) / seconds > state.policy.maxPlausibleSpeedMps) code = 'IMPLAUSIBLE_JUMP'
           }
@@ -417,15 +438,23 @@ export class TripGpsRecordingService {
           continue
         }
         insert.push({ ...sample, sessionId, recordedAt })
-        track.points.push(candidate)
         acceptedSampleIds.push(sample.clientSampleId)
       }
       if (insert.length) await tx.gpsLocation.createMany({ data: insert })
       state.lastSyncAt = now.toISOString()
+      const newest = insert.sort((a, b) => Date.parse(String(b.recordedAt)) - Date.parse(String(a.recordedAt)))[0]
+      if (newest)
+        state.lastLocation = {
+          latitude: Number(newest.latitude), longitude: Number(newest.longitude), accuracyM: Number(newest.accuracyM),
+          altitudeM: newest.altitudeM == null ? null : Number(newest.altitudeM), speedMps: newest.speedMps == null ? null : Number(newest.speedMps),
+          headingDeg: newest.headingDeg == null ? null : Number(newest.headingDeg), recordedAt: new Date(newest.recordedAt).toISOString(), receivedAt: now.toISOString(),
+        }
+      state.trackRefreshPending = insert.length > 0
       await tx.gpsSession.update({ where: { id: sessionId }, data: { recordingState: json(state) } })
-      await this.tracks.sync(tx, trip, member, session.status === 'STOPPED')
       session = await this.session(tx, tripId, userId, sessionId)
-      const data = await this.projection.refresh(tx, trip)
+      const data = await this.projection.updateLiveMember(tx, trip, session, userId)
+      if (insert.length)
+        await enqueueGps(tx, tripId, 'gps:track.refresh', { sessionId, userId }, null, `track-refresh:${sessionId}:${Math.floor(now.getTime() / 1000)}`)
       return {
         sessionId,
         acceptedSampleIds,
@@ -435,9 +464,29 @@ export class TripGpsRecordingService {
         totalDistanceMeters: session.totalDistanceMeters == null ? null : Number(session.totalDistanceMeters),
         lastLocation: this.state(session).lastLocation ?? null,
         memberVersion: data.members[userId].version,
-        routeRebuildPending: false,
+        routeRebuildPending: insert.length > 0,
         serverTime: now.toISOString(),
       }
+    })
+    this.logger.log(JSON.stringify({ event: 'gps_upload_committed', tripId, sessionId, userId, accepted: result.acceptedSampleIds.length, durationMs: Date.now() - started }))
+    return result
+  }
+
+  async rebuildTrack(tripId: string, userId: string, sessionId: string) {
+    return this.transaction(tripId, userId, async (tx, trip) => {
+      // Serialize the slow projection with the same session's short upload lock,
+      // so a rebuild cannot overwrite a newer live marker.
+      await tx.$queryRaw`SELECT id FROM gps_sessions WHERE id = ${sessionId}::uuid FOR UPDATE`
+      const session = await this.session(tx, tripId, userId, sessionId)
+      const state = this.state(session)
+      if (!state.trackRefreshPending) return
+      const member = await this.access.require(tx, trip, userId)
+      await this.tracks.sync(tx, trip, member, session.status === 'STOPPED')
+      const refreshed = await this.session(tx, tripId, userId, sessionId)
+      const refreshedState = this.state(refreshed)
+      refreshedState.trackRefreshPending = false
+      await tx.gpsSession.update({ where: { id: sessionId }, data: { recordingState: json(refreshedState) } })
+      await this.projection.refresh(tx, trip)
     })
   }
 

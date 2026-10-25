@@ -1,4 +1,4 @@
-import { Body, Controller, Get, createParamDecorator, HttpCode, Param, Post, Res } from '@nestjs/common'
+import { Body, Controller, Get, Header, createParamDecorator, HttpCode, Param, Post, Res } from '@nestjs/common'
 import type { Response } from 'express'
 import { AppError, TRIP_GPS_ERROR_CODES as E } from '../../../../shared/errors'
 import { ApiBearerAuth, ApiOperation, ApiTags, ApiBody, ApiHeader, ApiResponse, ApiParam } from '@nestjs/swagger'
@@ -67,6 +67,7 @@ export class TripGpsController {
   }
 
   @Get('state')
+  @Header('Cache-Control', 'private, no-store')
   @ApiResponse({ status: 200, schema: schema(gpsStateResponseSchema) })
   @ApiOperation({ summary: 'Consistent group GPS roster with durable member/roster/route versions' })
   state(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params) {

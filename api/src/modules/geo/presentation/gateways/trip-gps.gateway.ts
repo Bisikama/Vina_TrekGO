@@ -172,7 +172,10 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
 
   // Each instance consumes the SAME committed outbox independently and emits only to its
   // own sockets. This supplies cross-instance fanout/revocation without a second broker.
-  @Interval(1000)
+  // The outbox remains the durable cross-instance transport. A short interval
+  // avoids imposing the former 0–1 second realtime delay when LISTEN/NOTIFY is
+  // not available in the deployment.
+  @Interval(100)
   async publishOutbox() {
     if (this.publishing || !this.server) return
     this.publishing = true
@@ -193,6 +196,8 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
         take: 500,
       })
       for (const row of rows) {
+        // Track processing is a durable internal job, never a socket event.
+        if (row.eventType === 'gps:track.refresh') continue
         const payload = row.payload as unknown as { envelope: EventEnvelope<any>; recipientUserId: string | null }
         if (!payload?.envelope?.tripId) {
           this.seen.set(row.id, row.createdAt.getTime())
@@ -214,7 +219,12 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
               throw error
             }
           }
-          for (const socket of this.server.sockets.values()) {
+          // Subscription authorization is enforced at subscribe/revalidation time.
+          // Broadcast once to the room; do not open a DB transaction per viewer.
+          if (payload.recipientUserId === null && row.eventType !== 'gps:access.revoked') {
+            this.server.to(`trip-gps:${payload.envelope.tripId}`).emit(row.eventType, payload.envelope)
+            this.logger.debug(JSON.stringify({ event: 'gps_socket_emitted', eventId: payload.envelope.eventId, tripId: payload.envelope.tripId, occurredAt: payload.envelope.occurredAt }))
+          } else for (const socket of this.server.sockets.values()) {
             const { tripId } = payload.envelope
             const personal = payload.recipientUserId !== null
             if (personal ? socket.data.userId !== payload.recipientUserId : !socket.rooms.has(`trip-gps:${tripId}`))
