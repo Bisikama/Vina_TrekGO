@@ -25,6 +25,7 @@ export class RentalProductController {
 Lấy danh sách sản phẩm hiển thị cho người dùng cuối.
 - Chỉ hiển thị sản phẩm đang ACTIVE và danh mục (category) cũng phải đang ACTIVE.
 - Hỗ trợ tìm kiếm cơ bản và lọc theo category.
+- **Dùng để test với Gear Advisor & Rental Quotes:** Lấy id sản phẩm làm productId cho POST /api/v1/rentals/quote và cấu hình thông số kỹ thuật tại PUT /api/v1/staff/gear/product-profiles/{productId}.
 `
   })
   @ApiResponse({ 
