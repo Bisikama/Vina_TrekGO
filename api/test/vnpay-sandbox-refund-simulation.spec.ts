@@ -45,6 +45,7 @@ type HarnessOptions = {
   idempotencyCreate?: jest.Mock
   applyEventError?: Error
   outboxStatus?: 'PENDING' | 'PROCESSED'
+  rentalConsumerReceipt?: boolean
   mutate?: (state: { refund: any; items: any[]; payment: any }) => void
 }
 
@@ -148,7 +149,10 @@ const createHarness = (options: HarnessOptions = {}) => {
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     rentalOrder: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     paymentOutboxEvent: {
-      findUnique: jest.fn().mockResolvedValue({ status: options.outboxStatus ?? 'PENDING' }),
+      findUnique: jest.fn().mockResolvedValue({
+        status: options.outboxStatus ?? 'PENDING',
+        receipts: options.rentalConsumerReceipt ? [{ processedAt: now }] : [],
+      }),
     },
   }
   const prisma: any = {
@@ -308,8 +312,13 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       expect(harness.order.status).toBe(RentalOrderStatus.RETURN_PROCESSING)
     })
 
-    it('reports APPLIED only when the durable outbox event is already processed', async () => {
+    it('does not report APPLIED from transport status without the Rental consumer receipt', async () => {
       const result = await invoke(createHarness({ outboxStatus: 'PROCESSED' }))
+      expect(result.settlementProcessingStatus).toBe('PENDING')
+    })
+
+    it('reports APPLIED only when the Rental consumer receipt proves projection commit', async () => {
+      const result = await invoke(createHarness({ outboxStatus: 'PROCESSED', rentalConsumerReceipt: true }))
       expect(result.settlementProcessingStatus).toBe('APPLIED')
     })
 
@@ -677,6 +686,8 @@ describe('VNPay sandbox deposit-refund settlement', () => {
 
       await harness.service.applyEvent(realEvent)
 
+      expect(harness.refund.status).toBe('SUCCEEDED')
+      expect(harness.tx.paymentOutboxEvent.create).not.toHaveBeenCalled()
       expect(harness.tx.refund.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -718,6 +729,8 @@ describe('VNPay sandbox deposit-refund settlement', () => {
 
       await harness.service.applyEvent(realEvent)
 
+      expect(harness.refund.status).toBe('SUCCEEDED')
+      expect(harness.tx.paymentOutboxEvent.create).not.toHaveBeenCalled()
       expect(harness.tx.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
