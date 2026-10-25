@@ -120,8 +120,8 @@ export class PaymentOperationsController {
     summary: 'Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
     description:
       'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING. ' +
-      'Admin thực hiện mô phỏng để tiếp tục luồng hoàn cọc và đóng đơn demo. ' +
-      'Không đổi trạng thái VNPay 05/06 thành 00 và không giả tiền đã về tài khoản.',
+      'API ghi nhận một kết quả provider SUCCEEDED giả lập qua Shared Payment; Rental chỉ cập nhật settlement bằng outbox worker. ' +
+      'Không gọi API hoàn tiền thật và không chứng minh tiền đã về tài khoản.',
   })
   @ApiParam({ name: 'refundId', type: String, format: 'uuid', description: 'UUID của lệnh hoàn cọc' })
   @ApiHeader({
@@ -131,13 +131,13 @@ export class PaymentOperationsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Mô phỏng hoàn cọc thành công, đơn hàng và settlement được cập nhật',
+    description:
+      'Shared Payment đã ghi nhận refund SUCCEEDED; settlementProcessingStatus cho biết Rental worker đã áp dụng hay chưa',
   })
   @ApiResponse({ status: 401, description: 'Chưa xác thực' })
   @ApiResponse({
     status: 403,
-    description:
-      'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
+    description: 'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
   })
   @ApiResponse({
     status: 409,
@@ -206,7 +206,8 @@ export class RefundsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Xem chi tiết lệnh hoàn tiền (Refund Detail)',
-    description: 'Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.',
+    description:
+      'Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.',
   })
   @ApiParam({
     name: 'id',

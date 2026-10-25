@@ -6,6 +6,7 @@ import { PreparationModule } from './preparation/preparation.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { RentalReturnsModule } from './returns/returns.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
+import { RentalReviewModule } from './reviews/rental-review.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { LifecycleModule } from './lifecycle/lifecycle.module';
     DeliveryModule,
     RentalReturnsModule,
     LifecycleModule,
+    RentalReviewModule,
   ],
   controllers: [],
   providers: [],

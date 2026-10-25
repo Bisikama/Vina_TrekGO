@@ -312,7 +312,7 @@ export class RentalDepositWorker {
         where: { id: initial.id },
         include: {
           payment: { include: { invoice: true, application: true } },
-          allocations: { include: { paymentAllocation: true } },
+          allocations: { include: { paymentAllocation: { include: { rentalOrderLine: true } } } },
           depositRefundItems: true,
           depositSettlementItem: true,
         },
@@ -330,16 +330,46 @@ export class RentalDepositWorker {
         include: { assignment: true },
       })
 
+      const refundAllocationTotal = refund.allocations.reduce(
+        (sum, allocation) => sum.plus(allocation.amount),
+        new Prisma.Decimal(0),
+      )
+      const itemAllocationTotal =
+        refund.depositRefundItems.length > 0
+          ? refund.depositRefundItems.reduce(
+              (sum, allocation) => sum.plus(allocation.amount),
+              new Prisma.Decimal(0),
+            )
+          : refund.amount
+      const allocationMismatch = refund.allocations.some(
+        (allocation) =>
+          allocation.paymentAllocation.paymentId !== refund.paymentId ||
+          allocation.paymentAllocation.component !== 'RENTAL_DEPOSIT' ||
+          allocation.paymentAllocation.rentalOrderLine.orderId !== orderId ||
+          allocation.amount.lte(0) ||
+          allocation.amount.gt(allocation.paymentAllocation.amount),
+      )
+      const itemMismatch =
+        items.length !== itemIds.length ||
+        items.some((item) => item.settlementId !== settlementId) ||
+        refund.depositRefundItems.some((allocation) => allocation.amount.lte(0))
+
       const payload = event.payload as Prisma.JsonObject
       if (
         refund.depositSettlementId !== settlementId ||
+        (refund.rentalOrderId !== null && refund.rentalOrderId !== orderId) ||
         refund.paymentId !== payment.id ||
         refund.payment.invoiceId !== payment.invoiceId ||
         refund.payment.invoice.rentalOrderId !== orderId ||
         refund.payment.application?.status !== 'APPLIED' ||
         payload.schemaVersion !== 1 ||
         payload.refundId !== refund.id ||
-        event.eventType !== `REFUND_${refund.status}`
+        event.eventType !== `REFUND_${refund.status}` ||
+        refund.allocations.length === 0 ||
+        !refundAllocationTotal.equals(refund.amount) ||
+        !itemAllocationTotal.equals(refund.amount) ||
+        allocationMismatch ||
+        itemMismatch
       )
         throw new Error('Rental refund result does not match approved item')
 

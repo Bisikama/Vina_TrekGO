@@ -42,6 +42,11 @@ export class MediaPolicyService {
       requiresProvenance: true,
       deliveryType: 'authenticated',
     },
+    USER_GEAR: {
+      allowedResourceTypes: ['IMAGE'],
+      requiresProvenance: false,
+      deliveryType: 'upload',
+    },
   };
 
   getScopePolicy(scope: MediaScopeValue): ScopePolicy {
