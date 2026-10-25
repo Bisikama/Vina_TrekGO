@@ -12,6 +12,20 @@ import {
 const money = (value: number) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value);
 
+const settlementStatusLabels: Record<string, string> = {
+  PENDING_INSPECTION: "Chờ kiểm định",
+  REVIEW_REQUIRED: "Chờ Admin duyệt",
+  DEDUCTION_APPROVED: "Đã duyệt khấu trừ",
+  DEDUCTION_REJECTED: "Không khấu trừ",
+  REFUND_PENDING: "Đang chờ hoàn cọc",
+  REFUND_FAILED: "Hoàn cọc cần xử lý",
+  SETTLED: "Đã quyết toán",
+};
+
+function statusLabel(status: string) {
+  return settlementStatusLabels[status] ?? status.replaceAll("_", " ").toLocaleLowerCase("vi-VN");
+}
+
 export function StaffDepositSettlement({ returnId }: { returnId: string }) {
   const [detail, setDetail] = useState<StaffReturnDetail>();
   const [error, setError] = useState<string>();
@@ -32,7 +46,7 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
         <Link href="/staff/returns" className="text-xs font-bold text-emerald-800">← Quay lại tiếp nhận hoàn trả</Link>
         <h1 className="mt-3 text-2xl font-black">Theo dõi xử lý cọc</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Staff Inventory chỉ xem kết quả. Mọi khoản khấu trừ phải được Admin phê duyệt qua ngoại lệ; màn này không giả lập giải ngân.
+          Staff Inventory chỉ xem kết quả kiểm định và số tiền cần xử lý. Admin duyệt quyết toán; cổng thanh toán xử lý hoàn tiền.
         </p>
         {error ? <div className="mt-5 rounded-xl bg-red-50 p-4 text-red-700">{error}</div> : null}
         {!detail && !error ? <p className="mt-5 text-sm text-slate-500">Đang tải dữ liệu thật...</p> : null}
@@ -47,13 +61,18 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
                       <h2 className="font-black">{unit?.productName ?? item.unitId}</h2>
                       <p className="mt-1 font-mono text-xs text-slate-500">{unit?.assetCode}</p>
                     </div>
-                    <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">{item.status}</span>
+                    <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">{statusLabel(item.status)}</span>
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <Amount label="Tiền cọc" value={item.depositAmount} />
                     <Amount label="Khấu trừ" value={item.deductionAmount} />
-                    <Amount label="Hoàn lại" value={item.refundAmount} />
+                    <Amount label="Khoản phải hoàn" value={item.refundAmount} />
                   </div>
+                  {item.refundAmount > 0 && item.status !== "SETTLED" ? (
+                    <p className="mt-3 text-xs leading-5 text-amber-700">
+                      Khoản phải hoàn chưa đồng nghĩa tiền đã về tài khoản khách. Chỉ trạng thái hoàn tiền thành công mới xác nhận đã hoàn.
+                    </p>
+                  ) : null}
                 </article>
               );
             })}

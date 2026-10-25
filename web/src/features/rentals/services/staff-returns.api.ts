@@ -318,7 +318,15 @@ export async function approveDepositSettlement(input: {
   approvalRef: string;
   version: number;
 }) {
-  const response = await apiClient.post<Envelope<unknown>>(
+  const response = await apiClient.post<
+    Envelope<{
+      settlement: { id?: string; status?: string; outcome?: string };
+      refundRef: string | null;
+      deductionAmount: number;
+      refundAmount: number;
+      status: string;
+    }>
+  >(
     `/api/v1/rental-orders/${encodeURIComponent(input.orderId)}/deposit-settlement`,
     { assessmentId: input.assessmentId, approvalRef: input.approvalRef },
     { headers: { "Idempotency-Key": key("deposit-settlement", input.assessmentId, input.version) } },

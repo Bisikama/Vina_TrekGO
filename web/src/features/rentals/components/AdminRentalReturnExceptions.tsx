@@ -141,23 +141,30 @@ export function AdminRentalReturnExceptions() {
         assessmentVersion: detail.assessment?.version,
         expectedVersion: detail.case.version,
       });
-      if (
-        decision === "APPROVE_DEDUCTION" &&
-        result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" &&
-        detail.assessment
-      ) {
-        await approveDepositSettlement({
+      let settlementResult: Awaited<ReturnType<typeof approveDepositSettlement>> | undefined;
+      let settlementAssessment = detail.assessment;
+      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && !settlementAssessment) {
+        settlementAssessment = (await getRentalException(detail.case.id)).assessment;
+      }
+      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && settlementAssessment) {
+        settlementResult = await approveDepositSettlement({
           orderId: detail.case.orderId,
-          assessmentId: detail.assessment.id,
+          assessmentId: settlementAssessment.id,
           approvalRef: result.approvalRef,
-          version: detail.assessment.version,
+          version: settlementAssessment.version,
         });
       }
-      setNotice(
-        decision === "APPROVE_DEDUCTION"
-          ? "Đã duyệt khấu trừ và tạo quyết toán cọc."
-          : "Đã lưu quyết định ngoại lệ.",
-      );
+      if (settlementResult?.refundRef) {
+        setNotice(
+          `Đã chốt quyết toán cọc. Khoản ${formatMoney(settlementResult.refundAmount, "VND")} đang được gửi sang cổng thanh toán; đây chưa phải trạng thái đã hoàn tiền.`,
+        );
+      } else if (settlementResult) {
+        setNotice("Đã chốt quyết toán cọc. Không phát sinh khoản phải hoàn qua cổng thanh toán.");
+      } else if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT") {
+        setNotice("Đã lưu quyết định nhưng chưa lấy được kết quả kiểm định để tạo quyết toán. Hãy tải lại hồ sơ.");
+      } else {
+        setNotice("Đã lưu quyết định ngoại lệ. Không phát sinh bước quyết toán mới.");
+      }
       setReason("");
       setDetail(await getRentalException(detail.case.id));
       setItems((await listRentalExceptions()).items);
@@ -416,7 +423,7 @@ export function AdminRentalReturnExceptions() {
                       onClick={() => void decide("REJECT_DEDUCTION")}
                       className="rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
                     >
-                      Từ chối khấu trừ
+                      Không khấu trừ và quyết toán
                     </button>
                     <button
                       disabled={busy || reason.trim().length < 3}

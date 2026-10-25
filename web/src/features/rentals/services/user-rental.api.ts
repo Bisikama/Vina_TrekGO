@@ -44,6 +44,46 @@ export type RentalOrderDetail = {
   allowedActions: string[];
 };
 
+export type RentalDepositItem = {
+  unitId: string;
+  assetCode?: string;
+  depositAmount: number;
+  amount?: number;
+  status: string;
+  inspectionStatus?: string | null;
+  refundRef?: string | null;
+  refundStatus?: string | null;
+  refundAmount?: number | null;
+  heldReason?: string | null;
+  deduction?: number | null;
+  reason?: string | null;
+  settlementMode?: "STANDARD" | "SANDBOX_SIMULATED" | string;
+  simulationNotice?: string | null;
+};
+
+export type RentalDepositStatus = {
+  collectedAmount: number;
+  heldAmount: number;
+  refundedAmount: number;
+  refundPendingAmount: number;
+  deductionAmount: number;
+  items: RentalDepositItem[];
+  groupedRefunds?: {
+    refundRef: string;
+    status: string;
+    amount: number;
+    itemIds: string[];
+  }[];
+  financialTruth?: {
+    providerRefundedAmount: number;
+    providerRefundPendingAmount: number;
+    realMoneyReturned: boolean;
+  };
+  settlementMode?: "STANDARD" | "SANDBOX_SIMULATED" | string;
+  notice?: string;
+  warnings?: string[];
+};
+
 export type RentalTransaction = {
   id: string;
   kind: "PAYMENT" | "REFUND" | string;
@@ -90,6 +130,13 @@ export async function listMyRentalOrders(options?: {
 export async function getMyRentalOrder(orderId: string) {
   const response = await apiClient.get<Envelope<RentalOrderDetail>>(
     `/api/v1/rental-orders/${encodeURIComponent(orderId)}`,
+  );
+  return unwrap(response.data);
+}
+
+export async function getRentalDeposit(orderId: string) {
+  const response = await apiClient.get<Envelope<RentalDepositStatus>>(
+    `/api/v1/rental-orders/${encodeURIComponent(orderId)}/deposit`,
   );
   return unwrap(response.data);
 }
