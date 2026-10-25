@@ -1354,6 +1354,7 @@ model TrailRecordingPoint {
 // =========================================================
 
 model Trip {
+  gpsProjection TripGpsProjection?
   pickupPointId String?      @map("pickup_point_id") @db.Uuid
   pickupPoint   PickupPoint? @relation("R_Trip_pickup_point_id", fields: [pickupPointId], references: [id], onDelete: Restrict)
   id            String       @id @default(uuid()) @db.Uuid
@@ -2853,6 +2854,17 @@ model RentalOutboxEvent {
 
 /// Versioned GPS runtime policy. A GPS session references the policy version used during that session.
 model GpsPolicy {
+  sampleIntervalSeconds       Int       @default(5) @map("sample_interval_seconds")
+  maxBatchSamples             Int       @default(200) @map("max_batch_samples")
+  liveLocationMaxAgeSeconds   Int       @default(30) @map("live_location_max_age_seconds")
+  staleAfterSeconds           Int       @default(30) @map("stale_after_seconds")
+  offlineAfterSeconds         Int       @default(120) @map("offline_after_seconds")
+  recoveryThresholdM          Decimal   @default(30) @map("recovery_threshold_m") @db.Decimal(10, 2)
+  recoveryConsecutiveSamples  Int       @default(3) @map("recovery_consecutive_samples")
+  signalGapSeconds            Int       @default(120) @map("signal_gap_seconds")
+  maxPlausibleSpeedMps        Decimal   @default(0) @map("max_plausible_speed_mps") @db.Decimal(10, 2)
+  maxFutureSkewSeconds        Int       @default(30) @map("max_future_skew_seconds")
+  lateSyncGraceSeconds        Int       @default(86400) @map("late_sync_grace_seconds")
   id                          String    @id @default(uuid()) @db.Uuid
   policyCode                  String    @map("policy_code") @db.VarChar(80)
   versionNo                   Int       @map("version_no")
@@ -2877,8 +2889,12 @@ model GpsPolicy {
   @@map("gps_policies")
 }
 
-/// PostgreSQL partial unique index limits a user to at most one ACTIVE/PAUSED session per Trip.
+/// PostgreSQL partial unique indexes limit a user to at most one ACTIVE/PAUSED session globally.
 model GpsSession {
+  startReceipts       GpsStartReceipt[]
+  clientSessionId     String?          @map("client_session_id") @db.Uuid
+  uploadDeadline      DateTime?        @map("upload_deadline") @db.Timestamptz(6)
+  recordingState      Json?            @map("recording_state")
   id                  String           @id @default(uuid()) @db.Uuid
   userId              String           @map("user_id") @db.Uuid
   tripId              String           @map("trip_id") @db.Uuid
@@ -2907,6 +2923,29 @@ model GpsSession {
   @@index([tripId, status])
   @@index([gpsPolicyId])
   @@map("gps_sessions")
+  @@unique([userId, clientSessionId])
+}
+
+/// Serialized by locking the parent Trip; retains member versions after removal.
+model TripGpsProjection {
+  tripId    String @id @map("trip_id") @db.Uuid
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  @@map("trip_gps_projections")
+}
+
+/// Records alternate start keys when an existing open session is returned.
+model GpsStartReceipt {
+  userId          String @map("user_id") @db.Uuid
+  clientSessionId String @map("client_session_id") @db.Uuid
+  tripId          String @map("trip_id") @db.Uuid
+  deviceId        String @map("device_id") @db.VarChar(180)
+  sessionId       String @map("session_id") @db.Uuid
+  session         GpsSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  @@id([userId, clientSessionId])
+  @@index([sessionId])
+  @@map("gps_start_receipts")
 }
 
 /// CHECK constraints reject physically invalid samples: latitude [-90,90], longitude [-180,180], non-negative accuracy/speed, heading [0,360]. Raw data retention follows GPS_POLICIES; durable summary remains in GPS_SESSIONS/TRIP_ACTUAL_ROUTES.
@@ -2932,6 +2971,7 @@ model GpsLocation {
 }
 
 model RouteDeviationEvent {
+  gpsManaged            Boolean         @default(false) @map("gps_managed")
   id                    String          @id @default(uuid()) @db.Uuid
   tripId                String          @map("trip_id") @db.Uuid
   userId                String          @map("user_id") @db.Uuid
@@ -2989,6 +3029,10 @@ model CheckpointEvent {
 }
 
 model TripActualRoute {
+  resultStatus        String   @default("READY") @map("result_status") @db.VarChar(20)
+  version             Int      @default(1)
+  pointCount          Int      @default(0) @map("point_count")
+  metadata            Json?
   id                  String   @id @default(uuid()) @db.Uuid
   tripId              String   @map("trip_id") @db.Uuid
   userId              String   @map("user_id") @db.Uuid
@@ -4051,10 +4095,24 @@ model UserGearItem {
   updatedAt DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   confirmedDraft GearExtractionDraft? @relation("R_GearExtractionDraft_confirmed_item_id")
+  photos         UserGearItemPhoto[]  @relation("R_UserGearItem_photos")
 
   @@index([userId], map: "user_gear_item_user_idx")
   @@index([category], map: "user_gear_item_category_idx")
   @@map("user_gear_items")
+}
+
+model UserGearItemPhoto {
+  id         String       @id @default(uuid()) @db.Uuid
+  itemId     String       @map("item_id") @db.Uuid
+  item       UserGearItem @relation("R_UserGearItem_photos", fields: [itemId], references: [id], onDelete: Cascade)
+  storageRef String       @map("storage_ref") @db.VarChar(500)
+  position   Int          @map("position")
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([itemId, position], map: "user_gear_item_photo_item_position_unique")
+  @@index([itemId], map: "user_gear_item_photo_item_idx")
+  @@map("user_gear_item_photos")
 }
 
 model GearRequirementRule {

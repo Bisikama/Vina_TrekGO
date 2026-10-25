@@ -44,6 +44,9 @@ export class RentalTripController {
 - Nếu chưa đủ điều kiện, vẫn trả HTTP 200 với \`eligible = false\` kèm lý do.
 - Không dùng \`participantCount\` làm quota thuê.
 - \`cutoff\` và \`contextVersion\` do server trả về, FE không tự tính.
+
+**BƯỚC ĐẦU TIÊN CỦA QUY TRÌNH THUÊ & CHUẨN BỊ ĐỒ:**
+- Xác nhận chuyến đi đủ điều kiện (eligible = true) trước khi tạo Kế hoạch trang bị tại \`POST /api/v1/gear/plans\` hoặc tạo Báo giá thuê tại \`POST /api/v1/rentals/quote\`.
 `,
   })
   @ApiParam({
