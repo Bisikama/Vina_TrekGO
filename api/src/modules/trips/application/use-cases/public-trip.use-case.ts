@@ -12,7 +12,7 @@ import type {
   TripStore,
   TripView,
 } from '../trip.types'
-import { basicIssues, routeIssues } from '../trip.policy'
+import { basicIssues, resolveDefaultRegistrationDeadline, routeIssues } from '../trip.policy'
 
 export function fail(status: number, code: string, message: string, issues?: Issue[]): never {
   throw new HttpException({ statusCode: status, code, message, ...(issues ? { issues } : {}) }, status)
@@ -49,12 +49,18 @@ const publicProjection = (t: TripView) => ({
   destinationId: t.destinationId,
   startAt: t.startAt,
   endAt: t.endAt,
+  registrationOpenAt: t.registrationOpenAt ?? t.publishedAt ?? null,
+  registrationDeadlineAt: t.registrationDeadlineAt ?? resolveDefaultRegistrationDeadline(t.startAt),
   minPax: t.minPax ?? 1,
   capacity: t.capacity,
   price: t.price,
   pickupPointId: t.pickupPointId,
   status: t.status,
   publishedAt: t.publishedAt,
+  closedAt: t.closedAt ?? null,
+  startedAt: t.startedAt ?? null,
+  completedAt: t.completedAt ?? null,
+  cancelledAt: t.cancelledAt ?? null,
   ...(t.includedServices ? { includedServices: t.includedServices } : {}),
   ...(t.excludedServices ? { excludedServices: t.excludedServices } : {}),
 })
@@ -94,27 +100,49 @@ export class PublicTripUseCase {
   }
   create(actor: Actor, data: TripInput) {
     return this.write(actor, undefined, async (s) => {
-      await this.basic(s, data)
-      await this.conflict(s, actor.id, data)
-      return s.create(actor.id, data)
+      const normalized: TripInput = {
+        ...data,
+        registrationDeadlineAt:
+          data.registrationDeadlineAt ?? resolveDefaultRegistrationDeadline(data.startAt),
+      }
+      await this.basic(s, normalized)
+      await this.conflict(s, actor.id, normalized)
+      return s.create(actor.id, normalized)
     })
   }
   update(actor: Actor, id: string, expected: number, data: Partial<TripInput>) {
     return this.write(actor, id, async (s, existing) => {
       const trip = existing!
-      draft(trip)
       version(trip, expected)
+      const definedKeys = Object.keys(data).filter((k) => data[k as keyof TripInput] !== undefined)
+      const isOnlyRegistrationWindowUpdate =
+        definedKeys.length > 0 &&
+        definedKeys.every((k) => k === 'registrationOpenAt' || k === 'registrationDeadlineAt')
+
+      if (trip.status !== 'DRAFT') {
+        if (!['OPEN', 'FULL', 'CLOSED'].includes(trip.status) || !isOnlyRegistrationWindowUpdate) {
+          draft(trip)
+        }
+      }
+
       if (
         data.destinationId &&
         data.destinationId !== trip.destinationId &&
         (trip.checkpoints.length || trip.trails.length)
       )
         fail(409, 'INVALID_STATE_TRANSITION', 'Xóa kế hoạch checkpoint/trail trước khi đổi Destination.')
-      const next = { ...trip, ...data }
+
+      const patch: Partial<TripInput> = {
+        ...data,
+        ...(data.startAt && data.startAt !== trip.startAt && data.registrationDeadlineAt === undefined
+          ? { registrationDeadlineAt: resolveDefaultRegistrationDeadline(data.startAt) }
+          : {}),
+      }
+      const next = { ...trip, ...patch }
       if (!next.pickupPointId) fail(400, 'VALIDATION_ERROR', 'Cần điểm tập kết.')
       await this.basic(s, { ...next, pickupPointId: next.pickupPointId })
       await this.conflict(s, actor.id, next, id)
-      return s.update(id, data)
+      return s.update(id, patch)
     })
   }
   setCheckpoints(actor: Actor, id: string, expected: number, ids: string[]) {
@@ -230,11 +258,41 @@ export class PublicTripUseCase {
       return s.publish(id)
     })
   }
+  closeRegistration(actor: Actor, id: string, expected: number) {
+    return this.write(actor, id, async (s, existing) => {
+      const trip = existing!
+      version(trip, expected)
+      if (!['OPEN', 'FULL'].includes(trip.status) || !s.closeRegistration) {
+        fail(409, 'INVALID_STATE_TRANSITION', 'Chỉ có thể đóng form đăng ký khi chuyến đi đang OPEN hoặc FULL.')
+      }
+      return s.closeRegistration(id)
+    })
+  }
+  start(actor: Actor, id: string, expected: number) {
+    return this.write(actor, id, async (s, existing) => {
+      const trip = existing!
+      version(trip, expected)
+      if (!['OPEN', 'FULL', 'CLOSED'].includes(trip.status) || !s.start) {
+        fail(409, 'INVALID_STATE_TRANSITION', 'Chỉ có thể bắt đầu hành trình từ trạng thái OPEN, FULL hoặc CLOSED.')
+      }
+      return s.start(id)
+    })
+  }
+  complete(actor: Actor, id: string, expected: number) {
+    return this.write(actor, id, async (s, existing) => {
+      const trip = existing!
+      version(trip, expected)
+      if (trip.status !== 'IN_PROGRESS' || !s.complete) {
+        fail(409, 'INVALID_STATE_TRANSITION', 'Chỉ có thể hoàn thành chuyến đi đang ở trạng thái IN_PROGRESS.')
+      }
+      return s.complete(id)
+    })
+  }
   cancel(actor: Actor, id: string, expected: number, reason: string, evidenceUrls: string[]) {
     return this.write(actor, id, async (s, existing) => {
       const trip = existing!
       version(trip, expected)
-      if (!['DRAFT', 'OPEN', 'FULL'].includes(trip.status) || (await s.pendingCancellation(id)))
+      if (!['DRAFT', 'OPEN', 'FULL', 'CLOSED'].includes(trip.status) || (await s.pendingCancellation(id)))
         fail(409, 'INVALID_STATE_TRANSITION', 'Không thể gửi yêu cầu hủy ở trạng thái này.')
       return s.cancel(id, actor.id, trip.status, reason, evidenceUrls)
     })

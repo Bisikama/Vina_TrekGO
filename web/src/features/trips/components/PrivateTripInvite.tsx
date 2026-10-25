@@ -21,7 +21,7 @@ export function PrivateTripInvite({ code }: { code: string }) {
     if (!invitation?.trip?.id) return;
     try {
       // Use any for version since it's not strongly typed in the new structure yet
-      const res = await joinTrip(code, (invitation.trip as any).version);
+      const res = await joinTrip(code);
       setSuccess(true);
       // Chuyển hướng tới phòng chờ sau 2s
       setTimeout(() => {

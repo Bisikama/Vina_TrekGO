@@ -1,3 +1,4 @@
+import { publicBookingLinkage } from './public-invitation-projection'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
@@ -5,7 +6,14 @@ import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as P } from '../../shared/errors'
 import { paymentHash } from '../payments/payment-utils'
-import { databaseTime, expireTripHolds, occupiedSeats } from './booking-capacity'
+import {
+  databaseTime,
+  effectiveRegistrationDeadline,
+  effectiveRegistrationOpen,
+  expireTripHolds,
+  occupiedSeats,
+  syncTripRegistrationState,
+} from './booking-capacity'
 import type { BookingPage, CreateBookingInput, UpdateParticipantsInput } from './booking.dto'
 import { refundPercentAt } from './booking-policy'
 import { BookingPolicyService, lockBookingPolicy } from './booking-policy.service'
@@ -19,7 +27,15 @@ const detailInclude = {
   pickupPoint: { select: pickupSelect },
   returnPoint: { select: pickupSelect },
   bookingParticipantsViaBookingId: {
-    where: { status: 'ACTIVE' as const },
+    include: {
+      user: { select: { fullName: true } },
+      invitations: {
+        include: { recipient: { select: { fullName: true, status: true, role: true } } },
+        orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
+        take: 10,
+      },
+    },
+    where: { status: { in: ['ACTIVE', 'NO_SHOW', 'COMPLETED'] } },
     orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
   },
   invoicesViaBookingId: {
@@ -31,7 +47,10 @@ const detailInclude = {
 export class BookingsService {
   private running = false
   private readonly logger = new Logger(BookingsService.name)
-  constructor(private readonly db: PrismaService, private readonly policies: BookingPolicyService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly policies: BookingPolicyService,
+  ) {}
 
   async create(tripId: string, userId: string, key: string, input: CreateBookingInput) {
     if (!userId) fail('UNAUTHENTICATED')
@@ -45,23 +64,53 @@ export class BookingsService {
         return existing.id
       }
       await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
-      const trip = await tx.trip.findUnique({ where: { id: tripId } })
-      if (!trip || trip.tripType !== 'PUBLIC' || !trip.publishedAt) fail(B.NOT_FOUND)
+      const initialTrip = await tx.trip.findUnique({ where: { id: tripId } })
+      if (!initialTrip || initialTrip.tripType !== 'PUBLIC' || !initialTrip.publishedAt) fail(B.NOT_FOUND)
       await lockBookingPolicy(tx)
       const now = await databaseTime(tx)
       await expireTripHolds(tx, tripId, now)
-      if (trip.status !== 'OPEN' || trip.startAt <= now) fail(B.INVALID_STATE_TRANSITION)
+      const trip = (await tx.trip.findUnique({ where: { id: tripId } })) ?? initialTrip
+
+      // Condition 3: Trip lifecycle status gate
+      if (
+        trip.startAt <= now ||
+        trip.startedAt !== null ||
+        trip.cancelledAt !== null ||
+        !['OPEN', 'FULL', 'CLOSED'].includes(trip.status)
+      ) {
+        fail(B.INVALID_STATE_TRANSITION)
+      }
+
+      // Condition 1: Registration window gate (openAt & deadlineAt)
+      const openAt = effectiveRegistrationOpen(trip)
+      if (openAt && now < openAt) {
+        fail(B.BOOKING_REGISTRATION_NOT_OPEN_YET, { registrationOpenAt: openAt.toISOString() })
+      }
+      const deadline = effectiveRegistrationDeadline(trip)
+      if (now >= deadline || trip.status === 'CLOSED') {
+        fail(B.BOOKING_REGISTRATION_CLOSED, {
+          registrationDeadlineAt: deadline.toISOString(),
+          closedAt: (trip.closedAt ?? deadline).toISOString(),
+        })
+      }
+
       const active = await tx.booking.findFirst({
         where: { tripId, userId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'] } },
       })
       if (active) fail(B.ACTIVE_BOOKING_EXISTS, { bookingId: active.id })
+
+      // Condition 2: Maximum capacity gate
       const remaining = trip.maxPax - (await occupiedSeats(tx, tripId, now))
-      if (input.participantCount > remaining) fail(B.CAPACITY_CONFLICT, { remainingSlots: Math.max(0, remaining) })
+      if (trip.status === 'FULL' || remaining <= 0 || input.participantCount > remaining) {
+        fail(B.CAPACITY_CONFLICT, { remainingSlots: Math.max(0, remaining) })
+      }
+
       const policy = await this.policies.resolve(tx, now)
       if (!trip.pickupPointId || !trip.pricePerPax?.isPositive() || !trip.pricePerPax.isInteger())
         fail(B.INVALID_STATE_TRANSITION)
       const total = trip.pricePerPax.mul(input.participantCount)
       if (total.gt('9999999999')) fail(B.INVALID_STATE_TRANSITION)
+      // Hold TTL is preserved across registrationDeadlineAt (only bounded by holdTtlMinutes and trip.startAt)
       const expiresAt = new Date(Math.min(now.getTime() + policy.holdTtlMinutes * 60_000, trip.startAt.getTime()))
       const booking = await tx.booking.create({
         data: {
@@ -94,6 +143,7 @@ export class BookingsService {
         })),
       })
       await this.invoice(tx, booking, 1)
+      await syncTripRegistrationState(tx, tripId, now)
       return booking.id
     })
     return this.detail(id, userId)
@@ -157,7 +207,7 @@ export class BookingsService {
       if (booking.status === 'EXPIRED') return B.BOOKING_HOLD_EXPIRED
       if (
         booking.status !== 'PENDING_PAYMENT' ||
-        !['OPEN', 'FULL'].includes(booking.trip.status) ||
+        !['OPEN', 'FULL', 'CLOSED'].includes(booking.trip.status) ||
         booking.trip.startAt <= now
       )
         fail(B.INVALID_STATE_TRANSITION)
@@ -229,6 +279,7 @@ export class BookingsService {
         (oldInvoice?.revisionNo ?? 0) + 1,
         oldInvoice?.revisionNo ? oldInvoice.id : undefined,
       )
+      await syncTripRegistrationState(tx, initial.tripId, now)
       return null
     })
     if (result) fail(result)
@@ -247,7 +298,14 @@ export class BookingsService {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
     const payment = payments.find((p) => p.application?.status === 'APPLIED') ?? payments[0]
     const confirmed = ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED'].includes(booking.status)
-    const now = new Date()
+    const now = await databaseTime(this.db)
+    const linkage = await publicBookingLinkage(
+      this.db,
+      booking,
+      booking.trip,
+      booking.bookingParticipantsViaBookingId,
+      now,
+    )
     const hoursBeforeStart = (booking.trip.startAt.getTime() - now.getTime()) / 3600000
     const canCancel =
       hoursBeforeStart > 0 &&
@@ -260,7 +318,7 @@ export class BookingsService {
           refundPercentAt(booking.policySnapshot, booking.trip.startAt, now) !== null))
     const editable =
       booking.status === 'PENDING_PAYMENT' &&
-      ['OPEN', 'FULL'].includes(booking.trip.status) &&
+      ['OPEN', 'FULL', 'CLOSED'].includes(booking.trip.status) &&
       booking.trip.startAt > new Date() &&
       booking.insuranceAmount.isZero() &&
       booking.discountAmount.isZero() &&
@@ -289,14 +347,26 @@ export class BookingsService {
       },
       pickup: booking.pickupPoint,
       returnPoint: booking.returnPoint,
-      participants: booking.bookingParticipantsViaBookingId.map((p) => ({
-        id: p.id,
-        fullName: p.fullName,
-        phone: p.phone,
-        dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null,
-        emergencyContactName: p.emergencyContactName,
-        emergencyContactPhone: p.emergencyContactPhone,
-      })),
+      participants: booking.bookingParticipantsViaBookingId.map((p, index) => {
+        const canBuyerAccessQr =
+          ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(booking.status) &&
+          ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'].includes(booking.trip.status) &&
+          p.status === 'ACTIVE' &&
+          (!p.userId || p.userId === booking.userId)
+        return {
+          ...linkage[index],
+          id: p.id,
+          fullName: p.fullName,
+          phone: p.phone,
+          dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+          emergencyContactName: p.emergencyContactName,
+          emergencyContactPhone: p.emergencyContactPhone,
+          checkinStatus: p.checkinStatus,
+          checkinMethod: p.checkinMethod ?? null,
+          checkedInAt: p.checkedInAt?.toISOString() ?? null,
+          checkinCode: canBuyerAccessQr ? p.checkinCode : null,
+        }
+      }),
       transport: booking.trip.tripTransportsViaTripId
         .filter((t) => t.status !== 'CANCELLED')
         .map((t) => ({
@@ -405,13 +475,27 @@ export class BookingsService {
     if (this.running || process.env.BOOKING_EXPIRY_WORKER_ENABLED === 'false') return
     this.running = true
     try {
+      const now = new Date()
       const rows = await this.db.booking.findMany({
-        where: { status: 'PENDING_PAYMENT', expiresAt: { lte: new Date() } },
+        where: { status: 'PENDING_PAYMENT', expiresAt: { lte: now } },
         select: { tripId: true },
         distinct: ['tripId'],
         take: 100,
       })
-      for (const row of rows) await this.expire(row.tripId)
+      const deadlineTrips = await this.db.trip.findMany({
+        where: {
+          tripType: 'PUBLIC',
+          status: { in: ['OPEN', 'FULL'] },
+          OR: [
+            { registrationDeadlineAt: { lte: now } },
+            { registrationDeadlineAt: null, startAt: { lte: new Date(now.getTime() + 48 * 3600_000) } },
+          ],
+        },
+        select: { id: true },
+        take: 50,
+      })
+      const tripIds = new Set([...rows.map((r) => r.tripId), ...deadlineTrips.map((t) => t.id)])
+      for (const tripId of tripIds) await this.expire(tripId)
     } catch {
       this.logger.warn('Booking expiry deferred; retrying next tick')
     } finally {

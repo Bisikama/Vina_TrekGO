@@ -1,3 +1,4 @@
+import { invalidatePublicBookingInvitations } from './public-invitation-projection'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
@@ -6,7 +7,7 @@ import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { PaymentsPort } from '../payments/payments.port'
 import { paymentHash } from '../payments/payment-utils'
-import { databaseTime, expireTripHolds } from './booking-capacity'
+import { databaseTime, expireTripHolds, syncTripRegistrationState } from './booking-capacity'
 
 @Injectable()
 export class BookingCancellationService {
@@ -74,6 +75,7 @@ export class BookingCancellationService {
           where: { id: booking.id },
           data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } },
         })
+        await invalidatePublicBookingInvitations(tx, booking, input.actorId, now)
         await tx.bookingParticipant.updateMany({
           where: { bookingId: booking.id, status: 'ACTIVE' },
           data: { status: 'CANCELLED' },
@@ -82,6 +84,7 @@ export class BookingCancellationService {
           where: { bookingId: booking.id, status: { in: ['DRAFT', 'PENDING_PAYMENT'] } },
           data: { status: 'CANCELLED', version: { increment: 1 } },
         })
+        await syncTripRegistrationState(tx, booking.tripId, now)
         // Any unresolved collection remains financial truth; a later success is reversed by the payment consumer.
         await tx.bookingOutboxEvent.create({
           data: {
@@ -163,6 +166,12 @@ export class BookingCancellationService {
         where: { id: booking.id },
         data: { status: 'CANCELLED', cancelledAt: now, version: { increment: 1 } },
       })
+      await tx.bookingParticipant.updateMany({
+        where: { bookingId: booking.id, status: 'ACTIVE' },
+        data: { status: 'CANCELLED' },
+      })
+      await invalidatePublicBookingInvitations(tx, booking, input.actorId, now)
+      await syncTripRegistrationState(tx, booking.tripId, now)
       await tx.bookingOutboxEvent.create({
         data: {
           deduplicationKey: `booking-cancellation:${record.id}:v1`,

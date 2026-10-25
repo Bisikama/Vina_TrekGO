@@ -29,6 +29,7 @@ import { RentalPaymentsController } from '../rental/payments/rental-payments.con
 import { RentalExtensionPaymentsController } from '../rental/payments/rental-extension-payments.controller'
 import { RentalDepositWorker } from '../rental/payments/rental-deposit.worker'
 import { RentalRefundsService } from './rental-refunds.service'
+import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
 import { PaymentHistoryService } from './payment-history.service'
 import { UserTransactionsController } from './user-transactions.controller'
 
@@ -50,6 +51,7 @@ import { UserTransactionsController } from './user-transactions.controller'
   ],
   providers: [
     RefundsService,
+    SandboxRefundSimulationService,
     RentalRefundsService,
     RentalCheckoutService,
     RentalPaymentConsumer,

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePrivateTripMembership } from "../hooks/usePrivateTripMembership";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { PrivateTripDirectInviteModal } from "./PrivateTripDirectInviteModal";
 
 export function PrivateTripRoom({ tripId }: { tripId: string }) {
   const router = useRouter();
@@ -17,6 +18,7 @@ export function PrivateTripRoom({ tripId }: { tripId: string }) {
     }
   }, [tripId, loadRoom, loadMembers]);
 
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const isHost = Boolean(room?.viewer?.isHost || room?.myMembership?.role === 'HOST');
 
   const handleLeave = async () => {
@@ -70,12 +72,21 @@ export function PrivateTripRoom({ tripId }: { tripId: string }) {
               </button>
             )}
             {isHost && (
-              <button 
-                onClick={() => router.push(`/my-trips/${tripId}`)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition"
-              >
-                Cài đặt chuyến đi (Host)
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="px-4 py-2 bg-[#1B5E41] hover:bg-[#154B36] text-white rounded-lg text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  ✉️ Mời bạn bè (Email)
+                </button>
+                <button 
+                  onClick={() => router.push(`/my-trips/${tripId}`)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition"
+                >
+                  Cài đặt chuyến đi (Host)
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -133,6 +144,13 @@ export function PrivateTripRoom({ tripId }: { tripId: string }) {
       </div>
 
       {/* Có thể bổ sung Lộ trình (Trail Plans), Checkpoints ở đây dựa vào room.tripTrailPlansViaTripId */}
+      {/* Modal Mời Thành Viên Trực Tiếp */}
+      <PrivateTripDirectInviteModal
+        tripId={tripId}
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        onMemberJoined={() => loadMembers(tripId, { status: 'ACTIVE', pageSize: 50 })}
+      />
     </div>
   );
 }

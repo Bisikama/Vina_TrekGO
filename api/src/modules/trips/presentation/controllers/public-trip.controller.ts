@@ -58,7 +58,7 @@ export class LeaderPublicTripController {
   }
   @Patch(':id')
   @ApiCf01Id()
-  @ApiCf01Response('Sửa chuyến DRAFT theo expectedVersion', 'trip')
+  @ApiCf01Response('Sửa chuyến DRAFT hoặc điều chỉnh thời gian mở/đóng form đăng ký theo expectedVersion', 'trip')
   @bodyDoc(updateSchema)
   update(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
     const { expectedVersion, ...data } = parse(updateSchema, body)
@@ -100,6 +100,27 @@ export class LeaderPublicTripController {
   @bodyDoc(versionSchema)
   publish(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
     return this.trips.publish(actor, id(tripId), parse(versionSchema, body).expectedVersion)
+  }
+  @Post(':id/close-registration')
+  @ApiCf01Id()
+  @ApiCf01Response('Đóng form đăng ký sớm (chuyển sang CLOSED, ghi nhận closedAt)', 'trip', 201)
+  @bodyDoc(versionSchema)
+  closeRegistration(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
+    return this.trips.closeRegistration(actor, id(tripId), parse(versionSchema, body).expectedVersion)
+  }
+  @Post(':id/start')
+  @ApiCf01Id()
+  @ApiCf01Response('Bắt đầu xuất phát chuyến đi (chuyển sang IN_PROGRESS, ghi nhận startedAt)', 'trip', 201)
+  @bodyDoc(versionSchema)
+  start(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
+    return this.trips.start(actor, id(tripId), parse(versionSchema, body).expectedVersion)
+  }
+  @Post(':id/complete')
+  @ApiCf01Id()
+  @ApiCf01Response('Hoàn thành chuyến đi (chuyển sang COMPLETED, ghi nhận completedAt)', 'trip', 201)
+  @bodyDoc(versionSchema)
+  complete(@ActiveUser() actor: Actor, @Param('id') tripId: string, @Body() body: unknown) {
+    return this.trips.complete(actor, id(tripId), parse(versionSchema, body).expectedVersion)
   }
   @Post(':id/cancellation-requests')
   @ApiCf01Id()
