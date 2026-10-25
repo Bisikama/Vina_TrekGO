@@ -1,4 +1,5 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes';
+import { TRIP_GPS_ERROR_CODES as GPS } from './codes/trip-gps.error-codes';
 import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes';
 import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes';
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
@@ -22,6 +23,17 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [GPS.SESSION_NOT_FOUND]: { status: 404, message: 'GPS session not found', retryable: false },
+  [GPS.TRIP_NOT_RECORDABLE]: { status: 409, message: 'Trip is not in progress', retryable: false },
+  [GPS.RATE_LIMITED]: { status: 429, message: 'GPS request limit exceeded', retryable: true },
+  [GPS.NOT_FOUND]: { status: 404, message: 'GPS resource not found', retryable: false },
+  [GPS.INVALID_STATE]: { status: 409, message: 'GPS operation is not allowed in this state', retryable: false },
+  [GPS.DEVICE_CONFLICT]: { status: 409, message: 'Recording belongs to another device', retryable: false },
+  [GPS.ACTIVE_SESSION_EXISTS]: { status: 409, message: 'An open GPS session already exists', retryable: false },
+  [GPS.IDEMPOTENCY_CONFLICT]: { status: 409, message: 'Idempotency key payload differs', retryable: false },
+  [GPS.VERSION_CONFLICT]: { status: 409, message: 'Reload GPS session before retrying', retryable: false },
+  [GPS.UPLOAD_CLOSED]: { status: 409, message: 'GPS upload deadline has passed', retryable: false },
+  [GPS.POLICY_UNAVAILABLE]: { status: 503, message: 'An effective GPS policy is required', retryable: true },
   [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
   [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
   [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },
