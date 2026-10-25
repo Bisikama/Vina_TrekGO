@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common'
+import { CheckpointGpsArrivalPort } from './application/ports/checkpoint-gps-arrival.port'
+import { PrismaCheckpointGpsArrivalAdapter } from './infrastructure/adapters/prisma-checkpoint-gps-arrival.adapter'
 import { CheckpointController } from './presentation/controllers/checkpoint.controller'
 import { GetCheckpointsUseCase } from './application/use-cases/get-checkpoints.use-case'
 import { GetCheckpointDetailUseCase } from './application/use-cases/get-checkpoint-detail.use-case'
@@ -11,6 +13,7 @@ import { PrismaCheckpointAdapter } from './infrastructure/adapters/prisma-checkp
 @Module({
   controllers: [CheckpointController],
   providers: [
+    { provide: CheckpointGpsArrivalPort, useClass: PrismaCheckpointGpsArrivalAdapter },
     GetCheckpointsUseCase,
     GetCheckpointDetailUseCase,
     CreateCheckpointUseCase,
@@ -22,6 +25,7 @@ import { PrismaCheckpointAdapter } from './infrastructure/adapters/prisma-checkp
     },
   ],
   exports: [
+    CheckpointGpsArrivalPort,
     GetCheckpointsUseCase,
     GetCheckpointDetailUseCase,
     CreateCheckpointUseCase,
