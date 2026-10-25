@@ -1,13 +1,18 @@
 import { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { RentalOrderStatus, RentalUnitAssignmentStatus, UserRole } from '@prisma/client'
+import {
+  RentalFinancialStatus,
+  RentalOrderStatus,
+  RentalUnitAssignmentStatus,
+  UserRole,
+} from '@prisma/client'
 import { createHash } from 'node:crypto'
 import request from 'supertest'
 import { REQUEST_USER_KEY } from 'src/shared/constants/auth.constant'
 import { ROLES_KEY } from 'src/shared/decorators/roles.decorator'
 import { GlobalErrorFilter } from 'src/shared/errors'
-import { hasActualProductHandover, isReviewableOrderStatus } from './application/rental-review-eligibility'
+import { hasActualProductHandover, isReviewableOrder } from './application/rental-review-eligibility'
 import { CreateRentalReviewUseCase } from './application/use-cases/create-rental-review.use-case'
 import { GetOrderReviewableUseCase } from './application/use-cases/get-order-reviewable.use-case'
 import { ListProductReviewsUseCase } from './application/use-cases/list-product-reviews.use-case'
@@ -47,15 +52,13 @@ describe('Rental product reviews', () => {
           { status: RentalUnitAssignmentStatus.PACKED, handedOverAt: null },
         ]),
       ).toBe(false)
+      expect(
+        isReviewableOrder(RentalOrderStatus.COMPLETED, RentalFinancialStatus.SETTLED),
+      ).toBe(true)
       for (const status of [
         RentalOrderStatus.ACTIVE,
         RentalOrderStatus.RETURN_PENDING,
         RentalOrderStatus.RETURN_PROCESSING,
-        RentalOrderStatus.COMPLETED,
-      ]) {
-        expect(isReviewableOrderStatus(status)).toBe(true)
-      }
-      for (const status of [
         RentalOrderStatus.PENDING_PAYMENT,
         RentalOrderStatus.PAID,
         RentalOrderStatus.PREPARING,
@@ -63,8 +66,11 @@ describe('Rental product reviews', () => {
         RentalOrderStatus.CANCELLED,
         RentalOrderStatus.EXPIRED,
       ]) {
-        expect(isReviewableOrderStatus(status)).toBe(false)
+        expect(isReviewableOrder(status, RentalFinancialStatus.SETTLED)).toBe(false)
       }
+      expect(
+        isReviewableOrder(RentalOrderStatus.COMPLETED, RentalFinancialStatus.PAID),
+      ).toBe(false)
     })
   })
 
@@ -116,7 +122,8 @@ describe('Rental product reviews', () => {
         $queryRaw: jest.fn().mockResolvedValue([]),
         rentalOrder: {
           findFirst: jest.fn().mockResolvedValue({
-            status: RentalOrderStatus.ACTIVE,
+            status: RentalOrderStatus.COMPLETED,
+            financialStatus: RentalFinancialStatus.SETTLED,
             rentalHandoverViaOrderId: { id: 'handover-1' },
             rentalOrderLinesViaOrderId: [
               {
@@ -217,7 +224,8 @@ describe('Rental product reviews', () => {
       const prisma = {
         rentalOrder: {
           findFirst: jest.fn().mockResolvedValue({
-            status: RentalOrderStatus.ACTIVE,
+            status: RentalOrderStatus.COMPLETED,
+            financialStatus: RentalFinancialStatus.SETTLED,
             rentalHandoverViaOrderId: { id: 'handover-1' },
             rentalOrderLinesViaOrderId: [
               {

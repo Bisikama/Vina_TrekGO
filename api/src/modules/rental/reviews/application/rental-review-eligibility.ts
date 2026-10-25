@@ -1,11 +1,8 @@
-import { RentalOrderStatus, RentalUnitAssignmentStatus } from '@prisma/client'
-
-const REVIEWABLE_ORDER_STATUSES = new Set<RentalOrderStatus>([
-  RentalOrderStatus.ACTIVE,
-  RentalOrderStatus.RETURN_PENDING,
-  RentalOrderStatus.RETURN_PROCESSING,
-  RentalOrderStatus.COMPLETED,
-])
+import {
+  RentalFinancialStatus,
+  RentalOrderStatus,
+  RentalUnitAssignmentStatus,
+} from '@prisma/client'
 
 const HANDED_OVER_ASSIGNMENT_STATUSES = new Set<RentalUnitAssignmentStatus>([
   RentalUnitAssignmentStatus.HANDED_OVER,
@@ -13,8 +10,14 @@ const HANDED_OVER_ASSIGNMENT_STATUSES = new Set<RentalUnitAssignmentStatus>([
   RentalUnitAssignmentStatus.CLOSED,
 ])
 
-export function isReviewableOrderStatus(status: RentalOrderStatus): boolean {
-  return REVIEWABLE_ORDER_STATUSES.has(status)
+export function isReviewableOrder(
+  status: RentalOrderStatus,
+  financialStatus: RentalFinancialStatus,
+): boolean {
+  return (
+    status === RentalOrderStatus.COMPLETED &&
+    financialStatus === RentalFinancialStatus.SETTLED
+  )
 }
 
 export function hasActualProductHandover(

@@ -41,7 +41,7 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
   }, []);
 
   const visible = useMemo(
-    () => reviewMode ? orders.filter((order) => ["ACTIVE", "RETURN_PENDING", "RETURN_PROCESSING", "COMPLETED"].includes(order.status)) : orders,
+    () => reviewMode ? orders.filter((order) => !["PENDING_PAYMENT", "CANCELLED", "EXPIRED"].includes(order.status)) : orders,
     [orders, reviewMode],
   );
 
@@ -58,7 +58,15 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
           <State text={reviewMode ? "Chưa có đơn đủ điều kiện đánh giá." : "Bạn chưa có đơn thuê nào."} />
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            {visible.map((order) => (
+            {visible.map((order) => {
+              const reviewAllowed = order.status === "COMPLETED" && order.financialStatus === "SETTLED";
+              const reviewMessage = order.status !== "COMPLETED"
+                ? "Đơn vẫn đang trong quy trình sử dụng hoặc hoàn trả."
+                : order.financialStatus !== "SETTLED"
+                  ? "Đơn đã trả nhưng tiền cọc chưa quyết toán xong."
+                  : "Đơn đã hoàn tất và sẵn sàng nhận đánh giá.";
+
+              return (
               <article key={order.id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -71,11 +79,27 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
                   <div><p className="text-xs text-gray-500">Tổng thanh toán</p><p className="mt-1 font-extrabold text-gray-900">{money(order.totalAmount, order.currency)}</p></div>
                   <div><p className="text-xs text-gray-500">Hạn trả</p><p className="mt-1 font-bold text-gray-800">{dateTime(order.dueAt)}</p></div>
                 </div>
-                <Link href={reviewMode ? `/rentals/reviews/${order.id}` : `/rentals/orders/${order.id}`} className="mt-4 inline-flex rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-extrabold text-white">
-                  {reviewMode ? "Mở đánh giá" : "Xem chi tiết"}
-                </Link>
+                {reviewMode ? (
+                  <>
+                    <p className="mt-4 text-xs leading-5 text-gray-500">{reviewMessage}</p>
+                    {reviewAllowed ? (
+                      <Link href={`/rentals/reviews/${order.id}`} className="mt-3 inline-flex rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-extrabold text-white">
+                        Đánh giá thiết bị
+                      </Link>
+                    ) : (
+                      <span className="mt-3 inline-flex cursor-not-allowed rounded-xl bg-gray-100 px-4 py-2.5 text-xs font-extrabold text-gray-400">
+                        {order.status !== "COMPLETED" ? "Chờ hoàn tất trả đồ" : "Đang quyết toán tiền cọc"}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <Link href={`/rentals/orders/${order.id}`} className="mt-4 inline-flex rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-extrabold text-white">
+                    Xem chi tiết
+                  </Link>
+                )}
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
