@@ -71,7 +71,9 @@ jest_output.txt
 /docs/rental
 /docs/area-b
 
-/docs
+/docs/*
+!/docs/trip-gps.contract.ts
+!/docs/GPS_IN_TRIP.md
 /handoffs/rental
 /handoffs
 

@@ -208,11 +208,7 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
           continue
         }
         try {
-          // Subscription authorization is enforced at subscribe/revalidation time.
-          // Broadcast once to the room; do not open a DB transaction per viewer.
-          if (payload.recipientUserId === null && row.eventType !== 'gps:access.revoked') {
-            this.server.to(`trip-gps:${payload.envelope.tripId}`).emit(row.eventType, payload.envelope)
-          } else for (const socket of this.server.sockets.values()) {
+          for (const socket of this.server.sockets.values()) {
             const { tripId } = payload.envelope
             const personal = payload.recipientUserId !== null
             if (personal ? socket.data.userId !== payload.recipientUserId : !socket.rooms.has(`trip-gps:${tripId}`))
