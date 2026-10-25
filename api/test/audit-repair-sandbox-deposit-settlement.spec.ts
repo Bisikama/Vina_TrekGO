@@ -177,9 +177,7 @@ describe('sandbox deposit audit/repair classification', () => {
           status: 'PROCESSED',
           processedAt: '2026-10-23T12:00:00.000Z',
           payloadHash: 'success-payload-hash',
-          receipts: [
-            { consumerName: 'rental-deposit-v1', processedAt: '2026-10-23T12:00:00.000Z' },
-          ],
+          receipts: [{ consumerName: 'rental-deposit-v1', processedAt: '2026-10-23T12:00:00.000Z' }],
         },
       ],
       allocatedItems: [
@@ -258,25 +256,31 @@ describe('sandbox deposit audit/repair classification', () => {
     ['order version', { orderVersion: 8 }],
     ['settlement status', { settlementStatus: 'OPEN' }],
     ['source allocation budget', { sourcePayment: { ...candidate().sourcePayment, version: 3 } }],
-    ['inspection evidence', {
-      allocatedItems: [
-        {
-          ...candidate().allocatedItems[0],
-          inspection: { ...candidate().allocatedItems[0].inspection!, evidenceHash: 'changed-evidence' },
-        },
-      ],
-    }],
-    ['document ledger', {
-      documents: [
-        {
-          id: 'document-1',
-          documentType: 'RETURN_RECEIPT',
-          snapshotHash: 'document-hash',
-          issuedAt: '2026-10-23T12:05:00.000Z',
-          version: 1,
-        },
-      ],
-    }],
+    [
+      'inspection evidence',
+      {
+        allocatedItems: [
+          {
+            ...candidate().allocatedItems[0],
+            inspection: { ...candidate().allocatedItems[0].inspection!, evidenceHash: 'changed-evidence' },
+          },
+        ],
+      },
+    ],
+    [
+      'document ledger',
+      {
+        documents: [
+          {
+            id: 'document-1',
+            documentType: 'RETURN_RECEIPT',
+            snapshotHash: 'document-hash',
+            issuedAt: '2026-10-23T12:05:00.000Z',
+            version: 1,
+          },
+        ],
+      },
+    ],
   ])('changes the canonical snapshot hash when %s changes', (_label, override) => {
     expect(candidateSnapshotHash(candidate(override as Partial<AuditCandidate>))).not.toBe(
       candidateSnapshotHash(candidate()),

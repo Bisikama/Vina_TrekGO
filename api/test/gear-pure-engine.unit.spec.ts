@@ -1722,8 +1722,8 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
       )
 
       expect(res.summary.searchStatus).toBe('BOUNDED_RECOMMENDATION')
-      expect(res.summary.searchScope?.hitNodeLimit || res.summary.searchScope?.hitAllocationLimit).toBe(true);
-    });
+      expect(res.summary.searchScope?.hitNodeLimit || res.summary.searchScope?.hitAllocationLimit).toBe(true)
+    })
 
     it('Regression D: preserves canonical tie-break on equal fee and weight (A->P, B->Q)', () => {
       const needA_tie = {
@@ -1732,7 +1732,7 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
         priority: 'REQUIRED' as const,
         quantity: 1,
         constraints: [],
-      };
+      }
       const needB_tie = {
         requirementId: 'need-B',
         category: 'JACKET' as const,
@@ -1748,7 +1748,7 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
             reference: 'user-pref-waterproof',
           },
         ],
-      };
+      }
 
       const candP = {
         id: 'P',
@@ -1760,7 +1760,7 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
         weight_g: 1,
         attributes: { waterproof_mm: 100, temp_rating_c: 15, weight_g: 1, windproof: true },
         availableCount: 1,
-      };
+      }
       const candQ = {
         id: 'Q',
         name: 'Product Q',
@@ -1771,7 +1771,7 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
         weight_g: 1,
         attributes: { waterproof_mm: 100, temp_rating_c: 15, weight_g: 1, windproof: true },
         availableCount: 1,
-      };
+      }
       const candR = {
         id: 'R',
         name: 'Product R',
@@ -1782,9 +1782,9 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
         weight_g: 1,
         attributes: { waterproof_mm: 10, temp_rating_c: 15, weight_g: 1, windproof: true },
         availableCount: 1,
-      };
+      }
 
-      const candsMap = new Map([['JACKET', [candP, candQ, candR]]]);
+      const candsMap = new Map([['JACKET', [candP, candQ, candR]]])
 
       const res = solveDeterministicPlannerOption(
         {
@@ -1795,16 +1795,16 @@ describe('Gear Advisor V3.1.5 — Pure Engine & Constraint Evaluator (Prompt 03 
           nodeLimit: 5000,
         },
         'MIN_RENTAL_FEE',
-      );
+      )
 
-      expect(res.summary.totalRentalFee).toBe(2);
-      expect(res.summary.isComplete).toBe(true);
+      expect(res.summary.totalRentalFee).toBe(2)
+      expect(res.summary.isComplete).toBe(true)
 
       // Verify canonical signature: need-A -> P, need-B -> Q (since A:P;B:Q < A:Q;B:P)
-      const assignmentA = res.rentalLines.find((l: any) => l.requirementId === 'need-A');
-      const assignmentB = res.rentalLines.find((l: any) => l.requirementId === 'need-B');
-      expect(assignmentA?.productId).toBe('P');
-      expect(assignmentB?.productId).toBe('Q');
+      const assignmentA = res.rentalLines.find((l: any) => l.requirementId === 'need-A')
+      const assignmentB = res.rentalLines.find((l: any) => l.requirementId === 'need-B')
+      expect(assignmentA?.productId).toBe('P')
+      expect(assignmentB?.productId).toBe('Q')
     })
   })
 })

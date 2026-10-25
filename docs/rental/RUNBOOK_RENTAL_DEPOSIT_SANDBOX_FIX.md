@@ -116,10 +116,7 @@ Luồng kiểm thử hoặc vận hành chuẩn diễn ra theo 4 bước:
       "simulatedAt": "2026-10-25T06:00:00.000Z",
       "actorAdminId": "admin-user-id",
       "reason": "Mô phỏng hoàn cọc VNPay Sandbox do provider kẹt tại mã 05",
-      "warnings": [
-        "TEST_ONLY",
-        "NO_REAL_MONEY_RETURNED"
-      ],
+      "warnings": ["TEST_ONLY", "NO_REAL_MONEY_RETURNED"],
       "notices": {
         "userNotice": "Sandbox provider result simulated successfully; no real bank transfer occurred.",
         "adminNotice": "Shared Payment recorded SUCCEEDED. Rental settlement remains asynchronous through the outbox worker."
@@ -130,6 +127,7 @@ Luồng kiểm thử hoặc vận hành chuẩn diễn ra theo 4 bước:
 
 > [!NOTE]
 > **Quy tắc về trạng thái `settlementProcessingStatus`:**
+>
 > - `settlementProcessingStatus` trả về `"APPLIED"` nếu và chỉ nếu `PaymentConsumerReceipt` cho consumer `rental-deposit-v1` đã tồn tại trong database (chứng minh Rental worker đã commit toàn bộ projection).
 > - Nếu worker chưa chạy hoặc đang chạy dở dang, response trả về `"PENDING"`.
 > - Do đó, trong thực tế response có thể là `PENDING` hoặc `APPLIED` tùy thuộc vào độ trễ thực thi. Không mặc định luôn là `PENDING`. Nếu muốn kiểm thử trạng thái trung gian trong test suite, phải chủ động giữ worker bằng test barrier.
@@ -162,7 +160,9 @@ Luồng kiểm thử hoặc vận hành chuẩn diễn ra theo 4 bước:
 ### Bước 4: Kiểm tra trạng thái sau khi Worker hoàn tất
 
 #### Trường hợp A: Đơn hàng hoàn tất hoàn hảo (Full Clean Scenario)
+
 Tất cả thiết bị đều PASS kiểm định, hoàn cọc 100% hoặc khấu trừ hợp lệ, không có khiếu nại mở:
+
 1. **Xem chi tiết cọc đơn thuê (`GET /api/v1/rental-orders/{{orderId}}/deposit`):**
    - Tất cả các item cọc chuyển sang `status: "SETTLED"`.
    - `settlementMode: "SANDBOX_SIMULATED"`.
@@ -177,7 +177,9 @@ Tất cả thiết bị đều PASS kiểm định, hoàn cọc 100% hoặc kh�
    - `orderStatus`: chuyển sang `"COMPLETED"` (nếu đã thỏa mãn toàn bộ 8 cổng: bàn giao xong, custody received, không có case mở).
 
 #### Trường hợp B: Đơn hàng hoàn một phần hoặc có ngoại lệ (Mixed / Partial Scenario)
+
 Ví dụ: 1 item PASS (hoàn 400.000 VND), 1 item HƯ HẠI (đang mở exception case, giữ cọc 600.000 VND):
+
 1. **Xem chi tiết cọc:**
    - Item PASS chuyển sang `status: "SETTLED"`.
    - Item HƯ HẠI giữ nguyên trạng thái kiểm định/tranh chấp (ví dụ: `INSPECTION_PENDING` hoặc `DEDUCTION_PENDING`), **không bị settled vội**.
@@ -214,15 +216,9 @@ Ví dụ: 1 item PASS (hoàn 400.000 VND), 1 item HƯ HẠI (đang mở exceptio
       "reason": "Mô phỏng hoàn cọc VNPay Sandbox do provider kẹt tại mã 05",
       "requestedAt": "2026-10-25T06:00:00.000Z",
       "committedAt": "2026-10-25T06:00:01.000Z",
-      "warnings": [
-        "TEST_ONLY",
-        "NO_REAL_MONEY_RETURNED"
-      ]
+      "warnings": ["TEST_ONLY", "NO_REAL_MONEY_RETURNED"]
     },
-    "warnings": [
-      "TEST_ONLY",
-      "NO_REAL_MONEY_RETURNED"
-    ]
+    "warnings": ["TEST_ONLY", "NO_REAL_MONEY_RETURNED"]
   }
   ```
 
@@ -233,6 +229,7 @@ Ví dụ: 1 item PASS (hoàn 400.000 VND), 1 item HƯ HẠI (đang mở exceptio
 Hệ thống cung cấp script an toàn: `api/scripts/audit-repair-sandbox-deposit-settlement.ts`.
 
 ### Quy tắc an toàn bắt buộc:
+
 1. Chế độ mặc định là **DRY-RUN** (chỉ đọc, không ghi cơ sở dữ liệu).
 2. Khi chạy chế độ sửa chữa (`--apply`), script bắt buộc kiểm tra:
    - File snapshot từ lần chạy dry-run (`--snapshot-in`).
@@ -244,11 +241,14 @@ Hệ thống cung cấp script an toàn: `api/scripts/audit-repair-sandbox-depos
 ### Hướng dẫn chạy từng bước:
 
 #### Bước A: Chạy kiểm kê Dry-run và xuất Snapshot
+
 ```bash
 cd api
 npm run audit:repair-sandbox-deposit -- --snapshot-out=audit-snapshot-20261025.json
 ```
+
 Output sẽ in ra danh sách phân loại ứng viên:
+
 ```json
 {
   "mode": "DRY_RUN",
@@ -270,13 +270,16 @@ Output sẽ in ra danh sách phân loại ứng viên:
 > `<SHA-256_FROM_DRY_RUN>` chỉ là placeholder. Mỗi candidate có một `snapshotHash` riêng tương ứng với toàn bộ facts tại thời điểm dry-run. Không tự bịa, tái sử dụng hash trong tài liệu hoặc sao chép hash của candidate khác; apply bắt buộc dùng nguyên file snapshot do chính lần dry-run xuất ra.
 
 #### Bước B: Phân tích kết quả kiểm kê
+
 - **`EARLY_PROJECTION_AUTO_REPAIR`**: Đủ điều kiện để khôi phục projection về đúng trạng thái `REFUND_PENDING` (lệnh hoàn tiền còn `PROCESSING`, items bị ghi sớm là `SETTLED`, đơn chưa `COMPLETED`, chưa có chứng từ bất biến).
 - **`MANUAL_REVIEW_IMMUTABLE_OR_TERMINAL`**: Đơn hàng đã `COMPLETED` hoặc đã phát hành văn bản/chứng từ PDF pháp lý. Script **từ chối sửa tự động** để tránh xáo trộn vòng đời đơn; yêu cầu đội ngũ đối soát kiểm tra thủ công.
 - **`REPLAY_SHARED_SUCCESS_EVENT`**: Shared Payment thực tế đã `SUCCEEDED` nhưng Rental projection bị thiếu. Cần replay chính sự kiện outbox bền vững (`REFUND_SUCCEEDED`) thay vì sửa đè dữ liệu.
 - **`MANUAL_REVIEW_UNSAFE_SOURCE`**: Nguồn tiền không phải SANDBOX, quan hệ khóa ngoại bị sai lệch, có exception case mở, hoặc sự kiện durable đã tồn tại nhưng có dấu hiệu bất thường. Cần đối soát thủ công.
 
 #### Bước C: Thực hiện sửa chữa (Apply Mode) cho bản ghi đủ điều kiện
+
 Chỉ chạy trên môi trường sandbox cục bộ đã được cấp phép:
+
 ```bash
 cd api
 npm run audit:repair-sandbox-deposit -- \
@@ -285,7 +288,9 @@ npm run audit:repair-sandbox-deposit -- \
   --refund-id=550e8400-e29b-41d4-a716-446655440000 \
   --order-id=7c9e6679-7425-40de-944b-e07fc1f90ae7
 ```
+
 Output xác nhận:
+
 ```json
 {
   "mode": "APPLY",
@@ -298,7 +303,9 @@ Output xác nhận:
   ]
 }
 ```
+
 Sau khi apply thành công:
+
 1. `DepositSettlementItem` được đưa về `status: 'REFUND_PENDING'` và `settledAt: null`.
 2. `DepositSettlement` được cập nhật lại theo tiến độ thực tế thông qua `updateSettlementProgress()`.
 3. `RentalOrder.financialStatus` được tính toán lại chính xác.

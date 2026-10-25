@@ -22,13 +22,13 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
 
 ### Bảng đối chiếu chẩn đoán mã nguồn
 
-| Phát hiện | Bằng chứng file:line | Bất biến bị vi phạm | Vị trí sửa |
-| :--- | :--- | :--- | :--- |
-| **1. Endpoint bypass worker & ghi tắt Rental state** | `sandbox-refund-simulation.service.ts:337-476` (cũ) | Bất biến 1 & 2: Refund chưa SUCCEEDED đã quyết toán cọc; endpoint ghi trực tiếp bảng Rental che giấu worker. | `api/src/modules/payments/sandbox-refund-simulation.service.ts` |
-| **2. Thiếu liên kết `rentalOrderId` trên lệnh Refund** | `rental-refunds.service.ts:188-198` | Bất biến 7: Refund phải khớp trực tiếp với rental order nguồn; truy vết ngược bị gián đoạn. | `api/src/modules/payments/rental-refunds.service.ts` |
-| **3. Lịch sử giao dịch USER không có CREDIT khi cọc báo đã settled** | `payment-history.service.ts:312` | Bất biến 1: Chỉ hoàn tiền thực tế hoặc provider SUCCEEDED mới có `financialEffect=CREDIT`. | Giữ nguyên quy tắc `payment-history.service.ts`, chuyển `Refund` sang `SUCCEEDED` trong Shared Payment trước khi worker settled item. |
-| **4. Thiếu bảo vệ chống xung đột giữa sự kiện mô phỏng và sự kiện provider thật** | `refunds.service.ts:383-435` | Bất biến 9 & 10: Xung đột trạng thái terminal phải được giữ nguyên bằng chứng và đưa vào diện đối soát. | `api/src/modules/payments/refunds.service.ts` |
-| **5. Worker thiếu kiểm tra toàn vẹn đa tầng (allocations + items)** | `rental-deposit.worker.ts:330-375` | Bất biến 3, 4, 7 & 8: SUM(allocations) = Refund.amount; các allocation phải thuộc RENTAL_DEPOSIT của đúng order. | `api/src/modules/rental/payments/rental-deposit.worker.ts` |
+| Phát hiện                                                                         | Bằng chứng file:line                                | Bất biến bị vi phạm                                                                                              | Vị trí sửa                                                                                                                            |
+| :-------------------------------------------------------------------------------- | :-------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. Endpoint bypass worker & ghi tắt Rental state**                              | `sandbox-refund-simulation.service.ts:337-476` (cũ) | Bất biến 1 & 2: Refund chưa SUCCEEDED đã quyết toán cọc; endpoint ghi trực tiếp bảng Rental che giấu worker.     | `api/src/modules/payments/sandbox-refund-simulation.service.ts`                                                                       |
+| **2. Thiếu liên kết `rentalOrderId` trên lệnh Refund**                            | `rental-refunds.service.ts:188-198`                 | Bất biến 7: Refund phải khớp trực tiếp với rental order nguồn; truy vết ngược bị gián đoạn.                      | `api/src/modules/payments/rental-refunds.service.ts`                                                                                  |
+| **3. Lịch sử giao dịch USER không có CREDIT khi cọc báo đã settled**              | `payment-history.service.ts:312`                    | Bất biến 1: Chỉ hoàn tiền thực tế hoặc provider SUCCEEDED mới có `financialEffect=CREDIT`.                       | Giữ nguyên quy tắc `payment-history.service.ts`, chuyển `Refund` sang `SUCCEEDED` trong Shared Payment trước khi worker settled item. |
+| **4. Thiếu bảo vệ chống xung đột giữa sự kiện mô phỏng và sự kiện provider thật** | `refunds.service.ts:383-435`                        | Bất biến 9 & 10: Xung đột trạng thái terminal phải được giữ nguyên bằng chứng và đưa vào diện đối soát.          | `api/src/modules/payments/refunds.service.ts`                                                                                         |
+| **5. Worker thiếu kiểm tra toàn vẹn đa tầng (allocations + items)**               | `rental-deposit.worker.ts:330-375`                  | Bất biến 3, 4, 7 & 8: SUM(allocations) = Refund.amount; các allocation phải thuộc RENTAL_DEPOSIT của đúng order. | `api/src/modules/rental/payments/rental-deposit.worker.ts`                                                                            |
 
 ---
 
@@ -48,6 +48,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
 ## 3. Các thay đổi mã nguồn chi tiết
 
 ### 3.1. `api/src/modules/payments/sandbox-refund-simulation.service.ts`
+
 - **Ranh giới an toàn fail-closed (`assertEnvironmentSafe`):**
   - `NODE_ENV !== 'production'`.
   - `PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED === 'true'`.
@@ -64,15 +65,18 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Trả về response trung thực: `providerRefundStatus: 'SUCCEEDED'`, `simulationStatus: 'SIMULATED'`, `settlementMode: 'SANDBOX_SIMULATED'`. `settlementProcessingStatus` chỉ là `APPLIED` khi tồn tại `PaymentConsumerReceipt` cho consumer `rental-deposit-v1` (`sandbox-refund-simulation.service.ts:381`); trạng thái transport `paymentOutboxEvent.status=PROCESSED` một mình không phải bằng chứng projection Rental đã commit.
 
 ### 3.2. `api/src/modules/payments/refunds.service.ts`
+
 - **Phân biệt synthetic event và real provider event:**
   - Kiểm tra `isSandboxSimulationEvent` thông qua provenance được lưu trong `refund.providerPayload.sandboxSimulation` (`origin === 'ADMIN_SANDBOX_SIMULATION' && providerEventId === event.providerEventId`).
   - Khi synthetic event đến: cập nhật `status: 'SUCCEEDED'`, `refundedAt: now`, tạo durable outbox event `refund:${refund.id}:succeeded:v1` trong cùng transaction, và ghi audit log `ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED`.
   - Khi real provider event đến sau simulation: nếu provider báo `FAILED` (mâu thuẫn), giữ nguyên terminal `Refund.status=SUCCEEDED`, chỉ chuyển `Refund.reconcileStatus=NEEDS_REVIEW`, ghi `lastErrorCode=SANDBOX_SIMULATION_PROVIDER_CONFLICT` và audit `REFUND_RESULT_NEEDS_REVIEW` (`refunds.service.ts:382-407`). Không demote refund đơn lẻ và không đảo projection/ledger đã commit. Nếu provider xác nhận `SUCCEEDED`, ghi audit `REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION` nhưng không phát thêm outbox success và không sinh hiệu ứng tài chính thứ hai (`refunds.service.ts:535-549`).
 
 ### 3.3. `api/src/modules/payments/rental-refunds.service.ts`
+
 - Khi tạo refund cọc mới (`reserve()`), lưu trực tiếp `rentalOrderId: orderId` cùng với `depositSettlementId: settlementId`, đảm bảo tính toàn vẹn khóa ngoại và liên kết dữ liệu hai chiều.
 
 ### 3.4. `api/src/modules/rental/payments/rental-deposit.worker.ts`
+
 - **Bảo vệ toàn vẹn trước khi cập nhật:**
   - Xác thực `refund.depositSettlementId === settlementId` và `refund.rentalOrderId === orderId` (nếu không null).
   - Xác thực toàn bộ allocation: component là `RENTAL_DEPOSIT`, thuộc đúng `orderId`, số tiền hợp lệ.
@@ -86,6 +90,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Ghi nhận `paymentConsumerReceipt` và `paymentOutboxEvent.status = 'PROCESSED'` trong cùng một transaction (`rental-deposit.worker.ts:458-466`).
 
 ### 3.5. `api/scripts/audit-repair-sandbox-deposit-settlement.ts`
+
 - Script kiểm kê và sửa chữa dữ liệu cũ bị simulator phiên bản cũ ghi sai.
 - Chế độ mặc định là **DRY-RUN (chỉ đọc)**.
 - Phân loại rõ 4 nhóm:
@@ -125,6 +130,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
 ## 6. Xác minh và Xử lý chi tiết các Rủi ro V1–V7 (Prompt 02)
 
 ### V1: Thiếu bằng chứng chạy test và triển khai
+
 - **Trạng thái:** `Đã xác minh trong phạm vi chạy được; các giới hạn được ghi rõ`
 - **Chi tiết xác minh:**
   - Bộ test payments, các test simulation/repair chuyên biệt và regression Rental/history/Swagger đã được chạy thực tế; số liệu cuối cùng được ghi trong `TEST_EVIDENCE_RENTAL_DEPOSIT_FIX.md` và log đi kèm, không suy diễn từ số lượng test khai báo trong source.
@@ -133,6 +139,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Các bài PostgreSQL thật bị skip có chủ đích vì chưa có `PAYMENT_TEST_DATABASE_URL` trỏ tới database `payment_test_*` trên loopback. Sandbox E2E thật và kiểm chứng khóa tương thời vì vậy được ghi nhận là **BLOCKED**, không dùng mocked test để thay thế kết luận này.
 
 ### V2: Xung đột Provider FAILED sau Simulation SUCCEEDED không làm mất tính nhất quán (Status Demotion)
+
 - **Trạng thái:** `Đã xác minh đúng trên mã nguồn`
 - **Bằng chứng mã nguồn:** `api/src/modules/payments/refunds.service.ts:382-408`
 - **Chi tiết xác minh:**
@@ -167,6 +174,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Khi provider thật đến sau và báo `SUCCEEDED` (`refunds.service.ts:535-549`), `terminal && refund.status === event.status` không phát sinh reason lỗi, không tạo duplicate outbox event, không thực hiện credit lần hai, mà chỉ ghi audit log `REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION`.
 
 ### V3: Phân biệt `RefundAllocation` và `PaymentAllocation` (Hỗ trợ hoàn một phần - Partial Refunds)
+
 - **Trạng thái:** `Đã xác minh đúng trên mã nguồn`
 - **Bằng chứng mã nguồn:** `api/src/modules/payments/sandbox-refund-simulation.service.ts:455-472` và `api/src/modules/rental/payments/rental-deposit.worker.ts:333-356`
 - **Chi tiết xác minh:**
@@ -178,17 +186,21 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
       const paymentAllocationTotal = refund.allocations.reduce(
         (sum: Prisma.Decimal, allocation: any) => sum.plus(allocation.amount),
         new Prisma.Decimal(0),
-      )
-      if (!paymentAllocationTotal.equals(refund.amount) || refund.allocations.length === 0) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      );
+      if (
+        !paymentAllocationTotal.equals(refund.amount) ||
+        refund.allocations.length === 0
+      ) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID);
       }
       ```
-      Điều kiện này kiểm tra: Tổng số tiền phân bổ của *đợt hoàn tiền này* (`RefundAllocation.amount`) phải bằng đúng số tiền của lệnh hoàn tiền đó (`refund.amount`). Đây là quy tắc bất biến số học bắt buộc (FR mục 35).
+      Điều kiện này kiểm tra: Tổng số tiền phân bổ của _đợt hoàn tiền này_ (`RefundAllocation.amount`) phải bằng đúng số tiền của lệnh hoàn tiền đó (`refund.amount`). Đây là quy tắc bất biến số học bắt buộc (FR mục 35).
     - Tại dòng 468: `allocation.amount.gt(allocation.paymentAllocation.amount)` bảo đảm số tiền hoàn của từng allocation không vượt quá số tiền cọc đã capture ban đầu trên order line (`allocation.paymentAllocation.amount`).
     - Tại `RentalRefundsService.reserve()`: Hệ thống tính tổng toàn bộ các refund đang giữ chỗ (`PENDING`, `PROCESSING`, `SUCCEEDED`) trên cùng payment allocation, bảo đảm tổng số tiền hoàn cọc qua tất cả các đợt không vượt quá ngân sách cọc ban đầu.
     - Do đó, hoàn một phần (ví dụ cọc 1.000.000 VND, hoàn nhóm PASS 400.000 VND, giữ lại 600.000 VND cho item tranh chấp) hoàn toàn hợp lệ và hoạt động bình thường, không hề bị chặn.
 
 ### V4: Bằng chứng Worker commit từng Item và ranh giới xác định trạng thái APPLIED
+
 - **Trạng thái:** `Đã sửa và hoàn thiện ranh giới xác nhận`
 - **Bằng chứng mã nguồn:** `api/src/modules/payments/sandbox-refund-simulation.service.ts:332-342, 381` và `api/src/modules/rental/payments/rental-deposit.worker.ts:431-466`
 - **Chi tiết xác minh:**
@@ -200,14 +212,16 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
       select: {
         status: true,
         receipts: {
-          where: { consumerName: 'rental-deposit-v1' },
+          where: { consumerName: "rental-deposit-v1" },
           select: { processedAt: true },
           take: 1,
         },
       },
-    })
+    });
     // settlementProcessingStatus chỉ là 'APPLIED' khi đã có PaymentConsumerReceipt của rental-deposit-v1!
-    settlementProcessingStatus: successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING'
+    settlementProcessingStatus: successOutbox.receipts.length > 0
+      ? "APPLIED"
+      : "PENDING";
     ```
   - Tại `rental-deposit.worker.ts:280-466`: Toàn bộ các thao tác:
     1. Cập nhật `depositSettlementItem.status = 'SETTLED'`.
@@ -216,20 +230,23 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
     4. Đánh giá hoàn tất đơn `tryCompleteOrder()`.
     5. Tạo `paymentConsumerReceipt` cho consumer `'rental-deposit-v1'`.
     6. Cập nhật `paymentOutboxEvent.status = 'PROCESSED'`.
-    Đều nằm trong **cùng một transaction ACID duy nhất** (`await this.db.$transaction(async (tx) => { ... })`).
+       Đều nằm trong **cùng một transaction ACID duy nhất** (`await this.db.$transaction(async (tx) => { ... })`).
   - Do đó, trong transaction boundary hiện tại của worker, sự tồn tại của `paymentConsumerReceipt` cho `'rental-deposit-v1'` là commit fact của Rental projection. Nếu worker chưa commit transaction, response trả về trung thực là `PENDING`.
   - Về tính chất 1:1 của Item: Trong Prisma schema hiện tại, `depositSettlementItemId` trên `Refund` hoặc bảng liên kết `DepositRefundItemAllocation` đảm bảo mapping chặt chẽ; mỗi item chỉ settled khi toàn bộ nghĩa vụ hoàn tiền của item đó thành công.
 
 ### V5: Nhận diện Synthetic Event và nguồn gốc Provenance an toàn
+
 - **Trạng thái:** `Đã xác minh đúng trên mã nguồn`
 - **Bằng chứng mã nguồn:** `api/src/modules/payments/refunds.service.ts:326-328` và `api/src/modules/payments/sandbox-refund-simulation.service.ts:216-280`
 - **Chi tiết xác minh:**
   - `isSandboxSimulationEvent` không chỉ kiểm tra cờ tồn tại đơn thuần trên refund, mà kiểm tra sự trùng khớp giữa context sự kiện và provenance đã commit:
     ```ts
-    const sandboxSimulation = existingPayload?.sandboxSimulation as Record<string, unknown> | undefined
+    const sandboxSimulation = existingPayload?.sandboxSimulation as
+      | Record<string, unknown>
+      | undefined;
     const isSandboxSimulationEvent =
-      sandboxSimulation?.origin === 'ADMIN_SANDBOX_SIMULATION' &&
-      sandboxSimulation.providerEventId === event.providerEventId
+      sandboxSimulation?.origin === "ADMIN_SANDBOX_SIMULATION" &&
+      sandboxSimulation.providerEventId === event.providerEventId;
     ```
   - Provenance `sandboxSimulation` được ghi vào `providerPayload` bên trong transaction của `prepareSimulation` trên backend, với `providerEventId = sandbox-refund-simulation:${refund.id}:succeeded:v1` và `origin = 'ADMIN_SANDBOX_SIMULATION'`.
   - Webhook công khai từ bên ngoài không thể tự nhận là synthetic event:
@@ -239,6 +256,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Sau khi worker xử lý, provenance `SANDBOX_SIMULATED` cùng cảnh báo `TEST_ONLY`, `NO_REAL_MONEY_RETURNED` được duy trì trong read model và chi tiết cọc, ngăn chặn việc ngộ nhận kết quả mô phỏng là giao dịch tiền mặt thực tế.
 
 ### V6: Ranh giới Môi trường Runbook và Kỳ vọng Thời gian thực tế
+
 - **Trạng thái:** `Đã sửa và chuẩn hóa tài liệu`
 - **Bằng chứng mã nguồn:** `api/src/modules/payments/sandbox-refund-simulation.service.ts:39-87` và `RUNBOOK_RENTAL_DEPOSIT_SANDBOX_FIX.md`
 - **Chi tiết xác minh:**
@@ -249,6 +267,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - **Tính trung thực tài chính:** `financialTruth.realMoneyReturned` luôn là `false` đối với giao dịch mô phỏng sandbox; `financialEffect: 'CREDIT'` trên USER history là hiển thị tương thích read model nhưng kèm cảnh báo `TEST_ONLY`.
 
 ### V7: Tính toàn vẹn của Repair Script và Snapshot Hash thực tế
+
 - **Trạng thái:** `Đã sửa mã nguồn và bổ sung test; kiểm chứng PostgreSQL thật còn BLOCKED`
 - **Bằng chứng mã nguồn:** `api/scripts/audit-repair-sandbox-deposit-settlement.ts:143-200, 450-513` và `api/test/audit-repair-sandbox-deposit-settlement.spec.ts:202-230`
 - **Chi tiết xác minh:**
@@ -262,6 +281,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
 ## 7. Bốn Cổng Đánh Giá Nghiệm Thu (Four-Gate Evaluation)
 
 ### Gate 1: Code, Build & Regression
+
 - **Kết luận:** **PASS**
 - **Căn cứ:**
   - `npm run lint` và `npm run build`: exit code `0` ở vòng kiểm chứng cuối.
@@ -269,12 +289,14 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - 74 PostgreSQL tests bị skip vì thiếu isolated local test DB và không được tính là PASS.
 
 ### Gate 2: Sandbox E2E Flow (Shared Payment → Outbox → Worker → USER APIs)
+
 - **Kết luận:** **PASS trên Unit/Mocked/In-memory HTTP Integration; BLOCKED đối với deployed E2E và live PostgreSQL.**
 - **Căn cứ:**
   - Các test chứng minh từng ranh giới logic từ Admin simulation, Shared Payment/outbox, Rental worker/receipt đến USER read model; HTTP contract in-memory cũng PASS.
   - Chưa có bằng chứng deployed E2E với PostgreSQL thật. `.env` hiện trỏ tới database remote Neon, còn simulation guard chỉ cho phép database loopback nên lời gọi thật sẽ bị từ chối với `403 SANDBOX_SIMULATION_ENV_UNSAFE`.
 
 ### Gate 3: Data Audit & Repair Tooling
+
 - **Kết luận:** **PARTIAL PASS trên logic phân loại/hash/guard; PostgreSQL dry-run/apply/locking thật BLOCKED.**
 - **Căn cứ:**
   - Logic phân loại 4 nhóm ứng viên (`EARLY_PROJECTION_AUTO_REPAIR`, `MANUAL_REVIEW_IMMUTABLE_OR_TERMINAL`, `REPLAY_SHARED_SUCCESS_EVENT`, `MANUAL_REVIEW_UNSAFE_SOURCE`) và cơ chế chống stale bằng canonical snapshot hash đã được kiểm chứng tự động.
@@ -283,6 +305,7 @@ Trước khi sửa, hệ thống tồn tại sự không nhất quán nghiêm tr
   - Chưa chạy dry-run/apply trên database đang cấu hình và chưa chứng minh `SELECT ... FOR UPDATE` bằng race test PostgreSQL thật.
 
 ### Gate 4: Frontend Integration Readiness
+
 - **Kết luận:** **Contract/read model sẵn sàng tích hợp; nghiệm thu/freeze tài chính trên Neon hiện tại BLOCKED.**
 - **Căn cứ:**
   - Contracts cho FE đã được chốt và đồng bộ:

@@ -290,8 +290,8 @@ function toCandidate(row: RefundCandidateRow, eventRows: DurableEventFact[] = []
       )
     }
   }
-  const allocationBudgetValid = paymentDepositAllocations.every(
-    (allocation) => (reservedByAllocation.get(allocation.id) ?? new Prisma.Decimal(0)).lte(allocation.amount),
+  const allocationBudgetValid = paymentDepositAllocations.every((allocation) =>
+    (reservedByAllocation.get(allocation.id) ?? new Prisma.Decimal(0)).lte(allocation.amount),
   )
   return {
     refundId: row.id,
@@ -319,21 +319,20 @@ function toCandidate(row: RefundCandidateRow, eventRows: DurableEventFact[] = []
     settlementVersion: row.depositSettlement?.version ?? null,
     settlementSettledAt: row.depositSettlement?.settledAt?.toISOString() ?? null,
     issuedDocumentCount: order?.rentalDocumentsViaOrderId.length ?? 0,
-    hasSimulationMarker:
-      simulation?.origin === 'ADMIN_SANDBOX_SIMULATION' && simulation?.environment === 'SANDBOX',
+    hasSimulationMarker: simulation?.origin === 'ADMIN_SANDBOX_SIMULATION' && simulation?.environment === 'SANDBOX',
     relationConsistent: Boolean(
       settlementOrderId &&
-        (!row.rentalOrderId || row.rentalOrderId === settlementOrderId) &&
-        itemRows.length &&
-        refundAllocationTotal.equals(row.amount) &&
-        itemAllocationTotal.equals(row.amount) &&
-        row.allocations.every(
-          (allocation) =>
-            allocation.paymentAllocation.paymentId === row.paymentId &&
-            allocation.paymentAllocation.component === 'RENTAL_DEPOSIT' &&
-            allocation.paymentAllocation.rentalOrderLine.orderId === settlementOrderId,
-        ) &&
-        allocationBudgetValid,
+      (!row.rentalOrderId || row.rentalOrderId === settlementOrderId) &&
+      itemRows.length &&
+      refundAllocationTotal.equals(row.amount) &&
+      itemAllocationTotal.equals(row.amount) &&
+      row.allocations.every(
+        (allocation) =>
+          allocation.paymentAllocation.paymentId === row.paymentId &&
+          allocation.paymentAllocation.component === 'RENTAL_DEPOSIT' &&
+          allocation.paymentAllocation.rentalOrderLine.orderId === settlementOrderId,
+      ) &&
+      allocationBudgetValid,
     ),
     sourcePayment: {
       id: row.payment.id,
@@ -451,7 +450,12 @@ async function audit(db: PrismaClient, limit: number): Promise<ClassifiedCandida
       })
     : []
   return rows
-    .map((row) => toCandidate(row, events.filter((event) => event.aggregateId === row.id)))
+    .map((row) =>
+      toCandidate(
+        row,
+        events.filter((event) => event.aggregateId === row.id),
+      ),
+    )
     .map(classifyCandidate)
     .filter((row) => row.classification !== 'NOT_A_CANDIDATE')
 }
