@@ -7,7 +7,12 @@ import {
   bookingApi,
   type BookingSummary,
 } from "@/features/bookings/booking.api";
+import {
+  privateTripsApi,
+  type PrivateTrip,
+} from "@/features/trips/services/private-trips.api";
 import { RentalCatalogPage } from "@/features/rentals/components/RentalCatalogPage";
+import { RentalSectionNav } from "@/features/rentals/components/RentalSectionNav";
 
 type RentalEntryPageProps = {
   tripId?: string;
@@ -28,6 +33,7 @@ function formatDate(value: string) {
 
 export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
+  const [privateTrips, setPrivateTrips] = useState<PrivateTrip[]>([]);
   const [loading, setLoading] = useState(!tripId);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,11 +44,18 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
 
     let active = true;
 
-    bookingApi
-      .list(1, "")
-      .then((result) => {
+    Promise.allSettled([bookingApi.list(1, ""), privateTripsApi.list()])
+      .then(([bookingResult, privateTripResult]) => {
         if (!active) return;
-        setBookings(result.items ?? []);
+        if (bookingResult.status === "fulfilled") {
+          setBookings(bookingResult.value.items ?? []);
+        }
+        if (privateTripResult.status === "fulfilled") {
+          setPrivateTrips(privateTripResult.value ?? []);
+        }
+        if (bookingResult.status === "rejected" && privateTripResult.status === "rejected") {
+          throw bookingResult.reason;
+        }
         setError(null);
       })
       .catch(() => {
@@ -66,6 +79,19 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
     [bookings],
   );
 
+  const rentablePrivateTrips = useMemo(
+    () => privateTrips.filter((trip) => ["OPEN", "FULL", "CLOSED"].includes(trip.status)),
+    [privateTrips],
+  );
+
+  const tripOptions = useMemo(
+    () => [
+      ...rentableBookings.map((booking) => ({ id: booking.trip.id, title: booking.trip.title, startAt: booking.trip.startAt, endAt: booking.trip.endAt, status: booking.status, type: "Chuyến công khai" })),
+      ...rentablePrivateTrips.map((trip) => ({ id: trip.id, title: trip.title, startAt: trip.startAt, endAt: trip.endAt, status: trip.status, type: "Chuyến tự tổ chức" })),
+    ],
+    [rentableBookings, rentablePrivateTrips],
+  );
+
   if (tripId) {
     return <RentalCatalogPage bookingId={tripId} />;
   }
@@ -85,6 +111,24 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
           </p>
         </div>
 
+        <div className="mt-5">
+          <RentalSectionNav active="/rentals" />
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["/rentals/orders", "Đơn thuê", "Theo dõi giao nhận và hoàn cọc"],
+            ["/rentals/wardrobe", "Tủ đồ", "Khai báo đồ trekking đang có"],
+            ["/rentals/reviews", "Đánh giá", "Nhận xét thiết bị đã dùng"],
+            ["/rentals/transactions", "Lịch sử giao dịch", "Thanh toán và hoàn tiền"],
+          ].map(([href, title, description]) => (
+            <Link key={href} href={href} className="rounded-2xl border border-emerald-900/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-500/30">
+              <p className="text-sm font-extrabold text-gray-900">{title}</p>
+              <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
+            </Link>
+          ))}
+        </div>
+
         {loading && (
           <div className="mt-6 rounded-2xl bg-white p-8 text-center text-sm font-semibold text-gray-500 shadow-sm">
             Đang tải các chuyến đã xác nhận...
@@ -97,7 +141,7 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
           </div>
         )}
 
-        {!loading && !error && rentableBookings.length === 0 && (
+        {!loading && !error && tripOptions.length === 0 && (
           <div className="mt-6 rounded-2xl bg-white p-8 text-center shadow-sm">
             <h2 className="text-xl font-extrabold text-gray-900">
               Chưa có chuyến phù hợp
@@ -114,31 +158,31 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
           </div>
         )}
 
-        {!loading && rentableBookings.length > 0 && (
+        {!loading && tripOptions.length > 0 && (
           <div className="mt-6 grid gap-4">
-            {rentableBookings.map((booking) => (
+            {tripOptions.map((trip) => (
               <article
-                key={booking.id}
+                key={trip.id}
                 className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
               >
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
-                      {booking.status}
+                      {trip.type} · {trip.status}
                     </span>
                     <h2 className="mt-3 text-xl font-extrabold text-gray-900">
-                      {booking.trip.title}
+                      {trip.title}
                     </h2>
                     <p className="mt-2 text-sm text-gray-600">
-                      {formatDate(booking.trip.startAt)} – {formatDate(booking.trip.endAt)}
+                      {formatDate(trip.startAt)} – {formatDate(trip.endAt)}
                     </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      Booking: {booking.id}
+                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                      Sẵn sàng kiểm tra hành trang cho chuyến này
                     </p>
                   </div>
 
                   <Link
-                    href={`/rentals?tripId=${encodeURIComponent(booking.trip.id)}`}
+                    href={`/rentals?tripId=${encodeURIComponent(trip.id)}`}
                     className="inline-flex shrink-0 justify-center rounded-xl bg-[#1B5E41] px-5 py-3 text-sm font-extrabold text-white"
                   >
                     Chọn chuyến này

@@ -22,7 +22,8 @@ export type RentalLogisticsPoint = {
 };
 
 export type RentalEligibility = {
-  bookingId: string;
+  tripId: string;
+  membershipRef?: string;
   eligible: boolean;
   reason: string | null;
   recipientOptions: RentalRecipientOption[];
@@ -87,7 +88,7 @@ export type RentalProduct = {
 };
 
 export type RentalAvailability = {
-  bookingId: string;
+  tripId: string;
   productId: string;
   availableCount: number;
   rentalWindow: {
@@ -133,8 +134,7 @@ export type RentalProductDetailData = {
 
 export type CreateRentalQuoteInput = {
   tripId: string;
-  bookingId: string;
-  recipientParticipantId?: string;
+  recipientTripMemberId?: string;
   items: Array<{
     productId: string;
     quantity: number;
@@ -143,9 +143,9 @@ export type CreateRentalQuoteInput = {
 
 export type RentalQuote = {
   id: string;
-  bookingId: string;
+  bookingId: string | null;
   recipient: {
-    participantId: string;
+    memberId: string;
     displayName: string;
   };
   chargedDays: number;

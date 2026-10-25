@@ -70,6 +70,33 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function shortCode(value: string) {
+  return value.replaceAll("-", "").slice(-6).toUpperCase();
+}
+
+function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1_000);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center">
+      <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-amber-800">Thời gian còn lại để chuyển khoản</p>
+      <p className="mt-2 text-3xl font-black tabular-nums text-amber-950">
+        {remaining > 0 ? `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : "Đã hết hạn"}
+      </p>
+    </div>
+  );
+}
+
 export function RentalQuotePage({
   bookingId,
   productId,
@@ -200,8 +227,7 @@ export function RentalQuotePage({
     try {
       const result = await createRentalQuote({
         tripId: data.eligibility.trip.id,
-        bookingId: data.eligibility.bookingId,
-        recipientParticipantId:
+        recipientTripMemberId:
           recipientId || undefined,
         items: [
           {
@@ -279,7 +305,7 @@ export function RentalQuotePage({
           "trekgo:rental-payment-return",
           JSON.stringify({
             orderId: nextOrder.order.id,
-            bookingId: quote.bookingId,
+            bookingId,
             paymentId: nextPayment.paymentId,
           }),
         );
@@ -536,7 +562,7 @@ export function RentalQuotePage({
                 <p>
                   Mã đơn thuê:{" "}
                   <strong className="text-gray-900">
-                    {orderResult.order.id}
+                    #{shortCode(orderResult.order.id)}
                   </strong>
                 </p>
                 <p>
@@ -547,6 +573,7 @@ export function RentalQuotePage({
                     )}
                   </strong>
                 </p>
+                <PaymentCountdown expiresAt={orderResult.order.paymentExpiresAt} />
               </div>
             )}
 
