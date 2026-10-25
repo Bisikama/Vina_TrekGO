@@ -424,7 +424,7 @@ describe('Leader Check-in and Ticket QR Contract', () => {
         ParticipantClaimService,
         {
           provide: BookingsService,
-          useValue: new BookingsService(mockPrisma as unknown as PrismaService, {} as BookingPolicyService),
+          useValue: new BookingsService(mockPrisma, {} as BookingPolicyService),
         },
         { provide: PrismaService, useValue: mockPrisma },
       ],
@@ -604,7 +604,7 @@ describe('Leader Check-in and Ticket QR Contract', () => {
       ['/leader/trips/{id}/checkin', 'post', qrScan1],
       ['/leader/public-trips/{id}/participants/{participantId}/checkin', 'post', manualRes],
     ] as const) {
-      const op = doc.paths[path]![method]!
+      const op = doc.paths[path][method]!
       const schema = (op.responses['200'] as any).content['application/json'].schema
       const validate = ajv.compile(schema)
       validate(body)
