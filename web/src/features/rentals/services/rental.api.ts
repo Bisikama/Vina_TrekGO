@@ -560,27 +560,12 @@ export async function getRentalCatalog(
     ]),
   );
 
-  const availabilityItems = await Promise.all(
-    productResult.items.map((product) =>
-      getRentalAvailability(
-        bookingId,
-        product.id,
-        signal,
-      ),
-    ),
-  );
-
-  const availabilityMap = new Map(
-    availabilityItems.map((item) => [item.productId, item]),
-  );
-
   return {
     eligibility,
     categories: categoryResult.items,
     items: productResult.items.map((product) => ({
       ...product,
-      availableCount:
-        availabilityMap.get(product.id)?.availableCount ?? 0,
+      availableCount: null,
       recommendation:
         recommendationMap.get(product.id) ?? null,
     })),

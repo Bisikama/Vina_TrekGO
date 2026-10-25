@@ -112,7 +112,7 @@ export type RentalRecommendationsData = {
 };
 
 export type RentalCatalogItem = RentalProduct & {
-  availableCount: number;
+  availableCount: number | null;
   recommendation: RentalRecommendation | null;
 };
 
@@ -132,6 +132,7 @@ export type RentalProductDetailData = {
 };
 
 export type CreateRentalQuoteInput = {
+  tripId: string;
   bookingId: string;
   recipientParticipantId?: string;
   items: Array<{

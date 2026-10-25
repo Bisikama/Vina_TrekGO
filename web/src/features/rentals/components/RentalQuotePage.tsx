@@ -199,6 +199,7 @@ export function RentalQuotePage({
 
     try {
       const result = await createRentalQuote({
+        tripId: data.eligibility.trip.id,
         bookingId: data.eligibility.bookingId,
         recipientParticipantId:
           recipientId || undefined,

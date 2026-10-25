@@ -59,7 +59,7 @@ async function bootstrap() {
   })
   app.useWebSocketAdapter(new WebsocketAdapter(app))
 
-  await app.listen(envConfig.PORT)
+  await app.listen(envConfig.PORT, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${envConfig.PORT}`)
   console.log(`Swagger UI is available at: http://localhost:${envConfig.PORT}/docs`)
 }

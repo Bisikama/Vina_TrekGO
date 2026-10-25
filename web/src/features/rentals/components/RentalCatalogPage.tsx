@@ -273,7 +273,9 @@ function ProductCard({
 }) {
   const router = useRouter();
   const imageUrl = item.imageUrls[0];
-  const available = item.availableCount > 0;
+  const availabilityKnown = item.availableCount !== null;
+  const available =
+    item.availableCount === null || item.availableCount > 0;
   const [trailEffectKey, setTrailEffectKey] = useState(0);
   const navigationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -345,14 +347,18 @@ function ProductCard({
 
         <span
           className={`absolute bottom-3 right-3 rounded-full px-3 py-1 text-[11px] font-bold shadow-sm ${
-            available
-              ? "bg-emerald-600 text-white"
-              : "bg-gray-700 text-white"
+            !availabilityKnown
+              ? "bg-sky-700 text-white"
+              : available
+                ? "bg-emerald-600 text-white"
+                : "bg-gray-700 text-white"
           }`}
         >
-          {available
-            ? `Còn ${item.availableCount}`
-            : "Tạm hết"}
+          {!availabilityKnown
+            ? "Kiểm tra tồn kho"
+            : available
+              ? `Còn ${item.availableCount}`
+              : "Tạm hết"}
         </span>
       </Link>
 
