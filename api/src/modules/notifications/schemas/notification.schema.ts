@@ -20,6 +20,9 @@ export enum NotificationType {
   BOOKING_HOLD_EXPIRED = 'BOOKING_HOLD_EXPIRED',
   BOOKING_CANCELLED = 'BOOKING_CANCELLED',
   PRIVATE_TRIP_INVITE = 'PRIVATE_TRIP_INVITE',
+  PUBLIC_PARTICIPANT_INVITE = 'PUBLIC_PARTICIPANT_INVITE',
+  PUBLIC_PARTICIPANT_CLAIMED = 'PUBLIC_PARTICIPANT_CLAIMED',
+  PRIVATE_TRIP_MEMBER_JOINED = 'PRIVATE_TRIP_MEMBER_JOINED',
   TRIP_UPCOMING_REMINDER = 'TRIP_UPCOMING_REMINDER',
 
   // 3. Rental (Thuê đồ)
@@ -54,6 +57,8 @@ export enum ReferenceType {
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
 })
 export class Notification {
+  @Prop({ type: String, required: false })
+  deliveryKey?: string
   @Prop({ required: true, type: String })
   userId: string
 
@@ -100,4 +105,11 @@ NotificationSchema.index({ referenceType: 1, referenceId: 1 })
 
 // Index idempotency để worker kiểm tra sự kiện đã xử lý hay chưa
 NotificationSchema.index({ 'metadata.outboxEventId': 1 })
-
+NotificationSchema.index(
+  { deliveryKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { deliveryKey: { $type: 'string' } },
+    name: 'notification_delivery_key_unique',
+  },
+)

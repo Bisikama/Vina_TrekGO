@@ -104,7 +104,9 @@ export const ApiTicket = (kind: keyof typeof schemas) =>
       status: 200,
       schema: schemas[kind],
       description:
-        'Personal projection. Active tickets expose checkinCode for QR check-in; historical/cancelled tickets return null.',
+        kind === 'history'
+          ? 'Deduplicated terminal Public trips linked to the current account; historical permissions never grant operational access. No QR or payment data.'
+          : 'Personal projection. Active tickets expose checkinCode for QR check-in; historical/cancelled tickets return null. canNavigate is scoped to this participant entitlement; Rental integration remains pending.',
       headers: { 'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } } },
     }),
     ...[400, 401, 403, 404, ...(kind === 'claim' ? [409] : []), 500].map((status) =>

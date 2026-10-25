@@ -17,6 +17,8 @@ import { Reflector } from '@nestjs/core'
 import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { TicketsController } from './tickets.controller'
+import { InvitationInboxController } from './invitation-inbox.controller'
+import { InvitationInboxService } from './invitation-inbox.service'
 import { TicketsService } from './tickets.service'
 import { ParticipantClaimService } from './participant-claim.service'
 import { BookingCancellationService } from './booking-cancellation.service'
@@ -27,6 +29,15 @@ import { AuthenticationGuard } from '../../shared/guards/authentication.guard'
 import { AccessTokenGuard } from '../../shared/guards/access-token.guard'
 import { ApiKeyGuard } from '../../shared/guards/api-key.guard'
 import { GlobalErrorFilter } from '../../shared/errors'
+import { TripNavigationController } from '../trips/presentation/controllers/trip-navigation.controller'
+import { GetNavigationContextUseCase } from '../trips/application/use-cases/get-navigation-context.use-case'
+import { SwitchTrailUseCase } from '../trips/application/use-cases/switch-trail.use-case'
+import { NavigationContextPort } from '../trips/application/port/navigation-context.port'
+import { PrismaNavigationContextAdapter } from '../trips/infrastructure/adapters/prisma-navigation-context.adapter'
+import { TripHistoryController } from '../trips/presentation/controllers/trip-history.controller'
+import { TripHistoryUseCase } from '../trips/application/use-cases/trip-history.use-case'
+import { TripHistoryPort } from '../trips/application/trip-history.port'
+import { PrismaTripHistoryAdapter } from '../trips/infrastructure/adapters/prisma-trip-history.adapter'
 
 const url = process.env.PUBLIC_CLAIM_TEST_DATABASE_URL
 if (url) {
@@ -40,7 +51,6 @@ if (url) {
 }
 const suite = url ? describe : describe.skip
 suite('M5 real PostgreSQL and HTTP contract', () => {
-
   const db = new PrismaClient({ datasourceUrl: url })
   const claims = new ParticipantClaimService(db as unknown as PrismaService)
   const tickets = new TicketsService(db as unknown as PrismaService)
@@ -131,8 +141,22 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
       .send(body)
   beforeAll(async () => {
     const m = await Test.createTestingModule({
-      controllers: [TicketsController, PublicInvitationsController, BookingsController, LeaderCheckinController],
+      controllers: [
+        TicketsController,
+        InvitationInboxController,
+        PublicInvitationsController,
+        BookingsController,
+        LeaderCheckinController,
+        TripNavigationController,
+        TripHistoryController,
+      ],
       providers: [
+        InvitationInboxService,
+        GetNavigationContextUseCase,
+        SwitchTrailUseCase,
+        TripHistoryUseCase,
+        { provide: NavigationContextPort, useClass: PrismaNavigationContextAdapter },
+        { provide: TripHistoryPort, useClass: PrismaTripHistoryAdapter },
         PublicInvitationsService,
         {
           provide: BookingsService,
@@ -200,7 +224,14 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
       .expect(200)
     expect(list.body.total).toBe(1)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    const m5m6Paths = Object.keys(doc.paths).filter((k) => !k.startsWith('/leader/'))
+    const m5m6Paths = Object.keys(doc.paths).filter(
+      (k) =>
+        k !== '/me/invitations' &&
+        !k.startsWith('/leader/') &&
+        !k.endsWith('/history') &&
+        !k.endsWith('/navigation-context') &&
+        !k.endsWith('/switch-trail'),
+    )
     expect(m5m6Paths).toHaveLength(13)
     const ajv = new Ajv({ strict: false, nullable: true })
     for (const [path, method, body] of [
@@ -416,6 +447,235 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     request(app.getHttpServer()).get(`/booking-participant-invitations/${id}`).auth(actor, { type: 'bearer' })
   const buyerDetail = (f: Awaited<ReturnType<typeof fixture>>) =>
     new BookingsService(db as unknown as PrismaService, {} as BookingPolicyService).detail(f.booking.id, f.buyer.id)
+
+  const nav = (tripId: string, actor: string) =>
+    request(app.getHttpServer()).get(`/trips/${tripId}/navigation-context`).auth(actor, { type: 'bearer' })
+  const history = (actor: string, query = '') =>
+    request(app.getHttpServer()).get(`/me/public-trip-participations/history${query}`).auth(actor, { type: 'bearer' })
+
+  it('M8 unified inbox uses a recipient-scoped keyset across types and microsecond ties', async () => {
+    const f = await fixture()
+    const sent = await invite(f).expect(201)
+    const privateTrip = await db.trip.create({ data: { ...f.trip, id: randomUUID(), tripType: 'PRIVATE' } })
+    const privateInvite = await db.privateTripMemberInvitation.create({
+      data: {
+        tripId: privateTrip.id,
+        senderUserId: f.buyer.id,
+        recipientUserId: f.other.id,
+        recipientEmailSnapshot: f.other.email,
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    })
+    await db.$executeRaw`UPDATE booking_participant_invitations SET created_at='2026-10-25T00:00:00.123456Z'::timestamptz WHERE id=${sent.body.id}::uuid`
+    await db.$executeRaw`UPDATE private_trip_member_invitations SET created_at='2026-10-25T00:00:00.123456Z'::timestamptz WHERE id=${privateInvite.id}::uuid`
+    const get = (actor: string, query = '') =>
+      request(app.getHttpServer())
+        .get('/me/invitations' + query)
+        .auth(actor, { type: 'bearer' })
+    const first = await get(f.other.id, '?limit=1').expect(200)
+    expect(first.headers['cache-control']).toBe('no-store')
+    expect(first.body).toMatchObject({
+      hasMore: true,
+      items: [{ id: sent.body.id, type: 'PUBLIC', previewRequired: true }],
+    })
+    expect(first.body.items[0].createdAt).toBe('2026-10-25T00:00:00.123456Z')
+    // A new item at the head between requests must not repeat or shift the next page.
+    await db.privateTripMemberInvitation.create({
+      data: {
+        tripId: privateTrip.id,
+        senderUserId: f.buyer.id,
+        recipientUserId: f.other.id,
+        recipientEmailSnapshot: f.other.email,
+        status: 'REVOKED',
+        expiresAt: new Date(),
+        createdAt: new Date('2026-10-26'),
+      },
+    })
+    const cursor = encodeURIComponent(first.body.nextCursor)
+    const second = await get(f.other.id, '?limit=1&cursor=' + cursor).expect(200)
+    expect(second.body).toMatchObject({
+      hasMore: false,
+      nextCursor: null,
+      items: [{ id: privateInvite.id, type: 'PRIVATE' }],
+    })
+    expect((await get(f.other.id, '?type=PUBLIC').expect(200)).body.items).toHaveLength(1)
+    expect((await get(f.buyer.id).expect(200)).body.items).toHaveLength(0)
+    for (const query of [
+      '?limit=51',
+      '?cursor=invalid',
+      '?status=PENDING',
+      '?userId=' + f.other.id,
+      '?limit=1&type=PUBLIC&cursor=' + cursor,
+      '?limit=2&cursor=' + cursor,
+    ]) {
+      const error = await get(f.other.id, query).expect(400)
+      expect(error.body.error.code).toBe('VALIDATION_ERROR')
+      expect(error.body.meta.requestId).toBeDefined()
+    }
+    await get(f.buyer.id, '?limit=1&cursor=' + cursor).expect(400)
+    await request(app.getHttpServer()).get('/me/invitations').expect(401)
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'STAFF_DELIVERY' } })
+    await get(f.other.id).expect(403)
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'LEADER' } })
+    await get(f.other.id).expect(200)
+    for (const secret of [f.other.email, 'PRIVATE_PHONE', 'PRIVATE_ID', 'checkinCode', 'bookingId', 'recipientUserId'])
+      expect(JSON.stringify(first.body)).not.toContain(secret)
+    const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
+    const schema = (doc.paths['/me/invitations']!.get!.responses['200'] as any).content['application/json'].schema
+    const validate = new Ajv({ strict: false, nullable: true }).compile(schema)
+    expect({ valid: validate(first.body), errors: validate.errors }).toEqual({ valid: true, errors: null })
+    if (process.env.M8_CAPTURE_EXAMPLES === 'true')
+      writeFileSync(
+        'contracts/invitation-inbox/examples.local.json',
+        JSON.stringify({ firstPage: first.body, nextPage: second.body }, null, 2) + '\n',
+      )
+  })
+
+  it('M7 grants navigation only after accept without granting booking ownership or trail mutation', async () => {
+    const f = await fixture()
+    const denied = await nav(f.trip.id, f.other.id).expect(403)
+    expect(denied.body).toMatchObject({ statusCode: 403, code: 'FORBIDDEN' })
+    const sent = await invite(f).expect(201)
+    await action(sent.body.id, f.other.id).expect(200)
+    const context = await nav(f.trip.id, f.other.id).expect(200)
+    expect(context.body.accessSource).toBe('PUBLIC_PARTICIPANT')
+    expect(context.headers['cache-control']).toBe('no-store')
+    expect((await tickets.detail(f.other.id, f.p.id)).permissions.canNavigate).toBe(true)
+    expect((await preview(sent.body.id, f.buyer.id).expect(200)).body.currentAccess.canNavigate).toBe(false)
+    await request(app.getHttpServer()).get(`/bookings/${f.booking.id}`).auth(f.other.id, { type: 'bearer' }).expect(404)
+    await request(app.getHttpServer())
+      .post(`/trips/${f.trip.id}/switch-trail`)
+      .auth(f.other.id, { type: 'bearer' })
+      .send({ toPlanId: randomUUID() })
+      .expect(403)
+    await nav(f.trip.id, (await user()).id).expect(403)
+    for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', 'checkinCode', 'totalAmount', f.booking.id])
+      expect(JSON.stringify(context.body)).not.toContain(secret)
+    const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
+    const schema = (doc.paths['/trips/{tripId}/navigation-context']!.get!.responses['200'] as any).content[
+      'application/json'
+    ].schema
+    const validate = new Ajv({ strict: false, nullable: true }).compile(schema)
+    expect({ valid: validate(context.body), errors: validate.errors }).toEqual({ valid: true, errors: null })
+    if (process.env.M7_CAPTURE_EXAMPLES === 'true')
+      writeFileSync(
+        'contracts/public-participation/navigation.local.json',
+        JSON.stringify(context.body, null, 2) + '\n',
+      )
+  })
+
+  it('M7 revokes linked access for each invalid participant, booking and trip state', async () => {
+    const f = await fixture()
+    await db.bookingParticipant.update({ where: { id: f.p.id }, data: { userId: f.other.id } })
+    for (const status of ['OPEN', 'FULL', 'CLOSED', 'IN_PROGRESS'] as const) {
+      await db.trip.update({ where: { id: f.trip.id }, data: { status } })
+      await nav(f.trip.id, f.other.id).expect(200)
+    }
+    for (const status of ['DRAFT', 'CANCEL_PENDING', 'COMPLETED', 'CANCELLED', 'INTERRUPTED'] as const) {
+      await db.trip.update({ where: { id: f.trip.id }, data: { status } })
+      await nav(f.trip.id, f.other.id).expect(403)
+      expect((await tickets.detail(f.other.id, f.p.id)).permissions.canNavigate).toBe(false)
+    }
+    await db.trip.update({ where: { id: f.trip.id }, data: { status: 'OPEN' } })
+    for (const status of ['CANCELLED', 'EXPIRED', 'COMPLETED'] as const) {
+      await db.booking.update({ where: { id: f.booking.id }, data: { status } })
+      await nav(f.trip.id, f.other.id).expect(403)
+    }
+    for (const status of ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'] as const) {
+      await db.booking.update({ where: { id: f.booking.id }, data: { status } })
+      await nav(f.trip.id, f.other.id).expect(200)
+    }
+    for (const status of ['CANCELLED', 'NO_SHOW'] as const) {
+      await db.bookingParticipant.update({ where: { id: f.p.id }, data: { status } })
+      await nav(f.trip.id, f.other.id).expect(403)
+    }
+    await db.bookingParticipant.update({ where: { id: f.p.id }, data: { status: 'ACTIVE' } })
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'LEADER' } })
+    await nav(f.trip.id, f.other.id).expect(200)
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'STAFF_DELIVERY' } })
+    await nav(f.trip.id, f.other.id).expect(403)
+    await history(f.other.id).expect(403)
+    await db.user.update({ where: { id: f.other.id }, data: { role: 'USER', status: 'SUSPENDED' } })
+    await nav(f.trip.id, f.other.id).expect(403)
+    await history(f.other.id).expect(403)
+  })
+
+  it('M7 preserves legacy buyer, manager, admin and Private member access without backfilling identity', async () => {
+    const f = await fixture(),
+      manager = await user(),
+      admin = await user()
+    await db.user.update({ where: { id: admin.id }, data: { role: 'ADMIN' } })
+    await db.trip.update({ where: { id: f.trip.id }, data: { creatorId: manager.id, leaderId: manager.id } })
+    expect((await nav(f.trip.id, f.buyer.id).expect(200)).body.accessSource).toBe('BOOKING_BUYER')
+    expect((await nav(f.trip.id, manager.id).expect(200)).body.accessSource).toBe('TRIP_MANAGER')
+    expect((await nav(f.trip.id, admin.id).expect(200)).body.accessSource).toBe('ADMIN')
+    expect((await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })).userId).toBeNull()
+    await db.booking.update({ where: { id: f.booking.id }, data: { status: 'CANCELLED' } })
+    await nav(f.trip.id, f.buyer.id).expect(403)
+    // A historical cancelled buyer booking cannot shadow a valid participant in another booking.
+    const second = await db.booking.create({
+      data: { ...f.booking, id: randomUUID(), status: 'CONFIRMED', userId: manager.id },
+    })
+    await db.bookingParticipant.create({
+      data: { bookingId: second.id, fullName: 'Linked buyer', userId: f.buyer.id, checkinCode: randomUUID() },
+    })
+    expect((await nav(f.trip.id, f.buyer.id).expect(200)).body.accessSource).toBe('PUBLIC_PARTICIPANT')
+    await db.trip.update({ where: { id: f.trip.id }, data: { tripType: 'PRIVATE' } })
+    await nav(f.trip.id, f.buyer.id).expect(403)
+    await db.tripMember.create({ data: { tripId: f.trip.id, userId: f.other.id } })
+    expect((await nav(f.trip.id, f.other.id).expect(200)).body.accessSource).toBe('PRIVATE_MEMBER')
+  })
+
+  it('M7 deduplicates linked history, keeps cancelled/no-show links and preserves buyer history', async () => {
+    const f = await fixture()
+    await db.bookingParticipant.update({ where: { id: f.p.id }, data: { userId: f.other.id, status: 'CANCELLED' } })
+    await db.bookingParticipant.update({ where: { id: f.sibling.id }, data: { userId: f.other.id, status: 'NO_SHOW' } })
+    await db.booking.update({ where: { id: f.booking.id }, data: { status: 'CANCELLED', confirmedAt: new Date() } })
+    expect((await history(f.other.id).expect(200)).body.total).toBe(0)
+    for (const status of ['COMPLETED', 'CANCELLED', 'INTERRUPTED'] as const) {
+      await db.trip.update({ where: { id: f.trip.id }, data: { status } })
+      const result = await history(f.other.id).expect(200)
+      expect(result.body).toMatchObject({
+        total: 1,
+        totalPages: 1,
+        items: [
+          {
+            id: f.trip.id,
+            participationSource: 'PUBLIC_PARTICIPANT',
+            permissions: { canNavigate: false, canRent: false, canCheckIn: false, reason: 'HISTORICAL_ONLY' },
+          },
+        ],
+      })
+      expect(result.headers['cache-control']).toBe('no-store')
+      for (const secret of ['checkinCode', 'PRIVATE_PHONE', 'PRIVATE_ID', 'totalAmount', f.booking.id])
+        expect(JSON.stringify(result.body)).not.toContain(secret)
+    }
+    expect((await history(f.buyer.id).expect(200)).body.total).toBe(0)
+    const oldHistory = (actor: string) =>
+      request(app.getHttpServer()).get('/me/public-trips/history').auth(actor, { type: 'bearer' })
+    expect((await oldHistory(f.buyer.id).expect(200)).body.total).toBe(1)
+    expect((await oldHistory(f.other.id).expect(200)).body.total).toBe(0)
+    expect((await history(f.other.id, '?page=2&pageSize=1').expect(200)).body).toMatchObject({ total: 1, items: [] })
+    const invalid = await history(f.other.id, `?userId=${f.buyer.id}`).expect(400)
+    expect(invalid.body.error.code).toBeDefined()
+    expect(invalid.body.meta.requestId).toBeDefined()
+    await history(f.other.id, '?pageSize=51').expect(400)
+    await request(app.getHttpServer()).get('/me/public-trip-participations/history').expect(401)
+    const result = await history(f.other.id).expect(200)
+    const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
+    const schema = (doc.paths['/me/public-trip-participations/history']!.get!.responses['200'] as any).content[
+      'application/json'
+    ].schema
+    const validate = new Ajv({ strict: false, nullable: true }).compile(schema)
+    expect({ valid: validate(result.body), errors: validate.errors }).toEqual({ valid: true, errors: null })
+    if (process.env.M7_CAPTURE_EXAMPLES === 'true')
+      writeFileSync(
+        'contracts/public-participation/examples.local.json',
+        JSON.stringify({ history: result.body, validationError: invalid.body }, null, 2) + '\n',
+      )
+    await db.trip.update({ where: { id: f.trip.id }, data: { tripType: 'PRIVATE' } })
+    expect((await history(f.other.id).expect(200)).body.total).toBe(0)
+  })
 
   it('M6 sends once, previews safely, accepts concurrently once and validates the six HTTP contracts', async () => {
     const f = await fixture(),

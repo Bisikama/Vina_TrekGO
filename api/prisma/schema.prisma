@@ -1879,7 +1879,21 @@ model BookingCancellation {
   @@map("booking_cancellations")
 }
 
+model BookingNotificationReceipt {
+  eventId String @map("event_id") @db.Uuid
+  consumer String @db.VarChar(100)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError String? @map("last_error") @db.VarChar(100)
+  event BookingOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  @@id([eventId, consumer])
+  @@index([consumer, completedAt, nextAttemptAt], map: "booking_notification_retry_idx")
+  @@map("booking_notification_receipts")
+}
+
 model BookingOutboxEvent {
+  notificationReceipts BookingNotificationReceipt[]
   id               String      @id @default(uuid()) @db.Uuid
   /// Identity of an integration event; different from request idempotency_key
   deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
