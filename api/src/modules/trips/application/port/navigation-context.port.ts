@@ -7,6 +7,7 @@ export interface TripNavigationData {
   creatorId: string
   leaderId: string | null
   isMemberOrBooked: boolean
+  accessSource?: 'PUBLIC_PARTICIPANT' | 'BOOKING_BUYER' | 'PRIVATE_MEMBER' | null
   activeTrailPlanId: string | null
   trailPlans: Array<{
     id: string

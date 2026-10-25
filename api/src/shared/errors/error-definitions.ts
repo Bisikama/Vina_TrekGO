@@ -182,6 +182,31 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   },
   [B.INVALID_TRAIL_FOR_TRIP_TYPE]: { status: 422, message: 'Invalid trail or checkpoint context', retryable: false },
   [B.PRIVATE_TRIP_VERSION_CONFLICT]: { status: 409, message: 'Reload the trip before retrying', retryable: false },
+  [B.BOOKING_REGISTRATION_NOT_OPEN_YET]: {
+    status: 409,
+    message: 'Chuyến đi chưa đến thời gian mở đăng ký',
+    retryable: false,
+  },
+  [B.BOOKING_REGISTRATION_CLOSED]: {
+    status: 409,
+    message: 'Đã hết hạn đăng ký chuyến đi (đóng sổ trước khởi hành)',
+    retryable: false,
+  },
+  [B.BOOKING_TRIP_FULL]: {
+    status: 409,
+    message: 'Chuyến đi đã đủ số lượng người tối đa',
+    retryable: false,
+  },
+  [B.CHECKIN_TOKEN_INVALID]: {
+    status: 422,
+    message: 'Mã QR điểm danh không hợp lệ, đã được thay thế hoặc không thuộc chuyến đi này',
+    retryable: false,
+  },
+  [B.CHECKIN_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Không thể thực hiện điểm danh ở trạng thái chuyến đi hoặc đặt chỗ hiện tại',
+    retryable: false,
+  },
   // Common
   [COMMON_ERROR_CODES.VALIDATION_ERROR]: { status: 400, message: 'Validation failed', retryable: false },
   [COMMON_ERROR_CODES.UNAUTHENTICATED]: { status: 401, message: 'Unauthenticated access', retryable: false },

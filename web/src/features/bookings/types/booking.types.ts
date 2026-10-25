@@ -1,3 +1,9 @@
+export interface ParticipantActions {
+  canSelfClaim?: boolean;
+  canInvite?: boolean;
+  canRevoke?: boolean;
+}
+
 export interface Participant {
   id?: string;
   fullName: string;
@@ -5,6 +11,14 @@ export interface Participant {
   dateOfBirth?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
+  checkinStatus?: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'NO_SHOW';
+  checkinMethod?: 'QR' | 'MANUAL' | null;
+  checkedInAt?: string | null;
+  checkinCode?: string | null;
+  linkageStatus?: 'CLAIMED' | 'INVITATION_PENDING' | 'UNLINKED';
+  pendingInvitationId?: string | null;
+  recipientDisplay?: string | null;
+  actions?: ParticipantActions;
 }
 
 export interface PublicTripRoute {
@@ -27,6 +41,13 @@ export interface PublicBookingTrip {
   status: string;
   startAt: string;
   endAt: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
+  publishedAt?: string | null;
+  closedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   destination: {
     id: string;
     name: string;
@@ -52,7 +73,10 @@ export interface PublicBookingTrip {
   transport: { vehicleType: string }[];
 }
 
+export type PublicTrip = PublicBookingTrip;
 export type PaymentMethod = 'QR' | 'REDIRECT';
+
+
 export type PaymentGateway = 'momo' | 'vnpay';
 
 export interface Checkout {

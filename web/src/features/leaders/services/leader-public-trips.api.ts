@@ -16,6 +16,10 @@ import type {
   TripOptionItem,
   TripReadinessResult,
   UpdateLeaderPublicTripInput,
+  LeaderCheckinResult,
+  LeaderParticipantItem,
+  LeaderParticipantsResponse,
+  LeaderParticipantsSummary,
 } from "../types/leader-trips";
 
 /**
@@ -135,7 +139,7 @@ export async function getLeaderPublicTripDetail(
 
 /**
  * PATCH /api/v1/leader/public-trips/{id}
- * Cập nhật thông tin cơ bản của chuyến đi nháp
+ * Cập nhật thông tin cơ bản của chuyến đi nháp hoặc hạn mở/đóng form đăng ký
  */
 export async function updateLeaderPublicTrip(
   tripId: string,
@@ -237,6 +241,57 @@ export async function publishLeaderTrip(
 ): Promise<LeaderTripView> {
   const response = await apiClient.post<LeaderTripView>(
     `/api/v1/leader/public-trips/${tripId}/publish`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/close-registration
+ * Đóng form đăng ký sớm (chuyển sang CLOSED, ghi nhận closedAt)
+ */
+export async function closeLeaderTripRegistration(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/close-registration`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/start
+ * Bắt đầu xuất phát chuyến đi (chuyển sang IN_PROGRESS, ghi nhận startedAt)
+ */
+export async function startLeaderTrip(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/start`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/complete
+ * Hoàn thành chuyến đi (chuyển sang COMPLETED, ghi nhận completedAt)
+ */
+export async function completeLeaderTrip(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/complete`,
     input,
     { signal }
   );
@@ -364,6 +419,64 @@ export async function getLeaderSystemTrailOption(
   const response = await apiClient.get<LeaderTrailDetail>(
     `/api/v1/leader/trip-options/system-trails/${trailId}`,
     { signal }
+  );
+  return response.data;
+}
+
+// ==========================================
+// 3. CF01 LEADER CHECK-IN APIS
+// ==========================================
+
+/**
+ * GET /api/v1/leader/public-trips/{id}/participants
+ * Lấy danh sách thành viên và tóm tắt tiến độ điểm danh của chuyến đi
+ */
+export async function getLeaderTripParticipants(
+  tripId: string,
+  params?: {
+    page?: number;
+    pageSize?: number;
+    checkinStatus?: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'NO_SHOW';
+    search?: string;
+  },
+  signal?: AbortSignal
+): Promise<LeaderParticipantsResponse> {
+  const response = await apiClient.get<LeaderParticipantsResponse>(
+    `/api/v1/leader/public-trips/${tripId}/participants`,
+    { params, signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/participants/{participantId}/checkin
+ * Điểm danh hoặc báo vắng mặt cho một thành viên cụ thể (thủ công)
+ */
+export async function manualCheckinParticipant(
+  tripId: string,
+  participantId: string,
+  checkinStatus: 'CHECKED_IN' | 'NO_SHOW' = 'CHECKED_IN'
+): Promise<LeaderCheckinResult> {
+  const response = await apiClient.post<LeaderCheckinResult>(
+    `/api/v1/leader/public-trips/${tripId}/participants/${participantId}/checkin`,
+    { checkinStatus }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/checkin
+ * Điểm danh bằng mã QR hoặc thủ công
+ */
+export async function checkinLeaderTripParticipant(
+  tripId: string,
+  input:
+    | { checkinCode: string; method?: 'QR' }
+    | { participantId: string; method: 'MANUAL'; checkinStatus?: 'CHECKED_IN' | 'NO_SHOW' }
+): Promise<LeaderCheckinResult> {
+  const response = await apiClient.post<LeaderCheckinResult>(
+    `/api/v1/leader/public-trips/${tripId}/checkin`,
+    input
   );
   return response.data;
 }

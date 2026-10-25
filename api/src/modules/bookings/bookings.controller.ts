@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common'
+import { ApiBookingLinkage } from './public-invitations.swagger'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiQuery, ApiSecurity, ApiTags } from '@nestjs/swagger'
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 import { z } from 'zod'
@@ -78,6 +79,7 @@ export class BookingsController {
     return this.bookings.list(userId, query)
   }
   @Get('bookings/:id')
+  @ApiBookingLinkage()
   @ApiOperation({ summary: 'Get own booking detail', description: 'Includes payment and refunds. After cancellation, poll this endpoint for refunds[].refundId and status; refund creation is asynchronous.' })
   detail(@Param('id', new ZodValidationPipe(bookingIdSchema)) id: string, @ActiveUser('id') userId: string) {
     return this.bookings.detail(id, userId)

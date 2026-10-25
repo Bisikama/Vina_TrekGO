@@ -10,6 +10,8 @@ import { BookingPaymentConsumer } from './booking-payment.consumer'
 import { BookingsController, BookingRentalContextController } from './bookings.controller'
 import { BookingsService } from './bookings.service'
 import { BookingDiscoveryController, BookingDiscoveryService } from './booking-discovery.controller'
+import { LeaderCheckinController } from './leader-checkin.controller'
+import { LeaderCheckinService } from './leader-checkin.service'
 
 @Module({
   controllers: [
@@ -19,6 +21,7 @@ import { BookingDiscoveryController, BookingDiscoveryService } from './booking-d
     BookingRentalContextController,
     BookingDiscoveryController,
     BookingPolicyController,
+    LeaderCheckinController,
   ],
   providers: [
     PublicInvitationsService,
@@ -29,7 +32,8 @@ import { BookingDiscoveryController, BookingDiscoveryService } from './booking-d
     BookingsService,
     BookingDiscoveryService,
     BookingPolicyService,
+    LeaderCheckinService,
   ],
-  exports: [BookingPaymentConsumer, BookingsService],
+  exports: [BookingPaymentConsumer, BookingsService, LeaderCheckinService],
 })
 export class BookingsModule {}

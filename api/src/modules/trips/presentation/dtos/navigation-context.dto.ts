@@ -59,6 +59,14 @@ export const navigationContextResponseSchema = z.object({
   tripId: z.string().regex(UUID_REGEX, { message: 'tripId phải là UUID hợp lệ' }),
   title: z.string(),
   tripStatus: z.nativeEnum(TripStatus), // <-- Enum Prisma
+  accessSource: z.enum([
+    'ADMIN',
+    'TRIP_MANAGER',
+    'PUBLIC_PARTICIPANT',
+    'BOOKING_BUYER',
+    'PRIVATE_MEMBER',
+    'LEGACY_MEMBERSHIP',
+  ]),
   activeTrail: activeTrailSchema.nullable(),
   plannedTrails: z.array(plannedTrailSchema),
   requiredCheckpoints: z.array(requiredCheckpointSchema),

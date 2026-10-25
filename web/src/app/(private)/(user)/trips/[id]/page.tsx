@@ -152,6 +152,15 @@ export default function TripDetailPage() {
           rawData.systemTrailId ||
           null;
 
+        const statusMap: Record<string, { label: string; color: string }> = {
+          OPEN: { label: "Đang mở đăng ký", color: "text-emerald-600" },
+          FULL: { label: "Đã đủ người", color: "text-amber-600" },
+          CLOSED: { label: "Đã đóng form đăng ký", color: "text-stone-600" },
+          IN_PROGRESS: { label: "Đang khởi hành", color: "text-sky-600" },
+          COMPLETED: { label: "Đã hoàn thành", color: "text-slate-600" },
+          CANCELLED: { label: "Đã hủy chuyến", color: "text-red-600" },
+        };
+
         if (!cancelled) {
           setTrailCode(sysTrailId);
           setTrip({
@@ -176,15 +185,14 @@ export default function TripDetailPage() {
               rawStart: rawData.startAt,
               rawEnd: rawData.endAt,
             },
-            status: {
-              label:
-                rawData.status === "OPEN"
-                  ? "Đang mở đăng ký"
-                  : rawData.status === "FULL"
-                  ? "Đã đủ người"
-                  : rawData.status,
-              color: rawData.status === "OPEN" ? "text-emerald-600" : "text-amber-600",
+            status: statusMap[rawData.status] || {
+              label: rawData.status || "Đang mở đăng ký",
+              color: "text-amber-600",
             },
+            rawStatus: rawData.status,
+            registrationOpenAt: rawData.registrationOpenAt || rawData.publishedAt || null,
+            registrationDeadlineAt: rawData.registrationDeadlineAt || null,
+            closedAt: rawData.closedAt || null,
             leader: {
               name: rawData.leader?.fullName || "Leader Vina TrekGO",
               avatar: "/images/avatars/avatar-1.png",
@@ -208,8 +216,8 @@ export default function TripDetailPage() {
             costItems: costItems.length > 0 ? costItems : (rawData.costItems || []),
             priceExplanation: priceExplanation || rawData.priceExplanation || null,
             action: {
-              label: remainingSlots > 0 ? "Đặt chỗ ngay" : "Hết chỗ",
-              variant: remainingSlots > 0 ? "primary" : "disabled",
+              label: remainingSlots > 0 && rawData.status === "OPEN" ? "Đặt chỗ ngay" : "Đóng đăng ký",
+              variant: remainingSlots > 0 && rawData.status === "OPEN" ? "primary" : "disabled",
             },
           });
         }

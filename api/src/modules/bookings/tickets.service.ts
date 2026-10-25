@@ -12,11 +12,15 @@ type Ticket = Prisma.BookingParticipantGetPayload<{ include: typeof include }>
 export class TicketsService {
   constructor(private readonly db: PrismaService) {}
   private view(row: Ticket) {
+    const permissions = ticketAccess(row, row.booking, row.booking.trip)
     return {
       id: row.id,
       participantName: row.fullName,
       participantStatus: row.status,
       checkinStatus: row.checkinStatus,
+      checkinMethod: row.checkinMethod ?? null,
+      checkedInAt: row.checkedInAt?.toISOString() ?? null,
+      checkinCode: permissions.participantActive ? row.checkinCode : null,
       trip: {
         id: row.booking.trip.id,
         title: row.booking.trip.title,
@@ -26,7 +30,7 @@ export class TicketsService {
         destination: row.booking.trip.destination,
       },
       bookingStatus: row.booking.status,
-      permissions: ticketAccess(row, row.booking, row.booking.trip),
+      permissions,
     }
   }
   async list(userId: string, page: number, pageSize: number) {
@@ -43,6 +47,48 @@ export class TicketsService {
           take: pageSize,
         })
         return { items: rows.map((r) => this.view(r)), page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    )
+  }
+  async participationHistory(userId: string, page: number, pageSize: number) {
+    return this.db.$transaction(
+      async (tx) => {
+        await assertTicketActor(tx, userId)
+        const where: Prisma.TripWhereInput = {
+          tripType: 'PUBLIC',
+          status: { in: ['COMPLETED', 'CANCELLED', 'INTERRUPTED'] },
+          bookingsViaTripId: { some: { bookingParticipantsViaBookingId: { some: { userId } } } },
+        }
+        const total = await tx.trip.count({ where })
+        const trips = await tx.trip.findMany({
+          where,
+          select: {
+            id: true,
+            tripType: true,
+            title: true,
+            status: true,
+            startAt: true,
+            endAt: true,
+            completedAt: true,
+            cancelledAt: true,
+            destination: { select: { id: true, name: true } },
+          },
+          orderBy: [{ startAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        })
+        return {
+          items: trips.map((trip) => ({
+            ...trip,
+            participationSource: 'PUBLIC_PARTICIPANT' as const,
+            permissions: { canNavigate: false, canRent: false, canCheckIn: false, reason: 'HISTORICAL_ONLY' },
+          })),
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     )

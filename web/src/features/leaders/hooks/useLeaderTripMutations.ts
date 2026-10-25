@@ -3,11 +3,14 @@
 import { useState } from "react";
 import {
   cancelLeaderTripRequest,
+  closeLeaderTripRegistration,
+  completeLeaderTrip,
   createLeaderPublicTrip,
   getLeaderTripErrorMessage,
   publishLeaderTrip,
   setLeaderTripCheckpoints,
   setLeaderTripTrails,
+  startLeaderTrip,
   updateLeaderPublicTrip,
 } from "../services/leader-public-trips.api";
 import type {
@@ -140,6 +143,75 @@ export function useLeaderTripMutations() {
   };
 
   /**
+   * Đóng form đăng ký sớm (OPEN / FULL -> CLOSED)
+   */
+  const closeRegistration = async (
+    tripId: string,
+    input: PublishTripInput
+  ): Promise<LeaderTripView> => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      return await closeLeaderTripRegistration(tripId, input);
+    } catch (err: unknown) {
+      const msg = getLeaderTripErrorMessage(
+        err,
+        "Không thể đóng form đăng ký."
+      );
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Bắt đầu hành trình (OPEN / FULL / CLOSED -> IN_PROGRESS)
+   */
+  const startTrip = async (
+    tripId: string,
+    input: PublishTripInput
+  ): Promise<LeaderTripView> => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      return await startLeaderTrip(tripId, input);
+    } catch (err: unknown) {
+      const msg = getLeaderTripErrorMessage(
+        err,
+        "Không thể bắt đầu chuyến đi."
+      );
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Hoàn thành hành trình (IN_PROGRESS -> COMPLETED)
+   */
+  const completeTrip = async (
+    tripId: string,
+    input: PublishTripInput
+  ): Promise<LeaderTripView> => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      return await completeLeaderTrip(tripId, input);
+    } catch (err: unknown) {
+      const msg = getLeaderTripErrorMessage(
+        err,
+        "Không thể hoàn thành chuyến đi."
+      );
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
    * Gửi yêu cầu hủy chuyến đi
    */
   const cancelTrip = async (
@@ -172,6 +244,9 @@ export function useLeaderTripMutations() {
     setCheckpoints,
     setTrails,
     publishTrip,
+    closeRegistration,
+    startTrip,
+    completeTrip,
     cancelTrip,
   };
 }
