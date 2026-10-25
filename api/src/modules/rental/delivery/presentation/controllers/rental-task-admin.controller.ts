@@ -101,7 +101,7 @@ export class RentalTaskAdminController {
   }
 
   @Get('staff/rental-assignees')
-  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY, UserRole.ADMIN)
   @ApiOperation({
     summary: 'RB-API-412 — Danh sách nhân viên có thể nhận task',
     description:

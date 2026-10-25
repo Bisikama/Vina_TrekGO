@@ -10,9 +10,10 @@ export const UpdateRentalProductSchema = z.object({
     amount: z.number().min(0).optional(),
     percentage: z.number().min(0).max(100).optional(),
   }).optional(),
-  imageMediaIds: z.array(z.string()).optional(),
+  imageMediaIds: z.array(z.string().uuid()).optional(),
   spec: z.any().optional(),
   recommendationTags: z.array(z.string()).optional(),
+  requiresDeepInspectionAfterReturn: z.boolean().optional(),
   expectedVersion: z.number().int().min(1),
 });
 

@@ -1,0 +1,219 @@
+[
+  {
+    "name": "create for decline",
+    "method": "POST",
+    "path": "/private-trips/{{tripId}}/member-invitations",
+    "actor": "host",
+    "key": true,
+    "newKey": true,
+    "body": {
+      "recipientEmail": "{{recipientEmail}}"
+    },
+    "status": 201,
+    "capture": {
+      "invitationId": "id"
+    },
+    "expect": {
+      "status": "PENDING",
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "host list",
+    "method": "GET",
+    "path": "/private-trips/{{tripId}}/member-invitations?page=1&pageSize=20",
+    "actor": "host",
+    "status": 200
+  },
+  {
+    "name": "recipient list",
+    "method": "GET",
+    "path": "/me/private-trip-member-invitations?page=1&pageSize=20",
+    "actor": "recipient",
+    "status": 200
+  },
+  {
+    "name": "preview",
+    "method": "GET",
+    "path": "/private-trip-member-invitations/{{invitationId}}",
+    "actor": "recipient",
+    "status": 200,
+    "expect": {
+      "actions.canAccept": true
+    }
+  },
+  {
+    "name": "decline",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/decline",
+    "actor": "recipient",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "status": "DECLINED"
+    }
+  },
+  {
+    "name": "decline replay",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/decline",
+    "actor": "recipient",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "status": "DECLINED"
+    }
+  },
+  {
+    "name": "create for revoke",
+    "method": "POST",
+    "path": "/private-trips/{{tripId}}/member-invitations",
+    "actor": "host",
+    "key": true,
+    "newKey": true,
+    "body": {
+      "recipientEmail": "{{recipientEmail}}"
+    },
+    "status": 201,
+    "capture": {
+      "invitationId": "id"
+    },
+    "expect": {
+      "status": "PENDING",
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "revoke",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/revoke",
+    "actor": "host",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "status": "REVOKED"
+    }
+  },
+  {
+    "name": "revoke replay",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/revoke",
+    "actor": "host",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "status": "REVOKED"
+    }
+  },
+  {
+    "name": "create short expiry",
+    "method": "POST",
+    "path": "/private-trips/{{tripId}}/member-invitations",
+    "actor": "host",
+    "key": true,
+    "newKey": true,
+    "body": {
+      "recipientEmail": "{{recipientEmail}}",
+      "expiresAt": "{{expiresAt}}"
+    },
+    "status": 201,
+    "capture": {
+      "invitationId": "id"
+    },
+    "expect": {
+      "status": "PENDING",
+      "reservesCapacity": false
+    },
+    "expireSoon": true
+  },
+  {
+    "waitMs": 2300
+  },
+  {
+    "name": "expired accept",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/accept",
+    "actor": "recipient",
+    "body": {},
+    "status": 410,
+    "expect": {
+      "error.code": "INVITE_EXPIRED"
+    }
+  },
+  {
+    "name": "create for accept",
+    "method": "POST",
+    "path": "/private-trips/{{tripId}}/member-invitations",
+    "actor": "host",
+    "key": true,
+    "newKey": true,
+    "body": {
+      "recipientEmail": "{{recipientEmail}}"
+    },
+    "status": 201,
+    "capture": {
+      "invitationId": "id"
+    },
+    "expect": {
+      "status": "PENDING",
+      "reservesCapacity": false
+    }
+  },
+  {
+    "name": "create replay",
+    "method": "POST",
+    "path": "/private-trips/{{tripId}}/member-invitations",
+    "actor": "host",
+    "key": true,
+    "newKey": false,
+    "body": {
+      "recipientEmail": "{{recipientEmail}}"
+    },
+    "status": 201,
+    "capture": {
+      "invitationId": "id"
+    },
+    "expect": {
+      "status": "PENDING",
+      "reservesCapacity": false
+    },
+    "headers": {
+      "idempotency-replayed": "true"
+    }
+  },
+  {
+    "name": "accept",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/accept",
+    "actor": "recipient",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "invitationStatus": "ACCEPTED",
+      "canEnterRoom": true
+    }
+  },
+  {
+    "name": "accept replay",
+    "method": "POST",
+    "path": "/private-trip-member-invitations/{{invitationId}}/accept",
+    "actor": "recipient",
+    "body": {},
+    "status": 200,
+    "expect": {
+      "invitationStatus": "ACCEPTED",
+      "canEnterRoom": true,
+      "alreadyMember": true
+    }
+  },
+  {
+    "name": "room",
+    "method": "GET",
+    "path": "/private-trips/{{tripId}}/room",
+    "actor": "recipient",
+    "status": 200,
+    "expect": {
+      "viewer.membershipStatus": "ACTIVE"
+    }
+  }
+]

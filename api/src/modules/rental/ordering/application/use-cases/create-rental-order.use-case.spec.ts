@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import type { RentalOrderPort } from '../ports/rental-order.port';
 import { CreateRentalOrderUseCase } from './create-rental-order.use-case';
 
@@ -27,7 +27,6 @@ describe('CreateRentalOrderUseCase', () => {
       }),
       listOrders: jest.fn(),
       getOrder: jest.fn(),
-      createOrReusePayment: jest.fn(),
       getPayment: jest.fn(),
       previewCancellation: jest.fn(),
       cancelOrder: jest.fn(),

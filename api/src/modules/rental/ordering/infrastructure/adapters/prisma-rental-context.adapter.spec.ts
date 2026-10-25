@@ -79,10 +79,11 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
         findUnique: jest.fn(),
       },
       booking: {
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       bookingParticipant: {
-        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 
@@ -181,65 +182,9 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 3: PUBLIC BOOKING OWNER (CONFIRMED)
+  // TEST CASE 3: PUBLIC BOOKING PARTICIPANT (CONFIRMED)
   // ---------------------------------------------------------------------------
-  it('Test Case 3 (Public Booking Owner): User đặt vé Public Trip với trạng thái CONFIRMED -> eligible = true, bookingId có giá trị', async () => {
-    const tripId = 'trip-public-uuid';
-    const bookerUserId = 'booker-user-uuid';
-
-    prismaMock.trip.findUnique.mockResolvedValue({
-      id: tripId,
-      title: 'Tour Chinh Phục Fansipan (Public)',
-      status: 'OPEN',
-      tripType: 'PUBLIC',
-      startAt: new Date('2026-10-10T06:00:00Z'),
-      endAt: new Date('2026-10-12T18:00:00Z'),
-      version: 1,
-      pickupPointId: mockPickupPoint.id,
-      pickupPoint: mockPickupPoint,
-      leaderId: 'other-leader-uuid',
-      leader: { id: 'other-leader-uuid', fullName: 'Lê Leader', phone: '0905555555' },
-      tripTransportsViaTripId: [mockTransport],
-      tripTrailPlansViaTripId: [{ snapshotDifficulty: 'HARD' }],
-      weatherSnapshotsViaTripId: [],
-    });
-
-    prismaMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-confirmed-uuid',
-      tripId,
-      userId: bookerUserId,
-      status: 'CONFIRMED',
-      version: 2,
-      pickupPoint: mockPickupPoint,
-      returnPoint: mockReturnPoint,
-      user: { fullName: 'Phạm Khách Đặt Vé', phone: '0908888888' },
-      bookingParticipantsViaBookingId: [
-        {
-          id: 'participant-friend-uuid',
-          userId: 'friend-user-uuid',
-          fullName: 'Vũ Bạn Đi Cùng',
-          phone: '0907777777',
-          status: 'ACTIVE',
-        },
-      ],
-    });
-
-    const context = await adapter.getByTripId(tripId, bookerUserId, now);
-
-    expect(context).not.toBeNull();
-    expect(context?.rentalEligible).toBe(true);
-    expect(context?.bookingId).toBe('booking-confirmed-uuid');
-    expect(context?.membershipRef).toBe('booking-confirmed-uuid');
-    expect(context?.membershipStatus).toBe('ACTIVE');
-    expect(context?.recipientOptions).toHaveLength(2);
-    expect(context?.recipientOptions[0].displayName).toBe('Phạm Khách Đặt Vé');
-    expect(context?.recipientOptions[1].displayName).toBe('Vũ Bạn Đi Cùng');
-  });
-
-  // ---------------------------------------------------------------------------
-  // TEST CASE 4: PUBLIC BOOKING PARTICIPANT (CONFIRMED)
-  // ---------------------------------------------------------------------------
-  it('Test Case 4 (Public Participant): User là khách đi cùng trong đơn CONFIRMED -> eligible = true', async () => {
+  it('Test Case 3 (Public Participant): User có BookingParticipant trong đơn CONFIRMED -> eligible = true, membershipRef là participantId', async () => {
     const tripId = 'trip-public-uuid';
     const participantUserId = 'participant-user-uuid';
 
@@ -260,45 +205,95 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       weatherSnapshotsViaTripId: [],
     });
 
-    // User is NOT the booking owner
-    prismaMock.booking.findFirst.mockResolvedValue(null);
-
-    // User IS a participant in a confirmed booking
-    prismaMock.bookingParticipant.findFirst.mockResolvedValue({
-      id: 'participant-uuid-002',
-      bookingId: 'booking-parent-uuid',
-      userId: participantUserId,
-      fullName: 'Hoàng Người Đi Cùng',
-      phone: '0903333333',
-      status: 'ACTIVE',
-      user: { fullName: 'Hoàng Người Đi Cùng', phone: '0903333333' },
-      booking: {
-        id: 'booking-parent-uuid',
-        tripId,
-        status: 'CONFIRMED',
-        version: 1,
-        pickupPoint: mockPickupPoint,
-        returnPoint: mockReturnPoint,
+    prismaMock.bookingParticipant.findMany.mockResolvedValue([
+      {
+        id: 'participant-uuid-002',
+        bookingId: 'booking-confirmed-uuid',
+        userId: participantUserId,
+        fullName: 'Phạm Khách Tham Gia',
+        phone: '0908888888',
+        status: 'ACTIVE',
+        user: { fullName: 'Phạm Khách Tham Gia', phone: '0908888888' },
+        booking: {
+          id: 'booking-confirmed-uuid',
+          tripId,
+          userId: participantUserId,
+          status: 'CONFIRMED',
+          version: 2,
+          pickupPoint: mockPickupPoint,
+          returnPoint: mockReturnPoint,
+        },
       },
-    });
+    ]);
 
     const context = await adapter.getByTripId(tripId, participantUserId, now);
 
     expect(context).not.toBeNull();
     expect(context?.rentalEligible).toBe(true);
-    expect(context?.bookingId).toBe('booking-parent-uuid');
+    expect(context?.bookingId).toBe('booking-confirmed-uuid');
     expect(context?.membershipRef).toBe('participant-uuid-002');
+    expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.membershipRole).toBe('PARTICIPANT');
     expect(context?.recipientOptions).toHaveLength(1);
-    expect(context?.recipientOptions[0].displayName).toBe('Hoàng Người Đi Cùng');
+    expect(context?.recipientOptions[0].displayName).toBe('Phạm Khách Tham Gia');
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 5: PUBLIC BOOKING UNPAID OR CANCELLED
+  // TEST CASE 3B: PUBLIC BOOKING OWNER WITHOUT PARTICIPANT
   // ---------------------------------------------------------------------------
-  it('Test Case 5 (Public Booking Unpaid/Cancelled): Booking ở trạng thái PENDING_PAYMENT -> eligible = false', async () => {
+  it('Test Case 3B (Booker not a participant): Chủ Booking CONFIRMED được thuê theo chính sách đã chọn', async () => {
     const tripId = 'trip-public-uuid';
-    const bookerUserId = 'booker-unpaid-uuid';
+    const bookerUserId = 'booker-not-participant-uuid';
+
+    prismaMock.trip.findUnique.mockResolvedValue({
+      id: tripId,
+      title: 'Tour Chinh Phục Fansipan (Public)',
+      status: 'OPEN',
+      tripType: 'PUBLIC',
+      startAt: new Date('2026-10-10T06:00:00Z'),
+      endAt: new Date('2026-10-12T18:00:00Z'),
+      version: 1,
+      pickupPointId: mockPickupPoint.id,
+      pickupPoint: mockPickupPoint,
+      leaderId: 'other-leader-uuid',
+      leader: { id: 'other-leader-uuid', fullName: 'Lê Leader', phone: '0905555555' },
+      tripTransportsViaTripId: [mockTransport],
+      tripTrailPlansViaTripId: [{ snapshotDifficulty: 'HARD' }],
+      weatherSnapshotsViaTripId: [],
+    });
+
+    // Booker has no participant row
+    prismaMock.bookingParticipant.findMany.mockResolvedValue([]);
+
+    // But booker has a booking row
+    prismaMock.booking.findFirst.mockResolvedValue({
+      id: 'booking-confirmed-uuid',
+      tripId,
+      userId: bookerUserId,
+      status: 'CONFIRMED',
+      version: 1,
+      pickupPoint: mockPickupPoint,
+      returnPoint: mockReturnPoint,
+      user: { fullName: 'Khách Đặt Hộ', phone: '0901234567' },
+    });
+
+    const context = await adapter.getByTripId(tripId, bookerUserId, now);
+
+    expect(context).not.toBeNull();
+    expect(context?.rentalEligible).toBe(true);
+    expect(context?.membershipRef).toBe('booking-confirmed-uuid');
+    expect(context?.membershipRole).toBe('BOOKER');
+    expect(context?.recipientOptions).toEqual([
+      expect.objectContaining({ memberId: 'booking-confirmed-uuid', userId: bookerUserId, status: 'ACTIVE' }),
+    ]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // TEST CASE 4: PUBLIC BOOKING UNPAID OR CANCELLED
+  // ---------------------------------------------------------------------------
+  it('Test Case 4 (Public Participant Unpaid): Participant thuộc đơn PENDING_PAYMENT -> eligible = false', async () => {
+    const tripId = 'trip-public-uuid';
+    const participantUserId = 'participant-unpaid-uuid';
 
     prismaMock.trip.findUnique.mockResolvedValue({
       id: tripId,
@@ -317,23 +312,28 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       weatherSnapshotsViaTripId: [],
     });
 
-    // First query for CONFIRMED returns null
-    // Second query returns the PENDING_PAYMENT booking
-    prismaMock.booking.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'booking-unpaid-uuid',
-        tripId,
-        userId: bookerUserId,
-        status: 'PENDING_PAYMENT',
-        version: 1,
-        pickupPoint: mockPickupPoint,
-        returnPoint: mockReturnPoint,
+    prismaMock.bookingParticipant.findMany.mockResolvedValue([
+      {
+        id: 'participant-unpaid-part-uuid',
+        bookingId: 'booking-unpaid-uuid',
+        userId: participantUserId,
+        fullName: 'Khách Chưa Thanh Toán',
+        phone: '0904444444',
+        status: 'ACTIVE',
         user: { fullName: 'Khách Chưa Thanh Toán', phone: '0904444444' },
-        bookingParticipantsViaBookingId: [],
-      });
+        booking: {
+          id: 'booking-unpaid-uuid',
+          tripId,
+          userId: participantUserId,
+          status: 'PENDING_PAYMENT',
+          version: 1,
+          pickupPoint: mockPickupPoint,
+          returnPoint: mockReturnPoint,
+        },
+      },
+    ]);
 
-    const context = await adapter.getByTripId(tripId, bookerUserId, now);
+    const context = await adapter.getByTripId(tripId, participantUserId, now);
 
     expect(context).not.toBeNull();
     expect(context?.rentalEligible).toBe(false);

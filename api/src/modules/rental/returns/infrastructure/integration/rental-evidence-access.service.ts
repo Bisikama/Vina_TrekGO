@@ -1,3 +1,4 @@
+import envconfig from 'src/shared/config';
 import { createHmac,timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { MediaStatus, RentalExceptionCaseStatus, Prisma } from '@prisma/client';
@@ -11,7 +12,7 @@ export interface MediaAccessAttestation { caseId:string; userId:string; publishe
 export class RentalEvidenceAccessService {
  constructor(private readonly db:PrismaService) {}
  async confirm(request:MediaAccessAttestation,signature:string) {
-  const secret=process.env.RENTAL_MEDIA_ACCESS_ATTESTATION_SECRET;
+  const secret=envconfig.RENTAL_MEDIA_ACCESS_ATTESTATION_SECRET ?? process.env.RENTAL_MEDIA_ACCESS_ATTESTATION_SECRET;
   if (!secret || !signature || !/^[a-f0-9]{64}$/i.test(signature)) throw new Error('MEDIA_ACCESS_ATTESTATION_NOT_AUTHENTICATED');
   const raw=JSON.stringify([request.caseId,request.userId,request.publishedAt,[...request.mediaIds].sort(),request.requestId]);
   const expected=createHmac('sha256',secret).update(raw).digest();

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import { WeatherRiskLevel } from '@prisma/client'
 import { GetTripWeatherUseCase } from './get-trip-weather.use-case'

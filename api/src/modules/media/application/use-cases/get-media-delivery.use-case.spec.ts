@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+ 
 import { Test, TestingModule } from '@nestjs/testing';
 import { GetMediaDeliveryUseCase } from './get-media-delivery.use-case';
 import { MEDIA_ASSET_PORT } from '../ports/media-asset.port';

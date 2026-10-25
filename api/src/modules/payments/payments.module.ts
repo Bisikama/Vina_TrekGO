@@ -29,6 +29,9 @@ import { RentalPaymentsController } from '../rental/payments/rental-payments.con
 import { RentalExtensionPaymentsController } from '../rental/payments/rental-extension-payments.controller'
 import { RentalDepositWorker } from '../rental/payments/rental-deposit.worker'
 import { RentalRefundsService } from './rental-refunds.service'
+import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
+import { PaymentHistoryService } from './payment-history.service'
+import { UserTransactionsController } from './user-transactions.controller'
 
 @Module({
   imports: [BookingsModule],
@@ -44,9 +47,11 @@ import { RentalRefundsService } from './rental-refunds.service'
     TrailPurchaseController,
     RentalPaymentsController,
     RentalExtensionPaymentsController,
+    UserTransactionsController,
   ],
   providers: [
     RefundsService,
+    SandboxRefundSimulationService,
     RentalRefundsService,
     RentalCheckoutService,
     RentalPaymentConsumer,
@@ -55,6 +60,7 @@ import { RentalRefundsService } from './rental-refunds.service'
     PurchaseTrailUseCase,
     ApplyTrailPaymentUseCase,
     PaymentRecoveryService,
+    PaymentHistoryService,
     { provide: PaymentsPort, useClass: SharedPaymentsPort },
     BookingCancellationService,
     PaymentsService,
@@ -78,6 +84,6 @@ import { RentalRefundsService } from './rental-refunds.service'
       },
     },
   ],
-  exports: [PaymentsService, PaymentsPort],
+  exports: [PaymentsService, PaymentsPort, PaymentHistoryService],
 })
 export class PaymentsModule {}

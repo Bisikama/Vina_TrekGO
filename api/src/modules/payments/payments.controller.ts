@@ -7,8 +7,14 @@ import { AuthType } from '../../shared/constants/auth.constant'
 import { ActiveUser } from '../../shared/decorators/active-user.decorator'
 import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
 import { AppError } from '../../shared/errors'
+import { ApiErrorResponse } from '../../shared/swagger/api-error-response.helper'
 import { PaymentsService } from './payments.service'
 import type { PaymentMethod } from './payment-provider.port'
+import {
+  PAYMENT_CHECKOUT_RESPONSE_SCHEMA,
+  PAYMENT_OPTIONS_RESPONSE_SCHEMA,
+  PAYMENT_PENDING_RESPONSE_SCHEMA,
+} from './payment-swagger.schemas'
 
 const bodySchema = z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()
 const keySchema = z
@@ -26,6 +32,7 @@ export class PaymentsController {
 
   @Post(':id/payments')
   @ApiOperation({
+    operationId: 'createBookingPayment',
     summary: 'Tạo phiên thanh toán cho đơn đặt chỗ chuyến đi',
     description:
       'Khởi tạo phiên thanh toán cho đơn đặt chỗ (Booking) ở trạng thái PENDING_PAYMENT. ' +
@@ -40,7 +47,7 @@ export class PaymentsController {
     example: '550e8400-e29b-41d4-a716-446655440001',
   })
   @ApiHeader({
-    name: 'idempotency-key',
+    name: 'Idempotency-Key',
     required: true,
     description: 'Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)',
     example: 'pay-book-20261014-abc123',
@@ -67,9 +74,21 @@ export class PaymentsController {
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Tạo phiên thanh toán thành công — trả về checkout.url/checkout.qrData' })
-  @ApiResponse({ status: 202, description: 'Payment recorded but checkout is not available yet; reconciliation required. Retry with the same idempotency key.' })
-  @ApiResponse({ status: 200, description: 'Phiên thanh toán đã tồn tại và còn hiệu lực (idempotent)' })
+  @ApiResponse({
+    status: 201,
+    description: 'Tạo phiên thanh toán thành công — trả về checkout.url/checkout.qrData',
+    schema: PAYMENT_CHECKOUT_RESPONSE_SCHEMA,
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Đã ghi nhận payment nhưng chưa có checkout; retry đúng cùng Idempotency-Key hoặc poll trạng thái',
+    schema: PAYMENT_PENDING_RESPONSE_SCHEMA,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Phiên thanh toán đã tồn tại và còn hiệu lực (idempotent)',
+    schema: PAYMENT_CHECKOUT_RESPONSE_SCHEMA,
+  })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc paymentMethod sai' })
   @ApiResponse({ status: 401, description: 'Chưa xác thực — token không hợp lệ' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy đơn đặt chỗ' })
@@ -97,6 +116,18 @@ export class PaymentsController {
 export class PaymentOptionsController {
   constructor(private readonly payments: PaymentsService) {}
   @Get('options')
-  @ApiOperation({ summary: 'List enabled payment gateways and default gateway' })
+  @ApiOperation({
+    operationId: 'getPaymentOptions',
+    summary: 'Danh sách cổng và phương thức thanh toán đang bật',
+    description: `
+Dùng API này trước khi hiển thị lựa chọn thanh toán.
+
+- defaultGateway: cổng mặc định; có thể là null nếu không có cổng MoMo/VNPay mặc định.
+- gateways: các cổng hiện được backend cấu hình, môi trường chạy và phương thức hỗ trợ.
+- FE không nên hard-code gateway đang bật.
+`,
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách payment gateway khả dụng', schema: PAYMENT_OPTIONS_RESPONSE_SCHEMA })
+  @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHENTICATED', 'Token không hợp lệ hoặc đã hết hạn')
   options() { return this.payments.paymentOptions() }
 }

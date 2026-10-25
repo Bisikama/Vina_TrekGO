@@ -8,7 +8,7 @@ import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { bookingIdSchema, tripSearchSchema } from './booking.dto'
 import type { TripSearch } from './booking.dto'
-import { occupiedSeats } from './booking-capacity'
+import { effectiveRegistrationDeadline, effectiveRegistrationOpen, occupiedSeats } from './booking-capacity'
 
 const include = {
   destination: { select: { id: true, name: true } },
@@ -24,39 +24,77 @@ const include = {
     select: { id: true, name: true, sequence: true, isRequired: true },
   },
   tripTransportsViaTripId: { where: { status: { not: 'CANCELLED' as const } }, select: { vehicleType: true } },
+  tripCostPlanViaTripId: {
+    select: {
+      items: {
+        where: { isEnabled: true },
+        orderBy: { sortOrder: 'asc' as const },
+        select: { nameSnapshot: true, includedInPrice: true, sourceNote: true },
+      },
+    },
+  },
 } satisfies Prisma.TripInclude
 
 @Injectable()
 export class BookingDiscoveryService {
   constructor(private readonly db: PrismaService) {}
   private async project(trip: Prisma.TripGetPayload<{ include: typeof include }>) {
+    const costItems = trip.tripCostPlanViaTripId?.items ?? []
+    const includedServices = costItems.filter((i) => i.includedInPrice).map((i) => i.nameSnapshot)
+    const excludedServices = costItems
+      .filter((i) => !i.includedInPrice)
+      .map((i) => (i.sourceNote?.trim() ? `${i.nameSnapshot} (${i.sourceNote.trim()})` : i.nameSnapshot))
+
+    const now = new Date()
+    const openAt = effectiveRegistrationOpen(trip)
+    const deadlineAt = effectiveRegistrationDeadline(trip)
+    const remainingSlots = Math.max(0, trip.maxPax - (await occupiedSeats(this.db, trip.id, now)))
+    const isPastDeadline = now >= deadlineAt
+    const effectiveStatus =
+      isPastDeadline && ['OPEN', 'FULL'].includes(trip.status)
+        ? 'CLOSED'
+        : remainingSlots === 0 && trip.status === 'OPEN'
+          ? 'FULL'
+          : trip.status
+
     return {
       id: trip.id,
       title: trip.title,
       description: trip.description,
-      status: trip.status,
+      status: effectiveStatus,
       startAt: trip.startAt,
       endAt: trip.endAt,
+      registrationOpenAt: openAt,
+      registrationDeadlineAt: deadlineAt,
+      publishedAt: trip.publishedAt,
+      closedAt: trip.closedAt ?? (effectiveStatus === 'CLOSED' ? deadlineAt : null),
+      startedAt: trip.startedAt,
+      completedAt: trip.completedAt,
+      cancelledAt: trip.cancelledAt,
       destination: trip.destination,
       leader: trip.leader,
       pricePerPax: trip.pricePerPax?.toFixed() ?? null,
       currency: 'VND',
+      minPax: trip.minPax,
       capacity: trip.maxPax,
-      remainingSlots: Math.max(0, trip.maxPax - (await occupiedSeats(this.db, trip.id, new Date()))),
+      remainingSlots,
       pickup: trip.pickupPoint,
       routes: trip.tripTrailPlansViaTripId,
       checkpoints: trip.tripCheckpointsViaTripId,
       transportAvailable: trip.tripTransportsViaTripId.length > 0,
       transport: trip.tripTransportsViaTripId,
+      includedServices,
+      excludedServices,
     }
   }
   async list(query: TripSearch) {
+    const now = new Date()
     const where: Prisma.TripWhereInput = {
       tripType: 'PUBLIC',
-      status: 'OPEN',
+      status: { in: ['OPEN', 'FULL', 'CLOSED'] },
       publishedAt: { not: null },
       startAt: {
-        gt: new Date(),
+        gt: now,
         ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
         ...(query.dateTo ? { lt: new Date(new Date(query.dateTo).getTime() + 86_400_000) } : {}),
       },
@@ -86,7 +124,7 @@ export class BookingDiscoveryService {
       where: {
         id,
         tripType: 'PUBLIC',
-        status: { in: ['OPEN', 'FULL'] },
+        status: { in: ['OPEN', 'FULL', 'CLOSED'] },
         publishedAt: { not: null },
         startAt: { gt: new Date() },
       },

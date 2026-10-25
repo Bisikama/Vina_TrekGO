@@ -19,6 +19,16 @@ export class AuthenticationGuard implements CanActivate {
       [AuthType.Bearer]: this.accessTokenGuard,
       [AuthType.ApiKey]: this.apiKeyGuard,
       [AuthType.None]: { canActivate: () => true },
+      [AuthType.Optional]: {
+        canActivate: async (ctx: ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest()
+          const authHeader = req.headers?.authorization
+          if (!authHeader) {
+            return true
+          }
+          return this.accessTokenGuard.canActivate(ctx)
+        },
+      },
     }
   }
   async canActivate(context: ExecutionContext): Promise<boolean> {

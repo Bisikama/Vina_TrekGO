@@ -15,6 +15,8 @@ import { CreateRentalProductUseCase } from './application/use-cases/create-renta
 import { UpdateRentalProductUseCase } from './application/use-cases/update-rental-product.use-case';
 import { PrismaRentalProductAdapter } from './infrastructure/adapters/prisma-rental-product.adapter';
 import { RENTAL_PRODUCT_PORT } from './application/ports/rental-product.port';
+import { RentalPolicyAdminController } from './presentation/controllers/rental-policy-admin.controller';
+import { RentalPolicyAdminService } from './application/services/rental-policy-admin.service';
 
 @Module({
   imports: [SharedModule],
@@ -22,6 +24,7 @@ import { RENTAL_PRODUCT_PORT } from './application/ports/rental-product.port';
     RentalCategoryController,
     RentalProductController,
     StaffRentalProductController,
+    RentalPolicyAdminController,
   ],
   providers: [
     ListRentalCategoriesUseCase,
@@ -31,6 +34,7 @@ import { RENTAL_PRODUCT_PORT } from './application/ports/rental-product.port';
     ChangeRentalProductStatusUseCase,
     CreateRentalProductUseCase,
     UpdateRentalProductUseCase,
+    RentalPolicyAdminService,
     {
       provide: RENTAL_CATEGORY_PORT,
       useClass: PrismaRentalCategoryAdapter,

@@ -5,7 +5,12 @@ import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { PaymentMethod, PaymentProvider, ProviderResult } from './payment-provider.port'
 import { paymentRecoveryConfig, providerCall, trailCheckoutTtlSeconds } from './payment-utils'
-import { RentalCheckoutService, RentalCheckoutCommand } from '../rental/payments/rental-checkout.service'
+import {
+  RentalCheckoutService,
+  RentalCheckoutCommand,
+  RentalExtensionCheckoutCommand,
+} from '../rental/payments/rental-checkout.service'
+import { paymentReturnPath } from './payment-return-path'
 
 // PostgreSQL JSONB does not preserve object key order.
 const hash = (value: unknown) =>
@@ -39,16 +44,14 @@ export class PaymentsService {
     private readonly rental: RentalCheckoutService,
   ) {}
 
-  async createRentalExtensionCheckout(input: {
-    extensionId: string
-    actorUserId: string
-    idempotencyKey: string
-    paymentMethod: PaymentMethod
-    gateway?: 'momo' | 'vnpay'
-    clientIp?: string
-  }) {
+  async createRentalExtensionCheckout(input: RentalExtensionCheckoutCommand) {
     const provider = this.checkoutProvider(input.gateway)
-    return this.submit(await this.rental.reserveExtension(input, provider.scope), input.paymentMethod, 'RENTAL', input.clientIp)
+    return this.submit(
+      await this.rental.reserveExtension(input, provider.scope),
+      input.paymentMethod,
+      'RENTAL',
+      input.clientIp,
+    )
   }
   async createRentalCheckout(input: RentalCheckoutCommand) {
     const provider = this.checkoutProvider(input.gateway)
@@ -68,8 +71,78 @@ export class PaymentsService {
   }
 
   paymentOptions() {
-    return { gateways: this.provider.scopes.filter((scope) => ['momo', 'vnpay'].includes(scope.gateway))
-      .map((scope) => ({ gateway: scope.gateway, environment: scope.environment })) }
+    const gateways = this.provider.scopes
+      .filter((scope) => ['momo', 'vnpay'].includes(scope.gateway))
+      .map((scope) => ({
+        gateway: scope.gateway,
+        environment: scope.environment,
+        methods: ['QR', 'REDIRECT'] as PaymentMethod[],
+      }))
+
+    return {
+      defaultGateway: gateways.some((item) => item.gateway === this.provider.scope.gateway)
+        ? this.provider.scope.gateway
+        : null,
+      gateways,
+    }
+  }
+
+  async getRentalExtensionPayment(input: { extensionId: string; actorUserId: string }) {
+    const extension = await this.db.rentalExtensionRequest.findUnique({
+      where: { id: input.extensionId },
+      select: {
+        id: true,
+        orderId: true,
+        userId: true,
+        status: true,
+        invoiceId: true,
+        paymentRef: true,
+        additionalFee: true,
+        currency: true,
+        holdExpiresAt: true,
+      },
+    })
+    if (!extension || extension.userId !== input.actorUserId) fail(E.PAYMENT_NOT_FOUND)
+
+    const invoice = extension.invoiceId
+      ? await this.db.invoice.findUnique({
+          where: { id: extension.invoiceId },
+          select: { id: true, status: true, invoiceType: true, rentalOrderId: true, userId: true },
+        })
+      : null
+    if (
+      invoice &&
+      (invoice.invoiceType !== 'RENTAL' ||
+        invoice.rentalOrderId !== extension.orderId ||
+        invoice.userId !== input.actorUserId)
+    )
+      fail(E.PAYMENT_INVALID_STATE)
+    const payment = extension.paymentRef
+      ? await this.db.payment.findFirst({
+          where: { id: extension.paymentRef, invoiceId: extension.invoiceId ?? undefined },
+          include: { application: true },
+        })
+      : null
+    if (extension.paymentRef && !payment) fail(E.PAYMENT_INVALID_STATE)
+
+    return {
+      extensionId: extension.id,
+      rentalOrderId: extension.orderId,
+      extensionStatus: extension.status,
+      invoiceStatus: invoice?.status ?? null,
+      paymentRef: payment?.id ?? null,
+      paymentStatus: payment?.status ?? 'NOT_STARTED',
+      applicationStatus: payment?.application?.status ?? null,
+      applicationReasonCode: payment?.application?.reasonCode ?? null,
+      reconciliationStatus: payment?.reconcileStatus ?? null,
+      reconciliationRequired: payment
+        ? ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(payment.reconcileStatus)
+        : false,
+      amount: payment?.amount.toFixed(0) ?? extension.additionalFee.toFixed(0),
+      currency: payment?.currency ?? extension.currency,
+      expiresAt: payment?.expiresAt?.toISOString() ?? extension.holdExpiresAt?.toISOString() ?? null,
+      paidAt: payment?.paidAt?.toISOString() ?? null,
+    }
   }
 
   async createCheckout(input: InvoiceCheckoutCommand) {
@@ -206,15 +279,8 @@ export class PaymentsService {
     const payment = reserved.payment
     let result: ProviderResult
     const requestSnapshot = (payment.gatewayPayload as Prisma.JsonObject)?.requestSnapshot as
-      | Record<string, unknown>
-      | undefined
-    const rawBookingId = requestSnapshot?.bookingId
-    const bookingIdParam =
-      typeof rawBookingId === 'string'
-        ? rawBookingId
-        : typeof rawBookingId === 'number'
-          ? rawBookingId.toString()
-          : ''
+      Record<string, unknown> | undefined
+    const returnPath = paymentReturnPath(requestSnapshot)
     try {
       result = await providerCall(() =>
         this.provider.createPayment({
@@ -227,11 +293,7 @@ export class PaymentsService {
           paymentMethod,
           expiresAt: payment.expiresAt!,
           clientIp,
-          ...(invoiceType === 'BOOKING'
-            ? {
-                returnPath: `/payment-return?bookingId=${bookingIdParam}`,
-              }
-            : {}),
+          ...(returnPath ? { returnPath } : {}),
         }),
       )
     } catch {
@@ -302,7 +364,7 @@ export class PaymentsService {
           if (
             booking.status !== 'PENDING_PAYMENT' ||
             booking.trip.tripType !== 'PUBLIC' ||
-            !['OPEN', 'FULL'].includes(booking.trip.status) ||
+            !['OPEN', 'FULL', 'CLOSED'].includes(booking.trip.status) ||
             booking.trip.startAt <= now
           )
             fail(E.PAYMENT_INVALID_STATE)

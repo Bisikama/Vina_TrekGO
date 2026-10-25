@@ -1,0 +1,5431 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/bookings/{id}/participants/{pid}/invitations": {
+      "post": {
+        "description": "Expiry is clamped to requested time, DB now + TTL (default 7 days), and startAt minus one second. Create replay returns the original snapshot: refetch preview for current state.",
+        "operationId": "PublicInvitationsController_create",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[!-~]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "recipientEmail": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  }
+                },
+                "required": [
+                  "recipientEmail"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "participantId",
+                    "status",
+                    "reason",
+                    "version",
+                    "expiresAt",
+                    "createdAt",
+                    "recipientDisplay"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "participantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACCEPTED",
+                        "DECLINED",
+                        "REVOKED",
+                        "EXPIRED",
+                        "INVALIDATED"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "recipientDisplay": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buyer invites an existing ACTIVE USER or LEADER to claim a paid participant",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/me/booking-participant-invitations": {
+      "get": {
+        "operationId": "PublicInvitationsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING",
+                "ACCEPTED",
+                "DECLINED",
+                "REVOKED",
+                "EXPIRED",
+                "INVALIDATED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "page",
+                    "pageSize",
+                    "total",
+                    "totalPages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "participantId",
+                          "status",
+                          "reason",
+                          "version",
+                          "expiresAt",
+                          "createdAt",
+                          "recipientDisplay",
+                          "senderDisplay",
+                          "participantName",
+                          "participantStatus",
+                          "checkinStatus",
+                          "bookingStatus",
+                          "trip",
+                          "actions",
+                          "ticketId",
+                          "currentAccess"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "participantId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING",
+                              "ACCEPTED",
+                              "DECLINED",
+                              "REVOKED",
+                              "EXPIRED",
+                              "INVALIDATED"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "recipientDisplay": {
+                            "type": "string"
+                          },
+                          "senderDisplay": {
+                            "type": "string"
+                          },
+                          "participantName": {
+                            "type": "string"
+                          },
+                          "participantStatus": {
+                            "type": "string"
+                          },
+                          "checkinStatus": {
+                            "type": "string"
+                          },
+                          "bookingStatus": {
+                            "type": "string"
+                          },
+                          "trip": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "title",
+                              "status",
+                              "startAt",
+                              "endAt",
+                              "destination"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "startAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "endAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "destination": {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "name"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "actions": {
+                            "type": "object",
+                            "required": [
+                              "canAccept",
+                              "canDecline",
+                              "canRevoke"
+                            ],
+                            "properties": {
+                              "canAccept": {
+                                "type": "boolean"
+                              },
+                              "canDecline": {
+                                "type": "boolean"
+                              },
+                              "canRevoke": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          "ticketId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "currentAccess": {
+                            "type": "object",
+                            "required": [
+                              "participantActive",
+                              "canNavigate",
+                              "canRent",
+                              "canCheckIn",
+                              "reason"
+                            ],
+                            "properties": {
+                              "participantActive": {
+                                "type": "boolean"
+                              },
+                              "canNavigate": {
+                                "type": "boolean",
+                                "enum": [
+                                  false
+                                ]
+                              },
+                              "canRent": {
+                                "type": "boolean",
+                                "enum": [
+                                  false
+                                ]
+                              },
+                              "canCheckIn": {
+                                "type": "boolean",
+                                "enum": [
+                                  false
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "INTEGRATION_NOT_VERIFIED"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recipient invitation history, filtered by effective status before pagination",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/booking-participant-invitations/{id}": {
+      "get": {
+        "operationId": "PublicInvitationsController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "participantId",
+                    "status",
+                    "reason",
+                    "version",
+                    "expiresAt",
+                    "createdAt",
+                    "recipientDisplay",
+                    "senderDisplay",
+                    "participantName",
+                    "participantStatus",
+                    "checkinStatus",
+                    "bookingStatus",
+                    "trip",
+                    "actions",
+                    "ticketId",
+                    "currentAccess"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "participantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACCEPTED",
+                        "DECLINED",
+                        "REVOKED",
+                        "EXPIRED",
+                        "INVALIDATED"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "recipientDisplay": {
+                      "type": "string"
+                    },
+                    "senderDisplay": {
+                      "type": "string"
+                    },
+                    "participantName": {
+                      "type": "string"
+                    },
+                    "participantStatus": {
+                      "type": "string"
+                    },
+                    "checkinStatus": {
+                      "type": "string"
+                    },
+                    "bookingStatus": {
+                      "type": "string"
+                    },
+                    "trip": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "startAt",
+                        "endAt",
+                        "destination"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "destination": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "actions": {
+                      "type": "object",
+                      "required": [
+                        "canAccept",
+                        "canDecline",
+                        "canRevoke"
+                      ],
+                      "properties": {
+                        "canAccept": {
+                          "type": "boolean"
+                        },
+                        "canDecline": {
+                          "type": "boolean"
+                        },
+                        "canRevoke": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "ticketId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "currentAccess": {
+                      "type": "object",
+                      "required": [
+                        "participantActive",
+                        "canNavigate",
+                        "canRent",
+                        "canCheckIn",
+                        "reason"
+                      ],
+                      "properties": {
+                        "participantActive": {
+                          "type": "boolean"
+                        },
+                        "canNavigate": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canRent": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canCheckIn": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "INTEGRATION_NOT_VERIFIED"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Minimal preview for recipient or current buyer; no payment, contact or QR",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/booking-participant-invitations/{id}/accept": {
+      "post": {
+        "operationId": "PublicInvitationsController_accept",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "confirmParticipantIdentity": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "confirmParticipantIdentity"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "participantId",
+                    "status",
+                    "reason",
+                    "version",
+                    "expiresAt",
+                    "createdAt",
+                    "recipientDisplay",
+                    "senderDisplay",
+                    "participantName",
+                    "participantStatus",
+                    "checkinStatus",
+                    "bookingStatus",
+                    "trip",
+                    "actions",
+                    "ticketId",
+                    "currentAccess"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "participantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACCEPTED",
+                        "DECLINED",
+                        "REVOKED",
+                        "EXPIRED",
+                        "INVALIDATED"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "recipientDisplay": {
+                      "type": "string"
+                    },
+                    "senderDisplay": {
+                      "type": "string"
+                    },
+                    "participantName": {
+                      "type": "string"
+                    },
+                    "participantStatus": {
+                      "type": "string"
+                    },
+                    "checkinStatus": {
+                      "type": "string"
+                    },
+                    "bookingStatus": {
+                      "type": "string"
+                    },
+                    "trip": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "startAt",
+                        "endAt",
+                        "destination"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "destination": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "actions": {
+                      "type": "object",
+                      "required": [
+                        "canAccept",
+                        "canDecline",
+                        "canRevoke"
+                      ],
+                      "properties": {
+                        "canAccept": {
+                          "type": "boolean"
+                        },
+                        "canDecline": {
+                          "type": "boolean"
+                        },
+                        "canRevoke": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "ticketId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "currentAccess": {
+                      "type": "object",
+                      "required": [
+                        "participantActive",
+                        "canNavigate",
+                        "canRent",
+                        "canCheckIn",
+                        "reason"
+                      ],
+                      "properties": {
+                        "participantActive": {
+                          "type": "boolean"
+                        },
+                        "canNavigate": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canRent": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canCheckIn": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "INTEGRATION_NOT_VERIFIED"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Claim the declared participant; confirmation is required; replay never restores lost access",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/booking-participant-invitations/{id}/decline": {
+      "post": {
+        "operationId": "PublicInvitationsController_decline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "IDENTITY_MISMATCH",
+                      "NOT_INTERESTED",
+                      "SCHEDULE_CONFLICT",
+                      "OTHER"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "participantId",
+                    "status",
+                    "reason",
+                    "version",
+                    "expiresAt",
+                    "createdAt",
+                    "recipientDisplay",
+                    "senderDisplay",
+                    "participantName",
+                    "participantStatus",
+                    "checkinStatus",
+                    "bookingStatus",
+                    "trip",
+                    "actions",
+                    "ticketId",
+                    "currentAccess"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "participantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACCEPTED",
+                        "DECLINED",
+                        "REVOKED",
+                        "EXPIRED",
+                        "INVALIDATED"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "recipientDisplay": {
+                      "type": "string"
+                    },
+                    "senderDisplay": {
+                      "type": "string"
+                    },
+                    "participantName": {
+                      "type": "string"
+                    },
+                    "participantStatus": {
+                      "type": "string"
+                    },
+                    "checkinStatus": {
+                      "type": "string"
+                    },
+                    "bookingStatus": {
+                      "type": "string"
+                    },
+                    "trip": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "startAt",
+                        "endAt",
+                        "destination"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "destination": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "actions": {
+                      "type": "object",
+                      "required": [
+                        "canAccept",
+                        "canDecline",
+                        "canRevoke"
+                      ],
+                      "properties": {
+                        "canAccept": {
+                          "type": "boolean"
+                        },
+                        "canDecline": {
+                          "type": "boolean"
+                        },
+                        "canRevoke": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "ticketId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "currentAccess": {
+                      "type": "object",
+                      "required": [
+                        "participantActive",
+                        "canNavigate",
+                        "canRent",
+                        "canCheckIn",
+                        "reason"
+                      ],
+                      "properties": {
+                        "participantActive": {
+                          "type": "boolean"
+                        },
+                        "canNavigate": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canRent": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canCheckIn": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "INTEGRATION_NOT_VERIFIED"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recipient declines, including IDENTITY_MISMATCH; does not cancel booking",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/booking-participant-invitations/{id}/revoke": {
+      "post": {
+        "operationId": "PublicInvitationsController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current projection, except create replay which returns its original snapshot. Read current state after replay.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "participantId",
+                    "status",
+                    "reason",
+                    "version",
+                    "expiresAt",
+                    "createdAt",
+                    "recipientDisplay",
+                    "senderDisplay",
+                    "participantName",
+                    "participantStatus",
+                    "checkinStatus",
+                    "bookingStatus",
+                    "trip",
+                    "actions",
+                    "ticketId",
+                    "currentAccess"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "participantId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACCEPTED",
+                        "DECLINED",
+                        "REVOKED",
+                        "EXPIRED",
+                        "INVALIDATED"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "recipientDisplay": {
+                      "type": "string"
+                    },
+                    "senderDisplay": {
+                      "type": "string"
+                    },
+                    "participantName": {
+                      "type": "string"
+                    },
+                    "participantStatus": {
+                      "type": "string"
+                    },
+                    "checkinStatus": {
+                      "type": "string"
+                    },
+                    "bookingStatus": {
+                      "type": "string"
+                    },
+                    "trip": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "startAt",
+                        "endAt",
+                        "destination"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "endAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "destination": {
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "actions": {
+                      "type": "object",
+                      "required": [
+                        "canAccept",
+                        "canDecline",
+                        "canRevoke"
+                      ],
+                      "properties": {
+                        "canAccept": {
+                          "type": "boolean"
+                        },
+                        "canDecline": {
+                          "type": "boolean"
+                        },
+                        "canRevoke": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "ticketId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "currentAccess": {
+                      "type": "object",
+                      "required": [
+                        "participantActive",
+                        "canNavigate",
+                        "canRent",
+                        "canCheckIn",
+                        "reason"
+                      ],
+                      "properties": {
+                        "participantActive": {
+                          "type": "boolean"
+                        },
+                        "canNavigate": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canRent": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "canCheckIn": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "INTEGRATION_NOT_VERIFIED"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Shared error envelope; inspect error.code and details. No authority can be inferred from historical ACCEPTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "meta"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "serverTime",
+                        "contractVersion"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "serverTime": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "contractVersion": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buyer revokes pending invitation; accepted tickets cannot be transferred",
+        "tags": [
+          "Public participant invitations"
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}": {
+      "get": {
+        "description": "Includes payment and refunds. After cancellation, poll this endpoint for refunds[].refundId and status; refund creation is asynchronous.",
+        "operationId": "BookingsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing buyer booking detail with additive participant linkage fields. This schema documents the M6 projection only; other booking fields are unchanged. Invitation history is limited to the latest 10 per participant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "participants"
+                  ],
+                  "properties": {
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "fullName",
+                          "linkageStatus",
+                          "pendingInvitationId",
+                          "recipientDisplay",
+                          "invitations",
+                          "actions"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "fullName": {
+                            "type": "string"
+                          },
+                          "linkageStatus": {
+                            "type": "string",
+                            "enum": [
+                              "UNLINKED",
+                              "INVITATION_PENDING",
+                              "CLAIMED"
+                            ]
+                          },
+                          "pendingInvitationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "nullable": true
+                          },
+                          "recipientDisplay": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "invitations": {
+                            "type": "array",
+                            "maxItems": 10,
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "status",
+                                "reason",
+                                "version",
+                                "expiresAt",
+                                "recipientDisplay"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PENDING",
+                                    "ACCEPTED",
+                                    "DECLINED",
+                                    "REVOKED",
+                                    "EXPIRED",
+                                    "INVALIDATED"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "expiresAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "recipientDisplay": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "actions": {
+                            "type": "object",
+                            "required": [
+                              "canInvite",
+                              "canSelfClaim",
+                              "canRevoke"
+                            ],
+                            "properties": {
+                              "canInvite": {
+                                "type": "boolean"
+                              },
+                              "canSelfClaim": {
+                                "type": "boolean"
+                              },
+                              "canRevoke": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own booking detail",
+        "tags": [
+          "Bookings"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "TrekGo Public participant invitations",
+    "description": "M6 backend contract. Six invitation operations; additive buyer linkage projection included. Operational gates M7/M9 remain pending. Deployment not implied.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {}
+  }
+}

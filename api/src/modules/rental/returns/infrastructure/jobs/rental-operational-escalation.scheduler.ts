@@ -1,12 +1,14 @@
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Injectable, Logger } from '@nestjs/common';
-import { CustodyTransferStatus, EventStatus, RentalExceptionCaseStatus, RentalOrderExceptionStatus, Prisma } from '@prisma/client';
+import { CustodyTransferStatus, EventStatus, RentalExceptionCaseStatus, RentalOrderExceptionStatus, RentalOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
+import { tryCompleteOrder } from '../adapters/prisma-rental-return.adapter';
 
 /** Periodic monitoring only. NEVER mutates custody/inspection/approval/refund outcomes. */
 @Injectable()
 export class RentalOperationalEscalationScheduler {
  private readonly log = new Logger(RentalOperationalEscalationScheduler.name);
+ private closureCursor?: string;
  constructor(private readonly db: PrismaService) {}
  @Cron(CronExpression.EVERY_MINUTE)
  async check() {
@@ -30,6 +32,28 @@ export class RentalOperationalEscalationScheduler {
     await this.emit(tx,`admin-sla:${c.id}`,c.orderId,{kind:'ADMIN_DEDUCTION_SLA_BREACHED',caseId:c.id,approvalDueAt:c.adminApprovalDueAt?.toISOString()});
     this.log.warn(`Admin deduction review SLA breached: ${c.id}`);
    });
+  }
+
+  // Phase 09 Order Closure Sweep: Reconciles candidate orders stuck in RETURN_PROCESSING / RETURN_PENDING
+  const candidateOrders = await this.db.rentalOrder.findMany({
+    where: { status: { in: [RentalOrderStatus.RETURN_PROCESSING, RentalOrderStatus.RETURN_PENDING] } },
+    select: { id: true },
+    take: 50,
+    skip: this.closureCursor ? 1 : 0,
+    cursor: this.closureCursor ? { id: this.closureCursor } : undefined,
+    orderBy: { id: 'asc' },
+  });
+  if (candidateOrders.length > 0) {
+    this.closureCursor = candidateOrders[candidateOrders.length - 1].id;
+  } else {
+    this.closureCursor = undefined;
+  }
+  for (const cand of candidateOrders) {
+    await this.db.$transaction(async (tx) => {
+      await tryCompleteOrder(tx, cand.id, now);
+    }).catch((err) => {
+      this.log.warn(`Order closure sweep deferred for order ${cand.id}: ${err.message}`);
+    });
   }
  }
  private async emit(tx:Prisma.TransactionClient,key:string,orderId:string,payload:Record<string,unknown>) {

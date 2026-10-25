@@ -10,7 +10,6 @@ import { RENTAL_ORDER_PORT } from './application/ports/rental-order.port';
 import { RENTAL_QUOTE_PORT } from './application/ports/rental-quote.port';
 import { CancelRentalOrderUseCase } from './application/use-cases/cancel-rental-order.use-case';
 import { CreateRentalOrderUseCase } from './application/use-cases/create-rental-order.use-case';
-import { CreateRentalPaymentUseCase } from './application/use-cases/create-rental-payment.use-case';
 import { CreateRentalQuoteUseCase } from './application/use-cases/create-rental-quote.use-case';
 import { ExpirePendingRentalOrdersUseCase } from './application/use-cases/expire-pending-rental-orders.use-case';
 import { GetRentalAvailabilityUseCase } from './application/use-cases/get-rental-availability.use-case';
@@ -30,11 +29,18 @@ import { RentalOrderExpiryScheduler } from './infrastructure/jobs/rental-order-e
 import { RentalTripController } from './presentation/controllers/rental-booking.controller';
 import { RentalOperationController } from './presentation/controllers/rental-operation.controller';
 import { RentalOrderController } from './presentation/controllers/rental-order.controller';
+import { AdminRentalOrderController } from './presentation/controllers/admin-rental-order.controller';
 import { LifecycleModule } from '../lifecycle/lifecycle.module';
 
 @Module({
   imports: [SharedModule, LifecycleModule],
-  controllers: [RentalTripController, RentalOperationController, RentalOrderController, RentalExtensionController],
+  controllers: [
+    RentalTripController,
+    RentalOperationController,
+    RentalOrderController,
+    RentalExtensionController,
+    AdminRentalOrderController,
+  ],
   providers: [
     RentalExtensionService,
     RentalExtensionScheduler,
@@ -45,7 +51,6 @@ import { LifecycleModule } from '../lifecycle/lifecycle.module';
     CreateRentalOrderUseCase,
     ListRentalOrdersUseCase,
     GetRentalOrderUseCase,
-    CreateRentalPaymentUseCase,
     GetRentalPaymentUseCase,
     PreviewRentalCancellationUseCase,
     CancelRentalOrderUseCase,

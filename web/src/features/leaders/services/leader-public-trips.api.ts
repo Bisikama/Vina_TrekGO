@@ -83,9 +83,14 @@ export async function createLeaderPublicTrip(
   input: CreateLeaderPublicTripInput,
   signal?: AbortSignal
 ): Promise<LeaderTripView> {
+  const { minCapacity, ...rest } = input;
+  const payload = {
+    ...rest,
+    ...(minCapacity !== undefined ? { minPax: minCapacity } : {}),
+  };
   const response = await apiClient.post<LeaderTripView>(
     "/api/v1/leader/public-trips",
-    input,
+    payload,
     { signal }
   );
   return response.data;
@@ -130,16 +135,21 @@ export async function getLeaderPublicTripDetail(
 
 /**
  * PATCH /api/v1/leader/public-trips/{id}
- * Cập nhật thông tin cơ bản của chuyến đi nháp
+ * Cập nhật thông tin cơ bản của chuyến đi nháp hoặc hạn mở/đóng form đăng ký
  */
 export async function updateLeaderPublicTrip(
   tripId: string,
   input: UpdateLeaderPublicTripInput,
   signal?: AbortSignal
 ): Promise<LeaderTripView> {
+  const { minCapacity, ...rest } = input;
+  const payload = {
+    ...rest,
+    ...(minCapacity !== undefined ? { minPax: minCapacity } : {}),
+  };
   const response = await apiClient.patch<LeaderTripView>(
     `/api/v1/leader/public-trips/${tripId}`,
-    input,
+    payload,
     { signal }
   );
   return response.data;
@@ -227,6 +237,57 @@ export async function publishLeaderTrip(
 ): Promise<LeaderTripView> {
   const response = await apiClient.post<LeaderTripView>(
     `/api/v1/leader/public-trips/${tripId}/publish`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/close-registration
+ * Đóng form đăng ký sớm (chuyển sang CLOSED, ghi nhận closedAt)
+ */
+export async function closeLeaderTripRegistration(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/close-registration`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/start
+ * Bắt đầu xuất phát chuyến đi (chuyển sang IN_PROGRESS, ghi nhận startedAt)
+ */
+export async function startLeaderTrip(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/start`,
+    input,
+    { signal }
+  );
+  return response.data;
+}
+
+/**
+ * POST /api/v1/leader/public-trips/{id}/complete
+ * Hoàn thành chuyến đi (chuyển sang COMPLETED, ghi nhận completedAt)
+ */
+export async function completeLeaderTrip(
+  tripId: string,
+  input: PublishTripInput,
+  signal?: AbortSignal
+): Promise<LeaderTripView> {
+  const response = await apiClient.post<LeaderTripView>(
+    `/api/v1/leader/public-trips/${tripId}/complete`,
     input,
     { signal }
   );

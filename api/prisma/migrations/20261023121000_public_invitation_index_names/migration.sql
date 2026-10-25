@@ -1,0 +1,6 @@
+BEGIN;
+-- Original long identifiers are truncated by PostgreSQL. Renaming is metadata-only.
+ALTER INDEX booking_participant_invitations_recipient_user_id_created_at_idx RENAME TO public_invitation_recipient_idx;
+ALTER INDEX booking_participant_invitations_sender_user_id_created_at_id_idx RENAME TO public_invitation_sender_idx;
+ALTER INDEX booking_participant_invitations_booking_participant_id_creat_idx RENAME TO public_invitation_participant_idx;
+COMMIT;

@@ -27,6 +27,13 @@ export interface PublicBookingTrip {
   status: string;
   startAt: string;
   endAt: string;
+  registrationOpenAt?: string | null;
+  registrationDeadlineAt?: string | null;
+  publishedAt?: string | null;
+  closedAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   destination: {
     id: string;
     name: string;
@@ -38,6 +45,8 @@ export interface PublicBookingTrip {
   pricePerPax: string | null;
   currency: string;
   capacity: number;
+  minCapacity?: number;
+  minPax?: number;
   remainingSlots: number;
   pickup: {
     id: string;
@@ -50,7 +59,10 @@ export interface PublicBookingTrip {
   transport: { vehicleType: string }[];
 }
 
+export type PublicTrip = PublicBookingTrip;
 export type PaymentMethod = 'QR' | 'REDIRECT';
+
+
 export type PaymentGateway = 'momo' | 'vnpay';
 
 export interface Checkout {

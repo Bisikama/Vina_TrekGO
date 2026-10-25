@@ -1,0 +1,260 @@
+{
+  "buyerParticipants": [
+    {
+      "linkageStatus": "INVITATION_PENDING",
+      "pendingInvitationId": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+      "recipientDisplay": "Account name",
+      "invitations": [
+        {
+          "id": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+          "status": "PENDING",
+          "reason": null,
+          "version": 1,
+          "expiresAt": "2026-10-25T09:13:17.072Z",
+          "recipientDisplay": "Account name"
+        }
+      ],
+      "actions": {
+        "canInvite": false,
+        "canSelfClaim": false,
+        "canRevoke": true
+      },
+      "id": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+      "fullName": "Declared traveller",
+      "phone": "PRIVATE_PHONE",
+      "dateOfBirth": null,
+      "emergencyContactName": null,
+      "emergencyContactPhone": null
+    },
+    {
+      "linkageStatus": "UNLINKED",
+      "pendingInvitationId": null,
+      "recipientDisplay": null,
+      "invitations": [],
+      "actions": {
+        "canInvite": true,
+        "canSelfClaim": true,
+        "canRevoke": false
+      },
+      "id": "173208ef-1689-497e-867e-7262b4bc6657",
+      "fullName": "Other traveller",
+      "phone": null,
+      "dateOfBirth": null,
+      "emergencyContactName": null,
+      "emergencyContactPhone": null
+    }
+  ],
+  "create": {
+    "id": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+    "participantId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+    "status": "PENDING",
+    "reason": null,
+    "version": 1,
+    "expiresAt": "2026-10-25T09:13:17.072Z",
+    "createdAt": "2026-10-24T09:13:18.152Z",
+    "recipientDisplay": "Account name"
+  },
+  "preview": {
+    "id": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+    "participantId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+    "status": "PENDING",
+    "reason": null,
+    "version": 1,
+    "expiresAt": "2026-10-25T09:13:17.072Z",
+    "createdAt": "2026-10-24T09:13:18.152Z",
+    "senderDisplay": "Account name",
+    "recipientDisplay": "Account name",
+    "participantName": "Declared traveller",
+    "participantStatus": "ACTIVE",
+    "checkinStatus": "NOT_CHECKED_IN",
+    "bookingStatus": "CONFIRMED",
+    "trip": {
+      "id": "06f97bad-5a2a-430d-a2de-4ba6fe36ca02",
+      "title": "M5 trip",
+      "status": "CLOSED",
+      "startAt": "2026-10-25T09:13:18.072Z",
+      "endAt": "2026-10-26T09:13:18.072Z",
+      "destination": {
+        "id": "e377522b-efc9-4587-805c-7091d613336a",
+        "name": "M5 destination"
+      }
+    },
+    "actions": {
+      "canAccept": true,
+      "canDecline": true,
+      "canRevoke": false
+    },
+    "ticketId": null,
+    "currentAccess": {
+      "participantActive": false,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  },
+  "list": {
+    "items": [
+      {
+        "id": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+        "participantId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+        "status": "ACCEPTED",
+        "reason": null,
+        "version": 2,
+        "expiresAt": "2026-10-25T09:13:17.072Z",
+        "createdAt": "2026-10-24T09:13:18.152Z",
+        "senderDisplay": "Account name",
+        "recipientDisplay": "Account name",
+        "participantName": "Declared traveller",
+        "participantStatus": "ACTIVE",
+        "checkinStatus": "NOT_CHECKED_IN",
+        "bookingStatus": "CONFIRMED",
+        "trip": {
+          "id": "06f97bad-5a2a-430d-a2de-4ba6fe36ca02",
+          "title": "M5 trip",
+          "status": "CLOSED",
+          "startAt": "2026-10-25T09:13:18.072Z",
+          "endAt": "2026-10-26T09:13:18.072Z",
+          "destination": {
+            "id": "e377522b-efc9-4587-805c-7091d613336a",
+            "name": "M5 destination"
+          }
+        },
+        "actions": {
+          "canAccept": false,
+          "canDecline": false,
+          "canRevoke": false
+        },
+        "ticketId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+        "currentAccess": {
+          "participantActive": true,
+          "canNavigate": false,
+          "canRent": false,
+          "canCheckIn": false,
+          "reason": "INTEGRATION_NOT_VERIFIED"
+        }
+      }
+    ],
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  },
+  "accept": {
+    "id": "0b925903-a6b6-4d85-b60b-1192bf66268e",
+    "participantId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+    "status": "ACCEPTED",
+    "reason": null,
+    "version": 2,
+    "expiresAt": "2026-10-25T09:13:17.072Z",
+    "createdAt": "2026-10-24T09:13:18.152Z",
+    "senderDisplay": "Account name",
+    "recipientDisplay": "Account name",
+    "participantName": "Declared traveller",
+    "participantStatus": "ACTIVE",
+    "checkinStatus": "NOT_CHECKED_IN",
+    "bookingStatus": "CONFIRMED",
+    "trip": {
+      "id": "06f97bad-5a2a-430d-a2de-4ba6fe36ca02",
+      "title": "M5 trip",
+      "status": "CLOSED",
+      "startAt": "2026-10-25T09:13:18.072Z",
+      "endAt": "2026-10-26T09:13:18.072Z",
+      "destination": {
+        "id": "e377522b-efc9-4587-805c-7091d613336a",
+        "name": "M5 destination"
+      }
+    },
+    "actions": {
+      "canAccept": false,
+      "canDecline": false,
+      "canRevoke": false
+    },
+    "ticketId": "66f971c8-ad18-4de3-af57-b3dcc71f04d1",
+    "currentAccess": {
+      "participantActive": true,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  },
+  "decline": {
+    "id": "f69c3eab-bd8c-4449-ae1f-bde8abce421b",
+    "participantId": "cd7d203b-08be-4d7b-b119-10cfe1d61298",
+    "status": "DECLINED",
+    "reason": "IDENTITY_MISMATCH",
+    "version": 2,
+    "expiresAt": "2026-10-25T09:13:17.544Z",
+    "createdAt": "2026-10-24T09:13:18.594Z",
+    "senderDisplay": "Account name",
+    "recipientDisplay": "Account name",
+    "participantName": "Declared traveller",
+    "participantStatus": "ACTIVE",
+    "checkinStatus": "NOT_CHECKED_IN",
+    "bookingStatus": "CONFIRMED",
+    "trip": {
+      "id": "ae9d8eae-f939-4f8e-b380-5b1ef25644b9",
+      "title": "M5 trip",
+      "status": "OPEN",
+      "startAt": "2026-10-25T09:13:18.544Z",
+      "endAt": "2026-10-26T09:13:18.544Z",
+      "destination": {
+        "id": "b428c79d-3520-4573-9d4e-0aca31abe578",
+        "name": "M5 destination"
+      }
+    },
+    "actions": {
+      "canAccept": false,
+      "canDecline": false,
+      "canRevoke": false
+    },
+    "ticketId": null,
+    "currentAccess": {
+      "participantActive": false,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  },
+  "revoke": {
+    "id": "42ecec60-2fa5-4a13-ae81-6281316282b5",
+    "participantId": "50d5d6df-2f5c-47ed-9cdc-d90225381406",
+    "status": "REVOKED",
+    "reason": null,
+    "version": 2,
+    "expiresAt": "2026-10-25T09:13:17.693Z",
+    "createdAt": "2026-10-24T09:13:18.758Z",
+    "senderDisplay": "Account name",
+    "recipientDisplay": "Account name",
+    "participantName": "Declared traveller",
+    "participantStatus": "ACTIVE",
+    "checkinStatus": "NOT_CHECKED_IN",
+    "bookingStatus": "CONFIRMED",
+    "trip": {
+      "id": "08066ecb-a740-4922-8937-05b99a301f17",
+      "title": "M5 trip",
+      "status": "OPEN",
+      "startAt": "2026-10-25T09:13:18.693Z",
+      "endAt": "2026-10-26T09:13:18.693Z",
+      "destination": {
+        "id": "9d90553d-8bef-4a38-b9a2-be535fe47b85",
+        "name": "M5 destination"
+      }
+    },
+    "actions": {
+      "canAccept": false,
+      "canDecline": false,
+      "canRevoke": false
+    },
+    "ticketId": null,
+    "currentAccess": {
+      "participantActive": false,
+      "canNavigate": false,
+      "canRent": false,
+      "canCheckIn": false,
+      "reason": "INTEGRATION_NOT_VERIFIED"
+    }
+  }
+}
