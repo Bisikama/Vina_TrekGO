@@ -180,7 +180,11 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
     if (this.publishing || !this.server) return
     this.publishing = true
     try {
-      const since = Date.now() - 300000
+      // A newly subscribed client obtains the durable snapshot via GET /state;
+      // replaying five minutes of member updates causes stale marker jumps and a
+      // large startup burst. Fifteen seconds is enough for every live instance
+      // to observe a published event while keeping the outbox a retry source.
+      const since = Date.now() - 15000
       for (const [id, at] of this.seen) if (at < since) this.seen.delete(id)
       const rows = await this.prisma.gpsOutboxEvent.findMany({
         where: {
@@ -204,26 +208,10 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
           continue
         }
         try {
-          if (row.eventType === 'gps:member.updated') {
-            try {
-              await this.recording.authorize(payload.envelope.tripId, payload.envelope.data.member.userId)
-            } catch (error) {
-              if (error instanceof AppError && ['FORBIDDEN', 'GPS_TRIP_NOT_FOUND'].includes(error.code)) {
-                await this.prisma.gpsOutboxEvent.update({
-                  where: { id: row.id },
-                  data: { status: 'PUBLISHED', publishedAt: row.publishedAt ?? new Date() },
-                })
-                this.seen.set(row.id, Date.now())
-                continue
-              }
-              throw error
-            }
-          }
           // Subscription authorization is enforced at subscribe/revalidation time.
           // Broadcast once to the room; do not open a DB transaction per viewer.
           if (payload.recipientUserId === null && row.eventType !== 'gps:access.revoked') {
             this.server.to(`trip-gps:${payload.envelope.tripId}`).emit(row.eventType, payload.envelope)
-            this.logger.debug(JSON.stringify({ event: 'gps_socket_emitted', eventId: payload.envelope.eventId, tripId: payload.envelope.tripId, occurredAt: payload.envelope.occurredAt }))
           } else for (const socket of this.server.sockets.values()) {
             const { tripId } = payload.envelope
             const personal = payload.recipientUserId !== null

@@ -468,7 +468,11 @@ export class TripGpsRecordingService {
         serverTime: now.toISOString(),
       }
     })
-    this.logger.log(JSON.stringify({ event: 'gps_upload_committed', tripId, sessionId, userId, accepted: result.acceptedSampleIds.length, durationMs: Date.now() - started }))
+    // Keep normal GPS sampling quiet. Slow requests remain actionable without
+    // flooding the development console at the mobile sampling rate.
+    const durationMs = Date.now() - started
+    if (durationMs >= 2000)
+      this.logger.warn(JSON.stringify({ event: 'gps_upload_slow', tripId, sessionId, userId, accepted: result.acceptedSampleIds.length, durationMs }))
     return result
   }
 
