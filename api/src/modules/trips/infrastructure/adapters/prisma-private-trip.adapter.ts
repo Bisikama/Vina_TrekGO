@@ -34,7 +34,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
             if (id) await tx.$queryRaw`SELECT id FROM trips WHERE id = ${id}::uuid FOR UPDATE`
             return work(tx)
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 40000 },
         )
       } catch (e) {
         const retry =
