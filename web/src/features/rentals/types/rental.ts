@@ -29,6 +29,11 @@ export type RentalCategory = {
   status?: string;
 };
 
+export type RentalDepositPolicyType =
+  | "FIXED"
+  | "PERCENT_REPLACEMENT_VALUE"
+  | string;
+
 export type RentalDepositPolicy = {
   type: string;
   amount: number;
@@ -102,6 +107,47 @@ export type StaffRentalProductStatus =
   | "ACTIVE"
   | "INACTIVE"
   | "ARCHIVED";
+
+export type CreateStaffRentalProductInput = {
+  categoryId: string;
+  sku: string;
+  name: string;
+  description?: string | null;
+  dailyPrice: number;
+  currency: string;
+  replacementValue: number;
+  depositPolicy: {
+    type: RentalDepositPolicyType;
+    amount?: number | null;
+    percentage?: number | null;
+  };
+  imageMediaIds?: string[];
+  spec?: Record<string, unknown>;
+  recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
+};
+
+export type UpdateStaffRentalProductInput = {
+  expectedVersion: number;
+  name?: string;
+  description?: string | null;
+  dailyPrice?: number;
+  replacementValue?: number;
+  depositPolicy?: {
+    type: RentalDepositPolicyType;
+    amount?: number | null;
+    percentage?: number | null;
+  };
+  imageMediaIds?: string[];
+  spec?: Record<string, unknown>;
+  recommendationTags?: string[];
+  requiresDeepInspectionAfterReturn?: boolean;
+};
+
+export type ChangeStaffRentalProductStatusInput = {
+  expectedVersion: number;
+  status: StaffRentalProductStatus;
+};
 
 export type EquipmentUnitStatus =
   | "AVAILABLE"

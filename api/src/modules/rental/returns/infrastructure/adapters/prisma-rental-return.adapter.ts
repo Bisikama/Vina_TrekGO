@@ -1373,11 +1373,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     // RG-03 Fix: Only unconfirmed simulated items (refund is NOT yet SUCCEEDED by provider) are deducted.
     // Once provider confirms SUCCEEDED, it is already counted in refundedAmount, preventing double-subtraction.
     const unconfirmedSimulatedAmount = items
-      .filter(
-        (item) =>
-          item.settlementMode === 'SANDBOX_SIMULATED' &&
-          item.refundStatus !== RefundStatus.SUCCEEDED,
-      )
+      .filter((item) => item.settlementMode === 'SANDBOX_SIMULATED' && item.refundStatus !== RefundStatus.SUCCEEDED)
       .reduce((sum, item) => sum + item.refundAmount, 0)
     const heldAmount = Math.max(0, collectedAmount - refundedAmount - deductionAmount)
     const effectiveHeldAmount = Math.max(

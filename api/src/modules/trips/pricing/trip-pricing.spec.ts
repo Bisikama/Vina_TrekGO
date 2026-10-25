@@ -449,7 +449,12 @@ describe('Trekking Pricing Simulator math & HTTP flow (TG-PTR-PRICING-01)', () =
       tripRow.pricePerPax = new Prisma.Decimal('1050000')
 
       const bookingDb: any = {
+        trip: {
+          findUnique: jest.fn(async () => tripRow),
+          update: jest.fn(async () => tripRow),
+        },
         booking: {
+
           findMany: jest.fn(async () => []),
           findUnique: jest.fn(async () => currentBooking),
           findUniqueOrThrow: jest.fn(async () => ({
@@ -474,11 +479,13 @@ describe('Trekking Pricing Simulator math & HTTP flow (TG-PTR-PRICING-01)', () =
           updateMany: jest.fn(async () => ({ count: 0 })),
         },
         bookingParticipant: {
+          findMany: jest.fn(async () => []),
           count: jest.fn(async () => 0),
           updateMany: jest.fn(async () => ({ count: 0 })),
           update: jest.fn(async () => ({})),
           create: jest.fn(async () => ({})),
         },
+
         payment: {
           findFirst: jest.fn(async () => null),
         },

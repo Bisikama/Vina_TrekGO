@@ -1,4 +1,5 @@
 import { COMMON_ERROR_CODES } from './codes/common.error-codes'
+import { TRIP_GPS_ERROR_CODES as GPS } from './codes/trip-gps.error-codes'
 import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes'
 import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes'
 import { RENTAL_ERROR_CODES } from './codes/rental.error-codes'
@@ -24,6 +25,32 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [GPS.SESSION_NOT_FOUND]: { status: 404, message: 'GPS session not found', retryable: false },
+  [GPS.TRIP_NOT_RECORDABLE]: { status: 409, message: 'Trip is not in progress', retryable: false },
+  [GPS.RATE_LIMITED]: { status: 429, message: 'GPS request limit exceeded', retryable: true },
+  [GPS.NOT_FOUND]: { status: 404, message: 'GPS resource not found', retryable: false },
+  [GPS.INVALID_STATE]: { status: 409, message: 'GPS operation is not allowed in this state', retryable: false },
+  [GPS.DEVICE_CONFLICT]: { status: 409, message: 'Recording belongs to another device', retryable: false },
+  [GPS.ACTIVE_SESSION_EXISTS]: { status: 409, message: 'An open GPS session already exists', retryable: false },
+  [GPS.IDEMPOTENCY_CONFLICT]: { status: 409, message: 'Idempotency key payload differs', retryable: false },
+  [GPS.VERSION_CONFLICT]: { status: 409, message: 'Reload GPS session before retrying', retryable: false },
+  [GPS.UPLOAD_CLOSED]: { status: 409, message: 'GPS upload deadline has passed', retryable: false },
+  [GPS.POLICY_UNAVAILABLE]: { status: 503, message: 'An effective GPS policy is required', retryable: true },
+  [B.PARTICIPANT_ALREADY_LINKED]: {
+    status: 409,
+    message: 'Participant is already linked to another account',
+    retryable: false,
+  },
+  [B.TRIP_PARTICIPATION_EXISTS]: {
+    status: 409,
+    message: 'Account already has a valid participant for this trip',
+    retryable: false,
+  },
+  [B.PARTICIPANT_CLAIM_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Participant cannot be claimed in the current state',
+    retryable: false,
+  },
   [B.PENDING_INVITATION_EXISTS]: {
     status: 409,
     message: 'An unexpired invitation is already pending',
@@ -188,6 +215,31 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   },
   [B.INVALID_TRAIL_FOR_TRIP_TYPE]: { status: 422, message: 'Invalid trail or checkpoint context', retryable: false },
   [B.PRIVATE_TRIP_VERSION_CONFLICT]: { status: 409, message: 'Reload the trip before retrying', retryable: false },
+  [B.BOOKING_REGISTRATION_NOT_OPEN_YET]: {
+    status: 409,
+    message: 'Chuyến đi chưa đến thời gian mở đăng ký',
+    retryable: false,
+  },
+  [B.BOOKING_REGISTRATION_CLOSED]: {
+    status: 409,
+    message: 'Đã hết hạn đăng ký chuyến đi (đóng sổ trước khởi hành)',
+    retryable: false,
+  },
+  [B.BOOKING_TRIP_FULL]: {
+    status: 409,
+    message: 'Chuyến đi đã đủ số lượng người tối đa',
+    retryable: false,
+  },
+  [B.CHECKIN_TOKEN_INVALID]: {
+    status: 422,
+    message: 'Mã QR điểm danh không hợp lệ, đã được thay thế hoặc không thuộc chuyến đi này',
+    retryable: false,
+  },
+  [B.CHECKIN_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Không thể thực hiện điểm danh ở trạng thái chuyến đi hoặc đặt chỗ hiện tại',
+    retryable: false,
+  },
   // Common
   [COMMON_ERROR_CODES.VALIDATION_ERROR]: { status: 400, message: 'Validation failed', retryable: false },
   [COMMON_ERROR_CODES.UNAUTHENTICATED]: { status: 401, message: 'Unauthenticated access', retryable: false },
@@ -763,7 +815,8 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   },
   [G.GEAR_EXTRACTION_QUOTA_EXCEEDED]: {
     status: 429,
-    message: 'Bạn đã sử dụng hết hạn mức 20 lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.',
+    message:
+      'Bạn đã sử dụng hết hạn mức 20 lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.',
     retryable: false,
   },
   [G.GEAR_PAGE_READER_UNAVAILABLE]: {
@@ -806,4 +859,4 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới.',
     retryable: false,
   },
-};
+}

@@ -4,8 +4,8 @@ import Link from 'next/link';
 export interface MyTripsHeaderProps {
   counts?: { upcoming: number; ongoing: number; completed: number; cancelled: number };
   typeCounts?: { all: number; bookings: number; privateTrips: number };
-  activeTab?: 'ALL' | 'BOOKINGS' | 'PRIVATE';
-  onTabChange?: (tab: 'ALL' | 'BOOKINGS' | 'PRIVATE') => void;
+  activeTab?: 'ALL' | 'BOOKINGS' | 'PRIVATE' | 'INVITATIONS';
+  onTabChange?: (tab: 'ALL' | 'BOOKINGS' | 'PRIVATE' | 'INVITATIONS') => void;
   searchQuery?: string;
   onSearchChange?: (val: string) => void;
 }
@@ -113,6 +113,18 @@ export const MyTripsHeader = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               Chuyến tự tổ chức ({typeCounts.privateTrips})
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange('INVITATIONS')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'INVITATIONS'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-200'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>✉️</span>
+              Hộp thư lời mời
             </button>
           </div>
         )}

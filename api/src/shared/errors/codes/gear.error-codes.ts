@@ -41,6 +41,6 @@ export const GEAR_ERROR_CODES = {
   GEAR_OPTION_NOT_FOUND: 'GEAR_OPTION_NOT_FOUND',
   GEAR_OPTION_SET_NOT_FOUND: 'GEAR_OPTION_SET_NOT_FOUND',
   GEAR_OPTION_SET_EXPIRED: 'GEAR_OPTION_SET_EXPIRED',
-} as const;
+} as const
 
-export type GearErrorCode = (typeof GEAR_ERROR_CODES)[keyof typeof GEAR_ERROR_CODES];
+export type GearErrorCode = (typeof GEAR_ERROR_CODES)[keyof typeof GEAR_ERROR_CODES]

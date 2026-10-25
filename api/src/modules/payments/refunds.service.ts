@@ -52,8 +52,7 @@ export const refundSummary = (r: Refund) => {
               ? ['DISCREPANCY_DETECTED: Real provider reported FAILED after sandbox simulation settled demo items.']
               : []),
           ],
-          simulationNotice:
-            'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
+          simulationNotice: 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
           ...(hasDiscrepancy ? { discrepancy: 'SIMULATION_DIVERGED_FROM_PROVIDER_FAILURE' } : {}),
         }
       : {}),

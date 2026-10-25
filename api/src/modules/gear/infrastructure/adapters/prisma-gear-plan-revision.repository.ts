@@ -1,12 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../../shared/services/prisma.service';
-import { AppError } from '../../../../shared/errors/app-error';
-import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
-import { GearPlanRevisionDomain } from '../../domain/gear.types';
+import { Injectable } from '@nestjs/common'
+import { PrismaService } from '../../../../shared/services/prisma.service'
+import { AppError } from '../../../../shared/errors/app-error'
+import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
+import { GearPlanRevisionDomain } from '../../domain/gear.types'
 import {
   CreatePlanRevisionInput,
   GearPlanRevisionRepositoryPort,
-} from '../../application/ports/gear-plan-revision.repository.port';
+} from '../../application/ports/gear-plan-revision.repository.port'
 
 @Injectable()
 export class PrismaGearPlanRevisionRepository implements GearPlanRevisionRepositoryPort {
@@ -20,16 +20,16 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
           revision,
         },
       },
-    });
-    return record ? this.toDomain(record) : null;
+    })
+    return record ? this.toDomain(record) : null
   }
 
   async findAllByPlan(planId: string): Promise<GearPlanRevisionDomain[]> {
     const records = await this.prisma.gearPlanRevision.findMany({
       where: { planId },
       orderBy: { revision: 'desc' },
-    });
-    return records.map((r) => this.toDomain(r));
+    })
+    return records.map((r) => this.toDomain(r))
   }
 
   async saveRevision(input: CreatePlanRevisionInput): Promise<GearPlanRevisionDomain> {
@@ -40,15 +40,15 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
           revision: input.revision,
         },
       },
-    });
+    })
 
     if (existing) {
       if (existing.contentHash === input.contentHash) {
-        return this.toDomain(existing);
+        return this.toDomain(existing)
       }
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PLAN_CAS_CONFLICT, {
         message: `Phiên bản kế hoạch ${input.revision} đã được lưu trữ bất biến với nội dung khác`,
-      });
+      })
     }
 
     try {
@@ -62,8 +62,8 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
           contextVersion: input.contextVersion,
           ruleVersions: (input.ruleVersions ?? {}) as any,
         },
-      });
-      return this.toDomain(created);
+      })
+      return this.toDomain(created)
     } catch (err: any) {
       if (err.code === 'P2002') {
         const raceExisting = await this.prisma.gearPlanRevision.findUnique({
@@ -73,13 +73,13 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
               revision: input.revision,
             },
           },
-        });
+        })
         if (raceExisting && raceExisting.contentHash === input.contentHash) {
-          return this.toDomain(raceExisting);
+          return this.toDomain(raceExisting)
         }
-        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PLAN_CAS_CONFLICT);
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PLAN_CAS_CONFLICT)
       }
-      throw err;
+      throw err
     }
   }
 
@@ -94,6 +94,6 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
       contextVersion: record.contextVersion,
       ruleVersions: (record.ruleVersions as Record<string, unknown>) || {},
       createdAt: record.createdAt,
-    };
+    }
   }
 }

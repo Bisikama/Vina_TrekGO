@@ -6,19 +6,19 @@ Phiên bản đồng bộ: V3.1.5 — 23/10/2026. Nguồn: MASTER V3.1.5, mục1
 
 Khách khai đồ trekking mình có → chọn Trip mình là thành viên → xem, bổ sung và **xác nhận** điều kiện chuyến → chọn đồ → hệ thống đánh giá từng món **PHÙ HỢP / KHÔNG PHÙ HỢP + lý do cụ thể** → nhu cầu chưa đáp ứng được gợi ý phương án thuê → chuyển sang luồng Rental có sẵn. Không điểm số, không mức "tạm được", không chế độ chuyến mô phỏng/MANUAL (nhập tay thông số món đồ vẫn bình thường — đó là nguồn của item, không phải chế độ chuyến). Mọi verdict, coverage và giá do backend tính; frontend chỉ hiển thị.
 
-| Nhóm màn hình | Nội dung phải có |
-| --- | --- |
-| Tủ đồ | Danh sách món, lọc theo loại; ảnh đại diện; tên, tình trạng, nguồn; báo thông số còn thiếu; thêm/sửa/xóa; trạng thái trống/đang tải/lỗi |
-| Form món đồ | Form theo loại đồ (bảng thuộc tính ở mục 4); thông số chưa biết để trống; quản lý tối đa 3 ảnh |
-| Trích xuất & review | Chọn 1 ảnh hoặc 1 link → xử lý → nháp + bằng chứng + field chưa rõ → user sửa → xác nhận lưu vào tủ |
-| Tạo / mở plan | Chọn Trip hợp lệ, chọn đồ của mình (chọn rỗng vẫn hợp lệ), khai thêm nhu cầu nếu có |
-| Điều kiện chuyến | Dữ kiện thật của Trip, gợi ý khí hậu gắn nhãn "ước tính", field còn thiếu, nguồn từng field, bước xác nhận (mục 6) |
-| Chi tiết plan & kết quả | isReady từ server; verdict + lý do từng món; nhu cầu bắt buộc/tùy chọn và mức đáp ứng; checklist theo nhu cầu |
-| Phương án thuê & so sánh | Phương án tiết kiệm / nhẹ; món tận dụng được; dòng thuê + số lượng; phí, cọc; khối lượng đã biết/thiếu; tồn + thời điểm kiểm tra |
-| Tư vấn | Tải riêng, không chặn xem kết quả; nhãn nguồn AI / cache / theo quy tắc; bỏ qua phản hồi về trễ |
-| Lịch sử / revision | Danh sách plan, snapshot từng lần đánh giá, chi tiết một revision; Trip đã kết thúc chỉ xem |
+| Nhóm màn hình                 | Nội dung phải có                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tủ đồ                         | Danh sách món, lọc theo loại; ảnh đại diện; tên, tình trạng, nguồn; báo thông số còn thiếu; thêm/sửa/xóa; trạng thái trống/đang tải/lỗi                |
+| Form món đồ                   | Form theo loại đồ (bảng thuộc tính ở mục 4); thông số chưa biết để trống; quản lý tối đa 3 ảnh                                                         |
+| Trích xuất & review           | Chọn 1 ảnh hoặc 1 link → xử lý → nháp + bằng chứng + field chưa rõ → user sửa → xác nhận lưu vào tủ                                                    |
+| Tạo / mở plan                 | Chọn Trip hợp lệ, chọn đồ của mình (chọn rỗng vẫn hợp lệ), khai thêm nhu cầu nếu có                                                                    |
+| Điều kiện chuyến              | Dữ kiện thật của Trip, gợi ý khí hậu gắn nhãn "ước tính", field còn thiếu, nguồn từng field, bước xác nhận (mục 6)                                     |
+| Chi tiết plan & kết quả       | isReady từ server; verdict + lý do từng món; nhu cầu bắt buộc/tùy chọn và mức đáp ứng; checklist theo nhu cầu                                          |
+| Phương án thuê & so sánh      | Phương án tiết kiệm / nhẹ; món tận dụng được; dòng thuê + số lượng; phí, cọc; khối lượng đã biết/thiếu; tồn + thời điểm kiểm tra                       |
+| Tư vấn                        | Tải riêng, không chặn xem kết quả; nhãn nguồn AI / cache / theo quy tắc; bỏ qua phản hồi về trễ                                                        |
+| Lịch sử / revision            | Danh sách plan, snapshot từng lần đánh giá, chi tiết một revision; Trip đã kết thúc chỉ xem                                                            |
 | Xem lại theo Trip trong tủ đồ | Nhóm theo Trip: mỗi Trip list các món đã kiểm tra + verdict của lần đánh giá gần nhất; trong chi tiết món đồ: các Trip món đó đã được kiểm tra (mục 8) |
-| Chuyển sang Rental | Chọn phương án → intent → xem lại trong Rental → quote thật → liên kết quote về plan |
+| Chuyển sang Rental            | Chọn phương án → intent → xem lại trong Rental → quote thật → liên kết quote về plan                                                                   |
 
 Verdict là của một lần kiểm tra trong một ngữ cảnh cụ thể — không hiển thị verdict như thuộc tính cố định trên thẻ món đồ trong tủ; muốn xem lại verdict thì xem theo từng Trip như mục 8.
 
@@ -112,27 +112,27 @@ sequenceDiagram
 
 ## 3. Quyền theo thao tác → hành vi giao diện
 
-| Thao tác | Điều kiện / FE xử lý |
-| --- | --- |
-| Tủ đồ: xem / thêm / sửa / xóa; trích xuất và confirm | Chỉ cần đăng nhập, tài nguyên của chính mình; **không cần có Trip** |
-| Xem lịch sử plan của mình | Luôn xem được kể cả khi không còn Trip đang hoạt động |
-| Tạo / sửa plan, evaluate, tick checklist | Là thành viên của Trip đó + Trip **chưa kết thúc**; backend kiểm tra lại từng thao tác |
-| Xem plan của Trip đã kết thúc | Chỉ đọc snapshot đã lưu; không tạo options/advice/quote mới từ dữ liệu lịch sử |
-| Thuê từ phương án | Qua luồng Rental chuẩn; có Trip chưa kết thúc **chưa đồng nghĩa** đủ điều kiện thuê — Rental kiểm tra riêng |
-| ADMIN / LEADER nhóm | Không mặc nhiên xem được tủ đồ cá nhân của user khác |
+| Thao tác                                             | Điều kiện / FE xử lý                                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Tủ đồ: xem / thêm / sửa / xóa; trích xuất và confirm | Chỉ cần đăng nhập, tài nguyên của chính mình; **không cần có Trip**                                         |
+| Xem lịch sử plan của mình                            | Luôn xem được kể cả khi không còn Trip đang hoạt động                                                       |
+| Tạo / sửa plan, evaluate, tick checklist             | Là thành viên của Trip đó + Trip **chưa kết thúc**; backend kiểm tra lại từng thao tác                      |
+| Xem plan của Trip đã kết thúc                        | Chỉ đọc snapshot đã lưu; không tạo options/advice/quote mới từ dữ liệu lịch sử                              |
+| Thuê từ phương án                                    | Qua luồng Rental chuẩn; có Trip chưa kết thúc **chưa đồng nghĩa** đủ điều kiện thuê — Rental kiểm tra riêng |
+| ADMIN / LEADER nhóm                                  | Không mặc nhiên xem được tủ đồ cá nhân của user khác                                                        |
 
 ## 4. Form món đồ và ảnh
 
-| Category | Nhãn | Attributes (mọi field đều có thể null) |
-| --- | --- | --- |
-| JACKET | Áo khoác | waterproof_mm: int; temp_rating_c: int; weight_g: int; windproof: bool |
-| FOOTWEAR | Giày | waterproof: bool; ankle_support: bool; grip_level: int 1–5; weight_g: int |
-| PANTS | Quần | waterproof_mm: int; temp_rating_c: int; insulated: bool |
-| BACKPACK | Balo | capacity_l: int; rain_cover: bool; waterproof: bool; weight_g: int |
-| SLEEPING_BAG | Túi ngủ | temp_rating_c: int; weight_g: int |
-| TENT | Lều | sleeping_places: int ≥1; flysheet_waterproof_mm: int; floor_waterproof_mm: int; weight_g: int |
-| TREKKING_POLE | Gậy trekking | adjustable: bool; length_min_cm: số; length_max_cm: số; weight_g: int |
-| RAIN_GEAR | Đồ đi mưa | waterproof_mm: int; coverage: UPPER_BODY/FULL_BODY; weight_g: int |
+| Category      | Nhãn         | Attributes (mọi field đều có thể null)                                                        |
+| ------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| JACKET        | Áo khoác     | waterproof_mm: int; temp_rating_c: int; weight_g: int; windproof: bool                        |
+| FOOTWEAR      | Giày         | waterproof: bool; ankle_support: bool; grip_level: int 1–5; weight_g: int                     |
+| PANTS         | Quần         | waterproof_mm: int; temp_rating_c: int; insulated: bool                                       |
+| BACKPACK      | Balo         | capacity_l: int; rain_cover: bool; waterproof: bool; weight_g: int                            |
+| SLEEPING_BAG  | Túi ngủ      | temp_rating_c: int; weight_g: int                                                             |
+| TENT          | Lều          | sleeping_places: int ≥1; flysheet_waterproof_mm: int; floor_waterproof_mm: int; weight_g: int |
+| TREKKING_POLE | Gậy trekking | adjustable: bool; length_min_cm: số; length_max_cm: số; weight_g: int                         |
+| RAIN_GEAR     | Đồ đi mưa    | waterproof_mm: int; coverage: UPPER_BODY/FULL_BODY; weight_g: int                             |
 
 - 5 loại đầu là nhóm cơ bản; TENT / TREKKING_POLE / RAIN_GEAR là nhóm mở rộng, chỉ đánh giá qua nhu cầu của plan (mục 7) — không chạy bộ luật cơ bản, không tự hiện PHÙ HỢP khi chưa được đánh giá.
 - `condition`: `new | good | worn | poor`. `source`: `manual | ai_image | ai_link` do server gán, FE không cho user chọn nguồn.
@@ -141,7 +141,6 @@ sequenceDiagram
 - Giới hạn vận hành do backend cấu hình (mặc định: 50 món/user, 3 ảnh/món, 5MB/ảnh, JPEG/PNG/WebP) — FE hiển thị và xử lý theo lỗi server trả, không hardcode thành logic chặn tuyệt đối. Ảnh đầu (vị trí 0) là ảnh đại diện. Upload qua media của app và chỉ dùng uploadId của chính user; upload chưa xong thì chưa gọi trích xuất. Mỗi lần trích xuất chỉ 1 ảnh hoặc 1 link, do user chủ động bấm.
 - Backend gửi ảnh cho nhà cung cấp AI ở cạnh dài tối đa 1024px; FE không cần tự nén thay backend.
 - **Cảnh báo trùng mềm khi tạo món (cả nhập tay ở mục này và confirm nháp ở mục 5):** backend đối chiếu món sắp tạo với tủ hiện tại; nếu cùng category, cùng condition, mọi attribute mà cả hai bên biết đều bằng nhau và có ít nhất một field chung đã biết thì trả `409` kèm mã `GEAR_ITEM_POSSIBLE_DUPLICATE` và chi tiết món tương tự. FE hiện hộp hỏi "Tủ đã có một món tương tự — vẫn lưu thêm bản nữa?" kèm tên món đã có: user đồng ý → gửi lại đúng dữ liệu kèm `acknowledgeDuplicate=true`; user hủy → giữ nguyên form đang nhập, chưa có món nào được tạo. Đây không phải lỗi nhập liệu — không tô đỏ field, không xóa dữ liệu form.
-
 
 ### 4.1. Hộp cảnh báo món tương tự — dùng chung cho tạo tay và confirm
 
@@ -174,33 +173,33 @@ Trạng thái nháp: `PENDING` (đang xử lý, nếu backend chạy bất đồ
 - Confirm nháp mới cũng chịu cảnh báo trùng mềm như ở mục 4: nhận `409` mã `GEAR_ITEM_POSSIBLE_DUPLICATE` thì hiện cùng hộp hỏi; đồng ý → confirm lại kèm `acknowledgeDuplicate=true`; trong lúc chờ user quyết định, nháp vẫn ở trạng thái READY. Riêng confirm lại nháp đã CONFIRMED thì trả item cũ ngay, không hiện cảnh báo.
 - Quota mặc định **20 lượt/user/ngày (giờ Asia/Saigon), server là nơi quyết định**:
 
-| Trường hợp | Tính lượt? |
-| --- | --- |
-| Nhà cung cấp AI có phản hồi (kể cả phản hồi thiếu dữ kiện) | Có |
-| Trúng cache | Không |
-| Lỗi nhà cung cấp / timeout / không có phản hồi | Không — server hoàn lượt |
+| Trường hợp                                                 | Tính lượt?               |
+| ---------------------------------------------------------- | ------------------------ |
+| Nhà cung cấp AI có phản hồi (kể cả phản hồi thiếu dữ kiện) | Có                       |
+| Trúng cache                                                | Không                    |
+| Lỗi nhà cung cấp / timeout / không có phản hồi             | Không — server hoàn lượt |
 
 FE không tự đếm quota và **không tự khóa toàn bộ trích xuất tới hôm sau**: hết lượt thì chỉ chặn lượt gọi mới theo thông báo server (nếu server trả số lượt còn lại/thời điểm reset thì hiển thị theo đó); tủ đồ, nhập tay và kiểm tra đồ không bị ảnh hưởng.
 
 ## 6. Điều kiện chuyến và bước xác nhận
 
-| Field | Nguồn / cách xử lý |
-| --- | --- |
-| destination, ngày đi/về, days | Dữ kiện thật của Trip; days do backend suy ra từ lịch; không sửa lịch bằng form của tính năng này |
-| difficulty, terrain | Từ Trip/tour nếu có; thiếu thì backend báo field cần bổ sung (user khai, ghi nguồn USER_DECLARED) — không bịa giá trị mặc định |
-| temp_min_c, temp_min_night_c, rain_prob_pct | Gợi ý khí hậu theo điểm đến + tháng đi, gắn nhãn **"Ước tính theo mùa"** (không gọi là dự báo thời tiết); user xem, sửa, xác nhận |
-| temp_max_c | Field bắt buộc của bộ điều kiện; backend cung cấp hoặc yêu cầu bổ sung — thiếu thì chưa đánh giá được, FE không tự gán bằng temp_min |
+| Field                                       | Nguồn / cách xử lý                                                                                                                   |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| destination, ngày đi/về, days               | Dữ kiện thật của Trip; days do backend suy ra từ lịch; không sửa lịch bằng form của tính năng này                                    |
+| difficulty, terrain                         | Từ Trip/tour nếu có; thiếu thì backend báo field cần bổ sung (user khai, ghi nguồn USER_DECLARED) — không bịa giá trị mặc định       |
+| temp_min_c, temp_min_night_c, rain_prob_pct | Gợi ý khí hậu theo điểm đến + tháng đi, gắn nhãn **"Ước tính theo mùa"** (không gọi là dự báo thời tiết); user xem, sửa, xác nhận    |
+| temp_max_c                                  | Field bắt buộc của bộ điều kiện; backend cung cấp hoặc yêu cầu bổ sung — thiếu thì chưa đánh giá được, FE không tự gán bằng temp_min |
 
 Mỗi field mang nguồn `TRIP_FACT / CLIMATE_ESTIMATE / USER_DECLARED`, hiển thị theo nguồn backend trả. Trình tự bắt buộc: tạo/mở plan → hiện điều kiện kèm field thiếu → user sửa (nếu cần) và bấm xác nhận → **lưu lên server qua PATCH plan, nhận inputRevision mới** → mới evaluate bằng revision đó. Chưa xác nhận hoặc còn thiếu field: backend trả trạng thái cần bổ sung điều kiện, FE khóa nút kiểm tra và **không hiển thị verdict giả**. Sửa điều kiện sau khi đã có kết quả thì kết quả cũ được gắn nhãn cần đánh giá lại.
 
 ## 7. Kết quả: hai tầng core và plan — không trộn
 
-| | Kiểm tra core (`/gear/check`) | Plan (đường chính của UI) |
-| --- | --- | --- |
-| Loại đồ | Chỉ 5 loại cơ bản | 5 loại cơ bản + nhóm mở rộng theo nhu cầu |
-| Checklist | Đúng 5 dòng cố định theo 5 loại cơ bản | Theo danh sách nhu cầu thực tế của plan (thứ tự ổn định, không cố định 5 dòng) |
-| Kết quả | Verdict từng món, lý do, gap, isReady | Thêm: mức đáp ứng từng nhu cầu, món được dùng, snapshot theo revision |
-| Gợi ý thuê / tư vấn | Ở tầng core thuần: không có (`rentalSuggestions=[]`, `aiAdvice=null`) | Tải riêng qua options/advice khi capability sẵn sàng |
+|                     | Kiểm tra core (`/gear/check`)                                         | Plan (đường chính của UI)                                                      |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Loại đồ             | Chỉ 5 loại cơ bản                                                     | 5 loại cơ bản + nhóm mở rộng theo nhu cầu                                      |
+| Checklist           | Đúng 5 dòng cố định theo 5 loại cơ bản                                | Theo danh sách nhu cầu thực tế của plan (thứ tự ổn định, không cố định 5 dòng) |
+| Kết quả             | Verdict từng món, lý do, gap, isReady                                 | Thêm: mức đáp ứng từng nhu cầu, món được dùng, snapshot theo revision          |
+| Gợi ý thuê / tư vấn | Ở tầng core thuần: không có (`rentalSuggestions=[]`, `aiAdvice=null`) | Tải riêng qua options/advice khi capability sẵn sàng                           |
 
 - NOT_SUITABLE luôn kèm lý do: FE hiển thị `ruleId` + `message` nguyên văn backend trả, không tự viết lại câu, không tự chạy luật để sinh lý do.
 - Thiếu thông số: chỉ khi field thiếu thuộc một luật **áp dụng cho chuyến này** thì món mới KHÔNG PHÙ HỢP kèm lý do thiếu dữ liệu (R25) + nút "Bổ sung thông số" trỏ đúng field thiếu. Field null không liên quan tới chuyến thì không phạt.
@@ -212,14 +211,14 @@ Mỗi field mang nguồn `TRIP_FACT / CLIMATE_ESTIMATE / USER_DECLARED`, hiển 
 
 Mức đáp ứng từng nhu cầu (coverage) backend trả, FE hiển thị nhãn tương ứng:
 
-| Giá trị | Nhãn UI |
-| --- | --- |
-| COVERED_BY_OWNED | Đã có món đồ đáp ứng |
-| PLANNED_RENTAL | Dự định thuê — chưa giữ chỗ, chưa thanh toán |
+| Giá trị                 | Nhãn UI                                              |
+| ----------------------- | ---------------------------------------------------- |
+| COVERED_BY_OWNED        | Đã có món đồ đáp ứng                                 |
+| PLANNED_RENTAL          | Dự định thuê — chưa giữ chỗ, chưa thanh toán         |
 | USER_DECLARED_PROVISION | Bạn khai đã có nguồn chuẩn bị — TrekGo chưa xác nhận |
-| NEEDS_REPLACEMENT | Cần thay bằng món phù hợp |
-| MISSING | Chưa có món đáp ứng |
-| UNKNOWN | Chưa đủ thông tin để xác minh |
+| NEEDS_REPLACEMENT       | Cần thay bằng món phù hợp                            |
+| MISSING                 | Chưa có món đáp ứng                                  |
+| UNKNOWN                 | Chưa đủ thông tin để xác minh                        |
 
 Nhu cầu tùy chọn (OPTIONAL) chưa đáp ứng không hiển thị như thiếu nhu cầu bắt buộc (REQUIRED).
 
@@ -265,12 +264,12 @@ Thêm mục "Đã kiểm tra cho các chuyến" trong màn chi tiết món đồ
 
 ## 10. Phiên bản dữ liệu, xung đột, trạng thái lỗi
 
-| Cơ chế | FE dùng |
-| --- | --- |
-| `expectedInputRevision` | Gửi kèm khi PATCH plan và khi evaluate/options theo revision |
-| `expectedProgressVersion` | Gửi kèm khi tick checklist |
-| `expectedVersion` (nháp trích xuất) | Gửi kèm khi confirm nháp |
-| Item khi sửa | Chỉ gửi expectedVersion nếu DTO item thật của backend có field này — không tự thêm field lạ vào DTO strict |
+| Cơ chế                              | FE dùng                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `expectedInputRevision`             | Gửi kèm khi PATCH plan và khi evaluate/options theo revision                                               |
+| `expectedProgressVersion`           | Gửi kèm khi tick checklist                                                                                 |
+| `expectedVersion` (nháp trích xuất) | Gửi kèm khi confirm nháp                                                                                   |
+| Item khi sửa                        | Chỉ gửi expectedVersion nếu DTO item thật của backend có field này — không tự thêm field lạ vào DTO strict |
 
 - Lỗi 409 (xung đột phiên bản): giữ nguyên nội dung user đang sửa, báo dữ liệu đã thay đổi, tải bản mới và để user quyết định áp lại phần sửa. Không tự gửi lại vô hạn. Server trả revision mới nào thì dùng đúng số đó, không tự cộng version ở client. Phân biệt bằng mã lỗi: `409` kèm mã `GEAR_ITEM_POSSIBLE_DUPLICATE` là cảnh báo trùng mềm (mục 4), xử lý bằng hộp hỏi user — không áp quy trình xung đột phiên bản ở đây.
 - Item trong tủ bị sửa, điều kiện Trip đổi, hoặc có revision mới hơn → kết quả cũ gắn nhãn cần đánh giá lại; snapshot lịch sử giữ nguyên, không vẽ lại bằng dữ kiện hiện tại.
@@ -280,23 +279,23 @@ Thêm mục "Đã kiểm tra cho các chuyến" trong màn chi tiết món đồ
 
 Path chưa gồm prefix `/api/v1`. Đây là đặc tả đích theo MASTER V3.1.5; **wire chính xác (envelope, mã lỗi, tên field, phân trang) chốt theo API_CONTRACT_V3/OpenAPI của repo khi nối thật** — V3.1.5 là phiên bản đặc tả Gear, khác với contractVersion của Rental.
 
-| Method + path | Dùng để |
-| --- | --- |
-| GET/POST `/gear/items`; PATCH/DELETE `/gear/items/:id` | Tủ đồ của owner |
-| GET `/gear/requirement-rules` | Metadata 28 luật để hiển thị giải thích (user không sửa được) |
-| POST `/gear/check` | Kiểm tra core 5 loại cơ bản: `{tripId, itemIds}`; chứa loại mở rộng → lỗi `GEAR_CATEGORY_REQUIRES_PLAN` |
-| POST `/gear/extractions` | Tạo nháp: `source` là một object phân biệt loại — `{kind:"IMAGE", uploadId}` hoặc `{kind:"LINK", productUrl}` (dạng lồng trong `source`, chốt theo contract thật) |
-| GET `/gear/extractions/:id` | Đọc nháp/trạng thái/bằng chứng của owner |
-| POST `/gear/extractions/:id/confirm` | expectedVersion + field user đã xác nhận (+ `acknowledgeDuplicate` khi user đồng ý lưu món tương tự) → item |
-| POST `/gear/plans`; GET `/gear/plans`; GET `/gear/plans/:id` | Tạo / danh sách / chi tiết plan (đầu vào dùng `selectedItemIds`) |
-| PATCH `/gear/plans/:id` | expectedInputRevision + đầu vào sửa được, gồm context/confirmation/preferences |
-| PUT `/gear/plans/:id/checklist-progress` | expectedProgressVersion + tick theo requirementId |
-| POST `/gear/plans/:id/evaluate` | expectedInputRevision → snapshot kết quả hoặc trạng thái thiếu điều kiện |
-| GET `/gear/plans/:id/revisions`; GET `/gear/plans/:id/revisions/:revision` | Lịch sử snapshot và chi tiết một revision |
-| POST `/gear/plans/:id/options` | Phương án thuê cho revision hiện tại |
-| POST `/gear/plans/:id/advice` | Tư vấn theo revision/optionRef; không gửi verdict/giá tự khai |
-| POST `/gear/plans/:id/quote-intents` | revision + optionRef + số lượng → prefill Rental |
-| POST `/gear/plans/:id/quote-links` | quoteId + planRevision → liên kết quote thật về plan (backend tự xác minh) |
+| Method + path                                                              | Dùng để                                                                                                                                                           |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET/POST `/gear/items`; PATCH/DELETE `/gear/items/:id`                     | Tủ đồ của owner                                                                                                                                                   |
+| GET `/gear/requirement-rules`                                              | Metadata 28 luật để hiển thị giải thích (user không sửa được)                                                                                                     |
+| POST `/gear/check`                                                         | Kiểm tra core 5 loại cơ bản: `{tripId, itemIds}`; chứa loại mở rộng → lỗi `GEAR_CATEGORY_REQUIRES_PLAN`                                                           |
+| POST `/gear/extractions`                                                   | Tạo nháp: `source` là một object phân biệt loại — `{kind:"IMAGE", uploadId}` hoặc `{kind:"LINK", productUrl}` (dạng lồng trong `source`, chốt theo contract thật) |
+| GET `/gear/extractions/:id`                                                | Đọc nháp/trạng thái/bằng chứng của owner                                                                                                                          |
+| POST `/gear/extractions/:id/confirm`                                       | expectedVersion + field user đã xác nhận (+ `acknowledgeDuplicate` khi user đồng ý lưu món tương tự) → item                                                       |
+| POST `/gear/plans`; GET `/gear/plans`; GET `/gear/plans/:id`               | Tạo / danh sách / chi tiết plan (đầu vào dùng `selectedItemIds`)                                                                                                  |
+| PATCH `/gear/plans/:id`                                                    | expectedInputRevision + đầu vào sửa được, gồm context/confirmation/preferences                                                                                    |
+| PUT `/gear/plans/:id/checklist-progress`                                   | expectedProgressVersion + tick theo requirementId                                                                                                                 |
+| POST `/gear/plans/:id/evaluate`                                            | expectedInputRevision → snapshot kết quả hoặc trạng thái thiếu điều kiện                                                                                          |
+| GET `/gear/plans/:id/revisions`; GET `/gear/plans/:id/revisions/:revision` | Lịch sử snapshot và chi tiết một revision                                                                                                                         |
+| POST `/gear/plans/:id/options`                                             | Phương án thuê cho revision hiện tại                                                                                                                              |
+| POST `/gear/plans/:id/advice`                                              | Tư vấn theo revision/optionRef; không gửi verdict/giá tự khai                                                                                                     |
+| POST `/gear/plans/:id/quote-intents`                                       | revision + optionRef + số lượng → prefill Rental                                                                                                                  |
+| POST `/gear/plans/:id/quote-links`                                         | quoteId + planRevision → liên kết quote thật về plan (backend tự xác minh)                                                                                        |
 
 API Rental dùng lại nguyên trạng: `GET /trips/:tripId/rental-eligibility` (101 — lưu ý `eligible=false` vẫn có thể là phản hồi thành công kèm lý do), `GET /rentals/availability` (102), `POST /rentals/quote` (103), `GET /trips/:tripId/rental-recommendations` (104). Quote không giữ tồn; tạo đơn sẽ kiểm tra lại. Quote hết hạn hiển thị nhãn hết hạn trong lịch sử, không dùng lại như quote còn hiệu lực. Nếu tạo quote thành công nhưng liên kết về plan lỗi: giữ quoteId, cho liên kết lại — không tạo quote/đơn mới để che lỗi.
 
@@ -311,9 +310,19 @@ STAFF_INVENTORY/ADMIN quản lý hồ sơ kỹ thuật của sản phẩm catalo
 Toàn bộ mục này là fixture phục vụ dựng UI và kiểm thử FE — là kỳ vọng theo đặc tả, không phải dữ kiện runtime đã chạy, không seed vào tài khoản thật. Tách mock khỏi API client production.
 
 **Điều kiện chuyến mẫu (Bidoup)** — bộ điều kiện đầy đủ, đã xác nhận:
+
 ```json
-{ "temp_min_c": 8, "temp_max_c": 16, "temp_min_night_c": 9, "rain_prob_pct": 85, "difficulty": 3, "days": 2, "terrain": ["muddy", "rocky"] }
+{
+  "temp_min_c": 8,
+  "temp_max_c": 16,
+  "temp_min_night_c": 9,
+  "rain_prob_pct": 85,
+  "difficulty": 3,
+  "days": 2,
+  "terrain": ["muddy", "rocky"]
+}
 ```
+
 **Năm món mẫu** (condition=good, source=manual) và **kết quả kỳ vọng**:
 | Loại | Attributes | Kỳ vọng |
 | --- | --- | --- |
@@ -327,34 +336,34 @@ Tổng: đúng 3 KHÔNG PHÙ HỢP; `isReady=false`; gap R28; không R26/R27; kh
 
 **Các ca mock bổ sung để dựng đủ trạng thái:**
 
-| Ca | Kỳ vọng UI |
-| --- | --- |
-| Tất cả đạt | Giữ điều kiện trên; JACKET waterproof_mm=10000, temp_rating_c=5; FOOTWEAR waterproof=true; SLEEPING_BAG temp_rating_c=5 → 5 PHÙ HỢP, isReady=true, không gap |
-| Không chọn đồ | selectedItemIds=[] → không verdict từng món; gap R26 cho JACKET/FOOTWEAR/BACKPACK |
-| Thiếu điều kiện | Ước tính chưa xác nhận hoặc thiếu temp_max_c → trạng thái cần bổ sung điều kiện; không verdict giả |
-| Thiếu thông số | Field thiếu thuộc luật áp dụng cho chuyến → R25 + chỉ rõ field cần bổ sung |
-| Áo tốt + áo xấu | Cả hai có verdict riêng; plan dùng áo tốt, không gợi ý thuê áo |
-| Đồ mở rộng | TENT có nhu cầu số chỗ do user xác nhận; thiếu dữ kiện ràng buộc → UNKNOWN, không tự gắn PHÙ HỢP |
-| Tick checklist | Tick hết vẫn không đổi verdict/coverage/isReady; chỉ tiến độ đổi |
-| Nháp trích xuất READY | Có nguồn ảnh/link + thời điểm đọc (với link), bằng chứng, field chưa rõ, version nháp |
-| Nháp FAILED / hết quota | Không confirm được; có đường nhập tay; cache hit không bị trừ lượt hiển thị |
-| Phương án thiếu cân nặng | Phí/cọc hiển thị bình thường; cân nặng ghi PARTIAL/chưa biết — không 0g, không nhãn "nhẹ nhất" |
-| Không có phương án | Phân biệt "không khả thi, có lý do" với "chưa đủ dữ kiện xác minh" |
-| Tư vấn fallback / về trễ | Nhãn RULE_FALLBACK; phản hồi của revision cũ không thay thế bản hiện tại |
-| Xung đột 409 | Giữ nội dung đang sửa, cho tải bản mới |
-| Trip đã kết thúc | Xem snapshot; khóa sửa/evaluate/tick/options/advice/quote mới |
-| Quote hết hạn / liên kết lỗi | Nhãn hết hạn; hoặc giữ quoteId và cho liên kết lại |
-| Cùng món, hai Trip khác kết quả | Túi ngủ temp_rating_c=13: với Bidoup (đêm 9°C) → KHÔNG PHÙ HỢP R20; Trip thứ hai có đêm 18°C → PHÙ HỢP. Chi tiết món hiện cả hai dòng theo từng Trip; thẻ món trong tủ không ghim badge verdict |
-| Xem lại theo Trip trong tủ đồ | Nhóm theo Trip lấy revision mới nhất của từng plan; món đã xóa khỏi tủ vẫn hiện kèm nhãn "đã xóa khỏi tủ"; plan chưa xác nhận điều kiện → dòng Trip hiện "Chưa đánh giá — cần xác nhận điều kiện chuyến" |
-| Món sửa sau khi đã kiểm tra | Verdict cũ ở cả hai view gắn nhãn "cần đánh giá lại", không tự đổi theo thuộc tính mới của món |
-| Tạo món trùng món đã có | Nhập tay áo5000/5°C, weight=null khi món AI cũ5000/5°C/500g (cùng loại/tình trạng) → 409 GEAR_ITEM_POSSIBLE_DUPLICATE + hộp hỏi; đồng ý → lưu thành món thứ hai; hủy → không tạo món nào, form giữ nguyên |
-| Thông số chung khác nhau | Một field chung khớp nhưng nhiệt độ5 so6 → tạo thẳng, không cảnh báo |
-| Không đủ bằng chứng | Toàn null hoặc các field biết không giao nhau → tạo thẳng |
-| Giá trị0/false | weight_g=0 hoặc windproof=false ở cả hai → là field khớp thật |
-| Sửa sau cảnh báo | User đổi dữ liệu → bỏ acknowledgeDuplicate, lần lưu sau server kiểm lại |
-| Nhiều món tương tự / lỗi khác409 | Hiện similarCount và item đại diện server trả; version conflict không mở hộp lưu thêm |
-| Xóa món khi tủ đầy | Tủ đủ 50 → tạo mới bị lỗi giới hạn; xóa 1 món (hộp xác nhận ghi rõ xóa thật, không khôi phục được, lịch sử kiểm tra vẫn giữ) → tạo mới thành công ngay; tạo lại món giống hệt bản vừa xóa → không cảnh báo tương tự |
-| Gợi ý thuê cho PANTS | Nhu cầu PANTS chưa đáp ứng → hiện "chưa có danh mục thuê tương ứng", không hiện chung chung "hết hàng" |
+| Ca                               | Kỳ vọng UI                                                                                                                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tất cả đạt                       | Giữ điều kiện trên; JACKET waterproof_mm=10000, temp_rating_c=5; FOOTWEAR waterproof=true; SLEEPING_BAG temp_rating_c=5 → 5 PHÙ HỢP, isReady=true, không gap                                                        |
+| Không chọn đồ                    | selectedItemIds=[] → không verdict từng món; gap R26 cho JACKET/FOOTWEAR/BACKPACK                                                                                                                                   |
+| Thiếu điều kiện                  | Ước tính chưa xác nhận hoặc thiếu temp_max_c → trạng thái cần bổ sung điều kiện; không verdict giả                                                                                                                  |
+| Thiếu thông số                   | Field thiếu thuộc luật áp dụng cho chuyến → R25 + chỉ rõ field cần bổ sung                                                                                                                                          |
+| Áo tốt + áo xấu                  | Cả hai có verdict riêng; plan dùng áo tốt, không gợi ý thuê áo                                                                                                                                                      |
+| Đồ mở rộng                       | TENT có nhu cầu số chỗ do user xác nhận; thiếu dữ kiện ràng buộc → UNKNOWN, không tự gắn PHÙ HỢP                                                                                                                    |
+| Tick checklist                   | Tick hết vẫn không đổi verdict/coverage/isReady; chỉ tiến độ đổi                                                                                                                                                    |
+| Nháp trích xuất READY            | Có nguồn ảnh/link + thời điểm đọc (với link), bằng chứng, field chưa rõ, version nháp                                                                                                                               |
+| Nháp FAILED / hết quota          | Không confirm được; có đường nhập tay; cache hit không bị trừ lượt hiển thị                                                                                                                                         |
+| Phương án thiếu cân nặng         | Phí/cọc hiển thị bình thường; cân nặng ghi PARTIAL/chưa biết — không 0g, không nhãn "nhẹ nhất"                                                                                                                      |
+| Không có phương án               | Phân biệt "không khả thi, có lý do" với "chưa đủ dữ kiện xác minh"                                                                                                                                                  |
+| Tư vấn fallback / về trễ         | Nhãn RULE_FALLBACK; phản hồi của revision cũ không thay thế bản hiện tại                                                                                                                                            |
+| Xung đột 409                     | Giữ nội dung đang sửa, cho tải bản mới                                                                                                                                                                              |
+| Trip đã kết thúc                 | Xem snapshot; khóa sửa/evaluate/tick/options/advice/quote mới                                                                                                                                                       |
+| Quote hết hạn / liên kết lỗi     | Nhãn hết hạn; hoặc giữ quoteId và cho liên kết lại                                                                                                                                                                  |
+| Cùng món, hai Trip khác kết quả  | Túi ngủ temp_rating_c=13: với Bidoup (đêm 9°C) → KHÔNG PHÙ HỢP R20; Trip thứ hai có đêm 18°C → PHÙ HỢP. Chi tiết món hiện cả hai dòng theo từng Trip; thẻ món trong tủ không ghim badge verdict                     |
+| Xem lại theo Trip trong tủ đồ    | Nhóm theo Trip lấy revision mới nhất của từng plan; món đã xóa khỏi tủ vẫn hiện kèm nhãn "đã xóa khỏi tủ"; plan chưa xác nhận điều kiện → dòng Trip hiện "Chưa đánh giá — cần xác nhận điều kiện chuyến"            |
+| Món sửa sau khi đã kiểm tra      | Verdict cũ ở cả hai view gắn nhãn "cần đánh giá lại", không tự đổi theo thuộc tính mới của món                                                                                                                      |
+| Tạo món trùng món đã có          | Nhập tay áo5000/5°C, weight=null khi món AI cũ5000/5°C/500g (cùng loại/tình trạng) → 409 GEAR_ITEM_POSSIBLE_DUPLICATE + hộp hỏi; đồng ý → lưu thành món thứ hai; hủy → không tạo món nào, form giữ nguyên           |
+| Thông số chung khác nhau         | Một field chung khớp nhưng nhiệt độ5 so6 → tạo thẳng, không cảnh báo                                                                                                                                                |
+| Không đủ bằng chứng              | Toàn null hoặc các field biết không giao nhau → tạo thẳng                                                                                                                                                           |
+| Giá trị0/false                   | weight_g=0 hoặc windproof=false ở cả hai → là field khớp thật                                                                                                                                                       |
+| Sửa sau cảnh báo                 | User đổi dữ liệu → bỏ acknowledgeDuplicate, lần lưu sau server kiểm lại                                                                                                                                             |
+| Nhiều món tương tự / lỗi khác409 | Hiện similarCount và item đại diện server trả; version conflict không mở hộp lưu thêm                                                                                                                               |
+| Xóa món khi tủ đầy               | Tủ đủ 50 → tạo mới bị lỗi giới hạn; xóa 1 món (hộp xác nhận ghi rõ xóa thật, không khôi phục được, lịch sử kiểm tra vẫn giữ) → tạo mới thành công ngay; tạo lại món giống hệt bản vừa xóa → không cảnh báo tương tự |
+| Gợi ý thuê cho PANTS             | Nhu cầu PANTS chưa đáp ứng → hiện "chưa có danh mục thuê tương ứng", không hiện chung chung "hết hàng"                                                                                                              |
 
 ## 14. Riêng mobile
 

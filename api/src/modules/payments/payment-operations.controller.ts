@@ -137,8 +137,7 @@ export class PaymentOperationsController {
   @ApiResponse({ status: 401, description: 'Chưa xác thực' })
   @ApiResponse({
     status: 403,
-    description:
-      'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
+    description: 'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
   })
   @ApiResponse({
     status: 409,
@@ -207,7 +206,8 @@ export class RefundsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Xem chi tiết lệnh hoàn tiền (Refund Detail)',
-    description: 'Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.',
+    description:
+      'Chủ hóa đơn hoặc Admin được xem. Trả refundId, paymentId, purpose, reasonCode, amount, currency, status, refundedAt và reconciliationRequired. SUCCEEDED mới xác nhận hoàn thành.',
   })
   @ApiParam({
     name: 'id',

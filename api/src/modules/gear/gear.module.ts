@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common';
-import { SharedModule } from '../../shared/shared.module';
-import { MediaModule } from '../media/media.module';
+import { Module } from '@nestjs/common'
+import { SharedModule } from '../../shared/shared.module'
+import { MediaModule } from '../media/media.module'
 import {
   USER_GEAR_REPOSITORY_PORT,
   GEAR_RULE_REPOSITORY_PORT,
@@ -16,7 +16,7 @@ import {
   TRIP_CONTEXT_READ_PORT,
   GEAR_AI_PORT,
   PAGE_READER_PORT,
-} from './application/ports';
+} from './application/ports'
 import {
   PrismaUserGearRepository,
   PrismaGearRuleRepository,
@@ -33,19 +33,19 @@ import {
   OpenAiGearAiAdapter,
   GeminiGearAiAdapter,
   FirecrawlPageReaderAdapter,
-} from './infrastructure/adapters';
-import { UserGearService } from './application/services/user-gear.service';
-import { GearCheckService } from './application/services/gear-check.service';
-import { GearRuleService } from './application/services/gear-rule.service';
-import { StaffProductProfileService } from './application/services/staff-product-profile.service';
-import { GearPlanService } from './application/services/gear-plan.service';
-import { GearExtractionService } from './application/services/gear-extraction.service';
-import { UserGearController } from './presentation/controllers/user-gear.controller';
-import { GearCheckController } from './presentation/controllers/gear-check.controller';
-import { GearRulesController } from './presentation/controllers/gear-rules.controller';
-import { StaffGearProfileController } from './presentation/controllers/staff-gear-profile.controller';
-import { GearPlanController } from './presentation/controllers/gear-plan.controller';
-import { GearExtractionController } from './presentation/controllers/gear-extraction.controller';
+} from './infrastructure/adapters'
+import { UserGearService } from './application/services/user-gear.service'
+import { GearCheckService } from './application/services/gear-check.service'
+import { GearRuleService } from './application/services/gear-rule.service'
+import { StaffProductProfileService } from './application/services/staff-product-profile.service'
+import { GearPlanService } from './application/services/gear-plan.service'
+import { GearExtractionService } from './application/services/gear-extraction.service'
+import { UserGearController } from './presentation/controllers/user-gear.controller'
+import { GearCheckController } from './presentation/controllers/gear-check.controller'
+import { GearRulesController } from './presentation/controllers/gear-rules.controller'
+import { StaffGearProfileController } from './presentation/controllers/staff-gear-profile.controller'
+import { GearPlanController } from './presentation/controllers/gear-plan.controller'
+import { GearExtractionController } from './presentation/controllers/gear-extraction.controller'
 
 export const GEAR_REPOSITORY_PROVIDERS = [
   {
@@ -117,7 +117,7 @@ export const GEAR_REPOSITORY_PROVIDERS = [
   PrismaProductTechnicalProfileRepository,
   PrismaTripContextReadAdapter,
   OpenAiGearAiAdapter,
-];
+]
 
 export const GEAR_SERVICES = [
   UserGearService,
@@ -126,7 +126,7 @@ export const GEAR_SERVICES = [
   StaffProductProfileService,
   GearPlanService,
   GearExtractionService,
-];
+]
 
 @Module({
   imports: [SharedModule, MediaModule],

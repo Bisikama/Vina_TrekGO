@@ -6,6 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "test:trip-gps": "jest --runInBand --runTestsByPath src/modules/geo/trip-gps-recording.spec.ts src/modules/geo/trip-gps.gateway.spec.ts",
+    "openapi:trip-gps": "ts-node scripts/generate-trip-gps-openapi.ts",
     "seed:coreflows": "ts-node prisma/seeds/coreflows-happy.seed.ts",
     "test:coreflows-seed": "jest --config test/jest-cf02.json --testRegex coreflows-seed.spec.ts$ --runInBand",
     "start:cf02-mock": "cross-env PAYMENT_PROVIDER=mock PAYMENT_PROVIDER_ENVIRONMENT=MOCK PAYMENT_MOCK_ENABLED=true PAYMENT_EVENTS_WORKER_ENABLED=true PAYMENT_RECOVERY_WORKER_ENABLED=true nest start --watch",
@@ -92,6 +94,7 @@
     "node-fetch": "^2.7.0",
     "prettier": "^3.4.2",
     "prisma": "^6.3.1",
+    "socket.io-client": "^4.8.4",
     "source-map-support": "^0.5.21",
     "supertest": "^6.3.1",
     "ts-jest": "^29.2.5",

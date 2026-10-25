@@ -1,9 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { SystemTrail, purchaseTrail } from "../services/system-trails.api";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { useStaticDataStore } from "@/lib/staticDataStore";
+import {
+  SystemTrail,
+  purchaseTrail,
+  getTrailPurchaseErrorMessage,
+} from "../services/system-trails.api";
 import { SystemTrailMap } from "./SystemTrailMap";
 
 interface SystemTrailDetailViewProps {
@@ -12,23 +18,143 @@ interface SystemTrailDetailViewProps {
 
 export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
   const router = useRouter();
+  const accessToken = useAuthStore((s) => s.accessToken);
+
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"QR" | "REDIRECT">("QR");
+  const [paymentMethod, setPaymentMethod] = useState<"REDIRECT" | "QR">("REDIRECT");
+  const [gateway, setGateway] = useState<"vnpay" | "momo">("vnpay");
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [purchaseSuccessMsg, setPurchaseSuccessMsg] = useState<string | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  const isFree = !trail.price || Number(trail.price) === 0;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const unlockedKey = `trail_unlocked:${trail.id}`;
+    if (localStorage.getItem(unlockedKey) === "true") {
+      setIsUnlocked(true);
+    }
+  }, [trail.id]);
+
+  const handleOpenPurchaseModal = () => {
+    setPurchaseError(null);
+    if (!accessToken) {
+      router.push("/login");
+      return;
+    }
+    setIsPurchaseModalOpen(true);
+  };
 
   const handleConfirmPurchase = async () => {
     try {
       setIsPurchasing(true);
-      const result = await purchaseTrail(trail.id, paymentMethod);
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-      } else {
-        alert("Đã tạo giao dịch thanh toán thành công. Vui lòng thanh toán qua QR.");
-        setIsPurchaseModalOpen(false);
+      setPurchaseError(null);
+
+      // Giữ phiên thanh toán (idempotencyKey + paymentMethod + gateway) theo trail.id trong thời gian còn hiệu lực (15 phút)
+      // để tránh tạo Payment thứ 2 gây lỗi 409 PAYMENT_ATTEMPT_IN_PROGRESS
+      const sessionKey = `trail-purchase-active:${trail.id}`;
+      let activeKey = crypto.randomUUID();
+      let activeMethod: "REDIRECT" | "QR" = paymentMethod;
+      let activeGateway: "vnpay" | "momo" = gateway;
+
+      if (typeof window !== "undefined") {
+        try {
+          const rawSession = sessionStorage.getItem(sessionKey);
+          if (rawSession) {
+            const parsed = JSON.parse(rawSession);
+            const notExpired = !parsed.expiresAt || new Date(parsed.expiresAt).getTime() > Date.now();
+            if (parsed.idempotencyKey && notExpired) {
+              activeKey = parsed.idempotencyKey;
+              activeMethod = parsed.paymentMethod || paymentMethod;
+              activeGateway = parsed.gateway || gateway;
+            } else {
+              sessionStorage.removeItem(sessionKey);
+            }
+          }
+        } catch {
+          sessionStorage.removeItem(sessionKey);
+        }
       }
+
+      const result = await purchaseTrail(
+        trail.id,
+        activeMethod,
+        activeGateway,
+        activeKey
+      );
+
+      if (typeof window !== "undefined" && result?.paymentId) {
+        sessionStorage.setItem(
+          sessionKey,
+          JSON.stringify({
+            idempotencyKey: activeKey,
+            paymentMethod: activeMethod,
+            gateway: activeGateway,
+            expiresAt: result.expiresAt || new Date(Date.now() + 14 * 60 * 1000).toISOString(),
+          })
+        );
+      }
+
+      const checkoutUrl = result?.checkout?.url || result?.checkoutUrl;
+
+      if (checkoutUrl) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(
+            "last_trail_purchase",
+            JSON.stringify({
+              trailId: trail.id,
+              trailCode: trail.code,
+              trailName: trail.name,
+              price: trail.price ?? 0,
+              trailAccessId: result.trailAccessId,
+              paymentId: result.paymentId,
+              timestamp: Date.now(),
+            })
+          );
+          window.location.assign(checkoutUrl);
+        }
+        return;
+      }
+
+      if (result?.accessStatus === "ACTIVE" || isFree) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`trail_unlocked:${trail.id}`, "true");
+          sessionStorage.removeItem(sessionKey);
+        }
+        useStaticDataStore.getState().clearStaticCache();
+        void useStaticDataStore.getState().loadPrivateSources(true);
+        setIsUnlocked(true);
+        setPurchaseSuccessMsg(
+          "Mở khóa cung đường thành công! Bạn đã có toàn quyền sử dụng bản đồ 3D và lộ trình GPS."
+        );
+        setIsPurchaseModalOpen(false);
+        return;
+      }
+
+      setPurchaseSuccessMsg(
+        "Đã ghi nhận yêu cầu thanh toán. Hệ thống đang đồng bộ trạng thái từ cổng thanh toán."
+      );
+      setIsPurchaseModalOpen(false);
     } catch (error) {
       console.error("Lỗi khi tạo thanh toán:", error);
-      alert("Có lỗi xảy ra khi tạo thanh toán. Vui lòng thử lại.");
+      const parsed = getTrailPurchaseErrorMessage(error);
+      if (
+        typeof window !== "undefined" &&
+        parsed.code === "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+      ) {
+        sessionStorage.removeItem(`trail-purchase-active:${trail.id}`);
+      }
+      if (parsed.code === "PAYMENT_INVALID_STATE") {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`trail_unlocked:${trail.id}`, "true");
+        }
+        useStaticDataStore.getState().clearStaticCache();
+        void useStaticDataStore.getState().loadPrivateSources(true);
+        setIsUnlocked(true);
+      }
+      setPurchaseError(parsed.message);
     } finally {
       setIsPurchasing(false);
     }
@@ -71,22 +197,48 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
               <div className="flex flex-col mb-5">
                 <div className="text-white/80 text-sm font-medium mb-1">Giá mở khóa</div>
                 <div className="font-extrabold text-3xl text-white tracking-tight drop-shadow-sm">
-                  {trail.price === 0 || trail.price === undefined ? "Miễn phí" : `${trail.price.toLocaleString('vi-VN')}đ`}
+                  {isFree ? "Miễn phí" : `${Number(trail.price).toLocaleString("vi-VN")}đ`}
                 </div>
               </div>
-              <button 
-                onClick={() => setIsPurchaseModalOpen(true)}
-                className="w-full bg-white text-[#1B5E41] font-bold px-6 py-3.5 rounded-xl text-base transition-transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                {trail.price === 0 || trail.price === undefined ? "Nhận cung đường" : "Mở khóa lộ trình"}
-              </button>
+              {isUnlocked ? (
+                <div className="w-full bg-emerald-500/20 border border-emerald-300/40 text-white font-bold px-6 py-3.5 rounded-xl text-sm flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Đã mở khóa lộ trình
+                </div>
+              ) : (
+                <button 
+                  onClick={handleOpenPurchaseModal}
+                  className="w-full bg-white text-[#1B5E41] font-bold px-6 py-3.5 rounded-xl text-base transition-transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  {isFree ? "Nhận cung đường miễn phí" : "Mở khóa lộ trình (VNPAY)"}
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-12">
+        {purchaseSuccessMsg && (
+          <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <svg className="w-5 h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{purchaseSuccessMsg}</span>
+            </div>
+            <button
+              onClick={() => setPurchaseSuccessMsg(null)}
+              className="text-xs font-bold text-emerald-700 hover:underline ml-4"
+            >
+              Đóng
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-4 mb-12">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
             <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
@@ -135,7 +287,7 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-xl font-extrabold text-gray-900">Mở khóa cung đường</h3>
-              <p className="text-sm text-gray-500 mt-1">Sở hữu toàn bộ dữ liệu lộ trình và điểm check-in</p>
+              <p className="text-sm text-gray-500 mt-1">Sở hữu toàn bộ dữ liệu lộ trình 3D và điểm check-in GPS</p>
             </div>
             
             <div className="p-6">
@@ -145,31 +297,92 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
                 </div>
                 <div>
                   <h4 className="font-bold text-gray-900 leading-tight">{trail.name}</h4>
-                  <div className="text-xs text-gray-500 mt-1">Bản đồ 3D & Dữ liệu GPS</div>
+                  <div className="text-xs text-gray-500 mt-1">Mã lộ trình: <span className="font-mono font-semibold text-gray-700">{trail.code}</span></div>
                 </div>
               </div>
 
-              {trail.price !== 0 && (
+              {purchaseError && (
+                <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-800">
+                  {purchaseError}
+                </div>
+              )}
+
+              {!isFree && (
                 <div className="mb-6">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Phương thức thanh toán</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Phương thức thanh toán VNPAY
+                  </label>
                   <div className="space-y-3">
-                    <div onClick={() => setPaymentMethod('QR')} className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-colors ${paymentMethod === 'QR' ? 'border-[#1B5E41] bg-emerald-50/50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <div
+                      onClick={() => {
+                        setPaymentMethod("REDIRECT");
+                        setGateway("vnpay");
+                        setPurchaseError(null);
+                      }}
+                      className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-colors ${
+                        paymentMethod === "REDIRECT"
+                          ? "border-[#1B5E41] bg-emerald-50/50 ring-2 ring-[#1B5E41]/15"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'QR' ? 'border-[#1B5E41]' : 'border-gray-300'}`}>
-                          {paymentMethod === 'QR' && <div className="w-2.5 h-2.5 rounded-full bg-[#1B5E41]" />}
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            paymentMethod === "REDIRECT" ? "border-[#1B5E41]" : "border-gray-300"
+                          }`}
+                        >
+                          {paymentMethod === "REDIRECT" && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#1B5E41]" />
+                          )}
                         </div>
-                        <span className="font-medium text-sm text-gray-900">Chuyển khoản QR</span>
+                        <div>
+                          <div className="font-bold text-sm text-gray-900">
+                            Cổng thanh toán VNPAY (ATM / Visa / VNPAY-QR)
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Chuyển hướng sang trang thanh toán VNPAY Sandbox
+                          </div>
+                        </div>
                       </div>
-                      <Image src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg" width={24} height={24} alt="QR" className="rounded-md opacity-20" />
+                      <span className="px-2 py-1 rounded bg-[#005BAA] text-white font-black text-[10px] shrink-0">
+                        VNPAY
+                      </span>
                     </div>
 
-                    <div onClick={() => setPaymentMethod('REDIRECT')} className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-colors ${paymentMethod === 'REDIRECT' ? 'border-[#1B5E41] bg-emerald-50/50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <div
+                      onClick={() => {
+                        setPaymentMethod("QR");
+                        setGateway("vnpay");
+                        setPurchaseError(null);
+                      }}
+                      className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-colors ${
+                        paymentMethod === "QR"
+                          ? "border-[#1B5E41] bg-emerald-50/50 ring-2 ring-[#1B5E41]/15"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'REDIRECT' ? 'border-[#1B5E41]' : 'border-gray-300'}`}>
-                          {paymentMethod === 'REDIRECT' && <div className="w-2.5 h-2.5 rounded-full bg-[#1B5E41]" />}
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            paymentMethod === "QR" ? "border-[#1B5E41]" : "border-gray-300"
+                          }`}
+                        >
+                          {paymentMethod === "QR" && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#1B5E41]" />
+                          )}
                         </div>
-                        <span className="font-medium text-sm text-gray-900">Cổng thanh toán (VNPAY)</span>
+                        <div>
+                          <div className="font-bold text-sm text-gray-900">
+                            Quét mã VNPAY-QR trực tiếp
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Mở thẳng giao diện mã QR ngân hàng trên VNPAY
+                          </div>
+                        </div>
                       </div>
+                      <span className="px-2 py-1 rounded bg-emerald-700 text-white font-black text-[10px] shrink-0">
+                        QR
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -178,7 +391,7 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
               <div className="flex items-center justify-between py-4 border-t border-gray-100">
                 <span className="font-medium text-gray-500">Tổng thanh toán</span>
                 <span className="font-extrabold text-xl text-[#1B5E41]">
-                  {trail.price === 0 || trail.price === undefined ? "0đ" : `${trail.price.toLocaleString('vi-VN')}đ`}
+                  {isFree ? "0đ (Miễn phí)" : `${Number(trail.price).toLocaleString("vi-VN")}đ`}
                 </span>
               </div>
             </div>
@@ -186,16 +399,24 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
             <div className="p-6 pt-0 flex gap-3">
               <button 
                 onClick={() => setIsPurchaseModalOpen(false)}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl transition-colors hover:bg-gray-200"
+                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl transition-colors hover:bg-gray-200 cursor-pointer"
               >
-                Hủy bỏ
+                Đóng
               </button>
               <button 
                 onClick={handleConfirmPurchase}
                 disabled={isPurchasing}
-                className={`flex-1 py-3 text-white font-bold rounded-xl transition-colors shadow-lg ${isPurchasing ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#1B5E41] hover:bg-[#12402C] shadow-emerald-900/20'}`}
+                className={`flex-1 py-3 text-white font-bold rounded-xl transition-colors shadow-lg cursor-pointer ${
+                  isPurchasing
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#1B5E41] hover:bg-[#12402C] shadow-emerald-900/20"
+                }`}
               >
-                {isPurchasing ? 'Đang xử lý...' : 'Thanh toán ngay'}
+                {isPurchasing
+                  ? "Đang chuyển VNPAY..."
+                  : isFree
+                  ? "Mở khóa miễn phí"
+                  : "Thanh toán VNPAY"}
               </button>
             </div>
           </div>

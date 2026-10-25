@@ -1,9 +1,9 @@
-import { GearCategory, ProductTechnicalProfileDomain } from '../../domain/gear.types';
+import { GearCategory, ProductTechnicalProfileDomain } from '../../domain/gear.types'
 
-export const PRODUCT_TECHNICAL_PROFILE_REPOSITORY_PORT = Symbol('PRODUCT_TECHNICAL_PROFILE_REPOSITORY_PORT');
+export const PRODUCT_TECHNICAL_PROFILE_REPOSITORY_PORT = Symbol('PRODUCT_TECHNICAL_PROFILE_REPOSITORY_PORT')
 
 export interface ProductTechnicalProfileRepositoryPort {
-  findByProductId(productId: string): Promise<ProductTechnicalProfileDomain | null>;
+  findByProductId(productId: string): Promise<ProductTechnicalProfileDomain | null>
   upsertProfile(
     productId: string,
     category: GearCategory,
@@ -12,5 +12,5 @@ export interface ProductTechnicalProfileRepositoryPort {
     schemaVersion?: string,
     sources?: Record<string, unknown>,
     actorId?: string,
-  ): Promise<ProductTechnicalProfileDomain>;
+  ): Promise<ProductTechnicalProfileDomain>
 }
