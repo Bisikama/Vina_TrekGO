@@ -11,11 +11,16 @@ import { GetTripMapStateUseCase } from './application/use-cases/get-trip-map-sta
 import { PrismaTripMapStateAdapter } from './infrastructure/adapters/prisma-trip-map-state.adapter'
 import { TripMapStatePort } from './application/ports/trip-map-state.port'
 import { GpsTrackRefreshWorker } from './infrastructure/workers/gps-track-refresh.worker'
+import { GpsSyncService } from './application/gps-sync.service'
+import { TripGpsSyncController } from './presentation/controllers/trip-gps-sync.controller'
+import { GpsSyncWorker } from './infrastructure/workers/gps-sync.worker'
 
 @Module({
   imports: [CheckpointModule],
-  controllers: [TripMapStateController, TripGpsController],
+  controllers: [TripMapStateController, TripGpsController, TripGpsSyncController],
   providers: [
+    GpsSyncService,
+    GpsSyncWorker,
     GpsAccessService,
     GpsProjectionService,
     GpsTrackService,

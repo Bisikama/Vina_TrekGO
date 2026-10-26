@@ -25,6 +25,10 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [GPS.PROTOCOL_CONFLICT]: { status: 409, message: 'GPS protocol does not match session', retryable: false },
+  [GPS.SYNC_CONFLICT]: { status: 409, message: 'GPS sync revision or payload conflicts', retryable: false },
+  [GPS.SYNC_INCOMPLETE]: { status: 409, message: 'GPS snapshot has missing batches', retryable: false },
+  [GPS.SYNC_UNAVAILABLE]: { status: 503, message: 'GPS sync temporarily unavailable', retryable: true },
   [GPS.SESSION_NOT_FOUND]: { status: 404, message: 'GPS session not found', retryable: false },
   [GPS.TRIP_NOT_RECORDABLE]: { status: 409, message: 'Trip is not in progress', retryable: false },
   [GPS.RATE_LIMITED]: { status: 429, message: 'GPS request limit exceeded', retryable: true },
