@@ -434,6 +434,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Notification not found or access denied',
     retryable: false,
   },
+  [RO.RENTAL_POLICY_NOT_CONFIGURED]: {
+    status: 503,
+    message: 'Chính sách thuê chưa được cấu hình hoặc đã hết hạn',
+    retryable: true,
+  },
   [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: {
     status: 400,
     message: 'Insufficient available quantity for rental',
