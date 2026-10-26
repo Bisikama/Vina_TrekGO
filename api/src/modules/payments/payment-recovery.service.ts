@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
-import { Payment, Prisma, Refund } from '@prisma/client'
+import {
+  Payment,
+  Prisma,
+  Refund,
+  RentalExceptionCaseStatus,
+  RentalExceptionType,
+  RentalOrderExceptionStatus,
+} from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
@@ -15,6 +22,7 @@ type Kind = 'payment' | 'refund'
 type Claim<T> = { row: T; review: boolean; now: Date }
 const needsReview = (code: string | null) =>
   !!code && !['PAYMENT_PROVIDER_UNAVAILABLE', 'RECOVERY_UNKNOWN'].includes(code)
+const refundReviewReference = (refundId: string) => `[refund:${refundId}]`
 
 @Injectable()
 export class PaymentRecoveryService {
@@ -89,14 +97,61 @@ export class PaymentRecoveryService {
       (claim.row as Payment).expiresAt! > claim.now
     const review = claim.review || (!awaitingIpn && claim.row.retryCount >= config.maxAttempts)
     // Only the current unexpired owner can persist. A stale owner never clears a newer lease.
-    await this.db.$executeRaw(Prisma.sql`UPDATE ${table} SET
-      status = CASE WHEN status = 'PENDING' THEN 'PROCESSING'::${Prisma.raw(kind === 'payment' ? 'payment_status' : 'refund_status')} ELSE status END,
-      reconcile_status = ${review ? 'NEEDS_REVIEW' : 'SCHEDULED'}::payment_reconcile_status,
-      last_checked_at = clock_timestamp(), next_retry_at = ${review ? Prisma.sql`NULL` : Prisma.sql`clock_timestamp() + ${config.retrySeconds} * interval '1 second'`},
-      last_error_code = ${claim.review ? (claim.row.lastErrorCode ?? reason) : reason}, lease_token = NULL, lease_until = NULL,
-      version = version + 1, updated_at = clock_timestamp()
-      WHERE id = ${claim.row.id}::uuid AND lease_token = ${claim.row.leaseToken}::uuid
-      AND version = ${claim.row.version} AND lease_until > clock_timestamp()`)
+    await this.db.$transaction(async (tx) => {
+      const updated = await tx.$executeRaw(Prisma.sql`UPDATE ${table} SET
+        status = CASE WHEN status = 'PENDING' THEN 'PROCESSING'::${Prisma.raw(kind === 'payment' ? 'payment_status' : 'refund_status')} ELSE status END,
+        reconcile_status = ${review ? 'NEEDS_REVIEW' : 'SCHEDULED'}::payment_reconcile_status,
+        last_checked_at = clock_timestamp(), next_retry_at = ${review ? Prisma.sql`NULL` : Prisma.sql`clock_timestamp() + ${config.retrySeconds} * interval '1 second'`},
+        last_error_code = ${claim.review ? (claim.row.lastErrorCode ?? reason) : reason}, lease_token = NULL, lease_until = NULL,
+        version = version + 1, updated_at = clock_timestamp()
+        WHERE id = ${claim.row.id}::uuid AND lease_token = ${claim.row.leaseToken}::uuid
+        AND version = ${claim.row.version} AND lease_until > clock_timestamp()`)
+
+      if (updated !== 1 || kind !== 'refund' || !review) return
+
+      const refund = await tx.refund.findUnique({
+        where: { id: claim.row.id },
+        select: {
+          id: true,
+          rentalOrderId: true,
+          depositSettlement: { select: { orderId: true } },
+          depositSettlementItem: {
+            select: { settlement: { select: { orderId: true } } },
+          },
+        },
+      })
+      const rentalOrderId =
+        refund?.rentalOrderId ??
+        refund?.depositSettlement?.orderId ??
+        refund?.depositSettlementItem?.settlement.orderId
+      if (!refund || !rentalOrderId) return
+
+      const reference = refundReviewReference(refund.id)
+      const existing = await tx.rentalExceptionCase.findFirst({
+        where: {
+          orderId: rentalOrderId,
+          caseType: RentalExceptionType.REFUND_FAILURE,
+          status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+          reason: { contains: reference },
+        },
+        select: { id: true },
+      })
+      if (!existing) {
+        await tx.rentalExceptionCase.create({
+          data: {
+            orderId: rentalOrderId,
+            caseType: RentalExceptionType.REFUND_FAILURE,
+            status: RentalExceptionCaseStatus.OPEN,
+            reason: `${reference} ${reason}`,
+            evidenceIds: [],
+          },
+        })
+      }
+      await tx.rentalOrder.update({
+        where: { id: rentalOrderId },
+        data: { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED, version: { increment: 1 } },
+      })
+    })
   }
 
   async reconcilePayment(id?: string, deferInbox = false): Promise<boolean> {

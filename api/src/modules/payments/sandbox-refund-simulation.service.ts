@@ -1,35 +1,40 @@
-import { Injectable, Logger } from '@nestjs/common'
-import { randomUUID } from 'node:crypto'
-import {
-  DepositItemStatus,
-  DepositSettlementOutcome,
-  DepositSettlementStatus,
-  Prisma,
-  RentalFinancialStatus,
-  RentalOrderStatus,
-} from '@prisma/client'
+import { Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../shared/services/prisma.service'
 import envconfig from '../../shared/config'
 import { AppError } from '../../shared/errors'
 import { PAYMENT_ERROR_CODES as P } from '../../shared/errors/codes/payment.error-codes'
+import type { VerifiedRefundEvent } from './payment-provider.port'
 import { paymentHash } from './payment-utils'
-import { updateSettlementProgress } from '../rental/payments/settlement-progress'
-import { tryCompleteOrder } from '../rental/returns/infrastructure/adapters/prisma-rental-return.adapter'
+import { RefundsService } from './refunds.service'
 import type {
   SandboxSimulateRefundBodyDto,
   SandboxSimulateRefundResponseDto,
 } from './dtos/sandbox-refund-simulation.dto'
 
+type PreparedSimulation = {
+  cachedResponse?: SandboxSimulateRefundResponseDto
+  simulationId: string
+  event: VerifiedRefundEvent
+  refundId: string
+  rentalOrderId: string
+  depositSettlementId: string
+  amount: string
+  currency: string
+  actorUserId: string
+  reason: string
+}
+
 @Injectable()
 export class SandboxRefundSimulationService {
-  private readonly logger = new Logger(SandboxRefundSimulationService.name)
-
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly refunds: RefundsService,
+  ) {}
 
   /**
-   * MERGE-01 Hardening: Strict fail-closed environment & database guard.
-   * Simulation is NEVER allowed in production or against shared/cloud databases.
-   * Disallows unverified test DB env overrides when the main connection is a shared cloud database.
+   * Simulation is fail-closed and limited to an isolated local database. The
+   * refund row is checked again for VNPay SANDBOX provenance before use.
    */
   assertEnvironmentSafe(): void {
     if (process.env.NODE_ENV === 'production') {
@@ -48,41 +53,35 @@ export class SandboxRefundSimulationService {
       })
     }
 
-    const env = process.env.PAYMENT_PROVIDER_ENVIRONMENT ?? envconfig.PAYMENT_PROVIDER_ENVIRONMENT
-    if (env !== 'SANDBOX') {
+    const environment = process.env.PAYMENT_PROVIDER_ENVIRONMENT ?? envconfig.PAYMENT_PROVIDER_ENVIRONMENT
+    if (environment !== 'SANDBOX') {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
         message: 'Payment provider environment must be configured as SANDBOX for simulation',
       })
     }
 
-    // RG-01 Fix: Fail-closed verification of DATABASE_URL using exact URL hostname parsing
-    // Disallows query parameter tricks, path/auth masquerading, cloud/shared hosts, or non-local instances
-    const dbUrl = process.env.DATABASE_URL || ''
-    if (!dbUrl) {
+    const databaseUrl = process.env.DATABASE_URL || ''
+    if (!databaseUrl) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
         message: 'No DATABASE_URL configured. Simulation cannot be verified safe.',
       })
     }
 
-    let parsedHostname = ''
+    let hostname = ''
     try {
-      const parsed = new URL(dbUrl)
-      parsedHostname = (parsed.hostname || '').toLowerCase().trim()
+      hostname = new URL(databaseUrl).hostname
+        .toLowerCase()
+        .trim()
+        .replace(/^\[|\]$/g, '')
     } catch {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
         message: 'DATABASE_URL is not a valid URL format',
       })
     }
 
-    // Strip IPv6 brackets if present e.g. [::1] -> ::1
-    if (parsedHostname.startsWith('[') && parsedHostname.endsWith(']')) {
-      parsedHostname = parsedHostname.slice(1, -1)
-    }
-
-    const ALLOWED_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
-    if (!ALLOWED_LOCAL_HOSTS.has(parsedHostname)) {
+    if (!new Set(['localhost', '127.0.0.1', '::1']).has(hostname)) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
-        message: `Database host "${parsedHostname}" is not recognized as an isolated local instance. Simulation requires localhost or 127.0.0.1.`,
+        message: `Database host "${hostname}" is not an isolated local instance`,
       })
     }
   }
@@ -95,503 +94,425 @@ export class SandboxRefundSimulationService {
   }): Promise<SandboxSimulateRefundResponseDto> {
     this.assertEnvironmentSafe()
 
-    const { refundId, actorUserId, idempotencyKey, body } = input
-    const scope = `admin-simulate-refund:${refundId}`
-    const requestHash = paymentHash({ refundId, ...body })
+    const scope = `admin-simulate-refund:${input.refundId}`
+    const requestHash = paymentHash({ refundId: input.refundId, ...input.body })
+    const prepared = await this.prepareSimulation(input, scope, requestHash)
+    if (prepared.cachedResponse) return prepared.cachedResponse
 
-    try {
-      return await this.db.$transaction(async (tx) => {
-      // 1. Check idempotency record first
+    // The shared handler atomically persists Refund SUCCEEDED and the durable
+    // REFUND_SUCCEEDED outbox event. Rental projections remain worker-owned.
+    await this.refunds.applyEvent(prepared.event)
+
+    return this.finalizeSimulation(prepared, scope, requestHash, input.idempotencyKey)
+  }
+
+  private async prepareSimulation(
+    input: {
+      refundId: string
+      actorUserId: string
+      idempotencyKey: string
+      body: SandboxSimulateRefundBodyDto
+    },
+    scope: string,
+    requestHash: string,
+  ): Promise<PreparedSimulation> {
+    return this.db.$transaction(async (tx) => {
       const existingIdempotency = await tx.idempotencyRecord.findUnique({
         where: {
           scope_userId_idempotencyKey: {
             scope,
-            userId: actorUserId,
-            idempotencyKey,
+            userId: input.actorUserId,
+            idempotencyKey: input.idempotencyKey,
           },
         },
       })
-
       if (existingIdempotency) {
         if (existingIdempotency.requestHash !== requestHash) {
           throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         }
         if (existingIdempotency.responseBody) {
-          return existingIdempotency.responseBody as unknown as SandboxSimulateRefundResponseDto
+          return {
+            cachedResponse: existingIdempotency.responseBody as unknown as SandboxSimulateRefundResponseDto,
+          } as PreparedSimulation
         }
       }
 
-      // MERGE-06 Fix: Canonical lock order to eliminate deadlock risks
-      // Order of acquisition:
-      // 1) Read initial refund row to identify associated aggregates
-      const initialRefund = await tx.refund.findUnique({
-        where: { id: refundId },
-        select: {
-          id: true,
-          rentalOrderId: true,
-          depositSettlementId: true,
-          paymentId: true,
-        },
+      const initial = await tx.refund.findUnique({
+        where: { id: input.refundId },
+        select: { id: true, paymentId: true },
       })
+      if (!initial) throw AppError.fromCode(P.PAYMENT_NOT_FOUND, { message: 'Refund does not exist' })
 
-      if (!initialRefund) {
-        throw AppError.fromCode(P.PAYMENT_NOT_FOUND, {
-          message: 'Lệnh hoàn tiền không tồn tại',
-        })
-      }
+      const payment = await tx.payment.findUniqueOrThrow({ where: { id: initial.paymentId } })
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${payment.invoiceId}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${payment.id}::uuid FOR UPDATE`
+      await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${input.refundId}::uuid FOR UPDATE`
 
-      if (!initialRefund.rentalOrderId || !initialRefund.depositSettlementId) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Lệnh hoàn cọc không liên kết với DepositSettlement hoặc RentalOrder hợp lệ',
-        })
-      }
-
-      const orderId = initialRefund.rentalOrderId
-      const settlementId = initialRefund.depositSettlementId
-
-      // 2) Lock hierarchy in canonical order:
-      //    rental_orders -> deposit_settlements -> deposit_settlement_items -> refunds
-      await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${orderId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id = ${settlementId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id = ${settlementId}::uuid ORDER BY id FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${refundId}::uuid FOR UPDATE`
-
-      // 3) Retrieve fresh refund record with relations under lock
       const refund = await tx.refund.findUniqueOrThrow({
-        where: { id: refundId },
+        where: { id: input.refundId },
         include: {
-          payment: true,
+          payment: { include: { invoice: true } },
           depositSettlement: true,
           depositSettlementItem: true,
-          depositRefundItems: true,
+          depositRefundItems: { include: { item: true } },
+          allocations: { include: { paymentAllocation: { include: { rentalOrderLine: true } } } },
         },
       })
 
-      // MERGE-05 Fix: Concurrent same-key idempotency race handling
-      const existingPayload = refund.providerPayload as Prisma.JsonObject | null
-      if (existingPayload && existingPayload.sandboxSimulation) {
-        // Re-check if idempotency record was committed by a concurrent same-key request
-        const concurrentIdempotency = await tx.idempotencyRecord.findUnique({
-          where: {
-            scope_userId_idempotencyKey: {
-              scope,
-              userId: actorUserId,
-              idempotencyKey,
-            },
-          },
-        })
-        if (concurrentIdempotency) {
-          if (concurrentIdempotency.requestHash !== requestHash) {
-            throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
-          }
-          if (concurrentIdempotency.responseBody) {
-            return concurrentIdempotency.responseBody as unknown as SandboxSimulateRefundResponseDto
-          }
-        }
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_ALREADY_SIMULATED, {
-          message: 'Lệnh hoàn tiền này đã được mô phỏng trước đó',
+      const settlementOrderId = refund.depositSettlement?.orderId ?? null
+      if (!settlementOrderId || !refund.depositSettlementId) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+          message: 'Deposit refund is not linked to a valid settlement and rental order',
         })
       }
-
-      // Domain & gateway safety validations
+      if (refund.rentalOrderId && refund.rentalOrderId !== settlementOrderId) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+          message: 'Refund rental order does not match its deposit settlement',
+        })
+      }
+      if (refund.payment.invoice.rentalOrderId !== settlementOrderId) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+          message: 'Refund source payment belongs to a different rental order',
+        })
+      }
       if (refund.purpose !== 'DEPOSIT') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Chỉ hỗ trợ mô phỏng hoàn cọc cho mục đích DEPOSIT',
+          message: 'Only DEPOSIT refunds can be simulated by this operation',
         })
       }
-
       if (refund.paymentGateway !== 'vnpay' || refund.providerEnvironment !== 'SANDBOX') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Chỉ hỗ trợ mô phỏng hoàn tiền cho các giao dịch VNPay Sandbox',
+          message: 'Only VNPay SANDBOX refunds can be simulated',
         })
       }
 
-      if (refund.status !== 'PROCESSING') {
+      const providerPayload = refund.providerPayload as Prisma.JsonObject | null
+      const existingSimulation = providerPayload?.sandboxSimulation as Record<string, unknown> | undefined
+      if (existingSimulation) {
+        if (existingSimulation.requestHash !== requestHash) {
+          throw AppError.fromCode(P.SANDBOX_SIMULATION_ALREADY_SIMULATED)
+        }
+        // The same request may recover after a crash before response persistence.
+      } else if (refund.status !== 'PROCESSING') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Trạng thái hoàn tiền hiện tại là ${refund.status}, chỉ hỗ trợ mô phỏng khi đang ở PROCESSING (05/06)`,
+          message: `Refund status is ${refund.status}; only PROCESSING can be simulated`,
         })
       }
 
-      // RG-02 Fix: Strict fail-closed verification that refund has genuine VNPay 05/06 response provenance
-      const vnpayResponse = existingPayload?.vnpayResponse as Record<string, unknown> | undefined
-      if (!vnpayResponse || typeof vnpayResponse !== 'object') {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Thiếu kết quả phản hồi hoàn tiền từ VNPay (vnpayResponse). Không thể xác minh provenance.',
-        })
-      }
-
-      const vnpResponseCode =
-        typeof vnpayResponse.vnp_ResponseCode === 'string'
-          ? vnpayResponse.vnp_ResponseCode
-          : typeof vnpayResponse.vnp_ResponseCode === 'number'
-            ? `${vnpayResponse.vnp_ResponseCode}`
-            : ''
-      const vnpTxnStatus =
-        typeof vnpayResponse.vnp_TransactionStatus === 'string'
-          ? vnpayResponse.vnp_TransactionStatus
-          : typeof vnpayResponse.vnp_TransactionStatus === 'number'
-            ? `${vnpayResponse.vnp_TransactionStatus}`
-            : ''
-
-      // VNPay must have acknowledged the refund request with response code '00'
-      if (vnpResponseCode !== '00') {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Phản hồi VNPay có vnp_ResponseCode='${vnpResponseCode}', yêu cầu hoàn tiền không được VNPay tiếp nhận thành công`,
-        })
-      }
-
-      // Transaction status must be strictly '05' or '06' (PROCESSING)
-      if (!['05', '06'].includes(vnpTxnStatus)) {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Trạng thái giao dịch VNPay là '${vnpTxnStatus}', chỉ hỗ trợ mô phỏng hoàn cọc khi giao dịch đang ở nhóm 05 hoặc 06 (PROCESSING)`,
-        })
-      }
-
-      // MERGE-05 Fix: Explicit expectedVersion number check
-      if (typeof body.expectedVersion === 'number' && refund.version !== body.expectedVersion) {
+      if (
+        !existingSimulation &&
+        typeof input.body.expectedVersion === 'number' &&
+        refund.version !== input.body.expectedVersion
+      ) {
         throw AppError.fromCode('VERSION_CONFLICT', {
-          message: `Phiên bản hoàn tiền đã thay đổi (hiện tại: ${refund.version}, kỳ vọng: ${body.expectedVersion})`,
+          message: `Refund version changed (current ${refund.version}, expected ${input.body.expectedVersion})`,
         })
       }
 
-      // MERGE-03 Fix: Invariant verification of linked settlement items
-      const itemIds =
-        refund.depositRefundItems.length > 0
-          ? refund.depositRefundItems.map((d) => d.depositSettlementItemId)
-          : refund.depositSettlementItemId
-            ? [refund.depositSettlementItemId]
-            : []
-
-      if (!itemIds.length) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Không tìm thấy DepositSettlementItem liên kết với lệnh hoàn tiền',
-        })
-      }
-
-      const items = await tx.depositSettlementItem.findMany({
-        where: { id: { in: itemIds } },
-        include: {
-          inspection: true,
-          assignment: true,
-        },
-      })
-
-      if (items.length !== itemIds.length) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Một số DepositSettlementItem liên kết không tồn tại trong hệ thống',
-        })
-      }
-
-      for (const item of items) {
-        if (item.settlementId !== settlementId) {
-          throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-            message: `DepositSettlementItem ${item.id} không thuộc settlement ${settlementId}`,
-          })
-        }
-        if (item.status !== DepositItemStatus.REFUND_PENDING) {
-          throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-            message: `DepositSettlementItem ${item.id} có trạng thái ${item.status}, chỉ chấp nhận REFUND_PENDING`,
-          })
-        }
-      }
-
-      // Verify exact sum of item refund amounts matches refund.amount
-      const sumRefundAmounts = items.reduce(
-        (acc, i) => acc.plus(i.refundAmount ?? i.depositAmount.minus(i.deductionAmount)),
-        new Prisma.Decimal(0),
-      )
-      if (!sumRefundAmounts.equals(refund.amount)) {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Tổng số tiền hoàn của các item (${sumRefundAmounts.toFixed()}) không khớp với số tiền hoàn của lệnh (${refund.amount.toFixed()})`,
-        })
-      }
-
-      if (refund.currency !== 'VND') {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Chỉ hỗ trợ tiền tệ VND cho mô phỏng hoàn cọc VNPay Sandbox',
-        })
-      }
-
-      // Ensure no unresolved exception cases block this settlement
-      const openCases = await tx.rentalExceptionCase.findFirst({
-        where: {
-          orderId,
-          status: { in: ['OPEN', 'UNDER_REVIEW'] },
-          OR: [
-            { assignmentId: { in: items.map((i) => i.assignmentId) } },
-            { inspectionId: { in: items.map((i) => i.inspectionId).filter(Boolean) as string[] } },
-            { assignmentId: null, inspectionId: null },
-          ],
-        },
-      })
-
-      if (openCases) {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Không thể mô phỏng hoàn cọc khi vẫn còn trường hợp khiếu nại (RentalExceptionCase) đang xử lý',
-        })
-      }
+      this.assertVnpayProcessingProvenance(providerPayload)
+      this.assertAllocations(refund, settlementOrderId)
 
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
-      const simulationId = randomUUID()
+      const simulationId = paymentHash(['ADMIN_SANDBOX_SIMULATION', refund.id, 'v1'])
+      const providerEventId = `sandbox-refund-simulation:${refund.id}:succeeded:v1`
+      const refundTransactionRef = this.simulatedTransactionRef(refund.id)
+      const requestedAt =
+        typeof existingSimulation?.requestedAt === 'string' ? existingSimulation.requestedAt : now.toISOString()
 
-      // Record Layer 1 (Untouched Provider Truth) + Simulation Provenance
-      // Notice: refund.status stays PROCESSING! Raw provider truth is preserved without forgery.
-      const simulationProvenance = {
-        simulationId,
-        simulatedAt: now.toISOString(),
-        actorAdminId: actorUserId,
-        reason: body.reason,
-        testEvidenceRef: body.testEvidenceRef ?? null,
-        providerStatusAtSimulation: refund.status,
-        origin: 'ADMIN_SANDBOX_SIMULATION',
-        settlementMode: 'SANDBOX_SIMULATED',
-        notices: {
-          userNotice: 'Hoàn cọc mô phỏng cho mục đích thử nghiệm — chưa có xác nhận hoàn tiền từ VNPay',
-          adminNotice: 'Đã xử lý hoàn cọc (mô phỏng — VNPay Sandbox). Kết quả demo: SIMULATED (VNPay refund: PROCESSING)',
-        },
+      const event: VerifiedRefundEvent = {
+        kind: 'REFUND',
+        gateway: refund.paymentGateway,
+        environment: refund.providerEnvironment,
+        merchantAccountKey: refund.merchantAccountKey!,
+        providerEventId,
+        merchantRequestRef: refund.payment.merchantRequestRef!,
+        merchantRefundRef: refund.merchantRefundRef!,
+        transactionRef: refund.payment.transactionRef,
+        refundTransactionRef,
+        status: 'SUCCEEDED',
+        amount: refund.amount.toFixed(0),
+        currency: refund.currency,
+        occurredAt: requestedAt,
       }
 
-      const updatedPayload: Prisma.JsonObject = {
-        ...(existingPayload || {}),
-        sandboxSimulation: simulationProvenance,
-      }
-
-      await tx.refund.update({
-        where: { id: refund.id },
-        data: {
-          providerPayload: updatedPayload,
-          version: { increment: 1 },
-        },
-      })
-
-      // Record Layer 2 Simulation Evidence in mock_payment_operations
-      const operationId = paymentHash(['SANDBOX_SIMULATION', refund.id])
-      await tx.mockPaymentOperation.upsert({
-        where: { id: operationId },
-        create: {
-          id: operationId,
-          kind: 'REFUND',
-          requestHash,
-          request: {
-            refundId: refund.id,
-            actorAdminId: actorUserId,
-            reason: body.reason,
-            testEvidenceRef: body.testEvidenceRef ?? null,
-            simulatedAt: now.toISOString(),
-          },
-          result: {
-            status: 'SIMULATED',
-            settlementMode: 'SANDBOX_SIMULATED',
-            provider: 'VNPAY_SANDBOX',
-            providerStatus: refund.status,
-            simulatedAmount: refund.amount.toFixed(0),
-            currency: refund.currency,
-          },
-        },
-        update: {},
-      })
-
-      // Record in audit_logs table
-      await tx.auditLog.create({
-        data: {
-          userId: actorUserId,
-          action: 'ADMIN_SANDBOX_REFUND_SIMULATED',
-          entityType: 'Refund',
-          entityId: refund.id,
-          newValues: {
-            refundId: refund.id,
-            rentalOrderId: orderId,
-            depositSettlementId: settlementId,
-            amount: refund.amount.toFixed(0),
-            currency: refund.currency,
-            reason: body.reason,
-            providerStatus: refund.status,
-            settlementMode: 'SANDBOX_SIMULATED',
-            notice: 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
-          },
-        },
-      })
-
-      // Update each linked DepositSettlementItem to SETTLED with simulation provenance
-      for (const item of items) {
-        await tx.depositSettlementItem.update({
-          where: { id: item.id },
+      if (!existingSimulation) {
+        await tx.refund.update({
+          where: { id: refund.id },
           data: {
-            status: DepositItemStatus.SETTLED,
-            settledAt: now,
-            outcome: item.deductionAmount.greaterThan(0)
-              ? DepositSettlementOutcome.PARTIAL_REFUND
-              : DepositSettlementOutcome.FULL_REFUND,
-            decisionSnapshot: {
-              ...((item.decisionSnapshot as Prisma.JsonObject) || {}),
-              settlementMode: 'SANDBOX_SIMULATED',
-              simulationProvenance: {
+            providerPayload: {
+              ...(providerPayload ?? {}),
+              sandboxSimulation: {
                 simulationId,
-                simulatedAt: now.toISOString(),
-                actorAdminId: actorUserId,
+                requestHash,
+                providerEventId,
+                refundTransactionRef,
+                requestedAt,
+                actorAdminId: input.actorUserId,
+                reason: input.body.reason,
+                testEvidenceRef: input.body.testEvidenceRef ?? null,
                 origin: 'ADMIN_SANDBOX_SIMULATION',
-                notice: 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
+                environment: 'SANDBOX',
+                status: 'REQUESTED',
+                warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
             },
             version: { increment: 1 },
           },
         })
-      }
-
-      // Update DepositSettlement progress and status
-      await updateSettlementProgress(tx, settlementId, now)
-      const allSettlementItems = await tx.depositSettlementItem.findMany({
-        where: { settlementId },
-      })
-      const allSettled =
-        allSettlementItems.length > 0 &&
-        allSettlementItems.every((i) => i.status === DepositItemStatus.SETTLED)
-
-      if (allSettled) {
-        await tx.depositSettlement.update({
-          where: { id: settlementId },
+        await tx.auditLog.create({
           data: {
-            status: DepositSettlementStatus.SETTLED,
-            settledAt: now,
-            version: { increment: 1 },
+            userId: input.actorUserId,
+            action: 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
+            entityType: 'Refund',
+            entityId: refund.id,
+            newValues: {
+              simulationId,
+              providerEventId,
+              rentalOrderId: settlementOrderId,
+              depositSettlementId: refund.depositSettlementId,
+              paymentId: refund.paymentId,
+              environment: 'SANDBOX',
+              origin: 'ADMIN_SANDBOX_SIMULATION',
+              warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+            },
           },
         })
       }
 
-      // MERGE-02 Fix: RentalOrder.policySnapshot MUST NOT be mutated!
-      // In accordance with SOT BA04, policySnapshot is an immutable checkout contract.
-      // We only update financialStatus to SETTLED without touching policySnapshot.
-      if (allSettled) {
-        await tx.rentalOrder.update({
-          where: { id: orderId },
-          data: {
-            financialStatus: RentalFinancialStatus.SETTLED,
-            version: { increment: 1 },
-          },
-        })
-      }
-
-      // Attempt domain order completion
-      // (Respects all existing physical custody, inspection, delivery task positive gates)
-      const completed = await tryCompleteOrder(tx, orderId, now)
-
-      // Emit dedicated outbox event for simulation
-      await tx.paymentOutboxEvent.create({
-        data: {
-          deduplicationKey: `sandbox-simulation:${refund.id}:v1`,
-          eventType: 'SANDBOX_REFUND_SIMULATED',
-          aggregateType: 'Refund',
-          aggregateId: refund.id,
-          payload: {
-            schemaVersion: 1,
-            simulationId,
-            refundId: refund.id,
-            paymentId: refund.paymentId,
-            rentalOrderId: orderId,
-            depositSettlementId: settlementId,
-            amount: refund.amount.toFixed(0),
-            currency: refund.currency,
-            actorAdminId: actorUserId,
-            settlementMode: 'SANDBOX_SIMULATED',
-            provider: 'VNPAY_SANDBOX',
-            providerStatus: refund.status,
-            completed,
-            warnings: [
-              'TEST_ONLY',
-              'NO_REAL_MONEY_RETURNED',
-              'VNPay Sandbox refund remains in PROCESSING status; no real bank credit occurred.',
-            ],
-          },
-        },
-      })
-
-      // Read latest order status
-      const latestOrder = await tx.rentalOrder.findUniqueOrThrow({
-        where: { id: orderId },
-        select: { status: true, financialStatus: true },
-      })
-
-      const responseData: SandboxSimulateRefundResponseDto = {
+      return {
         simulationId,
+        event,
         refundId: refund.id,
-        rentalOrderId: orderId,
-        depositSettlementId: settlementId,
-        provider: 'VNPAY_SANDBOX',
-        providerRefundStatus: refund.status,
-        simulationStatus: 'SIMULATED',
-        simulatedAmount: refund.amount.toFixed(0),
+        rentalOrderId: settlementOrderId,
+        depositSettlementId: refund.depositSettlementId,
+        amount: refund.amount.toFixed(0),
         currency: refund.currency,
-        orderStatus: latestOrder.status,
-        financialStatus: latestOrder.financialStatus,
-        completionMode:
-          latestOrder.status === RentalOrderStatus.COMPLETED
-            ? 'SANDBOX_SIMULATED'
-            : 'STANDARD',
-        settlementMode: 'SANDBOX_SIMULATED',
-        simulatedAt: now.toISOString(),
-        actorAdminId: actorUserId,
-        reason: body.reason,
-        warnings: [
-          'TEST_ONLY',
-          'NO_REAL_MONEY_RETURNED',
-          'VNPay Sandbox refund remains in PROCESSING status; no real bank transfer occurred.',
-        ],
-        notices: {
-          userNotice: 'Hoàn cọc mô phỏng cho mục đích thử nghiệm — chưa có xác nhận hoàn tiền từ VNPay',
-          adminNotice: 'Đã xử lý hoàn cọc (mô phỏng — VNPay Sandbox). Kết quả demo: SIMULATED (VNPay refund: PROCESSING)',
-        },
+        actorUserId: input.actorUserId,
+        reason: input.body.reason,
       }
-
-      // RG-04: Record in IdempotencyRecord table within transaction
-      await tx.idempotencyRecord.create({
-        data: {
-          scope,
-          userId: actorUserId,
-          idempotencyKey,
-          requestHash,
-          responseStatus: 200,
-          responseBody: responseData as unknown as Prisma.InputJsonValue,
-          completedAt: now,
-        },
-      })
-
-      return responseData
     })
-  } catch (err: any) {
-    // RG-04: Handle concurrent same-key race cleanly OUTSIDE the transaction
-    if (err?.code === 'P2002' || err?.message?.includes('idempotency_records')) {
-      const concurrent = await this.db.idempotencyRecord.findUnique({
-        where: {
-          scope_userId_idempotencyKey: {
-            scope,
-            userId: actorUserId,
-            idempotencyKey,
+  }
+
+  private async finalizeSimulation(
+    prepared: PreparedSimulation,
+    scope: string,
+    requestHash: string,
+    idempotencyKey: string,
+  ): Promise<SandboxSimulateRefundResponseDto> {
+    try {
+      return await this.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${prepared.refundId}::uuid FOR UPDATE`
+        const refund = await tx.refund.findUniqueOrThrow({ where: { id: prepared.refundId } })
+        if (refund.status !== 'SUCCEEDED' || !refund.refundedAt) {
+          throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+            message: 'Shared Payment did not accept the simulated provider success event',
+          })
+        }
+
+        const existingIdempotency = await tx.idempotencyRecord.findUnique({
+          where: {
+            scope_userId_idempotencyKey: {
+              scope,
+              userId: prepared.actorUserId,
+              idempotencyKey,
+            },
           },
-        },
+        })
+        if (existingIdempotency?.responseBody) {
+          if (existingIdempotency.requestHash !== requestHash) {
+            throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
+          }
+          return existingIdempotency.responseBody as unknown as SandboxSimulateRefundResponseDto
+        }
+
+        const order = await tx.rentalOrder.findUniqueOrThrow({
+          where: { id: prepared.rentalOrderId },
+          select: { status: true, financialStatus: true },
+        })
+        const successOutbox = await tx.paymentOutboxEvent.findUnique({
+          where: { deduplicationKey: `refund:${refund.id}:succeeded:v1` },
+          select: {
+            status: true,
+            receipts: {
+              where: { consumerName: 'rental-deposit-v1' },
+              select: { processedAt: true },
+              take: 1,
+            },
+          },
+        })
+        if (!successOutbox) {
+          throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+            message: 'Refund succeeded without its durable Shared Payment outbox event',
+          })
+        }
+
+        const payload = refund.providerPayload as Prisma.JsonObject
+        const previous = payload.sandboxSimulation as Prisma.JsonObject
+        await tx.refund.update({
+          where: { id: refund.id },
+          data: {
+            providerPayload: {
+              ...payload,
+              sandboxSimulation: {
+                ...previous,
+                status: 'SUCCEEDED',
+                committedAt: refund.refundedAt.toISOString(),
+              },
+            },
+          },
+        })
+
+        const response: SandboxSimulateRefundResponseDto = {
+          simulationId: prepared.simulationId,
+          refundId: refund.id,
+          rentalOrderId: prepared.rentalOrderId,
+          depositSettlementId: prepared.depositSettlementId,
+          provider: 'VNPAY_SANDBOX',
+          providerRefundStatus: 'SUCCEEDED',
+          simulationStatus: 'SIMULATED',
+          simulatedAmount: prepared.amount,
+          currency: prepared.currency,
+          orderStatus: order.status,
+          financialStatus: order.financialStatus,
+          completionMode: 'STANDARD',
+          settlementMode: 'SANDBOX_SIMULATED',
+          // PROCESSED is transport state. The Rental consumer receipt is the
+          // projection-scoped fact proving that the worker transaction committed.
+          settlementProcessingStatus: successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
+          simulatedAt: refund.refundedAt.toISOString(),
+          actorAdminId: prepared.actorUserId,
+          reason: prepared.reason,
+          warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+          notices: {
+            userNotice: 'Sandbox provider result simulated successfully; no real bank transfer occurred.',
+            adminNotice:
+              'Shared Payment recorded SUCCEEDED. Rental settlement remains asynchronous through the outbox worker.',
+          },
+        }
+
+        if (!existingIdempotency) {
+          await tx.idempotencyRecord.create({
+            data: {
+              scope,
+              userId: prepared.actorUserId,
+              idempotencyKey,
+              requestHash,
+              responseStatus: 200,
+              responseBody: response as unknown as Prisma.InputJsonValue,
+              completedAt: refund.refundedAt,
+            },
+          })
+        }
+        return response
       })
-      if (concurrent) {
-        if (concurrent.requestHash !== requestHash) {
+    } catch (error: any) {
+      if (error?.code === 'P2002' || error?.message?.includes('idempotency_records')) {
+        const concurrent = await this.db.idempotencyRecord.findUnique({
+          where: {
+            scope_userId_idempotencyKey: {
+              scope,
+              userId: prepared.actorUserId,
+              idempotencyKey,
+            },
+          },
+        })
+        if (concurrent?.requestHash !== requestHash) {
           throw AppError.fromCode(P.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         }
-        if (concurrent.responseBody) {
+        if (concurrent?.responseBody) {
           return concurrent.responseBody as unknown as SandboxSimulateRefundResponseDto
         }
       }
+      throw error
     }
-    throw err
   }
-}
+
+  private assertVnpayProcessingProvenance(payload: Prisma.JsonObject | null): void {
+    const response = payload?.vnpayResponse as Record<string, unknown> | undefined
+    const rawResponseCode = response?.vnp_ResponseCode
+    const rawTransactionStatus = response?.vnp_TransactionStatus
+    const responseCode =
+      typeof rawResponseCode === 'string' || typeof rawResponseCode === 'number' ? String(rawResponseCode) : ''
+    const transactionStatus =
+      typeof rawTransactionStatus === 'string' || typeof rawTransactionStatus === 'number'
+        ? String(rawTransactionStatus)
+        : ''
+    if (responseCode !== '00' || !['05', '06'].includes(transactionStatus)) {
+      throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+        message: 'Refund lacks a verified VNPay SANDBOX 05/06 processing response',
+      })
+    }
+  }
+
+  private assertAllocations(refund: any, orderId: string): void {
+    if (!refund.merchantAccountKey || !refund.merchantRefundRef || !refund.payment.merchantRequestRef) {
+      throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+    }
+    if (refund.currency !== 'VND' || refund.payment.currency !== refund.currency) {
+      throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+    }
+
+    const paymentAllocationTotal = refund.allocations.reduce(
+      (sum: Prisma.Decimal, allocation: any) => sum.plus(allocation.amount),
+      new Prisma.Decimal(0),
+    )
+    if (!paymentAllocationTotal.equals(refund.amount) || refund.allocations.length === 0) {
+      throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+    }
+    for (const allocation of refund.allocations) {
+      if (
+        allocation.paymentAllocation.paymentId !== refund.paymentId ||
+        allocation.paymentAllocation.component !== 'RENTAL_DEPOSIT' ||
+        allocation.paymentAllocation.rentalOrderLine.orderId !== orderId ||
+        allocation.amount.lte(0) ||
+        allocation.amount.gt(allocation.paymentAllocation.amount)
+      ) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      }
+    }
+
+    const hasGroupedItems = refund.depositRefundItems && refund.depositRefundItems.length > 0
+    if (hasGroupedItems) {
+      const itemAllocationTotal = refund.depositRefundItems.reduce(
+        (sum: Prisma.Decimal, allocation: any) => sum.plus(allocation.amount),
+        new Prisma.Decimal(0),
+      )
+      if (!itemAllocationTotal.equals(refund.amount)) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      }
+      for (const allocation of refund.depositRefundItems) {
+        if (
+          allocation.item.settlementId !== refund.depositSettlementId ||
+          allocation.item.status !== 'REFUND_PENDING' ||
+          allocation.amount.lte(0) ||
+          allocation.amount.gt(allocation.item.refundAmount)
+        ) {
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+        }
+      }
+    } else if (refund.depositSettlementItem) {
+      const item = refund.depositSettlementItem
+      if (
+        item.settlementId !== refund.depositSettlementId ||
+        item.status !== 'REFUND_PENDING' ||
+        refund.amount.lte(0) ||
+        refund.amount.gt(item.refundAmount)
+      ) {
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      }
+    } else {
+      throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+    }
+  }
+
+  private simulatedTransactionRef(refundId: string): string {
+    const hash = paymentHash(['ADMIN_SANDBOX_SIMULATION', refundId, 'transaction-ref-v1'])
+    return ((BigInt(`0x${hash.slice(0, 16)}`) % 999_999_999_999_999n) + 1n).toString()
+  }
 
   async getSimulationDetail(refundId: string) {
     this.assertEnvironmentSafe()
-    const refund = await this.db.refund.findUnique({
-      where: { id: refundId },
-      include: {
-        payment: true,
-        depositSettlement: true,
-        depositSettlementItem: true,
-      },
-    })
+    const refund = await this.db.refund.findUnique({ where: { id: refundId } })
     if (!refund) throw AppError.fromCode(P.PAYMENT_NOT_FOUND)
     const payload = refund.providerPayload as Prisma.JsonObject | null
     const simulation = payload?.sandboxSimulation as Record<string, unknown> | undefined

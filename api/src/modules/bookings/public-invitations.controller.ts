@@ -49,7 +49,7 @@ export class PublicInvitationsController {
       return await work()
     } catch (error) {
       if (error instanceof AppError && error.code === B.INVITE_RATE_LIMITED)
-        res.setHeader('Retry-After', String(error.details?.retryAfterSeconds ?? 60))
+        res.setHeader('Retry-After', String((error.details as Record<string, any>)?.retryAfterSeconds ?? 60))
       throw error
     }
   }

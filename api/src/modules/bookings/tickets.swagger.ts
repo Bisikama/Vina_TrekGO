@@ -21,7 +21,7 @@ const ticket = obj({
   participantName: str,
   participantStatus: str,
   checkinStatus: str,
-  checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null as unknown as string], nullable: true },
+  checkinMethod: { type: 'string', enum: ['QR', 'MANUAL', null], nullable: true },
   checkedInAt: { type: 'string', format: 'date-time', nullable: true },
   checkinCode: { type: 'string', nullable: true },
   bookingStatus: str,

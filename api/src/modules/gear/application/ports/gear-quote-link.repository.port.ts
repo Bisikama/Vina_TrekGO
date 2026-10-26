@@ -8,5 +8,10 @@ export interface GearQuoteLinkRepositoryPort {
     quoteId: string,
     userId: string,
   ): Promise<GearQuoteLinkDomain | null>;
-  linkQuote(planRevisionId: string, quoteId: string, userId: string): Promise<GearQuoteLinkDomain>;
+  linkQuote(
+    planRevisionId: string,
+    quoteId: string,
+    userId: string,
+    intendedOptionRef?: { setId: string; optionId: string },
+  ): Promise<GearQuoteLinkDomain>;
 }

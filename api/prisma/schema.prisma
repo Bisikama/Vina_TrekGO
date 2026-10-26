@@ -4109,10 +4109,24 @@ model UserGearItem {
   updatedAt DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   confirmedDraft GearExtractionDraft? @relation("R_GearExtractionDraft_confirmed_item_id")
+  photos         UserGearItemPhoto[]  @relation("R_UserGearItem_photos")
 
   @@index([userId], map: "user_gear_item_user_idx")
   @@index([category], map: "user_gear_item_category_idx")
   @@map("user_gear_items")
+}
+
+model UserGearItemPhoto {
+  id         String       @id @default(uuid()) @db.Uuid
+  itemId     String       @map("item_id") @db.Uuid
+  item       UserGearItem @relation("R_UserGearItem_photos", fields: [itemId], references: [id], onDelete: Cascade)
+  storageRef String       @map("storage_ref") @db.VarChar(500)
+  position   Int          @map("position")
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([itemId, position], map: "user_gear_item_photo_item_position_unique")
+  @@index([itemId], map: "user_gear_item_photo_item_idx")
+  @@map("user_gear_item_photos")
 }
 
 model GearRequirementRule {

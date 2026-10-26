@@ -20,8 +20,6 @@ async function bootstrap() {
 
   // Swagger Documentation Setup
   const config = new DocumentBuilder()
-    .setTitle('Trekking API')
-    .setDescription('Tài liệu API cho hệ thống Trekking Tour & E-Commerce')
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -59,7 +57,7 @@ async function bootstrap() {
   })
   app.useWebSocketAdapter(new WebsocketAdapter(app))
 
-  await app.listen(envConfig.PORT)
+  await app.listen(envConfig.PORT, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${envConfig.PORT}`)
   console.log(`Swagger UI is available at: http://localhost:${envConfig.PORT}/docs`)
 }
