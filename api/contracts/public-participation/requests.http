@@ -1,0 +1,15 @@
+@baseUrl = http://localhost:3000/api/v1
+@token = REPLACE_WITH_ACTOR_BEARER_TOKEN
+@tripId = REPLACE_WITH_TRIP_UUID
+
+### Recipient navigation (after accepting invitation)
+GET {{baseUrl}}/trips/{{tripId}}/navigation-context
+Authorization: Bearer {{token}}
+
+### Linked participant history
+GET {{baseUrl}}/me/public-trip-participations/history?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Existing buyer history — separate meaning
+GET {{baseUrl}}/me/public-trips/history?page=1&pageSize=20
+Authorization: Bearer {{token}}
