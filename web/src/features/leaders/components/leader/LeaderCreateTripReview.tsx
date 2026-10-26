@@ -484,6 +484,9 @@ export function LeaderCreateTripReview() {
           description: descriptionInput.trim(),
         });
         currentVersion = updatedTrip.version;
+        // Refresh trip state (version + description) để lần thử lại sau lỗi publish
+        // không so với description cũ và không gửi expectedVersion đã lỗi thời.
+        await refetchTrip();
       }
 
       await apiPublishTrip(tripId, { expectedVersion: currentVersion });
