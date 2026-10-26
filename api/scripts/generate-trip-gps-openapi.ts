@@ -5,11 +5,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TripGpsController } from '../src/modules/geo/presentation/controllers/trip-gps.controller'
 import { TripGpsRecordingService } from '../src/modules/geo/infrastructure/adapters/trip-gps-recording.service'
+import { TripGpsSyncController } from '../src/modules/geo/presentation/controllers/trip-gps-sync.controller'
+import { GpsSyncService } from '../src/modules/geo/application/gps-sync.service'
 
 async function generate() {
   const module = await Test.createTestingModule({
-    controllers: [TripGpsController],
-    providers: [{ provide: TripGpsRecordingService, useValue: {} }],
+    controllers: [TripGpsController, TripGpsSyncController],
+    providers: [{ provide: TripGpsRecordingService, useValue: {} }, { provide: GpsSyncService, useValue: {} }],
   }).compile()
   const app = module.createNestApplication()
   app.setGlobalPrefix('api/v1')
@@ -23,12 +25,12 @@ async function generate() {
     (n, path) => n + Object.keys(path ?? {}).filter((k) => ['get', 'post'].includes(k)).length,
     0,
   )
-  if (operations !== 10) throw new Error(`Expected 10 GPS REST operations; found ${operations}`)
+  if (operations !== 16) throw new Error(`Expected 16 GPS REST operations; found ${operations}`)
   const folder = join(__dirname, '..', 'contracts', 'openapi')
   mkdirSync(folder, { recursive: true })
   writeFileSync(join(folder, 'trip-gps.json'), JSON.stringify(document, null, 2) + '\n')
   await app.close()
-  console.log('Generated contracts/openapi/trip-gps.json (10 operations)')
+  console.log('Generated contracts/openapi/trip-gps.json (16 operations)')
 }
 generate().catch((error) => {
   console.error(error)

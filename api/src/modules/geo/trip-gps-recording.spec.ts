@@ -272,6 +272,14 @@ databaseSuite('Trip GPS PostgreSQL contract (all fixtures ALWAYS rolled back)', 
       },
     } as unknown as PrismaService
     const service = new TripGpsRecordingService(prisma, access, projection, tracks)
+    // This rollback suite has no scheduler: explicitly drain the existing post-commit
+    // route processor after each upload before checking checkpoint/history results.
+    const upload = service.upload.bind(service)
+    service.upload = async (...args: Parameters<TripGpsRecordingService['upload']>) => {
+      const ack = await upload(...args)
+      if (ack.routeRebuildPending) await service.rebuildTrack(args[0], args[1], args[2])
+      return ack
+    }
     return { user, member, trip, policy, destination, checkpoint, service, access, projection, tracks }
   }
   async function rollback(run: (tx: Prisma.TransactionClient) => Promise<void>) {
@@ -374,7 +382,8 @@ databaseSuite('Trip GPS PostgreSQL contract (all fixtures ALWAYS rolled back)', 
         const accepted = response.gpsSamplesResponseSchema.parse(
           wire(await service.upload(trip.id, user.id, opened.sessionId, 'phone', { samples: [b, a] })),
         )
-        expect(accepted.sampleCount).toBe(2)
+        expect(accepted.acceptedSampleIds).toHaveLength(2)
+        expect(accepted.routeRebuildPending).toBe(true)
         expect(accepted.lastLocation?.recordedAt).toBe(b.recordedAt)
         expect(
           (await service.upload(trip.id, user.id, opened.sessionId, 'phone', { samples: [a] })).duplicateSampleIds,

@@ -4,6 +4,7 @@ import { GpsSession, Prisma, Trip } from '@prisma/client'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { AppError, TRIP_GPS_ERROR_CODES as E } from '../../../../shared/errors'
 import { GpsControl, GpsSamples, GpsStart } from '../../presentation/dtos/trip-gps.dto'
+import { GPS_V2_LIMITS } from '../../application/gps-sync.service'
 import { GpsAccessService } from '../../application/gps-access.service'
 import {
   GpsProjectionService,
@@ -34,6 +35,8 @@ const fail = (code: string, details?: Record<string, unknown>): never => {
 @Injectable()
 export class TripGpsRecordingService {
   private readonly logger = new Logger(TripGpsRecordingService.name)
+  private reconciling = false
+  private cleaning = false
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: GpsAccessService,
@@ -60,7 +63,13 @@ export class TripGpsRecordingService {
         const retryable =
           error instanceof Prisma.PrismaClientKnownRequestError &&
           (error.code === 'P2034' || (error.code === 'P2010' && ['40001', '40P01'].includes(String(error.meta?.code))))
-        if (!retryable || attempt >= 2) throw error
+        if (retryable && attempt < 1) {
+          await new Promise((resolve) => setTimeout(resolve, 25 + Math.floor(Math.random() * 50)))
+          continue
+        }
+        if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2028', 'P2024', 'P2034', 'P1001', 'P1002', 'P1017'].includes(error.code))
+          throw new AppError({ code: E.SYNC_UNAVAILABLE })
+        throw error
       }
     }
   }
@@ -83,7 +92,8 @@ export class TripGpsRecordingService {
   }
 
   private response(session: GpsSession): SessionResponse {
-    return { session: sessionDto(session), policy: publicPolicy(this.state(session).policy) }
+    return { session: sessionDto(session), policy: publicPolicy(this.state(session).policy),
+      ...((recordingState(session) as any)?.protocolVersion === 2 ? { protocolVersion: 2, limits: GPS_V2_LIMITS } : {}) }
   }
 
   private async effectivePolicy(tx: Tx): Promise<FrozenGpsPolicy> {
@@ -110,6 +120,12 @@ export class TripGpsRecordingService {
     return session
   }
 
+  async authorizeRoster(tripId: string) {
+    const trip = await this.prisma.trip.findUnique({ where: { id: tripId } })
+    if (!trip) return fail(E.NOT_FOUND)
+    return this.access.roster(this.prisma, trip)
+  }
+
   async authorize(tripId: string, userId: string, refresh = false) {
     return this.transaction(tripId, userId, async (tx, trip) => {
       await this.access.require(tx, trip, userId)
@@ -119,7 +135,7 @@ export class TripGpsRecordingService {
     })
   }
 
-  async context(tripId: string, userId: string): Promise<GpsContextResponse> {
+  async context(tripId: string, userId: string, v2 = false): Promise<GpsContextResponse> {
     return this.transaction(tripId, userId, async (tx, trip) => {
       const member = await this.access.require(tx, trip, userId)
       await this.reconcile(tx, trip)
@@ -147,8 +163,14 @@ export class TripGpsRecordingService {
           canRecord: reason == null,
           cannotRecordReason: reason,
           canManageTrip: member.tripRole === 'HOST' || member.tripRole === 'LEADER',
+          ...(v2 ? {
+            canStartNewSession: reason == null,
+            canContinueExistingSession: ['IN_PROGRESS', 'OPEN', 'FULL', 'CLOSED', 'COMPLETED'].includes(trip.status) &&
+              sessions.some((s) => s.tripId === tripId && (recordingState(s) as any)?.protocolVersion === 2),
+          } : {}),
         },
         policy: publicPolicy(policy),
+        ...(v2 ? { capabilities: { supportedSyncProtocols: process.env.TRIP_GPS_V2_ENABLED === 'false' ? [1] : [1, 2], socketPublishSupported: true, ...GPS_V2_LIMITS } } : {}),
         serverTime: new Date().toISOString(),
       }
     })
@@ -185,11 +207,23 @@ export class TripGpsRecordingService {
     })
   }
 
-  async stateSnapshot(tripId: string, userId: string) {
+  async stateSnapshot(tripId: string, userId: string, v2 = false) {
     return this.transaction(tripId, userId, async (tx, trip) => {
       await this.access.require(tx, trip, userId)
       await this.reconcile(tx, trip)
-      return this.projection.state(trip, userId, await this.projection.refresh(tx, trip))
+      const snapshot = this.projection.state(trip, userId, await this.projection.refresh(tx, trip))
+      if (!v2) return snapshot
+      const presences = await tx.gpsSocketPresence.findMany({ where: { tripId, expiresAt: { gt: new Date() } }, select: { userId: true } })
+      const online = new Set(presences.map((p) => p.userId))
+      const versions = await tx.gpsPresenceState.findMany({ where: { tripId }, select: { userId: true, version: true, locationVersion: true } })
+      const presenceVersions = new Map(versions.map((v) => [v.userId, v.version]))
+      const locationVersions = new Map(versions.map((v) => [v.userId, v.locationVersion]))
+      return { ...snapshot, members: snapshot.members.map((m) => ({ ...m,
+        connectionStatus: online.has(m.userId) ? 'ONLINE' : 'OFFLINE',
+        presenceVersion: presenceVersions.get(m.userId) ?? 0,
+        locationVersion: locationVersions.get(m.userId) ?? 0,
+        locationFreshness: !m.lastLocation ? 'NO_DATA' : Date.now() - Date.parse(m.lastLocation.recordedAt) > 30000 ? 'STALE' : 'FRESH',
+      })) }
     })
   }
 
@@ -200,6 +234,8 @@ export class TripGpsRecordingService {
         where: { userId_clientSessionId: { userId, clientSessionId: input.clientSessionId } },
       })
       if (receipt) {
+        const recorded = await this.session(tx, tripId, userId, receipt.sessionId)
+        if (((recordingState(recorded) as any).protocolVersion ?? 1) !== (input.protocolVersion ?? 1)) fail(E.PROTOCOL_CONFLICT)
         if (receipt.tripId !== tripId || receipt.deviceId !== input.deviceId) fail(E.IDEMPOTENCY_CONFLICT)
         return this.response(await this.session(tx, tripId, userId, receipt.sessionId))
       }
@@ -208,10 +244,12 @@ export class TripGpsRecordingService {
         where: { userId_clientSessionId: { userId, clientSessionId: input.clientSessionId } },
       })
       if (existing) {
+        if (((recordingState(existing) as any).protocolVersion ?? 1) !== (input.protocolVersion ?? 1)) fail(E.PROTOCOL_CONFLICT)
         if (existing.tripId !== tripId || existing.deviceId !== input.deviceId) fail(E.IDEMPOTENCY_CONFLICT)
         return this.response(existing)
       }
       if (!RECORDABLE.includes(trip.status)) fail(E.TRIP_NOT_RECORDABLE)
+      if (input.protocolVersion === 2 && process.env.TRIP_GPS_V2_ENABLED === 'false') fail(E.PROTOCOL_CONFLICT)
       if ((member.tripRole === 'HOST' || member.tripRole === 'LEADER') && trip.status !== 'IN_PROGRESS') {
         await tx.auditLog.create({
           data: {
@@ -233,15 +271,17 @@ export class TripGpsRecordingService {
       }
       const open = await tx.gpsSession.findFirst({ where: { userId, status: { in: ['ACTIVE', 'PAUSED'] } } })
       if (open) {
+        if (((recordingState(open) as any).protocolVersion ?? 1) !== (input.protocolVersion ?? 1)) fail(E.PROTOCOL_CONFLICT)
         if (open.tripId !== tripId) fail(E.ACTIVE_SESSION_EXISTS)
         if (open.deviceId !== input.deviceId) fail(E.DEVICE_CONFLICT)
-        await tx.gpsStartReceipt.create({ data: { userId, tripId, ...input, sessionId: open.id } })
+        await tx.gpsStartReceipt.create({ data: { userId, tripId, clientSessionId: input.clientSessionId, deviceId: input.deviceId, sessionId: open.id } })
         await this.projection.refresh(tx, trip)
         return this.response(open)
       }
       const now = new Date(),
         policy = await this.effectivePolicy(tx)
       const state: RecordingState = {
+        protocolVersion: input.protocolVersion ?? 1,
         policy,
         intervals: [{ start: now.toISOString(), end: null }],
         commands: {},
@@ -259,7 +299,8 @@ export class TripGpsRecordingService {
           recordingState: json(state),
         },
       })
-      await tx.gpsStartReceipt.create({ data: { userId, tripId, ...input, sessionId: session.id } })
+      if (input.protocolVersion === 2) await tx.gpsSyncState.create({ data: { sessionId: session.id } })
+      await tx.gpsStartReceipt.create({ data: { userId, tripId, clientSessionId: input.clientSessionId, deviceId: input.deviceId, sessionId: session.id } })
       await this.projection.refresh(tx, trip)
       return this.response(session)
     })
@@ -291,6 +332,7 @@ export class TripGpsRecordingService {
   }
 
   private async closeForTrip(tx: Tx, trip: Trip, session: GpsSession) {
+    if ((recordingState(session) as any)?.protocolVersion === 2 && trip.status === 'COMPLETED') return session
     if (session.status === 'STOPPED' || !['COMPLETED', 'INTERRUPTED', 'CANCELLED'].includes(trip.status)) return session
     let end = trip.status === 'CANCELLED' ? trip.cancelledAt : trip.completedAt
     if (!end) {
@@ -323,6 +365,7 @@ export class TripGpsRecordingService {
         tripRole: 'MEMBER' as const,
         role: 'USER' as const,
       }
+      if ((recordingState(session) as any)?.protocolVersion === 2) continue
       if (
         closed !== session ||
         (members.has(session.userId) &&
@@ -350,6 +393,7 @@ export class TripGpsRecordingService {
       const member = await this.access.require(tx, trip, userId)
       if (![...RECORDABLE, 'COMPLETED', 'INTERRUPTED'].includes(trip.status)) fail(E.TRIP_NOT_RECORDABLE)
       let session = await this.session(tx, tripId, userId, sessionId, deviceId)
+      if ((recordingState(session) as any)?.protocolVersion === 2) fail(E.PROTOCOL_CONFLICT)
       session = await this.closeForTrip(tx, trip, session)
       const state = this.state(session),
         now = new Date()
@@ -454,7 +498,7 @@ export class TripGpsRecordingService {
           altitudeM: newest.altitudeM == null ? null : Number(newest.altitudeM), speedMps: newest.speedMps == null ? null : Number(newest.speedMps),
           headingDeg: newest.headingDeg == null ? null : Number(newest.headingDeg), recordedAt: new Date(newest.recordedAt).toISOString(), receivedAt: now.toISOString(),
         }
-      state.trackRefreshPending = insert.length > 0
+      state.trackRefreshPending = state.trackRefreshPending || insert.length > 0
       await tx.gpsSession.update({ where: { id: sessionId }, data: { recordingState: json(state) } })
       session = await this.session(tx, tripId, userId, sessionId)
       const data = await this.projection.updateLiveMember(tx, trip, session, userId)
@@ -511,6 +555,7 @@ export class TripGpsRecordingService {
       const member = await this.access.require(tx, trip, userId)
       let session = await this.session(tx, tripId, userId, sessionId, deviceId),
         state = this.state(session)
+      if ((state as any).protocolVersion === 2) fail(E.PROTOCOL_CONFLICT)
       const payload = fingerprint({
         action,
         commandId: input.commandId,
@@ -710,6 +755,14 @@ export class TripGpsRecordingService {
 
   @Interval(5000)
   async finalizeEndedTrips() {
+    if (this.reconciling) return
+    this.reconciling = true
+    try { await this.reconcileRows() }
+    catch { this.logger.warn('GPS reconciliation deferred; database unavailable') }
+    finally { this.reconciling = false }
+  }
+
+  private async reconcileRows() {
     const rows = await this.prisma.tripGpsProjection.findMany({
       where: {
         OR: [
@@ -744,9 +797,18 @@ export class TripGpsRecordingService {
   @Interval(3600000)
   async cleanupRawPoints() {
     if (process.env.TRIP_GPS_RETENTION_ENABLED !== 'true') return
+    if (this.cleaning) return
+    this.cleaning = true
+    try { await this.cleanupRows() }
+    catch { this.logger.warn('GPS raw cleanup deferred; database unavailable') }
+    finally { this.cleaning = false }
+  }
+
+  private async cleanupRows() {
     const rows = await this.prisma.tripActualRoute.findMany({
       where: { resultStatus: { in: ['READY', 'EMPTY'] } },
       orderBy: { generatedAt: 'asc' },
+      take: 100,
     })
     for (const row of rows)
       await this.transaction(row.tripId, row.userId, async (tx, trip) => {
@@ -758,6 +820,8 @@ export class TripGpsRecordingService {
           )
         )
           return
+        const v2 = await tx.gpsSyncState.findMany({ where: { sessionId: { in: sessions.map((s) => s.id) } } })
+        if (v2.some((s) => s.status !== 'COMPLETE' || s.processedRevision !== s.snapshotRevision)) return
         const age = Math.max(...sessions.map((s) => this.state(s).policy.rawLocationRetentionDays)) * 86400000
         const current = await tx.tripActualRoute.findUniqueOrThrow({ where: { id: row.id } })
         if (!['READY', 'EMPTY'].includes(current.resultStatus)) return
