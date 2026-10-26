@@ -18,6 +18,10 @@ export class PrivateMembershipUseCase {
     assertMemberActor(a, true)
     return this.store.join(a.id, code)
   }
+  listMine(a: Actor, page: Pick<MemberPage, 'page' | 'pageSize'>) {
+    assertMemberActor(a)
+    return this.store.listMine(a.id, page)
+  }
   room(a: Actor, id: string) {
     assertMemberActor(a)
     return this.store.room(a.id, id)

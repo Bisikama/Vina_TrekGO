@@ -128,6 +128,9 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
       const result = await cloudinary.api.resource(input.publicId, {
         resource_type: resourceTypeStr,
         type: input.deliveryType,
+        ...(input.resourceType === 'VIDEO'
+          ? { media_metadata: true }
+          : {}),
       });
 
       return {

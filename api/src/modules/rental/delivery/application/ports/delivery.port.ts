@@ -132,6 +132,7 @@ export interface DeliveryTaskListResult {
 export interface DeliveryTaskDetailResult {
   task: Record<string, unknown>;
   package: Record<string, unknown> | null;
+  custodyTransfer: Record<string, unknown> | null;
   units: Array<Record<string, unknown>>;
   recipient: Record<string, unknown>;
   verificationStatus: Record<string, unknown>;

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import {
   Prisma,
   RecordStatus,
+  RentalFinancialStatus,
   RentalOrderStatus,
   RentalProductStatus,
   type RentalUnitAssignmentStatus,
@@ -11,7 +12,7 @@ import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ERROR_CODES } from 'src/shared/errors/codes/rental.error-codes'
 import { RENTAL_REVIEW_ERROR_CODES as RV } from 'src/shared/errors/codes/rental-review.error-codes'
 import { PrismaService } from 'src/shared/services/prisma.service'
-import { hasActualProductHandover, isReviewableOrderStatus } from '../../application/rental-review-eligibility'
+import { hasActualProductHandover, isReviewableOrder } from '../../application/rental-review-eligibility'
 import type {
   CreateRentalReviewCommand,
   ListProductReviewsQuery,
@@ -67,6 +68,7 @@ export class PrismaRentalReviewAdapter implements RentalReviewPort {
           where: { id: command.orderId, userId: command.userId },
           select: {
             status: true,
+            financialStatus: true,
             rentalHandoverViaOrderId: { select: { id: true } },
             rentalOrderLinesViaOrderId: {
               where: { productId: command.productId },
@@ -82,9 +84,14 @@ export class PrismaRentalReviewAdapter implements RentalReviewPort {
         if (!order) throw AppError.fromCode(RV.RENTAL_ORDER_NOT_FOUND)
         const line = order.rentalOrderLinesViaOrderId[0]
         if (!line) throw AppError.fromCode(RV.PRODUCT_NOT_IN_RENTAL_ORDER)
-        if (!isReviewableOrderStatus(order.status)) {
+        if (!isReviewableOrder(order.status, order.financialStatus)) {
           throw AppError.fromCode(RV.RENTAL_ORDER_NOT_ELIGIBLE_FOR_REVIEW, {
-            details: { orderStatus: order.status },
+            details: {
+              orderStatus: order.status,
+              financialStatus: order.financialStatus,
+              requiredOrderStatus: RentalOrderStatus.COMPLETED,
+              requiredFinancialStatus: RentalFinancialStatus.SETTLED,
+            },
           })
         }
         if (
@@ -224,6 +231,7 @@ export class PrismaRentalReviewAdapter implements RentalReviewPort {
       where: { id: query.orderId, userId: query.userId },
       select: {
         status: true,
+        financialStatus: true,
         rentalHandoverViaOrderId: { select: { id: true } },
         rentalOrderLinesViaOrderId: {
           orderBy: { createdAt: 'asc' },
@@ -247,7 +255,7 @@ export class PrismaRentalReviewAdapter implements RentalReviewPort {
     const reviewsByProduct = new Map(
       order.rentalReviewsViaRentalOrderId.map((review) => [review.productId, review]),
     )
-    const orderEligible = isReviewableOrderStatus(order.status)
+    const orderEligible = isReviewableOrder(order.status, order.financialStatus)
     const hasOrderHandover = order.rentalHandoverViaOrderId !== null
     return {
       items: order.rentalOrderLinesViaOrderId.map((line) => {
@@ -258,7 +266,11 @@ export class PrismaRentalReviewAdapter implements RentalReviewPort {
         )
         let ineligibleReason: ReviewIneligibleReason | null = null
         if (review) ineligibleReason = 'ALREADY_REVIEWED'
-        else if (!orderEligible) ineligibleReason = 'ORDER_NOT_ELIGIBLE_FOR_REVIEW'
+        else if (order.status !== RentalOrderStatus.COMPLETED) {
+          ineligibleReason = 'ORDER_NOT_ELIGIBLE_FOR_REVIEW'
+        } else if (order.financialStatus !== RentalFinancialStatus.SETTLED) {
+          ineligibleReason = 'DEPOSIT_NOT_SETTLED'
+        } else if (!orderEligible) ineligibleReason = 'ORDER_NOT_ELIGIBLE_FOR_REVIEW'
         else if (!hasBeenHandedOver) ineligibleReason = 'PRODUCT_NOT_HANDED_OVER'
         return {
           productId: line.productId,

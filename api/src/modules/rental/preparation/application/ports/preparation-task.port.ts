@@ -112,6 +112,7 @@ export interface PreparationUnitView {
   assetCode: string;
   condition: string;
   physicalStatus: string;
+  evidenceCaptured?: boolean;
 }
 
 export interface PreparationCandidateView {
@@ -169,6 +170,12 @@ export interface PreparationTaskDetailResult {
   pickedUnits: PreparationUnitView[];
   progress: PreparationProgressView;
   package: PreparationPackageView | null;
+  pendingTransfer: {
+    id: string;
+    status: string;
+    toStaff: PreparationAssigneeView;
+    requestedAt: string;
+  } | null;
   pickupContext: {
     pointId: string;
     name: string;
