@@ -89,7 +89,8 @@ export class GpsTrackService {
       const own = track.points.filter((p) => p.sessionId === session.id)
       const route = assembleRoute(own, track.intervals, state.policy.signalGapSeconds)
       const last = own.at(-1)
-      state.lastLocation = last ? this.location(last) : null
+      if (state.protocolVersion !== 2 || !state.lastLocation ||
+          (last && last.recordedAt > state.lastLocation.recordedAt)) state.lastLocation = last ? this.location(last) : null
       state.trackHash = hash
       state.trackContextHash = fingerprint(context)
       if (session.id === latest.id) state.deviation = deviation

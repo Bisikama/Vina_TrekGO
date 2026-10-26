@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const gpsStartSchema = z
-  .object({ clientSessionId: z.uuid().toLowerCase(), deviceId: z.string().trim().min(1).max(180) })
+  .object({ clientSessionId: z.uuid().toLowerCase(), deviceId: z.string().trim().min(1).max(180), protocolVersion: z.literal(2).optional() })
   .strict()
 export const gpsControlSchema = z
   .object({
@@ -35,7 +35,7 @@ export const gpsSamplesSchema = z
       ),
   })
   .strict()
-export const gpsSocketSchema = z.object({ requestId: z.uuid().toLowerCase(), tripId: z.uuid().toLowerCase() }).strict()
+export const gpsSocketSchema = z.object({ requestId: z.uuid().toLowerCase(), tripId: z.uuid().toLowerCase(), protocolVersion: z.literal(2).optional() }).strict()
 export type GpsStart = z.infer<typeof gpsStartSchema>
 export type GpsControl = z.infer<typeof gpsControlSchema>
 export type GpsSamples = z.infer<typeof gpsSamplesSchema>

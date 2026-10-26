@@ -2911,7 +2911,79 @@ model GpsPolicy {
 }
 
 /// PostgreSQL partial unique indexes limit a user to at most one ACTIVE/PAUSED session globally.
+// Trip GPS v2: immutable receipts and recoverable finalization.
+model GpsSyncState {
+  sessionId String @id @map("session_id") @db.Uuid
+  session GpsSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  metadataRevision Int @default(0) @map("metadata_revision")
+  status String @default("OPEN") @db.VarChar(32)
+  snapshotRevision Int @default(0) @map("snapshot_revision")
+  processedRevision Int @default(0) @map("processed_revision")
+  snapshot Json?
+  leaseToken String? @map("lease_token") @db.Uuid
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(6)
+  availableAt DateTime @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts Int @default(0)
+  lastError String? @map("last_error") @db.VarChar(100)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@index([status, availableAt])
+  @@map("gps_sync_states")
+}
+
+model GpsSyncReceipt {
+  sessionId String @map("session_id") @db.Uuid
+  session GpsSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  kind String @db.VarChar(20)
+  key String @db.VarChar(120)
+  payloadHash String @map("payload_hash") @db.VarChar(64)
+  payload Json
+  response Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@id([sessionId, kind, key])
+  @@map("gps_sync_receipts")
+}
+
+model GpsEventConsumer {
+  instanceId String @id @map("instance_id") @db.Uuid
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  @@map("gps_event_consumers")
+}
+
+model GpsEventDelivery {
+  eventId String @map("event_id") @db.Uuid
+  instanceId String @map("instance_id") @db.Uuid
+  event GpsOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+  @@id([eventId, instanceId])
+  @@index([processedAt])
+  @@map("gps_event_deliveries")
+}
+
+model GpsSocketPresence {
+  socketId String @id @map("socket_id") @db.VarChar(180)
+  instanceId String @map("instance_id") @db.Uuid
+  tripId String @map("trip_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  @@index([tripId, userId, expiresAt])
+  @@index([expiresAt])
+  @@map("gps_socket_presences")
+}
+
+model GpsPresenceState {
+  tripId String @map("trip_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  version Int @default(1)
+  locationVersion Int @default(0) @map("location_version")
+  status String @db.VarChar(12)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@id([tripId, userId])
+  @@map("gps_presence_states")
+}
+
 model GpsSession {
+  syncState           GpsSyncState?
+  syncReceipts        GpsSyncReceipt[]
   startReceipts       GpsStartReceipt[]
   clientSessionId     String?           @map("client_session_id") @db.Uuid
   uploadDeadline      DateTime?         @map("upload_deadline") @db.Timestamptz(6)
@@ -3109,6 +3181,7 @@ model WeatherSnapshot {
 
 /// Outbox tables are split by team/domain ownership for readability. deduplication_key belongs to event publication; idempotency_key belongs to a business command/operation.
 model GpsOutboxEvent {
+  deliveries       GpsEventDelivery[]
   id               String      @id @default(uuid()) @db.Uuid
   deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
   eventType        String      @map("event_type") @db.VarChar(140)

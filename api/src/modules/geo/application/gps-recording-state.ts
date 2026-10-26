@@ -4,6 +4,8 @@ import type { ActiveInterval } from './gps-geometry'
 import type { LastLocationDto, MemberStateDto } from './trip-gps.contract'
 
 export interface RecordingState {
+  protocolVersion?: number
+  liveSequence?: number
   policy: FrozenGpsPolicy
   intervals: ActiveInterval[]
   commands: Record<string, { payload: string; response: any }>
