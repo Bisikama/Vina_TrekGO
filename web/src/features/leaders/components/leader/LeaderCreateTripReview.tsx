@@ -477,14 +477,16 @@ export function LeaderCreateTripReview() {
     setErrorMsg("");
 
     try {
+      let currentVersion = trip.version;
       if (descriptionInput.trim() && descriptionInput.trim() !== (trip.description || "")) {
-        await updateTrip(tripId, {
-          expectedVersion: trip.version,
+        const updatedTrip = await updateTrip(tripId, {
+          expectedVersion: currentVersion,
           description: descriptionInput.trim(),
         });
+        currentVersion = updatedTrip.version;
       }
 
-      await apiPublishTrip(tripId, { expectedVersion: trip.version });
+      await apiPublishTrip(tripId, { expectedVersion: currentVersion });
       setPublished(true);
       setShowPublishModal(false);
 

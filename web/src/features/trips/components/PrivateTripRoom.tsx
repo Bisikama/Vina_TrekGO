@@ -5,152 +5,329 @@ import { useRouter } from "next/navigation";
 import { usePrivateTripMembership } from "../hooks/usePrivateTripMembership";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { PrivateTripDirectInviteModal } from "./PrivateTripDirectInviteModal";
+import {
+  PageShell,
+  PageHeader,
+  TripSummaryBanner,
+  SurfaceCard,
+  SurfaceSectionHeader,
+  Button,
+  StatusBadge,
+  LoadingState,
+  ErrorAlert,
+  EmptyState,
+  ConfirmModal,
+  InfoBanner,
+} from "@/components/ui";
 
 export function PrivateTripRoom({ tripId }: { tripId: string }) {
   const router = useRouter();
   const { user } = useAuth();
-  const { loadRoom, loadMembers, leaveTrip, removeMember, room, members, activeMemberCount, busy, error } = usePrivateTripMembership();
+  const {
+    loadRoom,
+    loadMembers,
+    leaveTrip,
+    removeMember,
+    room,
+    members,
+    activeMemberCount,
+    busy,
+    error,
+  } = usePrivateTripMembership();
 
   useEffect(() => {
     if (tripId) {
       loadRoom(tripId);
-      loadMembers(tripId, { status: 'ACTIVE', pageSize: 50 }); // Load danh sách thành viên ACTIVE
+      loadMembers(tripId, { status: "ACTIVE", pageSize: 50 });
     }
   }, [tripId, loadRoom, loadMembers]);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const isHost = Boolean(room?.viewer?.isHost || room?.myMembership?.role === 'HOST');
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [kickTarget, setKickTarget] = useState<{
+    id: string;
+    name: string;
+    version?: number;
+  } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const handleLeave = async () => {
-    if (confirm("Bạn có chắc chắn muốn rời khỏi chuyến đi này không?")) {
-      try {
-        await leaveTrip(tripId, room?.viewer?.membershipVersion ?? 1);
-        alert("Đã rời nhóm thành công.");
-        router.push("/my-trips");
-      } catch (e) {
-        // Error handled
-      }
+  const isHost = Boolean(
+    room?.viewer?.isHost || room?.myMembership?.role === "HOST"
+  );
+
+  const handleConfirmLeave = async () => {
+    try {
+      await leaveTrip(tripId, room?.viewer?.membershipVersion ?? 1);
+      setConfirmLeaveOpen(false);
+      router.push("/my-trips");
+    } catch {
+      setConfirmLeaveOpen(false);
     }
   };
 
-  const handleKick = async (memberId: string, memberName: string, version?: number) => {
-    if (confirm(`Bạn muốn loại ${memberName} khỏi chuyến đi?`)) {
-      try {
-        await removeMember(tripId, memberId, version ?? 1);
-        alert("Đã loại thành viên.");
-      } catch (e) {}
+  const handleConfirmKick = async () => {
+    if (!kickTarget) return;
+    try {
+      await removeMember(tripId, kickTarget.id, kickTarget.version ?? 1);
+      setNotice(`Đã loại ${kickTarget.name} khỏi chuyến đi.`);
+      setKickTarget(null);
+    } catch {
+      setKickTarget(null);
     }
   };
 
-  if (busy && !room) return <div className="p-8 text-center">Đang tải phòng chờ...</div>;
-  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
-  if (!room) return <div className="p-8 text-center">Không tìm thấy thông tin phòng chờ.</div>;
+  if (busy && !room) {
+    return (
+      <PageShell maxWidth="lg">
+        <LoadingState message="Đang tải thông tin phòng chờ chuyến đi..." />
+      </PageShell>
+    );
+  }
 
-  const title = room.trip?.title ?? room.title ?? "";
-  const status = room.trip?.status ?? room.status ?? "";
-  const startAt = room.trip?.startAt ?? room.startAt ?? new Date().toISOString();
+  if (error && !room) {
+    return (
+      <PageShell maxWidth="lg">
+        <PageHeader
+          backHref="/my-trips"
+          backLabel="Quay lại Chuyến đi của tôi"
+          eyebrow="Vina TrekGO · Phòng Chờ Chuyến Đi"
+          title="Không thể truy cập phòng chờ"
+        />
+        <ErrorAlert
+          message={error}
+          onRetry={() => {
+            loadRoom(tripId);
+            loadMembers(tripId, { status: "ACTIVE", pageSize: 50 });
+          }}
+        />
+      </PageShell>
+    );
+  }
+
+  if (!room) {
+    return (
+      <PageShell maxWidth="lg">
+        <EmptyState
+          title="Không tìm thấy thông tin phòng chờ"
+          description="Phòng chờ có thể đã bị hủy hoặc bạn không còn trong danh sách thành viên."
+          action={
+            <Button variant="primary" onClick={() => router.push("/my-trips")}>
+              Về Chuyến đi của tôi
+            </Button>
+          }
+        />
+      </PageShell>
+    );
+  }
+
+  const title = room.trip?.title ?? room.title ?? "Chuyến đi riêng tư";
+  const status = room.trip?.status ?? room.status ?? "OPEN";
+  const startAt =
+    room.trip?.startAt ?? room.startAt ?? new Date().toISOString();
   const endAt = room.trip?.endAt ?? room.endAt ?? new Date().toISOString();
   const capacity = room.trip?.capacity ?? room.maxPax ?? 0;
+  const pickupName = room.trip?.pickupPoint?.name || "Theo lịch trình nhóm";
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      {/* Header Info */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h1 className="text-2xl font-bold">{title}</h1>
-            <p className="text-gray-500 text-sm mt-1">Trạng thái: <span className="font-semibold text-blue-600">{status}</span></p>
-          </div>
-          <div className="flex gap-2">
+    <PageShell maxWidth="lg">
+      <PageHeader
+        backHref="/my-trips"
+        backLabel="Quay lại Chuyến đi của tôi"
+        eyebrow="Vina TrekGO · Phòng Chờ Nhóm Riêng Tư"
+        title={title}
+        badge={<StatusBadge status={status} />}
+        actions={
+          <>
             {!isHost && (
-              <button 
-                onClick={handleLeave}
+              <Button
+                variant="danger"
+                size="sm"
                 disabled={busy}
-                className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition"
+                onClick={() => setConfirmLeaveOpen(true)}
               >
                 Rời chuyến đi
-              </button>
+              </Button>
             )}
             {isHost && (
-              <div className="flex gap-2">
-                <button 
-                  type="button"
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={() => setIsInviteModalOpen(true)}
-                  className="px-4 py-2 bg-[#1B5E41] hover:bg-[#154B36] text-white rounded-lg text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
                 >
                   ✉️ Mời bạn bè (Email)
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => router.push(`/my-trips/${tripId}`)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition"
                 >
                   Cài đặt chuyến đi (Host)
-                </button>
-              </div>
+                </Button>
+              </>
             )}
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><span className="text-gray-500">Khởi hành:</span> {new Date(startAt).toLocaleString('vi-VN')}</div>
-          <div><span className="text-gray-500">Kết thúc:</span> {new Date(endAt).toLocaleString('vi-VN')}</div>
-          <div><span className="text-gray-500">Số lượng tham gia:</span> {activeMemberCount || members.length} / {capacity}</div>
-          <div><span className="text-gray-500">Vai trò của bạn:</span> {isHost ? "Host (Trưởng đoàn)" : "Thành viên"}</div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {/* Members List */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border">
-        <h2 className="text-xl font-bold mb-4">Danh Sách Tài Khoản Tham Gia ({members.length})</h2>
-        <div className="space-y-3">
-          {members.map(member => {
-            const accountName = member.displayName || member.user?.fullName || `Tài khoản #${member.userId?.slice(0, 8)}`;
-            return (
-              <div key={member.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-100 text-emerald-800 font-bold rounded-full flex items-center justify-center overflow-hidden">
-                    {member.user?.avatarUrl ? (
-                      <img src={member.user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-sm">{accountName.charAt(0).toUpperCase()}</span>
+      {error && <ErrorAlert message={error} />}
+      {notice && (
+        <InfoBanner tone="success" onDismiss={() => setNotice(null)}>
+          {notice}
+        </InfoBanner>
+      )}
+
+      <TripSummaryBanner
+        title="Thông tin lịch trình & điểm hẹn"
+        subtitle={
+          isHost ? "Vai trò: Trưởng đoàn (Host)" : "Vai trò: Thành viên tham gia"
+        }
+        metaItems={[
+          {
+            label: "Khởi hành",
+            value: new Date(startAt).toLocaleString("vi-VN"),
+          },
+          {
+            label: "Kết thúc",
+            value: new Date(endAt).toLocaleString("vi-VN"),
+          },
+          {
+            label: "Quân số hiện tại",
+            value: `${activeMemberCount || members.length} / ${capacity} người`,
+            highlight: true,
+          },
+          {
+            label: "Điểm tập kết",
+            value: pickupName,
+          },
+        ]}
+      />
+
+      <SurfaceCard padding="md">
+        <SurfaceSectionHeader
+          title={`Danh sách thành viên tham gia (${members.length})`}
+          subtitle="Các thành viên đang hoạt động trong đoàn leo núi"
+        />
+
+        {members.length === 0 ? (
+          <EmptyState
+            title="Chưa có thành viên nào"
+            description="Hãy gửi lời mời qua email hoặc chia sẻ mã QR để bạn bè cùng tham gia."
+          />
+        ) : (
+          <div className="space-y-3">
+            {members.map((member) => {
+              const accountName =
+                member.displayName ||
+                member.user?.fullName ||
+                `Tài khoản #${member.userId?.slice(0, 8)}`;
+
+              return (
+                <div
+                  key={member.id}
+                  className="flex flex-wrap justify-between items-center gap-3 p-3.5 hover:bg-[#F7F7F4] rounded-xl border border-[#E5E7EB] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#DCFCE7] text-[#166534] font-bold rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                      {member.user?.avatarUrl ? (
+                        <img
+                          src={member.user.avatarUrl}
+                          alt="avatar"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm">
+                          {accountName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-[#1F2937]">
+                          {accountName}
+                        </p>
+                        {member.userId === user?.id && (
+                          <span className="text-[11px] font-bold text-[#125238] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
+                            Bạn
+                          </span>
+                        )}
+                        <StatusBadge
+                          status={member.role === "HOST" ? "OPEN" : "ACTIVE"}
+                          customLabel={
+                            member.role === "HOST" ? "Trưởng đoàn" : "Thành viên"
+                          }
+                          showDot={false}
+                        />
+                      </div>
+                      <p className="text-xs text-[#6B7280] mt-0.5 tabular-nums">
+                        ID: <span className="font-mono">{member.userId?.slice(0, 8)}</span>{" "}
+                        • Tham gia{" "}
+                        {new Date(member.joinedAt).toLocaleDateString("vi-VN")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isHost &&
+                    member.userId !== user?.id &&
+                    member.role !== "HOST" && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                          setKickTarget({
+                            id: member.id,
+                            name: accountName,
+                            version: member.version,
+                          })
+                        }
+                      >
+                        Loại khỏi nhóm
+                      </Button>
                     )}
-                  </div>
-                  <div>
-                    <p className="font-semibold">
-                      {accountName}
-                      {member.userId === user?.id && <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded">Bạn</span>}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {member.role === 'HOST' ? "Trưởng đoàn" : "Thành viên"} • ID: <span className="font-mono">{member.userId?.slice(0, 8)}</span> • Tham gia {new Date(member.joinedAt).toLocaleDateString('vi-VN')}
-                    </p>
-                  </div>
                 </div>
-                
-                {/* Host có thể kick người khác (trừ chính mình) */}
-                {isHost && member.userId !== user?.id && member.role !== 'HOST' && (
-                  <button 
-                    onClick={() => handleKick(member.id, accountName, member.version)}
-                    disabled={busy}
-                    className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded border border-red-200"
-                  >
-                    Xóa
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {members.length === 0 && <p className="text-center text-gray-500 py-4">Chưa có thành viên nào.</p>}
-        </div>
-      </div>
+              );
+            })}
+          </div>
+        )}
+      </SurfaceCard>
 
-      {/* Có thể bổ sung Lộ trình (Trail Plans), Checkpoints ở đây dựa vào room.tripTrailPlansViaTripId */}
-      {/* Modal Mời Thành Viên Trực Tiếp */}
+      <ConfirmModal
+        isOpen={confirmLeaveOpen}
+        onClose={() => setConfirmLeaveOpen(false)}
+        onConfirm={handleConfirmLeave}
+        title="Rời khỏi chuyến đi?"
+        description="Bạn có chắc chắn muốn rời khỏi nhóm trekking này không? Bạn sẽ cần lời mời mới từ Trưởng đoàn nếu muốn tham gia lại."
+        confirmLabel="Xác nhận rời nhóm"
+        confirmVariant="danger"
+        loading={busy}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(kickTarget)}
+        onClose={() => setKickTarget(null)}
+        onConfirm={handleConfirmKick}
+        title="Loại thành viên khỏi chuyến đi"
+        description={
+          <>
+            Bạn có chắc chắn muốn loại{" "}
+            <strong className="text-[#1F2937]">{kickTarget?.name}</strong> khỏi
+            chuyến đi này không?
+          </>
+        }
+        confirmLabel="Loại thành viên"
+        confirmVariant="danger"
+        loading={busy}
+      />
+
       <PrivateTripDirectInviteModal
         tripId={tripId}
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
-        onMemberJoined={() => loadMembers(tripId, { status: 'ACTIVE', pageSize: 50 })}
+        onMemberJoined={() =>
+          loadMembers(tripId, { status: "ACTIVE", pageSize: 50 })
+        }
       />
-    </div>
+    </PageShell>
   );
 }

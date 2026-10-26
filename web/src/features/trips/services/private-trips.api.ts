@@ -14,10 +14,9 @@ async function all<T>(url: string, params: Record<string, string> = {}): Promise
 }
 export const privateTripsApi = {
   async sources(): Promise<PrivateSource[]> {
-    const [personal, access] = await Promise.all([
-      all<{ id: string; title: string; destinationId: string | null; personalCheckpointsViaPersonalTrailId: PrivatePoint[] }>('/api/v1/me/personal-trails'),
-      all<{ systemTrail: { id: string; name: string; destinationId: string; trailCheckpointsViaSystemTrailId: { sequence: number; checkpoint: { id: string; name: string; status: string; destinationId: string } }[] } }>('/api/v1/me/trail-accesses'),
-    ]);
+    // Fetch sequentially to prevent concurrent SERIALIZABLE transaction lock contention on users row
+    const personal = await all<{ id: string; title: string; destinationId: string | null; personalCheckpointsViaPersonalTrailId: PrivatePoint[] }>('/api/v1/me/personal-trails');
+    const access = await all<{ systemTrail: { id: string; name: string; destinationId: string; trailCheckpointsViaSystemTrailId: { sequence: number; checkpoint: { id: string; name: string; status: string; destinationId: string } }[] } }>('/api/v1/me/trail-accesses');
     return [...personal.map(p => ({ id: p.id, type: 'PERSONAL' as const, name: p.title, destinationId: p.destinationId, points: p.personalCheckpointsViaPersonalTrailId })), ...access.map((a: any) => ({ id: a.systemTrailId || a.systemTrail.id, type: 'SYSTEM' as const, name: a.systemTrail.name, destinationId: a.systemTrail.destinationId, points: a.systemTrail.trailCheckpointsViaSystemTrailId.filter((p: any) => p.checkpoint.status === 'ACTIVE' && p.checkpoint.destinationId === a.systemTrail.destinationId).map((p: any) => ({ id: p.checkpoint.id, name: p.checkpoint.name, sequence: p.sequence, destinationId: p.checkpoint.destinationId })) }))];
   },
   list: async () => all<PrivateTrip>(base),
