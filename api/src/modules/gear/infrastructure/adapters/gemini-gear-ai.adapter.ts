@@ -27,8 +27,8 @@ export class GeminiGearAiAdapter implements GearAiPort {
 
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY || null;
-    this.modelExtraction = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-2.5-flash';
-    this.modelAdvisor = process.env.GEMINI_MODEL_ADVISOR || 'gemini-2.5-flash';
+    this.modelExtraction = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-3.8-flash';
+    this.modelAdvisor = process.env.GEMINI_MODEL_ADVISOR || 'gemini-3.8-flash';
     this.timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10);
     this.maxRetries = parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10);
 
@@ -177,6 +177,18 @@ export class GeminiGearAiAdapter implements GearAiPort {
           });
         }
 
+        // Missing/retired model: fail fast and keep provider internals out of the UI.
+        const isModelUnavailable =
+          err.status === 404 ||
+          err.statusCode === 404 ||
+          err.message?.includes('NOT_FOUND') ||
+          err.message?.includes('no longer available');
+        if (isModelUnavailable) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_UNAVAILABLE, {
+            message: 'Mô hình nhận diện AI đang được cập nhật. Vui lòng thử lại sau hoặc nhập thông số bằng tay.',
+          });
+        }
+
         // 429 / Quota exceeded: check if maxRetries reached
         const isQuotaError =
           err.status === 429 ||
@@ -218,7 +230,7 @@ export class GeminiGearAiAdapter implements GearAiPort {
 
     this.logger.error(`Gemini AI extraction error: ${lastError?.message}`);
     throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_REFUSED, {
-      message: `Mô hình AI từ chối xử lý hoặc phát sinh lỗi: ${lastError?.message || 'Không xác định'}`,
+      message: 'Mô hình AI chưa thể xử lý ảnh này. Vui lòng thử lại hoặc nhập thông số bằng tay.',
     });
   }
 
