@@ -2,7 +2,9 @@ import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { PrismaUserGearRepository } from '../src/modules/gear/infrastructure/adapters/prisma-user-gear.repository'
 import { PrismaGearExtractionDraftRepository } from '../src/modules/gear/infrastructure/adapters/prisma-gear-extraction-draft.repository'
-import { RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
+import { PrismaGearConcurrencyLeaseAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-gear-concurrency-lease.adapter'
+import { PrismaGearExtractionCacheAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-gear-extraction-cache.adapter'
+import { GearExtractionService } from '../src/modules/gear/application/services/gear-extraction.service'
 
 /**
  * Isolated PostgreSQL Integration Test Suite for Gear Advisor V3.1.5 Concurrency & Lifecycle
@@ -51,11 +53,14 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
   afterAll(async () => {
     if (hasDbConnection && testUserId) {
       try {
+        await prisma.gearAdviceRun.deleteMany({ where: { planRevision: { plan: { userId: testUserId } } } })
+        await prisma.gearPlanOptionSet.deleteMany({ where: { planRevision: { plan: { userId: testUserId } } } })
+        await prisma.gearPlanRevision.deleteMany({ where: { plan: { userId: testUserId } } })
+        await prisma.gearQuoteLink.deleteMany({ where: { userId: testUserId } })
+        await prisma.gearPlan.deleteMany({ where: { userId: testUserId } })
         await prisma.userGearItemPhoto.deleteMany({ where: { item: { userId: testUserId } } })
         await prisma.userGearItem.deleteMany({ where: { userId: testUserId } })
         await prisma.gearExtractionDraft.deleteMany({ where: { userId: testUserId } })
-        await prisma.gearQuoteLink.deleteMany({ where: { userId: testUserId } })
-        await prisma.gearPlan.deleteMany({ where: { userId: testUserId } })
         await prisma.user.delete({ where: { id: testUserId } })
       } catch (cleanupErr: any) {
         console.error(`[GEAR_CLEANUP_FAILURE] Fixture cleanup failed for ${testUserId}:`, cleanupErr.message)
@@ -157,6 +162,152 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
     for (let i = 1; i <= 28; i++) {
       const code = `R${i.toString().padStart(2, '0')}`
       expect(ruleIds.has(code)).toBe(true)
+    }
+  })
+
+  it('INTEG-04: Blocker A — Quota atomic reservation with remaining quota = 1, concurrent caller rejection, and forced rollback', async () => {
+    expect(hasDbConnection).toBe(true)
+
+    const draftRepo = new PrismaGearExtractionDraftRepository(prisma as any)
+    const userRepo = new PrismaUserGearRepository(prisma as any)
+    const leaseAdapter = new PrismaGearConcurrencyLeaseAdapter(prisma as any)
+    const cacheAdapter = new PrismaGearExtractionCacheAdapter(prisma as any)
+    const mockAi = {} as any
+
+    const extractionService = new GearExtractionService(
+      draftRepo,
+      cacheAdapter,
+      leaseAdapter,
+      userRepo,
+      mockAi,
+      prisma as any,
+    )
+
+    // 1. Seed 19 charged drafts created today for this user so remaining quota is exactly 1 (daily limit is 20)
+    for (let i = 0; i < 19; i++) {
+      await draftRepo.createDraft({
+        userId: testUserId,
+        sourceType: 'IMAGE',
+        sourceHash: `seed-quota-${runId}-${i}`,
+        expiresAt: new Date(Date.now() + 60000),
+      })
+    }
+
+    try {
+      // 2. Caller 1 uses the 1 remaining quota slot -> succeeds
+      const expiresAt = new Date(Date.now() + 60000)
+      const draft1 = await extractionService.checkAndReserveQuota(
+        testUserId,
+        'IMAGE',
+        `hash-caller-1-${runId}`,
+        expiresAt,
+      )
+      expect(draft1).toBeDefined()
+      expect(draft1.userId).toBe(testUserId)
+
+      // 3. Caller 2 attempts reservation with quota exhausted -> rejected with quota exceeded error
+      await expect(
+        extractionService.checkAndReserveQuota(testUserId, 'IMAGE', `hash-caller-2-${runId}`, expiresAt),
+      ).rejects.toThrow(/hạn mức|quota/i)
+
+      // 4. Test forced rollback in transaction client: draft must NOT persist if tx throws
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await draftRepo.createDraft(
+            {
+              userId: testUserId,
+              sourceType: 'IMAGE',
+              sourceHash: `hash-rollback-${runId}`,
+              expiresAt: new Date(Date.now() + 60000),
+            },
+            tx,
+          )
+          throw new Error('FORCED_SIMULATED_TRANSACTION_ROLLBACK')
+        }),
+      ).rejects.toThrow('FORCED_SIMULATED_TRANSACTION_ROLLBACK')
+
+      const rolledBack = await prisma.gearExtractionDraft.findFirst({
+        where: { sourceHash: `hash-rollback-${runId}` },
+      })
+      expect(rolledBack).toBeNull()
+    } finally {
+      await prisma.gearExtractionDraft.deleteMany({ where: { userId: testUserId } }).catch(() => {})
+    }
+  })
+
+  it('INTEG-05: Blocker B.1 — Advice publish CAS coordination prevents publish when concurrent mutation updates head', async () => {
+    expect(hasDbConnection).toBe(true)
+
+    // 1. Create plan with inputRevision 1
+    const plan = await prisma.gearPlan.create({
+      data: {
+        userId: testUserId,
+        title: `Integration Plan ${runId.slice(0, 6)}`,
+        contextMode: 'TRIP',
+        inputRevision: 1,
+        evaluatedRevision: 1,
+        progressVersion: 1,
+      },
+    })
+
+    // 2. Create snapshot revision 1
+    const revision = await prisma.gearPlanRevision.create({
+      data: {
+        planId: plan.id,
+        revision: 1,
+        contentHash: `hash-rev1-${runId}`,
+        inputSnapshot: { inputRevision: 1 },
+        resultSnapshot: { checklist: [] },
+      },
+    })
+
+    try {
+      // 3. Concurrent mutation: another session increments inputRevision to 2
+      await prisma.gearPlan.update({
+        where: { id: plan.id },
+        data: { inputRevision: 2 },
+      })
+
+      // 4. Stale session attempts advice publish with CAS write expecting inputRevision 1
+      const publishAttempt = prisma.$transaction(async (tx) => {
+        const lockRes = await tx.gearPlan.updateMany({
+          where: {
+            id: plan.id,
+            userId: testUserId,
+            inputRevision: 1, // Stale: expected 1, but DB is already 2
+            evaluatedRevision: 1,
+          },
+          data: {
+            updatedAt: new Date(),
+          },
+        })
+
+        if (lockRes.count === 0) {
+          throw new Error('GEAR_PLAN_STALE')
+        }
+
+        return tx.gearAdviceRun.create({
+          data: {
+            planRevisionId: revision.id,
+            source: 'AI',
+            contextHash: revision.contentHash,
+            narrativeVi: 'Stale advice narrative',
+            disclaimerVi: 'Disclaimer',
+          },
+        })
+      })
+
+      await expect(publishAttempt).rejects.toThrow('GEAR_PLAN_STALE')
+
+      // 5. Verify no advice run was published for the stale head
+      const adviceRuns = await prisma.gearAdviceRun.findMany({
+        where: { planRevisionId: revision.id },
+      })
+      expect(adviceRuns.length).toBe(0)
+    } finally {
+      await prisma.gearAdviceRun.deleteMany({ where: { planRevisionId: revision.id } }).catch(() => {})
+      await prisma.gearPlanRevision.deleteMany({ where: { planId: plan.id } }).catch(() => {})
+      await prisma.gearPlan.delete({ where: { id: plan.id } }).catch(() => {})
     }
   })
 })

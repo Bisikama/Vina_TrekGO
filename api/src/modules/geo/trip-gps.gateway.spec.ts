@@ -69,7 +69,7 @@ describe('Trip GPS Socket.IO transport across two API instances', () => {
       if (!expectError)
         socket.once('connect_error', (error) => {
           clearTimeout(timer)
-          reject(error)
+          reject(error instanceof Error ? error : new Error(String(error)))
         })
     })
     socket.connect()

@@ -15,19 +15,89 @@ export type AuditCandidate = {
   refundId: string
   refundVersion: number
   refundStatus: string
+  refundReconcileStatus: string
+  refundAmount: string
+  refundCurrency: string
+  refundPaymentId: string
+  refundedAt: string | null
+  refundTransactionRef: string | null
   providerEnvironment: string | null
+  paymentGateway: string | null
+  simulationProvenanceHash: string | null
   orderId: string | null
   refundOrderId: string | null
   settlementId: string | null
   orderStatus: string | null
   orderFinancialStatus: string | null
+  orderExceptionStatus: string | null
+  orderVersion: number | null
+  orderCompletedAt: string | null
+  settlementStatus: string | null
+  settlementOutcome: string | null
+  settlementVersion: number | null
+  settlementSettledAt: string | null
   issuedDocumentCount: number
   hasSimulationMarker: boolean
   relationConsistent: boolean
+  sourcePayment: {
+    id: string
+    status: string
+    amount: string
+    currency: string
+    version: number
+    depositAllocations: Array<{ id: string; orderLineId: string; amount: string }>
+  }
+  refundAllocations: Array<{ paymentAllocationId: string; amount: string }>
+  sourceRefundReservations: Array<{
+    refundId: string
+    status: string
+    purpose: string
+    amount: string
+    version: number
+    reconcileStatus: string
+    refundedAt: string | null
+    allocations: Array<{ paymentAllocationId: string; amount: string }>
+  }>
+  cases: Array<{
+    id: string
+    status: string
+    version: number
+    updatedAt: string
+    resolvedAt: string | null
+    evidenceHash: string | null
+  }>
+  documents: Array<{
+    id: string
+    documentType: string
+    snapshotHash: string
+    issuedAt: string
+    version: number
+  }>
+  durableEvents: Array<{
+    id: string
+    eventType: string
+    status: string
+    processedAt: string | null
+    payloadHash: string
+    receipts: Array<{ consumerName: string; processedAt: string }>
+  }>
   allocatedItems: Array<{
     id: string
     status: string
     settledAt: string | null
+    version: number
+    depositAmount: string
+    deductionAmount: string
+    refundAmount: string
+    approvedAt: string | null
+    decisionSnapshotHash: string | null
+    inspection: {
+      id: string
+      stage: string
+      outcome: string
+      version: number
+      evidenceHash: string | null
+    } | null
     hasLegacySimulationMarker: boolean
   }>
 }
@@ -71,7 +141,20 @@ export function parseRepairArgs(args: string[]): RepairCliOptions {
 }
 
 export function candidateSnapshotHash(candidate: AuditCandidate): string {
-  return createHash('sha256').update(JSON.stringify(candidate)).digest('hex')
+  return createHash('sha256').update(canonical(candidate)).digest('hex')
+}
+
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
+    .join(',')}}`
+}
+
+function jsonHash(value: unknown): string | null {
+  return value === null || value === undefined ? null : createHash('sha256').update(canonical(value)).digest('hex')
 }
 
 export function classifyCandidate(candidate: AuditCandidate): ClassifiedCandidate {
@@ -81,6 +164,13 @@ export function classifyCandidate(candidate: AuditCandidate): ClassifiedCandidat
   const allSettledEarly =
     candidate.allocatedItems.length > 0 && candidate.allocatedItems.every((item) => item.status === 'SETTLED')
   const allItemsProven = candidate.allocatedItems.every((item) => item.hasLegacySimulationMarker)
+  const hasCommittedSuccess = candidate.durableEvents.some(
+    (event) => event.eventType === 'REFUND_SUCCEEDED' || event.receipts.length > 0,
+  )
+  const successEvents = candidate.durableEvents.filter((event) => event.eventType === 'REFUND_SUCCEEDED')
+  const hasRentalReceipt = successEvents.some((event) =>
+    event.receipts.some((receipt) => receipt.consumerName === 'rental-deposit-v1'),
+  )
 
   if (!candidate.hasSimulationMarker) {
     reasons.push('NO_SANDBOX_SIMULATION_MARKER')
@@ -88,15 +178,28 @@ export function classifyCandidate(candidate: AuditCandidate): ClassifiedCandidat
     classification = 'MANUAL_REVIEW_UNSAFE_SOURCE'
     reasons.push(candidate.providerEnvironment !== 'SANDBOX' ? 'SOURCE_NOT_SANDBOX' : 'RELATION_MISMATCH')
   } else if (candidate.refundStatus === 'SUCCEEDED' && hasPendingProjection) {
-    classification = 'REPLAY_SHARED_SUCCESS_EVENT'
-    reasons.push('PAYMENT_SUCCEEDED_RENTAL_PROJECTION_INCOMPLETE')
+    if (!successEvents.length || hasRentalReceipt) {
+      classification = 'MANUAL_REVIEW_UNSAFE_SOURCE'
+      reasons.push(!successEvents.length ? 'DURABLE_SUCCESS_EVENT_MISSING' : 'RECEIPT_EXISTS_BUT_PROJECTION_INCOMPLETE')
+    } else {
+      classification = 'REPLAY_SHARED_SUCCESS_EVENT'
+      reasons.push('PAYMENT_SUCCEEDED_RENTAL_PROJECTION_INCOMPLETE')
+    }
   } else if (candidate.refundStatus === 'PROCESSING' && allSettledEarly) {
     if (candidate.orderStatus === 'COMPLETED' || candidate.issuedDocumentCount > 0) {
       classification = 'MANUAL_REVIEW_IMMUTABLE_OR_TERMINAL'
       reasons.push(candidate.orderStatus === 'COMPLETED' ? 'ORDER_COMPLETED' : 'IMMUTABLE_DOCUMENT_ISSUED')
-    } else if (!allItemsProven) {
+    } else if (
+      !allItemsProven ||
+      candidate.refundReconcileStatus === 'NEEDS_REVIEW' ||
+      candidate.cases.length > 0 ||
+      hasCommittedSuccess
+    ) {
       classification = 'MANUAL_REVIEW_UNSAFE_SOURCE'
-      reasons.push('ITEM_SIMULATION_PROVENANCE_INCOMPLETE')
+      if (!allItemsProven) reasons.push('ITEM_SIMULATION_PROVENANCE_INCOMPLETE')
+      if (candidate.refundReconcileStatus === 'NEEDS_REVIEW') reasons.push('REFUND_RECONCILIATION_REQUIRED')
+      if (candidate.cases.length > 0) reasons.push('ORDER_CASE_ACTIVITY_PRESENT')
+      if (hasCommittedSuccess) reasons.push('DURABLE_SUCCESS_OR_RECEIPT_PRESENT')
     } else {
       classification = 'EARLY_PROJECTION_AUTO_REPAIR'
       reasons.push('PROCESSING_REFUND_WITH_EARLY_SETTLED_PROJECTION')
@@ -120,13 +223,25 @@ export function assertApplyEligible(
 }
 
 const candidateInclude = {
-  depositSettlement: {
+  payment: {
     include: {
-      order: { include: { rentalDocumentsViaOrderId: { select: { id: true } } } },
+      allocations: true,
+      refundsViaPaymentId: { include: { allocations: true } },
     },
   },
-  depositSettlementItem: true,
-  depositRefundItems: { include: { item: true } },
+  allocations: { include: { paymentAllocation: { include: { rentalOrderLine: true } } } },
+  depositSettlement: {
+    include: {
+      order: {
+        include: {
+          rentalDocumentsViaOrderId: true,
+          rentalExceptionCasesViaOrderId: true,
+        },
+      },
+    },
+  },
+  depositSettlementItem: { include: { inspection: true } },
+  depositRefundItems: { include: { item: { include: { inspection: true } } } },
 } satisfies Prisma.RefundInclude
 
 type RefundCandidateRow = Prisma.RefundGetPayload<{ include: typeof candidateInclude }>
@@ -135,7 +250,9 @@ function asObject(value: Prisma.JsonValue | null): Record<string, any> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null
 }
 
-function toCandidate(row: RefundCandidateRow): AuditCandidate {
+type DurableEventFact = Prisma.PaymentOutboxEventGetPayload<{ include: { receipts: true } }>
+
+function toCandidate(row: RefundCandidateRow, eventRows: DurableEventFact[] = []): AuditCandidate {
   const settlementOrderId = row.depositSettlement?.orderId ?? null
   const itemRows = row.depositRefundItems.length
     ? row.depositRefundItems.map((allocation) => allocation.item)
@@ -143,27 +260,168 @@ function toCandidate(row: RefundCandidateRow): AuditCandidate {
       ? [row.depositSettlementItem]
       : []
   const providerPayload = asObject(row.providerPayload)
+  const simulation = asObject(providerPayload?.sandboxSimulation ?? null)
+  const order = row.depositSettlement?.order ?? null
+  const paymentDepositAllocations = row.payment.allocations
+    .filter((allocation) => allocation.component === 'RENTAL_DEPOSIT')
+    .sort((left, right) => left.id.localeCompare(right.id))
+  const refundAllocations = row.allocations
+    .map((allocation) => ({
+      paymentAllocationId: allocation.paymentAllocationId,
+      amount: allocation.amount.toFixed(),
+    }))
+    .sort((left, right) => left.paymentAllocationId.localeCompare(right.paymentAllocationId))
+  const itemAllocationTotal = row.depositRefundItems.length
+    ? row.depositRefundItems.reduce((sum, allocation) => sum.plus(allocation.amount), new Prisma.Decimal(0))
+    : row.depositSettlementItem
+      ? row.amount
+      : new Prisma.Decimal(0)
+  const refundAllocationTotal = row.allocations.reduce(
+    (sum, allocation) => sum.plus(allocation.amount),
+    new Prisma.Decimal(0),
+  )
+  const reservedByAllocation = new Map<string, Prisma.Decimal>()
+  for (const refund of row.payment.refundsViaPaymentId) {
+    if (!['PENDING', 'PROCESSING', 'SUCCEEDED'].includes(refund.status)) continue
+    for (const allocation of refund.allocations) {
+      reservedByAllocation.set(
+        allocation.paymentAllocationId,
+        (reservedByAllocation.get(allocation.paymentAllocationId) ?? new Prisma.Decimal(0)).plus(allocation.amount),
+      )
+    }
+  }
+  const allocationBudgetValid = paymentDepositAllocations.every((allocation) =>
+    (reservedByAllocation.get(allocation.id) ?? new Prisma.Decimal(0)).lte(allocation.amount),
+  )
   return {
     refundId: row.id,
     refundVersion: row.version,
     refundStatus: row.status,
+    refundReconcileStatus: row.reconcileStatus,
+    refundAmount: row.amount.toFixed(),
+    refundCurrency: row.currency,
+    refundPaymentId: row.paymentId,
+    refundedAt: row.refundedAt?.toISOString() ?? null,
+    refundTransactionRef: row.refundTransactionRef,
     providerEnvironment: row.providerEnvironment,
+    paymentGateway: row.paymentGateway,
+    simulationProvenanceHash: jsonHash(simulation),
     orderId: settlementOrderId,
     refundOrderId: row.rentalOrderId,
     settlementId: row.depositSettlementId,
-    orderStatus: row.depositSettlement?.order.status ?? null,
-    orderFinancialStatus: row.depositSettlement?.order.financialStatus ?? null,
-    issuedDocumentCount: row.depositSettlement?.order.rentalDocumentsViaOrderId.length ?? 0,
-    hasSimulationMarker: Boolean(providerPayload?.sandboxSimulation),
+    orderStatus: order?.status ?? null,
+    orderFinancialStatus: order?.financialStatus ?? null,
+    orderExceptionStatus: order?.exceptionStatus ?? null,
+    orderVersion: order?.version ?? null,
+    orderCompletedAt: order?.completedAt?.toISOString() ?? null,
+    settlementStatus: row.depositSettlement?.status ?? null,
+    settlementOutcome: row.depositSettlement?.outcome ?? null,
+    settlementVersion: row.depositSettlement?.version ?? null,
+    settlementSettledAt: row.depositSettlement?.settledAt?.toISOString() ?? null,
+    issuedDocumentCount: order?.rentalDocumentsViaOrderId.length ?? 0,
+    hasSimulationMarker: simulation?.origin === 'ADMIN_SANDBOX_SIMULATION' && simulation?.environment === 'SANDBOX',
     relationConsistent: Boolean(
-      settlementOrderId && (!row.rentalOrderId || row.rentalOrderId === settlementOrderId) && itemRows.length,
+      settlementOrderId &&
+      (!row.rentalOrderId || row.rentalOrderId === settlementOrderId) &&
+      itemRows.length &&
+      refundAllocationTotal.equals(row.amount) &&
+      itemAllocationTotal.equals(row.amount) &&
+      row.allocations.every(
+        (allocation) =>
+          allocation.paymentAllocation.paymentId === row.paymentId &&
+          allocation.paymentAllocation.component === 'RENTAL_DEPOSIT' &&
+          allocation.paymentAllocation.rentalOrderLine.orderId === settlementOrderId,
+      ) &&
+      allocationBudgetValid,
     ),
-    allocatedItems: itemRows.map((item) => ({
-      id: item.id,
-      status: item.status,
-      settledAt: item.settledAt?.toISOString() ?? null,
-      hasLegacySimulationMarker: asObject(item.decisionSnapshot)?.settlementMode === 'SANDBOX_SIMULATED',
-    })),
+    sourcePayment: {
+      id: row.payment.id,
+      status: row.payment.status,
+      amount: row.payment.amount.toFixed(),
+      currency: row.payment.currency,
+      version: row.payment.version,
+      depositAllocations: paymentDepositAllocations.map((allocation) => ({
+        id: allocation.id,
+        orderLineId: allocation.rentalOrderLineId,
+        amount: allocation.amount.toFixed(),
+      })),
+    },
+    refundAllocations,
+    sourceRefundReservations: row.payment.refundsViaPaymentId
+      .filter((refund) => ['PENDING', 'PROCESSING', 'SUCCEEDED'].includes(refund.status))
+      .map((refund) => ({
+        refundId: refund.id,
+        status: refund.status,
+        purpose: refund.purpose,
+        amount: refund.amount.toFixed(),
+        version: refund.version,
+        reconcileStatus: refund.reconcileStatus,
+        refundedAt: refund.refundedAt?.toISOString() ?? null,
+        allocations: refund.allocations
+          .map((allocation) => ({
+            paymentAllocationId: allocation.paymentAllocationId,
+            amount: allocation.amount.toFixed(),
+          }))
+          .sort((left, right) => left.paymentAllocationId.localeCompare(right.paymentAllocationId)),
+      }))
+      .sort((left, right) => left.refundId.localeCompare(right.refundId)),
+    cases: (order?.rentalExceptionCasesViaOrderId ?? [])
+      .map((item) => ({
+        id: item.id,
+        status: item.status,
+        version: item.version,
+        updatedAt: item.updatedAt.toISOString(),
+        resolvedAt: item.resolvedAt?.toISOString() ?? null,
+        evidenceHash: jsonHash(item.evidenceIds),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    documents: (order?.rentalDocumentsViaOrderId ?? [])
+      .map((document) => ({
+        id: document.id,
+        documentType: document.documentType,
+        snapshotHash: document.snapshotHash,
+        issuedAt: document.issuedAt.toISOString(),
+        version: document.version,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    durableEvents: eventRows
+      .map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        status: event.status,
+        processedAt: event.processedAt?.toISOString() ?? null,
+        payloadHash: jsonHash(event.payload)!,
+        receipts: event.receipts
+          .map((receipt) => ({
+            consumerName: receipt.consumerName,
+            processedAt: receipt.processedAt.toISOString(),
+          }))
+          .sort((left, right) => left.consumerName.localeCompare(right.consumerName)),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    allocatedItems: itemRows
+      .map((item) => ({
+        id: item.id,
+        status: item.status,
+        settledAt: item.settledAt?.toISOString() ?? null,
+        version: item.version,
+        depositAmount: item.depositAmount.toFixed(),
+        deductionAmount: item.deductionAmount.toFixed(),
+        refundAmount: item.refundAmount.toFixed(),
+        approvedAt: item.approvedAt?.toISOString() ?? null,
+        decisionSnapshotHash: jsonHash(item.decisionSnapshot),
+        inspection: item.inspection
+          ? {
+              id: item.inspection.id,
+              stage: item.inspection.stage,
+              outcome: item.inspection.outcome,
+              version: item.inspection.version,
+              evidenceHash: jsonHash(item.inspection.evidenceIds),
+            }
+          : null,
+        hasLegacySimulationMarker: asObject(item.decisionSnapshot)?.settlementMode === 'SANDBOX_SIMULATED',
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
   }
 }
 
@@ -185,8 +443,19 @@ async function audit(db: PrismaClient, limit: number): Promise<ClassifiedCandida
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     take: limit,
   })
+  const events = rows.length
+    ? await db.paymentOutboxEvent.findMany({
+        where: { aggregateType: 'Refund', aggregateId: { in: rows.map((row) => row.id) } },
+        include: { receipts: true },
+      })
+    : []
   return rows
-    .map(toCandidate)
+    .map((row) =>
+      toCandidate(
+        row,
+        events.filter((event) => event.aggregateId === row.id),
+      ),
+    )
     .map(classifyCandidate)
     .filter((row) => row.classification !== 'NOT_A_CANDIDATE')
 }
@@ -202,9 +471,21 @@ async function applyCandidate(
     await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${candidate.orderId}::uuid FOR UPDATE`
     await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id=${candidate.settlementId}::uuid FOR UPDATE`
     await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id=${candidate.settlementId}::uuid ORDER BY id FOR UPDATE`
-    await tx.$queryRaw`SELECT id FROM refunds WHERE id=${candidate.refundId}::uuid FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM refunds WHERE payment_id=${candidate.refundPaymentId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM payment_allocations WHERE payment_id=${candidate.refundPaymentId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT ra.id FROM refund_allocations ra JOIN refunds r ON r.id=ra.refund_id WHERE r.payment_id=${candidate.refundPaymentId}::uuid ORDER BY ra.id FOR UPDATE OF ra`
+    await tx.$queryRaw`SELECT a.id FROM deposit_refund_item_allocations a JOIN deposit_settlement_items i ON i.id=a.deposit_settlement_item_id WHERE i.settlement_id=${candidate.settlementId}::uuid ORDER BY a.id FOR UPDATE OF a`
+    await tx.$queryRaw`SELECT id FROM return_inspections WHERE order_id=${candidate.orderId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM rental_exception_cases WHERE order_id=${candidate.orderId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM rental_documents WHERE order_id=${candidate.orderId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT id FROM payment_outbox_events WHERE aggregate_type='Refund' AND aggregate_id=${candidate.refundId}::uuid ORDER BY id FOR UPDATE`
+    await tx.$queryRaw`SELECT r.event_id FROM payment_consumer_receipts r JOIN payment_outbox_events e ON e.id=r.event_id WHERE e.aggregate_type='Refund' AND e.aggregate_id=${candidate.refundId}::uuid ORDER BY r.event_id,r.consumer_name FOR UPDATE OF r`
     const current = await tx.refund.findUniqueOrThrow({ where: { id: candidate.refundId }, include: candidateInclude })
-    const rechecked = classifyCandidate(toCandidate(current))
+    const currentEvents = await tx.paymentOutboxEvent.findMany({
+      where: { aggregateType: 'Refund', aggregateId: candidate.refundId },
+      include: { receipts: true },
+    })
+    const rechecked = classifyCandidate(toCandidate(current, currentEvents))
     assertApplyEligible(rechecked, options, expectedHashes)
 
     for (const item of rechecked.allocatedItems) {
