@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import { getRentalProductDetail } from "@/features/rentals/services/rental.api";
 import type { RentalProductDetailData } from "@/features/rentals/types/rental";
 
@@ -65,40 +66,42 @@ export function RentalProductDetailPage({
   productId,
   bookingId,
 }: RentalProductDetailPageProps) {
+  const cart = useRentalCart(bookingId);
   const [data, setData] =
     useState<RentalProductDetailData | null>(null);
   const [selectedImage, setSelectedImage] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await getRentalProductDetail(
-          productId,
-          bookingId,
-          controller.signal,
-        );
+    getRentalProductDetail(
+      productId,
+      bookingId,
+      controller.signal,
+    )
+      .then((result) => {
+        if (controller.signal.aborted) {
+          return;
+        }
 
         setData(result);
         setSelectedImage(result.product.imageUrls[0] ?? "");
-      } catch (loadError) {
+        setQuantity(1);
+        setError(null);
+      })
+      .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
           setError(getErrorMessage(loadError));
         }
-      } finally {
+      })
+      .finally(() => {
         if (!controller.signal.aborted) {
           setLoading(false);
         }
-      }
-    }
-
-    void load();
+      });
 
     return () => controller.abort();
   }, [bookingId, productId]);
@@ -152,6 +155,9 @@ export function RentalProductDetailPage({
   } = data;
 
   const available = availability.availableCount > 0;
+  const cartEntry = cart.items.find(
+    (item) => item.product.id === product.id,
+  );
 
   return (
     <div className="min-h-screen bg-[#F7F7F4]">
@@ -160,9 +166,7 @@ export function RentalProductDetailPage({
           <Link href="/" className="hover:text-[#1B5E41]">
             Trang chủ
           </Link>
-
           <span>/</span>
-
           <Link
             href={`/rentals?bookingId=${encodeURIComponent(
               bookingId,
@@ -171,12 +175,8 @@ export function RentalProductDetailPage({
           >
             Thuê thiết bị
           </Link>
-
           <span>/</span>
-
-          <span className="text-gray-900">
-            {product.name}
-          </span>
+          <span className="text-gray-900">{product.name}</span>
         </nav>
 
         <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
@@ -272,7 +272,6 @@ export function RentalProductDetailPage({
                 <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
                   Giá thuê mỗi ngày
                 </p>
-
                 <p className="mt-2 text-2xl font-black text-[#1B5E41]">
                   {formatMoney(
                     product.dailyPrice,
@@ -285,7 +284,6 @@ export function RentalProductDetailPage({
                 <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
                   Tiền đặt cọc
                 </p>
-
                 <p className="mt-2 text-xl font-black text-gray-900">
                   {formatMoney(
                     product.depositPolicy.amount,
@@ -299,52 +297,106 @@ export function RentalProductDetailPage({
               <p className="text-sm font-extrabold text-gray-900">
                 Áp dụng cho chuyến đi
               </p>
-
               <p className="mt-2 text-sm font-bold text-[#1B5E41]">
                 {tripSummary.name}
               </p>
-
               <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
                 <p>
-                  Thời lượng:{" "}
-                  <strong>
-                    {tripSummary.durationDays} ngày
-                  </strong>
+                  Thời lượng: <strong>{tripSummary.durationDays} ngày</strong>
                 </p>
-
                 <p>
-                  Độ khó:{" "}
-                  <strong>{tripSummary.difficulty}</strong>
+                  Độ khó: <strong>{tripSummary.difficulty}</strong>
                 </p>
-
                 {tripSummary.weatherSummary && (
                   <p className="sm:col-span-2">
-                    Thời tiết:{" "}
-                    <strong>
-                      {tripSummary.weatherSummary}
-                    </strong>
+                    Thời tiết: <strong>{tripSummary.weatherSummary}</strong>
                   </p>
                 )}
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={!available}
-              className={`mt-6 w-full rounded-xl px-6 py-4 text-sm font-extrabold transition ${
-                available
-                  ? "bg-[#1B5E41] text-white hover:bg-[#154B36]"
-                  : "cursor-not-allowed bg-gray-200 text-gray-500"
-              }`}
-            >
-              {available
-                ? "Chọn thiết bị này"
-                : "Thiết bị đang tạm hết"}
-            </button>
+            <div className="mt-6">
+              <p className="text-sm font-extrabold text-gray-900">
+                Số lượng
+              </p>
+              <div className="mt-3 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setQuantity((current) =>
+                      Math.max(1, current - 1),
+                    )
+                  }
+                  disabled={quantity <= 1}
+                  className="h-11 w-11 rounded-xl border border-gray-200 text-xl font-bold disabled:opacity-40"
+                >
+                  −
+                </button>
+                <span className="min-w-10 text-center text-lg font-black">
+                  {quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setQuantity((current) =>
+                      Math.min(
+                        availability.availableCount,
+                        current + 1,
+                      ),
+                    )
+                  }
+                  disabled={
+                    quantity >= availability.availableCount
+                  }
+                  className="h-11 w-11 rounded-xl border border-gray-200 text-xl font-bold disabled:opacity-40"
+                >
+                  +
+                </button>
+              </div>
+            </div>
 
+            {available ? (
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    cart.setQuantity(
+                      product,
+                      availability.availableCount,
+                      (cartEntry?.quantity ?? 0) + quantity,
+                    )
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#1B5E41] bg-emerald-50 px-6 py-4 text-sm font-extrabold text-[#1B5E41] transition hover:bg-emerald-100"
+                >
+                  <span className="text-lg">+</span>
+                  Thêm vào giỏ thuê
+                </button>
+                <Link
+                  href={`/rentals?bookingId=${encodeURIComponent(
+                    bookingId,
+                  )}`}
+                  className="flex w-full items-center justify-center rounded-xl bg-[#1B5E41] px-6 py-4 text-sm font-extrabold text-white transition hover:bg-[#154B36]"
+                >
+                  Xem giỏ &amp; chọn thêm
+                </Link>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="mt-6 w-full cursor-not-allowed rounded-xl bg-gray-200 px-6 py-4 text-sm font-extrabold text-gray-500"
+              >
+                Thiết bị đang tạm hết
+              </button>
+            )}
+
+            {cartEntry && (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-800">
+                Giỏ hành trang đang có {cartEntry.quantity} sản phẩm này.
+              </div>
+            )}
             <p className="mt-3 text-center text-[11px] leading-5 text-gray-500">
-              Việc chọn thiết bị chưa tạo thanh toán. Chi phí
-              được xác nhận ở bước hoàn tất đơn thuê.
+              Bạn có thể chọn thêm nhiều món trước khi kiểm tra tồn kho và tạo báo giá.
             </p>
           </section>
         </div>
@@ -365,7 +417,6 @@ export function RentalProductDetailPage({
                     <dt className="font-semibold capitalize text-gray-500">
                       {key.replaceAll("_", " ")}
                     </dt>
-
                     <dd className="text-right font-bold text-gray-900">
                       {formatSpecValue(value)}
                     </dd>
@@ -389,7 +440,6 @@ export function RentalProductDetailPage({
                 <p className="text-xs font-bold text-gray-500">
                   Bắt đầu
                 </p>
-
                 <p className="mt-1 text-sm font-extrabold text-gray-900">
                   {formatDate(
                     availability.rentalWindow.occupiedFrom,
@@ -401,7 +451,6 @@ export function RentalProductDetailPage({
                 <p className="text-xs font-bold text-gray-500">
                   Kết thúc
                 </p>
-
                 <p className="mt-1 text-sm font-extrabold text-gray-900">
                   {formatDate(
                     availability.rentalWindow.occupiedUntil,
