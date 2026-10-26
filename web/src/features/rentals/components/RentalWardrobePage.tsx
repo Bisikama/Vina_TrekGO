@@ -36,7 +36,11 @@ function issueOf(reason: unknown) {
   const body = (reason as { response?: { data?: unknown } })?.response?.data as Record<string, unknown> | undefined;
   const root = body && typeof body.data === "object" ? body.data as Record<string, unknown> : body;
   const error = root && typeof root.error === "object" ? root.error as Record<string, unknown> : root;
-  return { code: String(error?.code ?? ""), details: (error?.details ?? {}) as Record<string, unknown> };
+  return {
+    code: String(error?.code ?? ""),
+    status: Number((reason as { response?: { status?: number } })?.response?.status ?? 0),
+    details: (error?.details ?? {}) as Record<string, unknown>,
+  };
 }
 
 export function RentalWardrobePage() {
@@ -49,7 +53,10 @@ export function RentalWardrobePage() {
   const [editor, setEditor] = useState<{ item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string } | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [duplicate, setDuplicate] = useState<{ input: GearItemInput; item?: UserGearItem; draft?: GearExtractionDraft; details: Record<string, unknown> } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [aiProgress, setAiProgress] = useState<{ source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const aiRequestLock = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -89,15 +96,28 @@ export function RentalWardrobePage() {
 
   async function analyzeImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
-    setBusy(true); setError(null);
+    if (!file || aiRequestLock.current) return;
+    aiRequestLock.current = true;
+    setBusy(true); setError(null); setNotice(null);
+    setAiProgress({ source: "IMAGE", stage: "UPLOADING" });
     try {
       const uploadId = await uploadUserGearPhoto(file);
+      setAiProgress({ source: "IMAGE", stage: "ANALYZING" });
       const draft = await createGearExtraction({ source: "IMAGE", uploadId });
       if (draft.status !== "READY") throw new Error("AI chưa tạo được bản nháp sẵn sàng. Bạn vẫn có thể nhập tay.");
       setEditor({ draft, photoRef: uploadId });
-    } catch (reason) { setError(getRentalApiErrorMessage(reason, reason instanceof Error ? reason.message : "Không thể đọc ảnh bằng AI.")); }
-    finally { setBusy(false); }
+    } catch (reason) {
+      const issue = issueOf(reason);
+      if (issue.status === 409 || issue.code === "GEAR_CONCURRENCY_CONFLICT") {
+        setNotice("Ảnh này đang được TrekGo AI phân tích. Vui lòng chờ tác vụ hiện tại hoàn tất rồi thử lại, không cần nạp ảnh nhiều lần.");
+      } else {
+        setError(getRentalApiErrorMessage(reason, reason instanceof Error ? reason.message : "Không thể đọc ảnh bằng AI."));
+      }
+    } finally {
+      aiRequestLock.current = false;
+      setAiProgress(null);
+      setBusy(false);
+    }
   }
 
   return <main className="min-h-[700px] bg-[#f4f7fb] px-4 py-8 sm:px-6 lg:px-8">
@@ -120,14 +140,16 @@ export function RentalWardrobePage() {
           <span className="w-fit rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">✦ AI · giới hạn 20 lượt trích xuất/ngày</span>
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
-            <button disabled={busy} onClick={() => fileRef.current?.click()} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:opacity-50">✦ Nạp ảnh bằng AI</button>
-            <button disabled={busy} onClick={() => setLinkOpen(true)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:opacity-50">🔗 Dán link sản phẩm</button>
+            <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) fileRef.current?.click(); }} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "IMAGE" ? "⛰️ Đang phân tích..." : "✦ Nạp ảnh bằng AI"}</button>
+            <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) setLinkOpen(true); }} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "LINK" ? "⛰️ Đang đọc link..." : "🔗 Dán link sản phẩm"}</button>
             <button onClick={() => setEditor({})} className="rounded-xl bg-[#123f32] px-4 py-3 text-sm font-extrabold text-white shadow-sm">＋ Nhập tay</button>
           </div>
         </div>
       </div>
 
-      {busy && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">⛰️ TrekGo đang đọc thông số và sắp xếp hành trang...</div>}
+      {aiProgress && <AiExtractionLoader source={aiProgress.source} stage={aiProgress.stage} />}
+      {busy && !aiProgress && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">⛰️ TrekGo đang cập nhật hành trang...</div>}
+      {notice && <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"><span>⏳ {notice}</span><button onClick={() => setNotice(null)}>✕</button></div>}
       {error && <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
@@ -149,14 +171,56 @@ export function RentalWardrobePage() {
     </section>
 
     {editor && <GearEditor context={editor} busy={busy} onClose={() => setEditor(null)} onSave={(input) => void save(input)} />}
-    {linkOpen && <LinkDialog busy={busy} onClose={() => setLinkOpen(false)} onSubmit={async (url) => {
-      setBusy(true); setError(null);
-      try { const draft = await createGearExtraction({ source: "LINK", url }); setLinkOpen(false); setEditor({ draft }); }
-      catch (reason) { setError(getRentalApiErrorMessage(reason, "Không thể đọc link sản phẩm.")); }
-      finally { setBusy(false); }
+    {linkOpen && <LinkDialog busy={busy} onClose={() => { if (!aiRequestLock.current) setLinkOpen(false); }} onSubmit={async (url) => {
+      if (aiRequestLock.current) return;
+      aiRequestLock.current = true;
+      setBusy(true); setError(null); setNotice(null);
+      setAiProgress({ source: "LINK", stage: "ANALYZING" });
+      try {
+        const draft = await createGearExtraction({ source: "LINK", url });
+        setLinkOpen(false);
+        setEditor({ draft });
+      } catch (reason) {
+        const issue = issueOf(reason);
+        setLinkOpen(false);
+        if (issue.status === 409 || issue.code === "GEAR_CONCURRENCY_CONFLICT") {
+          setNotice("Link này đang được TrekGo AI phân tích. Vui lòng chờ tác vụ hiện tại hoàn tất rồi thử lại, không cần gửi link nhiều lần.");
+        } else {
+          setError(getRentalApiErrorMessage(reason, "Không thể đọc link sản phẩm."));
+        }
+      } finally {
+        aiRequestLock.current = false;
+        setAiProgress(null);
+        setBusy(false);
+      }
     }} />}
     {duplicate && <DuplicateDialog data={duplicate.details} busy={busy} onBack={() => { setDuplicate(null); setEditor({ item: duplicate.item, draft: duplicate.draft }); }} onConfirm={() => void save(duplicate.input, { item: duplicate.item, draft: duplicate.draft }, true)} />}
   </main>;
+}
+
+function AiExtractionLoader({ source, stage }: { source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" }) {
+  const title = stage === "UPLOADING" ? "Đang đưa ảnh lên trạm kiểm tra" : source === "IMAGE" ? "AI đang nhận diện trang bị" : "AI đang đọc thông tin sản phẩm";
+  const description = stage === "UPLOADING"
+    ? "Giữ nguyên màn hình để TrekGo chuẩn bị ảnh cho hành trình."
+    : "TrekGo đang đọc loại đồ, thương hiệu và thông số kỹ thuật. Quá trình có thể mất một lúc.";
+  return <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-r from-[#e9f7ef] via-white to-[#eef5ff] p-4 shadow-[0_8px_24px_rgba(22,92,69,.08)]" role="status" aria-live="polite">
+    <div className="flex items-center gap-4">
+      <div className="relative grid size-12 shrink-0 place-items-center rounded-full bg-[#123f32] text-xl text-white">
+        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/25" />
+        <span className="relative animate-pulse">⛰️</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-black text-[#123f32]">{title}</p>
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-[.15em] text-emerald-700">TrekGo AI</span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-slate-600">{description}</p>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-emerald-100">
+          <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-[#165c45] to-[#f4a261]" />
+        </div>
+      </div>
+    </div>
+  </div>;
 }
 
 function Filter({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
