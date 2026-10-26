@@ -95,6 +95,7 @@ export class BookingCancellationService {
             payload: {
               schemaVersion: 1,
               cancellationId: record.id,
+              bookingVersion: booking.version + 1,
               bookingId: booking.id,
               tripId: booking.tripId,
               userId: booking.userId,
@@ -181,6 +182,7 @@ export class BookingCancellationService {
           payload: {
             schemaVersion: 1,
             cancellationId: record.id,
+            bookingVersion: booking.version + 1,
             bookingId: booking.id,
             paymentId: payment.id,
             tripId: booking.tripId,

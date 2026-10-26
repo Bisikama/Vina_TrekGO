@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "id": "6addab3183cf85436b27a913",
+      "userId": "c7f2bb02-9a72-4582-8bad-a0e0366480e1",
+      "title": "Vé chuyến đi đã được liên kết thành công",
+      "content": "Vé chuyến đi đã được liên kết thành công",
+      "notificationType": "PUBLIC_PARTICIPANT_CLAIMED",
+      "referenceType": "TRIP",
+      "referenceId": "15f1218b-1070-4e23-834c-d13abd416b4f",
+      "status": "UNREAD",
+      "readAt": null,
+      "metadata": {
+        "schemaVersion": 1,
+        "tripId": "15f1218b-1070-4e23-834c-d13abd416b4f",
+        "target": {
+          "kind": "BOOKING_PARTICIPANT",
+          "bookingId": "c3f2ed49-94e2-44e4-9f41-76d86c2b2ef9",
+          "participantId": "ee442627-b562-4584-826d-4dde40120302"
+        },
+        "outboxEventId": "dd4fd81b-2143-481d-90b4-66ccbf0abfde",
+        "semanticType": "PUBLIC_PARTICIPANT_CLAIMED"
+      },
+      "createdAt": "2026-10-25T07:09:37.096Z",
+      "updatedAt": "2026-10-25T07:09:37.096Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 10
+}

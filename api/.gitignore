@@ -79,4 +79,5 @@ jest_output.txt
 
 /design
 /.invitation-test-pg
+/.invitation-test-mongo
 /scripts

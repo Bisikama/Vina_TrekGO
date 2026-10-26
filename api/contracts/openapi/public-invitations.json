@@ -1032,10 +1032,7 @@
                                 "type": "boolean"
                               },
                               "canNavigate": {
-                                "type": "boolean",
-                                "enum": [
-                                  false
-                                ]
+                                "type": "boolean"
                               },
                               "canRent": {
                                 "type": "boolean",
@@ -1044,10 +1041,7 @@
                                 ]
                               },
                               "canCheckIn": {
-                                "type": "boolean",
-                                "enum": [
-                                  false
-                                ]
+                                "type": "boolean"
                               },
                               "reason": {
                                 "type": "string",
@@ -1916,10 +1910,7 @@
                           "type": "boolean"
                         },
                         "canNavigate": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "canRent": {
                           "type": "boolean",
@@ -1928,10 +1919,7 @@
                           ]
                         },
                         "canCheckIn": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "reason": {
                           "type": "string",
@@ -2806,10 +2794,7 @@
                           "type": "boolean"
                         },
                         "canNavigate": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "canRent": {
                           "type": "boolean",
@@ -2818,10 +2803,7 @@
                           ]
                         },
                         "canCheckIn": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "reason": {
                           "type": "string",
@@ -3698,10 +3680,7 @@
                           "type": "boolean"
                         },
                         "canNavigate": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "canRent": {
                           "type": "boolean",
@@ -3710,10 +3689,7 @@
                           ]
                         },
                         "canCheckIn": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "reason": {
                           "type": "string",
@@ -4580,10 +4556,7 @@
                           "type": "boolean"
                         },
                         "canNavigate": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "canRent": {
                           "type": "boolean",
@@ -4592,10 +4565,7 @@
                           ]
                         },
                         "canCheckIn": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "type": "boolean"
                         },
                         "reason": {
                           "type": "string",
@@ -5292,6 +5262,10 @@
                         "required": [
                           "id",
                           "fullName",
+                          "checkinStatus",
+                          "checkinMethod",
+                          "checkedInAt",
+                          "checkinCode",
                           "linkageStatus",
                           "pendingInvitationId",
                           "recipientDisplay",
@@ -5305,6 +5279,32 @@
                           },
                           "fullName": {
                             "type": "string"
+                          },
+                          "checkinStatus": {
+                            "type": "string",
+                            "enum": [
+                              "NOT_CHECKED_IN",
+                              "CHECKED_IN",
+                              "NO_SHOW"
+                            ]
+                          },
+                          "checkinMethod": {
+                            "type": "string",
+                            "enum": [
+                              "QR",
+                              "MANUAL",
+                              null
+                            ],
+                            "nullable": true
+                          },
+                          "checkedInAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "checkinCode": {
+                            "type": "string",
+                            "nullable": true
                           },
                           "linkageStatus": {
                             "type": "string",
@@ -5412,8 +5412,8 @@
   },
   "info": {
     "title": "TrekGo Public participant invitations",
-    "description": "M6 backend contract. Six invitation operations; additive buyer linkage projection included. Operational gates M7/M9 remain pending. Deployment not implied.",
-    "version": "1.0.0",
+    "description": "M6/M7 backend contract. Six invitation operations; buyer linkage and actor-scoped navigation permissions. Rental integration remains M9. Deployment not implied.",
+    "version": "1.1.0",
     "contact": {}
   },
   "tags": [],

@@ -12,10 +12,63 @@ import { NOTIFICATION_ERROR_CODES } from '../../shared/errors/codes/notification
 
 @Injectable()
 export class NotificationsService {
+  private deliveryIndexReady?: Promise<unknown>
   constructor(
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
   ) {}
+
+  // Require the additive unique index even when production disables autoIndex.
+  async ensureDeliveryIndex() {
+    if (!this.deliveryIndexReady) {
+      this.deliveryIndexReady = this.notificationModel.collection
+        .createIndex(
+          { deliveryKey: 1 },
+          {
+            unique: true,
+            partialFilterExpression: { deliveryKey: { $type: 'string' } },
+            name: 'notification_delivery_key_unique',
+          },
+        )
+        .catch((error) => {
+          this.deliveryIndexReady = undefined
+          throw error
+        })
+    }
+    await this.deliveryIndexReady
+  }
+
+  async deliverBookingEvent(eventId: string, semanticType: string, data: Partial<Notification> & { userId: string }) {
+    await this.ensureDeliveryIndex()
+    // Legacy deliveries lacked semanticType. A recipient's receipt must not suppress another recipient.
+    const legacy = await this.notificationModel
+      .findOne({
+        userId: data.userId,
+        'metadata.outboxEventId': eventId,
+        $or: [{ 'metadata.semanticType': semanticType }, { 'metadata.semanticType': { $exists: false } }],
+      })
+      .lean()
+      .exec()
+    if (legacy) return
+    const deliveryKey = `${eventId}:${data.userId}:${semanticType}`
+    try {
+      await this.notificationModel
+        .updateOne(
+          { deliveryKey },
+          {
+            $setOnInsert: {
+              ...data,
+              deliveryKey,
+              metadata: { ...data.metadata, outboxEventId: eventId, semanticType },
+            },
+          },
+          { upsert: true, runValidators: true },
+        )
+        .exec()
+    } catch (error) {
+      if (error?.code !== 11000 || !(await this.notificationModel.exists({ deliveryKey }))) throw error
+    }
+  }
 
   // Lấy danh sách phân trang cho User
   async getUserNotifications(
@@ -70,9 +123,7 @@ export class NotificationsService {
 
   // Đếm số lượng chưa đọc (để hiển thị badge đỏ)
   async getUnreadCount(userId: string) {
-    const count = await this.notificationModel
-      .countDocuments({ userId, status: MongoNotificationStatus.UNREAD })
-      .exec()
+    const count = await this.notificationModel.countDocuments({ userId, status: MongoNotificationStatus.UNREAD }).exec()
     return { unreadCount: count }
   }
 
@@ -115,11 +166,7 @@ export class NotificationsService {
   // Lưu trữ 1 thông báo
   async archive(id: string, userId: string) {
     const updated = await this.notificationModel
-      .findOneAndUpdate(
-        { _id: id, userId },
-        { $set: { status: MongoNotificationStatus.ARCHIVED } },
-        { new: true },
-      )
+      .findOneAndUpdate({ _id: id, userId }, { $set: { status: MongoNotificationStatus.ARCHIVED } }, { new: true })
       .lean()
       .exec()
 
@@ -138,10 +185,7 @@ export class NotificationsService {
 
   // Tìm thông báo theo outboxEventId để chống xử lý trùng (Idempotency)
   async findByOutboxEventId(outboxEventId: string) {
-    return await this.notificationModel
-      .findOne({ 'metadata.outboxEventId': outboxEventId })
-      .lean()
-      .exec()
+    return await this.notificationModel.findOne({ 'metadata.outboxEventId': outboxEventId }).lean().exec()
   }
 
   // Tạo thông báo mới (dùng khi Consumer đọc outbox event từ Booking/Payment/GPS)
