@@ -107,8 +107,6 @@ export class CreateUploadIntentUseCase {
       switch (scope) {
         case 'LEADER_CERTIFICATE':
           return role === 'USER';
-        case 'USER_GEAR':
-          return role === 'USER';
         case 'RENTAL_PRODUCT':
           return ['STAFF_INVENTORY', 'ADMIN'].includes(role);
         case 'CONDITION_EVIDENCE':
