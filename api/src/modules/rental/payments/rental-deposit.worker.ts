@@ -78,6 +78,30 @@ export class RentalDepositWorker {
     const candidates: DepositRefundCandidate[] = []
 
     for (const item of items) {
+      const orderId = item.settlement.orderId
+      const finalInspections = await this.db.returnInspection.findMany({
+        where: { orderId, stage: 'FINAL' },
+        select: { assignmentId: true },
+      })
+      const missingPrelims = await this.db.returnInspection.findMany({
+        where: {
+          orderId,
+          stage: 'PRELIMINARY',
+          outcome: 'MISSING_PENDING_REVIEW',
+        },
+        select: { assignmentId: true },
+      })
+      const completedAssignmentIds = new Set([
+        ...finalInspections.map((f) => f.assignmentId),
+        ...missingPrelims.map((m) => m.assignmentId),
+      ])
+      const assignments = await this.db.rentalUnitAssignment.findMany({
+        where: { orderLine: { orderId } },
+        select: { id: true },
+      })
+      const isOrderComplete = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))
+      if (!isOrderComplete) continue
+
       const payment = await this.db.payment.findFirst({
         where: {
           application: { status: 'APPLIED' },
@@ -472,6 +496,59 @@ export class RentalDepositWorker {
     if (this.running || !isWorkerEnabled) return
     this.running = true
     try {
+      // Scanner: Release any orders where all assignments have completed inspection
+      const awaitGrouped = await this.db.depositSettlementItem.findMany({
+        where: {
+          status: 'REVIEW_REQUIRED',
+          reason: 'FINAL_PASS_AWAIT_GROUPED_REFUND',
+        },
+        include: { settlement: true },
+        take: 25,
+      })
+      const handledOrders = new Set<string>()
+      for (const ag of awaitGrouped) {
+        const orderId = ag.settlement.orderId
+        if (handledOrders.has(orderId)) continue
+        handledOrders.add(orderId)
+
+        const finalInspections = await this.db.returnInspection.findMany({
+          where: { orderId, stage: 'FINAL' },
+          select: { assignmentId: true },
+        })
+        const missingPrelims = await this.db.returnInspection.findMany({
+          where: {
+            orderId,
+            stage: 'PRELIMINARY',
+            outcome: 'MISSING_PENDING_REVIEW',
+          },
+          select: { assignmentId: true },
+        })
+        const completedAssignmentIds = new Set([
+          ...finalInspections.map((f) => f.assignmentId),
+          ...missingPrelims.map((m) => m.assignmentId),
+        ])
+        const assignments = await this.db.rentalUnitAssignment.findMany({
+          where: { orderLine: { orderId } },
+          select: { id: true },
+        })
+        const allInspected = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))
+        if (allInspected) {
+          const now = new Date()
+          await this.db.depositSettlementItem.updateMany({
+            where: {
+              settlementId: ag.settlementId,
+              status: 'REVIEW_REQUIRED',
+              reason: 'FINAL_PASS_AWAIT_GROUPED_REFUND',
+            },
+            data: {
+              status: 'REFUND_PENDING',
+              approvedAt: now,
+              reason: 'INVENTORY_FINAL_PASS',
+            },
+          })
+        }
+      }
+
       const items = await this.db.depositSettlementItem.findMany({
         where: {
           ...(this.itemCursor ? { id: { gt: this.itemCursor } } : {}),
