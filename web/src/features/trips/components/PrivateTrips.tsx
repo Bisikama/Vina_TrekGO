@@ -36,7 +36,7 @@ export function PrivateTrips() {
   }, [destination]);
   useEffect(() => {
     let cancelled = false;
-    if (!trip?.id) { setMembers([]); return; }
+    if (!trip?.id) return;
     privateTripMembershipApi.getMembers(trip.id, { status: 'ACTIVE', pageSize: 50 })
       .then(res => { if (!cancelled) setMembers(res.items || []); })
       .catch(() => { if (!cancelled) setMembers([]); });

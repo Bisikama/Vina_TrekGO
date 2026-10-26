@@ -656,6 +656,75 @@ describe('Gear Advisor V3.1.5 — Phase 04 HTTP E2E Pipeline (/api/v1/gear & /ap
 
       expect(res.body.id).toBeDefined();
     });
+
+    it('detects duplicate backpack with matching attributes despite different name/brand and allows override with acknowledgeDuplicate', async () => {
+      // 1. Create first backpack (Brand One Star, GOOD condition, 500g, waterproof: true, rain_cover: false)
+      const firstRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/items')
+        .set('Authorization', aliceToken)
+        .send({
+          name: 'Balo One Star',
+          category: 'BACKPACK',
+          brand: 'One Star',
+          condition: 'GOOD',
+          attributes: {
+            capacity_l: null,
+            rain_cover: false,
+            waterproof: true,
+            weight_g: 500,
+          },
+        })
+        .expect(201);
+
+      expect(firstRes.body.id).toBeDefined();
+
+      // 2. Attempt to create second backpack with different name & brand but identical technical attributes without acknowledgeDuplicate
+      const dupRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/items')
+        .set('Authorization', aliceToken)
+        .send({
+          name: 'Balo laptop Stargo Raina',
+          category: 'BACKPACK',
+          brand: null,
+          condition: 'GOOD',
+          attributes: {
+            capacity_l: null,
+            rain_cover: false,
+            waterproof: true,
+            weight_g: 500,
+          },
+        })
+        .expect(409);
+
+      expect(dupRes.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_ITEM_POSSIBLE_DUPLICATE);
+      expect(dupRes.body.error.details).toBeDefined();
+      expect(dupRes.body.error.details.similarItem.id).toBe(firstRes.body.id);
+      expect(dupRes.body.error.details.matchedFields).toEqual(
+        expect.arrayContaining(['rain_cover', 'waterproof', 'weight_g'])
+      );
+
+      // 3. User acknowledges duplicate and resends -> 201 Created
+      const ackRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/items')
+        .set('Authorization', aliceToken)
+        .send({
+          name: 'Balo laptop Stargo Raina',
+          category: 'BACKPACK',
+          brand: null,
+          condition: 'GOOD',
+          acknowledgeDuplicate: true,
+          attributes: {
+            capacity_l: null,
+            rain_cover: false,
+            waterproof: true,
+            weight_g: 500,
+          },
+        })
+        .expect(201);
+
+      expect(ackRes.body.id).toBeDefined();
+      expect(ackRes.body.id).not.toBe(firstRes.body.id);
+    });
   });
 
   // =========================================================================

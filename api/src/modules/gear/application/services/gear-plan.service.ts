@@ -3,6 +3,7 @@ import * as crypto from 'crypto'
 import { AppError } from '../../../../shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
 import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes'
+import { RENTAL_ORDERING_ERROR_CODES } from '../../../../shared/errors/codes/rental-ordering.error-codes'
 import {
   buildTripRequirements,
   evaluateGearCheck,
@@ -45,6 +46,7 @@ import type {
 import { GearPlanDomain, GearPlanRevisionDomain, GearOptionObjective, GearAdviceSource } from '../../domain/gear.types'
 import {
   calculateChargedDays,
+  calculateOccupiedWindow,
   parseWholeVnd,
   calculateDepositPerUnit,
   rentalOccupiedFrom,
@@ -57,7 +59,12 @@ import {
   CandidateProduct,
   OwnedAssignment,
 } from '../../domain/pure-planner'
-import { validateNarrativeViGrounding } from '../../domain/advice-grounding'
+import {
+  validateNarrativeViGrounding,
+  buildApprovedClaims,
+  renderNarrativeFromClaims,
+  ApprovedClaim,
+} from '../../domain/advice-grounding'
 
 function canonicalStringify(obj: any): string {
   if (obj === null || typeof obj !== 'object') {
@@ -791,7 +798,69 @@ export class GearPlanService {
     }
 
     const trip = await this.tripContextPort.getTripContext(tripId, userId)
-    const chargedDays = calculateChargedDays(trip.startAt, trip.endAt, 'CEIL_24H')
+
+    // 1. Check if rental items are actually needed to cover missing checklist items
+    const needsRental = checklist.some((req: any) => req.status !== 'COVERED_BY_OWNED')
+
+    // 2. Canonical active rental policy resolution
+    const now = new Date()
+    const activePolicy = this.prisma.rentalPolicy?.findFirst
+      ? await this.prisma.rentalPolicy.findFirst({
+          where: {
+            isActive: true,
+            effectiveFrom: { lte: now },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+          },
+          orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }],
+        })
+      : null
+
+    if (needsRental && !activePolicy) {
+      throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED, {
+        message: 'Chính sách thuê chưa được cấu hình hoặc đã hết hạn, không thể tính toán phương án thuê',
+      })
+    }
+
+    if (needsRental && activePolicy) {
+      const normalBuffer = Math.max(
+        Number(activePolicy.returnBufferMinutes ?? 0),
+        Number(activePolicy.cleaningBufferMinutes ?? 0),
+      )
+      if (!Number.isSafeInteger(normalBuffer) || normalBuffer < 1440) {
+        throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED, {
+          message: 'Chính sách thuê thiếu thông số returnBufferMinutes hợp lệ (tối thiểu 1440 phút)',
+        })
+      }
+      const deepBuffer = activePolicy.deepInspectionBufferMinutes
+      if (deepBuffer != null && (!Number.isSafeInteger(Number(deepBuffer)) || Number(deepBuffer) < 2880)) {
+        throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED, {
+          message: 'Chính sách thuê thiếu thông số deepInspectionBufferMinutes hợp lệ (tối thiểu 2880 phút)',
+        })
+      }
+    }
+
+    const canonicalRentalContext = activePolicy
+      ? ({
+          pickup: { scheduledAt: trip.startAt },
+          dropoff: { scheduledAt: trip.endAt },
+          activePolicy: {
+            id: activePolicy.id,
+            policyCode: activePolicy.policyCode,
+            versionNo: activePolicy.versionNo,
+            dayCountMode: activePolicy.dayCountMode,
+            returnBufferMinutes: Number(activePolicy.returnBufferMinutes),
+            cleaningBufferMinutes: Number(activePolicy.cleaningBufferMinutes),
+            deepInspectionBufferMinutes:
+              activePolicy.deepInspectionBufferMinutes !== null
+                ? Number(activePolicy.deepInspectionBufferMinutes)
+                : undefined,
+          },
+        } as any)
+      : null
+
+    const chargedDays = canonicalRentalContext
+      ? Math.max(1, calculateChargedDays(trip.startAt, trip.endAt, canonicalRentalContext.activePolicy.dayCountMode))
+      : 1
 
     // Gear Category to Rental Category Slug mapping (All 8 categories per MASTER 1.1.I)
     const GEAR_TO_RENTAL_CATEGORY_SLUG: Record<string, string | null> = {
@@ -856,33 +925,16 @@ export class GearPlanService {
 
         let availableCount = 0
         try {
-          const occupiedFrom = rentalOccupiedFrom(trip.startAt)
-          const activePolicy = this.prisma.rentalPolicy?.findFirst
-            ? (await this.prisma.rentalPolicy.findFirst({
-                where: {
-                  isActive: true,
-                  effectiveFrom: { lte: new Date() },
-                  OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
-                },
-                orderBy: { effectiveFrom: 'desc' },
-              })) || (await this.prisma.rentalPolicy.findFirst({ where: { isActive: true } }))
-            : null
-          const returnBuf =
-            activePolicy?.returnBufferMinutes !== undefined && activePolicy?.returnBufferMinutes !== null
-              ? Number(activePolicy.returnBufferMinutes)
-              : 1440
-          const cleaningBuf =
-            activePolicy?.cleaningBufferMinutes !== undefined && activePolicy?.cleaningBufferMinutes !== null
-              ? Number(activePolicy.cleaningBufferMinutes)
-              : 0
-          const bufferMinutes = Math.max(returnBuf, cleaningBuf)
-          const occupiedUntil = new Date(trip.endAt.getTime() + bufferMinutes * 60_000)
+          const requiresDeep =
+            profileAttrs?.requires_deep_inspection === true ||
+            (product as any).requiresDeepInspectionAfterReturn === true
+          const occupiedWindow = calculateOccupiedWindow(canonicalRentalContext, trip.endAt, requiresDeep)
 
           const capacitySnapshot = await getVerifiedCapacitySnapshot(this.prisma, {
             productId: product.id,
-            occupiedFrom,
-            occupiedUntil,
-            now: new Date(),
+            occupiedFrom: occupiedWindow.occupiedFrom,
+            occupiedUntil: occupiedWindow.occupiedUntil,
+            now,
           })
           availableCount = capacitySnapshot.availableCount
         } catch (err: any) {
@@ -1008,6 +1060,10 @@ export class GearPlanService {
               ? optionMinWeight.summary.isComplete
               : optionMinFee.summary.isComplete,
           chargedDays,
+          rentalPolicyId: activePolicy?.id ?? null,
+          policyVersion: activePolicy ? `${activePolicy.policyCode}-v${activePolicy.versionNo}` : null,
+          rentalStartAt: trip.startAt.toISOString(),
+          rentalEndAt: trip.endAt.toISOString(),
           candidateCategoriesEvaluated: candidatesPerCategory.size,
         },
         optionsJson: [optionMinFee, optionMinWeight] as any,
@@ -1142,6 +1198,30 @@ export class GearPlanService {
       (l: any) => `${l.productId}:${l.productName}`,
     )
 
+    const tripContextForClaims = {
+      days,
+      difficulty: diff,
+      destination: tripContext?.destination || tripContext?.trailName || 'cung đường',
+      temp_min_c: climate?.temp_min_c,
+      temp_max_c: climate?.temp_max_c,
+      temp_min_night_c: climate?.temp_min_night_c,
+      rain_prob_pct: climate?.rain_prob_pct,
+    }
+
+    const approvedClaims = buildApprovedClaims({
+      tripContext: tripContextForClaims,
+      selectedOption: {
+        summary: {
+          totalRentalFee: selectedOption.summary?.totalRentalFee ?? 0,
+          totalDeposit: selectedOption.summary?.totalDeposit ?? 0,
+          missingRequirements: selectedOption.summary?.missingRequirements || [],
+          status: selectedOption.summary?.status,
+        },
+        rentalLines: selectedOption.rentalLines || [],
+        ownedAssignments: selectedOption.ownedAssignments || [],
+      },
+    })
+
     let adviceResult: any
     try {
       if (!this.gearAiPort || !this.gearAiPort.generateAdvice) throw new Error('GEAR_AI_UNAVAILABLE')
@@ -1152,14 +1232,12 @@ export class GearPlanService {
         requirements: (revision.resultSnapshot as any)?.checklist || [],
         coverage: (revision.resultSnapshot as any)?.summary || {},
         options: [selectedOption],
+        approvedClaims,
       })
     } catch {
       adviceResult = {
         source: 'RULE_FALLBACK' as GearAdviceSource,
-        narrativeVi: this.renderRuleFallbackNarrative({
-          tripContext,
-          selectedOption,
-        }),
+        narrativeVi: '',
         factRefs,
         actionRefs,
         candidateRefs,
@@ -1171,48 +1249,48 @@ export class GearPlanService {
 
     let finalSource: GearAdviceSource = 'RULE_FALLBACK'
     let finalNarrative = ''
+    let finalFactRefs = factRefs
 
     if (adviceResult && adviceResult.source === 'AI') {
-      const modelFactRefs: string[] = adviceResult.factRefs || []
-      const modelCandRefs: string[] = adviceResult.candidateRefs || []
+      const selectedClaimIds: string[] = Array.isArray(adviceResult.selectedClaimIds)
+        ? adviceResult.selectedClaimIds
+        : Array.isArray(adviceResult.claimIds)
+          ? adviceResult.claimIds
+          : []
 
-      const allowedCandidateIds = new Set<string>((selectedOption.rentalLines || []).map((l: any) => l.productId))
-      const allowedCandidateNames = (selectedOption.rentalLines || []).map((l: any) => l.productName || '')
+      // Validate selectedClaimIds strictly against approvedClaims
+      const renderResult = renderNarrativeFromClaims(selectedClaimIds, approvedClaims)
 
-      const hasMissing = (selectedOption.summary?.missingRequirements || []).length > 0
-      const totalRentalFee = selectedOption.summary?.totalRentalFee ?? 0
-
-      const groundingCheck = validateNarrativeViGrounding({
-        narrativeVi: adviceResult.narrativeVi || '',
-        tripDays: days,
-        tripDifficulty: diff,
-        climate: {
-          temp_min_c: climate.temp_min_c,
-          temp_max_c: climate.temp_max_c,
-          rain_prob_pct: climate.rain_prob_pct,
-        },
-        totalRentalFee,
-        allowedCandidateNames,
-        allowedCandidateIds,
-        allowedFactSet: approvedFactSet,
-        modelFactRefs,
-        modelCandidateRefs: modelCandRefs,
-        hasMissingRequired: hasMissing,
-      })
-
-      if (!groundingCheck.isValid) {
+      if (!renderResult.isValid) {
         this.logger.warn(
-          `AI advice failed verification against approved facts (${groundingCheck.reason}), refusing narrative and falling back to RULE_FALLBACK`,
+          `AI advice selected invalid claim IDs (${renderResult.reason}), refusing narrative and falling back to RULE_FALLBACK`,
         )
         finalSource = 'RULE_FALLBACK'
-        finalNarrative = this.renderRuleFallbackNarrative({ tripContext, selectedOption })
+        const fallbackRender = renderNarrativeFromClaims(
+          approvedClaims.map((c) => c.id),
+          approvedClaims,
+        )
+        finalNarrative = fallbackRender.narrativeVi
+        finalFactRefs = Array.from(new Set([...finalFactRefs, ...fallbackRender.factRefs]))
       } else {
+        // AI selection is valid!
+        // CRITICAL CONTRACT:
+        // Server renders finalNarrative strictly from approvedClaims.
+        // We NEVER assign adviceResult.narrativeVi directly, eliminating any possible model text leak.
         finalSource = 'AI'
-        finalNarrative = adviceResult.narrativeVi
+        finalNarrative = renderResult.narrativeVi
+        if (renderResult.factRefs.length > 0) {
+          finalFactRefs = Array.from(new Set([...finalFactRefs, ...renderResult.factRefs]))
+        }
       }
     } else {
       finalSource = 'RULE_FALLBACK'
-      finalNarrative = this.renderRuleFallbackNarrative({ tripContext, selectedOption })
+      const fallbackRender = renderNarrativeFromClaims(
+        approvedClaims.map((c) => c.id),
+        approvedClaims,
+      )
+      finalNarrative = fallbackRender.narrativeVi
+      finalFactRefs = Array.from(new Set([...finalFactRefs, ...fallbackRender.factRefs]))
     }
 
     // F03: 1. Re-verify active trip membership / eligibility after network wait
@@ -1442,39 +1520,13 @@ export class GearPlanService {
 
   private renderRuleFallbackNarrative(params: { tripContext: any; selectedOption: any }): string {
     const { tripContext, selectedOption } = params
-    const days = tripContext?.days ?? 1
-    const diff = tripContext?.difficulty ?? 1
-    const destination = tripContext?.destination || 'cung đường'
-
-    const lines: string[] = []
-    lines.push(
-      `Hệ thống cố vấn trang bị VinaTrekGO đã phân tích kế hoạch cho hành trình khám phá ${destination} (${days} ngày, cấp độ khó ${diff}/5).`,
-    )
-
-    if (selectedOption.ownedAssignments && selectedOption.ownedAssignments.length > 0) {
-      const ownedNames = selectedOption.ownedAssignments.map((a: any) => a.itemName).join(', ')
-      lines.push(
-        `Trang bị cá nhân phù hợp: Bạn đã có sẵn ${selectedOption.ownedAssignments.length} món đồ đáp ứng tiêu chuẩn an toàn (${ownedNames}).`,
-      )
-    }
-
-    if (selectedOption.rentalLines && selectedOption.rentalLines.length > 0) {
-      const rentDetails = selectedOption.rentalLines.map((l: any) => `${l.productName} (SL: ${l.quantity})`).join(', ')
-      lines.push(
-        `Trang bị đề xuất thuê: ${rentDetails}. Tổng chi phí thuê ước tính là ${selectedOption.summary.totalRentalFee.toLocaleString(
-          'vi-VN',
-        )} VND (tiền cọc: ${selectedOption.summary.totalDeposit.toLocaleString('vi-VN')} VND).`,
-      )
-    }
-
-    if (selectedOption.summary.missingRequirements && selectedOption.summary.missingRequirements.length > 0) {
-      lines.push(
-        `Lưu ý: Còn ${selectedOption.summary.missingRequirements.length} yêu cầu chưa có trong danh mục thuê (ví dụ: quần trekking dài). Vui lòng chuẩn bị trước khi xuất phát.`,
-      )
-    }
-
-    lines.push('Hãy kiểm tra kỹ toàn bộ trang bị, đảm bảo độ bám và khả năng chống thấm nước trước ngày khởi hành.')
-
-    return lines.join('\n\n')
+    const approvedClaims = buildApprovedClaims({
+      tripContext,
+      selectedOption,
+    })
+    return renderNarrativeFromClaims(
+      approvedClaims.map((c) => c.id),
+      approvedClaims,
+    ).narrativeVi
   }
 }

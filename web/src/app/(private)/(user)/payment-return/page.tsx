@@ -47,6 +47,12 @@ function getMomoErrorMessage(code: string | null, defaultMessage?: string | null
   }
 }
 
+type RentalPaymentReturnContext = {
+  orderId: string;
+  bookingId: string;
+  paymentId: string;
+};
+
 function PaymentReturnContent() {
   const searchParams = useSearchParams();
 
@@ -72,52 +78,122 @@ function PaymentReturnContent() {
 
   // Tham số ID đơn đặt chỗ
   const rawBookingId = searchParams.get('bookingId');
+  const [rentalContext] =
+    useState<RentalPaymentReturnContext | null>(() => {
+      if (
+        typeof window === 'undefined' ||
+        rawBookingId
+      ) {
+        return null;
+      }
+
+      const stored = sessionStorage.getItem(
+        'trekgo:rental-payment-return',
+      );
+
+      if (!stored) return null;
+
+      try {
+        const parsed = JSON.parse(
+          stored,
+        ) as Partial<RentalPaymentReturnContext>;
+
+        if (
+          typeof parsed.orderId === 'string' &&
+          typeof parsed.bookingId === 'string' &&
+          typeof parsed.paymentId === 'string'
+        ) {
+          return {
+            orderId: parsed.orderId,
+            bookingId: parsed.bookingId,
+            paymentId: parsed.paymentId,
+          };
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    });
 
   // Load thông tin chi tiết đơn đặt chỗ và chuyến đi (hoặc cung đường vừa mua)
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [isLoadingBooking, setIsLoadingBooking] = useState(false);
-  const [trailPurchase, setTrailPurchase] = useState<{
+
+  const [trailPurchase] = useState<{
     trailId: string;
     trailCode?: string;
     trailName: string;
     price?: number;
-  } | null>(null);
+  } | null>(() => {
+    if (typeof window === 'undefined' || rawBookingId) {
+      return null;
+    }
+
+    try {
+      const raw = sessionStorage.getItem('last_trail_purchase');
+
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw) as {
+        trailId?: string;
+        trailCode?: string;
+        trailName?: string;
+        price?: number;
+      };
+
+      if (
+        typeof parsed.trailId !== 'string' ||
+        typeof parsed.trailName !== 'string'
+      ) {
+        return null;
+      }
+
+      return {
+        trailId: parsed.trailId,
+        trailCode: parsed.trailCode,
+        trailName: parsed.trailName,
+        price: parsed.price,
+      };
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     if (rawBookingId) {
       let active = true;
-      setIsLoadingBooking(true);
+
       bookingApi
         .detail(rawBookingId)
         .then((data) => {
           if (active) setBooking(data);
         })
-        .catch(() => {})
-        .finally(() => {
-          if (active) setIsLoadingBooking(false);
-        });
+        .catch(() => {});
+
       return () => {
         active = false;
       };
-    } else if (typeof window !== 'undefined') {
-      try {
-        const raw = sessionStorage.getItem('last_trail_purchase');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?.trailId) {
-            setTrailPurchase(parsed);
-            if (vnpResponseCode === '00' || momoResultCode === '0') {
-              localStorage.setItem(`trail_unlocked:${parsed.trailId}`, 'true');
-              useStaticDataStore.getState().clearStaticCache();
-              void useStaticDataStore.getState().loadPrivateSources(true);
-            }
-          }
-        }
-      } catch {
-        // ignore JSON parse error
-      }
     }
-  }, [rawBookingId, vnpResponseCode, momoResultCode]);
+
+    if (
+      typeof window !== 'undefined' &&
+      trailPurchase &&
+      (vnpResponseCode === '00' || momoResultCode === '0')
+    ) {
+      localStorage.setItem(
+        `trail_unlocked:${trailPurchase.trailId}`,
+        'true',
+      );
+      useStaticDataStore.getState().clearStaticCache();
+      void useStaticDataStore.getState().loadPrivateSources(true);
+    }
+  }, [
+    rawBookingId,
+    trailPurchase,
+    vnpResponseCode,
+    momoResultCode,
+  ]);
+
 
   // Xác định trạng thái thành công
   let isSuccess = false;
@@ -165,7 +241,6 @@ function PaymentReturnContent() {
 
   // Lấy Trip ID để gắn vào nút "Xem chi tiết chuyến đi"
   const tripId = booking?.trip?.id;
-  const tripTitle = booking?.trip?.title;
 
   return (
     <div className="min-h-screen bg-[#F7F7F4] flex items-center justify-center px-4 py-16">
@@ -218,21 +293,48 @@ function PaymentReturnContent() {
                 : 'bg-amber-50 text-amber-800 border-amber-200'
             }`}
           >
-            {isSuccess ? '✓ Giao dịch đã xác thực thành công' : '✗ Thanh toán chưa hoàn tất'}
+            {isSuccess
+              ? rentalContext
+                ? '✓ Cổng thanh toán đã tiếp nhận'
+                : '✓ Giao dịch đã xác thực thành công'
+              : '✗ Thanh toán chưa hoàn tất'}
           </span>
 
           <h1 className="mt-3.5 text-2xl sm:text-3xl font-extrabold text-gray-900">
-            {isSuccess ? 'Thanh Toán Thành Công!' : 'Thanh Toán Không Thành Công'}
+            {isSuccess
+              ? rentalContext
+                ? 'Đang xác nhận đơn thuê'
+                : 'Thanh Toán Thành Công!'
+              : 'Thanh Toán Không Thành Công'}
           </h1>
 
           <p className="mt-2.5 text-sm text-gray-600 leading-relaxed max-w-md mx-auto">
             {isSuccess
-              ? trailPurchase && !booking
-                ? `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Cung đường 3D và dữ liệu lộ trình GPS của bạn đã được mở khóa.`
+              ? rentalContext
+                ? `Cổng ${gatewayName} đã trả kết quả thành công. TrekGo đang tái xác minh giao dịch trước khi chuyển đơn thuê sang PAID.`
+                : trailPurchase && !booking
+                  ? `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Cung đường 3D và dữ liệu lộ trình GPS của bạn đã được mở khóa.`
                 : `Hệ thống TrekGo đã ghi nhận thanh toán từ cổng ${gatewayName}. Chỗ của bạn đã được đảm bảo và vé điện tử đã được xác nhận.`
               : failureReason}
           </p>
         </div>
+
+        {rentalContext && (
+          <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+              Đơn thuê thiết bị
+            </span>
+            <p className="mt-2 text-xs text-gray-600">
+              Mã đơn: <strong className="text-gray-900">{rentalContext.orderId}</strong>
+            </p>
+            <p className="mt-1 text-xs text-gray-600">
+              Mã thanh toán: <strong className="text-gray-900">{rentalContext.paymentId}</strong>
+            </p>
+            <p className="mt-3 text-xs leading-5 text-amber-800">
+              Kết quả trên trình duyệt chưa phải bằng chứng PAID. Trạng thái cuối cùng do Backend nhận webhook và đối soát.
+            </p>
+          </div>
+        )}
 
         {/* Card thông tin chuyến đi đã thanh toán */}
         {booking && (
@@ -332,7 +434,24 @@ function PaymentReturnContent() {
 
         {/* Các nút điều hướng */}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          {isSuccess ? (
+          {isSuccess && rentalContext ? (
+            <>
+              <Link
+                href={`/rentals?bookingId=${encodeURIComponent(
+                  rentalContext.bookingId,
+                )}`}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f]"
+              >
+                Theo dõi đơn thuê
+              </Link>
+              <Link
+                href="/"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-xs font-bold text-gray-700 transition hover:border-emerald-300 hover:text-[#125238]"
+              >
+                Quay lại trang chủ
+              </Link>
+            </>
+          ) : isSuccess ? (
             <>
               {!rawBookingId && trailPurchase ? (
                 <Link

@@ -18,7 +18,11 @@ export const UserHeader = () => {
   }, []);
 
   useEffect(() => {
-    setMobileMenuOpen(false);
+    const timeoutId = window.setTimeout(() => {
+      setMobileMenuOpen(false);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [pathname]);
 
   const displayName =
@@ -165,7 +169,7 @@ export const UserHeader = () => {
           </Link>
 
           <Link
-            href="/rentals?bookingId=booking_001"
+            href="/rentals"
             className="flex items-center gap-1 whitespace-nowrap hover:text-[#1B5E41] transition-colors"
           >
             <svg

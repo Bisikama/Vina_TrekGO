@@ -191,7 +191,7 @@ export class GearExtractionService {
 
   async createExtraction(userId: string, dto: CreateExtractionDto): Promise<GearExtractionDraftDomain> {
     const promptVersion = GEAR_EXTRACTION_PROMPT.version
-    const modelVersion = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-2.5-flash'
+    const modelVersion = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-3.8-flash'
     const schemaVersion = '3.1.5'
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
 
