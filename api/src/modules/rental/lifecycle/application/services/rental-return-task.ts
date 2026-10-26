@@ -21,7 +21,7 @@ export async function ensureReturnTaskWithTx(
   tx: Prisma.TransactionClient,
   orderId: string,
   scheduledAt: Date,
-  reason: 'DUE' | 'TRIP_ENDED_EARLY' | 'BOOKING_CANCELLED_AFTER_HANDOVER',
+  reason: 'DUE' | 'TRIP_ENDED_EARLY' | 'BOOKING_CANCELLED_AFTER_HANDOVER' | 'MEMBERSHIP_REVOKED_AFTER_HANDOVER',
 ): Promise<string | null> {
   const order = await tx.rentalOrder.findUnique({
     where: { id: orderId },

@@ -438,6 +438,61 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Notification not found or access denied',
     retryable: false,
   },
+  [RO.TRIP_MEMBERSHIP_NOT_FOUND]: {
+    status: 403,
+    message: 'Không tìm thấy thông tin thành viên của chuyến đi',
+    retryable: false,
+  },
+  [RO.TRIP_MEMBERSHIP_NOT_ELIGIBLE]: {
+    status: 403,
+    message: 'Chuyến đi không đủ điều kiện thuê thiết bị',
+    retryable: false,
+  },
+  [RO.TRIP_NOT_FOUND]: {
+    status: 404,
+    message: 'Chuyến đi không tồn tại',
+    retryable: false,
+  },
+  [RO.RENTAL_CUTOFF_PASSED]: {
+    status: 409,
+    message: 'Đã qua thời hạn cho phép đặt thuê thiết bị của chuyến đi',
+    retryable: false,
+  },
+  [RO.AREA_A_CONTEXT_UNAVAILABLE]: {
+    status: 503,
+    message: 'Ngữ cảnh chuyến đi Area A tạm thời không khả dụng',
+    retryable: true,
+  },
+  [RO.TRIP_LOGISTICS_UNAVAILABLE]: {
+    status: 503,
+    message: 'Chưa xác định được điểm giao nhận thiết bị cho chuyến đi',
+    retryable: true,
+  },
+  [RO.BOOKING_NOT_FOUND]: {
+    status: 404,
+    message: 'Đơn đặt vé không tồn tại',
+    retryable: false,
+  },
+  [RO.BOOKING_NOT_RENTAL_ELIGIBLE]: {
+    status: 403,
+    message: 'Đơn đặt vé không đủ điều kiện thuê thiết bị',
+    retryable: false,
+  },
+  [RO.RENTAL_RECIPIENT_INVALID]: {
+    status: 400,
+    message: 'Người nhận thiết bị không hợp lệ',
+    retryable: false,
+  },
+  [RO.RENTAL_DURATION_NOT_ALLOWED]: {
+    status: 422,
+    message: 'Thời gian thuê không hợp lệ theo chính sách chuyến đi',
+    retryable: false,
+  },
+  [RO.RENTAL_RETURN_OPTION_UNAVAILABLE]: {
+    status: 404,
+    message: 'Phương thức trả đồ không khả dụng',
+    retryable: false,
+  },
   [RO.RENTAL_POLICY_NOT_CONFIGURED]: {
     status: 503,
     message: 'Chính sách thuê chưa được cấu hình hoặc đã hết hạn',
