@@ -56,6 +56,7 @@ export interface OrderReviewableItemsQuery {
 export type ReviewIneligibleReason =
   | 'ALREADY_REVIEWED'
   | 'ORDER_NOT_ELIGIBLE_FOR_REVIEW'
+  | 'DEPOSIT_NOT_SETTLED'
   | 'PRODUCT_NOT_HANDED_OVER'
 
 export interface OrderReviewableItemsResult {

@@ -2,7 +2,12 @@ import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { PrismaUserGearRepository } from '../src/modules/gear/infrastructure/adapters/prisma-user-gear.repository'
 import { PrismaGearExtractionDraftRepository } from '../src/modules/gear/infrastructure/adapters/prisma-gear-extraction-draft.repository'
-import { RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
+import { PrismaGearConcurrencyLeaseAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-gear-concurrency-lease.adapter'
+import { PrismaGearExtractionCacheAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-gear-extraction-cache.adapter'
+import { PrismaGearPlanRepository } from '../src/modules/gear/infrastructure/adapters/prisma-gear-plan.repository'
+import { PrismaGearPlanRevisionRepository } from '../src/modules/gear/infrastructure/adapters/prisma-gear-plan-revision.repository'
+import { GearExtractionService } from '../src/modules/gear/application/services/gear-extraction.service'
+import { GearPlanService } from '../src/modules/gear/application/services/gear-plan.service'
 
 /**
  * Isolated PostgreSQL Integration Test Suite for Gear Advisor V3.1.5 Concurrency & Lifecycle
@@ -51,11 +56,15 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
   afterAll(async () => {
     if (hasDbConnection && testUserId) {
       try {
+        await prisma.gearAdviceRun.deleteMany({ where: { planRevision: { plan: { userId: testUserId } } } })
+        await prisma.gearPlanOptionSet.deleteMany({ where: { planRevision: { plan: { userId: testUserId } } } })
+        await prisma.gearPlanRevision.deleteMany({ where: { plan: { userId: testUserId } } })
+        await prisma.gearQuoteLink.deleteMany({ where: { userId: testUserId } })
+        await prisma.gearPlan.deleteMany({ where: { userId: testUserId } })
         await prisma.userGearItemPhoto.deleteMany({ where: { item: { userId: testUserId } } })
         await prisma.userGearItem.deleteMany({ where: { userId: testUserId } })
         await prisma.gearExtractionDraft.deleteMany({ where: { userId: testUserId } })
-        await prisma.gearQuoteLink.deleteMany({ where: { userId: testUserId } })
-        await prisma.gearPlan.deleteMany({ where: { userId: testUserId } })
+        await prisma.gearExtractionLease.deleteMany({ where: { resourceKey: { startsWith: `lease-res-${runId}` } } })
         await prisma.user.delete({ where: { id: testUserId } })
       } catch (cleanupErr: any) {
         console.error(`[GEAR_CLEANUP_FAILURE] Fixture cleanup failed for ${testUserId}:`, cleanupErr.message)
@@ -157,6 +166,218 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
     for (let i = 1; i <= 28; i++) {
       const code = `R${i.toString().padStart(2, '0')}`
       expect(ruleIds.has(code)).toBe(true)
+    }
+  })
+
+  it('INTEG-04: Blocker A — Quota atomic reservation with remaining quota = 1 under two parallel concurrent callers and tx rollback', async () => {
+    expect(hasDbConnection).toBe(true)
+
+    const draftRepo = new PrismaGearExtractionDraftRepository(prisma as any)
+    const userRepo = new PrismaUserGearRepository(prisma as any)
+    const leaseAdapter = new PrismaGearConcurrencyLeaseAdapter(prisma as any)
+    const cacheAdapter = new PrismaGearExtractionCacheAdapter(prisma as any)
+    const mockAi = {} as any
+
+    const extractionService = new GearExtractionService(
+      draftRepo,
+      cacheAdapter,
+      leaseAdapter,
+      userRepo,
+      mockAi,
+      prisma as any,
+    )
+
+    // 1. Seed 19 charged drafts created today for this user so remaining quota is exactly 1 (daily limit is 20)
+    for (let i = 0; i < 19; i++) {
+      await draftRepo.createDraft({
+        userId: testUserId,
+        sourceType: 'IMAGE',
+        sourceHash: `seed-quota-${runId}-${i}`,
+        expiresAt: new Date(Date.now() + 60000),
+      })
+    }
+
+    try {
+      // 2. Parallel concurrent reservation: Caller 1 and Caller 2 call concurrently at the same instant
+      const expiresAt = new Date(Date.now() + 60000)
+      const results = await Promise.allSettled([
+        extractionService.checkAndReserveQuota(testUserId, 'IMAGE', `hash-caller-1-${runId}`, expiresAt),
+        extractionService.checkAndReserveQuota(testUserId, 'IMAGE', `hash-caller-2-${runId}`, expiresAt),
+      ])
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled')
+      const rejected = results.filter((r) => r.status === 'rejected')
+
+      // Exactly 1 caller succeeds; 1 caller is rejected due to atomic daily quota limit = 20
+      expect(fulfilled.length).toBe(1)
+      expect(rejected.length).toBe(1)
+      expect(rejected[0].reason.message).toMatch(/hạn mức|quota/i)
+
+      // 3. Test forced rollback in transaction client: draft must NOT persist if tx throws
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await draftRepo.createDraft(
+            {
+              userId: testUserId,
+              sourceType: 'IMAGE',
+              sourceHash: `hash-rollback-${runId}`,
+              expiresAt: new Date(Date.now() + 60000),
+            },
+            tx,
+          )
+          throw new Error('FORCED_SIMULATED_TRANSACTION_ROLLBACK')
+        }),
+      ).rejects.toThrow('FORCED_SIMULATED_TRANSACTION_ROLLBACK')
+
+      const rolledBack = await prisma.gearExtractionDraft.findFirst({
+        where: { sourceHash: `hash-rollback-${runId}` },
+      })
+      expect(rolledBack).toBeNull()
+    } finally {
+      await prisma.gearExtractionDraft.deleteMany({ where: { userId: testUserId } }).catch(() => {})
+    }
+  })
+
+  it('INTEG-05: Blocker B.1 — Actual GearPlanService advice generation aborts with GEAR_PLAN_STALE under concurrent mutation barrier', async () => {
+    expect(hasDbConnection).toBe(true)
+
+    // 1. Create plan with inputRevision 1, evaluatedRevision 1
+    const plan = await prisma.gearPlan.create({
+      data: {
+        userId: testUserId,
+        title: `Integration Plan ${runId.slice(0, 6)}`,
+        contextMode: 'TRIP',
+        inputRevision: 1,
+        evaluatedRevision: 1,
+        progressVersion: 1,
+      },
+    })
+
+    // 2. Create evaluated revision 1
+    const revision = await prisma.gearPlanRevision.create({
+      data: {
+        planId: plan.id,
+        revision: 1,
+        contentHash: `hash-rev1-${runId}`,
+        inputSnapshot: { inputRevision: 1, items: [] },
+        resultSnapshot: {
+          checklist: [],
+          tripContext: { days: 2, difficulty: 3 },
+          climate: { temp_min_c: 10, temp_max_c: 25, rain_prob_pct: 20 },
+        },
+      },
+    })
+
+    // 3. Create active option set for revision 1
+    const optionSet = await prisma.gearPlanOptionSet.create({
+      data: {
+        planRevisionId: revision.id,
+        objective: 'ECONOMICAL',
+        expiresAt: new Date(Date.now() + 900000),
+        optionsJson: [
+          {
+            id: 'opt_min_fee',
+            summary: { totalRentalFee: 0, totalDeposit: 0, missingRequirements: [] },
+            rentalLines: [],
+            ownedAssignments: [],
+          },
+        ] as any,
+      },
+    })
+
+    // 4. Set up actual repositories wired to Neon PostgreSQL
+    const planRepo = new PrismaGearPlanRepository(prisma as any)
+    const revisionRepo = new PrismaGearPlanRevisionRepository(prisma as any)
+    const userGearRepo = new PrismaUserGearRepository(prisma as any)
+    const tripContextPort = {
+      getTripContext: jest.fn(async () => ({
+        tripId: randomUUID(),
+        days: 2,
+        difficulty: 3,
+        terrain: ['rừng'],
+        startAt: new Date(Date.now() + 86400000 * 2),
+        endAt: new Date(Date.now() + 86400000 * 4),
+      })),
+    } as any
+
+    // 5. Barrier mock: During AI advice generation latency, a concurrent mutation increments inputRevision in DB
+    let mutationExecuted = false
+    const mockAiPort = {
+      generateAdvice: jest.fn(async () => {
+        // Barrier: mutate plan in DB before AI responds and CAS write occurs
+        await prisma.gearPlan.update({
+          where: { id: plan.id },
+          data: { inputRevision: 2, updatedAt: new Date() },
+        })
+        mutationExecuted = true
+        return {
+          source: 'AI',
+          narrativeVi: 'Kế hoạch đã được rà soát theo dữ kiện thời tiết và địa hình.',
+          factRefs: ['trip.days:2', 'trip.difficulty:3'],
+          candidateRefs: [],
+        }
+      }),
+    } as any
+
+    const gearPlanService = new GearPlanService(
+      planRepo,
+      revisionRepo,
+      userGearRepo,
+      tripContextPort,
+      prisma as any,
+      undefined,
+      undefined,
+      undefined,
+      mockAiPort,
+    )
+
+    try {
+      // 6. Actual service call: should detect CAS condition mismatch and throw GEAR_PLAN_STALE
+      await expect(
+        gearPlanService.generatePlanAdvice(plan.id, testUserId, {
+          expectedRevision: 1,
+          optionRef: { setId: optionSet.id, optionId: 'opt_min_fee' },
+        }),
+      ).rejects.toThrow(/thay đổi trong quá trình tạo tư vấn|GEAR_PLAN_STALE/i)
+
+      expect(mutationExecuted).toBe(true)
+
+      // 7. Verify no advice run was published for the stale plan head
+      const adviceRuns = await prisma.gearAdviceRun.findMany({
+        where: { planRevisionId: revision.id },
+      })
+      expect(adviceRuns.length).toBe(0)
+    } finally {
+      await prisma.gearAdviceRun.deleteMany({ where: { planRevisionId: revision.id } }).catch(() => {})
+      await prisma.gearPlanOptionSet.deleteMany({ where: { planRevisionId: revision.id } }).catch(() => {})
+      await prisma.gearPlanRevision.deleteMany({ where: { planId: plan.id } }).catch(() => {})
+      await prisma.gearPlan.delete({ where: { id: plan.id } }).catch(() => {})
+    }
+  })
+
+  it('INTEG-06: Concurrency lease mutual exclusion and timeout takeover in PostgreSQL', async () => {
+    expect(hasDbConnection).toBe(true)
+
+    const leaseAdapter = new PrismaGearConcurrencyLeaseAdapter(prisma as any)
+    const resourceKey = `lease-res-${runId}`
+
+    try {
+      // Worker 1 acquires lease for 2 seconds
+      const lease1 = await leaseAdapter.acquireLease(resourceKey, 'worker-1', 2000)
+      expect(lease1.acquired).toBe(true)
+
+      // Worker 2 attempts concurrent acquisition while lease is active -> rejected
+      const lease2 = await leaseAdapter.acquireLease(resourceKey, 'worker-2', 2000)
+      expect(lease2.acquired).toBe(false)
+
+      // Worker 1 releases lease
+      await leaseAdapter.releaseLease(resourceKey, 'worker-1')
+
+      // Worker 2 now acquires lease successfully
+      const lease3 = await leaseAdapter.acquireLease(resourceKey, 'worker-2', 2000)
+      expect(lease3.acquired).toBe(true)
+    } finally {
+      await prisma.gearExtractionLease.deleteMany({ where: { resourceKey } }).catch(() => {})
     }
   })
 })

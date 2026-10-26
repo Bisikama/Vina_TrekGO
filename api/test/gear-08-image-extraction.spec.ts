@@ -452,6 +452,74 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
       expect(res.body.status).toBe('READY');
       expect(aiCallCount).toBe(currentCalls); // Cache hit: AI was not called!
     });
+
+    it('successfully extracts gear with canonical nested MASTER format { source: { kind: "IMAGE", uploadId } }', async () => {
+      const nestedUploadId = randomUUID();
+      mediaAssets.set(nestedUploadId, {
+        id: nestedUploadId,
+        ownerUserId: aliceId,
+        scope: 'USER_GEAR',
+        status: 'READY',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1024 * 512,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          source: {
+            kind: 'IMAGE',
+            uploadId: nestedUploadId,
+          },
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.sourceType).toBe('IMAGE');
+      expect(res.body.extractedData).toBeDefined();
+    });
+
+    it('successfully extracts gear with Swagger flat format { sourceType: "IMAGE", uploadId }', async () => {
+      const swaggerUploadId = randomUUID();
+      mediaAssets.set(swaggerUploadId, {
+        id: swaggerUploadId,
+        ownerUserId: aliceId,
+        scope: 'USER_GEAR',
+        status: 'READY',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1024 * 512,
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          sourceType: 'IMAGE',
+          uploadId: swaggerUploadId,
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.sourceType).toBe('IMAGE');
+      expect(res.body.extractedData).toBeDefined();
+    });
+
+    it('rejects conflicting format with 400 VALIDATION_ERROR', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          source: {
+            kind: 'IMAGE',
+            uploadId: validUploadId,
+          },
+          sourceType: 'LINK',
+        })
+        .expect(400);
+
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
   });
 
   describe('Route 2: GET /api/v1/gear/extractions/:id', () => {

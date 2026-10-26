@@ -28,8 +28,9 @@ export class PrismaGearExtractionDraftRepository implements GearExtractionDraftR
     return record ? this.toDomain(record) : null
   }
 
-  async createDraft(input: CreateDraftInput): Promise<GearExtractionDraftDomain> {
-    const record = await this.prisma.gearExtractionDraft.create({
+  async createDraft(input: CreateDraftInput, client?: any): Promise<GearExtractionDraftDomain> {
+    const db = client || this.prisma
+    const record = await db.gearExtractionDraft.create({
       data: {
         userId: input.userId,
         sourceType: input.sourceType as any,

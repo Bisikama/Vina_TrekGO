@@ -292,8 +292,13 @@ export class TripGpsRecordingService {
 
   private async closeForTrip(tx: Tx, trip: Trip, session: GpsSession) {
     if (session.status === 'STOPPED' || !['COMPLETED', 'INTERRUPTED', 'CANCELLED'].includes(trip.status)) return session
-    const end = trip.status === 'CANCELLED' ? trip.cancelledAt : trip.completedAt
-    if (!end) return fail(E.TRIP_NOT_RECORDABLE, { reason: 'Actual trip end timestamp is missing' })
+    let end = trip.status === 'CANCELLED' ? trip.cancelledAt : trip.completedAt
+    if (!end) {
+      end = trip.updatedAt ?? new Date()
+      const data = trip.status === 'CANCELLED' ? { cancelledAt: end } : { completedAt: end }
+      await tx.trip.update({ where: { id: trip.id }, data })
+      Object.assign(trip, data)
+    }
     return this.close(tx, session, end, trip.status === 'CANCELLED' ? 'CANCELLED' : 'TRIP_ENDED')
   }
 
