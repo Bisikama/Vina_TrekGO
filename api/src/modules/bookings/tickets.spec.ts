@@ -51,7 +51,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     const u = await db.user.create({
       data: { email: `${randomUUID()}@m5.test`, authUserId: randomUUID(), fullName: 'Account name' },
     })
-    tokens.set(u.id, { id: u.authUserId! })
+    tokens.set(u.id, { id: u.authUserId })
     return u
   }
   const fixture = async () => {
@@ -208,7 +208,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
       ['/me/tickets', 'get', list.body],
       ['/me/tickets/{participantId}', 'get', detail.body],
     ] as const) {
-      const operation = doc.paths[path]![method]!
+      const operation = doc.paths[path][method]!
       expect(operation.security).toEqual([{ bearer: [] }])
       const schema = (operation.responses['200'] as any).content['application/json'].schema
       const validate = ajv.compile(schema)
@@ -504,7 +504,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
       ['/booking-participant-invitations/{id}/revoke', 'post', 200, revoked.body],
     ] as const
     for (const [path, method, status, body] of cases) {
-      const op = doc.paths[path]![method]!
+      const op = doc.paths[path][method]!
       expect(op.security).toEqual([{ bearer: [] }])
       const validate = ajv.compile((op.responses[status] as any).content['application/json'].schema)
       expect(validate(body)).toBe(true)
