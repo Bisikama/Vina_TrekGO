@@ -55,13 +55,14 @@ Phân quyền (Roles/Scopes):
 - CONDITION_EVIDENCE: STAFF_INVENTORY
 - RETURN_EVIDENCE: STAFF_INVENTORY / STAFF_DELIVERY
 - EXCEPTION_EVIDENCE: USER / LEADER / STAFF_INVENTORY / STAFF_DELIVERY / ADMIN
+- USER_GEAR: USER
 `
   })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        scope: { type: 'string', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE'] },
+        scope: { type: 'string', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE', 'USER_GEAR'] },
         resourceType: { type: 'string', enum: ['IMAGE', 'VIDEO'] },
         fileName: { type: 'string' },
         contentType: { type: 'string' },
