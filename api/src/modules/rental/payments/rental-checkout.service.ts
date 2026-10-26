@@ -46,6 +46,7 @@ export class RentalCheckoutService {
         where: { id: initial.id },
         include: {
           trip: true,
+          quote: { include: { rentalQuoteLinesViaQuoteId: true } },
           rentalOrderLinesViaOrderId: { include: { rentalQuantityReservationsViaOrderLineId: true } },
         },
       })
@@ -156,14 +157,20 @@ export class RentalCheckoutService {
       if (
         order.rentalOrderLinesViaOrderId.some((l) => {
           const held = l.rentalQuantityReservationsViaOrderLineId.filter((r) => r.status === 'HELD')
+          const quoteLine = order.quote.rentalQuoteLinesViaQuoteId.find(
+            (line) => line.productId === l.productId,
+          )
+          const expectedOccupiedFrom = quoteLine?.occupiedFrom ?? order.occupiedStartAt
+          const expectedOccupiedUntil = quoteLine?.occupiedUntil ?? order.occupiedEndAt
+
           return (
             held.length !== 1 ||
             held[0].quantity !== l.quantity ||
             held[0].productId !== l.productId ||
             !held[0].holdExpiresAt ||
             held[0].holdExpiresAt <= now ||
-            held[0].occupiedFrom > order.occupiedStartAt ||
-            held[0].occupiedUntil < order.occupiedEndAt
+            held[0].occupiedFrom > expectedOccupiedFrom ||
+            held[0].occupiedUntil < expectedOccupiedUntil
           )
         })
       ) {

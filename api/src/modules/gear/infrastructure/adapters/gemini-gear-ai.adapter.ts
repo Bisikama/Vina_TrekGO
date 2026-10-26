@@ -177,6 +177,18 @@ export class GeminiGearAiAdapter implements GearAiPort {
           })
         }
 
+        // Missing/retired model: fail fast and keep provider internals out of the UI.
+        const isModelUnavailable =
+          err.status === 404 ||
+          err.statusCode === 404 ||
+          err.message?.includes('NOT_FOUND') ||
+          err.message?.includes('no longer available')
+        if (isModelUnavailable) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_UNAVAILABLE, {
+            message: 'Mô hình nhận diện AI đang được cập nhật. Vui lòng thử lại sau hoặc nhập thông số bằng tay.',
+          })
+        }
+
         // 429 / Quota exceeded: check if maxRetries reached
         const isQuotaError =
           err.status === 429 ||
