@@ -81,8 +81,8 @@ export class UserGearController {
 Lưu một món đồ vào tủ đồ cá nhân của người dùng.
 - **Giới hạn số lượng:** Mỗi tài khoản lưu tối đa 50 món đồ.
 - **8 Danh mục hỗ trợ:** \`JACKET\`, \`FOOTWEAR\`, \`PANTS\`, \`BACKPACK\`, \`SLEEPING_BAG\`, \`TENT\`, \`TREKKING_POLE\`, \`RAIN_GEAR\`.
-- **Tình trạng món đồ (condition):** \`EXCELLENT\`, \`GOOD\`, \`FAIR\`, \`POOR\`.
-- **Phát hiện trùng lặp:** Hệ thống cảnh báo hoặc chặn trùng lặp nếu trùng tên, thương hiệu và danh mục.
+- **Tình trạng món đồ (condition):** \`NEW\`, \`GOOD\`, \`WORN\`, \`POOR\` (hỗ trợ cả chữ thường \`new\`, \`good\`, \`worn\`, \`poor\`).
+- **Cảnh báo trùng lặp (Duplicate Warning):** Hệ thống so sánh các thuộc tính kỹ thuật chuyên sâu trong cùng danh mục (không phụ thuộc vào tên hay thương hiệu). Nếu phát hiện trùng, trả về HTTP 409 \`GEAR_ITEM_POSSIBLE_DUPLICATE\` kèm thông tin món tương tự để FE hiển thị modal xác nhận. Nếu người dùng đồng ý tạo tiếp, FE gửi lại request kèm \`acknowledgeDuplicate: true\`.
 
 **Gợi ý test trên Swagger:** Chọn một trong các ví dụ mẫu bên dưới (Áo khoác chống nước, Giày leo núi, Balo trợ lực, Túi ngủ) và nhấn Execute. Sau đó sao chép ID món đồ để sử dụng trong Kế hoạch trang bị (\`POST /api/v1/gear/plans\`).
 `,
@@ -103,9 +103,14 @@ Lưu một món đồ vào tủ đồ cá nhân của người dùng.
         brand: { type: 'string', example: 'Quechua', description: 'Thương hiệu sản xuất' },
         condition: {
           type: 'string',
-          enum: ['EXCELLENT', 'GOOD', 'FAIR', 'POOR'],
+          enum: ['NEW', 'GOOD', 'WORN', 'POOR'],
           example: 'GOOD',
-          description: 'Tình trạng món đồ (POOR sẽ kích hoạt quy tắc R24 đánh giá không phù hợp)',
+          description: 'Tình trạng món đồ (NEW, GOOD, WORN, POOR; POOR sẽ kích hoạt quy tắc R24 đánh giá không phù hợp)',
+        },
+        acknowledgeDuplicate: {
+          type: 'boolean',
+          example: false,
+          description: 'Cờ xác nhận lưu dù có cảnh báo trùng lặp (mặc định false). Khi nhận 409 GEAR_ITEM_POSSIBLE_DUPLICATE, gửi lại kèm acknowledgeDuplicate = true để hoàn tất lưu.',
         },
         attributes: {
           type: 'object',
@@ -152,7 +157,7 @@ Lưu một món đồ vào tủ đồ cá nhân của người dùng.
           name: 'Giày trekking chống trượt Salomon X Ultra 4',
           category: 'FOOTWEAR',
           brand: 'Salomon',
-          condition: 'EXCELLENT',
+          condition: 'GOOD',
           attributes: {
             waterproof: true,
             ankle_support: true,
@@ -167,7 +172,7 @@ Lưu một món đồ vào tủ đồ cá nhân của người dùng.
           name: 'Balo trợ lực Osprey Atmos AG 50',
           category: 'BACKPACK',
           brand: 'Osprey',
-          condition: 'EXCELLENT',
+          condition: 'GOOD',
           attributes: {
             capacity_l: 50,
             rain_cover: true,
@@ -198,7 +203,7 @@ Lưu một món đồ vào tủ đồ cá nhân của người dùng.
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'Tên món đồ không được để trống hoặc danh mục không hợp lệ')
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
   @ApiErrorResponse(409, 'Tủ đồ đã đầy', GEAR_ERROR_CODES.GEAR_ITEM_LIMIT_EXCEEDED, 'Tủ đồ cá nhân đã đạt giới hạn tối đa 50 món')
-  @ApiErrorResponse(409, 'Món đồ bị trùng', GEAR_ERROR_CODES.GEAR_ITEM_POSSIBLE_DUPLICATE, 'Món đồ có cùng tên và thương hiệu đã tồn tại trong tủ đồ')
+  @ApiErrorResponse(409, 'Cảnh báo trùng lặp', GEAR_ERROR_CODES.GEAR_ITEM_POSSIBLE_DUPLICATE, 'Phát hiện món đồ có thông số kỹ thuật tương tự trong tủ đồ (gửi kèm acknowledgeDuplicate: true để tiếp tục lưu)')
   async create(
     @ActiveUser('id') userId: string,
     @Body(new ZodValidationPipe(createUserGearItemSchema)) body: CreateUserGearItemInput,
@@ -308,7 +313,7 @@ Cập nhật tên, tình trạng, hoặc các thuộc tính kỹ thuật.
       properties: {
         expectedVersion: { type: 'integer', minimum: 1, example: 1, description: 'Phiên bản hiện tại của món đồ' },
         name: { type: 'string', example: 'Áo khoác gió Quechua MH500 (Đã giặt sấy)' },
-        condition: { type: 'string', enum: ['EXCELLENT', 'GOOD', 'FAIR', 'POOR'], example: 'EXCELLENT' },
+        condition: { type: 'string', enum: ['NEW', 'GOOD', 'WORN', 'POOR'], example: 'GOOD' },
         attributes: {
           type: 'object',
           example: { waterproof_mm: 12000, temp_rating_c: -5 },

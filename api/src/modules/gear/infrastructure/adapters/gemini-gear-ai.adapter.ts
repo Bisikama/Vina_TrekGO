@@ -1,39 +1,37 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { GoogleGenAI } from '@google/genai';
+import { Injectable, Logger } from '@nestjs/common'
+import { GoogleGenAI } from '@google/genai'
 import {
   GearAiPort,
   GearExtractionAiRequest,
   GearExtractionAiResult,
   GearAdviceAiRequest,
   GearAdviceAiResult,
-} from '../../application/ports/gear-ai.port';
-import { normalizeExtractionResult } from '../../domain/gear-extraction-schema';
-import {
-  GEAR_EXTRACTION_PROMPT,
-  GEAR_ADVISOR_PROMPT,
-} from '../prompts/prompt-assets';
-import { AppError } from '../../../../shared/errors/app-error';
-import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
+} from '../../application/ports/gear-ai.port'
+import { normalizeExtractionResult } from '../../domain/gear-extraction-schema'
+import { ApprovedClaim, buildApprovedClaims, renderNarrativeFromClaims } from '../../domain/advice-grounding'
+import { GEAR_EXTRACTION_PROMPT, GEAR_ADVISOR_PROMPT } from '../prompts/prompt-assets'
+import { AppError } from '../../../../shared/errors/app-error'
+import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
 
 @Injectable()
 export class GeminiGearAiAdapter implements GearAiPort {
-  private readonly logger = new Logger(GeminiGearAiAdapter.name);
-  private readonly aiClient: GoogleGenAI | null = null;
-  private readonly apiKey: string | null;
-  private readonly modelExtraction: string;
-  private readonly modelAdvisor: string;
-  private readonly timeoutMs: number;
-  private readonly maxRetries: number;
+  private readonly logger = new Logger(GeminiGearAiAdapter.name)
+  private readonly aiClient: GoogleGenAI | null = null
+  private readonly apiKey: string | null
+  private readonly modelExtraction: string
+  private readonly modelAdvisor: string
+  private readonly timeoutMs: number
+  private readonly maxRetries: number
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || null;
-    this.modelExtraction = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-2.5-flash';
-    this.modelAdvisor = process.env.GEMINI_MODEL_ADVISOR || 'gemini-2.5-flash';
-    this.timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10);
-    this.maxRetries = parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10);
+    this.apiKey = process.env.GEMINI_API_KEY || null
+    this.modelExtraction = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-2.5-flash'
+    this.modelAdvisor = process.env.GEMINI_MODEL_ADVISOR || 'gemini-2.5-flash'
+    this.timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10)
+    this.maxRetries = parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10)
 
     if (this.apiKey) {
-      this.aiClient = new GoogleGenAI({ apiKey: this.apiKey });
+      this.aiClient = new GoogleGenAI({ apiKey: this.apiKey })
     }
   }
 
@@ -42,56 +40,58 @@ export class GeminiGearAiAdapter implements GearAiPort {
     if (!this.apiKey || !this.aiClient || !GEAR_EXTRACTION_PROMPT.isAvailable) {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_UNAVAILABLE, {
         message: 'Dịch vụ nhận diện AI hiện chưa được cấu hình. Vui lòng nhập thông số bằng tay.',
-      });
+      })
     }
 
-    const startTime = Date.now();
+    const startTime = Date.now()
     const parts: any[] = [
-      { text: `${GEAR_EXTRACTION_PROMPT.content}\n\nHãy trích xuất thông số kỹ thuật của trang bị theo định dạng JSON chuẩn.` },
-    ];
+      {
+        text: `${GEAR_EXTRACTION_PROMPT.content}\n\nHãy trích xuất thông số kỹ thuật của trang bị theo định dạng JSON chuẩn.`,
+      },
+    ]
 
     if (request.sourceType === 'IMAGE') {
-      const base64Data = request.imageBase64 || request.imageBuffer?.toString('base64');
+      const base64Data = request.imageBase64 || request.imageBuffer?.toString('base64')
       if (!base64Data) {
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_REFUSED, {
           message: 'Không tìm thấy dữ liệu hình ảnh để phân tích',
-        });
+        })
       }
       parts.push({
         inlineData: {
           mimeType: request.mimeType || 'image/jpeg',
           data: base64Data,
         },
-      });
+      })
     } else {
       if (!request.textContent) {
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_REFUSED, {
           message: 'Không tìm thấy nội dung văn bản sản phẩm để phân tích',
-        });
+        })
       }
       parts.push({
         text: `Nội dung chi tiết trang sản phẩm:\n${request.textContent}`,
-      });
+      })
     }
 
     // 2. Execute with bounded retries and total timeout budget
-    let lastError: any = null;
-    let attempt = 0;
-    const totalDeadline = startTime + this.timeoutMs;
+    let lastError: any = null
+    let attempt = 0
+    const totalDeadline = startTime + this.timeoutMs
 
     while (attempt <= this.maxRetries) {
-      attempt++;
-      const now = Date.now();
+      attempt++
+      const now = Date.now()
       if (now >= totalDeadline) {
-        break;
+        break
       }
-      const attemptTimeoutMs = Math.min(this.timeoutMs, totalDeadline - now);
-      let timerHandle: any;
+      const attemptTimeoutMs = Math.min(this.timeoutMs, totalDeadline - now)
+      let timerHandle: any
 
       try {
         const timeoutPromise = new Promise<never>((_, reject) => {
-          timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), attemptTimeoutMs);
-        });
+          timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), attemptTimeoutMs)
+        })
 
         const response = await Promise.race([
           this.aiClient.models.generateContent({
@@ -108,35 +108,35 @@ export class GeminiGearAiAdapter implements GearAiPort {
             },
           }),
           timeoutPromise,
-        ]);
+        ])
 
-        const rawText = (response as any)?.text?.trim();
+        const rawText = (response as any)?.text?.trim()
         if (!rawText) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_SCHEMA_MISMATCH, {
             message: 'Phản hồi từ mô hình AI rỗng hoặc không có nội dung',
-          });
+          })
         }
 
-        let parsedJson: any;
+        let parsedJson: any
         try {
-          parsedJson = JSON.parse(rawText);
+          parsedJson = JSON.parse(rawText)
         } catch {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_SCHEMA_MISMATCH, {
             message: 'Phản hồi từ AI không đúng cấu trúc JSON mong đợi',
-          });
+          })
         }
 
-        const domainResult = normalizeExtractionResult(parsedJson);
-        const latencyMs = Date.now() - startTime;
+        const domainResult = normalizeExtractionResult(parsedJson)
+        const latencyMs = Date.now() - startTime
 
-        const usageMetadata = (response as any)?.usageMetadata;
+        const usageMetadata = (response as any)?.usageMetadata
         const usage = usageMetadata
           ? {
               promptTokens: usageMetadata.promptTokenCount || 0,
               completionTokens: usageMetadata.candidatesTokenCount || 0,
               totalTokens: usageMetadata.totalTokenCount || 0,
             }
-          : undefined;
+          : undefined
 
         return {
           extraction: domainResult,
@@ -148,21 +148,21 @@ export class GeminiGearAiAdapter implements GearAiPort {
             latencyMs,
             usage,
           },
-        };
+        }
       } catch (err: any) {
-        lastError = err;
-        this.logger.warn(`Gemini extraction attempt ${attempt} failed: ${err.message}`);
+        lastError = err
+        this.logger.warn(`Gemini extraction attempt ${attempt} failed: ${err.message}`)
 
         // Timeout: fail fast with GEAR_AI_TIMEOUT, do not retry
         if (err.message === 'GEMINI_TIMEOUT' || err.name === 'AbortError') {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_TIMEOUT, {
             message: 'Thời gian phản hồi từ mô hình AI vượt quá giới hạn',
-          });
+          })
         }
 
         // Schema mismatch: fail fast
         if (err instanceof AppError && err.code === GEAR_ERROR_CODES.GEAR_EXTRACTION_SCHEMA_MISMATCH) {
-          throw err;
+          throw err
         }
 
         // 401 / Permanent auth error: fail fast with GEAR_AI_REFUSED, do not retry
@@ -170,11 +170,11 @@ export class GeminiGearAiAdapter implements GearAiPort {
           err.status === 401 ||
           err.statusCode === 401 ||
           err.message?.includes('401') ||
-          err.message?.includes('API_KEY_INVALID');
+          err.message?.includes('API_KEY_INVALID')
         if (isAuthError) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_REFUSED, {
             message: 'Khóa API AI không hợp lệ hoặc đã hết hạn',
-          });
+          })
         }
 
         // 429 / Quota exceeded: check if maxRetries reached
@@ -182,21 +182,21 @@ export class GeminiGearAiAdapter implements GearAiPort {
           err.status === 429 ||
           err.statusCode === 429 ||
           err.message?.includes('429') ||
-          err.message?.includes('RESOURCE_EXHAUSTED');
+          err.message?.includes('RESOURCE_EXHAUSTED')
         if (isQuotaError && attempt >= this.maxRetries) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
             message: 'Dịch vụ AI vượt quá hạn mức yêu cầu, vui lòng thử lại sau',
-          });
+          })
         }
 
-        await new Promise((r) => setTimeout(r, 200 * attempt));
+        await new Promise((r) => setTimeout(r, 200 * attempt))
       } finally {
-        if (timerHandle) clearTimeout(timerHandle);
+        if (timerHandle) clearTimeout(timerHandle)
       }
     }
 
     if (lastError instanceof AppError) {
-      throw lastError;
+      throw lastError
     }
 
     if (
@@ -207,27 +207,43 @@ export class GeminiGearAiAdapter implements GearAiPort {
     ) {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
         message: 'Dịch vụ AI vượt quá hạn mức yêu cầu, vui lòng thử lại sau',
-      });
+      })
     }
 
     if (lastError?.message === 'GEMINI_TIMEOUT' || lastError?.name === 'AbortError') {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_TIMEOUT, {
         message: 'Thời gian phản hồi từ mô hình AI vượt quá giới hạn',
-      });
+      })
     }
 
-    this.logger.error(`Gemini AI extraction error: ${lastError?.message}`);
+    this.logger.error(`Gemini AI extraction error: ${lastError?.message}`)
     throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_REFUSED, {
       message: `Mô hình AI từ chối xử lý hoặc phát sinh lỗi: ${lastError?.message || 'Không xác định'}`,
-    });
+    })
   }
 
   async generateAdvice(request: GearAdviceAiRequest): Promise<GearAdviceAiResult> {
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     // If key not configured or prompt asset missing -> fallback to RULE_FALLBACK seamlessly
     if (!this.apiKey || !this.aiClient || !GEAR_ADVISOR_PROMPT.isAvailable) {
-      return this.buildRuleFallbackAdvice(request);
+      return this.buildRuleFallbackAdvice(request)
+    }
+
+    let approvedClaims = (request.approvedClaims || []) as ApprovedClaim[]
+    if (approvedClaims.length === 0 && request.tripContext && request.options && request.options.length > 0) {
+      const selectedOption = request.options[0] as any
+      approvedClaims = buildApprovedClaims({
+        tripContext: request.tripContext,
+        selectedOption: {
+          summary: selectedOption.summary,
+          rentalLines: selectedOption.rentalLines,
+          ownedAssignments: selectedOption.ownedAssignments,
+        },
+      })
+    }
+    if (approvedClaims.length === 0) {
+      return this.buildRuleFallbackAdvice(request)
     }
 
     try {
@@ -236,14 +252,19 @@ export class GeminiGearAiAdapter implements GearAiPort {
         requirements: request.requirements,
         coverage: request.coverage,
         options: request.options || [],
-      };
+        approvedClaims: approvedClaims.map((c) => ({
+          id: c.id,
+          category: c.category,
+          textVi: c.textVi,
+        })),
+      }
 
-      let timerHandle: any;
+      let timerHandle: any
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), this.timeoutMs);
-      });
+        timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), this.timeoutMs)
+      })
 
-      let response: any;
+      let response: any
       try {
         response = await Promise.race([
           this.aiClient.models.generateContent({
@@ -264,70 +285,74 @@ export class GeminiGearAiAdapter implements GearAiPort {
             },
           }),
           timeoutPromise,
-        ]);
+        ])
       } finally {
-        if (timerHandle) clearTimeout(timerHandle);
+        if (timerHandle) clearTimeout(timerHandle)
       }
 
-      const rawText = (response)?.text?.trim();
-      const parsed = JSON.parse(rawText || '{}');
-
-      const narrativeVi =
-        parsed.narrativeVi ||
-        'Kế hoạch trang bị đã được rà soát theo dữ kiện thời tiết và địa hình của chuyến đi.';
-      const factRefs = Array.isArray(parsed.factRefs) ? parsed.factRefs : [];
-      const actionRefs = Array.isArray(parsed.actionRefs) ? parsed.actionRefs : [];
-      const candidateRefs = Array.isArray(parsed.candidateRefs) ? parsed.candidateRefs : [];
-
-      // Validate against fabricated references with exact value allowlist
-      const approvedFactSet = new Set<string>();
-      const ctx = (request.tripContext || {}) as Record<string, any>;
-      if (ctx.days !== undefined) approvedFactSet.add(`trip.days:${String(ctx.days)}`);
-      if (ctx.difficulty !== undefined) approvedFactSet.add(`trip.difficulty:${String(ctx.difficulty)}`);
-      if (ctx.temp_min_c !== undefined) approvedFactSet.add(`climate.temp_min:${String(ctx.temp_min_c)}`);
-      if (ctx.temp_max_c !== undefined) approvedFactSet.add(`climate.temp_max:${String(ctx.temp_max_c)}`);
-      if (ctx.rain_prob_pct !== undefined) approvedFactSet.add(`climate.rain_prob:${String(ctx.rain_prob_pct)}`);
-
-      for (const opt of (request.options || []) as any[]) {
-        if (opt.summary?.totalRentalFee !== undefined) approvedFactSet.add(`pricing.total_fee:${String(opt.summary.totalRentalFee)}`);
-        if (opt.summary?.totalDeposit !== undefined) approvedFactSet.add(`pricing.total_deposit:${String(opt.summary.totalDeposit)}`);
-      }
-      for (const req of (request.requirements || []) as any[]) {
-        if (req.status) approvedFactSet.add(`requirement.${String(req.requirementId)}:${String(req.status)}`);
-        if (req.requirementId) approvedFactSet.add(`requirement.${String(req.requirementId)}`);
+      const rawText = response?.text?.trim()
+      let parsed: any = {}
+      try {
+        parsed = JSON.parse(rawText || '{}')
+      } catch {
+        this.logger.warn('Gemini advice response was not valid JSON, falling back to RULE_FALLBACK')
+        return this.buildRuleFallbackAdvice(request)
       }
 
-      const hasFabricatedFactRefs =
-        factRefs.length === 0 ||
-        factRefs.some((ref: string) => typeof ref !== 'string' || !approvedFactSet.has(ref));
+      const selectedClaimIds = Array.isArray(parsed.selectedClaimIds)
+        ? parsed.selectedClaimIds
+        : Array.isArray(parsed.claimIds)
+          ? parsed.claimIds
+          : []
 
-      const allowedProductIds = new Set<string>();
+      // Validate selected claim IDs schema
+      if (selectedClaimIds.length === 0 || selectedClaimIds.some((id: any) => typeof id !== 'string')) {
+        this.logger.warn('Gemini advice did not provide valid selectedClaimIds, falling back to RULE_FALLBACK')
+        return this.buildRuleFallbackAdvice(request)
+      }
+
+      // Render narrative strictly from server-owned approved claims
+      const renderResult = renderNarrativeFromClaims(selectedClaimIds, approvedClaims)
+      if (!renderResult.isValid) {
+        this.logger.warn(
+          `Gemini advice selected unknown claims (${renderResult.reason}), falling back to RULE_FALLBACK`,
+        )
+        return this.buildRuleFallbackAdvice(request)
+      }
+
+      const actionRefs = Array.isArray(parsed.actionRefs) ? parsed.actionRefs : []
+      const candidateRefs = Array.isArray(parsed.candidateRefs) ? parsed.candidateRefs : []
+
+      // Validate candidate refs against allowed products
+      const allowedProductIds = new Set<string>()
       for (const opt of (request.options || []) as any[]) {
         for (const line of (opt.rentalLines || []) as any[]) {
-          if (line.productId) allowedProductIds.add(line.productId);
+          if (line.productId) allowedProductIds.add(line.productId)
         }
       }
 
       const hasFabricatedCandidateRefs = candidateRefs.some((ref: string) => {
-        if (typeof ref !== 'string') return true;
-        const prodId = ref.split(':')[0];
-        return !allowedProductIds.has(prodId);
-      });
+        if (typeof ref !== 'string') return true
+        const prodId = ref.split(':')[0]
+        return !allowedProductIds.has(prodId)
+      })
 
-      if (hasFabricatedFactRefs || hasFabricatedCandidateRefs) {
-        this.logger.warn('Gemini advice generated fabricated references, falling back to RULE_FALLBACK');
-        return this.buildRuleFallbackAdvice(request);
+      if (hasFabricatedCandidateRefs) {
+        this.logger.warn('Gemini advice generated fabricated candidate references, falling back to RULE_FALLBACK')
+        return this.buildRuleFallbackAdvice(request)
       }
 
       const disclaimerVi =
-        'Tư vấn dựa trên bộ quy chuẩn an toàn TrekGo. Vui lòng kiểm tra kỹ độ bền và thông số trang bị trước khi khởi hành.';
+        'Tư vấn dựa trên bộ quy chuẩn an toàn TrekGo. Vui lòng kiểm tra kỹ độ bền và thông số trang bị trước khi khởi hành.'
 
-      const usageMetadata = (response)?.usageMetadata;
+      const usageMetadata = response?.usageMetadata
 
       return {
         source: 'AI',
-        narrativeVi,
-        factRefs,
+        narrativeVi: renderResult.narrativeVi, // Server-rendered from approved claims!
+        selectedClaimIds,
+        claimIds: selectedClaimIds,
+        factRefs: renderResult.factRefs,
         actionRefs,
         candidateRefs,
         disclaimerVi,
@@ -337,38 +362,59 @@ export class GeminiGearAiAdapter implements GearAiPort {
           latencyMs: Date.now() - startTime,
           tokenUsage: usageMetadata || {},
         },
-      };
+      }
     } catch (err: any) {
-      this.logger.warn(`Gemini advisor error, falling back to RULE_FALLBACK: ${err?.message}`);
-      return this.buildRuleFallbackAdvice(request);
+      this.logger.warn(`Gemini advisor error, falling back to RULE_FALLBACK: ${err?.message}`)
+      return this.buildRuleFallbackAdvice(request)
     }
   }
 
   private buildRuleFallbackAdvice(request: GearAdviceAiRequest): GearAdviceAiResult {
-    const coverage = request.coverage as any;
-    const summary = coverage?.summary || {};
-    const missingCount = summary.unresolvedCount || 0;
+    const approvedClaims = (request.approvedClaims || []) as ApprovedClaim[]
+    const allClaimIds = approvedClaims.map((c) => c.id)
+    let narrativeVi = 'Kế hoạch trang bị đã được phân tích tự động dựa trên 28 quy chuẩn an toàn TrekGo.'
+    let factRefs = ['trip.temp_min_c', 'trip.rain_prob_pct', 'trip.difficulty']
 
-    let narrativeVi = 'Kế hoạch trang bị đã được phân tích tự động dựa trên 28 quy chuẩn an toàn TrekGo.';
-    if (summary.isFullyCovered) {
-      narrativeVi += ' Bạn đã có đầy đủ các trang bị bắt buộc cho chuyến đi.';
-    } else if (missingCount > 0) {
-      narrativeVi += ` Bạn còn ${missingCount} món trang bị cần bổ sung hoặc thuê thêm để bảo đảm an toàn.`;
+    if (approvedClaims.length > 0) {
+      const renderResult = renderNarrativeFromClaims(allClaimIds, approvedClaims)
+      narrativeVi = renderResult.narrativeVi
+      factRefs = renderResult.factRefs
+    } else {
+      const coverage = request.coverage as any
+      const summary = coverage?.summary || {}
+      const missingCount = summary.unresolvedCount || 0
+      if (summary.isFullyCovered) {
+        narrativeVi += ' Bạn đã có đầy đủ các trang bị bắt buộc cho chuyến đi.'
+      } else if (missingCount > 0) {
+        narrativeVi += ` Bạn còn ${missingCount} món trang bị cần bổ sung hoặc thuê thêm để bảo đảm an toàn.`
+      }
     }
+
+    const candidateRefs: string[] = []
+    for (const opt of (request.options || []) as any[]) {
+      for (const line of (opt.rentalLines || []) as any[]) {
+        if (line.productId) candidateRefs.push(`${line.productId}:${line.productName || ''}`)
+      }
+    }
+
+    const actionRefs = (request.coverage as any)?.summary?.isFullyCovered ? ['READY_FOR_TRIP'] : ['RENT_MISSING_GEAR']
+
+    const disclaimerVi =
+      'Tư vấn dựa trên bộ quy chuẩn an toàn TrekGo (chế độ dự phòng). Vui lòng kiểm tra kỹ độ bền và thông số trang bị trước khi khởi hành.'
 
     return {
       source: 'RULE_FALLBACK',
+      selectedClaimIds: allClaimIds,
+      claimIds: allClaimIds,
       narrativeVi,
-      factRefs: ['trip.temp_min_c', 'trip.rain_prob_pct', 'trip.difficulty'],
-      actionRefs: summary.isFullyCovered ? ['READY_FOR_TRIP'] : ['RENT_MISSING_GEAR'],
-      candidateRefs: [],
-      disclaimerVi:
-        'Tư vấn dựa trên bộ quy chuẩn an toàn TrekGo (chế độ dự phòng). Vui lòng kiểm tra kỹ độ bền và thông số trang bị trước khi khởi hành.',
+      factRefs,
+      actionRefs,
+      candidateRefs,
+      disclaimerVi,
       metadata: {
         modelVersion: 'rule_fallback_v1',
         promptVersion: '1.0.0',
       },
-    };
+    }
   }
 }
-

@@ -100,9 +100,28 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
         select: { id: true, startAt: true, endAt: true },
       })
       if (trip && quote.rentalStartAt && quote.rentalEndAt) {
-        if (new Date(quote.rentalEndAt) < trip.startAt || new Date(quote.rentalStartAt) > trip.endAt) {
+        const quoteStart = new Date(quote.rentalStartAt)
+        const quoteEnd = new Date(quote.rentalEndAt)
+        const tripStart = new Date(trip.startAt)
+        const tripEnd = new Date(trip.endAt)
+
+        if (quoteStart >= quoteEnd) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
-            message: 'Khoảng thời gian thuê của báo giá không phù hợp với thời gian chuyến đi',
+            message: 'Khoảng thời gian thuê không hợp lệ (thời gian kết thúc phải sau thời gian bắt đầu)',
+          })
+        }
+
+        // Canonical window: Rental must cover the entire trip period.
+        // It cannot start AFTER the trip starts, and cannot end BEFORE the trip ends.
+        if (quoteStart > tripStart) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+            message: 'Thời gian bắt đầu thuê không được sau thời gian khởi hành chuyến đi',
+          })
+        }
+
+        if (quoteEnd < tripEnd) {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+            message: 'Thời gian kết thúc thuê phải bao quát toàn bộ thời gian diễn ra chuyến đi',
           })
         }
       }
@@ -185,7 +204,7 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
     }
 
     // 6. Match against intended selection or active option sets
-    let matchedOption = false
+    let selectedOption: any = null
 
     if (selectedOptionFromRef) {
       const optLines = selectedOptionFromRef.rentalLines || []
@@ -209,17 +228,19 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
           })
         }
       }
-      matchedOption = true
+      selectedOption = selectedOptionFromRef
     } else {
+      // Collect all matching options across all active option sets
+      interface MatchingCandidate {
+        optionSetId: string
+        option: any
+      }
+      const matchingCandidates: MatchingCandidate[] = []
+
       for (const set of activeOptionSets) {
         const options = (set.optionsJson as any[]) || []
         for (const opt of options) {
           const optLines = opt.rentalLines || []
-          if (optLines.length === 0 && quoteQtyMap.size === 0) {
-            matchedOption = true
-            break
-          }
-
           const optQtyMap = new Map<string, number>()
           for (const line of optLines) {
             if (line.productId) {
@@ -227,32 +248,37 @@ export class PrismaGearQuoteLinkRepository implements GearQuoteLinkRepositoryPor
             }
           }
 
-          if (optQtyMap.size !== quoteQtyMap.size) {
-            continue
-          }
+          if (optQtyMap.size !== quoteQtyMap.size) continue
 
           let isMatch = true
           for (const [prodId, neededQty] of optQtyMap.entries()) {
-            const actualQty = quoteQtyMap.get(prodId)
-            if (actualQty !== neededQty) {
+            if (quoteQtyMap.get(prodId) !== neededQty) {
               isMatch = false
               break
             }
           }
 
           if (isMatch) {
-            matchedOption = true
-            break
+            matchingCandidates.push({ optionSetId: set.id, option: opt })
           }
         }
-        if (matchedOption) break
       }
-    }
 
-    if (!matchedOption) {
-      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
-        message: 'Sản phẩm hoặc số lượng trong báo giá không khớp với bất kỳ phương án đơn lẻ nào của kế hoạch',
-      })
+      if (matchingCandidates.length === 0) {
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+          message: 'Sản phẩm hoặc số lượng trong báo giá không khớp với bất kỳ phương án nào của kế hoạch',
+        })
+      }
+
+      if (matchingCandidates.length > 1) {
+        // Disallow ambiguous binding when multiple active options match identical lines without explicit optionRef
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+          message:
+            'Tồn tại nhiều phương án trùng khớp trong các tập phương án đang hoạt động. Vui lòng cung cấp optionRef rõ ràng để liên kết chính xác phương án mong muốn',
+        })
+      }
+
+      selectedOption = matchingCandidates[0].option
     }
 
     const record = await this.prisma.gearQuoteLink.upsert({
