@@ -79,7 +79,13 @@ export async function uploadUserGearPhoto(file: File) {
   return intent.mediaId;
 }
 export async function createGearExtraction(source: { source: "IMAGE"; uploadId: string } | { source: "LINK"; url: string }) {
-  const response = await apiClient.post<Envelope<GearExtractionDraft>>("/api/v1/gear/extractions", source);
+  // AI extraction can legitimately take longer than the shared 10-second API timeout.
+  // Keep the longer timeout scoped to this request so normal API failures still surface quickly.
+  const response = await apiClient.post<Envelope<GearExtractionDraft>>(
+    "/api/v1/gear/extractions",
+    source,
+    { timeout: 120_000 },
+  );
   return unwrap(response.data);
 }
 export async function confirmGearExtraction(draftId: string, input: { expectedVersion: number; item: GearItemInput; acknowledgeDuplicate?: boolean }) {
