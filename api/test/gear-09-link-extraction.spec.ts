@@ -490,6 +490,40 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
       expect(aiCallCount).toBe(currentCalls + 1); // Refreshed!
     });
 
+    it('successfully extracts gear with canonical nested MASTER format { source: { kind: "LINK", url } }', async () => {
+      const uniqueUrl = 'https://shop.decathlon.vn/products/nested-test-item-link';
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          source: {
+            kind: 'LINK',
+            url: uniqueUrl,
+          },
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.sourceType).toBe('LINK');
+      expect(res.body.extractedData).toBeDefined();
+    });
+
+    it('successfully extracts gear with Swagger flat format { sourceType: "LINK", url }', async () => {
+      const uniqueUrl = 'https://shop.decathlon.vn/products/swagger-flat-test-item-link';
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          sourceType: 'LINK',
+          url: uniqueUrl,
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.sourceType).toBe('LINK');
+      expect(res.body.extractedData).toBeDefined();
+    });
+
     it('confirms LINK extraction draft and creates user gear item with source AI_LINK', async () => {
       const confirmPayload = {
         expectedVersion: 2,

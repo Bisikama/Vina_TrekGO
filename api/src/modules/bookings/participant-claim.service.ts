@@ -15,14 +15,20 @@ export async function assertTicketActor(tx: Prisma.TransactionClient, userId: st
   if (!actor) return fail(C.UNAUTHENTICATED)
   if (actor.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(actor.role)) fail(C.FORBIDDEN)
 }
-export function ticketAccess(participant: BookingParticipant, booking: Booking, trip: Trip, actorId = participant.userId) {
+export function ticketAccess(
+  participant: BookingParticipant,
+  booking: Booking,
+  trip: Trip,
+  actorId = participant.userId,
+) {
   const participantActive = hasPublicParticipationAccess(participant, booking, trip, actorId)
   return {
     participantActive,
     // Rental integration remains a separate gate; preserve the current check-in contract.
     canNavigate: participantActive,
     canRent: false,
-    canCheckIn: participantActive && participant.checkinStatus === 'NOT_CHECKED_IN',
+    canCheckIn:
+      participantActive && !trip.cancelledAt && !trip.completedAt && participant.checkinStatus === 'NOT_CHECKED_IN',
     reason: 'INTEGRATION_NOT_VERIFIED',
   }
 }

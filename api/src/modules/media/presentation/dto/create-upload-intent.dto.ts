@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { MediaScopeValue, MediaResourceTypeValue, MediaCaptureSourceValue } from '../../application/ports/media-asset.port';
 
 export const createUploadIntentSchema = z.object({
-  scope: z.enum(['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE'] as const),
+  scope: z.enum(['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE', 'USER_GEAR'] as const),
   resourceType: z.enum(['IMAGE', 'VIDEO'] as const),
   fileName: z.string().trim().min(1).max(255),
   contentType: z.string().min(1),
@@ -13,7 +13,7 @@ export const createUploadIntentSchema = z.object({
 }).strict();
 
 export class CreateUploadIntentDto {
-  @ApiProperty({ example: 'RENTAL_PRODUCT', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE'] })
+  @ApiProperty({ example: 'RENTAL_PRODUCT', enum: ['RENTAL_PRODUCT', 'CONDITION_EVIDENCE', 'RETURN_EVIDENCE', 'EXCEPTION_EVIDENCE', 'LEADER_CERTIFICATE', 'USER_GEAR'] })
   scope!: MediaScopeValue;
 
   @ApiProperty({ example: 'IMAGE', enum: ['IMAGE', 'VIDEO'] })

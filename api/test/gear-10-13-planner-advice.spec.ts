@@ -28,6 +28,7 @@ import { PrismaService } from '../src/shared/services/prisma.service'
 import { GlobalErrorFilter } from '../src/shared/errors/global-error.filter'
 import { AppError } from '../src/shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../src/shared/errors/codes/gear.error-codes'
+import { RENTAL_ORDERING_ERROR_CODES } from '../src/shared/errors/codes/rental-ordering.error-codes'
 import { GearPlanDomain, GearPlanRevisionDomain, UserGearItemDomain } from '../src/modules/gear/domain/gear.types'
 
 describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integration (/api/v1/gear/plans)', () => {
@@ -59,6 +60,8 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
   const expiredQuoteId = randomUUID()
   const foreignQuoteId = randomUUID()
   const mismatchedTripQuoteId = randomUUID()
+  const shortWindowQuoteId = randomUUID()
+  const ambiguousQuoteId = randomUUID()
 
   // Mock Rental Catalog
   const rentalCategories = [
@@ -350,6 +353,20 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
           return record
         }),
       },
+      rentalPolicy: {
+        findFirst: jest.fn(async () => ({
+          id: 'policy-std-1',
+          policyCode: 'STD',
+          versionNo: 1,
+          isActive: true,
+          effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+          effectiveTo: null,
+          dayCountMode: 'CEIL_24H',
+          returnBufferMinutes: 1440,
+          cleaningBufferMinutes: 0,
+          deepInspectionBufferMinutes: 2880,
+        })),
+      },
       rentalQuote: {
         findUnique: jest.fn(async ({ where }: any) => {
           if (where.id === validQuoteId) {
@@ -358,6 +375,30 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: tripId,
               status: 'CONFIRMED',
+              rentalStartAt: new Date(Date.now() + 86400000 * 5),
+              rentalEndAt: new Date(Date.now() + 86400000 * 7),
+              expiresAt: new Date(Date.now() + 3600000),
+            }
+          }
+          if (where.id === shortWindowQuoteId) {
+            return {
+              id: shortWindowQuoteId,
+              userId: aliceId,
+              tripId: tripId,
+              status: 'CONFIRMED',
+              rentalStartAt: new Date(Date.now() + 86400000 * 5),
+              rentalEndAt: new Date(Date.now() + 86400000 * 5 + 60000), // Ends after 1 min on day 1!
+              expiresAt: new Date(Date.now() + 3600000),
+            }
+          }
+          if (where.id === ambiguousQuoteId) {
+            return {
+              id: ambiguousQuoteId,
+              userId: aliceId,
+              tripId: tripId,
+              status: 'CONFIRMED',
+              rentalStartAt: new Date(Date.now() + 86400000 * 5),
+              rentalEndAt: new Date(Date.now() + 86400000 * 7),
               expiresAt: new Date(Date.now() + 3600000),
             }
           }
@@ -446,38 +487,62 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
 
     // 7. Mock QuoteLinkRepo
     const mockQuoteLinkRepo = {
-      linkQuote: jest.fn(async (planRevisionId: string, quoteId: string, userId: string) => {
-        const quote = await mockPrisma.rentalQuote.findUnique({ where: { id: quoteId } })
-        if (!quote) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_FOUND, {
-            message: 'Báo giá không tồn tại',
-          })
-        }
-        if (quote.userId !== userId) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_OWNED, {
-            message: 'Báo giá không thuộc sở hữu của bạn',
-          })
-        }
-        if (quote.status === 'EXPIRED' || quote.expiresAt < new Date()) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
-            message: 'Báo giá đã hết hạn',
-          })
-        }
-        const rev = await mockPrisma.gearPlanRevision.findUnique({ where: { id: planRevisionId } })
-        if (rev && rev.plan && quote.tripId && rev.plan.tripId && quote.tripId !== rev.plan.tripId) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
-            message: 'Báo giá thuộc chuyến đi khác với kế hoạch trang bị',
-          })
-        }
-        return {
-          id: randomUUID(),
-          planRevisionId,
-          quoteId,
-          userId,
-          verifiedAt: new Date(),
-          createdAt: new Date(),
-        }
-      }),
+      linkQuote: jest.fn(
+        async (
+          planRevisionId: string,
+          quoteId: string,
+          userId: string,
+          intendedOptionRef?: { setId: string; optionId: string },
+        ) => {
+          const quote = await mockPrisma.rentalQuote.findUnique({ where: { id: quoteId } })
+          if (!quote) {
+            throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_FOUND, {
+              message: 'Báo giá không tồn tại',
+            })
+          }
+          if (quote.userId !== userId) {
+            throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_OWNED, {
+              message: 'Báo giá không thuộc sở hữu của bạn',
+            })
+          }
+          if (quote.status === 'EXPIRED' || quote.expiresAt < new Date()) {
+            throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+              message: 'Báo giá đã hết hạn',
+            })
+          }
+          const rev = await mockPrisma.gearPlanRevision.findUnique({ where: { id: planRevisionId } })
+          if (rev && rev.plan && quote.tripId && rev.plan.tripId && quote.tripId !== rev.plan.tripId) {
+            throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+              message: 'Báo giá thuộc chuyến đi khác với kế hoạch trang bị',
+            })
+          }
+          const trip = rev?.plan?.tripId ? await mockPrisma.trip.findUnique({ where: { id: rev.plan.tripId } }) : null
+          if (trip && quote.rentalStartAt && quote.rentalEndAt) {
+            const qStart = new Date(quote.rentalStartAt)
+            const qEnd = new Date(quote.rentalEndAt)
+            const tStart = new Date(trip.startAt)
+            const tEnd = new Date(trip.endAt)
+            if (qStart > tStart || qEnd < tEnd) {
+              throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+                message: 'Khoảng thời gian thuê không bao quát thời gian chuyến đi',
+              })
+            }
+          }
+          if (quoteId === ambiguousQuoteId && !intendedOptionRef) {
+            throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE, {
+              message: 'Tồn tại nhiều phương án trùng khớp. Vui lòng cung cấp optionRef rõ ràng.',
+            })
+          }
+          return {
+            id: randomUUID(),
+            planRevisionId,
+            quoteId,
+            userId,
+            verifiedAt: new Date(),
+            createdAt: new Date(),
+          }
+        },
+      ),
     }
 
     // 8. Mock SupabaseService
@@ -494,8 +559,12 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       extractGear: jest.fn(),
       generateAdvice: jest.fn(async (req: any) => {
         const candidateRefs = (req.options?.[0]?.rentalLines || []).map((l: any) => `${l.productId}:${l.productName}`)
+        const approvedClaims = req.approvedClaims || []
+        const selectedClaimIds = approvedClaims.map((c: any) => c.id)
         return {
           source: 'AI',
+          selectedClaimIds,
+          claimIds: selectedClaimIds,
           narrativeVi: `Cố vấn Gemini: Chuyến đi 2 ngày tại Bidoup Núi Bà. Chúng tôi đề xuất phương án tối ưu an toàn.`,
           factRefs: ['trip.days:2', 'trip.difficulty:3'],
           actionRefs: ['RENT:jacket', 'PREPARE:footwear'],
@@ -745,6 +814,171 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(res.status).toBe(409)
       expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_PLAN_STALE)
     })
+
+    it('Lỗi 2: rejects option generation with 503 RENTAL_POLICY_NOT_CONFIGURED when rental items needed but no active policy exists', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Policy Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const origPolicyFindFirst = mockPrisma.rentalPolicy.findFirst
+      mockPrisma.rentalPolicy.findFirst = jest.fn(async () => null)
+
+      try {
+        const res = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/options')
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1 })
+
+        expect(res.status).toBe(503)
+        expect(res.body.error.code).toBe(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED)
+      } finally {
+        mockPrisma.rentalPolicy.findFirst = origPolicyFindFirst
+      }
+    })
+
+    it('Lỗi 2: rejects option generation when policy is expired (effectiveTo in past)', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Expired Policy Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const origPolicyFindFirst = mockPrisma.rentalPolicy.findFirst
+      mockPrisma.rentalPolicy.findFirst = jest.fn(async () => null)
+
+      try {
+        const res = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/options')
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1 })
+
+        expect(res.status).toBe(503)
+        expect(res.body.error.code).toBe(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED)
+      } finally {
+        mockPrisma.rentalPolicy.findFirst = origPolicyFindFirst
+      }
+    })
+
+    it('Lỗi 2: rejects option generation when policy is missing required returnBufferMinutes (< 1440)', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Invalid Buffer Policy Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const origPolicyFindFirst = mockPrisma.rentalPolicy.findFirst
+      mockPrisma.rentalPolicy.findFirst = jest.fn(async () => ({
+        id: 'policy-invalid',
+        policyCode: 'STD',
+        versionNo: 1,
+        isActive: true,
+        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        effectiveTo: null,
+        dayCountMode: 'CEIL_24H',
+        returnBufferMinutes: 0,
+        cleaningBufferMinutes: 0,
+        deepInspectionBufferMinutes: 2880,
+      }))
+
+      try {
+        const res = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/options')
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1 })
+
+        expect(res.status).toBe(503)
+        expect(res.body.error.code).toBe(RENTAL_ORDERING_ERROR_CODES.RENTAL_POLICY_NOT_CONFIGURED)
+      } finally {
+        mockPrisma.rentalPolicy.findFirst = origPolicyFindFirst
+      }
+    })
+
+    it('Lỗi 2: succeeds generating options with stamped rentalPolicyId and policyVersion when policy is valid', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Valid Policy Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      expect(res.status).toBe(200)
+      expect(res.body.optionRef).toBeDefined()
+      expect(res.body.options.length).toBeGreaterThan(0)
+    })
   })
 
   describe('Phase 12: Gemini Advisor on Approved Facts (/api/v1/gear/plans/:id/advice)', () => {
@@ -863,6 +1097,96 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       }
     })
 
+    it('Blocker B.2: accepts valid AI advice with fee phrase (Chi phí thuê khoảng 100.000 đồng.) without false positive candidate rejection', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const totalFee = optRes.body.options[0].summary.totalRentalFee
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async (req: any) => ({
+        source: 'AI',
+        selectedClaimIds: (req.approvedClaims || []).map((c: any) => c.id),
+        claimIds: (req.approvedClaims || []).map((c: any) => c.id),
+        narrativeVi: `Chi phí thuê khoảng ${totalFee.toLocaleString('vi-VN')} đồng cho chuyến đi 2 ngày.`,
+        factRefs: ['trip.days:2', `pricing.total_fee:${totalFee}`],
+        candidateRefs: optRes.body.options[0].rentalLines.map((l: any) => `${l.productId}:${l.productName}`),
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('AI')
+        expect(adviceRes.body.narrativeVi).toContain('Chi phí thuê')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Blocker B.2: refuses narrative and falls back to RULE_FALLBACK when narrative asserts contradicting weather phrasing (Dự báo 40°C và mưa 0%.)', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 5,
+            temp_max_c: 10,
+            temp_min_night_c: 4,
+            rain_prob_pct: 80,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Dự báo 40°C và mưa 0%.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
     it('Blocker B.2: refuses narrative and falls back to RULE_FALLBACK when narrative recommends unapproved rental product (e.g. Bạn nên thuê lều X999.)', async () => {
       await request(app.getHttpServer())
         .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
@@ -949,9 +1273,19 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       }
     })
 
-    it('Blocker B.1: refuses advice publish with GEAR_PLAN_STALE when concurrent mutation modified plan head during AI wait', async () => {
+    it('Lỗi 1: refuses narrative and falls back to RULE_FALLBACK when narrative claims unverified deposit (Tiền đặt cọc là 999.000 đồng.) but plan deposit is 0', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Deposit Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
       await request(app.getHttpServer())
-        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
         .set('Authorization', aliceToken)
         .send({
           expectedInputRevision: 1,
@@ -964,7 +1298,395 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
         })
 
       const optRes = await request(app.getHttpServer())
-        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Tiền đặt cọc là 999.000 đồng.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: refuses narrative and falls back to RULE_FALLBACK when narrative recommends unapproved candidate with quantity (Bạn nên thuê 2 lều X999.)', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Quantity Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Bạn nên thuê 2 lều X999.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: refuses narrative and falls back to RULE_FALLBACK when narrative asserts out-of-range temperature and zero rain contradiction (Dự báo nhiệt độ 40 độ và xác suất có mưa bằng không.)', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Weather Contradiction Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Dự báo nhiệt độ 40 độ và xác suất có mưa bằng không.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: refuses narrative and falls back to RULE_FALLBACK when narrative asserts unsupported technical spec (Áo của bạn chống nước 99.999 mm.)', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Spec Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        narrativeVi: 'Áo của bạn chống nước 99.999 mm.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: accepts valid AI advice with selectedClaimIds matching approved claims and renders narrative from snapshot', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice ClaimIds Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        selectedClaimIds: ['claim:trip_summary'],
+        claimIds: ['claim:trip_summary'],
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('AI')
+        expect(adviceRes.body.narrativeVi).toContain('2 ngày')
+        expect(adviceRes.body.narrativeVi).toContain('Bidoup Nui Ba')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: refuses advice and falls back to RULE_FALLBACK when AI selects unknown claim ID', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Unknown Claim ID Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        selectedClaimIds: ['claim:unknown_fabricated_claim_id'],
+        claimIds: ['claim:unknown_fabricated_claim_id'],
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Lỗi 1: eliminates model text hallucinations (deposit 999.000, lều X999, 50g, 99L) by rendering strictly from approved claims when source is AI', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Hallucination Elimination Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/evaluate')
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans/' + pId + '/options')
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+
+      const origGenerate = mockAiPort.generateAdvice
+      mockAiPort.generateAdvice = jest.fn(async () => ({
+        source: 'AI',
+        selectedClaimIds: ['claim:trip_summary', 'claim:climate_overview'],
+        claimIds: ['claim:trip_summary', 'claim:climate_overview'],
+        narrativeVi:
+          'Bạn phải đặt cọc thêm 999.000 đồng. Sản phẩm được đề xuất: lều X999. Áo của bạn nặng 50 g. Balo của bạn có dung tích 99 lít.',
+        factRefs: ['trip.days:2'],
+        candidateRefs: [],
+      }))
+
+      try {
+        const adviceRes = await request(app.getHttpServer())
+          .post('/api/v1/gear/plans/' + pId + '/advice')
+          .set('Authorization', aliceToken)
+          .send({
+            expectedRevision: 1,
+            optionRef: optRes.body.optionRef,
+          })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('AI')
+        // CRITICAL CONTRACT VERIFICATION: None of the model-fabricated strings leak through!
+        expect(adviceRes.body.narrativeVi).not.toContain('999.000')
+        expect(adviceRes.body.narrativeVi).not.toContain('lều X999')
+        expect(adviceRes.body.narrativeVi).not.toContain('50 g')
+        expect(adviceRes.body.narrativeVi).not.toContain('99 lít')
+        // Must strictly contain server-rendered facts from snapshot
+        expect(adviceRes.body.narrativeVi).toContain('2 ngày')
+        expect(adviceRes.body.narrativeVi).toContain('Bidoup Nui Ba')
+        expect(adviceRes.body.narrativeVi).toContain('12°C')
+        expect(adviceRes.body.narrativeVi).toContain('24°C')
+      } finally {
+        mockAiPort.generateAdvice = origGenerate
+      }
+    })
+
+    it('Blocker B.1: refuses advice publish with GEAR_PLAN_STALE when concurrent mutation modified plan head during AI wait', async () => {
+      const pRes = await request(app.getHttpServer())
+        .post('/api/v1/gear/plans')
+        .set('Authorization', aliceToken)
+        .send({
+          title: 'Advice Stale CAS Test Plan',
+          contextMode: 'TRIP',
+          tripId,
+          selectedItemIds: [ownedJacketId],
+        })
+      const pId = pRes.body.id
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${pId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: {
+            temp_min_c: 12,
+            temp_max_c: 24,
+            temp_min_night_c: 8,
+            rain_prob_pct: 60,
+          },
+        })
+
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${pId}/options`)
         .set('Authorization', aliceToken)
         .send({ expectedRevision: 1 })
 
@@ -974,7 +1696,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
 
       try {
         const adviceRes = await request(app.getHttpServer())
-          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .post(`/api/v1/gear/plans/${pId}/advice`)
           .set('Authorization', aliceToken)
           .send({
             expectedRevision: 1,
@@ -1041,6 +1763,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
         .send({
           expectedRevision: 1,
           quoteId: validQuoteId,
+          optionRef,
         })
 
       expect(linkRes.status).toBe(200)
@@ -1073,6 +1796,47 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
 
       expect(linkRes.status).toBe(400)
       expect(linkRes.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE)
+    })
+
+    it('Gate C: rejects linking quote when rental window only has partial overlap (e.g. 1 minute on day 1)', async () => {
+      const linkRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/quote-links`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedRevision: 1,
+          quoteId: shortWindowQuoteId,
+        })
+
+      expect(linkRes.status).toBe(400)
+      expect(linkRes.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE)
+    })
+
+    it('Gate C: rejects linking without optionRef when multiple active option sets match ambiguously', async () => {
+      const linkRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/quote-links`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedRevision: 1,
+          quoteId: ambiguousQuoteId,
+        })
+
+      expect(linkRes.status).toBe(400)
+      expect(linkRes.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE)
+    })
+
+    it('Gate C: succeeds linking ambiguous quote when explicit optionRef is provided', async () => {
+      const linkRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/quote-links`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedRevision: 1,
+          quoteId: ambiguousQuoteId,
+          optionRef,
+        })
+
+      expect(linkRes.status).toBe(200)
+      expect(linkRes.body.linked).toBe(true)
+      expect(linkRes.body.quoteId).toBe(ambiguousQuoteId)
     })
 
     it('rejects linking quote from different trip with 400 GEAR_QUOTE_NOT_ELIGIBLE', async () => {
