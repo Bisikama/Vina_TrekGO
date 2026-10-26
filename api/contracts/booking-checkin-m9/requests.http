@@ -1,0 +1,23 @@
+@baseUrl = http://localhost:3000/api/v1
+@leaderToken = REPLACE_WITH_LEADER_TOKEN
+@tripId = REPLACE_WITH_TRIP_UUID
+@participantId = REPLACE_WITH_PARTICIPANT_UUID
+@qr = REPLACE_WITH_CURRENT_TICKET_QR
+
+### Roster (leader only)
+GET {{baseUrl}}/leader/public-trips/{{tripId}}/participants?page=1&pageSize=50
+Authorization: Bearer {{leaderToken}}
+
+### Scan current QR, fetched after claim/accept
+POST {{baseUrl}}/leader/public-trips/{{tripId}}/checkin
+Authorization: Bearer {{leaderToken}}
+Content-Type: application/json
+
+{"method":"QR","checkinCode":"{{qr}}"}
+
+### Manual attendance (also supports NO_SHOW / NOT_CHECKED_IN)
+POST {{baseUrl}}/leader/public-trips/{{tripId}}/participants/{{participantId}}/checkin
+Authorization: Bearer {{leaderToken}}
+Content-Type: application/json
+
+{"checkinStatus":"CHECKED_IN"}

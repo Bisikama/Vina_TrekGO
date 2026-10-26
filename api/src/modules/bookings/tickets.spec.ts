@@ -20,6 +20,7 @@ import { TicketsController } from './tickets.controller'
 import { InvitationInboxController } from './invitation-inbox.controller'
 import { InvitationInboxService } from './invitation-inbox.service'
 import { TicketsService } from './tickets.service'
+import { BookingParticipationContextService } from './booking-participation-context.service'
 import { ParticipantClaimService } from './participant-claim.service'
 import { BookingCancellationService } from './booking-cancellation.service'
 import { PaymentsPort } from '../payments/payments.port'
@@ -1045,6 +1046,168 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     expect((await db.bookingParticipant.findUniqueOrThrow({ where: { id: p.id } })).checkinCode).toBe(p.checkinCode)
     expect((await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).userId).toBe(f.buyer.id)
   })
+  const m9Fixture = async () => {
+    const f = await fixture(),
+      leader = await user()
+    await db.user.update({ where: { id: leader.id }, data: { role: 'LEADER' } })
+    await db.trip.update({ where: { id: f.trip.id }, data: { creatorId: leader.id, leaderId: leader.id } })
+    // The buyer has exactly one ticket, intended for another account.
+    await db.bookingParticipant.delete({ where: { id: f.sibling.id } })
+    await db.booking.update({ where: { id: f.booking.id }, data: { participantCount: 1 } })
+    return { ...f, leader }
+  }
+  const scan = (f: Awaited<ReturnType<typeof m9Fixture>>, code: string, actor = f.leader.id) =>
+    request(app.getHttpServer())
+      .post(`/leader/trips/${f.trip.id}/checkin`)
+      .auth(actor, { type: 'bearer' })
+      .send({ checkinCode: code })
+  const contextService = new BookingParticipationContextService()
+  const context = (f: Awaited<ReturnType<typeof fixture>>, actor: string) =>
+    db.$transaction((tx) => contextService.lockAndRead(tx, f.trip.id, actor))
+
+  it('M9 one-ticket gift preserves buyer ownership and exposes versioned participation without secrets', async () => {
+    const f = await m9Fixture()
+    const sent = await invite(f).expect(201)
+    expect((await context(f, f.other.id))!.sources).toEqual([])
+    await action(sent.body.id, f.other.id).expect(200)
+    const before = await context(f, f.other.id)
+    expect(before!.sources).toMatchObject([
+      { membershipKind: 'PUBLIC_PARTICIPANT', membershipRef: f.p.id, bookingVersion: 2, sourceActive: true },
+    ])
+    expect((await context(f, f.buyer.id))!.sources).toMatchObject([
+      { membershipKind: 'PUBLIC_BOOKING_BUYER', membershipRef: f.booking.id },
+    ])
+    for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', 'checkinCode', 'payment', f.other.email])
+      expect(JSON.stringify(before)).not.toContain(secret)
+    const p = await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })
+    await scan(f, f.p.checkinCode).expect(422)
+    await scan(f, p.checkinCode, f.other.id).expect(403)
+    const results = await Promise.all([scan(f, p.checkinCode), scan(f, p.checkinCode)])
+    expect(results.map((r) => r.status)).toEqual([200, 200])
+    expect(results.map((r) => r.body.replayed).sort()).toEqual([false, true])
+    expect(
+      await db.bookingOutboxEvent.count({
+        where: { aggregateId: f.booking.id, eventType: 'PUBLIC_PARTICIPANT_CHECKED_IN' },
+      }),
+    ).toBe(1)
+    const after = await context(f, f.other.id)
+    expect(after!.sources[0]).toMatchObject({ bookingVersion: 3, checkinStatus: 'CHECKED_IN' })
+    expect((await db.booking.findUniqueOrThrow({ where: { id: f.booking.id } })).userId).toBe(f.buyer.id)
+    if (process.env.M9_CAPTURE_EXAMPLES === 'true')
+      writeFileSync(
+        'contracts/booking-checkin-m9/examples.local.json',
+        JSON.stringify(
+          { contextBefore: before, contextAfter: after, checkin: results.find((r) => !r.body.replayed)!.body },
+          null,
+          2,
+        ) + '\n',
+      )
+  })
+
+  it('M9 accept versus old QR scan serializes: claim wins or check-in invalidates the invitation', async () => {
+    const f = await m9Fixture(),
+      sent = await invite(f).expect(201)
+    const [accepted, checked] = await Promise.all([action(sent.body.id, f.other.id), scan(f, f.p.checkinCode)])
+    if (accepted.status === 200) {
+      expect(checked.status).toBe(422)
+      const p = await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })
+      expect(p.userId).toBe(f.other.id)
+      await scan(f, p.checkinCode).expect(200)
+    } else {
+      expect(accepted.status).toBe(409)
+      expect(checked.status).toBe(200)
+      expect((await db.bookingParticipantInvitation.findUniqueOrThrow({ where: { id: sent.body.id } })).status).toBe(
+        'INVALIDATED',
+      )
+      expect((await context(f, f.other.id))!.sources).toEqual([])
+    }
+  })
+
+  it('M9 cancel versus check-in serializes and cancelled QR cannot restore entitlement', async () => {
+    for (const concurrent of [false, true]) {
+      const f = await m9Fixture(),
+        sent = await invite(f).expect(201)
+      await action(sent.body.id, f.other.id).expect(200)
+      const p = await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })
+      const invoice = await db.invoice.create({
+        data: {
+          invoiceNo: randomUUID(),
+          userId: f.buyer.id,
+          invoiceType: 'BOOKING',
+          bookingId: f.booking.id,
+          subtotalAmount: 200,
+          totalAmount: 200,
+          status: 'PAID',
+        },
+      })
+      const payment = await db.payment.create({
+        data: {
+          invoiceId: invoice.id,
+          amount: 200,
+          paymentGateway: 'TEST',
+          status: 'SUCCEEDED',
+          idempotencyKey: randomUUID(),
+        },
+      })
+      await db.paymentApplication.create({ data: { invoiceId: invoice.id, paymentId: payment.id, status: 'APPLIED' } })
+      const cancel = () =>
+        cancellation.cancel({
+          bookingId: f.booking.id,
+          actorId: f.buyer.id,
+          actorRole: 'USER',
+          idempotencyKey: randomUUID(),
+          reason: 'M9 test',
+        })
+      if (concurrent) {
+        const [c, s] = await Promise.allSettled([cancel(), scan(f, p.checkinCode)])
+        expect(s.status).toBe('fulfilled')
+        if (c.status === 'rejected') {
+          expect(c.reason.code).toBe('BOOKING_CANCELLATION_NOT_ALLOWED')
+          expect((s as PromiseFulfilledResult<any>).value.status).toBe(200)
+          continue
+        }
+        expect((s as PromiseFulfilledResult<any>).value.status).toBe(409)
+      } else await cancel()
+      await scan(f, p.checkinCode).expect(409)
+      const ctx = await context(f, f.other.id)
+      expect(ctx!.sources[0].sourceActive).toBe(false)
+      expect((await tickets.detail(f.other.id, f.p.id)).checkinCode).toBeNull()
+      const event = await db.bookingOutboxEvent.findFirstOrThrow({
+        where: { aggregateId: f.booking.id, eventType: 'BOOKING_CANCELLED' },
+      })
+      expect(event.payload).toMatchObject({ bookingVersion: ctx!.sources[0].bookingVersion })
+    }
+  })
+
+  it('M9 rejects terminal trip markers consistently and rolls check-in back when outbox fails', async () => {
+    const f = await m9Fixture()
+    await db.bookingParticipant.update({ where: { id: f.p.id }, data: { userId: f.other.id } })
+    for (const field of ['cancelledAt', 'completedAt']) {
+      await db.trip.update({ where: { id: f.trip.id }, data: { [field]: new Date() } })
+      expect((await tickets.detail(f.other.id, f.p.id)).permissions.canCheckIn).toBe(false)
+      await scan(f, f.p.checkinCode).expect(409)
+      await db.trip.update({ where: { id: f.trip.id }, data: { [field]: null } })
+    }
+    await db.bookingOutboxEvent.create({
+      data: {
+        eventType: 'COLLISION',
+        aggregateType: 'Booking',
+        aggregateId: f.booking.id,
+        deduplicationKey: `PUBLIC_PARTICIPANT_CHECKED_IN:${f.p.id}:2`,
+        payload: {},
+      },
+    })
+    const service = new LeaderCheckinService(db as unknown as PrismaService)
+    await expect(
+      service.checkin(f.leader.id, f.trip.id, { method: 'QR', checkinCode: f.p.checkinCode }),
+    ).rejects.toMatchObject({ code: 'P2002' })
+    expect((await db.bookingParticipant.findUniqueOrThrow({ where: { id: f.p.id } })).checkinStatus).toBe(
+      'NOT_CHECKED_IN',
+    )
+    expect((await db.booking.findUniqueOrThrow({ where: { id: f.booking.id } })).version).toBe(1)
+    expect(await db.auditLog.count({ where: { entityId: f.p.id } })).toBe(0)
+  })
+
   it('Leader check-in lists participants, scans rotated QR idempotently, syncs booking status, invalidates pending invitations and blocks cancellation', async () => {
     const f = await fixture()
     const leader = f.buyer

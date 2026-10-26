@@ -59,7 +59,8 @@ suite('M8 real PostgreSQL/Mongo notification delivery', () => {
   beforeAll(async () => {
     // Isolate copied historical fixtures; test-created events below remain unreceipted.
     await db.$executeRawUnsafe(`INSERT INTO booking_notification_receipts(event_id, consumer, completed_at)
-      SELECT id, 'booking-notifications-v1', now() FROM booking_outbox_events ON CONFLICT DO NOTHING`)
+      SELECT id, 'booking-notifications-v1', now() FROM booking_outbox_events
+      ON CONFLICT (event_id, consumer) DO UPDATE SET completed_at=EXCLUDED.completed_at, last_error=NULL`)
     connection = await createConnection(mongo!, { serverSelectionTimeoutMS: 5000 }).asPromise()
     model = connection.model<NotificationDocument>(Notification.name, NotificationSchema)
     service = new NotificationsService(model)

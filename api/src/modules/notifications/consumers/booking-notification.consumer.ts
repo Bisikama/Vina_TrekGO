@@ -49,7 +49,9 @@ export class BookingNotificationConsumer {
           await this.db
             .$executeRaw`INSERT INTO booking_notification_receipts(event_id, consumer, completed_at, attempts)
             VALUES (${event.id}::uuid, ${consumer}, now(), 1)
-            ON CONFLICT (event_id, consumer) DO UPDATE SET completed_at=now(), last_error=NULL`
+            ON CONFLICT (event_id, consumer) DO UPDATE SET completed_at=now(), last_error=NULL,
+              attempts=booking_notification_receipts.attempts + 1
+            WHERE booking_notification_receipts.completed_at IS NULL`
         } catch {
           // No payload or driver errors in logs. A failed event does not block newer events.
           await this.db
