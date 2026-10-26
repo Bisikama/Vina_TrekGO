@@ -107,16 +107,23 @@ export function RentalWardrobePage() {
       <div className="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,.05)] lg:grid-cols-[1fr_auto] lg:items-center">
         <div className="flex items-center gap-4">
           <div className="grid size-12 place-items-center rounded-xl bg-[#dff4e8] text-2xl">▣</div>
-          <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-4"><p className="font-black text-slate-900">Tủ đồ kỹ thuật</p><p className="text-sm font-black text-slate-900">{items.length} / 50</p></div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-black text-slate-900">Tủ đồ kỹ thuật</p>
+              <p className="text-sm font-black text-slate-900">{items.length} món / 50</p>
+            </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#165c45]" style={{ width: `${Math.min(items.length * 2, 100)}%` }} /></div>
-            <p className="mt-2 text-xs text-slate-500">Còn {Math.max(50 - items.length, 0)} vị trí · lịch sử đánh giá theo chuyến vẫn được bảo toàn khi xóa món.</p>
+            <p className="mt-2 text-xs text-slate-500">Đã lưu {items.length} món · còn {Math.max(50 - items.length, 0)} chỗ. Lịch sử đánh giá theo chuyến vẫn được bảo toàn khi xóa món.</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
-          <button disabled={busy} onClick={() => fileRef.current?.click()} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:opacity-50">✦ Nạp ảnh bằng AI</button>
-          <button disabled={busy} onClick={() => setLinkOpen(true)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:opacity-50">🔗 Dán link sản phẩm</button>
-          <button onClick={() => setEditor({})} className="rounded-xl bg-[#123f32] px-4 py-3 text-sm font-extrabold text-white shadow-sm">＋ Nhập tay</button>
+        <div className="flex flex-col gap-3 lg:items-end">
+          <span className="w-fit rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">✦ AI · giới hạn 20 lượt trích xuất/ngày</span>
+          <div className="flex flex-wrap gap-2">
+            <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
+            <button disabled={busy} onClick={() => fileRef.current?.click()} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:opacity-50">✦ Nạp ảnh bằng AI</button>
+            <button disabled={busy} onClick={() => setLinkOpen(true)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:opacity-50">🔗 Dán link sản phẩm</button>
+            <button onClick={() => setEditor({})} className="rounded-xl bg-[#123f32] px-4 py-3 text-sm font-extrabold text-white shadow-sm">＋ Nhập tay</button>
+          </div>
         </div>
       </div>
 
