@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, createParamDecorator, HttpCode, Param, Post, Res } from '@nestjs/common'
+import { Body, Controller, Get, Header, Headers, createParamDecorator, HttpCode, Param, Post, Res } from '@nestjs/common'
 import type { Response } from 'express'
 import { AppError, TRIP_GPS_ERROR_CODES as E } from '../../../../shared/errors'
 import { ApiBearerAuth, ApiOperation, ApiTags, ApiBody, ApiHeader, ApiResponse, ApiParam } from '@nestjs/swagger'
@@ -8,6 +8,7 @@ import { ActiveUser } from '../../../../shared/decorators/active-user.decorator'
 import { AuthType } from '../../../../shared/constants/auth.constant'
 import { ZodValidationPipe } from '../../../../shared/pipes/zod-validation.pipe'
 import { TripGpsRecordingService } from '../../infrastructure/adapters/trip-gps-recording.service'
+import { gpsContextV2ResponseSchema, gpsStateV2ResponseSchema, gpsSessionV2ResponseSchema } from '../dtos/trip-gps-sync.dto'
 import { gpsControlSchema, gpsFinishSchema, gpsSamplesSchema, gpsStartSchema } from '../dtos/trip-gps.dto'
 import type { GpsControl, GpsSamples, GpsStart } from '../dtos/trip-gps.dto'
 import {
@@ -39,12 +40,14 @@ export class TripGpsController {
   constructor(private readonly recording: TripGpsRecordingService) {}
 
   @Get('context')
-  @ApiResponse({ status: 200, schema: schema(gpsContextResponseSchema) })
+  @ApiHeader({ name: 'X-GPS-Protocol', required: false, description: 'trip-gps-sync/2 for v2 capabilities' })
+  @ApiResponse({ status: 200, schema: schema(z.union([gpsContextResponseSchema, gpsContextV2ResponseSchema])) })
   @ApiOperation({
     summary: 'GPS context: route snapshots, checkpoints, frozen/effective policy and caller permissions',
   })
-  context(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params) {
-    return this.recording.context(p.tripId, user.id)
+  context(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params,
+    @Headers('x-gps-protocol') protocol?: string) {
+    return protocol === 'trip-gps-sync/2' ? this.recording.context(p.tripId, user.id, true) : this.recording.context(p.tripId, user.id)
   }
 
   @Post('end-trip')
@@ -68,10 +71,12 @@ export class TripGpsController {
 
   @Get('state')
   @Header('Cache-Control', 'private, no-store')
-  @ApiResponse({ status: 200, schema: schema(gpsStateResponseSchema) })
+  @ApiHeader({ name: 'X-GPS-Protocol', required: false, description: 'trip-gps-sync/2 for connection and location versions' })
+  @ApiResponse({ status: 200, schema: schema(z.union([gpsStateResponseSchema, gpsStateV2ResponseSchema])) })
   @ApiOperation({ summary: 'Consistent group GPS roster with durable member/roster/route versions' })
-  state(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params) {
-    return this.recording.stateSnapshot(p.tripId, user.id)
+  state(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params,
+    @Headers('x-gps-protocol') protocol?: string) {
+    return protocol === 'trip-gps-sync/2' ? this.recording.stateSnapshot(p.tripId, user.id, true) : this.recording.stateSnapshot(p.tripId, user.id)
   }
 
   @Get('my-route')
@@ -83,7 +88,7 @@ export class TripGpsController {
 
   @Post('sessions')
   @ApiBody({ schema: schema(gpsStartSchema) })
-  @ApiResponse({ status: 200, schema: schema(gpsSessionResponseSchema) })
+  @ApiResponse({ status: 200, schema: schema(z.union([gpsSessionResponseSchema, gpsSessionV2ResponseSchema])) })
   @HttpCode(200)
   @ApiOperation({ summary: 'Start own trip GPS recording (public/private)' })
   start(
@@ -96,7 +101,7 @@ export class TripGpsController {
 
   @Get('sessions/:sessionId')
   @ApiParam({ name: 'sessionId', format: 'uuid', required: true })
-  @ApiResponse({ status: 200, schema: schema(gpsSessionResponseSchema) })
+  @ApiResponse({ status: 200, schema: schema(z.union([gpsSessionResponseSchema, gpsSessionV2ResponseSchema])) })
   session(@ActiveUser() user: { id: string }, @Param(new ZodValidationPipe(params)) p: Params) {
     return this.recording.getSession(p.tripId, user.id, p.sessionId!)
   }

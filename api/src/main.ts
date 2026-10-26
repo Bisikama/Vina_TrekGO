@@ -15,7 +15,7 @@ async function bootstrap() {
     origin: true,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type,Accept,Authorization,x-api-key,Idempotency-Key,X-GPS-Device-Id',
+    allowedHeaders: 'Content-Type,Accept,Authorization,x-api-key,Idempotency-Key,X-GPS-Device-Id,X-GPS-Protocol',
   })
 
   // Swagger Documentation Setup

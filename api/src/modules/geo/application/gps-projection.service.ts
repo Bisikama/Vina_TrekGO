@@ -191,7 +191,7 @@ export class GpsProjectionService {
     const age = lastLocation ? (Date.now() - Date.parse(lastLocation.recordedAt)) / 1000 : Infinity
     const locationStatus = !lastLocation
       ? 'NO_DATA'
-      : chosen?.status === 'STOPPED' || trip.status !== 'IN_PROGRESS'
+      : chosen?.status === 'STOPPED' || (state?.protocolVersion !== 2 && trip.status !== 'IN_PROGRESS')
         ? 'STOPPED'
         : chosen?.status === 'PAUSED'
           ? 'PAUSED'

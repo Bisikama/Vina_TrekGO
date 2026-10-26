@@ -1,4 +1,4 @@
-import { HttpException, Injectable, Logger, OnModuleDestroy } from '@nestjs/common'
+import { HttpException, Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import {
   ConnectedSocket,
@@ -9,12 +9,16 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets'
 import { Namespace, Socket } from 'socket.io'
+import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { SupabaseService } from '../../../../shared/services/supabase.service'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { AppError, ERROR_DEFINITIONS } from '../../../../shared/errors'
 import { TripGpsRecordingService } from '../../infrastructure/adapters/trip-gps-recording.service'
+import { GpsSyncService } from '../../application/gps-sync.service'
+import { locationPublishSchema } from '../dtos/trip-gps-sync.dto'
+import { enqueueGps } from '../../application/gps-projection.service'
 import { gpsSocketSchema } from '../dtos/trip-gps.dto'
 import type { ErrorBody, EventEnvelope } from '../../application/trip-gps.contract'
 
@@ -54,18 +58,28 @@ export function gpsSocketError(error: unknown, requestId?: string): ErrorBody {
 }
 
 @Injectable()
-@WebSocketGateway({ namespace: '/gps', cors: { origin: true, credentials: true } })
+@WebSocketGateway({
+  namespace: '/gps',
+  cors: { origin: true, credentials: true },
+  pingInterval: 10000,
+  pingTimeout: 10000,
+})
 export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
   @WebSocketServer() server: Namespace
   private readonly logger = new Logger(TripGpsGateway.name)
   private readonly expiry = new Map<string, ReturnType<typeof setTimeout>>()
-  private readonly seen = new Map<string, number>()
+  private readonly instanceId = randomUUID()
+  private nextPollAt = 0
+  private pollDelay = 500
+  private presenceRunning = false
+  private cleaning = false
   private publishing = false
   private checking = false
   constructor(
     private readonly supabase: SupabaseService,
     private readonly prisma: PrismaService,
     private readonly recording: TripGpsRecordingService,
+    @Optional() private readonly sync?: GpsSyncService,
   ) {}
 
   afterInit(server: Namespace) {
@@ -101,7 +115,7 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
     void socket.join(`trip-gps-user:${socket.data.userId}`)
     const timer = setTimeout(
       () => {
-        void this.expire(socket)
+        void this.expire(socket).catch(() => this.logger.warn('GPS token expiry deferred'))
       },
       Math.min(socket.data.expiresAt - Date.now(), 2147483647),
     )
@@ -113,6 +127,8 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
     const timer = this.expiry.get(socket.id)
     if (timer) clearTimeout(timer)
     this.expiry.delete(socket.id)
+    if (socket.data.gpsProtocol === 2)
+      void this.removePresence(socket.id).catch(() => this.logger.warn('GPS disconnect deferred'))
   }
 
   private async subscription(socket: Socket, body: unknown, subscribe: boolean) {
@@ -129,12 +145,17 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
       const { tripId } = parsed.data
       if (!subscribe) {
         await socket.leave(`trip-gps:${tripId}`)
+        if (socket.data.gpsProtocol === 2 && !socket.data.gpsPublishedTrips?.has(tripId))
+          await this.removePresence(socket.id, tripId)
         return { ok: true, requestId, data: { tripId } }
       }
-      await this.recording.authorize(tripId, socket.data.userId, true)
+      const data = await this.recording.authorize(tripId, socket.data.userId, true)
+      socket.data.gpsProtocol = parsed.data.protocolVersion ?? 1
       await socket.join(`trip-gps:${tripId}`)
       // Recheck after join; every emission also rechecks against the current database roster.
-      const data = await this.recording.authorize(tripId, socket.data.userId, true)
+      const confirmed = await this.recording.authorizeRoster(tripId)
+      if (!confirmed.some((m) => m.userId === socket.data.userId)) throw new AppError({ code: 'FORBIDDEN' })
+      if (socket.data.gpsProtocol === 2) await this.addPresence(socket, tripId)
       return { ok: true, requestId, data }
     } catch (error) {
       if (parsed.success && subscribe) await socket.leave(`trip-gps:${parsed.data.tripId}`)
@@ -154,6 +175,8 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
 
   private async revoke(socket: Socket, tripId: string, code = 'FORBIDDEN') {
     await socket.leave(`trip-gps:${tripId}`)
+    socket.data.gpsPublishedTrips?.delete(tripId)
+    if (socket.data.gpsProtocol === 2) await this.removePresence(socket.id, tripId)
     const envelope: EventEnvelope<{ code: string }> = {
       eventId: randomUUID(),
       contractVersion: 'trip-gps/1.0.0',
@@ -165,98 +188,204 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
   }
 
   private async expire(socket: Socket, code = 'UNAUTHENTICATED') {
-    for (const room of [...socket.rooms])
-      if (room.startsWith('trip-gps:')) await this.revoke(socket, room.slice('trip-gps:'.length), code)
-    socket.disconnect(true)
+    try {
+      for (const room of [...socket.rooms])
+        if (room.startsWith('trip-gps:')) await this.revoke(socket, room.slice('trip-gps:'.length), code)
+    } finally {
+      socket.disconnect(true)
+    }
   }
 
-  // Each instance consumes the SAME committed outbox independently and emits only to its
-  // own sockets. This supplies cross-instance fanout/revocation without a second broker.
-  // The outbox remains the durable cross-instance transport. A short interval
-  // avoids imposing the former 0–1 second realtime delay when LISTEN/NOTIFY is
-  // not available in the deployment.
-  @Interval(100)
+  @SubscribeMessage('gps:location.publish')
+  async publishLocation(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown) {
+    const parsed = locationPublishSchema.safeParse(body)
+    try {
+      if (Buffer.byteLength(JSON.stringify(body) ?? '') > 16384) throw new AppError({ code: 'VALIDATION_ERROR' })
+      if (!parsed.success) throw new AppError({ code: 'VALIDATION_ERROR' })
+      if (!socket.data.userId || socket.data.expiresAt <= Date.now()) throw new AppError({ code: 'UNAUTHENTICATED' })
+      if (!this.sync) throw new AppError({ code: 'GPS_SYNC_UNAVAILABLE' })
+      const data = await this.sync.publish(socket.data.userId, parsed.data)
+      socket.data.gpsProtocol = 2
+      socket.data.gpsPublishedTrips ??= new Set<string>()
+      if (!socket.data.gpsPublishedTrips.has(parsed.data.tripId)) {
+        await this.addPresence(socket, parsed.data.tripId)
+        socket.data.gpsPublishedTrips.add(parsed.data.tripId)
+      }
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, ...gpsSocketError(error, parsed.success ? parsed.data.requestId : undefined) }
+    }
+  }
+
+  private async addPresence(socket: Socket, tripId: string) {
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${tripId + ':' + socket.data.userId}))::text`
+        await tx.gpsSocketPresence.upsert({
+          where: { socketId: socket.id + ':' + tripId },
+          create: {
+            socketId: socket.id + ':' + tripId,
+            instanceId: this.instanceId,
+            tripId,
+            userId: socket.data.userId,
+            expiresAt: new Date(Math.min(Date.now() + 20000, socket.data.expiresAt)),
+          },
+          update: { expiresAt: new Date(Math.min(Date.now() + 20000, socket.data.expiresAt)) },
+        })
+        await this.presenceEvent(tx, tripId, socket.data.userId, 'ONLINE')
+      },
+      { timeout: 5000, maxWait: 1000 },
+    )
+  }
+
+  private async removePresence(socketId: string, tripId?: string) {
+    const rows = await this.prisma.gpsSocketPresence.findMany({
+      where: { socketId: { startsWith: socketId + ':' }, ...(tripId ? { tripId } : {}) },
+      take: 100,
+    })
+    for (const row of rows)
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${row.tripId + ':' + row.userId}))::text`
+          await tx.gpsSocketPresence.deleteMany({ where: { socketId: row.socketId } })
+          const count = await tx.gpsSocketPresence.count({
+            where: { tripId: row.tripId, userId: row.userId, expiresAt: { gt: new Date() } },
+          })
+          if (!count) await this.presenceEvent(tx, row.tripId, row.userId, 'OFFLINE')
+        },
+        { timeout: 5000, maxWait: 1000 },
+      )
+  }
+
+  private async presenceEvent(tx: Prisma.TransactionClient, tripId: string, userId: string, status: string) {
+    const old = await tx.gpsPresenceState.findUnique({ where: { tripId_userId: { tripId, userId } } })
+    if (old?.status === status) return
+    const row = await tx.gpsPresenceState.upsert({
+      where: { tripId_userId: { tripId, userId } },
+      create: { tripId, userId, status },
+      update: { status, version: { increment: 1 } },
+    })
+    await enqueueGps(tx, tripId, 'gps:presence.updated', {
+      userId,
+      connectionStatus: status,
+      presenceVersion: row.version,
+    })
+  }
+
+  // Fanout receipts are PER INSTANCE. They never claim an event away from another API.
+  @Interval(500)
   async publishOutbox() {
-    if (this.publishing || !this.server) return
+    if (this.publishing || !this.server || Date.now() < this.nextPollAt) return
+    const sockets = [...this.server.sockets.values()]
+    const tripIds = [
+      ...new Set(sockets.flatMap((s) => [...s.rooms].filter((r) => r.startsWith('trip-gps:')).map((r) => r.slice(9)))),
+    ]
+    if (!tripIds.length) return
     this.publishing = true
     try {
-      // A newly subscribed client obtains the durable snapshot via GET /state;
-      // replaying five minutes of member updates causes stale marker jumps and a
-      // large startup burst. Fifteen seconds is enough for every live instance
-      // to observe a published event while keeping the outbox a retry source.
-      const since = Date.now() - 15000
-      for (const [id, at] of this.seen) if (at < since) this.seen.delete(id)
+      const since = Date.now() - 300000
       const rows = await this.prisma.gpsOutboxEvent.findMany({
         where: {
           aggregateType: 'TripGps',
-          OR: [
-            { status: 'PENDING' },
-            { createdAt: { gte: new Date(since) } },
-            { publishedAt: { gte: new Date(since) } },
-          ],
-          id: { notIn: [...this.seen.keys()] },
+          aggregateId: { in: tripIds },
+          eventType: { not: 'gps:track.refresh' },
+          createdAt: { gte: new Date(since) },
+          deliveries: { none: { instanceId: this.instanceId } },
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: 500,
+        take: 100,
       })
-      for (const row of rows) {
-        // Track processing is a durable internal job, never a socket event.
-        if (row.eventType === 'gps:track.refresh') continue
-        const payload = row.payload as unknown as { envelope: EventEnvelope<any>; recipientUserId: string | null }
-        if (!payload?.envelope?.tripId) {
-          this.seen.set(row.id, row.createdAt.getTime())
-          continue
+      this.pollDelay = rows.length ? 500 : Math.min(5000, this.pollDelay * 2)
+      if (!rows.length) return
+      const rosters = new Map<string, Set<string>>()
+      for (const tripId of tripIds) {
+        const members = await this.recording.authorizeRoster(tripId)
+        rosters.set(tripId, new Set(members.map((m) => m.userId)))
+      }
+      // Revoke before delivering any location in this batch, with one roster read per trip.
+      for (const socket of sockets)
+        for (const tripId of tripIds) {
+          if (!socket.rooms.has('trip-gps:' + tripId)) continue
+          if (socket.data.expiresAt <= Date.now()) await this.expire(socket)
+          else if (!rosters.get(tripId)?.has(socket.data.userId)) await this.revoke(socket, tripId)
         }
-        try {
-          for (const socket of this.server.sockets.values()) {
-            const { tripId } = payload.envelope
-            const personal = payload.recipientUserId !== null
-            if (personal ? socket.data.userId !== payload.recipientUserId : !socket.rooms.has(`trip-gps:${tripId}`))
+      const latest = new Map<string, string>()
+      for (const row of rows)
+        if (row.eventType === 'gps:location.updated') {
+          const e = (row.payload as any)?.envelope
+          const key = row.aggregateId + ':' + e?.data?.userId
+          const oldId = latest.get(key),
+            old = oldId ? rows.find((r) => r.id === oldId) : null
+          if (!old || ((old.payload as any)?.envelope?.data?.locationVersion ?? 0) < (e?.data?.locationVersion ?? 0))
+            latest.set(key, row.id)
+        }
+      for (const row of rows) {
+        if (row.eventType === 'gps:track.refresh') continue
+        const payload = row.payload as any,
+          envelope = payload?.envelope
+        if (
+          envelope?.tripId &&
+          (row.eventType !== 'gps:location.updated' ||
+            latest.get(row.aggregateId + ':' + envelope.data?.userId) === row.id)
+        ) {
+          for (const socket of sockets) {
+            const tripId = envelope.tripId
+            if (
+              !socket.rooms.has('trip-gps:' + tripId) ||
+              !rosters.get(tripId)?.has(socket.data.userId) ||
+              socket.data.expiresAt <= Date.now()
+            )
               continue
-            if (socket.data.expiresAt <= Date.now()) {
-              await this.expire(socket)
+            if (payload.recipientUserId && socket.data.userId !== payload.recipientUserId) continue
+            if (
+              ['gps:location.updated', 'gps:presence.updated'].includes(row.eventType) &&
+              socket.data.gpsProtocol !== 2
+            )
               continue
-            }
-            if (row.eventType === 'gps:access.revoked') {
-              try {
-                await this.recording.authorize(tripId, socket.data.userId)
-              } catch (error) {
-                if (error instanceof AppError && ['FORBIDDEN', 'GPS_TRIP_NOT_FOUND'].includes(error.code))
-                  await this.revoke(socket, tripId)
-                else throw error
-              }
-              continue
-            }
-            try {
-              await this.recording.authorize(tripId, socket.data.userId)
-            } catch (error) {
-              if (error instanceof AppError && ['FORBIDDEN', 'GPS_TRIP_NOT_FOUND'].includes(error.code)) {
-                await this.revoke(socket, tripId)
-                continue
-              }
-              throw error
-            }
-            socket.emit(row.eventType, payload.envelope)
+            socket.emit(row.eventType, envelope)
           }
-          await this.prisma.gpsOutboxEvent.update({
-            where: { id: row.id },
-            data: { status: 'PUBLISHED', publishedAt: row.publishedAt ?? new Date(), lastError: null },
-          })
-          this.seen.set(row.id, Date.now())
-        } catch (error) {
-          await this.prisma.gpsOutboxEvent.update({
-            where: { id: row.id },
-            data: {
-              retryCount: { increment: 1 },
-              lastError: 'GPS delivery deferred; authorization or transport unavailable',
-            },
-          })
         }
       }
+      await this.prisma.gpsEventDelivery.createMany({
+        data: rows.map((r) => ({ eventId: r.id, instanceId: this.instanceId })),
+        skipDuplicates: true,
+      })
+      await this.prisma.gpsOutboxEvent.updateMany({
+        where: { id: { in: rows.map((r) => r.id) }, status: 'PENDING', eventType: { not: 'gps:track.refresh' } },
+        data: { status: 'PUBLISHED', publishedAt: new Date() },
+      })
     } catch (error) {
-      this.logger.error('GPS outbox poll failed', error instanceof Error ? error.stack : undefined)
+      this.pollDelay = Math.min(5000, this.pollDelay * 2)
+      this.logger.warn('GPS fanout deferred; database or authorization unavailable')
     } finally {
+      this.nextPollAt = Date.now() + this.pollDelay
       this.publishing = false
+    }
+  }
+
+  @Interval(3600000)
+  async cleanupFanout() {
+    if (this.cleaning) return
+    this.cleaning = true
+    try {
+      const before = new Date(Date.now() - 86400000)
+      // Only transient v2 fanout events; never delete historical jobs or business notifications.
+      const expired = await this.prisma.gpsOutboxEvent.findMany({
+        where: {
+          eventType: { in: ['gps:location.updated', 'gps:presence.updated'] },
+          createdAt: { lt: before },
+        },
+        select: { id: true },
+        take: 1000,
+      })
+      if (expired.length)
+        await this.prisma.gpsOutboxEvent.deleteMany({ where: { id: { in: expired.map((e) => e.id) } } })
+      await this.prisma.gpsEventDelivery.deleteMany({ where: { processedAt: { lt: before } } })
+      await this.prisma.gpsEventConsumer.deleteMany({ where: { lastSeenAt: { lt: before } } })
+    } catch {
+      this.logger.warn('GPS fanout cleanup deferred')
+    } finally {
+      this.cleaning = false
     }
   }
 
@@ -265,31 +394,79 @@ export class TripGpsGateway implements OnGatewayInit, OnModuleDestroy {
     if (this.checking || !this.server) return
     this.checking = true
     try {
+      const rosters = new Map<string, Set<string>>()
       for (const socket of this.server.sockets.values()) {
         if (socket.data.expiresAt <= Date.now()) {
           await this.expire(socket)
           continue
         }
-        const user = await this.prisma.user.findUnique({ where: { id: socket.data.userId }, select: { status: true } })
-        if (!user || user.status !== 'ACTIVE') {
-          await this.expire(socket, 'FORBIDDEN')
-          continue
-        }
-        for (const room of socket.rooms) {
-          if (!room.startsWith('trip-gps:')) continue
-          const tripId = room.slice('trip-gps:'.length)
-          try {
-            await this.recording.authorize(tripId, socket.data.userId)
-          } catch (error) {
-            if (error instanceof AppError && ['FORBIDDEN', 'GPS_TRIP_NOT_FOUND'].includes(error.code))
-              await this.revoke(socket, tripId)
-          }
+        const tripIds = new Set<string>([
+          ...[...socket.rooms].filter((r) => r.startsWith('trip-gps:')).map((r) => r.slice(9)),
+          ...(socket.data.gpsPublishedTrips ?? []),
+        ])
+        for (const tripId of tripIds) {
+          if (!rosters.has(tripId))
+            rosters.set(tripId, new Set((await this.recording.authorizeRoster(tripId)).map((m) => m.userId)))
+          if (!rosters.get(tripId)!.has(socket.data.userId)) await this.revoke(socket, tripId)
         }
       }
-    } catch (error) {
-      this.logger.error('GPS subscription revalidation failed', error instanceof Error ? error.stack : undefined)
+    } catch {
+      this.logger.warn('GPS subscription check deferred')
     } finally {
       this.checking = false
+    }
+  }
+
+  @Interval(5000)
+  async refreshPresence() {
+    if (this.presenceRunning || !this.server || !this.server.sockets.size) return
+    this.presenceRunning = true
+    try {
+      const active: string[] = []
+      for (const socket of this.server.sockets.values())
+        if (socket.data.gpsProtocol === 2 && socket.data.expiresAt > Date.now()) {
+          const tripIds = new Set<string>([
+            ...[...socket.rooms].filter((r) => r.startsWith('trip-gps:')).map((r) => r.slice(9)),
+            ...(socket.data.gpsPublishedTrips ?? []),
+          ])
+          for (const tripId of tripIds) active.push(socket.id + ':' + tripId)
+        }
+      if (active.length)
+        await this.prisma.gpsSocketPresence.updateMany({
+          where: { instanceId: this.instanceId, socketId: { in: active } },
+          data: { expiresAt: new Date(Date.now() + 20000) },
+        })
+      const expired = await this.prisma.gpsSocketPresence.findMany({
+        where: { expiresAt: { lt: new Date() } },
+        take: 100,
+      })
+      for (const row of expired) {
+        await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${row.tripId + ':' + row.userId}))::text`
+            const removed = await tx.gpsSocketPresence.deleteMany({
+              where: { socketId: row.socketId, expiresAt: { lt: new Date() } },
+            })
+            if (
+              removed.count &&
+              !(await tx.gpsSocketPresence.count({
+                where: { tripId: row.tripId, userId: row.userId, expiresAt: { gt: new Date() } },
+              }))
+            )
+              await this.presenceEvent(tx, row.tripId, row.userId, 'OFFLINE')
+          },
+          { timeout: 5000, maxWait: 1000 },
+        )
+      }
+      await this.prisma.gpsEventConsumer.upsert({
+        where: { instanceId: this.instanceId },
+        create: { instanceId: this.instanceId },
+        update: { lastSeenAt: new Date() },
+      })
+    } catch {
+      this.logger.warn('GPS presence refresh deferred')
+    } finally {
+      this.presenceRunning = false
     }
   }
 
