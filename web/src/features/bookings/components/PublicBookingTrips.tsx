@@ -12,6 +12,23 @@ import {
 import { formatBookingDateTime, formatMoneyVND } from '../services/booking.api';
 import type { Participant, PublicTrip } from '../types/booking.types';
 import { BookingSignIn } from './BookingSignIn';
+import {
+  PageShell,
+  PageHeader,
+  SurfaceCard,
+  SurfaceSectionHeader,
+  Button,
+  FormField,
+  Input,
+  Select,
+  StatusBadge,
+  LoadingState,
+  EmptyState,
+  ErrorAlert,
+  InfoBanner,
+  PaginationBar,
+  TripSummaryBanner,
+} from '@/components/ui';
 
 export function PublicBookingTrips() {
   const {
@@ -45,174 +62,130 @@ export function PublicBookingTrips() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F7F4] px-4 pb-20 pt-28">
-      <div className="mx-auto max-w-6xl space-y-7">
-        <div className="flex flex-wrap justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-[#125238]">
-              Vina TrekGO · Khám Phá Chuyến Đi
-            </p>
-            <h1 className="mt-2 text-4xl font-bold text-stone-900">
-              Chọn hành trình tiếp theo
-            </h1>
-            <p className="mt-3 text-stone-600">
-              Xem lịch khởi hành, chỗ trống thực tế và đặt chỗ cùng nhóm của bạn.
-            </p>
-          </div>
-          <Link
-            href="/bookings"
-            className="h-fit rounded-xl border border-[#125238] px-4 py-2 text-sm font-bold text-[#125238] transition hover:bg-emerald-50"
-          >
-            Đặt chỗ của tôi
-          </Link>
-        </div>
-
-        <form
-          className="grid gap-3 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:grid-cols-5"
-          onSubmit={handleFilterSubmit}
-        >
-          <label className="text-xs font-semibold text-stone-600">
-            Từ ngày
-            <input
-              type="date"
-              name="dateFrom"
-              className="mt-1 w-full rounded-lg border border-stone-200 p-2 text-sm"
-            />
-          </label>
-          <label className="text-xs font-semibold text-stone-600">
-            Đến ngày
-            <input
-              type="date"
-              name="dateTo"
-              className="mt-1 w-full rounded-lg border border-stone-200 p-2 text-sm"
-            />
-          </label>
-          <label className="text-xs font-semibold text-stone-600">
-            Độ khó
-            <select
-              name="difficulty"
-              className="mt-1 w-full rounded-lg border border-stone-200 bg-white p-2 text-sm"
+    <PageShell>
+      <div className="space-y-7">
+        <PageHeader
+          eyebrow="Vina TrekGO · Khám Phá Chuyến Đi"
+          title="Chọn hành trình tiếp theo"
+          description="Xem lịch khởi hành, chỗ trống thực tế và đặt chỗ cùng nhóm của bạn."
+          actions={
+            <Link
+              href="/bookings"
+              className="inline-flex h-11 items-center rounded-xl border border-[#2F6B4F] bg-white px-4 text-sm font-bold text-[#125238] transition hover:bg-emerald-50"
             >
-              <option value="">Tất cả</option>
-              <option value="EASY">Dễ</option>
-              <option value="MEDIUM">Trung bình</option>
-              <option value="HARD">Khó</option>
-              <option value="EXTREME">Rất khó</option>
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-stone-600">
-            Giá tối đa (₫)
-            <input
-              type="number"
-              min="0"
-              name="price"
-              placeholder="VD: 3000000"
-              className="mt-1 w-full rounded-lg border border-stone-200 p-2 text-sm"
-            />
-          </label>
-          <button
-            type="submit"
-            className="self-end rounded-xl bg-[#125238] p-2.5 text-sm font-bold text-white shadow transition hover:bg-[#2f6b4f]"
-          >
-            Tìm chuyến đi
-          </button>
-        </form>
+              Đặt chỗ của tôi
+            </Link>
+          }
+        />
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-center justify-between rounded-xl bg-red-50 p-4 text-sm text-red-800 border border-red-200"
+        <SurfaceCard padding="md">
+          <form
+            className="grid gap-4 sm:grid-cols-5 items-end"
+            onSubmit={handleFilterSubmit}
           >
-            <span>{error}</span>
-            <button type="button" className="underline font-bold" onClick={refetch}>
-              Thử lại
-            </button>
-          </div>
-        )}
+            <FormField label="Từ ngày">
+              <Input type="date" name="dateFrom" />
+            </FormField>
+            <FormField label="Đến ngày">
+              <Input type="date" name="dateTo" />
+            </FormField>
+            <FormField label="Độ khó">
+              <Select name="difficulty" defaultValue="">
+                <option value="">Tất cả</option>
+                <option value="EASY">Dễ</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HARD">Khó</option>
+                <option value="EXTREME">Rất khó</option>
+              </Select>
+            </FormField>
+            <FormField label="Giá tối đa (₫)">
+              <Input
+                type="number"
+                min="0"
+                name="price"
+                placeholder="VD: 3000000"
+              />
+            </FormField>
+            <Button type="submit" fullWidth>
+              Tìm chuyến đi
+            </Button>
+          </form>
+        </SurfaceCard>
+
+        {error && <ErrorAlert message={error} onRetry={refetch} />}
 
         {isLoading && !error && (
-          <div className="p-12 text-center text-stone-500 text-sm">
-            Đang tải danh sách chuyến đi công khai…
-          </div>
+          <LoadingState label="Đang tải danh sách chuyến đi công khai…" />
         )}
 
         {!isLoading && trips.length === 0 && !error && (
-          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-12 text-center text-stone-500">
-            Chưa có chuyến đi phù hợp. Hãy thay đổi bộ lọc hoặc quay lại sau.
-          </div>
+          <EmptyState
+            title="Chưa có chuyến đi phù hợp"
+            description="Hãy thay đổi bộ lọc tìm kiếm hoặc quay lại kiểm tra sau."
+          />
         )}
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip: PublicTrip) => (
-            <article
+            <SurfaceCard
               key={trip.id}
-              className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+              interactive
+              className="flex flex-col justify-between"
             >
               <div>
-                <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                  {trip.destination?.name} · Còn {trip.remainingSlots} chỗ
-                </span>
-                <h2 className="mt-3 text-lg font-bold text-stone-900 line-clamp-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-[#125238] tabular-nums">
+                    {trip.destination?.name} · Còn {trip.remainingSlots} chỗ
+                  </span>
+                  <StatusBadge status={trip.status} />
+                </div>
+                <h2 className="mt-3 text-lg font-bold text-[#1F2937] line-clamp-2">
                   <Link href={`/trips/${trip.id}`} className="hover:text-[#125238]">
                     {trip.title}
                   </Link>
                 </h2>
-                <p className="mt-3 text-xs text-stone-500">
+                <p className="mt-3 text-xs text-[#6B7280] tabular-nums">
                   📅 Khởi hành: {formatBookingDateTime(trip.startAt)}
                 </p>
                 {trip.registrationDeadlineAt && (
-                  <p className="mt-1 text-xs text-amber-700 font-medium">
+                  <p className="mt-1 text-xs text-amber-700 font-medium tabular-nums">
                     ⏳ Đóng form: {formatBookingDateTime(trip.registrationDeadlineAt)}
                   </p>
                 )}
-                <p className="mt-1 text-xs text-stone-500">
+                <p className="mt-1 text-xs text-[#6B7280]">
                   👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}
                 </p>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-stone-100 flex items-center justify-between">
+              <div className="mt-5 pt-4 border-t border-[#E5E7EB] flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-stone-400 block uppercase">Giá vé trọn gói</span>
-                  <strong className="text-base text-[#125238] font-bold">
+                  <span className="text-[10px] text-[#6B7280] block uppercase font-semibold tracking-wider">
+                    Giá vé trọn gói
+                  </span>
+                  <strong className="text-base text-[#125238] font-bold tabular-nums">
                     {trip.pricePerPax ? formatMoneyVND(trip.pricePerPax) : 'Chưa có giá'}
                   </strong>
                 </div>
                 <Link
                   href={`/trips/${trip.id}`}
-                  className="rounded-xl bg-[#125238] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#2f6b4f]"
+                  className="rounded-xl bg-[#2F6B4F] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#1F4A36]"
                 >
                   Xem chi tiết
                 </Link>
               </div>
-            </article>
+            </SurfaceCard>
           ))}
         </div>
 
-        {total > 0 && (
-          <div className="flex items-center justify-center gap-4 pt-4">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage(page - 1)}
-              className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-xs font-bold text-stone-700 disabled:opacity-40"
-            >
-              ← Trước
-            </button>
-            <span className="text-xs font-semibold text-stone-600">
-              Trang {page} / {Math.ceil(total / pageSize)} (Tổng {total} chuyến)
-            </span>
-            <button
-              type="button"
-              disabled={page * pageSize >= total}
-              onClick={() => setPage(page + 1)}
-              className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-xs font-bold text-stone-700 disabled:opacity-40"
-            >
-              Sau →
-            </button>
-          </div>
-        )}
+        <PaginationBar
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          itemLabel="chuyến"
+        />
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -259,34 +232,37 @@ function SimpleParticipantForm({
     >
       <div className="space-y-3">
         {participants.map((p, idx) => (
-          <div key={idx} className="rounded-xl border border-stone-200 bg-stone-50/50 p-4 space-y-3">
+          <div
+            key={idx}
+            className="rounded-xl border border-[#E5E7EB] bg-[#F7F7F4]/60 p-4 space-y-3"
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-stone-700">Thành viên #{idx + 1}</span>
+              <span className="text-xs font-bold text-[#1F2937]">
+                Thành viên #{idx + 1}
+              </span>
               {participants.length > 1 && (
                 <button
                   type="button"
                   onClick={() => remove(idx)}
-                  className="text-xs text-red-600 hover:underline"
+                  className="text-xs font-bold text-red-600 hover:underline"
                 >
                   Xóa
                 </button>
               )}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <input
+              <Input
                 required
                 type="text"
                 placeholder="Họ và tên *"
                 value={p.fullName}
                 onChange={(e) => update(idx, 'fullName', e.target.value)}
-                className="rounded border border-stone-200 bg-white p-2 text-sm"
               />
-              <input
+              <Input
                 type="tel"
                 placeholder="Số điện thoại"
                 value={p.phone || ''}
                 onChange={(e) => update(idx, 'phone', e.target.value)}
-                className="rounded border border-stone-200 bg-white p-2 text-sm"
               />
             </div>
           </div>
@@ -296,26 +272,33 @@ function SimpleParticipantForm({
         <button
           type="button"
           onClick={add}
-          className="text-xs font-semibold text-emerald-800 hover:underline"
+          className="text-xs font-semibold text-[#125238] hover:underline"
         >
           + Thêm người đi cùng (Còn {max - participants.length} chỗ)
         </button>
       )}
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded-xl bg-[#125238] p-3 text-center text-sm font-bold text-white transition hover:bg-[#2f6b4f] disabled:bg-stone-300"
-      >
-        {busy ? 'Đang xử lý...' : submitLabel}
-      </button>
+      <Button type="submit" fullWidth loading={busy} disabled={busy}>
+        {submitLabel}
+      </Button>
     </form>
   );
 }
 
-export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: string; participantCount?: number }) {
+export function PublicBookingTrip({
+  tripId,
+  participantCount = 1,
+}: {
+  tripId: string;
+  participantCount?: number;
+}) {
   const { accessToken, user } = useAuth();
   const router = useRouter();
-  const { trip, isLoading, error: fetchError, refetch } = usePublicBookingTripDetail(tripId);
+  const {
+    trip,
+    isLoading,
+    error: fetchError,
+    refetch,
+  } = usePublicBookingTripDetail(tripId);
   const { createBooking, isSubmitting, error: mutationError } = useBookingMutations();
 
   const handleCreate = async (people: Participant[]) => {
@@ -339,7 +322,8 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
     ? new Date(trip.registrationDeadlineAt).getTime()
     : null;
   const isNotOpenYet = openAtMs !== null && Number.isFinite(openAtMs) && nowMs < openAtMs;
-  const isPastDeadline = deadlineMs !== null && Number.isFinite(deadlineMs) && nowMs >= deadlineMs;
+  const isPastDeadline =
+    deadlineMs !== null && Number.isFinite(deadlineMs) && nowMs >= deadlineMs;
   const canCreateNewBooking =
     trip?.status === 'OPEN' &&
     !isNotOpenYet &&
@@ -347,91 +331,115 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
     (trip?.remainingSlots ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-[#F7F7F4] px-4 pb-20 pt-28">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <Link href="/trips" className="text-sm font-semibold text-[#125238] hover:underline">
+    <PageShell maxWidth="5xl">
+      <div className="space-y-6">
+        <Link
+          href="/trips"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#125238] hover:underline"
+        >
           ← Quay lại danh sách chuyến đi
         </Link>
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-center justify-between rounded-xl bg-red-50 p-4 text-sm text-red-800 border border-red-200"
-          >
-            <span>{error}</span>
-            <button type="button" className="underline font-bold" onClick={refetch}>
-              Tải lại
-            </button>
-          </div>
-        )}
+        {error && <ErrorAlert message={error} onRetry={refetch} />}
 
         {isLoading && !error && (
-          <p className="text-sm text-stone-500">Đang tải thông tin chuyến đi…</p>
+          <LoadingState label="Đang tải thông tin chuyến đi…" />
         )}
 
         {trip && (
           <>
-            <header>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-[#125238]">
-                {trip.destination?.name}
-              </span>
-              <h1 className="mt-3 text-3xl sm:text-4xl font-extrabold text-stone-900">
-                {trip.title}
-              </h1>
-              <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-stone-600">
-                {trip.description}
-              </p>
-            </header>
+            <TripSummaryBanner
+              title={trip.title}
+              status={trip.status}
+              destinationName={trip.destination?.name}
+              startAt={formatBookingDateTime(trip.startAt)}
+              endAt={formatBookingDateTime(trip.endAt)}
+              pickupName={
+                trip.pickup
+                  ? `${trip.pickup.name} (${trip.pickup.address})`
+                  : 'Đang cập nhật'
+              }
+              capacityLabel={`Còn ${trip.remainingSlots}/${trip.capacity} chỗ`}
+              priceLabel={
+                trip.pricePerPax
+                  ? `${formatMoneyVND(trip.pricePerPax)} / người`
+                  : 'Chưa có giá'
+              }
+              leaderName={trip.leader?.fullName ?? 'Đang cập nhật'}
+            />
 
             <div className="grid items-start gap-6 lg:grid-cols-2">
-              <section className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-stone-900 border-b border-stone-100 pb-3">
-                  Thông tin hành trình
-                </h2>
-                <div className="space-y-2 text-sm text-stone-700">
-                  <p>📅 Khởi hành: {formatBookingDateTime(trip.startAt)} – {formatBookingDateTime(trip.endAt)}</p>
+              <SurfaceCard className="space-y-4">
+                <SurfaceSectionHeader
+                  title="Thông tin hành trình"
+                  subtitle={trip.description || undefined}
+                />
+                <div className="space-y-2 text-sm text-[#1F2937] tabular-nums">
+                  <p>
+                    📅 Khởi hành: {formatBookingDateTime(trip.startAt)} –{' '}
+                    {formatBookingDateTime(trip.endAt)}
+                  </p>
                   {trip.registrationDeadlineAt && (
                     <p className="text-amber-800 font-medium">
-                      ⏳ Hạn chót đăng ký: {formatBookingDateTime(trip.registrationDeadlineAt)}
+                      ⏳ Hạn chót đăng ký:{' '}
+                      {formatBookingDateTime(trip.registrationDeadlineAt)}
                     </p>
                   )}
                   <p>👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}</p>
-                  <p>📍 Điểm tập kết: {trip.pickup ? `${trip.pickup.name} (${trip.pickup.address})` : 'Đang cập nhật'}</p>
+                  <p>
+                    📍 Điểm tập kết:{' '}
+                    {trip.pickup
+                      ? `${trip.pickup.name} (${trip.pickup.address})`
+                      : 'Đang cập nhật'}
+                  </p>
                 </div>
 
                 {trip.routes && trip.routes.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-bold uppercase text-stone-400">Tuyến đường</h3>
-                    <ul className="mt-2 space-y-1 text-sm text-stone-700">
-                      {trip.routes.map((r: NonNullable<PublicTrip['routes']>[number]) => (
-                        <li key={r.id} className="flex items-center gap-1.5">
-                          • {r.snapshotName} ({r.snapshotDifficulty || 'Cấp 2'}{r.snapshotDistanceKm && ` - ${r.snapshotDistanceKm} km`})
-                        </li>
-                      ))}
+                    <h3 className="text-xs font-bold uppercase text-[#6B7280]">
+                      Tuyến đường
+                    </h3>
+                    <ul className="mt-2 space-y-1 text-sm text-[#1F2937]">
+                      {trip.routes.map(
+                        (r: NonNullable<PublicTrip['routes']>[number]) => (
+                          <li key={r.id} className="flex items-center gap-1.5">
+                            • {r.snapshotName} ({r.snapshotDifficulty || 'Cấp 2'}
+                            {r.snapshotDistanceKm && ` - ${r.snapshotDistanceKm} km`})
+                          </li>
+                        )
+                      )}
                     </ul>
                   </div>
                 )}
 
                 {trip.checkpoints && trip.checkpoints.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-bold uppercase text-stone-400">Trạm kiểm soát</h3>
-                    <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-stone-700">
-                      {trip.checkpoints.map((c: NonNullable<PublicTrip['checkpoints']>[number]) => (
-                        <li key={c.id}>
-                          {c.name}{c.isRequired ? ' (bắt buộc)' : ''}
-                        </li>
-                      ))}
+                    <h3 className="text-xs font-bold uppercase text-[#6B7280]">
+                      Trạm kiểm soát
+                    </h3>
+                    <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-[#1F2937]">
+                      {trip.checkpoints.map(
+                        (c: NonNullable<PublicTrip['checkpoints']>[number]) => (
+                          <li key={c.id}>
+                            {c.name}
+                            {c.isRequired ? ' (bắt buộc)' : ''}
+                          </li>
+                        )
+                      )}
                     </ol>
                   </div>
                 )}
-              </section>
+              </SurfaceCard>
 
-              <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                  <strong className="text-2xl font-bold text-[#125238]">
-                    {trip.pricePerPax ? formatMoneyVND(trip.pricePerPax) : 'Chưa có giá'} / người
+              <SurfaceCard className="space-y-5">
+                <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                  <strong className="text-2xl font-bold text-[#125238] tabular-nums">
+                    {trip.pricePerPax
+                      ? formatMoneyVND(trip.pricePerPax)
+                      : 'Chưa có giá'}{' '}
+                    / người
                   </strong>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-100">
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-[#125238] border border-emerald-100 tabular-nums">
                     Còn {trip.remainingSlots}/{trip.capacity} chỗ
                   </span>
                 </div>
@@ -441,8 +449,16 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                     <SimpleParticipantForm
                       key={`participants-${participantCount}`}
                       initial={Array.from(
-                        { length: Math.max(1, Math.min(trip.remainingSlots, participantCount)) },
-                        (_, i) => ({ fullName: i === 0 ? (user?.fullName ?? '') : '', phone: '' })
+                        {
+                          length: Math.max(
+                            1,
+                            Math.min(trip.remainingSlots, participantCount)
+                          ),
+                        },
+                        (_, i) => ({
+                          fullName: i === 0 ? (user?.fullName ?? '') : '',
+                          phone: '',
+                        })
                       )}
                       max={trip.remainingSlots}
                       busy={isSubmitting}
@@ -450,37 +466,39 @@ export function PublicBookingTrip({ tripId, participantCount = 1 }: { tripId: st
                       onSubmit={handleCreate}
                     />
                   ) : (
-                    <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                      <p className="font-bold">
-                        {isNotOpenYet
+                    <InfoBanner
+                      variant="warning"
+                      title={
+                        isNotOpenYet
                           ? 'Chuyến đi chưa đến giờ mở form đăng ký.'
                           : trip.status === 'CLOSED' || isPastDeadline
                           ? 'Chuyến đi đã đóng sổ đăng ký tạo đơn mới.'
                           : trip.status === 'FULL' || trip.remainingSlots <= 0
                           ? 'Chuyến đi đã đủ số lượng thành viên tối đa.'
-                          : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'}
-                      </p>
-                      <p className="text-xs text-amber-800 leading-relaxed">
-                        Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn vẫn có thể hoàn tất thanh toán trong thời hạn giữ chỗ tại mục{' '}
-                        <Link href="/bookings" className="font-bold underline">
-                          Đặt chỗ của tôi
-                        </Link>
-                        .
-                      </p>
-                    </div>
+                          : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'
+                      }
+                    >
+                      Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn
+                      vẫn có thể hoàn tất thanh toán trong thời hạn giữ chỗ tại mục{' '}
+                      <Link href="/bookings" className="font-bold underline">
+                        Đặt chỗ của tôi
+                      </Link>
+                      .
+                    </InfoBanner>
                   )
                 ) : (
                   <BookingSignIn />
                 )}
 
-                <p className="text-xs text-stone-400 leading-relaxed">
-                  * Số chỗ được kiểm tra và giữ quyền ưu tiên ngay khi bạn gửi yêu cầu đặt chỗ.
+                <p className="text-xs text-[#6B7280] leading-relaxed">
+                  * Số chỗ được kiểm tra và giữ quyền ưu tiên ngay khi bạn gửi yêu cầu đặt
+                  chỗ.
                 </p>
-              </section>
+              </SurfaceCard>
             </div>
           </>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }

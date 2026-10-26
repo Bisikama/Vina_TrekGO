@@ -64,7 +64,7 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
         if (!active) return;
         setBooking(next);
         setExpired(new Date(next.expiresAt).getTime() <= Date.now());
-        if (next.status === 'PENDING_PAYMENT') timer = setTimeout(refresh, 1200);
+        if (next.status === 'PENDING_PAYMENT') timer = setTimeout(refresh, 3500);
       } catch (e) { if (active) setError(bookingError(e).message); }
     };
     void refresh();
