@@ -782,10 +782,10 @@ enum MediaC2paStatus {
 
 model MediaAsset {
   leaderCertificate LeaderCertificate?
-  userGearItems     UserGearItem[]      @relation("R_UserGearItem_photo_ref")
-  id          String  @id @default(uuid()) @db.Uuid
-  ownerUserId String? @map("owner_user_id") @db.Uuid
-  owner       User?   @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  userGearItems     UserGearItem[]     @relation("R_UserGearItem_photo_ref")
+  id                String             @id @default(uuid()) @db.Uuid
+  ownerUserId       String?            @map("owner_user_id") @db.Uuid
+  owner             User?              @relation("R_MediaAsset_owner_user_id", fields: [ownerUserId], references: [id], onDelete: SetNull)
 
   provider     MediaProvider
   scope        MediaScope
@@ -861,80 +861,80 @@ model User {
   updatedAt                      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deactivatedAt                  DateTime?              @map("deactivated_at") @db.Timestamptz(6)
 
-  leaderProfileViaUserId                 LeaderProfile?              @relation("R_LeaderProfile_user_id")
-  leaderProfilesViaVerifiedBy            LeaderProfile[]             @relation("R_LeaderProfile_verified_by")
-  leaderApplicationsViaUserId            LeaderApplication[]         @relation("R_LeaderApplication_user_id")
-  leaderApplicationsViaReviewedBy        LeaderApplication[]         @relation("R_LeaderApplication_reviewed_by")
-  leaderTestsViaCreatedBy                LeaderTest[]                @relation("R_LeaderTest_created_by")
-  leaderTestAttemptsViaUserId            LeaderTestAttempt[]         @relation("R_LeaderTestAttempt_user_id")
-  leaderCertificatesViaUserId            LeaderCertificate[]         @relation("R_LeaderCertificate_user_id")
-  leaderCertificatesViaVerifiedBy        LeaderCertificate[]         @relation("R_LeaderCertificate_verified_by")
-  pickupPointsViaCreatedBy               PickupPoint[]               @relation("R_PickupPoint_created_by")
-  personalTrailsViaUserId                PersonalTrail[]             @relation("R_PersonalTrail_user_id")
-  trailSubmissionsViaSubmittedBy         TrailSubmission[]           @relation("R_TrailSubmission_submitted_by")
-  trailSubmissionsViaReviewedBy          TrailSubmission[]           @relation("R_TrailSubmission_reviewed_by")
-  systemTrailsViaCreatedBy               SystemTrail[]               @relation("R_SystemTrail_created_by")
-  trailAccesssViaUserId                  TrailAccess[]               @relation("R_TrailAccess_user_id")
-  trailRecordingsViaUserId               TrailRecording[]            @relation("R_TrailRecording_user_id")
-  tripsViaCreatorId                      Trip[]                      @relation("R_Trip_creator_id")
-  tripsViaLeaderId                       Trip[]                      @relation("R_Trip_leader_id")
-  tripActiveTrailPlansViaChangedBy       TripActiveTrailPlan[]       @relation("R_TripActiveTrailPlan_changed_by")
-  tripTrailSwitchsViaActorId             TripTrailSwitch[]           @relation("R_TripTrailSwitch_actor_id")
-  tripCheckpointProgresssViaUpdatedBy    TripCheckpointProgress[]    @relation("R_TripCheckpointProgress_updated_by")
-  tripCancellationRequestsViaRequestedBy TripCancellationRequest[]   @relation("R_TripCancellationRequest_requested_by")
-  tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]   @relation("R_TripCancellationRequest_reviewed_by")
-  privateTripInvitesViaCreatedBy         PrivateTripInvite[]         @relation("R_PrivateTripInvite_created_by")
-  privateMemberInvitationsSent           PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationSender")
+  leaderProfileViaUserId                 LeaderProfile?                 @relation("R_LeaderProfile_user_id")
+  leaderProfilesViaVerifiedBy            LeaderProfile[]                @relation("R_LeaderProfile_verified_by")
+  leaderApplicationsViaUserId            LeaderApplication[]            @relation("R_LeaderApplication_user_id")
+  leaderApplicationsViaReviewedBy        LeaderApplication[]            @relation("R_LeaderApplication_reviewed_by")
+  leaderTestsViaCreatedBy                LeaderTest[]                   @relation("R_LeaderTest_created_by")
+  leaderTestAttemptsViaUserId            LeaderTestAttempt[]            @relation("R_LeaderTestAttempt_user_id")
+  leaderCertificatesViaUserId            LeaderCertificate[]            @relation("R_LeaderCertificate_user_id")
+  leaderCertificatesViaVerifiedBy        LeaderCertificate[]            @relation("R_LeaderCertificate_verified_by")
+  pickupPointsViaCreatedBy               PickupPoint[]                  @relation("R_PickupPoint_created_by")
+  personalTrailsViaUserId                PersonalTrail[]                @relation("R_PersonalTrail_user_id")
+  trailSubmissionsViaSubmittedBy         TrailSubmission[]              @relation("R_TrailSubmission_submitted_by")
+  trailSubmissionsViaReviewedBy          TrailSubmission[]              @relation("R_TrailSubmission_reviewed_by")
+  systemTrailsViaCreatedBy               SystemTrail[]                  @relation("R_SystemTrail_created_by")
+  trailAccesssViaUserId                  TrailAccess[]                  @relation("R_TrailAccess_user_id")
+  trailRecordingsViaUserId               TrailRecording[]               @relation("R_TrailRecording_user_id")
+  tripsViaCreatorId                      Trip[]                         @relation("R_Trip_creator_id")
+  tripsViaLeaderId                       Trip[]                         @relation("R_Trip_leader_id")
+  tripActiveTrailPlansViaChangedBy       TripActiveTrailPlan[]          @relation("R_TripActiveTrailPlan_changed_by")
+  tripTrailSwitchsViaActorId             TripTrailSwitch[]              @relation("R_TripTrailSwitch_actor_id")
+  tripCheckpointProgresssViaUpdatedBy    TripCheckpointProgress[]       @relation("R_TripCheckpointProgress_updated_by")
+  tripCancellationRequestsViaRequestedBy TripCancellationRequest[]      @relation("R_TripCancellationRequest_requested_by")
+  tripCancellationRequestsViaReviewedBy  TripCancellationRequest[]      @relation("R_TripCancellationRequest_reviewed_by")
+  privateTripInvitesViaCreatedBy         PrivateTripInvite[]            @relation("R_PrivateTripInvite_created_by")
+  privateMemberInvitationsSent           PrivateTripMemberInvitation[]  @relation("PrivateMemberInvitationSender")
   participantInvitationsSent             BookingParticipantInvitation[] @relation("ParticipantInvitationSender")
   participantInvitationsReceived         BookingParticipantInvitation[] @relation("ParticipantInvitationRecipient")
-  privateMemberInvitationsReceived       PrivateTripMemberInvitation[] @relation("PrivateMemberInvitationRecipient")
-  tripMembersViaUserId                   TripMember[]                @relation("R_TripMember_user_id")
-  tripMembersViaAttendanceMarkedBy       TripMember[]                @relation("R_TripMember_attendance_marked_by")
-  bookingPolicysViaCreatedBy             BookingPolicy[]             @relation("R_BookingPolicy_created_by")
-  bookingsViaUserId                      Booking[]                   @relation("R_Booking_user_id")
-  bookingParticipantsViaUserId           BookingParticipant[]        @relation("R_BookingParticipant_user_id")
-  bookingParticipantsViaCheckedInBy      BookingParticipant[]        @relation("R_BookingParticipant_checked_in_by")
-  bookingCancellationsViaCancelledBy     BookingCancellation[]       @relation("R_BookingCancellation_cancelled_by")
-  rentalPolicysViaCreatedBy              RentalPolicy[]              @relation("R_RentalPolicy_created_by")
-  rentalProductPriceHistorysViaChangedBy RentalProductPriceHistory[] @relation("R_RentalProductPriceHistory_changed_by")
-  rentalQuotesViaUserId                  RentalQuote[]               @relation("R_RentalQuote_user_id")
-  rentalOrdersViaUserId                  RentalOrder[]               @relation("R_RentalOrder_user_id")
-  inventoryTasksViaStaffId               InventoryTask[]             @relation("R_InventoryTask_staff_id")
-  deliveryTasksViaStaffId                DeliveryTask[]              @relation("R_DeliveryTask_staff_id")
-  rentalPickupCodesViaVerifiedBy         RentalPickupCode[]          @relation("R_RentalPickupCode_verified_by")
-  rentalHandoversViaStaffId              RentalHandover[]            @relation("R_RentalHandover_staff_id")
-  conditionSnapshotsViaTakenBy           ConditionSnapshot[]         @relation("R_ConditionSnapshot_taken_by")
-  returnInspectionsViaInspectorId        ReturnInspection[]          @relation("R_ReturnInspection_inspector_id")
-  rentalExceptionCasesViaOpenedBy        RentalExceptionCase[]       @relation("R_RentalExceptionCase_opened_by")
-  rentalExceptionCasesViaAssignedTo      RentalExceptionCase[]       @relation("R_RentalExceptionCase_assigned_to")
-  rentalAssessmentReviewsViaUserId       RentalAssessmentReview[]    @relation("R_RentalAssessmentReview_user_id")
-  depositSettlementsViaSettledBy         DepositSettlement[]         @relation("R_DepositSettlement_settled_by")
-  depositSettlementItemsViaApprovedBy    DepositSettlementItem[]     @relation("R_DepositSettlementItem_approved_by")
-  maintenanceRecordsViaStaffId           MaintenanceRecord[]         @relation("R_MaintenanceRecord_staff_id")
-  custodyEventsViaFromUserId             CustodyEvent[]              @relation("R_CustodyEvent_from_user_id")
-  custodyEventsViaToUserId               CustodyEvent[]              @relation("R_CustodyEvent_to_user_id")
-  custodyEventsViaPerformedBy            CustodyEvent[]              @relation("R_CustodyEvent_performed_by")
-  gpsPolicysViaCreatedBy                 GpsPolicy[]                 @relation("R_GpsPolicy_created_by")
-  gpsSessionsViaUserId                   GpsSession[]                @relation("R_GpsSession_user_id")
-  tripActualRoutesViaUserId              TripActualRoute[]           @relation("R_TripActualRoute_user_id")
-  routeDeviationEventsViaUserId          RouteDeviationEvent[]       @relation("R_RouteDeviationEvent_user_id")
-  checkpointEventsViaUserId              CheckpointEvent[]           @relation("R_CheckpointEvent_user_id")
-  invoicesViaUserId                      Invoice[]                   @relation("R_Invoice_user_id")
-  userRankViaUserId                      UserRank?                   @relation("R_UserRank_user_id")
-  pointTransactionsViaUserId             PointTransaction[]          @relation("R_PointTransaction_user_id")
-  userBadgesViaUserId                    UserBadge[]                 @relation("R_UserBadge_user_id")
-  tripReviewsViaUserId                   TripReview[]                @relation("R_TripReview_user_id")
-  leaderReviewsViaLeaderId               LeaderReview[]              @relation("R_LeaderReview_leader_id")
-  leaderReviewsViaUserId                 LeaderReview[]              @relation("R_LeaderReview_user_id")
-  rentalReviewsViaUserId                 RentalReview[]              @relation("R_RentalReview_user_id")
-  systemConfigsViaUpdatedBy              SystemConfig[]              @relation("R_SystemConfig_updated_by")
-  notificationsViaUserId                 Notification[]              @relation("R_Notification_user_id")
-  auditLogsViaUserId                     AuditLog[]                  @relation("R_AuditLog_user_id")
-  mediaAssetsViaOwnerUserId              MediaAsset[]                @relation("R_MediaAsset_owner_user_id")
-  userGearItems                          UserGearItem[]              @relation("R_UserGearItem_user_id")
-  gearExtractionDrafts                   GearExtractionDraft[]       @relation("R_GearExtractionDraft_user_id")
-  gearPlans                              GearPlan[]                  @relation("R_GearPlan_user_id")
-  gearQuoteLinks                         GearQuoteLink[]             @relation("R_GearQuoteLink_user_id")
+  privateMemberInvitationsReceived       PrivateTripMemberInvitation[]  @relation("PrivateMemberInvitationRecipient")
+  tripMembersViaUserId                   TripMember[]                   @relation("R_TripMember_user_id")
+  tripMembersViaAttendanceMarkedBy       TripMember[]                   @relation("R_TripMember_attendance_marked_by")
+  bookingPolicysViaCreatedBy             BookingPolicy[]                @relation("R_BookingPolicy_created_by")
+  bookingsViaUserId                      Booking[]                      @relation("R_Booking_user_id")
+  bookingParticipantsViaUserId           BookingParticipant[]           @relation("R_BookingParticipant_user_id")
+  bookingParticipantsViaCheckedInBy      BookingParticipant[]           @relation("R_BookingParticipant_checked_in_by")
+  bookingCancellationsViaCancelledBy     BookingCancellation[]          @relation("R_BookingCancellation_cancelled_by")
+  rentalPolicysViaCreatedBy              RentalPolicy[]                 @relation("R_RentalPolicy_created_by")
+  rentalProductPriceHistorysViaChangedBy RentalProductPriceHistory[]    @relation("R_RentalProductPriceHistory_changed_by")
+  rentalQuotesViaUserId                  RentalQuote[]                  @relation("R_RentalQuote_user_id")
+  rentalOrdersViaUserId                  RentalOrder[]                  @relation("R_RentalOrder_user_id")
+  inventoryTasksViaStaffId               InventoryTask[]                @relation("R_InventoryTask_staff_id")
+  deliveryTasksViaStaffId                DeliveryTask[]                 @relation("R_DeliveryTask_staff_id")
+  rentalPickupCodesViaVerifiedBy         RentalPickupCode[]             @relation("R_RentalPickupCode_verified_by")
+  rentalHandoversViaStaffId              RentalHandover[]               @relation("R_RentalHandover_staff_id")
+  conditionSnapshotsViaTakenBy           ConditionSnapshot[]            @relation("R_ConditionSnapshot_taken_by")
+  returnInspectionsViaInspectorId        ReturnInspection[]             @relation("R_ReturnInspection_inspector_id")
+  rentalExceptionCasesViaOpenedBy        RentalExceptionCase[]          @relation("R_RentalExceptionCase_opened_by")
+  rentalExceptionCasesViaAssignedTo      RentalExceptionCase[]          @relation("R_RentalExceptionCase_assigned_to")
+  rentalAssessmentReviewsViaUserId       RentalAssessmentReview[]       @relation("R_RentalAssessmentReview_user_id")
+  depositSettlementsViaSettledBy         DepositSettlement[]            @relation("R_DepositSettlement_settled_by")
+  depositSettlementItemsViaApprovedBy    DepositSettlementItem[]        @relation("R_DepositSettlementItem_approved_by")
+  maintenanceRecordsViaStaffId           MaintenanceRecord[]            @relation("R_MaintenanceRecord_staff_id")
+  custodyEventsViaFromUserId             CustodyEvent[]                 @relation("R_CustodyEvent_from_user_id")
+  custodyEventsViaToUserId               CustodyEvent[]                 @relation("R_CustodyEvent_to_user_id")
+  custodyEventsViaPerformedBy            CustodyEvent[]                 @relation("R_CustodyEvent_performed_by")
+  gpsPolicysViaCreatedBy                 GpsPolicy[]                    @relation("R_GpsPolicy_created_by")
+  gpsSessionsViaUserId                   GpsSession[]                   @relation("R_GpsSession_user_id")
+  tripActualRoutesViaUserId              TripActualRoute[]              @relation("R_TripActualRoute_user_id")
+  routeDeviationEventsViaUserId          RouteDeviationEvent[]          @relation("R_RouteDeviationEvent_user_id")
+  checkpointEventsViaUserId              CheckpointEvent[]              @relation("R_CheckpointEvent_user_id")
+  invoicesViaUserId                      Invoice[]                      @relation("R_Invoice_user_id")
+  userRankViaUserId                      UserRank?                      @relation("R_UserRank_user_id")
+  pointTransactionsViaUserId             PointTransaction[]             @relation("R_PointTransaction_user_id")
+  userBadgesViaUserId                    UserBadge[]                    @relation("R_UserBadge_user_id")
+  tripReviewsViaUserId                   TripReview[]                   @relation("R_TripReview_user_id")
+  leaderReviewsViaLeaderId               LeaderReview[]                 @relation("R_LeaderReview_leader_id")
+  leaderReviewsViaUserId                 LeaderReview[]                 @relation("R_LeaderReview_user_id")
+  rentalReviewsViaUserId                 RentalReview[]                 @relation("R_RentalReview_user_id")
+  systemConfigsViaUpdatedBy              SystemConfig[]                 @relation("R_SystemConfig_updated_by")
+  notificationsViaUserId                 Notification[]                 @relation("R_Notification_user_id")
+  auditLogsViaUserId                     AuditLog[]                     @relation("R_AuditLog_user_id")
+  mediaAssetsViaOwnerUserId              MediaAsset[]                   @relation("R_MediaAsset_owner_user_id")
+  userGearItems                          UserGearItem[]                 @relation("R_UserGearItem_user_id")
+  gearExtractionDrafts                   GearExtractionDraft[]          @relation("R_GearExtractionDraft_user_id")
+  gearPlans                              GearPlan[]                     @relation("R_GearPlan_user_id")
+  gearQuoteLinks                         GearQuoteLink[]                @relation("R_GearQuoteLink_user_id")
 
   returnCustodyTransfersViaFromStaffId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_fromStaffId")
 
@@ -1122,25 +1122,25 @@ model PickupPoint {
 }
 
 model PersonalTrail {
-  tripTrailPlans TripTrailPlan[]         @relation("PrivateTripPersonalTrail")
-  id             String                  @id @default(uuid()) @db.Uuid
-  userId         String                  @map("user_id") @db.Uuid
-  destinationId  String?                 @map("destination_id") @db.Uuid
-  title          String                  @db.VarChar(200)
-  description    String?
-  difficulty     DifficultyLevel?
-  distanceKm     Decimal?                @map("distance_km") @db.Decimal(8, 2)
-  elevationGainM Int?                    @map("elevation_gain_m")
-  elevationLossM Int?                    @map("elevation_loss_m")
-    duration       String?                 @db.VarChar(100)
-  elevationProfile Json?                 @map("elevation_profile")
-  routeGeojson   Json                    @map("route_geojson")
-  visibility     PersonalTrailVisibility @default(PRIVATE)
-  status         RecordStatus            @default(ACTIVE)
-  version        Int                     @default(1)
-  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt     DateTime?               @map("archived_at") @db.Timestamptz(6)
+  tripTrailPlans   TripTrailPlan[]         @relation("PrivateTripPersonalTrail")
+  id               String                  @id @default(uuid()) @db.Uuid
+  userId           String                  @map("user_id") @db.Uuid
+  destinationId    String?                 @map("destination_id") @db.Uuid
+  title            String                  @db.VarChar(200)
+  description      String?
+  difficulty       DifficultyLevel?
+  distanceKm       Decimal?                @map("distance_km") @db.Decimal(8, 2)
+  elevationGainM   Int?                    @map("elevation_gain_m")
+  elevationLossM   Int?                    @map("elevation_loss_m")
+  duration         String?                 @db.VarChar(100)
+  elevationProfile Json?                   @map("elevation_profile")
+  routeGeojson     Json                    @map("route_geojson")
+  visibility       PersonalTrailVisibility @default(PRIVATE)
+  status           RecordStatus            @default(ACTIVE)
+  version          Int                     @default(1)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt       DateTime?               @map("archived_at") @db.Timestamptz(6)
 
   user        User         @relation("R_PersonalTrail_user_id", fields: [userId], references: [id])
   destination Destination? @relation("R_PersonalTrail_destination_id", fields: [destinationId], references: [id])
@@ -1309,8 +1309,8 @@ model TrailRecording {
   distanceKm             Decimal?  @map("distance_km") @db.Decimal(8, 2)
   elevationGainM         Int?      @map("elevation_gain_m")
   elevationLossM         Int?      @map("elevation_loss_m")
-    duration               String?   @db.VarChar(100)
-    elapsedSeconds         Int?      @map("elapsed_seconds")
+  duration               String?   @db.VarChar(100)
+  elapsedSeconds         Int?      @map("elapsed_seconds")
   createdPersonalTrailId String?   @map("created_personal_trail_id") @db.Uuid
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1354,64 +1354,64 @@ model TrailRecordingPoint {
 // =========================================================
 
 model Trip {
-  gpsProjection TripGpsProjection?
-  pickupPointId String?      @map("pickup_point_id") @db.Uuid
-  pickupPoint   PickupPoint? @relation("R_Trip_pickup_point_id", fields: [pickupPointId], references: [id], onDelete: Restrict)
-  id            String       @id @default(uuid()) @db.Uuid
-  tripType      TripType     @map("trip_type")
-  title         String       @db.VarChar(220)
-  description   String?
-  destinationId String       @map("destination_id") @db.Uuid
-  creatorId     String       @map("creator_id") @db.Uuid
+  gpsProjection          TripGpsProjection?
+  pickupPointId          String?            @map("pickup_point_id") @db.Uuid
+  pickupPoint            PickupPoint?       @relation("R_Trip_pickup_point_id", fields: [pickupPointId], references: [id], onDelete: Restrict)
+  id                     String             @id @default(uuid()) @db.Uuid
+  tripType               TripType           @map("trip_type")
+  title                  String             @db.VarChar(220)
+  description            String?
+  destinationId          String             @map("destination_id") @db.Uuid
+  creatorId              String             @map("creator_id") @db.Uuid
   /// Required for PUBLIC; null for PRIVATE self-guided Trip
-  leaderId      String?      @map("leader_id") @db.Uuid
-  startAt       DateTime     @map("start_at") @db.Timestamptz(6)
-  endAt         DateTime     @map("end_at") @db.Timestamptz(6)
-  registrationOpenAt     DateTime?    @map("registration_open_at") @db.Timestamptz(6)
-  registrationDeadlineAt DateTime?    @map("registration_deadline_at") @db.Timestamptz(6)
-  minPax        Int          @default(1) @map("min_pax")
-  maxPax        Int          @map("max_pax")
+  leaderId               String?            @map("leader_id") @db.Uuid
+  startAt                DateTime           @map("start_at") @db.Timestamptz(6)
+  endAt                  DateTime           @map("end_at") @db.Timestamptz(6)
+  registrationOpenAt     DateTime?          @map("registration_open_at") @db.Timestamptz(6)
+  registrationDeadlineAt DateTime?          @map("registration_deadline_at") @db.Timestamptz(6)
+  minPax                 Int                @default(1) @map("min_pax")
+  maxPax                 Int                @map("max_pax")
   /// Required for PUBLIC; null/0 for PRIVATE
-  pricePerPax   Decimal?     @map("price_per_pax") @db.Decimal(12, 2)
-  priceExplanation String? @map("price_explanation") @db.Text
-  status        TripStatus   @default(DRAFT)
-  publishedAt   DateTime?    @map("published_at") @db.Timestamptz(6)
-  closedAt      DateTime?    @map("closed_at") @db.Timestamptz(6)
-  startedAt     DateTime?    @map("started_at") @db.Timestamptz(6)
-  completedAt   DateTime?    @map("completed_at") @db.Timestamptz(6)
-  cancelledAt   DateTime?    @map("cancelled_at") @db.Timestamptz(6)
-  version       Int          @default(1)
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  pricePerPax            Decimal?           @map("price_per_pax") @db.Decimal(12, 2)
+  priceExplanation       String?            @map("price_explanation") @db.Text
+  status                 TripStatus         @default(DRAFT)
+  publishedAt            DateTime?          @map("published_at") @db.Timestamptz(6)
+  closedAt               DateTime?          @map("closed_at") @db.Timestamptz(6)
+  startedAt              DateTime?          @map("started_at") @db.Timestamptz(6)
+  completedAt            DateTime?          @map("completed_at") @db.Timestamptz(6)
+  cancelledAt            DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+  version                Int                @default(1)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   destination Destination @relation("R_Trip_destination_id", fields: [destinationId], references: [id])
   creator     User        @relation("R_Trip_creator_id", fields: [creatorId], references: [id])
   leader      User?       @relation("R_Trip_leader_id", fields: [leaderId], references: [id])
 
-  tripTrailPlansViaTripId           TripTrailPlan[]           @relation("R_TripTrailPlan_trip_id")
-  tripActiveTrailPlanViaTripId      TripActiveTrailPlan?      @relation("R_TripActiveTrailPlan_trip_id")
-  tripTrailSwitchsViaTripId         TripTrailSwitch[]         @relation("R_TripTrailSwitch_trip_id")
-  tripCheckpointsViaTripId          TripCheckpoint[]          @relation("R_TripCheckpoint_trip_id")
-  tripTransportsViaTripId           TripTransport[]           @relation("R_TripTransport_trip_id")
-  tripCancellationRequestsViaTripId TripCancellationRequest[] @relation("R_TripCancellationRequest_trip_id")
-  privateTripInvitesViaTripId       PrivateTripInvite[]       @relation("R_PrivateTripInvite_trip_id")
+  tripTrailPlansViaTripId           TripTrailPlan[]               @relation("R_TripTrailPlan_trip_id")
+  tripActiveTrailPlanViaTripId      TripActiveTrailPlan?          @relation("R_TripActiveTrailPlan_trip_id")
+  tripTrailSwitchsViaTripId         TripTrailSwitch[]             @relation("R_TripTrailSwitch_trip_id")
+  tripCheckpointsViaTripId          TripCheckpoint[]              @relation("R_TripCheckpoint_trip_id")
+  tripTransportsViaTripId           TripTransport[]               @relation("R_TripTransport_trip_id")
+  tripCancellationRequestsViaTripId TripCancellationRequest[]     @relation("R_TripCancellationRequest_trip_id")
+  privateTripInvitesViaTripId       PrivateTripInvite[]           @relation("R_PrivateTripInvite_trip_id")
   privateMemberInvitations          PrivateTripMemberInvitation[]
-  tripMembersViaTripId              TripMember[]              @relation("R_TripMember_trip_id")
-  bookingsViaTripId                 Booking[]                 @relation("R_Booking_trip_id")
-  rentalQuotesViaTripId             RentalQuote[]             @relation("R_RentalQuote_trip_id")
-  rentalOrdersViaTripId             RentalOrder[]             @relation("R_RentalOrder_trip_id")
-  deliveryTasksViaTripId            DeliveryTask[]            @relation("R_DeliveryTask_trip_id")
-  gpsSessionsViaTripId              GpsSession[]              @relation("R_GpsSession_trip_id")
-  routeDeviationEventsViaTripId     RouteDeviationEvent[]     @relation("R_RouteDeviationEvent_trip_id")
-  checkpointEventsViaTripId         CheckpointEvent[]         @relation("R_CheckpointEvent_trip_id")
-  tripActualRoutesViaTripId         TripActualRoute[]         @relation("R_TripActualRoute_trip_id")
-  weatherSnapshotsViaTripId         WeatherSnapshot[]         @relation("R_WeatherSnapshot_trip_id")
-  userBadgesViaTripId               UserBadge[]               @relation("R_UserBadge_trip_id")
-  tripReviewsViaTripId              TripReview[]              @relation("R_TripReview_trip_id")
-  leaderReviewsViaTripId            LeaderReview[]            @relation("R_LeaderReview_trip_id")
-  gearPlans                         GearPlan[]                @relation("R_GearPlan_trip_id")
-  tripCostPlanViaTripId             TripCostPlan?             @relation("R_TripCostPlan_trip_id")
-  tripPricingVersionsViaTripId      TripPricingVersion[]      @relation("R_TripPricingVersion_trip_id")
+  tripMembersViaTripId              TripMember[]                  @relation("R_TripMember_trip_id")
+  bookingsViaTripId                 Booking[]                     @relation("R_Booking_trip_id")
+  rentalQuotesViaTripId             RentalQuote[]                 @relation("R_RentalQuote_trip_id")
+  rentalOrdersViaTripId             RentalOrder[]                 @relation("R_RentalOrder_trip_id")
+  deliveryTasksViaTripId            DeliveryTask[]                @relation("R_DeliveryTask_trip_id")
+  gpsSessionsViaTripId              GpsSession[]                  @relation("R_GpsSession_trip_id")
+  routeDeviationEventsViaTripId     RouteDeviationEvent[]         @relation("R_RouteDeviationEvent_trip_id")
+  checkpointEventsViaTripId         CheckpointEvent[]             @relation("R_CheckpointEvent_trip_id")
+  tripActualRoutesViaTripId         TripActualRoute[]             @relation("R_TripActualRoute_trip_id")
+  weatherSnapshotsViaTripId         WeatherSnapshot[]             @relation("R_WeatherSnapshot_trip_id")
+  userBadgesViaTripId               UserBadge[]                   @relation("R_UserBadge_trip_id")
+  tripReviewsViaTripId              TripReview[]                  @relation("R_TripReview_trip_id")
+  leaderReviewsViaTripId            LeaderReview[]                @relation("R_LeaderReview_trip_id")
+  gearPlans                         GearPlan[]                    @relation("R_GearPlan_trip_id")
+  tripCostPlanViaTripId             TripCostPlan?                 @relation("R_TripCostPlan_trip_id")
+  tripPricingVersionsViaTripId      TripPricingVersion[]          @relation("R_TripPricingVersion_trip_id")
 
   @@index([tripType, status, startAt])
   @@index([destinationId, startAt])
@@ -1641,21 +1641,21 @@ model PrivateTripInvite {
 
 model PrivateTripMemberInvitation {
   // Partial unique PENDING per (trip, recipient) is enforced in SQL.
-  id                       String           @id @default(uuid()) @db.Uuid
-  tripId                   String           @map("trip_id") @db.Uuid
-  senderUserId             String           @map("sender_user_id") @db.Uuid
-  recipientUserId          String           @map("recipient_user_id") @db.Uuid
-  recipientEmailSnapshot   String           @map("recipient_email_snapshot") @db.VarChar(255)
-  status                   InvitationStatus @default(PENDING)
-  expiresAt                DateTime         @map("expires_at") @db.Timestamptz(6)
-  respondedAt              DateTime?        @map("responded_at") @db.Timestamptz(6)
-  invalidatedAt            DateTime?        @map("invalidated_at") @db.Timestamptz(6)
-  reason                   String?          @db.VarChar(100)
-  acceptedMemberId         String?          @map("accepted_member_id") @db.Uuid
-  membershipVersionAtAccept Int?            @map("membership_version_at_accept")
-  version                  Int              @default(1)
-  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                        String           @id @default(uuid()) @db.Uuid
+  tripId                    String           @map("trip_id") @db.Uuid
+  senderUserId              String           @map("sender_user_id") @db.Uuid
+  recipientUserId           String           @map("recipient_user_id") @db.Uuid
+  recipientEmailSnapshot    String           @map("recipient_email_snapshot") @db.VarChar(255)
+  status                    InvitationStatus @default(PENDING)
+  expiresAt                 DateTime         @map("expires_at") @db.Timestamptz(6)
+  respondedAt               DateTime?        @map("responded_at") @db.Timestamptz(6)
+  invalidatedAt             DateTime?        @map("invalidated_at") @db.Timestamptz(6)
+  reason                    String?          @db.VarChar(100)
+  acceptedMemberId          String?          @map("accepted_member_id") @db.Uuid
+  membershipVersionAtAccept Int?             @map("membership_version_at_accept")
+  version                   Int              @default(1)
+  createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   trip           Trip        @relation(fields: [tripId], references: [id], onDelete: Restrict)
   sender         User        @relation("PrivateMemberInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
@@ -1672,10 +1672,10 @@ model PrivateTripMemberInvitation {
 
 // Invitation-only fixed-window counters. No general-purpose rate-limit framework.
 model PrivateInvitationRateBucket {
-  actorId     String   @map("actor_id") @db.Uuid
-  bucket      String   @db.VarChar(32)
-  count       Int      @default(0)
-  resetsAt    DateTime @map("resets_at") @db.Timestamptz(6)
+  actorId  String   @map("actor_id") @db.Uuid
+  bucket   String   @db.VarChar(32)
+  count    Int      @default(0)
+  resetsAt DateTime @map("resets_at") @db.Timestamptz(6)
 
   @@id([actorId, bucket])
   @@index([resetsAt])
@@ -1706,7 +1706,7 @@ model TripMember {
   pickupPoint            PickupPoint?       @relation("R_TripMember_pickup_point_id", fields: [pickupPointId], references: [id])
   attendanceMarkedByUser User?              @relation("R_TripMember_attendance_marked_by", fields: [attendanceMarkedBy], references: [id])
 
-  tripReviewsViaMemberId TripReview[] @relation("R_TripReview_member_id")
+  tripReviewsViaMemberId     TripReview[]                  @relation("R_TripReview_member_id")
   acceptedPrivateInvitations PrivateTripMemberInvitation[]
 
   @@unique([tripId, userId])
@@ -1800,24 +1800,24 @@ model Booking {
 
 model BookingParticipant {
   invitations           BookingParticipantInvitation[]
-  id                    String            @id @default(uuid()) @db.Uuid
-  bookingId             String            @map("booking_id") @db.Uuid
+  id                    String                         @id @default(uuid()) @db.Uuid
+  bookingId             String                         @map("booking_id") @db.Uuid
   /// Nullable for non-account participant.
-  userId                String?           @map("user_id") @db.Uuid
-  fullName              String            @map("full_name") @db.VarChar(150)
-  phone                 String?           @db.VarChar(30)
-  dateOfBirth           DateTime?         @map("date_of_birth") @db.Date
-  idDocumentNo          String?           @map("id_document_no") @db.VarChar(80)
-  emergencyContactName  String?           @map("emergency_contact_name") @db.VarChar(150)
-  emergencyContactPhone String?           @map("emergency_contact_phone") @db.VarChar(30)
-  status                ParticipantStatus @default(ACTIVE)
-  checkinCode           String            @unique @map("checkin_code") @db.VarChar(160)
-  checkinStatus         CheckinStatus     @default(NOT_CHECKED_IN) @map("checkin_status")
-  checkinMethod         CheckinMethod?    @map("checkin_method")
-  checkedInAt           DateTime?         @map("checked_in_at") @db.Timestamptz(6)
-  checkedInBy           String?           @map("checked_in_by") @db.Uuid
-  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  userId                String?                        @map("user_id") @db.Uuid
+  fullName              String                         @map("full_name") @db.VarChar(150)
+  phone                 String?                        @db.VarChar(30)
+  dateOfBirth           DateTime?                      @map("date_of_birth") @db.Date
+  idDocumentNo          String?                        @map("id_document_no") @db.VarChar(80)
+  emergencyContactName  String?                        @map("emergency_contact_name") @db.VarChar(150)
+  emergencyContactPhone String?                        @map("emergency_contact_phone") @db.VarChar(30)
+  status                ParticipantStatus              @default(ACTIVE)
+  checkinCode           String                         @unique @map("checkin_code") @db.VarChar(160)
+  checkinStatus         CheckinStatus                  @default(NOT_CHECKED_IN) @map("checkin_status")
+  checkinMethod         CheckinMethod?                 @map("checkin_method")
+  checkedInAt           DateTime?                      @map("checked_in_at") @db.Timestamptz(6)
+  checkedInBy           String?                        @map("checked_in_by") @db.Uuid
+  createdAt             DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   booking         Booking @relation("R_BookingParticipant_booking_id", fields: [bookingId], references: [id])
   user            User?   @relation("R_BookingParticipant_user_id", fields: [userId], references: [id])
@@ -1832,22 +1832,23 @@ model BookingParticipant {
 }
 
 model BookingParticipantInvitation {
-  id                       String @id @default(uuid()) @db.Uuid
-  bookingParticipantId     String @map("booking_participant_id") @db.Uuid
-  senderUserId             String @map("sender_user_id") @db.Uuid
-  recipientUserId          String @map("recipient_user_id") @db.Uuid
-  recipientEmailSnapshot   String @map("recipient_email_snapshot") @db.VarChar(255)
-  status                   InvitationStatus @default(PENDING)
-  expiresAt                DateTime @map("expires_at") @db.Timestamptz(6)
-  respondedAt              DateTime? @map("responded_at") @db.Timestamptz(6)
-  invalidatedAt            DateTime? @map("invalidated_at") @db.Timestamptz(6)
-  reason                   String? @db.VarChar(100)
-  version                  Int @default(1)
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  participant BookingParticipant @relation(fields: [bookingParticipantId], references: [id], onDelete: Restrict)
-  sender User @relation("ParticipantInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
-  recipient User @relation("ParticipantInvitationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  id                     String             @id @default(uuid()) @db.Uuid
+  bookingParticipantId   String             @map("booking_participant_id") @db.Uuid
+  senderUserId           String             @map("sender_user_id") @db.Uuid
+  recipientUserId        String             @map("recipient_user_id") @db.Uuid
+  recipientEmailSnapshot String             @map("recipient_email_snapshot") @db.VarChar(255)
+  status                 InvitationStatus   @default(PENDING)
+  expiresAt              DateTime           @map("expires_at") @db.Timestamptz(6)
+  respondedAt            DateTime?          @map("responded_at") @db.Timestamptz(6)
+  invalidatedAt          DateTime?          @map("invalidated_at") @db.Timestamptz(6)
+  reason                 String?            @db.VarChar(100)
+  version                Int                @default(1)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  participant            BookingParticipant @relation(fields: [bookingParticipantId], references: [id], onDelete: Restrict)
+  sender                 User               @relation("ParticipantInvitationSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  recipient              User               @relation("ParticipantInvitationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+
   @@index([recipientUserId, createdAt, id], map: "public_invitation_recipient_idx")
   @@index([senderUserId, createdAt, id], map: "public_invitation_sender_idx")
   @@index([status, expiresAt], map: "booking_participant_invitations_status_expires_at_idx")
@@ -1881,13 +1882,14 @@ model BookingCancellation {
 }
 
 model BookingNotificationReceipt {
-  eventId String @map("event_id") @db.Uuid
-  consumer String @db.VarChar(100)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
-  attempts Int @default(0)
-  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
-  lastError String? @map("last_error") @db.VarChar(100)
-  event BookingOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  eventId       String             @map("event_id") @db.Uuid
+  consumer      String             @db.VarChar(100)
+  completedAt   DateTime?          @map("completed_at") @db.Timestamptz(6)
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime           @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?            @map("last_error") @db.VarChar(100)
+  event         BookingOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
   @@id([eventId, consumer])
   @@index([consumer, completedAt, nextAttemptAt], map: "booking_notification_retry_idx")
   @@map("booking_notification_receipts")
@@ -1895,19 +1897,19 @@ model BookingNotificationReceipt {
 
 model BookingOutboxEvent {
   notificationReceipts BookingNotificationReceipt[]
-  id               String      @id @default(uuid()) @db.Uuid
+  id                   String                       @id @default(uuid()) @db.Uuid
   /// Identity of an integration event; different from request idempotency_key
-  deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
-  eventType        String      @map("event_type") @db.VarChar(140)
-  aggregateType    String      @map("aggregate_type") @db.VarChar(100)
-  aggregateId      String      @map("aggregate_id") @db.Uuid
-  payload          Json
-  status           EventStatus @default(PENDING)
-  retryCount       Int         @default(0) @map("retry_count")
-  lastError        String?     @map("last_error")
-  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  publishedAt      DateTime?   @map("published_at") @db.Timestamptz(6)
-  processedAt      DateTime?   @map("processed_at") @db.Timestamptz(6)
+  deduplicationKey     String                       @unique @map("deduplication_key") @db.VarChar(220)
+  eventType            String                       @map("event_type") @db.VarChar(140)
+  aggregateType        String                       @map("aggregate_type") @db.VarChar(100)
+  aggregateId          String                       @map("aggregate_id") @db.Uuid
+  payload              Json
+  status               EventStatus                  @default(PENDING)
+  retryCount           Int                          @default(0) @map("retry_count")
+  lastError            String?                      @map("last_error")
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt          DateTime?                    @map("published_at") @db.Timestamptz(6)
+  processedAt          DateTime?                    @map("processed_at") @db.Timestamptz(6)
 
   @@index([status, createdAt])
   @@index([aggregateType, aggregateId, createdAt])
@@ -1941,7 +1943,7 @@ model InventoryLocation {
   custodyEventsViaToInventoryLocationId       CustodyEvent[]      @relation("R_CustodyEvent_to_inventory_location_id")
 
   returnCustodyTransfersViaInventoryLocationId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_inventoryLocationId")
-  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_location")
+  returnInspectionTasks                        ReturnInspectionTask[]  @relation("R_ReturnInspectionTask_location")
 
   @@index([status])
   @@map("inventory_locations")
@@ -2051,16 +2053,16 @@ model EquipmentUnit {
   homeInventoryLocation    InventoryLocation  @relation("R_EquipmentUnit_home_inventory_location_id", fields: [homeInventoryLocationId], references: [id])
   currentInventoryLocation InventoryLocation? @relation("R_EquipmentUnit_current_inventory_location_id", fields: [currentInventoryLocationId], references: [id])
 
-  rentalUnitAssignmentsViaEquipmentUnitId RentalUnitAssignment[]  @relation("R_RentalUnitAssignment_equipment_unit_id")
-  packageItemsViaEquipmentUnitId          PackageItem[]           @relation("R_PackageItem_equipment_unit_id")
-  conditionSnapshotsViaUnitId             ConditionSnapshot[]     @relation("R_ConditionSnapshot_unit_id")
-  returnInspectionsViaUnitId              ReturnInspection[]      @relation("R_ReturnInspection_unit_id")
-  rentalExceptionCasesViaUnitId           RentalExceptionCase[]   @relation("R_RentalExceptionCase_unit_id")
-  depositSettlementItemsViaUnitId         DepositSettlementItem[] @relation("R_DepositSettlementItem_unit_id")
-  maintenanceRecordsViaUnitId             MaintenanceRecord[]     @relation("R_MaintenanceRecord_unit_id")
-  custodyEventsViaUnitId                  CustodyEvent[]          @relation("R_CustodyEvent_unit_id")
-  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_unit")
-  readinessCommitmentsViaUnitId RentalReadinessCommitment[] @relation("R_RentalReadinessCommitment_unit")
+  rentalUnitAssignmentsViaEquipmentUnitId RentalUnitAssignment[]      @relation("R_RentalUnitAssignment_equipment_unit_id")
+  packageItemsViaEquipmentUnitId          PackageItem[]               @relation("R_PackageItem_equipment_unit_id")
+  conditionSnapshotsViaUnitId             ConditionSnapshot[]         @relation("R_ConditionSnapshot_unit_id")
+  returnInspectionsViaUnitId              ReturnInspection[]          @relation("R_ReturnInspection_unit_id")
+  rentalExceptionCasesViaUnitId           RentalExceptionCase[]       @relation("R_RentalExceptionCase_unit_id")
+  depositSettlementItemsViaUnitId         DepositSettlementItem[]     @relation("R_DepositSettlementItem_unit_id")
+  maintenanceRecordsViaUnitId             MaintenanceRecord[]         @relation("R_MaintenanceRecord_unit_id")
+  custodyEventsViaUnitId                  CustodyEvent[]              @relation("R_CustodyEvent_unit_id")
+  returnInspectionTasks                   ReturnInspectionTask[]      @relation("R_ReturnInspectionTask_unit")
+  readinessCommitmentsViaUnitId           RentalReadinessCommitment[] @relation("R_RentalReadinessCommitment_unit")
 
   @@index([productId, status, condition])
   @@index([currentInventoryLocationId, status])
@@ -2071,41 +2073,41 @@ model EquipmentUnit {
 /// Versioned rental business policy. Quotes/orders persist policy snapshot so later rule changes never rewrite historical financial decisions.
 /// Versioned rental business policy. Quotes/orders persist policy snapshots so later rule changes never rewrite history.
 model RentalPolicy {
-  id                            String             @id @default(uuid()) @db.Uuid
-  policyCode                    String             @map("policy_code") @db.VarChar(80)
-  versionNo                     Int                @map("version_no")
-  currency                      String             @default("VND") @db.Char(3)
-  dayCountMode                  RentalDayCountMode @default(CEIL_24H) @map("day_count_mode")
-  quoteTtlMinutes               Int                @map("quote_ttl_minutes")
-  paymentHoldMinutes            Int                @default(15) @map("payment_hold_minutes")
-  freeCancellationHours         Int                @default(24) @map("free_cancellation_hours")
-  pickupCodeTtlMinutes          Int?               @map("pickup_code_ttl_minutes")
-  pickupVerificationTtlMinutes  Int?               @map("pickup_verification_ttl_minutes")
-  overdueReviewMinutes          Int?               @map("overdue_review_minutes")
-  deepInspectionReviewMinutes   Int?               @map("deep_inspection_review_minutes")
-  adminApprovalMinutes          Int?               @map("admin_approval_minutes")
-  userAssessmentReviewMinutes   Int?               @map("user_assessment_review_minutes")
-  lostConfirmationMinutes       Int?               @map("lost_confirmation_minutes")
-  cutoffHoursBeforeTrip         Int                @map("cutoff_hours_before_trip")
-  prepBufferMinutes             Int                @default(0) @map("prep_buffer_minutes")
-  returnBufferMinutes           Int                @default(0) @map("return_buffer_minutes")
-  cleaningBufferMinutes         Int                @default(0) @map("cleaning_buffer_minutes")
-  maxRentalAfterTripHours       Int?               @map("max_rental_after_trip_hours")
-  extensionRequestCutoffMinutes Int?               @map("extension_request_cutoff_minutes")
-  extensionHoldMinutes          Int?               @map("extension_hold_minutes")
-  maxExtensionCount             Int?               @map("max_extension_count")
-  maxTotalRentalDays            Int?               @map("max_total_rental_days")
-  deepInspectionBufferMinutes   Int?               @map("deep_inspection_buffer_minutes")
-  returnInspectionSlaHours Int? @map("return_inspection_sla_hours")
-  deepInspectionSlaHours Int? @map("deep_inspection_sla_hours")
-  returnToInventoryAllowanceHours Int? @map("return_to_inventory_allowance_hours")
-  postInspectionCleaningAllowanceHours Int? @map("post_inspection_cleaning_allowance_hours")
-  cancellationRules             Json               @map("cancellation_rules")
-  effectiveFrom                 DateTime           @map("effective_from") @db.Timestamptz(6)
-  effectiveTo                   DateTime?          @map("effective_to") @db.Timestamptz(6)
-  isActive                      Boolean            @default(true) @map("is_active")
-  createdBy                     String?            @map("created_by") @db.Uuid
-  createdAt                     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                                   String             @id @default(uuid()) @db.Uuid
+  policyCode                           String             @map("policy_code") @db.VarChar(80)
+  versionNo                            Int                @map("version_no")
+  currency                             String             @default("VND") @db.Char(3)
+  dayCountMode                         RentalDayCountMode @default(CEIL_24H) @map("day_count_mode")
+  quoteTtlMinutes                      Int                @map("quote_ttl_minutes")
+  paymentHoldMinutes                   Int                @default(15) @map("payment_hold_minutes")
+  freeCancellationHours                Int                @default(24) @map("free_cancellation_hours")
+  pickupCodeTtlMinutes                 Int?               @map("pickup_code_ttl_minutes")
+  pickupVerificationTtlMinutes         Int?               @map("pickup_verification_ttl_minutes")
+  overdueReviewMinutes                 Int?               @map("overdue_review_minutes")
+  deepInspectionReviewMinutes          Int?               @map("deep_inspection_review_minutes")
+  adminApprovalMinutes                 Int?               @map("admin_approval_minutes")
+  userAssessmentReviewMinutes          Int?               @map("user_assessment_review_minutes")
+  lostConfirmationMinutes              Int?               @map("lost_confirmation_minutes")
+  cutoffHoursBeforeTrip                Int                @map("cutoff_hours_before_trip")
+  prepBufferMinutes                    Int                @default(0) @map("prep_buffer_minutes")
+  returnBufferMinutes                  Int                @default(0) @map("return_buffer_minutes")
+  cleaningBufferMinutes                Int                @default(0) @map("cleaning_buffer_minutes")
+  maxRentalAfterTripHours              Int?               @map("max_rental_after_trip_hours")
+  extensionRequestCutoffMinutes        Int?               @map("extension_request_cutoff_minutes")
+  extensionHoldMinutes                 Int?               @map("extension_hold_minutes")
+  maxExtensionCount                    Int?               @map("max_extension_count")
+  maxTotalRentalDays                   Int?               @map("max_total_rental_days")
+  deepInspectionBufferMinutes          Int?               @map("deep_inspection_buffer_minutes")
+  returnInspectionSlaHours             Int?               @map("return_inspection_sla_hours")
+  deepInspectionSlaHours               Int?               @map("deep_inspection_sla_hours")
+  returnToInventoryAllowanceHours      Int?               @map("return_to_inventory_allowance_hours")
+  postInspectionCleaningAllowanceHours Int?               @map("post_inspection_cleaning_allowance_hours")
+  cancellationRules                    Json               @map("cancellation_rules")
+  effectiveFrom                        DateTime           @map("effective_from") @db.Timestamptz(6)
+  effectiveTo                          DateTime?          @map("effective_to") @db.Timestamptz(6)
+  isActive                             Boolean            @default(true) @map("is_active")
+  createdBy                            String?            @map("created_by") @db.Uuid
+  createdAt                            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
   createdByUser User? @relation("R_RentalPolicy_created_by", fields: [createdBy], references: [id])
 
@@ -2141,41 +2143,42 @@ model RentalProductPriceHistory {
 }
 
 /// Quote is a time-limited price offer. It freezes product price/deposit/policy through RENTAL_QUOTE_LINES; later catalog price changes do not alter this quote.
-/// Rental is available only for PUBLIC Trips.
-/// A valid CONFIRMED Booking is required before creating a Rental Quote.
+/// Rental requires an Area A Trip membership. bookingId is provenance only.
 /// PRIVATE Trips are not eligible for equipment rental.
 /// Quote freezes price/deposit/policy but DOES NOT reserve capacity.
 model RentalQuote {
-  id                     String            @id @default(uuid()) @db.Uuid
-  userId                 String            @map("user_id") @db.Uuid
-  tripId                 String            @map("trip_id") @db.Uuid
-  bookingId              String?           @map("booking_id") @db.Uuid
-  membershipRef          String?           @map("membership_ref") @db.Uuid
-  membershipSnapshot     Json?             @map("membership_snapshot")
-  pickupPointId          String?           @map("pickup_point_id") @db.Uuid
-  returnPointId          String?           @map("return_point_id") @db.Uuid
-  returnOptionSnapshot   Json?             @map("return_option_snapshot")
-  recipientUserId        String?           @map("recipient_user_id") @db.Uuid
-  recipientParticipantId String?           @map("recipient_participant_id") @db.Uuid
-  recipientSnapshot      Json              @map("recipient_snapshot")
-  contextVersion         Int               @map("context_version")
-  rentalPolicyId         String            @map("rental_policy_id") @db.Uuid
-  rentalStartAt          DateTime          @map("rental_start_at") @db.Timestamptz(6)
-  rentalEndAt            DateTime          @map("rental_end_at") @db.Timestamptz(6)
-  plannedHandoverAt      DateTime          @map("planned_handover_at") @db.Timestamptz(6)
-  plannedReturnAt        DateTime          @map("planned_return_at") @db.Timestamptz(6)
-  occupiedStartAt        DateTime          @map("occupied_start_at") @db.Timestamptz(6)
-  occupiedEndAt          DateTime          @map("occupied_end_at") @db.Timestamptz(6)
-  rentalFee              Decimal           @map("rental_fee") @db.Decimal(12, 2)
-  totalDeposit           Decimal           @map("total_deposit") @db.Decimal(12, 2)
-  totalAmount            Decimal           @map("total_amount") @db.Decimal(12, 2)
-  currency               String            @default("VND") @db.Char(3)
-  policySnapshot         Json              @map("policy_snapshot")
-  status                 RentalQuoteStatus @default(ACTIVE)
-  expiresAt              DateTime          @map("expires_at") @db.Timestamptz(6)
-  version                Int               @default(1)
-  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                      String            @id @default(uuid()) @db.Uuid
+  userId                  String            @map("user_id") @db.Uuid
+  tripId                  String            @map("trip_id") @db.Uuid
+  bookingId               String?           @map("booking_id") @db.Uuid
+  membershipKind          String?           @map("membership_kind") @db.VarChar(40)
+  membershipRef           String?           @map("membership_ref") @db.Uuid
+  membershipSourceVersion Int?              @map("membership_source_version")
+  membershipSnapshot      Json?             @map("membership_snapshot")
+  pickupPointId           String?           @map("pickup_point_id") @db.Uuid
+  returnPointId           String?           @map("return_point_id") @db.Uuid
+  returnOptionSnapshot    Json?             @map("return_option_snapshot")
+  recipientUserId         String?           @map("recipient_user_id") @db.Uuid
+  recipientParticipantId  String?           @map("recipient_participant_id") @db.Uuid
+  recipientSnapshot       Json              @map("recipient_snapshot")
+  contextVersion          Int               @map("context_version")
+  rentalPolicyId          String            @map("rental_policy_id") @db.Uuid
+  rentalStartAt           DateTime          @map("rental_start_at") @db.Timestamptz(6)
+  rentalEndAt             DateTime          @map("rental_end_at") @db.Timestamptz(6)
+  plannedHandoverAt       DateTime          @map("planned_handover_at") @db.Timestamptz(6)
+  plannedReturnAt         DateTime          @map("planned_return_at") @db.Timestamptz(6)
+  occupiedStartAt         DateTime          @map("occupied_start_at") @db.Timestamptz(6)
+  occupiedEndAt           DateTime          @map("occupied_end_at") @db.Timestamptz(6)
+  rentalFee               Decimal           @map("rental_fee") @db.Decimal(12, 2)
+  totalDeposit            Decimal           @map("total_deposit") @db.Decimal(12, 2)
+  totalAmount             Decimal           @map("total_amount") @db.Decimal(12, 2)
+  currency                String            @default("VND") @db.Char(3)
+  policySnapshot          Json              @map("policy_snapshot")
+  status                  RentalQuoteStatus @default(ACTIVE)
+  expiresAt               DateTime          @map("expires_at") @db.Timestamptz(6)
+  version                 Int               @default(1)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user                 User                @relation("R_RentalQuote_user_id", fields: [userId], references: [id])
   trip                 Trip                @relation("R_RentalQuote_trip_id", fields: [tripId], references: [id])
@@ -2190,25 +2193,26 @@ model RentalQuote {
   @@index([userId, status])
   @@index([tripId, status])
   @@index([bookingId, status])
+  @@index([membershipKind, membershipRef, status])
   @@index([rentalPolicyId])
   @@index([expiresAt])
   @@map("rental_quotes")
 }
 
 model RentalQuoteLine {
-  id                       String   @id @default(uuid()) @db.Uuid
-  quoteId                  String   @map("quote_id") @db.Uuid
-  productId                String   @map("product_id") @db.Uuid
+  id                       String    @id @default(uuid()) @db.Uuid
+  quoteId                  String    @map("quote_id") @db.Uuid
+  productId                String    @map("product_id") @db.Uuid
   quantity                 Int
-  dailyPriceSnapshot       Decimal  @map("daily_price_snapshot") @db.Decimal(12, 2)
-  depositPerUnitSnapshot   Decimal  @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
-  replacementValueSnapshot Decimal  @map("replacement_value_snapshot") @db.Decimal(12, 2)
-  chargedDays              Int      @map("charged_days")
-  lineRentalFee            Decimal  @map("line_rental_fee") @db.Decimal(12, 2)
-  lineDeposit              Decimal  @map("line_deposit") @db.Decimal(12, 2)
-  occupiedFrom DateTime? @map("occupied_from") @db.Timestamptz(6)
-  occupiedUntil DateTime? @map("occupied_until") @db.Timestamptz(6)
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  dailyPriceSnapshot       Decimal   @map("daily_price_snapshot") @db.Decimal(12, 2)
+  depositPerUnitSnapshot   Decimal   @map("deposit_per_unit_snapshot") @db.Decimal(12, 2)
+  replacementValueSnapshot Decimal   @map("replacement_value_snapshot") @db.Decimal(12, 2)
+  chargedDays              Int       @map("charged_days")
+  lineRentalFee            Decimal   @map("line_rental_fee") @db.Decimal(12, 2)
+  lineDeposit              Decimal   @map("line_deposit") @db.Decimal(12, 2)
+  occupiedFrom             DateTime? @map("occupied_from") @db.Timestamptz(6)
+  occupiedUntil            DateTime? @map("occupied_until") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   quote   RentalQuote   @relation("R_RentalQuoteLine_quote_id", fields: [quoteId], references: [id])
   product RentalProduct @relation("R_RentalQuoteLine_product_id", fields: [productId], references: [id])
@@ -2220,43 +2224,45 @@ model RentalQuoteLine {
 /// Rental billing dates come from Trip. occupied_* includes operational preparation/return/cleaning buffers and is the window used for reservation overlap.
 /// Billing dates come from Trip. occupied_* includes preparation/return/cleaning buffers.
 model RentalOrder {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  quoteId                String                     @unique @map("quote_id") @db.Uuid
-  rentalPolicyId         String                     @map("rental_policy_id") @db.Uuid
-  userId                 String                     @map("user_id") @db.Uuid
-  tripId                 String                     @map("trip_id") @db.Uuid
-  bookingId              String?                    @map("booking_id") @db.Uuid
-  membershipRef          String?                    @map("membership_ref") @db.Uuid
-  membershipSnapshot     Json?                      @map("membership_snapshot")
-  returnOptionSnapshot   Json?                      @map("return_option_snapshot")
-  recipientUserId        String?                    @map("recipient_user_id") @db.Uuid
-  recipientParticipantId String?                    @map("recipient_participant_id") @db.Uuid
-  recipientSnapshot      Json                       @map("recipient_snapshot")
-  pickupPointId          String                     @map("pickup_point_id") @db.Uuid
-  returnPointId          String                     @map("return_point_id") @db.Uuid
-  contextVersionSnapshot Int                        @map("context_version_snapshot")
-  operationalReturnDueAt DateTime?                  @map("operational_return_due_at") @db.Timestamptz(6)
-  rentalStartAt          DateTime                   @map("rental_start_at") @db.Timestamptz(6)
-  rentalEndAt            DateTime                   @map("rental_end_at") @db.Timestamptz(6)
-  plannedHandoverAt      DateTime                   @map("planned_handover_at") @db.Timestamptz(6)
-  plannedReturnAt        DateTime                   @map("planned_return_at") @db.Timestamptz(6)
-  occupiedStartAt        DateTime                   @map("occupied_start_at") @db.Timestamptz(6)
-  occupiedEndAt          DateTime                   @map("occupied_end_at") @db.Timestamptz(6)
-  status                 RentalOrderStatus          @default(PENDING_PAYMENT)
-  exceptionStatus        RentalOrderExceptionStatus @default(NONE) @map("exception_status")
-  financialStatus        RentalFinancialStatus      @default(UNPAID) @map("financial_status")
-  rentalFee              Decimal                    @map("rental_fee") @db.Decimal(12, 2)
-  totalDeposit           Decimal                    @map("total_deposit") @db.Decimal(12, 2)
-  totalAmount            Decimal                    @map("total_amount") @db.Decimal(12, 2)
-  currency               String                     @default("VND") @db.Char(3)
-  policySnapshot         Json                       @map("policy_snapshot")
-  paymentExpiresAt       DateTime                   @map("payment_expires_at") @db.Timestamptz(6)
-  paidAt                 DateTime?                  @map("paid_at") @db.Timestamptz(6)
-  cancelledAt            DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
-  completedAt            DateTime?                  @map("completed_at") @db.Timestamptz(6)
-  version                Int                        @default(1)
-  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                      String                     @id @default(uuid()) @db.Uuid
+  quoteId                 String                     @unique @map("quote_id") @db.Uuid
+  rentalPolicyId          String                     @map("rental_policy_id") @db.Uuid
+  userId                  String                     @map("user_id") @db.Uuid
+  tripId                  String                     @map("trip_id") @db.Uuid
+  bookingId               String?                    @map("booking_id") @db.Uuid
+  membershipKind          String?                    @map("membership_kind") @db.VarChar(40)
+  membershipRef           String?                    @map("membership_ref") @db.Uuid
+  membershipSourceVersion Int?                       @map("membership_source_version")
+  membershipSnapshot      Json?                      @map("membership_snapshot")
+  returnOptionSnapshot    Json?                      @map("return_option_snapshot")
+  recipientUserId         String?                    @map("recipient_user_id") @db.Uuid
+  recipientParticipantId  String?                    @map("recipient_participant_id") @db.Uuid
+  recipientSnapshot       Json                       @map("recipient_snapshot")
+  pickupPointId           String                     @map("pickup_point_id") @db.Uuid
+  returnPointId           String                     @map("return_point_id") @db.Uuid
+  contextVersionSnapshot  Int                        @map("context_version_snapshot")
+  operationalReturnDueAt  DateTime?                  @map("operational_return_due_at") @db.Timestamptz(6)
+  rentalStartAt           DateTime                   @map("rental_start_at") @db.Timestamptz(6)
+  rentalEndAt             DateTime                   @map("rental_end_at") @db.Timestamptz(6)
+  plannedHandoverAt       DateTime                   @map("planned_handover_at") @db.Timestamptz(6)
+  plannedReturnAt         DateTime                   @map("planned_return_at") @db.Timestamptz(6)
+  occupiedStartAt         DateTime                   @map("occupied_start_at") @db.Timestamptz(6)
+  occupiedEndAt           DateTime                   @map("occupied_end_at") @db.Timestamptz(6)
+  status                  RentalOrderStatus          @default(PENDING_PAYMENT)
+  exceptionStatus         RentalOrderExceptionStatus @default(NONE) @map("exception_status")
+  financialStatus         RentalFinancialStatus      @default(UNPAID) @map("financial_status")
+  rentalFee               Decimal                    @map("rental_fee") @db.Decimal(12, 2)
+  totalDeposit            Decimal                    @map("total_deposit") @db.Decimal(12, 2)
+  totalAmount             Decimal                    @map("total_amount") @db.Decimal(12, 2)
+  currency                String                     @default("VND") @db.Char(3)
+  policySnapshot          Json                       @map("policy_snapshot")
+  paymentExpiresAt        DateTime                   @map("payment_expires_at") @db.Timestamptz(6)
+  paidAt                  DateTime?                  @map("paid_at") @db.Timestamptz(6)
+  cancelledAt             DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
+  completedAt             DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  version                 Int                        @default(1)
+  createdAt               DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   quote                RentalQuote         @relation("R_RentalOrder_quote_id", fields: [quoteId], references: [id])
   rentalPolicy         RentalPolicy        @relation("R_RentalOrder_rental_policy_id", fields: [rentalPolicyId], references: [id])
@@ -2288,13 +2294,14 @@ model RentalOrder {
   rentalReviewsViaRentalOrderId     RentalReview[]           @relation("R_RentalReview_rental_order_id")
 
   returnCustodyTransfersViaOrderId ReturnCustodyTransfer[] @relation("R_ReturnCustodyTransfer_orderId")
-  returnInspectionTasks ReturnInspectionTask[] @relation("R_ReturnInspectionTask_order")
+  returnInspectionTasks            ReturnInspectionTask[]  @relation("R_ReturnInspectionTask_order")
 
   @@index([userId, tripId, status])
   @@index([userId, status])
   @@index([tripId, status])
   @@index([rentalPolicyId])
   @@index([bookingId, status])
+  @@index([membershipKind, membershipRef, status])
   @@index([pickupPointId])
   @@index([returnPointId])
   @@index([paymentExpiresAt])
@@ -2385,7 +2392,7 @@ model RentalUnitAssignment {
   returnInspectionsViaAssignmentId     ReturnInspection[]     @relation("R_ReturnInspection_assignment_id")
   rentalExceptionCasesViaAssignmentId  RentalExceptionCase[]  @relation("R_RentalExceptionCase_assignment_id")
   depositSettlementItemViaAssignmentId DepositSettlementItem? @relation("R_DepositSettlementItem_assignment_id")
-  returnInspectionTask ReturnInspectionTask? @relation("R_ReturnInspectionTask_assignment")
+  returnInspectionTask                 ReturnInspectionTask?  @relation("R_ReturnInspectionTask_assignment")
 
   @@index([orderLineId, status])
   @@index([equipmentUnitId, status])
@@ -2636,31 +2643,31 @@ model ReturnInspectionFinding {
 }
 
 model RentalExceptionCase {
-  id           String                    @id @default(uuid()) @db.Uuid
-  orderId      String                    @map("order_id") @db.Uuid
-  assignmentId String?                   @map("assignment_id") @db.Uuid
-  unitId       String?                   @map("unit_id") @db.Uuid
-  inspectionId String?                   @map("inspection_id") @db.Uuid
-  caseType     RentalExceptionType       @map("case_type")
-  status       RentalExceptionCaseStatus @default(OPEN)
-  openedBy     String?                   @map("opened_by") @db.Uuid
-  assignedTo   String?                   @map("assigned_to") @db.Uuid
-  reason       String
-  evidenceIds  Json?                     @map("evidence_ids")
-  resolution   String?
-  approvalRef  String?                   @map("approval_ref") @db.VarChar(180)
-  dueAt        DateTime?                 @map("due_at") @db.Timestamptz(6)
-  resolvedAt   DateTime?                 @map("resolved_at") @db.Timestamptz(6)
-  adminApprovalDueAt DateTime?              @map("admin_approval_due_at") @db.Timestamptz(6)
-  adminReviewStatus String @default("PENDING") @map("admin_review_status") @db.VarChar(32)
-  adminSlaBreachedAt DateTime?              @map("admin_sla_breached_at") @db.Timestamptz(6)
-  evidenceAccessibleAt DateTime?           @map("evidence_accessible_at") @db.Timestamptz(6)
-  evidenceCompleteAt DateTime?              @map("evidence_complete_at") @db.Timestamptz(6)
-  evidencePublishedAt DateTime?            @map("evidence_published_at") @db.Timestamptz(6)
-  inAppNoticePublishedAt DateTime?         @map("in_app_notice_published_at") @db.Timestamptz(6)
-  version      Int                       @default(1)
-  createdAt    DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String                    @id @default(uuid()) @db.Uuid
+  orderId                String                    @map("order_id") @db.Uuid
+  assignmentId           String?                   @map("assignment_id") @db.Uuid
+  unitId                 String?                   @map("unit_id") @db.Uuid
+  inspectionId           String?                   @map("inspection_id") @db.Uuid
+  caseType               RentalExceptionType       @map("case_type")
+  status                 RentalExceptionCaseStatus @default(OPEN)
+  openedBy               String?                   @map("opened_by") @db.Uuid
+  assignedTo             String?                   @map("assigned_to") @db.Uuid
+  reason                 String
+  evidenceIds            Json?                     @map("evidence_ids")
+  resolution             String?
+  approvalRef            String?                   @map("approval_ref") @db.VarChar(180)
+  dueAt                  DateTime?                 @map("due_at") @db.Timestamptz(6)
+  resolvedAt             DateTime?                 @map("resolved_at") @db.Timestamptz(6)
+  adminApprovalDueAt     DateTime?                 @map("admin_approval_due_at") @db.Timestamptz(6)
+  adminReviewStatus      String                    @default("PENDING") @map("admin_review_status") @db.VarChar(32)
+  adminSlaBreachedAt     DateTime?                 @map("admin_sla_breached_at") @db.Timestamptz(6)
+  evidenceAccessibleAt   DateTime?                 @map("evidence_accessible_at") @db.Timestamptz(6)
+  evidenceCompleteAt     DateTime?                 @map("evidence_complete_at") @db.Timestamptz(6)
+  evidencePublishedAt    DateTime?                 @map("evidence_published_at") @db.Timestamptz(6)
+  inAppNoticePublishedAt DateTime?                 @map("in_app_notice_published_at") @db.Timestamptz(6)
+  version                Int                       @default(1)
+  createdAt              DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   order          RentalOrder           @relation("R_RentalExceptionCase_order_id", fields: [orderId], references: [id])
   assignment     RentalUnitAssignment? @relation("R_RentalExceptionCase_assignment_id", fields: [assignmentId], references: [id])
@@ -2758,8 +2765,8 @@ model DepositSettlementItem {
   inspection     ReturnInspection?    @relation("R_DepositSettlementItem_inspection_id", fields: [inspectionId], references: [id])
   approvedByUser User?                @relation("R_DepositSettlementItem_approved_by", fields: [approvedBy], references: [id])
 
-  refundViaDepositSettlementItemId Refund? @relation("R_Refund_deposit_settlement_item_id")
-  depositRefundAllocations DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_item")
+  refundViaDepositSettlementItemId Refund?                       @relation("R_Refund_deposit_settlement_item_id")
+  depositRefundAllocations         DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_item")
 
   @@unique([settlementId, unitId])
   @@index([status])
@@ -2906,23 +2913,23 @@ model GpsPolicy {
 /// PostgreSQL partial unique indexes limit a user to at most one ACTIVE/PAUSED session globally.
 model GpsSession {
   startReceipts       GpsStartReceipt[]
-  clientSessionId     String?          @map("client_session_id") @db.Uuid
-  uploadDeadline      DateTime?        @map("upload_deadline") @db.Timestamptz(6)
-  recordingState      Json?            @map("recording_state")
-  id                  String           @id @default(uuid()) @db.Uuid
-  userId              String           @map("user_id") @db.Uuid
-  tripId              String           @map("trip_id") @db.Uuid
-  gpsPolicyId         String           @map("gps_policy_id") @db.Uuid
-  status              GpsSessionStatus @default(ACTIVE)
-  startedAt           DateTime         @map("started_at") @db.Timestamptz(6)
-  endedAt             DateTime?        @map("ended_at") @db.Timestamptz(6)
-  deviceId            String?          @map("device_id") @db.VarChar(180)
-  actualPathGeojson   Json?            @map("actual_path_geojson")
-  totalDistanceMeters Decimal?         @map("total_distance_meters") @db.Decimal(12, 2)
-  sampleCount         Int              @default(0) @map("sample_count")
-  version             Int              @default(1)
-  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  clientSessionId     String?           @map("client_session_id") @db.Uuid
+  uploadDeadline      DateTime?         @map("upload_deadline") @db.Timestamptz(6)
+  recordingState      Json?             @map("recording_state")
+  id                  String            @id @default(uuid()) @db.Uuid
+  userId              String            @map("user_id") @db.Uuid
+  tripId              String            @map("trip_id") @db.Uuid
+  gpsPolicyId         String            @map("gps_policy_id") @db.Uuid
+  status              GpsSessionStatus  @default(ACTIVE)
+  startedAt           DateTime          @map("started_at") @db.Timestamptz(6)
+  endedAt             DateTime?         @map("ended_at") @db.Timestamptz(6)
+  deviceId            String?           @map("device_id") @db.VarChar(180)
+  actualPathGeojson   Json?             @map("actual_path_geojson")
+  totalDistanceMeters Decimal?          @map("total_distance_meters") @db.Decimal(12, 2)
+  sampleCount         Int               @default(0) @map("sample_count")
+  version             Int               @default(1)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user      User      @relation("R_GpsSession_user_id", fields: [userId], references: [id])
   trip      Trip      @relation("R_GpsSession_trip_id", fields: [tripId], references: [id])
@@ -2933,30 +2940,32 @@ model GpsSession {
   checkpointEventsViaSessionId       CheckpointEvent[]     @relation("R_CheckpointEvent_session_id")
   tripActualRoutesViaSourceSessionId TripActualRoute[]     @relation("R_TripActualRoute_source_session_id")
 
+  @@unique([userId, clientSessionId])
   @@index([userId, tripId])
   @@index([tripId, status])
   @@index([gpsPolicyId])
   @@map("gps_sessions")
-  @@unique([userId, clientSessionId])
 }
 
 /// Serialized by locking the parent Trip; retains member versions after removal.
 model TripGpsProjection {
-  tripId    String @id @map("trip_id") @db.Uuid
+  tripId    String   @id @map("trip_id") @db.Uuid
   data      Json
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Restrict)
+
   @@map("trip_gps_projections")
 }
 
 /// Records alternate start keys when an existing open session is returned.
 model GpsStartReceipt {
-  userId          String @map("user_id") @db.Uuid
-  clientSessionId String @map("client_session_id") @db.Uuid
-  tripId          String @map("trip_id") @db.Uuid
-  deviceId        String @map("device_id") @db.VarChar(180)
-  sessionId       String @map("session_id") @db.Uuid
+  userId          String     @map("user_id") @db.Uuid
+  clientSessionId String     @map("client_session_id") @db.Uuid
+  tripId          String     @map("trip_id") @db.Uuid
+  deviceId        String     @map("device_id") @db.VarChar(180)
+  sessionId       String     @map("session_id") @db.Uuid
   session         GpsSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
   @@id([userId, clientSessionId])
   @@index([sessionId])
   @@map("gps_start_receipts")
@@ -3318,13 +3327,13 @@ model Refund {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  payment               Payment                @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
-  depositSettlement     DepositSettlement?     @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
-  depositSettlementItem DepositSettlementItem? @relation("R_Refund_deposit_settlement_item_id", fields: [depositSettlementItemId], references: [id])
-  depositRefundItems DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_refund")
-  bookingCancellation   BookingCancellation?   @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id], onDelete: Restrict)
-  rentalOrder           RentalOrder?           @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
-  trailAccess           TrailAccess?           @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
+  payment               Payment                       @relation("R_Refund_payment_id", fields: [paymentId], references: [id])
+  depositSettlement     DepositSettlement?            @relation("R_Refund_deposit_settlement_id", fields: [depositSettlementId], references: [id])
+  depositSettlementItem DepositSettlementItem?        @relation("R_Refund_deposit_settlement_item_id", fields: [depositSettlementItemId], references: [id])
+  depositRefundItems    DepositRefundItemAllocation[] @relation("R_DepositRefundItemAllocation_refund")
+  bookingCancellation   BookingCancellation?          @relation("R_Refund_booking_cancellation_id", fields: [bookingCancellationId], references: [id], onDelete: Restrict)
+  rentalOrder           RentalOrder?                  @relation("R_Refund_rental_order_id", fields: [rentalOrderId], references: [id])
+  trailAccess           TrailAccess?                  @relation("R_Refund_trail_access_id", fields: [trailAccessId], references: [id])
   webhookEvents         PaymentWebhookEvent[]
 
   @@unique([paymentId, businessActionId])
@@ -3935,71 +3944,74 @@ model RentalDocumentAccessLog {
 }
 
 model ReturnInspectionTask {
-  id String @id @default(uuid()) @db.Uuid
-  orderId String @map("order_id") @db.Uuid
-  assignmentId String @unique @map("assignment_id") @db.Uuid
-  unitId String @map("unit_id") @db.Uuid
-  inventoryLocationId String @map("inventory_location_id") @db.Uuid
-  receivedAt DateTime @map("received_at") @db.Timestamptz(6)
-  inspectionDueAt DateTime @map("inspection_due_at") @db.Timestamptz(6)
-  deepInspectionDueAt DateTime? @map("deep_inspection_due_at") @db.Timestamptz(6)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
-  status String @default("PENDING") @db.VarChar(32)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  order RentalOrder @relation("R_ReturnInspectionTask_order", fields:[orderId],references:[id],onDelete:Restrict)
-  assignment RentalUnitAssignment @relation("R_ReturnInspectionTask_assignment",fields:[assignmentId],references:[id],onDelete:Restrict)
-  unit EquipmentUnit @relation("R_ReturnInspectionTask_unit",fields:[unitId],references:[id],onDelete:Restrict)
-  inventoryLocation InventoryLocation @relation("R_ReturnInspectionTask_location",fields:[inventoryLocationId],references:[id],onDelete:Restrict)
-  @@index([status,inspectionDueAt])
-  @@index([inventoryLocationId,status,inspectionDueAt])
+  id                  String               @id @default(uuid()) @db.Uuid
+  orderId             String               @map("order_id") @db.Uuid
+  assignmentId        String               @unique @map("assignment_id") @db.Uuid
+  unitId              String               @map("unit_id") @db.Uuid
+  inventoryLocationId String               @map("inventory_location_id") @db.Uuid
+  receivedAt          DateTime             @map("received_at") @db.Timestamptz(6)
+  inspectionDueAt     DateTime             @map("inspection_due_at") @db.Timestamptz(6)
+  deepInspectionDueAt DateTime?            @map("deep_inspection_due_at") @db.Timestamptz(6)
+  completedAt         DateTime?            @map("completed_at") @db.Timestamptz(6)
+  status              String               @default("PENDING") @db.VarChar(32)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order               RentalOrder          @relation("R_ReturnInspectionTask_order", fields: [orderId], references: [id], onDelete: Restrict)
+  assignment          RentalUnitAssignment @relation("R_ReturnInspectionTask_assignment", fields: [assignmentId], references: [id], onDelete: Restrict)
+  unit                EquipmentUnit        @relation("R_ReturnInspectionTask_unit", fields: [unitId], references: [id], onDelete: Restrict)
+  inventoryLocation   InventoryLocation    @relation("R_ReturnInspectionTask_location", fields: [inventoryLocationId], references: [id], onDelete: Restrict)
+
+  @@index([status, inspectionDueAt])
+  @@index([inventoryLocationId, status, inspectionDueAt])
   @@map("return_inspection_tasks")
 }
 
 model DepositRefundItemAllocation {
-  id String @id @default(uuid()) @db.Uuid
-  refundId String @map("refund_id") @db.Uuid
-  depositSettlementItemId String @unique @map("deposit_settlement_item_id") @db.Uuid
-  amount Decimal @db.Decimal(12,2)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  refund Refund @relation("R_DepositRefundItemAllocation_refund",fields:[refundId],references:[id],onDelete:Restrict)
-  item DepositSettlementItem @relation("R_DepositRefundItemAllocation_item",fields:[depositSettlementItemId],references:[id],onDelete:Restrict)
-  @@unique([refundId,depositSettlementItemId])
+  id                      String                @id @default(uuid()) @db.Uuid
+  refundId                String                @map("refund_id") @db.Uuid
+  depositSettlementItemId String                @unique @map("deposit_settlement_item_id") @db.Uuid
+  amount                  Decimal               @db.Decimal(12, 2)
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  refund                  Refund                @relation("R_DepositRefundItemAllocation_refund", fields: [refundId], references: [id], onDelete: Restrict)
+  item                    DepositSettlementItem @relation("R_DepositRefundItemAllocation_item", fields: [depositSettlementItemId], references: [id], onDelete: Restrict)
+
+  @@unique([refundId, depositSettlementItemId])
   @@index([refundId])
   @@map("deposit_refund_item_allocations")
 }
 
 model RentalReadinessCommitment {
-  id String @id @default(uuid()) @db.Uuid
-  unitId String @unique @map("unit_id") @db.Uuid
-  readyBy DateTime @map("ready_by") @db.Timestamptz(6)
-  validUntil DateTime @map("valid_until") @db.Timestamptz(6)
-  verifiedAt DateTime @map("verified_at") @db.Timestamptz(6)
-  verifiedBy String @map("verified_by") @db.Uuid
-  evidenceRef String @map("evidence_ref") @db.VarChar(200)
-  status String @default("VERIFIED") @db.VarChar(32)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  unit EquipmentUnit @relation("R_RentalReadinessCommitment_unit",fields:[unitId],references:[id],onDelete:Restrict)
+  id          String        @id @default(uuid()) @db.Uuid
+  unitId      String        @unique @map("unit_id") @db.Uuid
+  readyBy     DateTime      @map("ready_by") @db.Timestamptz(6)
+  validUntil  DateTime      @map("valid_until") @db.Timestamptz(6)
+  verifiedAt  DateTime      @map("verified_at") @db.Timestamptz(6)
+  verifiedBy  String        @map("verified_by") @db.Uuid
+  evidenceRef String        @map("evidence_ref") @db.VarChar(200)
+  status      String        @default("VERIFIED") @db.VarChar(32)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  unit        EquipmentUnit @relation("R_RentalReadinessCommitment_unit", fields: [unitId], references: [id], onDelete: Restrict)
+
   @@index([status, readyBy, validUntil])
   @@map("rental_readiness_commitments")
 }
 
 model RentalCapacityAlert {
-  alertKey String @id @map("alert_key") @db.VarChar(120)
-  productId String @map("product_id") @db.Uuid
-  occupiedFrom DateTime @map("occupied_from") @db.Timestamptz(6)
-  occupiedUntil DateTime @map("occupied_until") @db.Timestamptz(6)
-  requestedQuantity Int @map("requested_quantity")
-  availableCount Int @map("available_count")
-  unknownUnitCount Int @map("unknown_unit_count")
-  status String @default("ACTION_REQUIRED") @db.VarChar(32)
-  reason String @db.VarChar(120)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  alertKey          String   @id @map("alert_key") @db.VarChar(120)
+  productId         String   @map("product_id") @db.Uuid
+  occupiedFrom      DateTime @map("occupied_from") @db.Timestamptz(6)
+  occupiedUntil     DateTime @map("occupied_until") @db.Timestamptz(6)
+  requestedQuantity Int      @map("requested_quantity")
+  availableCount    Int      @map("available_count")
+  unknownUnitCount  Int      @map("unknown_unit_count")
+  status            String   @default("ACTION_REQUIRED") @db.VarChar(32)
+  reason            String   @db.VarChar(120)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
   @@index([productId, status])
   @@map("rental_capacity_alerts")
 }
-
 
 // =========================================================
 // AI GEAR ADVISOR V3.1.1 ENUMS & MODELS (STEP 02 FOUNDATION)
@@ -4093,20 +4105,20 @@ enum GearVerdict {
 }
 
 model UserGearItem {
-  id        String        @id @default(uuid()) @db.Uuid
-  userId    String        @map("user_id") @db.Uuid
-  user      User          @relation("R_UserGearItem_user_id", fields: [userId], references: [id], onDelete: Cascade)
-  name      String        @db.VarChar(200)
-  category  GearCategory  @map("category")
-  brand     String?       @db.VarChar(100)
-  condition GearCondition @default(GOOD) @map("condition")
-  attributes Json         @default("{}") @map("attributes")
-  photoRef  String?       @map("photo_ref") @db.Uuid
-  photo     MediaAsset?   @relation("R_UserGearItem_photo_ref", fields: [photoRef], references: [id], onDelete: SetNull)
-  source    GearItemSource @default(MANUAL) @map("source")
-  version   Int           @default(1) @map("version")
-  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  user       User           @relation("R_UserGearItem_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  name       String         @db.VarChar(200)
+  category   GearCategory   @map("category")
+  brand      String?        @db.VarChar(100)
+  condition  GearCondition  @default(GOOD) @map("condition")
+  attributes Json           @default("{}") @map("attributes")
+  photoRef   String?        @map("photo_ref") @db.Uuid
+  photo      MediaAsset?    @relation("R_UserGearItem_photo_ref", fields: [photoRef], references: [id], onDelete: SetNull)
+  source     GearItemSource @default(MANUAL) @map("source")
+  version    Int            @default(1) @map("version")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   confirmedDraft GearExtractionDraft? @relation("R_GearExtractionDraft_confirmed_item_id")
   photos         UserGearItemPhoto[]  @relation("R_UserGearItem_photos")
@@ -4144,20 +4156,20 @@ model GearRequirementRule {
 }
 
 model GearExtractionDraft {
-  id                     String                   @id @default(uuid()) @db.Uuid
-  userId                 String                   @map("user_id") @db.Uuid
-  user                   User                     @relation("R_GearExtractionDraft_user_id", fields: [userId], references: [id], onDelete: Cascade)
-  sourceType             GearExtractionSourceType @map("source_type")
-  sourceHash             String                   @map("source_hash") @db.VarChar(64)
-  status                 GearExtractionStatus     @default(PENDING) @map("status")
-  extractedData          Json?                    @map("extracted_data")
-  confirmedItemId        String?                  @unique @map("confirmed_item_id") @db.Uuid
-  confirmedItem          UserGearItem?            @relation("R_GearExtractionDraft_confirmed_item_id", fields: [confirmedItemId], references: [id], onDelete: SetNull)
-  confirmationPayloadHash String?                 @map("confirmation_payload_hash") @db.VarChar(64)
-  version                Int                      @default(1) @map("version")
-  expiresAt              DateTime                 @map("expires_at") @db.Timestamptz(6)
-  createdAt              DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                      String                   @id @default(uuid()) @db.Uuid
+  userId                  String                   @map("user_id") @db.Uuid
+  user                    User                     @relation("R_GearExtractionDraft_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  sourceType              GearExtractionSourceType @map("source_type")
+  sourceHash              String                   @map("source_hash") @db.VarChar(64)
+  status                  GearExtractionStatus     @default(PENDING) @map("status")
+  extractedData           Json?                    @map("extracted_data")
+  confirmedItemId         String?                  @unique @map("confirmed_item_id") @db.Uuid
+  confirmedItem           UserGearItem?            @relation("R_GearExtractionDraft_confirmed_item_id", fields: [confirmedItemId], references: [id], onDelete: SetNull)
+  confirmationPayloadHash String?                  @map("confirmation_payload_hash") @db.VarChar(64)
+  version                 Int                      @default(1) @map("version")
+  expiresAt               DateTime                 @map("expires_at") @db.Timestamptz(6)
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([userId], map: "gear_extraction_draft_user_idx")
   @@index([sourceHash], map: "gear_extraction_draft_source_hash_idx")
@@ -4196,22 +4208,22 @@ model GearExtractionLease {
 }
 
 model GearPlan {
-  id                 String              @id @default(uuid()) @db.Uuid
-  userId             String              @map("user_id") @db.Uuid
-  user               User                @relation("R_GearPlan_user_id", fields: [userId], references: [id], onDelete: Cascade)
-  title              String              @db.VarChar(220)
-  contextMode        GearPlanContextMode @default(TRIP) @map("context_mode")
-  tripId             String?             @map("trip_id") @db.Uuid
-  trip               Trip?               @relation("R_GearPlan_trip_id", fields: [tripId], references: [id], onDelete: Restrict)
-  selectedItemIds    Json                @default("[]") @map("selected_item_ids")
-  preferences        Json                @default("{}") @map("preferences")
-  canonicalContext   Json                @default("{}") @map("canonical_context")
-  inputRevision      Int                 @default(1) @map("input_revision")
-  evaluatedRevision  Int?                @map("evaluated_revision")
-  progressVersion    Int                 @default(1) @map("progress_version")
-  progressJson       Json                @default("[]") @map("progress_json")
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String              @id @default(uuid()) @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  user              User                @relation("R_GearPlan_user_id", fields: [userId], references: [id], onDelete: Cascade)
+  title             String              @db.VarChar(220)
+  contextMode       GearPlanContextMode @default(TRIP) @map("context_mode")
+  tripId            String?             @map("trip_id") @db.Uuid
+  trip              Trip?               @relation("R_GearPlan_trip_id", fields: [tripId], references: [id], onDelete: Restrict)
+  selectedItemIds   Json                @default("[]") @map("selected_item_ids")
+  preferences       Json                @default("{}") @map("preferences")
+  canonicalContext  Json                @default("{}") @map("canonical_context")
+  inputRevision     Int                 @default(1) @map("input_revision")
+  evaluatedRevision Int?                @map("evaluated_revision")
+  progressVersion   Int                 @default(1) @map("progress_version")
+  progressJson      Json                @default("[]") @map("progress_json")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   revisions GearPlanRevision[]
 
