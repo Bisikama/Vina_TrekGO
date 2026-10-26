@@ -211,7 +211,7 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
       // Exactly 1 caller succeeds; 1 caller is rejected due to atomic daily quota limit = 20
       expect(fulfilled.length).toBe(1)
       expect(rejected.length).toBe(1)
-      expect((rejected[0]).reason.message).toMatch(/hạn mức|quota/i)
+      expect(rejected[0].reason.message).toMatch(/hạn mức|quota/i)
 
       // 3. Test forced rollback in transaction client: draft must NOT persist if tx throws
       await expect(

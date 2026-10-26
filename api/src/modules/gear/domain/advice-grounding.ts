@@ -196,8 +196,7 @@ export function validateNarrativeViGrounding(input: NarrativeGroundingInput): Na
       const claimsZeroRain =
         /(?:xác suất(?: có)? mưa|khả năng mưa|tỉ lệ mưa|tỷ lệ mưa|mưa)[^.!?\n\r,]*?(?:bằng không|bằng 0|không%?|0%|rất thấp)/i.test(
           lower,
-        ) ||
-        /(?:không có mưa|hoàn toàn không mưa|tuyệt đối không mưa)/i.test(lower)
+        ) || /(?:không có mưa|hoàn toàn không mưa|tuyệt đối không mưa)/i.test(lower)
 
       if (claimsZeroRain && climate.rain_prob_pct >= 30) {
         return {
@@ -291,7 +290,9 @@ export function validateNarrativeViGrounding(input: NarrativeGroundingInput): Na
   // 10. Technical specifications grounding: verify claimed specs (e.g. "chống nước 99.999 mm")
   if (gearSpecs) {
     // Waterproof mm check
-    const wpMatches = lower.matchAll(/(?:chống nước|kháng nước|waterproof|độ chống nước)\s*(?:khoảng|là)?\s*([0-9.,]+)\s*mm\b/gi)
+    const wpMatches = lower.matchAll(
+      /(?:chống nước|kháng nước|waterproof|độ chống nước)\s*(?:khoảng|là)?\s*([0-9.,]+)\s*mm\b/gi,
+    )
     for (const m of wpMatches) {
       const rawNum = m[1].replace(/\./g, '').replace(/,/g, '')
       const val = parseInt(rawNum, 10)
@@ -415,9 +416,7 @@ export function buildApprovedClaims(input: BuildApprovedClaimsInput): ApprovedCl
   const owned = selectedOption.ownedAssignments || []
   if (owned.length > 0) {
     const ownedNames = owned.map((o) => o.itemName || o.category).join(', ')
-    const factRefs = owned
-      .filter((o) => o.requirementId)
-      .map((o) => `requirement.${o.requirementId}:COVERED_BY_OWNED`)
+    const factRefs = owned.filter((o) => o.requirementId).map((o) => `requirement.${o.requirementId}:COVERED_BY_OWNED`)
     claims.push({
       id: 'claim:owned_prep',
       category: 'OWNED_PREP',
@@ -438,9 +437,7 @@ export function buildApprovedClaims(input: BuildApprovedClaimsInput): ApprovedCl
   const fee = selectedOption.summary?.totalRentalFee ?? 0
   const deposit = selectedOption.summary?.totalDeposit ?? 0
   if (lines.length > 0) {
-    const rentDetails = lines
-      .map((l) => `${l.quantity > 1 ? `${l.quantity} ` : ''}${l.productName}`)
-      .join(', ')
+    const rentDetails = lines.map((l) => `${l.quantity > 1 ? `${l.quantity} ` : ''}${l.productName}`).join(', ')
     const factRefs = [`pricing.total_fee:${fee}`]
     if (deposit > 0) {
       factRefs.push(`pricing.total_deposit:${deposit}`)
@@ -530,9 +527,7 @@ export function renderNarrativeFromClaims(
   }
 
   const textLines = chosenClaims.map((c) => c.textVi)
-  textLines.push(
-    'Hãy kiểm tra kỹ toàn bộ trang bị, đảm bảo độ bám và khả năng chống thấm nước trước ngày khởi hành.',
-  )
+  textLines.push('Hãy kiểm tra kỹ toàn bộ trang bị, đảm bảo độ bám và khả năng chống thấm nước trước ngày khởi hành.')
 
   const narrativeVi = textLines.join('\n\n')
   const factRefs = Array.from(new Set(chosenClaims.flatMap((c) => c.factRefs)))
