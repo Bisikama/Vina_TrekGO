@@ -194,7 +194,7 @@ export class CompleteUploadUseCase {
     }
 
     let retentionUntil: Date | null = null;
-    if (asset.scope === 'RENTAL_PRODUCT' || asset.scope === 'LEADER_CERTIFICATE') {
+    if (asset.scope === 'RENTAL_PRODUCT' || asset.scope === 'LEADER_CERTIFICATE' || asset.scope === 'USER_GEAR') {
       retentionUntil = new Date(Date.now() + envConfig.MEDIA_CATALOG_ORPHAN_RETENTION_DAYS * 86400 * 1000);
     } else if (asset.scope?.includes('EVIDENCE')) {
       retentionUntil = new Date(Date.now() + envConfig.MEDIA_EVIDENCE_RETENTION_DAYS * 86400 * 1000);

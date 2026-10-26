@@ -1,0 +1,49 @@
+{
+  "history": {
+    "items": [
+      {
+        "id": "2e2e51f0-e4a2-433d-adbc-48b253bc5c5b",
+        "tripType": "PUBLIC",
+        "title": "M5 trip",
+        "status": "INTERRUPTED",
+        "startAt": "2026-10-25T23:06:23.559Z",
+        "endAt": "2026-10-26T23:06:23.559Z",
+        "completedAt": null,
+        "cancelledAt": null,
+        "destination": {
+          "id": "6d3a3405-8111-4e61-b943-91b292965c46",
+          "name": "M5 destination"
+        },
+        "participationSource": "PUBLIC_PARTICIPANT",
+        "permissions": {
+          "canNavigate": false,
+          "canRent": false,
+          "canCheckIn": false,
+          "reason": "HISTORICAL_ONLY"
+        }
+      }
+    ],
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  },
+  "validationError": {
+    "error": {
+      "code": "VALIDATION_ERROR",
+      "message": "Dữ liệu đầu vào không hợp lệ",
+      "details": [
+        {
+          "field": "root",
+          "message": "Unrecognized key: \"userId\""
+        }
+      ],
+      "retryable": false
+    },
+    "meta": {
+      "requestId": "839efda1-a4bc-48cd-b302-aa8c517ad884",
+      "serverTime": "2026-10-24T23:06:23.691Z",
+      "contractVersion": "0.2.0-final-flow"
+    }
+  }
+}

@@ -983,6 +983,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 finalOutcome === ReturnInspectionOutcome.NORMAL && proposed.equals(0)
                   ? 'FINAL_PASS_AWAIT_GROUPED_REFUND'
                   : 'DEDUCTION_REVIEW_REQUIRED',
+              refundAmount:
+                finalOutcome === ReturnInspectionOutcome.NORMAL && proposed.equals(0)
+                  ? depositItem.depositAmount
+                  : new Prisma.Decimal(0),
+              deductionAmount: new Prisma.Decimal(0),
+              approvedAt: finalOutcome === ReturnInspectionOutcome.NORMAL && proposed.equals(0) ? command.now : null,
+              approvedBy: finalOutcome === ReturnInspectionOutcome.NORMAL && proposed.equals(0) ? actor.id : null,
               decisionSnapshot: jsonValue({
                 proposedDeduction: proposed.toString(),
                 cappedDeduction: capped.toString(),
@@ -990,6 +997,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 requiresApproval,
                 baselineCondition: baseline.condition,
                 finalCondition: item.condition,
+                refundDecision: 'INVENTORY_FINAL_PASS',
+                unitId: item.issueUnitId,
+                inventoryReceivedAt: inspectionTask.receivedAt.toISOString(),
+                inspectionAt: command.now.toISOString(),
+                slaBreached: command.now > inspectionTask.inspectionDueAt,
               }),
               version: { increment: 1 },
             },
@@ -1027,27 +1039,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               })
             }
           } else {
-            // Eligible for a *grouped* deposit refund after Inventory FINAL, never a Delivery quick refund.
-            await tx.depositSettlementItem.update({
-              where: { id: depositItem.id },
-              data: {
-                status: DepositItemStatus.REFUND_PENDING,
-                refundAmount: depositItem.depositAmount,
-                deductionAmount: new Prisma.Decimal(0),
-                inspectionId: finalInspection.id,
-                approvedAt: command.now,
-                approvedBy: actor.id,
-                reason: 'INVENTORY_FINAL_PASS',
-                decisionSnapshot: jsonValue({
-                  refundDecision: 'INVENTORY_FINAL_PASS',
-                  unitId: item.issueUnitId,
-                  inventoryReceivedAt: inspectionTask.receivedAt.toISOString(),
-                  inspectionAt: command.now.toISOString(),
-                  slaBreached: command.now > inspectionTask.inspectionDueAt,
-                }),
-                version: { increment: 1 },
-              },
-            })
+            // Normal pass: resolve any deep inspection exception cases
             await tx.rentalExceptionCase.updateMany({
               where: {
                 assignmentId: assignment.id,
@@ -1058,24 +1050,6 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 resolution: 'DEEP_INSPECTION_CLEARED',
                 resolvedAt: command.now,
                 version: { increment: 1 },
-              },
-            })
-            await tx.rentalOutboxEvent.upsert({
-              where: { deduplicationKey: `deposit-refund-approved:${depositItem.id}` },
-              update: {},
-              create: {
-                deduplicationKey: `deposit-refund-approved:${depositItem.id}`,
-                eventType: 'RENTAL_DEPOSIT_REFUND_APPROVED',
-                aggregateType: 'RentalOrder',
-                aggregateId: order.id,
-                payload: jsonValue({
-                  orderId: order.id,
-                  depositSettlementItemId: depositItem.id,
-                  approvedAmount: depositItem.depositAmount.toFixed(),
-                  requestedBy: actor.id,
-                  requestedAt: command.now.toISOString(),
-                  operation: 'final-pass',
-                }),
               },
             })
           }
@@ -1129,6 +1103,64 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             requiresApproval,
           })
         }
+        // Evaluate order-level inspection completeness for clean grouped refund dispatch
+        const finalInspections = await tx.returnInspection.findMany({
+          where: { orderId: order.id, stage: InspectionStage.FINAL },
+          select: { assignmentId: true },
+        })
+        const missingPrelims = await tx.returnInspection.findMany({
+          where: {
+            orderId: order.id,
+            stage: InspectionStage.PRELIMINARY,
+            outcome: ReturnInspectionOutcome.MISSING_PENDING_REVIEW,
+          },
+          select: { assignmentId: true },
+        })
+        const completedAssignmentIds = new Set([
+          ...finalInspections.map((f) => f.assignmentId),
+          ...missingPrelims.map((m) => m.assignmentId),
+        ])
+        const orderInspectionComplete = assignments.every((a: any) => completedAssignmentIds.has(a.id))
+
+        if (orderInspectionComplete) {
+          const passItemsToRelease = await tx.depositSettlementItem.findMany({
+            where: {
+              settlement: { orderId: order.id },
+              status: DepositItemStatus.REVIEW_REQUIRED,
+              reason: 'FINAL_PASS_AWAIT_GROUPED_REFUND',
+            },
+          })
+          for (const pi of passItemsToRelease) {
+            await tx.depositSettlementItem.update({
+              where: { id: pi.id },
+              data: {
+                status: DepositItemStatus.REFUND_PENDING,
+                approvedAt: command.now,
+                reason: 'INVENTORY_FINAL_PASS',
+                version: { increment: 1 },
+              },
+            })
+            await tx.rentalOutboxEvent.upsert({
+              where: { deduplicationKey: `deposit-refund-approved:${pi.id}` },
+              update: {},
+              create: {
+                deduplicationKey: `deposit-refund-approved:${pi.id}`,
+                eventType: 'RENTAL_DEPOSIT_REFUND_APPROVED',
+                aggregateType: 'RentalOrder',
+                aggregateId: order.id,
+                payload: jsonValue({
+                  orderId: order.id,
+                  depositSettlementItemId: pi.id,
+                  approvedAmount: pi.depositAmount.toFixed(),
+                  requestedBy: actor.id,
+                  requestedAt: command.now.toISOString(),
+                  operation: 'final-pass',
+                }),
+              },
+            })
+          }
+        }
+
         await refreshSettlementAggregate(tx, order.id, command.now)
         await writeAudit(
           tx,

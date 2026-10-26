@@ -627,9 +627,13 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
         },
         gearPlanOptionSet: {
           findMany: jest.fn(),
+          findUnique: jest.fn(),
         },
         rentalQuoteLine: {
           findMany: jest.fn(),
+        },
+        trip: {
+          findUnique: jest.fn(),
         },
       }
       quoteRepo = new PrismaGearQuoteLinkRepository(mockPrisma)
@@ -833,6 +837,126 @@ describe('Gear Repositories Unit Tests (Mock Prisma)', () => {
       await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
         expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_OPTION_SET_EXPIRED }),
       )
+    })
+
+    it('Gate C: should reject when quote rental window ends before trip end (23:00 to 23:01 boundary check)', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a', tripId: 'trip-1' },
+      })
+      mockPrisma.trip.findUnique.mockResolvedValue({
+        id: 'trip-1',
+        startAt: new Date('2026-01-01T08:00:00.000Z'),
+        endAt: new Date('2026-01-04T18:00:00.000Z'),
+      })
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-short-window',
+        userId: 'user-a',
+        tripId: 'trip-1',
+        status: 'ACTIVE',
+        rentalStartAt: new Date('2026-01-01T23:00:00.000Z'),
+        rentalEndAt: new Date('2026-01-01T23:01:00.000Z'), // Ends 23:01 day 1, well before trip end!
+        expiresAt: new Date(Date.now() + 60000),
+      })
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-short-window', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      )
+    })
+
+    it('Gate C: should reject when quote rental starts after trip start', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a', tripId: 'trip-1' },
+      })
+      mockPrisma.trip.findUnique.mockResolvedValue({
+        id: 'trip-1',
+        startAt: new Date('2026-01-01T08:00:00.000Z'),
+        endAt: new Date('2026-01-04T18:00:00.000Z'),
+      })
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-late-start',
+        userId: 'user-a',
+        tripId: 'trip-1',
+        status: 'ACTIVE',
+        rentalStartAt: new Date('2026-01-02T08:00:00.000Z'), // Starts day 2 after trip start!
+        rentalEndAt: new Date('2026-01-04T18:00:00.000Z'),
+        expiresAt: new Date(Date.now() + 60000),
+      })
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-late-start', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      )
+    })
+
+    it('Gate C: should reject when multiple active option sets match identical product quantities without explicit optionRef', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      })
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      })
+      mockPrisma.rentalQuoteLine.findMany.mockResolvedValue([
+        { id: 'line-1', quoteId: 'quote-1', productId: 'prod-tent', quantity: 1 },
+      ])
+      // Two active sets with same products (ambiguous!)
+      mockPrisma.gearPlanOptionSet.findMany.mockResolvedValue([
+        {
+          id: 'set-a',
+          expiresAt: new Date(Date.now() + 60000),
+          optionsJson: [{ id: 'opt-a1', rentalLines: [{ productId: 'prod-tent', quantity: 1 }] }],
+        },
+        {
+          id: 'set-b',
+          expiresAt: new Date(Date.now() + 60000),
+          optionsJson: [{ id: 'opt-b1', rentalLines: [{ productId: 'prod-tent', quantity: 1 }] }],
+        },
+      ])
+
+      await expect(quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a')).rejects.toThrow(
+        expect.objectContaining({ code: GEAR_ERROR_CODES.GEAR_QUOTE_NOT_ELIGIBLE }),
+      )
+    })
+
+    it('Gate C: should succeed when explicit optionRef is provided to disambiguate multiple active sets', async () => {
+      mockPrisma.gearPlanRevision.findUnique.mockResolvedValue({
+        id: 'rev-1',
+        plan: { userId: 'user-a' },
+      })
+      mockPrisma.rentalQuote.findUnique.mockResolvedValue({
+        id: 'quote-1',
+        userId: 'user-a',
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 60000),
+      })
+      mockPrisma.rentalQuoteLine.findMany.mockResolvedValue([
+        { id: 'line-1', quoteId: 'quote-1', productId: 'prod-tent', quantity: 1 },
+      ])
+      mockPrisma.gearPlanOptionSet.findUnique.mockResolvedValue({
+        id: 'set-b',
+        planRevisionId: 'rev-1',
+        expiresAt: new Date(Date.now() + 60000),
+        optionsJson: [{ id: 'opt-b1', rentalLines: [{ productId: 'prod-tent', quantity: 1 }] }],
+      })
+      mockPrisma.gearQuoteLink.upsert.mockResolvedValue({
+        id: 'link-1',
+        planRevisionId: 'rev-1',
+        quoteId: 'quote-1',
+        userId: 'user-a',
+        verifiedAt: new Date(),
+        createdAt: new Date(),
+      })
+
+      const linked = await quoteRepo.linkQuote('rev-1', 'quote-1', 'user-a', {
+        setId: 'set-b',
+        optionId: 'opt-b1',
+      })
+      expect(linked.quoteId).toBe('quote-1')
+      expect(mockPrisma.gearQuoteLink.upsert).toHaveBeenCalled()
     })
   })
 })
