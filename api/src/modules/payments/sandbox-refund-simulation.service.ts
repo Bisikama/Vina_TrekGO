@@ -33,8 +33,8 @@ export class SandboxRefundSimulationService {
   ) {}
 
   /**
-   * Simulation is fail-closed and limited to an isolated local database. The
-   * refund row is checked again for VNPay SANDBOX provenance before use.
+   * Simulation is fail-closed. A remote database is permitted only for an
+   * explicitly enabled, hostname-pinned demo environment.
    */
   assertEnvironmentSafe(): void {
     if (process.env.NODE_ENV === 'production') {
@@ -79,11 +79,37 @@ export class SandboxRefundSimulationService {
       })
     }
 
-    if (!new Set(['localhost', '127.0.0.1', '::1']).has(hostname)) {
+    const isLocalDatabase = new Set(['localhost', '127.0.0.1', '::1']).has(hostname)
+    if (isLocalDatabase) return
+
+    const remoteDemoEnabled = this.isEnabled(
+      'PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED',
+      envconfig.PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED,
+    )
+    const allowedHost = (
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST ??
+      envconfig.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST ??
+      ''
+    )
+      .toLowerCase()
+      .trim()
+      .replace(/^\[|\]$/g, '')
+    if (!remoteDemoEnabled || !allowedHost || hostname !== allowedHost) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
-        message: `Database host "${hostname}" is not an isolated local instance`,
+        message: `Database host "${hostname}" is not the explicitly allowed remote demo database`,
       })
     }
+  }
+
+  private isEnabled(name: string, fallback: boolean): boolean {
+    return process.env[name] === 'true' || (!process.env[name] && fallback === true)
+  }
+
+  private allowsPendingRefundSimulation(): boolean {
+    return this.isEnabled(
+      'PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND',
+      envconfig.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND,
+    )
   }
 
   async simulateRefundSettlement(input: {
@@ -193,10 +219,8 @@ export class SandboxRefundSimulationService {
           throw AppError.fromCode(P.SANDBOX_SIMULATION_ALREADY_SIMULATED)
         }
         // The same request may recover after a crash before response persistence.
-      } else if (refund.status !== 'PROCESSING') {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: `Refund status is ${refund.status}; only PROCESSING can be simulated`,
-        })
+      } else {
+        this.assertRefundEligibleForSimulation(refund, input.body.expectedProviderStatus, providerPayload)
       }
 
       if (
@@ -209,7 +233,6 @@ export class SandboxRefundSimulationService {
         })
       }
 
-      this.assertVnpayProcessingProvenance(providerPayload)
       this.assertAllocations(refund, settlementOrderId)
 
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
@@ -253,6 +276,7 @@ export class SandboxRefundSimulationService {
                 origin: 'ADMIN_SANDBOX_SIMULATION',
                 environment: 'SANDBOX',
                 status: 'REQUESTED',
+                providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
                 warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
             },
@@ -273,6 +297,7 @@ export class SandboxRefundSimulationService {
               paymentId: refund.paymentId,
               environment: 'SANDBOX',
               origin: 'ADMIN_SANDBOX_SIMULATION',
+              providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
               warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
             },
           },
@@ -374,7 +399,7 @@ export class SandboxRefundSimulationService {
           currency: prepared.currency,
           orderStatus: order.status,
           financialStatus: order.financialStatus,
-          completionMode: 'STANDARD',
+          completionMode: 'SANDBOX_SIMULATED',
           settlementMode: 'SANDBOX_SIMULATED',
           // PROCESSED is transport state. The Rental consumer receipt is the
           // projection-scoped fact proving that the worker transaction committed.
@@ -444,8 +469,41 @@ export class SandboxRefundSimulationService {
     }
   }
 
+  private assertRefundEligibleForSimulation(
+    refund: { status: string },
+    expectedProviderStatus: 'PENDING' | 'PROCESSING',
+    payload: Prisma.JsonObject | null,
+  ): void {
+    if (refund.status !== expectedProviderStatus) {
+      throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+        message: `Refund status changed (current ${refund.status}, expected ${expectedProviderStatus})`,
+      })
+    }
+    if (refund.status === 'PROCESSING') {
+      this.assertVnpayProcessingProvenance(payload)
+      return
+    }
+    if (refund.status !== 'PENDING' || !this.allowsPendingRefundSimulation()) {
+      throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+        message: `Refund status is ${refund.status}; only PROCESSING can be simulated unless pending-demo mode is enabled`,
+      })
+    }
+    // A prior dispatch can still be in flight or have an unknown provider result.
+    // Never overwrite that ambiguity with a synthetic success.
+    if (payload?.vnpayDispatch || payload?.vnpayResponse) {
+      throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+        message: 'Pending demo simulation requires a refund that has never been dispatched to VNPay',
+      })
+    }
+  }
+
   private assertAllocations(refund: any, orderId: string): void {
-    if (!refund.merchantAccountKey || !refund.merchantRefundRef || !refund.payment.merchantRequestRef) {
+    if (
+      !refund.merchantAccountKey ||
+      !refund.merchantRefundRef ||
+      !refund.payment.merchantRequestRef ||
+      refund.payment.status !== 'SUCCEEDED'
+    ) {
       throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
     }
     if (refund.currency !== 'VND' || refund.payment.currency !== refund.currency) {

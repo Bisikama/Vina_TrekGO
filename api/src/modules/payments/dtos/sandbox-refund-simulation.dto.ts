@@ -15,8 +15,8 @@ export const SandboxSimulateRefundBodySchema = z
     acknowledgeSandboxSimulation: z.literal(true, {
       message: 'Bắt buộc xác nhận acknowledgeSandboxSimulation: true',
     }),
-    expectedProviderStatus: z.literal('PROCESSING', {
-      message: 'Chỉ được phép mô phỏng khi expectedProviderStatus là PROCESSING',
+    expectedProviderStatus: z.enum(['PROCESSING', 'PENDING'], {
+      message: 'expectedProviderStatus phải là PROCESSING hoặc PENDING',
     }),
     testEvidenceRef: z.string().trim().max(200).optional(),
   })

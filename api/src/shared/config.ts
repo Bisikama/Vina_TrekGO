@@ -128,6 +128,19 @@ const envConfigSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((val) => val === 'true'),
+    // Remote simulation remains opt-in and must be pinned to one dedicated
+    // demo database host. It is never a production payment capability.
+    PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
+    PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST: z.string().trim().min(1).optional(),
+    // Some gateways' sandboxes do not expose a refund confirmation API. This
+    // permits an explicitly labelled demo settlement from a pristine PENDING refund.
+    PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
 
     // MoMo Sandbox Gateway
     MOMO_SANDBOX_PARTNER_CODE: z.string().min(1).max(100).optional(),

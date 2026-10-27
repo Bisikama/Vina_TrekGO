@@ -66,6 +66,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     merchantRequestRef: `payment:${ids.paymentId}`,
     transactionRef: '14567890',
     currency: 'VND',
+    status: 'SUCCEEDED',
     invoice: { id: ids.invoiceId, rentalOrderId: ids.orderId, ...(options.invoice ?? {}) },
     ...(options.payment ?? {}),
   }
@@ -185,7 +186,12 @@ const createHarness = (options: HarnessOptions = {}) => {
 
 const invoke = (
   harness: ReturnType<typeof createHarness>,
-  overrides: { idempotencyKey?: string; reason?: string; expectedVersion?: number } = {},
+  overrides: {
+    idempotencyKey?: string
+    reason?: string
+    expectedVersion?: number
+    expectedProviderStatus?: 'PENDING' | 'PROCESSING'
+  } = {},
 ) =>
   harness.service.simulateRefundSettlement({
     refundId: harness.refundId,
@@ -194,7 +200,7 @@ const invoke = (
     body: {
       reason: overrides.reason ?? 'Xac nhan hoan coc mo phong cho kiem thu',
       acknowledgeSandboxSimulation: true,
-      expectedProviderStatus: 'PROCESSING',
+      expectedProviderStatus: overrides.expectedProviderStatus ?? 'PROCESSING',
       ...(overrides.expectedVersion === undefined ? {} : { expectedVersion: overrides.expectedVersion }),
     },
   })
@@ -207,6 +213,8 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       NODE_ENV: 'test',
       PAYMENT_PROVIDER_ENVIRONMENT: 'SANDBOX',
       PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED: 'true',
+      PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED: 'false',
+      PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND: 'false',
       DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/vina_trekgo_test',
     })
   })
@@ -249,6 +257,18 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       )
     })
 
+    it('allows only the exactly configured remote demo database host', () => {
+      process.env.DATABASE_URL = 'postgresql://user:secret@db.demo.supabase.co:5432/app'
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED = 'true'
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST = 'db.demo.supabase.co'
+      expect(() => createHarness().service.assertEnvironmentSafe()).not.toThrow()
+
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST = 'db.other.supabase.co'
+      expect(() => createHarness().service.assertEnvironmentSafe()).toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_ENV_UNSAFE }),
+      )
+    })
+
     it('requires the explicit acknowledgement and PROCESSING expectation', () => {
       expect(
         SandboxSimulateRefundBodySchema.safeParse({ reason: 'valid reason', expectedProviderStatus: 'PROCESSING' })
@@ -258,9 +278,42 @@ describe('VNPay sandbox deposit-refund settlement', () => {
         SandboxSimulateRefundBodySchema.safeParse({
           reason: 'valid reason',
           acknowledgeSandboxSimulation: true,
+          expectedProviderStatus: 'PENDING',
+        }).success,
+      ).toBe(true)
+      expect(
+        SandboxSimulateRefundBodySchema.safeParse({
+          reason: 'valid reason',
+          acknowledgeSandboxSimulation: true,
           expectedProviderStatus: 'SUCCEEDED',
         }).success,
       ).toBe(false)
+    })
+
+    it('does not permit PENDING simulation unless its separate demo flag is enabled', async () => {
+      const harness = createHarness({ refund: { status: 'PENDING', providerPayload: null } })
+      await expect(invoke(harness, { expectedProviderStatus: 'PENDING' })).rejects.toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }),
+      )
+
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
+      const enabledHarness = createHarness({ refund: { status: 'PENDING', providerPayload: null } })
+      const result = await invoke(enabledHarness, { expectedProviderStatus: 'PENDING' })
+      expect(result.completionMode).toBe('SANDBOX_SIMULATED')
+      expect(enabledHarness.refunds.applyEvent).toHaveBeenCalledWith(expect.objectContaining({ status: 'SUCCEEDED' }))
+      expect(enabledHarness.refund.providerPayload.sandboxSimulation).toEqual(
+        expect.objectContaining({ providerConfirmation: 'UNCONFIRMED_DEMO' }),
+      )
+    })
+
+    it('rejects PENDING simulation after a VNPay dispatch was attempted', async () => {
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
+      const harness = createHarness({
+        refund: { status: 'PENDING', providerPayload: { vnpayDispatch: { vnp_Command: 'refund' } } },
+      })
+      await expect(invoke(harness, { expectedProviderStatus: 'PENDING' })).rejects.toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }),
+      )
     })
 
     it('rejects a missing idempotency header before calling the service', async () => {
@@ -305,7 +358,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       const result = await invoke(harness)
 
       expect(result.settlementProcessingStatus).toBe('PENDING')
-      expect(result.completionMode).toBe('STANDARD')
+      expect(result.completionMode).toBe('SANDBOX_SIMULATED')
       expect(result.orderStatus).toBe(RentalOrderStatus.RETURN_PROCESSING)
       expect(result.financialStatus).toBe(RentalFinancialStatus.DEPOSIT_HELD)
       expect(harness.items[0].status).toBe(DepositItemStatus.REFUND_PENDING)
