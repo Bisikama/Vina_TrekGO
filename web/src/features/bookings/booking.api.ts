@@ -48,7 +48,7 @@ const config = { baseURL: '' }; // Same-origin Next rewrite; shared token/refres
 const headers = (key: string) => ({ ...config, headers: { 'Idempotency-Key': key } });
 const input = (participants: Participant[]) => ({ participantCount: participants.length, participants: participants.map((p) => ({
   ...(p.id ? { id: p.id } : {}), fullName: p.fullName.trim(), ...(p.phone?.trim() ? { phone: p.phone.trim() } : {}),
-  ...(p.dateOfBirth ? { dateOfBirth: p.dateOfBirth } : {}),
+  ...(p.dateOfBirth && p.dateOfBirth.trim() ? { dateOfBirth: p.dateOfBirth.trim().slice(0, 10) } : {}),
   ...(p.emergencyContactName?.trim() ? { emergencyContactName: p.emergencyContactName.trim() } : {}),
   ...(p.emergencyContactPhone?.trim() ? { emergencyContactPhone: p.emergencyContactPhone.trim() } : {}),
 })) });

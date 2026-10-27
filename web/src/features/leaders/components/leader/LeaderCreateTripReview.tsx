@@ -477,14 +477,19 @@ export function LeaderCreateTripReview() {
     setErrorMsg("");
 
     try {
+      let currentVersion = trip.version;
       if (descriptionInput.trim() && descriptionInput.trim() !== (trip.description || "")) {
-        await updateTrip(tripId, {
-          expectedVersion: trip.version,
+        const updatedTrip = await updateTrip(tripId, {
+          expectedVersion: currentVersion,
           description: descriptionInput.trim(),
         });
+        currentVersion = updatedTrip.version;
+        // Refresh trip state (version + description) để lần thử lại sau lỗi publish
+        // không so với description cũ và không gửi expectedVersion đã lỗi thời.
+        await refetchTrip();
       }
 
-      await apiPublishTrip(tripId, { expectedVersion: trip.version });
+      await apiPublishTrip(tripId, { expectedVersion: currentVersion });
       setPublished(true);
       setShowPublishModal(false);
 

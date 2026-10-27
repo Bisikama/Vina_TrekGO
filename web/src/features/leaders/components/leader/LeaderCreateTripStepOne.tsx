@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 const inputClass =
-  "h-12 w-full rounded-xl border border-slate-200 bg-[#f6f8fc] px-4 text-sm text-slate-950 outline-none transition focus:border-[#2f6b4f] focus:ring-2 focus:ring-[#2f6b4f]/15";
+  "h-12 w-full rounded-xl border border-[#E5E7EB] bg-[#F7F7F4] px-4 text-sm text-[#1F2937] outline-none transition focus:border-[#2F6B4F] focus:bg-white focus:ring-2 focus:ring-[#2F6B4F]/15";
 
 import {
   useLeaderTripDetail,
@@ -22,6 +22,10 @@ function dateInputValue(date: Date) {
 function toDateTimeLocalValue(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function getMinNowDateTimeLocal() {
+  return toDateTimeLocalValue(new Date());
 }
 
 function computeDeadlineBeforeStart(startDate: string, meetingTime: string, hoursBefore = 48) {
@@ -58,7 +62,7 @@ function FieldLabel({
   required?: boolean;
 }) {
   return (
-    <span className="mb-2 block text-sm font-semibold text-slate-800">
+    <span className="mb-2 block text-sm font-semibold text-[#1F2937]">
       {children}
       {required && <span className="ml-1 text-red-600">*</span>}
     </span>
@@ -77,15 +81,15 @@ function FormCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+    <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xs md:p-6">
       <div className="mb-6 flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 font-bold text-[#125238]">
           {number}
         </div>
 
         <div>
-          <h2 className="font-bold text-slate-950">{title}</h2>
-          <p className="mt-1 text-xs text-slate-500">{description}</p>
+          <h2 className="font-bold text-[#1F2937]">{title}</h2>
+          <p className="mt-1 text-xs text-[#6B7280]">{description}</p>
         </div>
       </div>
 
@@ -253,13 +257,14 @@ export function LeaderCreateTripStepOne() {
     Math.round(
       (new Date(endDate + "T00:00:00").getTime() -
         new Date(startDate + "T00:00:00").getTime()) /
-        (1000 * 60 * 60 * 24),
+      (1000 * 60 * 60 * 24),
     ) + 1,
   );
   const nightsCount = Math.max(0, daysCount - 1);
   const durationText =
     nightsCount > 0 ? `${daysCount} ngày ${nightsCount} đêm` : `${daysCount} ngày`;
 
+  const minNowLocal = getMinNowDateTimeLocal();
   const maxAllowedDeadlineLocal = computeDeadlineBeforeStart(startDate, meetingTime, 24);
 
   function handleStartNewTrip() {
@@ -318,7 +323,12 @@ export function LeaderCreateTripStepOne() {
       ? new Date(registrationDeadlineLocal)
       : new Date(startAtDate.getTime() - 48 * 3600_000);
 
-    if (isNaN(deadlineDate.getTime()) || deadlineDate.getTime() > maxDeadlineMs) {
+    if (isNaN(deadlineDate.getTime()) || deadlineDate.getTime() < Date.now() - 60_000) {
+      setDateError("Hạn chót đóng form đăng ký không được chọn thời điểm trong quá khứ.");
+      return;
+    }
+
+    if (deadlineDate.getTime() > maxDeadlineMs) {
       setDateError(
         "Hạn chót đóng form đăng ký phải trước giờ khởi hành ít nhất 1 ngày (24 giờ). Không được phép đóng form sát giờ xuất phát hơn 1 ngày.",
       );
@@ -328,7 +338,11 @@ export function LeaderCreateTripStepOne() {
     let openDate: Date | null = null;
     if (registrationOpenLocal.trim()) {
       openDate = new Date(registrationOpenLocal);
-      if (isNaN(openDate.getTime()) || openDate.getTime() >= deadlineDate.getTime()) {
+      if (isNaN(openDate.getTime()) || openDate.getTime() < Date.now() - 60_000) {
+        setDateError("Giờ mở nhận đăng ký không được chọn ngày giờ trong quá khứ.");
+        return;
+      }
+      if (openDate.getTime() >= deadlineDate.getTime()) {
         setDateError("Giờ mở đăng ký phải trước thời điểm đóng form đăng ký.");
         return;
       }
@@ -439,11 +453,11 @@ export function LeaderCreateTripStepOne() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f7fb] px-5 py-6 lg:px-8">
+    <main className="min-h-screen bg-[#F7F7F4] px-5 py-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xs md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-[#6B7280]">
               Quản lý dẫn đoàn
               <span className="mx-2">›</span>
               Tạo chuyến đi mới
@@ -462,7 +476,7 @@ export function LeaderCreateTripStepOne() {
                   <button
                     type="button"
                     onClick={handleStartNewTrip}
-                    className="text-xs font-medium text-slate-500 hover:text-red-600 underline transition"
+                    className="text-xs font-medium text-[#6B7280] hover:text-red-600 underline transition"
                   >
                     Tạo chuyến mới
                   </button>
@@ -482,16 +496,16 @@ export function LeaderCreateTripStepOne() {
           <div className="mt-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
               {tripId && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#6B7280]">
                   Mã bản nháp: #{tripId.slice(0, 8)}
                 </p>
               )}
 
-              <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
+              <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#1F2937]">
                 {tripId ? "Chỉnh Sửa Thông Tin Chuyến Đi" : "Tạo Chuyến Đi Mới"}
               </h1>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-[#6B7280]">
                 Thiết lập hành trình trekking an toàn, đạt chuẩn thẩm định của
                 VFRS.
               </p>
@@ -499,7 +513,7 @@ export function LeaderCreateTripStepOne() {
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl bg-[#2f6b4f]/10 p-4 text-[#125238]">
+            <div className="rounded-xl bg-[#2F6B4F]/10 p-4 text-[#125238]">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#125238] font-bold text-white">
                   1
@@ -520,10 +534,10 @@ export function LeaderCreateTripStepOne() {
                 onClick={() =>
                   router.push(`/leader/create-trip/route?tripId=${tripId}`)
                 }
-                className="rounded-xl bg-[#eef3fb] p-4 text-slate-700 text-left hover:bg-slate-200 transition"
+                className="rounded-xl bg-[#F7F7F4] border border-[#E5E7EB] p-4 text-[#1F2937] text-left hover:bg-[#EFEFE9] transition"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2f6b4f] font-bold text-white">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2F6B4F] font-bold text-white">
                     2
                   </span>
                   <div>
@@ -536,9 +550,9 @@ export function LeaderCreateTripStepOne() {
                 </div>
               </button>
             ) : (
-              <div className="rounded-xl bg-[#eef3fb] p-4 text-slate-500">
+              <div className="rounded-xl bg-[#F7F7F4] border border-[#E5E7EB] p-4 text-[#6B7280]">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 font-bold">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-200 font-bold">
                     2
                   </span>
                   <div>
@@ -550,9 +564,9 @@ export function LeaderCreateTripStepOne() {
               </div>
             )}
 
-            <div className="rounded-xl bg-[#eef3fb] p-4 text-slate-500">
+            <div className="rounded-xl bg-[#F7F7F4] border border-[#E5E7EB] p-4 text-[#6B7280]">
               <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 font-bold">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-200 font-bold">
                   3
                 </span>
 
@@ -665,8 +679,8 @@ export function LeaderCreateTripStepOne() {
 
                 <div className="rounded-xl bg-emerald-50 p-3 flex items-center justify-between">
                   <div className="text-xs">
-                    <span className="text-slate-600 block">◷ Tổng thời lượng dự kiến:</span>
-                    <strong className="text-sm text-slate-900">{durationText}</strong>
+                    <span className="text-[#6B7280] block">Tổng thời lượng dự kiến:</span>
+                    <strong className="text-sm text-[#1F2937]">{durationText}</strong>
                   </div>
                   <span className="rounded bg-emerald-100 px-2.5 py-1 text-xs font-bold text-[#125238]">
                     Lịch trình chuẩn
@@ -674,13 +688,13 @@ export function LeaderCreateTripStepOne() {
                 </div>
 
                 {/* Khung cấu hình Thời gian Mở & Đóng Form Đăng ký */}
-                <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                <div className="md:col-span-2 rounded-2xl border border-[#E5E7EB] bg-[#F7F7F4]/70 p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        ⏰ Thời gian Mở &amp; Đóng Form Đăng Ký (Booking Gate)
+                      <h3 className="text-sm font-bold text-[#1F2937]">
+                        Thời gian Mở &amp; Đóng Form Đăng Ký (Booking Gate)
                       </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-[#6B7280] mt-0.5">
                         Mặc định đóng form trước <strong>2 ngày (48h)</strong> so với giờ khởi hành. Tối đa cho phép chỉnh sát nhất là <strong>trước 1 ngày (24h)</strong>.
                       </p>
                     </div>
@@ -701,11 +715,10 @@ export function LeaderCreateTripStepOne() {
                               setCustomDeadlineTouched(preset.hours !== 48);
                               setDateError("");
                             }}
-                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                              isActive
-                                ? "bg-[#125238] text-white"
-                                : "bg-white border border-slate-200 text-slate-700 hover:border-[#2f6b4f]"
-                            }`}
+                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${isActive
+                              ? "bg-[#125238] text-white"
+                              : "bg-white border border-[#E5E7EB] text-[#1F2937] hover:border-[#2F6B4F]"
+                              }`}
                           >
                             {preset.label}
                           </button>
@@ -721,14 +734,20 @@ export function LeaderCreateTripStepOne() {
                         type="datetime-local"
                         className={inputClass}
                         value={registrationOpenLocal}
+                        min={minNowLocal}
                         max={registrationDeadlineLocal || maxAllowedDeadlineLocal}
                         onChange={(e) => {
-                          setRegistrationOpenLocal(e.target.value);
-                          setDateError("");
+                          const val = e.target.value;
+                          setRegistrationOpenLocal(val);
+                          if (val && new Date(val).getTime() < Date.now() - 60_000) {
+                            setDateError("Giờ mở nhận đăng ký không được chọn ngày giờ trong quá khứ.");
+                          } else {
+                            setDateError("");
+                          }
                         }}
                       />
-                      <span className="mt-1 block text-[11px] text-slate-500">
-                        Để trống nếu muốn mở đăng ký ngay lập tức khi Publish chuyến đi.
+                      <span className="mt-1 block text-[11px] text-[#6B7280]">
+                        Để trống nếu muốn mở đăng ký ngay lập tức khi Publish chuyến đi. Không được chọn ngày quá khứ.
                       </span>
                     </label>
 
@@ -738,11 +757,17 @@ export function LeaderCreateTripStepOne() {
                         type="datetime-local"
                         className={inputClass}
                         value={registrationDeadlineLocal}
+                        min={registrationOpenLocal || minNowLocal}
                         max={maxAllowedDeadlineLocal}
                         onChange={(e) => {
-                          setRegistrationDeadlineLocal(e.target.value);
+                          const val = e.target.value;
+                          setRegistrationDeadlineLocal(val);
                           setCustomDeadlineTouched(true);
-                          setDateError("");
+                          if (val && new Date(val).getTime() < Date.now() - 60_000) {
+                            setDateError("Hạn chót đóng form đăng ký không được chọn ngày giờ trong quá khứ.");
+                          } else {
+                            setDateError("");
+                          }
                         }}
                       />
                       <span className="mt-1 block text-[11px] text-amber-800">
@@ -752,14 +777,11 @@ export function LeaderCreateTripStepOne() {
                   </div>
                 </div>
 
-                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-slate-700 flex items-start gap-2.5">
-                  <span className="text-base leading-none">💡</span>
-                  <div>
-                    <strong className="text-emerald-950 font-bold">Quy chuẩn an toàn VFRS:</strong> Chuyến đi ghép đoàn cần mở trước ngày khởi hành tối thiểu <strong>3 ngày</strong> để đảm bảo đủ thời gian gom đoàn, xử lý các đơn thuê trang bị (Rental Cutoff 24h) và nộp danh sách khai báo kiểm lâm.
-                  </div>
+                <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 text-xs text-[#1F2937]">
+                  <strong className="text-[#125238] font-bold">Quy chuẩn an toàn VFRS:</strong> Chuyến đi ghép đoàn cần mở trước ngày khởi hành tối thiểu <strong>3 ngày</strong> để đảm bảo đủ thời gian gom đoàn, xử lý các đơn thuê trang bị (Rental Cutoff 24h) và nộp danh sách khai báo kiểm lâm.
                 </div>
                 {dateError && (
-                  <p className="text-sm text-red-600 md:col-span-2" role="alert">
+                  <p className="text-sm font-medium text-red-600 md:col-span-2" role="alert">
                     {dateError}
                   </p>
                 )}
@@ -823,13 +845,8 @@ export function LeaderCreateTripStepOne() {
                   </select>
                 </label>
 
-                <div className="md:col-span-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 bg-emerald-50/60 p-3 rounded-xl border border-emerald-100">
-                  <span className="flex items-center gap-2">
-                    <span className="text-base">📝</span>
-                    <span>
-                      <strong>Mô tả chi tiết &amp; Lịch trình chuyến đi:</strong> Sẽ được tự động tạo và tinh chỉnh ở <strong>Bước 3 (Xem lại &amp; Công khai)</strong> sau khi bạn hoàn tất chọn Cung đường và Checkpoints ở Bước 2.
-                    </span>
-                  </span>
+                <div className="md:col-span-2 text-xs text-[#1F2937] bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200">
+                  <strong className="text-[#125238]">Mô tả chi tiết &amp; Lịch trình chuyến đi:</strong> Sẽ được tự động tạo và tinh chỉnh ở <strong>Bước 3 (Xem lại &amp; Công khai)</strong> sau khi bạn hoàn tất chọn Cung đường và Checkpoints ở Bước 2.
                 </div>
               </div>
             </FormCard>
@@ -843,18 +860,18 @@ export function LeaderCreateTripStepOne() {
                 <div>
                   <FieldLabel required>Số thành viên tối thiểu để khởi hành</FieldLabel>
 
-                  <div className="flex h-12 overflow-hidden rounded-xl border border-slate-200 bg-[#f6f8fc]">
+                  <div className="flex h-12 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F7F4]">
                     <button
                       type="button"
                       onClick={() =>
                         setMinCapacity((current) => Math.max(1, current - 1))
                       }
-                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                      className="w-12 font-bold text-[#6B7280] hover:bg-[#E5E7EB]"
                     >
                       -
                     </button>
 
-                    <div className="flex flex-1 items-center justify-center font-bold text-slate-900">
+                    <div className="flex flex-1 items-center justify-center font-bold text-[#1F2937] tabular-nums">
                       {minCapacity} thành viên
                     </div>
 
@@ -863,13 +880,13 @@ export function LeaderCreateTripStepOne() {
                       onClick={() =>
                         setMinCapacity((current) => Math.min(capacity, current + 1))
                       }
-                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                      className="w-12 font-bold text-[#6B7280] hover:bg-[#E5E7EB]"
                     >
                       +
                     </button>
                   </div>
 
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-[#6B7280]">
                     Chuyến đi đạt số lượng tối thiểu này sẽ chắc chắn khởi hành.
                   </p>
                 </div>
@@ -877,18 +894,18 @@ export function LeaderCreateTripStepOne() {
                 <div>
                   <FieldLabel required>Số thành viên tối đa (quy mô đoàn)</FieldLabel>
 
-                  <div className="flex h-12 overflow-hidden rounded-xl border border-slate-200 bg-[#f6f8fc]">
+                  <div className="flex h-12 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F7F4]">
                     <button
                       type="button"
                       onClick={() =>
                         setCapacity((current) => Math.max(minCapacity, current - 1))
                       }
-                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                      className="w-12 font-bold text-[#6B7280] hover:bg-[#E5E7EB]"
                     >
                       -
                     </button>
 
-                    <div className="flex flex-1 items-center justify-center font-bold text-slate-900">
+                    <div className="flex flex-1 items-center justify-center font-bold text-[#1F2937] tabular-nums">
                       {capacity} thành viên
                     </div>
 
@@ -897,7 +914,7 @@ export function LeaderCreateTripStepOne() {
                       onClick={() =>
                         setCapacity((current) => Math.min(30, current + 1))
                       }
-                      className="w-12 font-bold text-slate-600 hover:bg-slate-200"
+                      className="w-12 font-bold text-[#6B7280] hover:bg-[#E5E7EB]"
                     >
                       +
                     </button>
@@ -913,33 +930,30 @@ export function LeaderCreateTripStepOne() {
 
                   <div className="relative">
                     <input
-                      className={`${inputClass} pr-16`}
+                      className={`${inputClass} pr-16 tabular-nums`}
                       value={Number(price || 0).toLocaleString("vi-VN")}
                       onChange={(event) =>
                         setPrice(event.target.value.replace(/\D/g, ""))
                       }
                     />
 
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6B7280]">
                       VNĐ
                     </span>
                   </div>
 
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-[#6B7280]">
                     Mức giá tạm tính. Bạn có thể lập bảng chi phí chi tiết và chạy mô phỏng lợi nhuận ở Bước 3.
                   </p>
                 </label>
 
-                <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-xs text-slate-700 flex items-start gap-3">
-                  <span className="text-xl leading-none">📊</span>
-                  <div className="space-y-1">
-                    <strong className="text-emerald-950 font-bold block text-sm">
-                      Dự toán chi phí &amp; Trekking Pricing Simulator tự động:
-                    </strong>
-                    <p className="text-slate-600 leading-relaxed">
-                      Bạn không cần phải tự giải trình cơ sở tính giá bằng tay. Ở <strong>Bước 3 (Xem lại &amp; Công khai)</strong>, hệ thống sẽ cung cấp <strong>Bảng kê chi phí</strong> (xe cộ, ăn uống, porter, bảo hiểm) cùng <strong>Simulator kéo thả</strong> để tính toán điểm hòa vốn, biên lợi nhuận và tự động sinh bản giải trình cho bạn.
-                    </p>
-                  </div>
+                <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-[#1F2937] space-y-1">
+                  <strong className="text-[#125238] font-bold block text-sm">
+                    Dự toán chi phí &amp; Trekking Pricing Simulator tự động:
+                  </strong>
+                  <p className="text-[#6B7280] leading-relaxed">
+                    Bạn không cần phải tự giải trình cơ sở tính giá bằng tay. Ở <strong>Bước 3 (Xem lại &amp; Công khai)</strong>, hệ thống sẽ cung cấp <strong>Bảng kê chi phí</strong> (xe cộ, ăn uống, porter, bảo hiểm) cùng <strong>Simulator kéo thả</strong> để tính toán điểm hòa vốn, biên lợi nhuận và tự động sinh bản giải trình cho bạn.
+                  </p>
                 </div>
               </div>
             </FormCard>
@@ -953,7 +967,7 @@ export function LeaderCreateTripStepOne() {
               </div>
             )}
 
-            <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:flex-row sm:items-center">
               <Link
                 href="/leader/trips"
                 onClick={() => {
@@ -961,7 +975,7 @@ export function LeaderCreateTripStepOne() {
                   window.sessionStorage.removeItem("leader-create-trip-draft");
                   window.sessionStorage.removeItem("leader-create-trip-route");
                 }}
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100 px-5 text-sm font-bold text-slate-700 hover:bg-slate-200 transition"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-[#F7F7F4] border border-[#E5E7EB] px-5 text-sm font-bold text-[#1F2937] hover:bg-[#EFEFE9] transition"
               >
                 Hủy bỏ
               </Link>
@@ -971,25 +985,25 @@ export function LeaderCreateTripStepOne() {
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleContinue}
-                  className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#2f6b4f] disabled:cursor-not-allowed disabled:bg-slate-400"
+                  className="h-11 rounded-xl bg-[#2F6B4F] px-6 text-sm font-bold text-white shadow-xs hover:bg-[#1F4A36] disabled:cursor-not-allowed disabled:bg-stone-400"
                 >
                   {isSubmitting
                     ? "Đang xử lý..."
                     : tripId
-                    ? "Cập nhật & Tiếp tục: Chọn cung đường →"
-                    : "Tiếp tục: Chọn cung đường →"}
+                      ? "Cập nhật & Tiếp tục: Chọn cung đường →"
+                      : "Tiếp tục: Chọn cung đường →"}
                 </button>
               </div>
             </div>
           </div>
 
           <aside className="sticky top-20 hidden space-y-5 xl:block">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-bold text-slate-950">
+            <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-xs">
+              <h2 className="font-bold text-[#1F2937]">
                 Quy tắc 3 Điều kiện Mở/Đóng Đăng ký
               </h2>
 
-              <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
+              <ul className="mt-4 space-y-3 text-xs leading-5 text-[#6B7280]">
                 <li>✓ <strong>Hạn chót đăng ký:</strong> Tự động đóng form trước giờ khởi hành 2 ngày (có thể chỉnh tối đa sát nhất trước 1 ngày).</li>
                 <li>✓ <strong>Bảo vệ giữ chỗ:</strong> Khách đã vào form giữ chỗ trước giờ đóng sổ vẫn được thanh toán nốt trong thời gian giữ chỗ.</li>
                 <li>✓ <strong>Sức chứa tối đa:</strong> Đủ số người tối đa sẽ tự động chuyển sang trạng thái Đủ chỗ (FULL).</li>
