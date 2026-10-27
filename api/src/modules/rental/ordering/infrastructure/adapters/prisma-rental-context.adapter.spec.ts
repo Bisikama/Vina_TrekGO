@@ -1,4 +1,5 @@
 import { PrismaRentalContextAdapter } from './prisma-rental-context.adapter';
+import { BookingParticipationContextService } from '../../../../bookings/booking-participation-context.service';
 import { UserRole } from 'src/shared/constants';
 import { ROLES_KEY } from 'src/shared/decorators/roles.decorator';
 import { RentalTripController } from '../../presentation/controllers/rental-booking.controller';
@@ -9,6 +10,7 @@ import { RentalExtensionController } from '../../extension/rental-extension.cont
 describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   let adapter: PrismaRentalContextAdapter;
   let prismaMock: any;
+  let bookingContextService: BookingParticipationContextService;
 
   const now = new Date('2026-10-01T10:00:00Z');
 
@@ -80,14 +82,35 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       },
       booking: {
         findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockImplementation((args: any) => {
+          return Promise.resolve({
+            id: args?.where?.id,
+            pickupPoint: mockPickupPoint,
+            returnPoint: mockReturnPoint,
+            user: { fullName: 'Booking User', phone: '0901234567' },
+          });
+        }),
       },
       bookingParticipant: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockImplementation((args: any) => {
+          return Promise.resolve({
+            id: args?.where?.id,
+            fullName: 'Phạm Khách Tham Gia',
+            phone: '0908888888',
+            user: { fullName: 'Phạm Khách Tham Gia', phone: '0908888888' },
+          });
+        }),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-default', fullName: 'Default User', phone: '0900000000', status: 'ACTIVE', role: 'USER' }),
       },
     };
 
-    adapter = new PrismaRentalContextAdapter(prismaMock);
+    bookingContextService = new BookingParticipationContextService();
+    adapter = new PrismaRentalContextAdapter(prismaMock, bookingContextService);
   });
 
   // ---------------------------------------------------------------------------
@@ -122,7 +145,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       userId,
       role: 'MEMBER',
       status: 'ACTIVE',
-      version: 1,
+      version: 3,
       pickupPointId: mockPickupPoint.id,
       pickupPoint: mockPickupPoint,
       user: { fullName: 'Nguyễn Văn Member', phone: '0901111111' },
@@ -134,6 +157,8 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
     expect(context?.rentalEligible).toBe(true);
     expect(context?.bookingId).toBeNull();
     expect(context?.membershipRef).toBe('member-uuid-001');
+    expect(context?.membershipKind).toBe('PRIVATE_TRIP_MEMBER');
+    expect(context?.membershipSourceVersion).toBe(3);
     expect(context?.membershipRole).toBe('MEMBER');
     expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.trip.tripType).toBe('PRIVATE');
@@ -144,7 +169,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   // ---------------------------------------------------------------------------
   // TEST CASE 2: PUBLIC TRIP LEADER
   // ---------------------------------------------------------------------------
-  it('Test Case 2 (Public Leader): User là Leader của Public Trip -> eligible = true, membershipRole = LEADER, recipientOptions chỉ có Leader', async () => {
+  it('Test Case 2 (Public Leader): User là Leader của Public Trip -> eligible = true, membershipRole = LEADER', async () => {
     const tripId = 'trip-public-uuid';
     const leaderUserId = 'leader-user-uuid';
 
@@ -155,7 +180,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       tripType: 'PUBLIC',
       startAt: new Date('2026-10-10T06:00:00Z'),
       endAt: new Date('2026-10-12T18:00:00Z'),
-      version: 1,
+      version: 2,
       pickupPointId: mockPickupPoint.id,
       pickupPoint: mockPickupPoint,
       leaderId: leaderUserId,
@@ -173,6 +198,8 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
     expect(context?.rentalEligible).toBe(true);
     expect(context?.bookingId).toBeNull();
     expect(context?.membershipRef).toBe(leaderUserId);
+    expect(context?.membershipKind).toBe('PUBLIC_TRIP_LEADER');
+    expect(context?.membershipSourceVersion).toBe(2);
     expect(context?.membershipRole).toBe('LEADER');
     expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.recipientOptions).toHaveLength(1);
@@ -184,7 +211,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   // ---------------------------------------------------------------------------
   // TEST CASE 3: PUBLIC BOOKING PARTICIPANT (CONFIRMED)
   // ---------------------------------------------------------------------------
-  it('Test Case 3 (Public Participant): User có BookingParticipant trong đơn CONFIRMED -> eligible = true, membershipRef là participantId', async () => {
+  it('Test Case 3 (Public Participant): User có BookingParticipant trong đơn CONFIRMED -> eligible = true', async () => {
     const tripId = 'trip-public-uuid';
     const participantUserId = 'participant-user-uuid';
 
@@ -205,24 +232,25 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       weatherSnapshotsViaTripId: [],
     });
 
-    prismaMock.bookingParticipant.findMany.mockResolvedValue([
+    prismaMock.booking.findMany.mockResolvedValue([
       {
-        id: 'participant-uuid-002',
-        bookingId: 'booking-confirmed-uuid',
-        userId: participantUserId,
-        fullName: 'Phạm Khách Tham Gia',
-        phone: '0908888888',
-        status: 'ACTIVE',
-        user: { fullName: 'Phạm Khách Tham Gia', phone: '0908888888' },
-        booking: {
-          id: 'booking-confirmed-uuid',
-          tripId,
-          userId: participantUserId,
-          status: 'CONFIRMED',
-          version: 2,
-          pickupPoint: mockPickupPoint,
-          returnPoint: mockReturnPoint,
-        },
+        id: 'booking-confirmed-uuid',
+        tripId,
+        userId: 'other-booker-uuid',
+        status: 'CONFIRMED',
+        version: 4,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [
+          {
+            id: 'participant-uuid-002',
+            bookingId: 'booking-confirmed-uuid',
+            userId: participantUserId,
+            fullName: 'Phạm Khách Tham Gia',
+            phone: '0908888888',
+            status: 'ACTIVE',
+          },
+        ],
       },
     ]);
 
@@ -232,6 +260,8 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
     expect(context?.rentalEligible).toBe(true);
     expect(context?.bookingId).toBe('booking-confirmed-uuid');
     expect(context?.membershipRef).toBe('participant-uuid-002');
+    expect(context?.membershipKind).toBe('PUBLIC_PARTICIPANT');
+    expect(context?.membershipSourceVersion).toBe(4);
     expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.membershipRole).toBe('PARTICIPANT');
     expect(context?.recipientOptions).toHaveLength(1);
@@ -239,9 +269,9 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 3B: PUBLIC BOOKING OWNER WITHOUT PARTICIPANT
+  // TEST CASE 4: BUYER-ONLY WITHOUT PARTICIPANT ROW (PO Default: ineligible)
   // ---------------------------------------------------------------------------
-  it('Test Case 3B (Booker not a participant): Chủ Booking CONFIRMED được thuê theo chính sách đã chọn', async () => {
+  it('Test Case 4 (Buyer-only without participant): Mặc định đề xuất TẮT quyền thuê cho buyer không đi trek', async () => {
     const tripId = 'trip-public-uuid';
     const bookerUserId = 'booker-not-participant-uuid';
 
@@ -262,42 +292,39 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       weatherSnapshotsViaTripId: [],
     });
 
-    // Booker has no participant row
-    prismaMock.bookingParticipant.findMany.mockResolvedValue([]);
-
-    // But booker has a booking row
-    prismaMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-confirmed-uuid',
-      tripId,
-      userId: bookerUserId,
-      status: 'CONFIRMED',
-      version: 1,
-      pickupPoint: mockPickupPoint,
-      returnPoint: mockReturnPoint,
-      user: { fullName: 'Khách Đặt Hộ', phone: '0901234567' },
-    });
+    // Booker has a booking row, but participant list belongs to other users
+    prismaMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-confirmed-uuid',
+        tripId,
+        userId: bookerUserId,
+        status: 'CONFIRMED',
+        version: 1,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [],
+      },
+    ]);
 
     const context = await adapter.getByTripId(tripId, bookerUserId, now);
 
+    // Per PO default decision: buyer-only without participant slot cannot rent
     expect(context).not.toBeNull();
-    expect(context?.rentalEligible).toBe(true);
-    expect(context?.membershipRef).toBe('booking-confirmed-uuid');
-    expect(context?.membershipRole).toBe('BOOKER');
-    expect(context?.recipientOptions).toEqual([
-      expect.objectContaining({ memberId: 'booking-confirmed-uuid', userId: bookerUserId, status: 'ACTIVE' }),
-    ]);
+    expect(context?.rentalEligible).toBe(false);
+    expect(context?.ineligibleReason).toBe('TRIP_MEMBERSHIP_NOT_ELIGIBLE');
+    expect(context?.membershipKind).toBe('PUBLIC_BOOKING_BUYER');
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 4: PUBLIC BOOKING UNPAID OR CANCELLED
+  // TEST CASE 5: DETERMINISTIC SELECTION ACROSS MULTIPLE SOURCES
   // ---------------------------------------------------------------------------
-  it('Test Case 4 (Public Participant Unpaid): Participant thuộc đơn PENDING_PAYMENT -> eligible = false', async () => {
+  it('Test Case 5 (Multiple Sources): Chọn deterministically nguồn có thứ tự ưu tiên và ref nhỏ nhất', async () => {
     const tripId = 'trip-public-uuid';
-    const participantUserId = 'participant-unpaid-uuid';
+    const multiUserId = 'multi-user-uuid';
 
     prismaMock.trip.findUnique.mockResolvedValue({
       id: tripId,
-      title: 'Tour Chinh Phục Bạch Mộc Lương Tử',
+      title: 'Tour Fansipan',
       status: 'OPEN',
       tripType: 'PUBLIC',
       startAt: new Date('2026-10-10T06:00:00Z'),
@@ -305,46 +332,185 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       version: 1,
       pickupPointId: mockPickupPoint.id,
       pickupPoint: mockPickupPoint,
-      leaderId: 'leader-uuid',
+      leaderId: 'leader-id',
       leader: null,
       tripTransportsViaTripId: [mockTransport],
       tripTrailPlansViaTripId: [],
       weatherSnapshotsViaTripId: [],
     });
 
-    prismaMock.bookingParticipant.findMany.mockResolvedValue([
+    // User is buyer on booking-1, and participant on two bookings: participant-B and participant-A
+    prismaMock.booking.findMany.mockResolvedValue([
       {
-        id: 'participant-unpaid-part-uuid',
-        bookingId: 'booking-unpaid-uuid',
-        userId: participantUserId,
-        fullName: 'Khách Chưa Thanh Toán',
-        phone: '0904444444',
-        status: 'ACTIVE',
-        user: { fullName: 'Khách Chưa Thanh Toán', phone: '0904444444' },
-        booking: {
-          id: 'booking-unpaid-uuid',
-          tripId,
-          userId: participantUserId,
-          status: 'PENDING_PAYMENT',
-          version: 1,
-          pickupPoint: mockPickupPoint,
-          returnPoint: mockReturnPoint,
-        },
+        id: 'booking-1',
+        tripId,
+        userId: multiUserId,
+        status: 'CONFIRMED',
+        version: 1,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [
+          {
+            id: 'participant-bbb',
+            bookingId: 'booking-1',
+            userId: multiUserId,
+            fullName: 'Participant B',
+            phone: '0901',
+            status: 'ACTIVE',
+          },
+        ],
+      },
+      {
+        id: 'booking-2',
+        tripId,
+        userId: 'other-user',
+        status: 'CONFIRMED',
+        version: 2,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [
+          {
+            id: 'participant-aaa',
+            bookingId: 'booking-2',
+            userId: multiUserId,
+            fullName: 'Participant A',
+            phone: '0902',
+            status: 'ACTIVE',
+          },
+        ],
       },
     ]);
 
-    const context = await adapter.getByTripId(tripId, participantUserId, now);
+    const context = await adapter.getByTripId(tripId, multiUserId, now);
 
+    // Selected deterministically: PUBLIC_PARTICIPANT with smaller membershipRef ('participant-aaa')
     expect(context).not.toBeNull();
-    expect(context?.rentalEligible).toBe(false);
-    expect(context?.ineligibleReason).toBe('TRIP_MEMBERSHIP_NOT_ELIGIBLE');
-    expect(context?.membershipStatus).toBe('PENDING_PAYMENT');
+    expect(context?.rentalEligible).toBe(true);
+    expect(context?.membershipKind).toBe('PUBLIC_PARTICIPANT');
+    expect(context?.membershipRef).toBe('participant-aaa');
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 6: NON-MEMBER (NOT IN TRIP)
+  // TEST CASE 6: TERMINAL TRIP CHECK
   // ---------------------------------------------------------------------------
-  it('Test Case 6 (Non-member): Người ngoài không có trong chuyến đi -> trả về null', async () => {
+  it('Test Case 6 (Terminal Trip): Trip ở trạng thái CANCELLED hoặc COMPLETED -> eligible = false', async () => {
+    const tripId = 'trip-cancelled-uuid';
+    const userId = 'user-uuid';
+
+    prismaMock.trip.findUnique.mockResolvedValue({
+      id: tripId,
+      title: 'Tour Bị Hủy',
+      status: 'CANCELLED',
+      tripType: 'PUBLIC',
+      startAt: new Date('2026-10-10T06:00:00Z'),
+      endAt: new Date('2026-10-12T18:00:00Z'),
+      version: 5,
+      pickupPointId: mockPickupPoint.id,
+      pickupPoint: mockPickupPoint,
+      leaderId: 'leader-id',
+      leader: null,
+      tripTransportsViaTripId: [mockTransport],
+      tripTrailPlansViaTripId: [],
+      weatherSnapshotsViaTripId: [],
+    });
+
+    prismaMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-1',
+        tripId,
+        userId,
+        status: 'CONFIRMED',
+        version: 1,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [
+          {
+            id: 'part-1',
+            bookingId: 'booking-1',
+            userId,
+            fullName: 'Khách',
+            phone: '0901',
+            status: 'ACTIVE',
+          },
+        ],
+      },
+    ]);
+
+    const context = await adapter.getByTripId(tripId, userId, now);
+
+    expect(context).not.toBeNull();
+    expect(context?.rentalEligible).toBe(false);
+    expect(context?.ineligibleReason).toBe('TRIP_TERMINAL');
+  });
+
+  // ---------------------------------------------------------------------------
+  // TEST CASE 7: EXACT CUTOFF BOUNDARY
+  // ---------------------------------------------------------------------------
+  it('Test Case 7 (Cutoff Boundary): Đúng mốc cutoff (now == cutoff) được thuê; quá mốc (now > cutoff) từ chối', async () => {
+    const tripId = 'trip-cutoff-uuid';
+    const userId = 'user-cutoff-uuid';
+
+    // handover at 2026-10-10T06:00:00Z, policy cutoff 24h -> cutoff is 2026-10-09T06:00:00Z
+    const plannedHandoverAt = new Date('2026-10-10T06:00:00Z');
+    const exactCutoff = new Date('2026-10-09T06:00:00Z');
+    const pastCutoff = new Date('2026-10-09T06:00:00.001Z');
+
+    prismaMock.trip.findUnique.mockResolvedValue({
+      id: tripId,
+      title: 'Tour Cutoff Check',
+      status: 'OPEN',
+      tripType: 'PUBLIC',
+      startAt: plannedHandoverAt,
+      endAt: new Date('2026-10-12T18:00:00Z'),
+      version: 1,
+      pickupPointId: mockPickupPoint.id,
+      pickupPoint: mockPickupPoint,
+      leaderId: 'leader-id',
+      leader: null,
+      tripTransportsViaTripId: [mockTransport],
+      tripTrailPlansViaTripId: [],
+      weatherSnapshotsViaTripId: [],
+    });
+
+    prismaMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-1',
+        tripId,
+        userId,
+        status: 'CONFIRMED',
+        version: 1,
+        pickupPoint: mockPickupPoint,
+        returnPoint: mockReturnPoint,
+        bookingParticipantsViaBookingId: [
+          {
+            id: 'part-cutoff',
+            bookingId: 'booking-1',
+            userId,
+            fullName: 'Khách Cutoff',
+            phone: '0901',
+            status: 'ACTIVE',
+          },
+        ],
+      },
+    ]);
+
+    // 1. Đúng mốc cutoff: ELIGIBLE = true (Policy v1.5.2)
+    const contextAtCutoff = await adapter.getByTripId(tripId, userId, exactCutoff);
+    expect(contextAtCutoff).not.toBeNull();
+    expect(contextAtCutoff?.rentalEligible).toBe(true);
+    expect(contextAtCutoff?.ineligibleReason).toBeNull();
+
+    // 2. Vượt quá mốc cutoff: ELIGIBLE = false, reason = 'RENTAL_CUTOFF_PASSED'
+    const contextPastCutoff = await adapter.getByTripId(tripId, userId, pastCutoff);
+    expect(contextPastCutoff).not.toBeNull();
+    expect(contextPastCutoff?.rentalEligible).toBe(false);
+    expect(contextPastCutoff?.ineligibleReason).toBe('RENTAL_CUTOFF_PASSED');
+  });
+
+  // ---------------------------------------------------------------------------
+  // TEST CASE 8: NON-MEMBER (NOT IN TRIP)
+  // ---------------------------------------------------------------------------
+  it('Test Case 8 (Non-member): Người ngoài không có trong chuyến đi -> trả về null', async () => {
     const tripId = 'trip-public-uuid';
     const strangerUserId = 'stranger-uuid';
 
@@ -365,8 +531,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
       weatherSnapshotsViaTripId: [],
     });
 
-    prismaMock.booking.findFirst.mockResolvedValue(null);
-    prismaMock.bookingParticipant.findFirst.mockResolvedValue(null);
+    prismaMock.booking.findMany.mockResolvedValue([]);
     prismaMock.tripMember.findUnique.mockResolvedValue(null);
 
     const context = await adapter.getByTripId(tripId, strangerUserId, now);
@@ -375,7 +540,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // TEST CASE 7: ROLE GUARDS REGISTRATION
+  // TEST CASE 9: ROLE GUARDS REGISTRATION
   // ---------------------------------------------------------------------------
   describe('Kiểm tra cấu hình Role Guard trên các Presentation Controller', () => {
     it('RentalTripController các endpoint phải cho phép UserRole.LEADER bên cạnh UserRole.USER', () => {

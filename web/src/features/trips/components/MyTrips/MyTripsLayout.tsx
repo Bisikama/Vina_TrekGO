@@ -118,25 +118,22 @@ export const MyTripsLayout = () => {
 
         {isInitialLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <svg className="animate-spin h-9 w-9 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+            <div className="h-9 w-9 animate-spin rounded-full border-3 border-emerald-600 border-t-transparent" />
             <p className="text-sm font-medium text-gray-500">Đang tải danh sách chuyến đi của bạn...</p>
           </div>
         ) : activeTab === 'INVITATIONS' ? (
-            <div className="mt-8">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <span>✉️</span> Hộp thư lời mời tham gia chuyến đi riêng (Private Trip)
-                </h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Xem và phản hồi các lời mời do Host chuyến đi gửi trực tiếp tới email tài khoản của bạn.
-                </p>
-              </div>
-              <PrivateTripInvitationsInbox />
+          <div className="mt-8">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                Hộp thư lời mời tham gia chuyến đi riêng (Private Trip)
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Xem và phản hồi các lời mời do Host chuyến đi gửi trực tiếp tới email tài khoản của bạn.
+              </p>
             </div>
-          ) : (
+            <PrivateTripInvitationsInbox />
+          </div>
+        ) : (
           <div className="mt-8 space-y-12">
             {/* Sắp tới */}
             <section>
@@ -163,22 +160,11 @@ export const MyTripsLayout = () => {
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-10 text-center shadow-sm">
-                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
                   <p className="text-gray-800 font-bold mb-1">Bạn chưa có chuyến đi nào sắp diễn ra.</p>
                   <p className="text-gray-400 text-sm mb-6 max-w-md mx-auto">
-                    Khám phá các tour ghép đoàn hấp dẫn hoặc tự lập kế hoạch trekking cùng bạn bè.
+                    Hãy tự lập kế hoạch trekking cùng bạn bè cho hành trình sắp tới.
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-3">
-                    <Link
-                      href="/trips"
-                      className="px-5 py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors text-sm shadow-sm"
-                    >
-                      Khám phá tour ghép đoàn
-                    </Link>
                     <Link
                       href="/my-trips/create"
                       className="px-5 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 transition-colors text-sm border border-emerald-200"
@@ -268,15 +254,10 @@ const BookedTripCard = ({ booking }: { booking: BookingSummary }) => {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
           <div>
             <div className="flex flex-wrap items-center gap-2.5 mb-2">
-              {/* Type badge */}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase bg-teal-50 text-teal-800 border border-teal-200">
-                <svg className="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase bg-teal-50 text-teal-800 border border-teal-200">
                 Tour đã đặt
               </span>
 
-              {/* Status badge */}
               <span
                 className={`px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase ${
                   booking.status === 'CONFIRMED'
@@ -287,7 +268,7 @@ const BookedTripCard = ({ booking }: { booking: BookingSummary }) => {
                 }`}
               >
                 {booking.status === 'CONFIRMED'
-                  ? '✓ Đã thanh toán & Xác nhận'
+                  ? 'Đã thanh toán & Xác nhận'
                   : BOOKING_STATUS_LABELS[booking.status] || booking.status}
               </span>
 
@@ -303,29 +284,15 @@ const BookedTripCard = ({ booking }: { booking: BookingSummary }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 gap-y-6 mt-6 pt-4 border-t border-gray-100">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Khởi hành</p>
-              <p className="font-semibold text-gray-900">{formatDate(booking.trip.startAt)}</p>
-            </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Khởi hành</p>
+            <p className="font-semibold text-gray-900">{formatDate(booking.trip.startAt)}</p>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Số lượng & Thanh toán</p>
-              <p className="font-semibold text-gray-900">{booking.participantCount} thành viên</p>
-              <p className="text-xs text-emerald-700 font-bold">{formatMoneyVND(booking.totalAmount)}</p>
-            </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Số lượng & Thanh toán</p>
+            <p className="font-semibold text-gray-900">{booking.participantCount} thành viên</p>
+            <p className="text-xs text-emerald-700 font-bold">{formatMoneyVND(booking.totalAmount)}</p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
@@ -387,11 +354,7 @@ const PrivateTripCard = ({ trip, onCancel }: { trip: any; onCancel?: () => void 
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <div className="flex flex-wrap items-center gap-2.5 mb-2">
-              {/* Type badge */}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase bg-amber-50 text-amber-800 border border-amber-200">
-                <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wider uppercase bg-amber-50 text-amber-800 border border-amber-200">
                 Chuyến tự tổ chức
               </span>
 
@@ -428,43 +391,21 @@ const PrivateTripCard = ({ trip, onCancel }: { trip: any; onCancel?: () => void 
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 gap-y-6 pt-4 border-t border-gray-100">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Khởi hành</p>
-              <p className="font-semibold text-gray-900">{formatDate(trip.startAt)}</p>
-            </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Khởi hành</p>
+            <p className="font-semibold text-gray-900">{formatDate(trip.startAt)}</p>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Thành viên</p>
-              <p className="font-semibold text-gray-900">Tối đa {trip.maxPax} người</p>
-            </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Thành viên</p>
+            <p className="font-semibold text-gray-900">Tối đa {trip.maxPax} người</p>
           </div>
 
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Nguồn tuyến đường</p>
-              <p className="font-semibold text-gray-900">
-                {trip.tripType === 'PERSONAL' ? 'Bản đồ cá nhân' : 'Bản đồ hệ thống'}
-              </p>
-            </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">Nguồn tuyến đường</p>
+            <p className="font-semibold text-gray-900">
+              {trip.tripType === 'PERSONAL' ? 'Bản đồ cá nhân' : 'Bản đồ hệ thống'}
+            </p>
           </div>
 
           <div className="flex flex-col items-start justify-end md:items-end">
@@ -484,4 +425,3 @@ const PrivateTripCard = ({ trip, onCancel }: { trip: any; onCancel?: () => void 
     </div>
   );
 };
-

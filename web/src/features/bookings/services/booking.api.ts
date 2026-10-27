@@ -13,6 +13,59 @@ import type {
   PublicTripsQuery,
 } from '../types/booking.types';
 
+export interface PublicParticipantInvitation {
+  id: string;
+  participantId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED' | 'EXPIRED' | 'INVALIDATED';
+  reason: string | null;
+  version: number;
+  expiresAt: string;
+  createdAt: string;
+  senderDisplay: string;
+  recipientDisplay: string;
+  participantName: string;
+  participantStatus: string;
+  checkinStatus: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'NO_SHOW';
+  bookingStatus: string;
+  trip: {
+    id: string;
+    title: string;
+    status: string;
+    startAt: string;
+    endAt: string;
+    destination?: { id: string; name: string } | null;
+  };
+  actions: {
+    canAccept: boolean;
+    canDecline: boolean;
+    canRevoke: boolean;
+  };
+  ticketId: string | null;
+}
+
+export interface PersonalTicket {
+  id: string;
+  participantName: string;
+  participantStatus: string;
+  checkinStatus: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'NO_SHOW';
+  checkinMethod: 'QR' | 'MANUAL' | null;
+  checkedInAt: string | null;
+  checkinCode: string | null;
+  trip: {
+    id: string;
+    title: string;
+    status: string;
+    startAt: string;
+    endAt: string;
+    destination?: { id: string; name: string } | null;
+  };
+  bookingStatus: string;
+  permissions?: {
+    participantActive?: boolean;
+    canCheckIn?: boolean;
+  };
+}
+
 const config = { baseURL: '' }; // Same-origin Next rewrite để tránh bị CORS chặn header Idempotency-Key
 const headers = (key: string) => ({
   ...config,
@@ -27,7 +80,9 @@ const formatParticipantsPayload = (participants: Participant[]) => ({
     ...(p.id ? { id: p.id } : {}),
     fullName: p.fullName.trim(),
     ...(p.phone?.trim() ? { phone: p.phone.trim() } : {}),
-    ...(p.dateOfBirth ? { dateOfBirth: p.dateOfBirth } : {}),
+    ...(p.dateOfBirth && p.dateOfBirth.trim()
+      ? { dateOfBirth: p.dateOfBirth.trim().slice(0, 10) }
+      : {}),
     ...(p.emergencyContactName?.trim()
       ? { emergencyContactName: p.emergencyContactName.trim() }
       : {}),
@@ -46,11 +101,31 @@ export const bookingApiService = {
     query: PublicTripsQuery = {},
     signal?: AbortSignal
   ): Promise<PageResponse<PublicBookingTrip>> => {
+    // Sanitize params according to backend tripSearchSchema.strict()
+    const params: Record<string, any> = {
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 12,
+    };
+    if (query.destinationId && query.destinationId.trim()) {
+      params.destinationId = query.destinationId.trim();
+    }
+    if (query.dateFrom && query.dateFrom.trim()) {
+      params.dateFrom = query.dateFrom.trim();
+    }
+    if (query.dateTo && query.dateTo.trim()) {
+      params.dateTo = query.dateTo.trim();
+    }
+    if (query.difficulty && query.difficulty.trim()) {
+      params.difficulty = query.difficulty.trim();
+    }
+    if (query.priceMax !== undefined && query.priceMax !== null && !isNaN(Number(query.priceMax))) {
+      params.price = Number(query.priceMax);
+    }
     const response = await apiClient.get<PageResponse<PublicBookingTrip>>(
       '/api/v1/trips',
       {
         ...config,
-        params: query,
+        params,
         signal,
       }
     );
@@ -135,7 +210,7 @@ export const bookingApiService = {
   ): Promise<BookingDetail> => {
     const payload = {
       ...formatParticipantsPayload(participants),
-      ...(typeof expectedVersion === 'number' ? { expectedVersion } : {}),
+      expectedVersion: expectedVersion ?? 1,
     };
     const response = await apiClient.patch<BookingDetail>(
       `/api/v1/bookings/${bookingId}/participants`,
@@ -179,6 +254,75 @@ export const bookingApiService = {
     );
     return response.data;
   },
+
+  /**
+   * GET /api/v1/me/booking-participant-invitations
+   * Danh sách lời mời nhận vé từ bạn bè
+   */
+  listMyTicketInvitations: async (
+    query: { page?: number; pageSize?: number; status?: string } = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<PublicParticipantInvitation>> => {
+    const response = await apiClient.get<PageResponse<PublicParticipantInvitation>>(
+      '/api/v1/me/booking-participant-invitations',
+      {
+        ...config,
+        params: query,
+        signal,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * POST /api/v1/booking-participant-invitations/{id}/accept
+   * Chấp nhận lời mời nhận vé đồng hành
+   */
+  acceptTicketInvitation: async (
+    invitationId: string
+  ): Promise<PublicParticipantInvitation> => {
+    const response = await apiClient.post<PublicParticipantInvitation>(
+      `/api/v1/booking-participant-invitations/${invitationId}/accept`,
+      { confirmParticipantIdentity: true },
+      config
+    );
+    return response.data;
+  },
+
+  /**
+   * POST /api/v1/booking-participant-invitations/{id}/decline
+   * Từ chối lời mời nhận vé đồng hành
+   */
+  declineTicketInvitation: async (
+    invitationId: string,
+    reason?: string
+  ): Promise<PublicParticipantInvitation> => {
+    const response = await apiClient.post<PublicParticipantInvitation>(
+      `/api/v1/booking-participant-invitations/${invitationId}/decline`,
+      reason ? { reason } : {},
+      config
+    );
+    return response.data;
+  },
+
+  /**
+   * GET /api/v1/me/tickets
+   * Danh sách vé cá nhân đã liên kết với tài khoản hiện tại
+   */
+  listMyTickets: async (
+    query: { page?: number; pageSize?: number } = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<PersonalTicket>> => {
+    const response = await apiClient.get<PageResponse<PersonalTicket>>(
+      '/api/v1/me/tickets',
+      {
+        ...config,
+        params: query,
+        signal,
+      }
+    );
+    return response.data;
+  },
 };
 
 /**
@@ -214,6 +358,11 @@ export function getBookingErrorMessage(
       VALIDATION_ERROR:
         'Dữ liệu nhập không hợp lệ. Vui lòng kiểm tra lại thông tin thành viên.',
       NOT_FOUND: 'Không tìm thấy thông tin chuyến đi hoặc đặt chỗ.',
+      INVITE_EXPIRED: 'Lời mời nhận vé này đã hết hạn.',
+      INVITATION_NOT_ACTIONABLE: 'Lời mời nhận vé này không còn hiệu lực xử lý.',
+      PARTICIPANT_ALREADY_LINKED: 'Vé này đã được liên kết với một tài khoản khác.',
+      TRIP_PARTICIPATION_EXISTS: 'Tài khoản của bạn đã có vé tham gia trong chuyến đi này rồi.',
+      PARTICIPANT_CLAIM_NOT_ALLOWED: 'Vé này chưa sẵn sàng để liên kết hoặc đã được điểm danh.',
     };
 
     const message = messages[code] ?? errObj?.message ?? fallback;

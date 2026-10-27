@@ -1,6 +1,18 @@
 import { z } from 'zod'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
+export const PERSONAL_TRAIL_BATCH_LIMIT = 500
+const MAX_INT = 2_147_483_647
+
+export const personalCheckpointInputSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  radiusMeters: z.number().int().min(1).max(MAX_INT).default(50),
+  info: z.string().nullable().optional(),
+})
+export type PersonalCheckpointInput = z.infer<typeof personalCheckpointInputSchema>
+
 // ============================================================================
 // 1. ZOD VALIDATION SCHEMAS
 // ============================================================================
@@ -29,14 +41,14 @@ export const rawSampleItemSchema = z.object({
   altitudeAccuracyM: z.number().nullable().optional(),
   speedMps: z.number().nullable().optional(),
   headingDeg: z.number().nullable().optional(),
-  segmentId: z.number().int().nonnegative().default(0),
+  segmentId: z.number().int().nonnegative().max(MAX_INT).default(0),
   accepted: z.boolean().nullable().optional().default(true),
   rejectReason: z.string().max(40).nullable().optional(),
 })
 
 export const rawSamplesBatchSchema = z.object({
   clientRecordingId: z.string().uuid().optional(),
-  samples: z.array(rawSampleItemSchema).min(1, 'Samples batch cannot be empty'),
+  samples: z.array(rawSampleItemSchema).min(1, 'Samples batch cannot be empty').max(PERSONAL_TRAIL_BATCH_LIMIT),
 })
 
 export type RawSamplesBatchInput = z.infer<typeof rawSamplesBatchSchema>
@@ -58,7 +70,7 @@ export const finishRecordingSchema = z
       .object({
         title: z.string().min(1).max(200).optional(),
         description: z.string().nullable().optional(),
-    duration: z.string().nullable().optional(),
+        duration: z.string().max(100).nullable().optional(),
         region: z.string().nullable().optional(),
         difficulty: z.string().nullable().optional(),
         terrainType: z.string().nullable().optional(),
@@ -69,12 +81,12 @@ export const finishRecordingSchema = z
       .object({
         distanceKm: z.number().optional(),
         elevationGainM: z.number().optional(),
-        duration: z.string().optional(),
-        elapsedSeconds: z.number().optional(),
+        duration: z.string().min(1).max(100).optional(),
+        elapsedSeconds: z.number().int().nonnegative().max(MAX_INT).optional(),
       })
       .optional(),
     gpsSegments: z.array(z.array(z.array(z.number()))).optional(),
-    checkpoints: z.array(z.any()).optional(),
+    checkpoints: z.array(personalCheckpointInputSchema).max(100).optional(),
   })
   .default({})
 
@@ -186,6 +198,8 @@ export class RawSamplesBatchRequestDto {
 
   @ApiProperty({
     type: [RawSampleItemDto],
+    minItems: 1,
+    maxItems: PERSONAL_TRAIL_BATCH_LIMIT,
     description: 'Danh sách các mẫu GPS thô ghi nhận được trong đợt đồng bộ này',
     example: [
       {
@@ -251,11 +265,34 @@ export class ProvisionalTelemetryRequestDto {
   @ApiPropertyOptional({ example: 350, description: 'Độ dốc leo tích lũy tạm tính (m)' })
   elevationGainM?: number
 
-  @ApiPropertyOptional({ example: '02:15:30', description: 'Thời gian thực tế' })
+  @ApiPropertyOptional({ example: '02:15:30', minLength: 1, maxLength: 100, description: 'Thời gian thực tế' })
   duration?: string
 
-  @ApiPropertyOptional({ example: 8130, description: 'Số giây trôi qua' })
+  @ApiPropertyOptional({
+    example: 8130,
+    type: 'integer',
+    minimum: 0,
+    maximum: MAX_INT,
+    description: 'Số giây trôi qua',
+  })
   elapsedSeconds?: number
+}
+
+export class PersonalCheckpointRequestDto {
+  @ApiProperty({ minLength: 1, maxLength: 200, example: 'Điểm lấy nước' })
+  name!: string
+
+  @ApiProperty({ minimum: -90, maximum: 90, example: 10.78 })
+  latitude!: number
+
+  @ApiProperty({ minimum: -180, maximum: 180, example: 106.7 })
+  longitude!: number
+
+  @ApiPropertyOptional({ type: 'integer', minimum: 1, maximum: MAX_INT, default: 50 })
+  radiusMeters?: number
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  info?: string | null
 }
 
 export class FinishRecordingRequestDto {
@@ -285,8 +322,12 @@ export class FinishRecordingRequestDto {
   })
   gpsSegments?: number[][][]
 
-  @ApiPropertyOptional({ description: 'Danh sách các điểm checkpoint đánh dấu trong phiên ghi' })
-  checkpoints?: any[]
+  @ApiPropertyOptional({
+    type: [PersonalCheckpointRequestDto],
+    maxItems: 100,
+    description: 'Checkpoint tùy chỉnh theo thứ tự đi; server tự thêm START và END',
+  })
+  checkpoints?: PersonalCheckpointRequestDto[]
 }
 
 export class UpdatePersonalTrailRequestDto {

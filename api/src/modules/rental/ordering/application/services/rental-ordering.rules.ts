@@ -9,14 +9,35 @@ export interface RentalEligibilityDecision { eligible: boolean; reason: RentalEl
 export interface OccupiedWindow { occupiedFrom: Date; occupiedUntil: Date; }
 /** SOT 1.5.2: giữ công suất từ 12 giờ trước rentalStartAt. */
 export const RENTAL_PREP_BUFFER_MINUTES = 12 * 60;
+export const TERMINAL_TRIP_STATUSES = ['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'] as const;
+
+export function isTripTerminalOrInactive(status: string): boolean {
+  return (TERMINAL_TRIP_STATUSES as readonly string[]).includes(status);
+}
+
+export function calculateRentalCutoff(plannedHandoverAt: Date, cutoffHoursBeforeTrip = 24): Date {
+  return new Date(plannedHandoverAt.getTime() - cutoffHoursBeforeTrip * 3_600_000);
+}
+
+export function isRentalCutoffPassed(now: Date, rentalCutoffAt: Date): boolean {
+  // Policy v1.5.2: Đúng tại mốc 24 giờ vẫn được thuê; chỉ từ chối khi now > cutoff.
+  return now.getTime() > rentalCutoffAt.getTime();
+}
+
 export function rentalOccupiedFrom(rentalStartAt: Date): Date {
   return new Date(rentalStartAt.getTime() - RENTAL_PREP_BUFFER_MINUTES * 60_000);
 }
+
 export function evaluateRentalEligibility(context: RentalEligibilityContext, now: Date): RentalEligibilityDecision {
-  if (!context.rentalEligible || context.membershipStatus !== 'ACTIVE') return { eligible: false, reason: 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' };
-  if (now >= context.rentalCutoffAt) return { eligible: false, reason: 'RENTAL_CUTOFF_PASSED' };
+  if (!context.rentalEligible || context.membershipStatus !== 'ACTIVE' || isTripTerminalOrInactive(context.trip.status)) {
+    return { eligible: false, reason: 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' };
+  }
+  if (isRentalCutoffPassed(now, context.rentalCutoffAt)) {
+    return { eligible: false, reason: 'RENTAL_CUTOFF_PASSED' };
+  }
   return { eligible: true, reason: null };
 }
+
 /** Server validates a longer return against policy AND an actual Area A return option. */
 export function resolveRentalReturn(context: RentalEligibilityContext, requestedReturnAt?: Date, returnOptionId?: string) {
   const endAt = requestedReturnAt ?? context.dropoff.scheduledAt;
@@ -37,6 +58,7 @@ export function resolveRentalReturn(context: RentalEligibilityContext, requested
     windowStart: option.windowStart.toISOString(), windowEnd: option.windowEnd.toISOString(),
   } };
 }
+
 export function calculateOccupiedWindow(context: RentalEligibilityContext, returnAt = context.dropoff.scheduledAt, requiresDeepInspection = false): OccupiedWindow {
   const occupiedFrom = rentalOccupiedFrom(context.pickup.scheduledAt);
   // Policy v1.4.2: post-return 24h OR deep-inspection 48h, never 24+48.
@@ -53,12 +75,14 @@ export function calculateOccupiedWindow(context: RentalEligibilityContext, retur
   if (occupiedFrom >= occupiedUntil) throw new Error('Invalid occupied window');
   return { occupiedFrom, occupiedUntil };
 }
+
 export function calculateChargedDays(startAt: Date, endAt: Date, dayCountMode: 'CEIL_24H' = 'CEIL_24H'): number {
   const durationMs = endAt.getTime() - startAt.getTime();
   if (durationMs <= 0) throw new Error('Rental endAt must be after startAt');
   if (dayCountMode !== 'CEIL_24H') throw new Error(`Unsupported rental dayCountMode: ${String(dayCountMode)}`);
   return Math.max(1, Math.ceil(durationMs / 86400000));
 }
+
 export function resolveRecipient(context: RentalEligibilityContext, requestedMemberId?: string): RentalRecipientOption | null {
   // MVP: only the owner/member. Do not grant rental custody to another Trip member implicitly.
   return context.recipientOptions.find((r) => r.userId === context.userId && r.status === 'ACTIVE' && (!requestedMemberId || r.memberId === requestedMemberId)) ?? null;

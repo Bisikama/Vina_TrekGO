@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { bookingApi, dateTime, money } from '@/features/bookings/booking.api';
 import type { Booking } from '@/features/bookings/booking.api';
+import { apiClient } from '@/lib/axios';
 import { useStaticDataStore } from '@/lib/staticDataStore';
 
 function getVnpayErrorMessage(code: string | null): string {
@@ -160,34 +161,57 @@ function PaymentReturnContent() {
   });
 
   useEffect(() => {
-    if (rawBookingId) {
-      let active = true;
+    let active = true;
 
-      bookingApi
-        .detail(rawBookingId)
-        .then((data) => {
+    async function syncAndLoad() {
+      // Chuyển tiếp chữ ký vnp_* từ Return URL sang webhook VNPAY của Backend
+      // để xác thực chữ ký HMAC-SHA512 (vnp_SecureHash) và chốt đơn ngay cả khi không bật ngrok
+      if (isVnpay && searchParams.has('vnp_SecureHash')) {
+        const vnpParams: Record<string, string> = {};
+        searchParams.forEach((value, key) => {
+          if (key.startsWith('vnp_')) {
+            vnpParams[key] = value;
+          }
+        });
+        try {
+          await apiClient.get('/api/v1/payments/webhooks/vnpay', {
+            params: vnpParams,
+          });
+        } catch {
+          // Ignore webhook forward error
+        }
+      }
+
+      if (rawBookingId) {
+        try {
+          const data = await bookingApi.detail(rawBookingId);
           if (active) setBooking(data);
-        })
-        .catch(() => {});
+        } catch {}
+        return;
+      }
 
-      return () => {
-        active = false;
-      };
+      if (
+        typeof window !== 'undefined' &&
+        trailPurchase &&
+        (vnpResponseCode === '00' || momoResultCode === '0')
+      ) {
+        localStorage.setItem(
+          `trail_unlocked:${trailPurchase.trailId}`,
+          'true',
+        );
+        useStaticDataStore.getState().clearStaticCache();
+        void useStaticDataStore.getState().loadPrivateSources(true);
+      }
     }
 
-    if (
-      typeof window !== 'undefined' &&
-      trailPurchase &&
-      (vnpResponseCode === '00' || momoResultCode === '0')
-    ) {
-      localStorage.setItem(
-        `trail_unlocked:${trailPurchase.trailId}`,
-        'true',
-      );
-      useStaticDataStore.getState().clearStaticCache();
-      void useStaticDataStore.getState().loadPrivateSources(true);
-    }
+    void syncAndLoad();
+
+    return () => {
+      active = false;
+    };
   }, [
+    isVnpay,
+    searchParams,
     rawBookingId,
     trailPurchase,
     vnpResponseCode,

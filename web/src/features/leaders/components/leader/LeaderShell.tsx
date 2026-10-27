@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -23,24 +24,6 @@ const leaderItems: NavItem[] = [
     label: "Tạo chuyến đi mới",
     href: "/leader/create-trip",
     icon: "⊕",
-  },
-];
-
-const trekkerItems: NavItem[] = [
-  {
-    label: "Khám phá cung đường",
-    href: "/trips",
-    icon: "◉",
-  },
-  {
-    label: "Chuyến đi đã đặt",
-    href: "/my-trips",
-    icon: "⌑",
-  },
-  {
-    label: "Thuê thiết bị",
-    href: "/rentals",
-    icon: "♧",
   },
 ];
 
@@ -68,7 +51,7 @@ function NavGroup({
 
   return (
     <section className="space-y-1">
-      <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+      <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6B7280]">
         {title}
       </p>
 
@@ -82,11 +65,10 @@ function NavGroup({
           <Link
             key={item.label}
             href={item.href}
-            className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition ${
-              active
-                ? "bg-[#236747] font-semibold text-white shadow-sm"
-                : "text-slate-700 hover:bg-[#e7eefb] hover:text-[#125238]"
-            }`}
+            className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition ${active
+                ? "bg-[#2F6B4F] font-semibold text-white shadow-sm"
+                : "text-[#1F2937] hover:bg-[#EFEFE9] hover:text-[#125238]"
+              }`}
           >
             <span className="w-5 text-center text-base">
               {item.icon}
@@ -115,13 +97,14 @@ export function LeaderShell({
   const user = useAuthStore((state) => state.user);
 
   const displayName = user?.fullName || user?.email?.split("@")[0] || "Leader";
-  const initials = displayName
-    .split(" ")
-    .filter(Boolean)
-    .slice(-2)
-    .map((word) => word[0]?.toUpperCase())
-    .join("") || "LD";
-  const userRole = user?.role === "LEADER" ? "Leader PRO" : user?.role || "Leader";
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .slice(-2)
+      .map((word) => word[0]?.toUpperCase())
+      .join("") || "LD";
+  const userRole = user?.role === "LEADER" ? "Leader" : user?.role || "Leader";
 
   const handleLogout = () => {
     logout();
@@ -129,36 +112,35 @@ export function LeaderShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f6fc] text-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-[#f5f7fd] lg:flex lg:flex-col">
+    <div className="min-h-screen bg-[#F7F7F4] text-[#1F2937]">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[#E5E7EB] bg-white lg:flex lg:flex-col">
         <Link
           href="/leader"
-          className="flex h-[72px] items-center gap-3 px-5"
+          className="flex h-[72px] items-center gap-3 border-b border-[#E5E7EB] px-5"
         >
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#236747] text-xl text-white">
-            ⛰
-          </span>
+          <Image
+            src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
+            alt="VinaTrekGO"
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-xl object-cover shadow-xs"
+          />
 
-          <span>
-            <strong className="block text-[15px] leading-none text-[#123f2d]">
-              Trekking System
+          <div className="flex flex-col">
+            <strong className="text-lg font-extrabold tracking-tight leading-none text-[#125238]">
+              VinaTrek<span className="text-[#F59E0B]">GO</span>
             </strong>
 
-            <small className="mt-1 block text-[10px] font-bold tracking-wide text-amber-800">
+            <small className="mt-1 block text-[10px] font-bold tracking-widest uppercase text-amber-800">
               LEADER PORTAL
             </small>
-          </span>
+          </div>
         </Link>
 
-        <nav className="space-y-6 overflow-y-auto px-3 py-4">
+        <nav className="space-y-6 overflow-y-auto px-3 py-5">
           <NavGroup
             title="Quản lý dẫn đoàn"
             items={leaderItems}
-          />
-
-          <NavGroup
-            title="Tính năng Trekker"
-            items={trekkerItems}
           />
 
           <NavGroup
@@ -167,18 +149,18 @@ export function LeaderShell({
           />
         </nav>
 
-        <div className="mt-auto border-t border-slate-200 p-3">
-          <div className="flex items-center gap-3 rounded-xl bg-[#e5edfb] p-3">
+        <div className="mt-auto border-t border-[#E5E7EB] p-3">
+          <div className="flex items-center gap-3 rounded-xl bg-[#F7F7F4] border border-[#E5E7EB] p-3">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-xs font-bold text-white">
               {initials}
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
+              <p className="truncate text-sm font-semibold text-[#1F2937]">
                 {displayName}
               </p>
 
-              <p className="text-[11px] text-amber-800">
+              <p className="text-[11px] font-medium text-amber-800">
                 {userRole}
               </p>
             </div>
@@ -195,33 +177,25 @@ export function LeaderShell({
       </aside>
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white/95 px-4 py-3 backdrop-blur md:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full bg-emerald-50 px-3 py-2 text-emerald-900">
+            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5 font-medium text-[#125238]">
               ◎ Hệ thống radar cảnh báo thời tiết núi hoạt động tốt
             </span>
 
-            <span className="rounded-lg bg-[#edf2fc] px-3 py-2">
+            <span className="rounded-lg bg-[#F7F7F4] border border-[#E5E7EB] px-3 py-1.5 tabular-nums">
               ☼ Fansipan: <b>14°C</b>
             </span>
 
-            <span className="rounded-lg bg-[#edf2fc] px-3 py-2">
+            <span className="rounded-lg bg-[#F7F7F4] border border-[#E5E7EB] px-3 py-1.5 tabular-nums">
               ☁ Tà Xùa: <b>16°C</b>
             </span>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <span className="rounded-lg bg-amber-600 px-3 py-2 text-[11px] font-bold text-white">
+            <span className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white">
               {userRole}
             </span>
-
-            <button
-              type="button"
-              aria-label="Thông báo"
-              className="relative grid h-9 w-9 place-items-center rounded-lg bg-[#edf2fc] text-slate-700 hover:bg-[#dce7f7] transition"
-            >
-              ♟
-            </button>
 
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-xs font-bold text-white">
               {initials}

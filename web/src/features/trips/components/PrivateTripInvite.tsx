@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrivateTripMembership } from "../hooks/usePrivateTripMembership";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -8,7 +9,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 export function PrivateTripInvite({ code }: { code: string }) {
   const router = useRouter();
   const { user } = useAuth();
-  const { loadInvitation, joinTrip, invitation, busy, error } = usePrivateTripMembership();
+  const { loadInvitation, joinTrip, invitation, busy, error, errorCode } = usePrivateTripMembership();
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
@@ -17,13 +18,37 @@ export function PrivateTripInvite({ code }: { code: string }) {
     }
   }, [code, loadInvitation]);
 
+  // Thông báo riêng cho từng tình huống hết hiệu lực/thiếu điều kiện, kèm hướng xử lý
+  const describeInviteError = (code: string | null, fallback: string): string => {
+    switch (code) {
+      case "INVITE_REVOKED":
+        return "Link mời đã bị host thu hồi. Vui lòng xin host gửi link mới.";
+      case "INVITE_EXPIRED":
+        return "Link mời đã hết hạn. Vui lòng xin host tạo link mới.";
+      case "INVALID_STATE_TRANSITION":
+        return "Chuyến đi không còn nhận thành viên mới (đã khởi hành hoặc không còn mở).";
+      case "CAPACITY_CONFLICT":
+        return "Chuyến đi đã đủ số lượng thành viên. Liên hệ host để được hỗ trợ.";
+      case "INVITE_USAGE_LIMIT_REACHED":
+        return "Link mời đã hết lượt sử dụng. Vui lòng xin host tạo link mới.";
+      case "MEMBER_REMOVED":
+        return "Bạn đã bị loại khỏi chuyến đi này nên không thể tự tham gia lại. Liên hệ host nếu cần xem lại.";
+      case "LEADER_CANNOT_CREATE_PRIVATE_TRIP":
+        return "Tài khoản Leader không thể tham gia chuyến riêng bằng link. Vui lòng dùng tài khoản USER.";
+      case "NOT_FOUND":
+        return "Không tìm thấy lời mời. Kiểm tra lại link hoặc xin host gửi link mới.";
+      default:
+        return fallback;
+    }
+  };
+
   const handleJoin = async () => {
     if (!invitation?.trip?.id) return;
     try {
       // Use any for version since it's not strongly typed in the new structure yet
       const res = await joinTrip(code);
       setSuccess(true);
-      // Chuyển hướng tới phòng chờ sau 2s
+      // Điều hướng theo tripId thật; không dùng redirectTo legacy /private-trips/:id
       setTimeout(() => {
         router.push(`/trip-room/${res.tripId}`);
       }, 2000);
@@ -34,10 +59,23 @@ export function PrivateTripInvite({ code }: { code: string }) {
 
   if (busy && !invitation) return (
     <div className="flex justify-center items-center min-h-[50vh]">
-      <svg className="animate-spin h-8 w-8 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+      <svg className="animate-spin h-8 w-8 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
     </div>
   );
-  if (error) return <div className="p-8 text-center text-red-600 font-bold bg-white rounded-2xl shadow-sm border border-red-100 max-w-lg mx-auto mt-10">{error}</div>;
+  if (error) return (
+    <div className="max-w-lg mx-auto mt-10 rounded-2xl bg-white shadow-sm border border-red-100 p-8 text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl mb-3">🔗</div>
+      <h2 className="text-lg font-bold text-gray-900">Không thể mở lời mời</h2>
+      <p className="mt-2 text-sm text-red-600 font-medium">{describeInviteError(errorCode, error)}</p>
+      <button
+        type="button"
+        onClick={() => loadInvitation(code)}
+        className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#125238] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0f402c] transition"
+      >
+        Tải lại lời mời
+      </button>
+    </div>
+  );
   if (!invitation) return <div className="p-8 text-center text-gray-500 font-bold bg-white rounded-2xl shadow-sm max-w-lg mx-auto mt-10">Không tìm thấy lời mời.</div>;
 
   const trip = invitation.trip;
@@ -142,13 +180,19 @@ export function PrivateTripInvite({ code }: { code: string }) {
               ) : "Xác Nhận Tham Gia"}
             </button>
             {!user && (
-              <div className="w-full p-4 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-medium text-center">
-                Bạn cần đăng nhập để tham gia chuyến đi này.
+              <div className="w-full p-4 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-medium text-center space-y-3">
+                <p>Bạn cần đăng nhập tài khoản TrekGO để tham gia chuyến đi này. Thông tin lời mời phía trên vẫn xem được.</p>
+                <Link
+                  href={`/public/login?next=${encodeURIComponent(`/invite/${code}`)}`}
+                  className="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition"
+                >
+                  Đăng nhập để tiếp tục
+                </Link>
               </div>
             )}
             {!invitation.joinable && (
               <div className="w-full p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl text-sm font-medium text-center">
-                {invitation.joinDisabledReason || "Lời mời đã hết hạn hoặc hết chỗ."}
+                {describeInviteError(invitation.joinDisabledReason || null, invitation.joinDisabledReason || "Lời mời đã hết hạn hoặc hết chỗ.")}
               </div>
             )}
           </div>
