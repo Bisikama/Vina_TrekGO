@@ -27,7 +27,9 @@ const formatParticipantsPayload = (participants: Participant[]) => ({
     ...(p.id ? { id: p.id } : {}),
     fullName: p.fullName.trim(),
     ...(p.phone?.trim() ? { phone: p.phone.trim() } : {}),
-    ...(p.dateOfBirth ? { dateOfBirth: p.dateOfBirth } : {}),
+    ...(p.dateOfBirth && p.dateOfBirth.trim()
+      ? { dateOfBirth: p.dateOfBirth.trim().slice(0, 10) }
+      : {}),
     ...(p.emergencyContactName?.trim()
       ? { emergencyContactName: p.emergencyContactName.trim() }
       : {}),
@@ -46,11 +48,31 @@ export const bookingApiService = {
     query: PublicTripsQuery = {},
     signal?: AbortSignal
   ): Promise<PageResponse<PublicBookingTrip>> => {
+    // Sanitize params according to backend tripSearchSchema.strict()
+    const params: Record<string, any> = {
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 12,
+    };
+    if (query.destinationId && query.destinationId.trim()) {
+      params.destinationId = query.destinationId.trim();
+    }
+    if (query.dateFrom && query.dateFrom.trim()) {
+      params.dateFrom = query.dateFrom.trim();
+    }
+    if (query.dateTo && query.dateTo.trim()) {
+      params.dateTo = query.dateTo.trim();
+    }
+    if (query.difficulty && query.difficulty.trim()) {
+      params.difficulty = query.difficulty.trim();
+    }
+    if (query.priceMax !== undefined && query.priceMax !== null && !isNaN(Number(query.priceMax))) {
+      params.price = Number(query.priceMax);
+    }
     const response = await apiClient.get<PageResponse<PublicBookingTrip>>(
       '/api/v1/trips',
       {
         ...config,
-        params: query,
+        params,
         signal,
       }
     );
@@ -135,7 +157,7 @@ export const bookingApiService = {
   ): Promise<BookingDetail> => {
     const payload = {
       ...formatParticipantsPayload(participants),
-      ...(typeof expectedVersion === 'number' ? { expectedVersion } : {}),
+      expectedVersion: expectedVersion ?? 1,
     };
     const response = await apiClient.patch<BookingDetail>(
       `/api/v1/bookings/${bookingId}/participants`,

@@ -48,6 +48,25 @@ export interface BookingCancelledCommand {
   };
 }
 
+export interface MembershipSourceChangedCommand {
+  eventId: string;
+  eventType: string;
+  entityId: string;
+  entityVersion: number;
+  correlationId: string;
+  occurredAt: Date;
+  payload: {
+    membershipKind: string;
+    membershipRef: string;
+    version: number;
+    reason?: string;
+    effectiveAt?: Date;
+    tripId?: string;
+    userId?: string;
+    bookingId?: string;
+  };
+}
+
 export interface LifecycleExecutionResult {
   eventId: string;
   status: 'PROCESSED' | 'SKIPPED_DUPLICATE' | 'SKIPPED_OUT_OF_ORDER' | 'FAILED';
@@ -65,4 +84,5 @@ export interface TripLifecyclePort {
   processTripRescheduled(command: TripRescheduledCommand): Promise<LifecycleExecutionResult>;
   processTripCancelled(command: TripCancelledCommand): Promise<LifecycleExecutionResult>;
   processBookingCancelled(command: BookingCancelledCommand): Promise<LifecycleExecutionResult>;
+  processMembershipSourceChanged(command: MembershipSourceChangedCommand): Promise<LifecycleExecutionResult>;
 }

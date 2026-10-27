@@ -98,11 +98,20 @@ describe('rental-ordering.rules', () => {
     });
   });
 
-  it('trả RENTAL_CUTOFF_PASSED khi đã tới cutoff', () => {
+  it('cho phép đặt thuê đúng mốc cutoff 24h và từ chối khi vượt quá cutoff', () => {
     const context = createContext();
 
+    // Đúng mốc cutoff: vẫn eligible (Policy v1.5.2)
     expect(
       evaluateRentalEligibility(context, new Date('2026-10-09T00:00:00Z')),
+    ).toEqual({
+      eligible: true,
+      reason: null,
+    });
+
+    // Sau mốc cutoff: từ chối RENTAL_CUTOFF_PASSED
+    expect(
+      evaluateRentalEligibility(context, new Date('2026-10-09T00:00:00.001Z')),
     ).toEqual({
       eligible: false,
       reason: 'RENTAL_CUTOFF_PASSED',

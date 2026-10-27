@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import {
   cancelLeaderTripRequest,
@@ -36,6 +36,9 @@ export function usePublicTrips() {
 
   const [page, setPage] = useState(1);
   const [trailPage, setTrailPage] = useState(1);
+  // Trang hiện tại lưu qua ref để loadTrips có identity ổn định; nếu phụ thuộc state `page`
+  // thì effect [token, loadTrips] sẽ bắn lại loadTrips(1) và reset phân trang về trang đầu.
+  const pageRef = useRef(1);
 
   const [trips, setTrips] = useState<LeaderTripView[]>([]);
   const [trip, setTrip] = useState<LeaderTripView | null>(null);
@@ -57,20 +60,22 @@ export function usePublicTrips() {
   }, []);
 
   // 2. Tải danh sách trips của Leader
-  const loadTrips = useCallback(async (p = page) => {
+  const loadTrips = useCallback(async (p?: number) => {
     if (!token) return;
+    const target = p ?? pageRef.current;
     setBusy(true);
     setError(null);
     try {
-      const data = await listLeaderPublicTrips({ page: p, pageSize: 20 });
+      const data = await listLeaderPublicTrips({ page: target, pageSize: 20 });
       setTrips(data);
-      setPage(p);
+      pageRef.current = target;
+      setPage(target);
     } catch (err: unknown) {
       setError(getLeaderTripErrorMessage(err, "Không thể tải danh sách chuyến đi."));
     } finally {
       setBusy(false);
     }
-  }, [token, page]);
+  }, [token]);
 
   // 3. Tải Pickups và Checkpoints theo Destination
   const loadDestination = useCallback(async (destId: string) => {
