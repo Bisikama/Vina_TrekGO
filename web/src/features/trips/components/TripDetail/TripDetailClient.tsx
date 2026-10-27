@@ -10,6 +10,11 @@ import { BookingSidebar } from "./BookingSidebar";
 import { TripRouteReviewMap } from "@/features/leaders/components/leader/TripRouteReviewMap";
 import type { SystemTrailDetail } from "@/features/leaders/components/leader/StepTwoOverviewMap";
 
+const stripEmojis = (text: string) =>
+  text
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "")
+    .replace(/^[ \t]+/gm, "");
+
 export const TripDetailClient = ({
   trip,
   trailCode,
@@ -43,14 +48,13 @@ export const TripDetailClient = ({
             {/* Giới thiệu & Mô tả chi tiết chuyến đi */}
             {enrichedTrip.description ? (
               <section className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-7 shadow-sm">
-                <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-3">
-                  <span className="text-xl">📝</span>
+                <div className="mb-4 border-b border-gray-100 pb-3">
                   <h2 className="text-xl font-extrabold text-gray-900">
                     Giới thiệu &amp; Kế hoạch chuyến đi
                   </h2>
                 </div>
                 <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 font-normal">
-                  {enrichedTrip.description}
+                  {stripEmojis(enrichedTrip.description)}
                 </div>
               </section>
             ) : null}
@@ -84,10 +88,7 @@ export const TripDetailClient = ({
                 />
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-2xl text-slate-400">
-                    🗺️
-                  </div>
-                  <h3 className="mt-3 text-sm font-bold text-slate-800">
+                  <h3 className="text-sm font-bold text-slate-800">
                     Cung đường chưa có toạ độ vệ tinh 3D
                   </h3>
                   <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
@@ -101,12 +102,9 @@ export const TripDetailClient = ({
             {enrichedTrip.checkpoints && enrichedTrip.checkpoints.length > 0 && (
               <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🚩</span>
-                    <h2 className="text-xl font-extrabold text-gray-900">
-                      Các trạm kiểm soát (Checkpoints)
-                    </h2>
-                  </div>
+                  <h2 className="text-xl font-extrabold text-gray-900">
+                    Các trạm kiểm soát (Checkpoints)
+                  </h2>
                   <span className="rounded bg-emerald-50 px-2.5 py-1 text-xs font-bold text-[#125238]">
                     {enrichedTrip.checkpoints.length} trạm
                   </span>

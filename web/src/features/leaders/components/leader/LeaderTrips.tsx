@@ -32,13 +32,13 @@ const tabs: Array<{
   value: "all" | TripStatus;
   label: string;
 }> = [
-  { value: "all", label: "Tất cả" },
-  { value: "draft", label: "Bản nháp" },
-  { value: "open", label: "Đang mở bán" },
-  { value: "active", label: "Đang diễn ra" },
-  { value: "completed", label: "Đã hoàn thành" },
-  { value: "cancelled", label: "Đã hủy" },
-];
+    { value: "all", label: "Tất cả" },
+    { value: "draft", label: "Bản nháp" },
+    { value: "open", label: "Đang mở bán" },
+    { value: "active", label: "Đang diễn ra" },
+    { value: "completed", label: "Đã hoàn thành" },
+    { value: "cancelled", label: "Đã hủy" },
+  ];
 
 const statusStyle: Record<
   TripStatus,
@@ -180,20 +180,18 @@ export function LeaderTrips() {
                     key={tab.value}
                     type="button"
                     onClick={() => setActiveTab(tab.value)}
-                    className={`flex min-w-max items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${
-                      selected
+                    className={`flex min-w-max items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${selected
                         ? "bg-[#2F6B4F] text-white"
                         : "text-[#1F2937] hover:bg-[#F7F7F4]"
-                    }`}
+                      }`}
                   >
                     {tab.label}
 
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${
-                        selected
+                      className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selected
                           ? "bg-white/25 text-white"
                           : "bg-[#F7F7F4] text-[#6B7280]"
-                      }`}
+                        }`}
                     >
                       {getCount(tab.value)}
                     </span>
@@ -352,9 +350,8 @@ export function LeaderTrips() {
 
                     <div>
                       <span
-                        className={`inline-flex rounded-full px-3.5 py-1.5 text-xs font-bold ${
-                          statusStyle[trip.status].className
-                        }`}
+                        className={`inline-flex rounded-full px-3.5 py-1.5 text-xs font-bold ${statusStyle[trip.status].className
+                          }`}
                       >
                         {statusStyle[trip.status].label}
                       </span>
@@ -378,8 +375,8 @@ export function LeaderTrips() {
                         {trip.status === "completed"
                           ? "Doanh thu thực tế"
                           : trip.status === "cancelled"
-                          ? "Chuyến đã hủy"
-                          : "Doanh thu dự kiến"}
+                            ? "Chuyến đã hủy"
+                            : "Doanh thu dự kiến"}
                       </p>
                     </div>
                   </article>
