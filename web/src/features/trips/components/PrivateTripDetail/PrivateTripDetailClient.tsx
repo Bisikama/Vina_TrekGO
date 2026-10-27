@@ -24,7 +24,7 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
   const pickupName = initialPickups?.find(p => p.id === trip?.pickupPointId)?.name || trip?.pickupPointId || "Đang tải...";
 
   const { members, activeMemberCount, busy: membersBusy, loadMembers, removeMember } = usePrivateTripMembership();
-  const isHost = !user?.id || !trip?.hostId || user.id === trip.hostId;
+  const isHost = Boolean(user?.id && trip?.hostId && user.id === trip.hostId);
   
   React.useEffect(() => {
     if (trip?.id) {
