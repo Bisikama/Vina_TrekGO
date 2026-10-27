@@ -111,6 +111,7 @@ jobs:
     # Bien moi truong dung chung cho tat ca steps trong job nay
     env:
       DATABASE_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
+      DIRECT_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
       NODE_ENV: test
       ACCESS_TOKEN_SECRET: "ci-dummy-access-secret-min-32-chars-ok"
       REFRESH_TOKEN_SECRET: "ci-dummy-refresh-secret-min-32-chars-ok"
