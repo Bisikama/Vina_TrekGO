@@ -216,6 +216,18 @@ async function resolveProductImages(
     : product;
 }
 
+export function getRentalApiErrorCode(error: unknown) {
+  if (!axios.isAxiosError(error)) return null;
+
+  const responseData: unknown = error.response?.data;
+  if (!isRecord(responseData)) return null;
+
+  const apiError = responseData.error;
+  return isRecord(apiError) && typeof apiError.code === "string"
+    ? apiError.code
+    : null;
+}
+
 export function getRentalApiErrorMessage(
   error: unknown,
   fallback: string,
@@ -534,6 +546,10 @@ export async function createRentalOrder(
       response.data,
     );
   } catch (error) {
+    // Preserve the backend error envelope so checkout can recover from
+    // STALE_CONTEXT instead of retrying an obsolete quote.
+    if (axios.isAxiosError(error)) throw error;
+
     throw new Error(
       getRentalApiErrorMessage(
         error,
