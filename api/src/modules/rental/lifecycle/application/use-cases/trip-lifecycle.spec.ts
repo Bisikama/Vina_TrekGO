@@ -3,6 +3,7 @@ import {
   Prisma,
   RentalOrderStatus,
   RentalOrderExceptionStatus,
+  RentalFinancialStatus,
   ReservationStatus,
   EquipmentUnitStatus,
   EquipmentCondition,
@@ -21,6 +22,8 @@ import type {
   TripRescheduledCommand,
   TripCancelledCommand,
   BookingCancelledCommand,
+  MembershipSourceChangedCommand,
+  LifecycleExecutionResult,
 } from '../ports/trip-lifecycle.port';
 
 describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
@@ -35,6 +38,7 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         processTripRescheduled: jest.fn(),
         processTripCancelled: jest.fn(),
         processBookingCancelled: jest.fn(),
+        processMembershipSourceChanged: jest.fn(),
       };
       rescheduleUseCase = new HandleTripRescheduledUseCase(mockPort);
       cancelTripUseCase = new HandleTripCancelledUseCase(mockPort);
@@ -2060,6 +2064,206 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         const result = await adapter.processTripRescheduled(cmd);
         expect(result.status).toBe('PROCESSED');
         expect(result.affectedOrderIds).toEqual(['order-p2002']);
+      });
+    });
+
+    describe('M9 Membership Source Changed & Booking Cancel Source Discrimination', () => {
+      it('leave/remove/rejoin: event version older than order membershipSourceVersion does NOT cancel the order (rejoined order preserved)', async () => {
+        const cmd: MembershipSourceChangedCommand = {
+          eventId: 'evt-leave-stale',
+          eventType: 'PRIVATE_TRIP_MEMBER_LEFT',
+          entityId: 'member-1',
+          entityVersion: 2,
+          correlationId: 'corr-1',
+          occurredAt: new Date(),
+          payload: {
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            version: 2,
+            reason: 'Left trip early version',
+          },
+        };
+
+        // User rejoined and placed order with version 3
+        mockTx.rentalOrder.findMany.mockResolvedValueOnce([
+          {
+            id: 'order-rejoined',
+            tripId: 'trip-1',
+            status: RentalOrderStatus.PAID,
+            version: 1,
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            membershipSourceVersion: 3, // Order created at version 3
+            rentalPolicy: { freeCancellationHours: 24 },
+            rentalOrderLinesViaOrderId: [],
+            deliveryTasksViaOrderId: [],
+          },
+        ]);
+
+        const result = await adapter.processMembershipSourceChanged(cmd);
+        // Stale leave event (v2) must NOT cancel order created after rejoin (v3)
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderCount).toBe(0);
+        expect(result.affectedOrderIds).toEqual([]);
+      });
+
+      it('leave/remove: event version >= order membershipSourceVersion cancels the order', async () => {
+        const cmd: MembershipSourceChangedCommand = {
+          eventId: 'evt-leave-active',
+          eventType: 'PRIVATE_TRIP_MEMBER_LEFT',
+          entityId: 'member-1',
+          entityVersion: 3,
+          correlationId: 'corr-2',
+          occurredAt: new Date(),
+          payload: {
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            version: 3,
+            reason: 'Left trip',
+          },
+        };
+
+        mockTx.rentalOrder.findMany.mockResolvedValueOnce([
+          {
+            id: 'order-to-cancel',
+            tripId: 'trip-1',
+            status: RentalOrderStatus.PAID,
+            financialStatus: RentalFinancialStatus.PAID,
+            version: 1,
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            membershipSourceVersion: 3,
+            rentalPolicy: { freeCancellationHours: 24 },
+            rentalOrderLinesViaOrderId: [],
+            deliveryTasksViaOrderId: [],
+          },
+        ]);
+
+        const result = await adapter.processMembershipSourceChanged(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderCount).toBe(1);
+        expect(result.affectedOrderIds).toEqual(['order-to-cancel']);
+        expect(result.cancelledOrderIds).toEqual(['order-to-cancel']);
+      });
+
+      it('duplicate: returns existing result on duplicate eventId for membership source changed', async () => {
+        const cachedResult: LifecycleExecutionResult = {
+          eventId: 'evt-dup-1',
+          status: 'PROCESSED',
+          affectedOrderCount: 1,
+          affectedOrderIds: ['ord-1'],
+          conflicts: [],
+          scheduleNoticesIssued: [],
+        };
+        mockTx.rentalInboxEvent.findUnique.mockResolvedValueOnce({
+          eventId: 'evt-dup-1',
+          result: cachedResult,
+        });
+
+        const cmd: MembershipSourceChangedCommand = {
+          eventId: 'evt-dup-1',
+          eventType: 'PRIVATE_TRIP_MEMBER_LEFT',
+          entityId: 'member-1',
+          entityVersion: 1,
+          correlationId: 'corr-dup',
+          occurredAt: new Date(),
+          payload: {
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            version: 1,
+          },
+        };
+
+        const result = await adapter.processMembershipSourceChanged(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderIds).toEqual(['ord-1']);
+      });
+
+      it('custody sau bàn giao: ACTIVE order keeps physical custody, sets ACTION_REQUIRED, does not blanket cancel', async () => {
+        const cmd: MembershipSourceChangedCommand = {
+          eventId: 'evt-leave-active-custody',
+          eventType: 'PRIVATE_TRIP_MEMBER_REMOVED',
+          entityId: 'member-1',
+          entityVersion: 2,
+          correlationId: 'corr-custody',
+          occurredAt: new Date(),
+          payload: {
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            version: 2,
+            reason: 'Removed by leader after start',
+          },
+        };
+
+        mockTx.rentalOrder.findMany.mockResolvedValueOnce([
+          {
+            id: 'order-active-custody',
+            tripId: 'trip-1',
+            status: RentalOrderStatus.ACTIVE, // Customer physically holds equipment
+            version: 1,
+            membershipKind: 'PRIVATE_TRIP_MEMBER',
+            membershipRef: 'member-1',
+            membershipSourceVersion: 2,
+            rentalPolicy: { freeCancellationHours: 24 },
+            rentalOrderLinesViaOrderId: [],
+            deliveryTasksViaOrderId: [],
+          },
+        ]);
+
+        const result = await adapter.processMembershipSourceChanged(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderIds).toEqual(['order-active-custody']);
+        // Crucial: NOT in cancelledOrderIds, but marked in actionRequiredOrderIds!
+        expect(result.cancelledOrderIds).toEqual([]);
+        expect(result.actionRequiredOrderIds).toEqual(['order-active-custody']);
+
+        expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'order-active-custody', version: 1 },
+            data: expect.objectContaining({
+              exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+            }),
+          }),
+        );
+      });
+
+      it('booking cancel phân biệt source: BOOKING_CANCELLED only affects buyer orders, not participant orders', async () => {
+        const cmd: BookingCancelledCommand = {
+          eventId: 'evt-booking-cancel-source-check',
+          eventType: 'BOOKING_CANCELLED',
+          entityId: 'booking-buyer-1',
+          entityVersion: 2,
+          correlationId: 'corr-booking-cancel',
+          occurredAt: new Date(),
+          payload: {
+            bookingId: 'booking-buyer-1',
+            reason: 'Buyer cancelled booking',
+            effectiveAt: new Date(),
+            version: 2,
+          },
+        };
+
+        // When finding candidate orders, only orders with membershipKind: 'PUBLIC_BOOKING_BUYER' match
+        mockTx.rentalOrder.findMany.mockResolvedValueOnce([
+          {
+            id: 'order-buyer-only',
+            tripId: 'trip-1',
+            status: RentalOrderStatus.PAID,
+            financialStatus: RentalFinancialStatus.PAID,
+            version: 1,
+            membershipKind: 'PUBLIC_BOOKING_BUYER',
+            membershipRef: 'booking-buyer-1',
+            membershipSourceVersion: 2,
+            rentalPolicy: { freeCancellationHours: 24 },
+            rentalOrderLinesViaOrderId: [],
+            deliveryTasksViaOrderId: [],
+          },
+        ]);
+
+        const result = await adapter.processBookingCancelled(cmd);
+        expect(result.status).toBe('PROCESSED');
+        expect(result.affectedOrderIds).toEqual(['order-buyer-only']);
+        expect(result.cancelledOrderIds).toEqual(['order-buyer-only']);
       });
     });
   });

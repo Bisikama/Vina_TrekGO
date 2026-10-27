@@ -31,9 +31,10 @@ import { RentalOperationController } from './presentation/controllers/rental-ope
 import { RentalOrderController } from './presentation/controllers/rental-order.controller';
 import { AdminRentalOrderController } from './presentation/controllers/admin-rental-order.controller';
 import { LifecycleModule } from '../lifecycle/lifecycle.module';
+import { BookingsModule } from '../../bookings/bookings.module';
 
 @Module({
-  imports: [SharedModule, LifecycleModule],
+  imports: [SharedModule, LifecycleModule, BookingsModule],
   controllers: [
     RentalTripController,
     RentalOperationController,
