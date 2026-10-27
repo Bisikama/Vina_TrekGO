@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SurfaceCard, Button } from "@/components/ui";
 
 export default function InviteEntryPage() {
   const [code, setCode] = useState("");
@@ -9,18 +10,20 @@ export default function InviteEntryPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const raw = code.trim();
-    if (raw) {
-      const extracted = raw.includes("/invite/")
-        ? raw.split("/invite/").pop()?.split(/[?#]/)[0] || raw
-        : raw;
-      router.push(`/invite/${extracted}`);
+    const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (normalized.length === 6) {
+      router.push(`/invite/${normalized}`);
     }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    setCode(cleaned);
   };
 
   return (
     <div className="min-h-screen bg-[#F7F7F4] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 w-full max-w-md">
+      <SurfaceCard padding="lg" className="w-full max-w-md shadow-sm">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -28,34 +31,44 @@ export default function InviteEntryPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Tham gia chuyến đi</h1>
-          <p className="text-gray-500 text-sm mt-2">Nhập mã mời được gửi từ trưởng đoàn để tham gia nhóm.</p>
+          <p className="text-gray-500 text-sm mt-2">
+            Nhập mã mời 6 ký tự được gửi từ trưởng đoàn để tham gia nhóm.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="code" className="block text-sm font-bold text-gray-700 mb-1.5">
-              Mã mời (Invite Code)
+            <label htmlFor="code" className="block text-sm font-bold text-gray-700 mb-2">
+              Mã mời (6 ký tự)
             </label>
             <input
               type="text"
               id="code"
+              maxLength={6}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck="false"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="VD: 1nfyeSxeSLf-..."
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors tracking-widest text-center font-medium"
+              onChange={handleChange}
+              placeholder="VD: K7X9P2"
+              className="w-full px-4 py-3.5 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors tracking-[0.3em] text-center font-mono text-xl font-bold uppercase text-gray-900"
               required
             />
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Gồm 6 chữ cái in hoa và số
+            </p>
           </div>
-          
-          <button
+
+          <Button
             type="submit"
-            disabled={!code.trim()}
-            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-sm shadow-emerald-200"
+            variant="primary"
+            disabled={code.length !== 6}
+            className="w-full py-3"
           >
             Tìm chuyến đi
-          </button>
+          </Button>
         </form>
-      </div>
+      </SurfaceCard>
     </div>
   );
 }

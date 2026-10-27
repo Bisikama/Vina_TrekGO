@@ -318,6 +318,18 @@ export function PrivateTrips() {
                     e.preventDefault();
                     const f = new FormData(e.currentTarget);
                     void run(async () => {
+                      const startMs = new Date(String(f.get('start'))).getTime();
+                      const endMs = new Date(String(f.get('end'))).getTime();
+                      const minAllowedStart = Date.now() + 2 * 24 * 60 * 60 * 1000;
+                      if (!trip && startMs < minAllowedStart) {
+                        setError('Thời gian bắt đầu chuyến đi phải cách thời điểm hiện tại ít nhất 2 ngày (48 giờ).');
+                        return;
+                      }
+                      if (endMs <= startMs) {
+                        setError('Thời gian kết thúc chuyến đi phải sau thời gian bắt đầu.');
+                        return;
+                      }
+
                       const data: PrivateInput = {
                         title: String(f.get('title')),
                         description: String(f.get('description')),
@@ -364,11 +376,20 @@ export function PrivateTrips() {
                     </FormField>
 
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField label="Thời gian bắt đầu" required>
+                      <FormField
+                        label="Thời gian bắt đầu"
+                        required
+                        hint="Phải cách thời điểm hiện tại ít nhất 2 ngày (48 giờ)"
+                      >
                         <Input
                           name="start"
                           type="datetime-local"
                           required
+                          min={(() => {
+                            const d = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+                            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                            return d.toISOString().slice(0, 16);
+                          })()}
                           defaultValue={trip ? local(trip.startAt) : ''}
                         />
                       </FormField>
@@ -527,15 +548,14 @@ export function PrivateTrips() {
                       className="inline-flex flex-col items-center gap-2 rounded-xl border border-[#E5E7EB] p-4 bg-[#F7F7F4]"
                     >
                       <QRCodeSVG
-                        value={
-                          typeof window !== 'undefined'
-                            ? `${window.location.origin}/invite/${invite.code}`
-                            : `/invite/${invite.code}`
-                        }
+                        value={invite.code}
                         size={160}
                         fgColor="#125238"
                         includeMargin
                       />
+                      <div className="px-3 py-1 bg-white border border-[#E5E7EB] rounded-lg font-mono font-bold text-lg tracking-widest text-[#125238]">
+                        {invite.code}
+                      </div>
                       <span className="text-xs text-[#6B7280] tabular-nums">
                         Hết hạn:{' '}
                         {new Date(invite.expiresAt).toLocaleString('vi-VN')}

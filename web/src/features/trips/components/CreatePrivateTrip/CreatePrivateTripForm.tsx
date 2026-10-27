@@ -34,9 +34,10 @@ export const CreatePrivateTripForm = () => {
   });
 
   const getMinStartAt = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    return now.toISOString().slice(0, 16);
+    // Thời gian khởi hành phải cách thời điểm tạo ít nhất 2 ngày (48 giờ)
+    const minDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    minDate.setMinutes(minDate.getMinutes() - minDate.getTimezoneOffset());
+    return minDate.toISOString().slice(0, 16);
   };
 
   const getMinEndAt = () => {
@@ -118,14 +119,15 @@ export const CreatePrivateTripForm = () => {
     const now = new Date();
     const startDate = new Date(formData.startAt);
     const endDate = new Date(formData.endAt);
+    const minAllowedStart = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
 
-    if (startDate <= now) {
-      setValidationError("Thời gian bắt đầu chuyến đi phải diễn ra trong tương lai.");
+    if (startDate < minAllowedStart) {
+      setValidationError("Thời gian khởi hành phải cách thời điểm hiện tại ít nhất 2 ngày (48 giờ).");
       return;
     }
 
     if (endDate <= startDate) {
-      setValidationError("Thời gian kết thúc chuyến đi phải sau thời gian bắt đầu.");
+      setValidationError("Thời gian kết thúc chuyến đi phải sau thời gian khởi hành.");
       return;
     }
 
@@ -331,7 +333,11 @@ export const CreatePrivateTripForm = () => {
             </FormField>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <FormField label="Khởi hành" required>
+              <FormField
+                label="Khởi hành"
+                required
+                hint="Phải cách thời điểm hiện tại ít nhất 2 ngày (48 giờ)"
+              >
                 <Input
                   type="datetime-local"
                   name="startAt"
@@ -341,7 +347,11 @@ export const CreatePrivateTripForm = () => {
                   required
                 />
               </FormField>
-              <FormField label="Kết thúc" required>
+              <FormField
+                label="Kết thúc"
+                required
+                hint="Thời gian kết thúc phải sau thời gian khởi hành"
+              >
                 <Input
                   type="datetime-local"
                   name="endAt"
