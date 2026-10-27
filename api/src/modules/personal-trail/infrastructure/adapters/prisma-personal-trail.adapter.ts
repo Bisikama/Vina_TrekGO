@@ -1,13 +1,17 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { IPersonalTrailRepository } from '../../application/ports/personal-trail.port'
-import { MyTrailsQuery, RawSamplesBatchInput } from '../../presentation/dtos/personal-trail.dto'
+import {
+  MyTrailsQuery,
+  RawSamplesBatchInput,
+  PersonalCheckpointInput,
+} from '../../presentation/dtos/personal-trail.dto'
 import {
   PersonalTrailModel,
   TrailRecordingModel,
   TrailRecordingPointModel,
 } from '../../application/ports/personal-trail.port'
-import { DifficultyLevel, PersonalTrailVisibility, RecordStatus, TrailSubmissionStatus } from '@prisma/client'
+import { DifficultyLevel, PersonalTrailVisibility, RecordStatus, TrailSubmissionStatus, Prisma } from '@prisma/client'
 import { AppError } from '../../../../shared/errors/app-error'
 import { PersonalTrailErrorCode } from '../../../../shared/errors/codes/personal-trail.error-codes'
 
@@ -31,7 +35,66 @@ function mapVisibility(input?: string | null): PersonalTrailVisibility {
 
 @Injectable()
 export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
+  private readonly logger = new Logger(PrismaPersonalTrailAdapter.name)
   constructor(private readonly prisma: PrismaService) {}
+
+  private async transaction<T>(
+    operation: string,
+    resourceId: string,
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+    sampleCount?: number,
+  ): Promise<T> {
+    const started = Date.now()
+    let code: string | undefined
+    let outcome = 'committed'
+    let appErrorCode: string | undefined
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          // Fail lock contention before the interactive transaction itself expires.
+          await tx.$queryRaw`SELECT set_config('lock_timeout', '3000', true)`
+          return work(tx)
+        },
+        { maxWait: 5_000, timeout: 15_000 },
+      )
+    } catch (error) {
+      outcome = 'failed'
+      if (error instanceof AppError) appErrorCode = error.code
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        code = error.code
+        const lockTimeout = error.code === 'P2010' && error.meta?.code === '55P03'
+        if (lockTimeout || error.code === 'P2034') {
+          throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_STORAGE_BUSY })
+        }
+        if (error.code === 'P2028') {
+          // P2028 includes ambiguous connection/lifecycle failures: do not blindly replay.
+          throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE })
+        }
+      }
+      throw error
+    } finally {
+      this.logger.log(
+        JSON.stringify({
+          operation,
+          resourceId,
+          sampleCount,
+          durationMs: Date.now() - started,
+          prismaCode: code,
+          appErrorCode,
+          outcome,
+        }),
+      )
+    }
+  }
+
+  private async lock(tx: Prisma.TransactionClient, table: 'trail_recordings' | 'personal_trails', id: string) {
+    const started = Date.now()
+    try {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM ${Prisma.raw(table)} WHERE id = ${id}::uuid FOR UPDATE`)
+    } finally {
+      this.logger.log(JSON.stringify({ operation: 'lock', table, resourceId: id, durationMs: Date.now() - started }))
+    }
+  }
 
   async findRecordingById(id: string): Promise<TrailRecordingModel | null> {
     const record = await this.prisma.trailRecording.findUnique({
@@ -56,15 +119,21 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
     startedAt: Date
     status: string
   }): Promise<TrailRecordingModel> {
-    const created = await this.prisma.trailRecording.create({
-      data: {
-        clientRecordingId: data.clientRecordingId,
-        userId: data.userId,
-        startedAt: data.startedAt,
-        status: data.status,
-      },
-    })
-    return created
+    try {
+      return await this.prisma.trailRecording.create({
+        data: {
+          clientRecordingId: data.clientRecordingId,
+          userId: data.userId,
+          startedAt: data.startedAt,
+          status: data.status,
+        },
+      })
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      const existing = await this.findRecordingByClientRecordingId(data.clientRecordingId, data.userId)
+      if (existing) return existing
+      throw new AppError({ code: PersonalTrailErrorCode.CLIENT_RECORDING_ID_CONFLICT })
+    }
   }
 
   async saveRawSamplesBatch(
@@ -92,23 +161,28 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       recordedAt: new Date(s.recordedAt),
     }))
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM trail_recordings WHERE id = ${recordingId}::uuid FOR UPDATE`
-      const recording = await tx.trailRecording.findUnique({ where: { id: recordingId } })
-      if (!recording) throw new AppError({ code: PersonalTrailErrorCode.RECORDING_NOT_FOUND })
-      if (recording.status === 'READY') {
-        throw new AppError({ code: PersonalTrailErrorCode.RECORDING_ALREADY_FINISHED })
-      }
-      const inserted = await tx.trailRecordingPoint.createMany({ data, skipDuplicates: true })
-      // Invalidate elevation calculations that started before this upload.
-      if (inserted.count > 0) {
-        await tx.trailRecording.update({
-          where: { id: recordingId },
-          data: { updatedAt: new Date(Math.max(Date.now(), recording.updatedAt.getTime() + 1)) },
-        })
-      }
-      return inserted
-    })
+    const result = await this.transaction(
+      'upload',
+      recordingId,
+      async (tx) => {
+        await this.lock(tx, 'trail_recordings', recordingId)
+        const recording = await tx.trailRecording.findUnique({ where: { id: recordingId } })
+        if (!recording) throw new AppError({ code: PersonalTrailErrorCode.RECORDING_NOT_FOUND })
+        if (recording.status === 'READY') {
+          throw new AppError({ code: PersonalTrailErrorCode.RECORDING_ALREADY_FINISHED })
+        }
+        const inserted = await tx.trailRecordingPoint.createMany({ data, skipDuplicates: true })
+        // Invalidate elevation calculations that started before this upload.
+        if (inserted.count > 0) {
+          await tx.trailRecording.update({
+            where: { id: recordingId },
+            data: { updatedAt: new Date(Math.max(Date.now(), recording.updatedAt.getTime() + 1)) },
+          })
+        }
+        return inserted
+      },
+      receivedCount,
+    )
 
     const insertedCount = result.count
     const duplicatedCount = Math.max(0, receivedCount - insertedCount)
@@ -128,20 +202,21 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
 
     const points = await this.prisma.trailRecordingPoint.findMany({
       where,
-      orderBy: [{ segmentId: 'asc' }, { recordedAt: 'asc' }],
+      orderBy: [{ segmentId: 'asc' }, { recordedAt: 'asc' }, { clientSampleId: 'asc' }],
     })
 
     return points
   }
 
   async updateRecordingStatus(recordingId: string, status: string): Promise<TrailRecordingModel> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM trail_recordings WHERE id = ${recordingId}::uuid FOR UPDATE`
+    return this.transaction('status', recordingId, async (tx) => {
+      await this.lock(tx, 'trail_recordings', recordingId)
       const recording = await tx.trailRecording.findUnique({ where: { id: recordingId } })
       if (!recording) throw new AppError({ code: PersonalTrailErrorCode.RECORDING_NOT_FOUND })
       if (recording.status === 'READY') {
         throw new AppError({ code: PersonalTrailErrorCode.RECORDING_ALREADY_FINISHED })
       }
+      if (recording.status === status) return recording
       return tx.trailRecording.update({
         where: { id: recordingId },
         data: { status, updatedAt: new Date(Math.max(Date.now(), recording.updatedAt.getTime() + 1)) },
@@ -173,9 +248,10 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       difficulty?: string | null
       visibility?: string | null
     }
+    checkpoints?: PersonalCheckpointInput[]
   }): Promise<{ recording: TrailRecordingModel; personalTrail: PersonalTrailModel }> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM trail_recordings WHERE id = ${params.recordingId}::uuid FOR UPDATE`
+    return this.transaction('finish', params.recordingId, async (tx) => {
+      await this.lock(tx, 'trail_recordings', params.recordingId)
       // 1. Create PersonalTrail
       const title = params.trailMetadata?.title || 'Cung đường cá nhân'
 
@@ -204,39 +280,37 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
         throw new AppError({ code: PersonalTrailErrorCode.RECORDING_CHANGED })
       }
 
-      if (!durationStr || !elapsedSeconds) {
+      if (params.endedAt.getTime() < existingRec.startedAt.getTime()) {
+        throw new AppError({ code: PersonalTrailErrorCode.INVALID_RECORDING_TIME })
+      }
+      if (elapsedSeconds === undefined) {
         if (existingRec?.startedAt && params.endedAt) {
           elapsedSeconds = Math.max(
             0,
             Math.floor((new Date(params.endedAt).getTime() - new Date(existingRec.startedAt).getTime()) / 1000),
           )
-          const mins = Math.round(elapsedSeconds / 60)
-          durationStr = mins >= 60 ? `${Math.floor(mins / 60)} giờ ${mins % 60} phút` : `${Math.max(1, mins)} phút`
         } else {
           durationStr = '1 phút'
           elapsedSeconds = 60
         }
       }
+      if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > 2_147_483_647) {
+        throw new AppError({ code: PersonalTrailErrorCode.INVALID_RECORDING_TIME })
+      }
+      if (!durationStr) {
+        const mins = Math.round(elapsedSeconds / 60)
+        durationStr = mins >= 60 ? `${Math.floor(mins / 60)} giờ ${mins % 60} phút` : `${Math.max(1, mins)} phút`
+      }
       const difficulty = mapDifficulty(params.trailMetadata?.difficulty)
       const visibility = mapVisibility(params.trailMetadata?.visibility)
 
-      // Serialize destination resolution across different recordings as name is not unique.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('personal-trail:destination:hcm'))::text`
+      // Reuse the manually prepared destination; never create replacement data here.
       const destinationName = 'Hồ Chí Minh'
-      const destination =
-        (await tx.destination.findFirst({
-          where: { name: { equals: destinationName, mode: 'insensitive' }, status: RecordStatus.ACTIVE },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        })) ??
-        (await tx.destination.create({
-          data: {
-            name: destinationName,
-            region: 'SOUTH',
-            centerLat: 10.7769,
-            centerLng: 106.7009,
-            status: RecordStatus.ACTIVE,
-          },
-        }))
+      const destination = await tx.destination.findFirst({
+        where: { name: { equals: destinationName, mode: 'insensitive' }, status: RecordStatus.ACTIVE },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })
+      if (!destination) throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_DESTINATION_UNAVAILABLE })
 
       const personalTrail = await tx.personalTrail.create({
         data: {
@@ -257,9 +331,7 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       })
 
       const routeSegments = Array.isArray(params.processedGeojson?.coordinates)
-        ? params.processedGeojson.coordinates.filter(
-            (segment: unknown) => Array.isArray(segment) && segment.length > 0,
-          )
+        ? params.processedGeojson.coordinates.filter((segment: unknown) => Array.isArray(segment) && segment.length > 0)
         : []
       const firstCoordinate = routeSegments[0]?.[0]
       const lastSegment = routeSegments[routeSegments.length - 1]
@@ -280,9 +352,18 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
             name: 'Điểm kết thúc',
             longitude: Number(lastCoordinate[0]),
             latitude: Number(lastCoordinate[1]),
-            sequence: 2,
+            sequence: (params.checkpoints?.length ?? 0) + 2,
             info: 'END',
           },
+          ...(params.checkpoints ?? []).map((checkpoint, index) => ({
+            personalTrailId: personalTrail.id,
+            name: checkpoint.name,
+            latitude: checkpoint.latitude,
+            longitude: checkpoint.longitude,
+            radiusMeters: checkpoint.radiusMeters,
+            info: checkpoint.info ?? null,
+            sequence: index + 2,
+          })),
         ],
       })
 
@@ -315,7 +396,7 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       where: { id, status: RecordStatus.ACTIVE },
       include: {
         trailSubmissionsViaPersonalTrailId: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 1,
         },
         trailRecordingsViaCreatedPersonalTrailId: {
@@ -377,15 +458,23 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       if (query.verificationStatus === 'DRAFT') {
         where.trailSubmissionsViaPersonalTrailId = { none: {} }
       } else {
-        const mappedStatus =
+        const statuses =
           query.verificationStatus === 'PENDING'
-            ? TrailSubmissionStatus.SUBMITTED
+            ? [TrailSubmissionStatus.SUBMITTED, TrailSubmissionStatus.UNDER_REVIEW]
             : query.verificationStatus === 'VERIFIED'
-              ? TrailSubmissionStatus.APPROVED
-              : (query.verificationStatus as TrailSubmissionStatus)
-        where.trailSubmissionsViaPersonalTrailId = {
-          some: { status: mappedStatus },
-        }
+              ? [TrailSubmissionStatus.APPROVED]
+              : [query.verificationStatus as TrailSubmissionStatus]
+        // Prisma relation.some matches history, not the latest submission.
+        const matching = await this.prisma.$queryRaw<Array<{ personal_trail_id: string }>>(Prisma.sql`
+          SELECT latest.personal_trail_id FROM (
+            SELECT DISTINCT ON (s.personal_trail_id) s.personal_trail_id, s.status
+            FROM trail_submissions s
+            JOIN personal_trails t ON t.id = s.personal_trail_id
+            WHERE t.user_id = ${userId}::uuid AND t.status = 'ACTIVE'
+            ORDER BY s.personal_trail_id, s.created_at DESC, s.id DESC
+          ) latest WHERE latest.status::text IN (${Prisma.join(statuses)})
+        `)
+        where.id = { in: matching.map((row) => row.personal_trail_id) }
       }
     }
 
@@ -394,10 +483,10 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
           trailSubmissionsViaPersonalTrailId: {
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: 1,
           },
           trailRecordingsViaCreatedPersonalTrailId: {
@@ -452,13 +541,13 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
   }
 
   async updatePersonalTrail(id: string, userId: string, data: any): Promise<PersonalTrailModel> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM personal_trails WHERE id = ${id}::uuid FOR UPDATE`
+    return this.transaction('update-trail', id, async (tx) => {
+      await this.lock(tx, 'personal_trails', id)
       const trail = await tx.personalTrail.findUnique({
         where: { id, status: RecordStatus.ACTIVE },
         include: {
           trailSubmissionsViaPersonalTrailId: {
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           },
         },
       })
@@ -505,41 +594,44 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
   }
 
   async softDeletePersonalTrail(id: string, userId: string): Promise<void> {
-    const trail = await this.prisma.personalTrail.findUnique({
-      where: { id },
-    })
-
-    if (!trail) {
-      throw new AppError({
-        code: PersonalTrailErrorCode.PERSONAL_TRAIL_NOT_FOUND,
-        message: 'Cung đường không tồn tại',
+    return this.transaction('delete-trail', id, async (tx) => {
+      await this.lock(tx, 'personal_trails', id)
+      const trail = await tx.personalTrail.findUnique({
+        where: { id },
       })
-    }
 
-    if (trail.userId !== userId) {
-      throw new AppError({
-        code: PersonalTrailErrorCode.TRAIL_ACCESS_DENIED,
-        message: 'Không có quyền xóa cung đường này',
+      if (!trail) {
+        throw new AppError({
+          code: PersonalTrailErrorCode.PERSONAL_TRAIL_NOT_FOUND,
+          message: 'Cung đường không tồn tại',
+        })
+      }
+
+      if (trail.userId !== userId) {
+        throw new AppError({
+          code: PersonalTrailErrorCode.TRAIL_ACCESS_DENIED,
+          message: 'Không có quyền xóa cung đường này',
+        })
+      }
+
+      await tx.personalTrail.update({
+        where: { id },
+        data: {
+          status: RecordStatus.INACTIVE,
+          archivedAt: new Date(),
+        },
       })
-    }
-
-    await this.prisma.personalTrail.update({
-      where: { id },
-      data: {
-        status: RecordStatus.INACTIVE,
-        archivedAt: new Date(),
-      },
     })
   }
 
   async submitTrailVerification(trailId: string, userId: string, note?: string): Promise<any> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM personal_trails WHERE id = ${trailId}::uuid FOR UPDATE`
+    return this.transaction('submit', trailId, async (tx) => {
+      await this.lock(tx, 'personal_trails', trailId)
       const trail = await tx.personalTrail.findUnique({
         where: { id: trailId, status: RecordStatus.ACTIVE },
         include: {
           trailSubmissionsViaPersonalTrailId: {
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           },
         },
       })

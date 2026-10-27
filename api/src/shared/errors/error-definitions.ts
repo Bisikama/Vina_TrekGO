@@ -680,6 +680,21 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
 
   // Personal Trail & Elevation
+  [PT.PERSONAL_TRAIL_STORAGE_BUSY]: {
+    status: 503, message: 'Personal trail storage is busy. Retry the same operation.', retryable: true,
+  },
+  [PT.PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE]: {
+    status: 503, message: 'Personal trail transaction could not complete. Reconcile recording status before retrying.', retryable: false,
+  },
+  [PT.PERSONAL_TRAIL_DESTINATION_UNAVAILABLE]: {
+    status: 503, message: 'The existing active Ho Chi Minh destination is unavailable. Contact support.', retryable: false,
+  },
+  [PT.CLIENT_RECORDING_ID_CONFLICT]: {
+    status: 409, message: 'This client recording ID cannot be used. Generate a new recording ID.', retryable: false,
+  },
+  [PT.INVALID_RECORDING_TIME]: {
+    status: 400, message: 'Recording end time or elapsed duration is invalid.', retryable: false,
+  },
   [PT.INSUFFICIENT_GPS_POINTS]: {
     status: 400,
     message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ',
