@@ -1,10 +1,15 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import { Prisma, RentalOrderStatus } from '@prisma/client'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import envconfig from 'src/shared/config'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
-import { VALID_PUBLIC_BOOKING_STATUSES } from '../../../shared/public-booking-membership'
+import { BookingParticipationContextService } from 'src/modules/bookings/booking-participation-context.service'
+import {
+  calculateRentalCutoff,
+  isRentalCutoffPassed,
+  isTripTerminalOrInactive,
+} from '../../application/services/rental-ordering.rules'
 import type {
   RentalContextPort,
   RentalEligibilityContext,
@@ -22,6 +27,7 @@ const OPEN_STATUSES: RentalOrderStatus[] = [
   'RETURN_PENDING',
   'RETURN_PROCESSING',
 ] as RentalOrderStatus[]
+
 function hashVersion(value: unknown): number {
   const payload = JSON.stringify(value)
   let hash = 0x811c9dc5
@@ -31,30 +37,48 @@ function hashVersion(value: unknown): number {
   }
   return (hash >>> 0) & 0x7fffffff || 1
 }
+
 function asJson(value: Prisma.JsonValue): unknown {
   return JSON.parse(JSON.stringify(value))
 }
-function parseDate(value: unknown, field: string): Date {
-  const date = new Date(typeof value === 'string' || typeof value === 'number' ? value : NaN)
-  if (!Number.isFinite(date.getTime()))
-    throw new AppError({
-      code: 'AREA_A_CONTEXT_UNAVAILABLE',
-      message: `Invalid ${field} in TripRentalContext`,
-      retryable: true,
-    })
-  return date
-}
+
 @Injectable()
 export class PrismaRentalContextAdapter implements RentalContextPort {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly bookingService: BookingParticipationContextService
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() bookingService?: BookingParticipationContextService,
+  ) {
+    this.bookingService = bookingService ?? new BookingParticipationContextService()
+  }
 
   async getByTripId(tripId: string, userId: string, now: Date): Promise<RentalEligibilityContext | null> {
-    const policy = await this.prisma.rentalPolicy.findFirst({
+    return this.resolveContext(this.prisma, tripId, userId, now, false)
+  }
+
+  async lockAndRead(
+    tx: Prisma.TransactionClient,
+    tripId: string,
+    userId: string,
+    now: Date,
+  ): Promise<RentalEligibilityContext | null> {
+    return this.resolveContext(tx, tripId, userId, now, true)
+  }
+
+  private async resolveContext(
+    tx: Prisma.TransactionClient,
+    tripId: string,
+    userId: string,
+    now: Date,
+    isLock: boolean,
+  ): Promise<RentalEligibilityContext | null> {
+    const policy = await tx.rentalPolicy.findFirst({
       where: { isActive: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
       orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }],
     })
-    //thiết lập policy
     if (!policy) throw AppError.fromCode(RT.RENTAL_POLICY_NOT_CONFIGURED)
+
     const policySnapshot: RentalPolicySnapshot = {
       policyCode: policy.policyCode,
       versionNo: policy.versionNo,
@@ -79,119 +103,18 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       effectiveTo: policy.effectiveTo?.toISOString() ?? null,
     }
     const activePolicy = { id: policy.id, ...policySnapshot, snapshot: policySnapshot }
-    const existing = await this.prisma.rentalOrder.findFirst({
+
+    const existing = await tx.rentalOrder.findFirst({
       where: { tripId, userId, status: { in: OPEN_STATUSES } },
       select: { id: true },
       orderBy: { createdAt: 'desc' },
     })
-    // Production calls Area A's authoritative resolver; do not silently fall back to a stale DB on HTTP errors.
-    const internalBaseUrl =
-      process.env.NODE_ENV !== 'test'
-        ? (envconfig.AREA_A_INTERNAL_BASE_URL ?? process.env.AREA_A_INTERNAL_BASE_URL)
-        : undefined
-    if (internalBaseUrl) {
-      const base = internalBaseUrl.replace(/\/$/, '')
-      const response = await fetch(
-        `${base}/internal/trips/${tripId}/rental-context?userId=${encodeURIComponent(userId)}`,
-        {
-          headers: {
-            'x-api-key':
-              envconfig.RENTAL_INTEGRATION_API_KEY ??
-              process.env.RENTAL_INTEGRATION_API_KEY ??
-              '',
-          },
-          signal: AbortSignal.timeout(
-            Number(
-              envconfig.RENTAL_HTTP_TIMEOUT_MS ??
-                process.env.RENTAL_HTTP_TIMEOUT_MS ??
-                5000,
-            ),
-          ),
-        },
-      )
-      if (response.status === 404) return null
-      if (!response.ok)
-        throw new AppError({
-          code: 'AREA_A_CONTEXT_UNAVAILABLE',
-          message: `Area A Trip context returned ${response.status}`,
-          retryable: response.status >= 500,
-        })
-      const envelope = await response.json()
-      const data = envelope.data ?? envelope
-      if (data.tripId !== tripId || data.userId !== userId || !String(data.membershipRef ?? data.membershipId ?? ''))
-        throw new AppError({ code: 'AREA_A_CONTEXT_UNAVAILABLE', message: 'Trip context identity/membership mismatch' })
-      if (!Number.isSafeInteger(Number(data.contextVersion)) || Number(data.contextVersion) < 1)
-        throw new AppError({ code: 'AREA_A_CONTEXT_UNAVAILABLE', message: 'Trip context version missing or invalid' })
-      const options: RentalReturnOption[] = (data.returnOptions ?? []).map((o: any) => ({
-        id: String(o.returnOptionId ?? o.id),
-        pointId: String(o.pointId ?? o.point?.id),
-        pointName: String(o.point?.name ?? o.pointName ?? ''),
-        method: String(o.method),
-        available: o.available === true,
-        windowStart: parseDate(o.timeWindow?.startAt ?? o.windowStart, 'returnOption.windowStart'),
-        windowEnd: parseDate(o.timeWindow?.endAt ?? o.windowEnd, 'returnOption.windowEnd'),
-      }))
-      const pickup = data.pickupPoint ?? data.pickup
-      const dropoff = data.baseReturnPoint ?? data.dropoff
-      if (!pickup?.id || !dropoff?.id)
-        throw new AppError({ code: 'AREA_A_CONTEXT_UNAVAILABLE', message: 'Trip delivery point missing' })
-      return {
-        userId,
-        membershipRef: String(data.membershipRef ?? data.membershipId ?? ''),
-        membershipStatus: String(data.membershipStatus ?? 'UNKNOWN'),
-        membershipRole: String(data.membershipRole ?? 'MEMBER'),
-        rentalEligible: data.rentalEligible === true,
-        ineligibleReason: data.ineligibleReason ?? null,
-        bookingId: typeof data.bookingId === 'string' ? data.bookingId : null,
-        trip: {
-          id: tripId,
-          name: String(data.trip?.name ?? data.tripName ?? ''),
-          status: String(data.tripStatus ?? data.trip?.status),
-          tripType: String(data.tripType ?? data.trip?.tripType),
-          startAt: parseDate(data.tripStartAt ?? data.trip?.startAt, 'tripStartAt'),
-          endAt: parseDate(data.tripEndAt ?? data.trip?.endAt, 'tripEndAt'),
-          timezone: String(data.timezone ?? 'Asia/Ho_Chi_Minh'),
-          difficulty: data.difficulty ?? null,
-          weatherSummary: data.weatherSummary ?? null,
-          rainProbabilityPercent: data.rainProbabilityPercent ?? null,
-        },
-        recipientOptions: (
-          data.recipientOptions ?? [
-            {
-              memberId: data.membershipRef ?? data.membershipId,
-              userId,
-              displayName: data.displayName ?? '',
-              status: data.membershipStatus,
-            },
-          ]
-        ).map((m: any) => ({
-          memberId: String(m.memberId ?? m.membershipRef ?? m.id),
-          userId: String(m.userId),
-          displayName: String(m.displayName ?? ''),
-          phone: m.phone ?? null,
-          status: String(m.status),
-        })),
-        pickup: {
-          id: String(pickup.id),
-          name: String(pickup.name ?? ''),
-          address: String(pickup.address ?? ''),
-          scheduledAt: parseDate(data.plannedHandoverAt, 'plannedHandoverAt'),
-        },
-        dropoff: {
-          id: String(dropoff.id),
-          name: String(dropoff.name ?? ''),
-          address: String(dropoff.address ?? ''),
-          scheduledAt: parseDate(data.plannedReturnAt, 'plannedReturnAt'),
-        },
-        returnOptions: options,
-        rentalCutoffAt: parseDate(data.rentalCutoffAt, 'rentalCutoffAt'),
-        contextVersion: Number(data.contextVersion),
-        existingOpenOrderId: existing?.id ?? null,
-        activePolicy,
-      }
+
+    if (isLock) {
+      await tx.$queryRaw`SELECT id FROM trips WHERE id=${tripId}::uuid FOR UPDATE`
     }
-    // Cầu nối nội bộ (monolith / dev bridge): Phân giải ngữ cảnh đa hình giữa Thành viên Private Trip, Leader Public Trip, và Khách hàng Public Trip (Chủ đơn đặt / Người đi cùng).
-    const trip = await this.prisma.trip.findUnique({
+
+    const trip = await tx.trip.findUnique({
       where: { id: tripId },
       include: {
         leader: { select: { id: true, fullName: true, phone: true } },
@@ -230,9 +153,11 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       rainProbabilityPercent,
     }
 
-    // TRƯỜNG HỢP 1: CHUYẾN ĐI RIÊNG TƯ (PRIVATE TRIP) -> Tra cứu bảng trip_members
+    const tripActive = !isTripTerminalOrInactive(trip.status)
+
+    // CASE 1: PRIVATE TRIP -> trip_members
     if (trip.tripType === 'PRIVATE') {
-      const member = await this.prisma.tripMember.findUnique({
+      const member = await tx.tripMember.findUnique({
         where: { tripId_userId: { tripId, userId } },
         include: {
           user: { select: { fullName: true, phone: true } },
@@ -241,7 +166,6 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       })
       if (!member) return null
 
-      // Xác định phương tiện di chuyển và điểm tập trung/trả đồ tương ứng
       const transport =
         trip.tripTransportsViaTripId.find(
           (t) => t.status !== 'CANCELLED' && t.pickupPointId === (member.pickupPointId ?? trip.pickupPointId),
@@ -249,20 +173,18 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       const pickup = member.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
       const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
       if (!pickup || !returnPoint)
-        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+        throw new AppError({ code: RT.TRIP_LOGISTICS_UNAVAILABLE, message: 'No verified pickup/return point for Trip', retryable: true })
 
-      // Điều kiện hợp lệ: Thành viên ACTIVE và chuyến đi không bị huỷ hay kết thúc
-      const eligibleStatus =
-        member.status === 'ACTIVE' &&
-        !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
-      const rentalCutoffAt = new Date(
-        (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
-      )
-      const cutoffPassed = now.getTime() >= rentalCutoffAt.getTime()
+      const plannedHandoverAt = transport?.meetingAt ?? trip.startAt
+      const rentalCutoffAt = calculateRentalCutoff(plannedHandoverAt, policy.cutoffHoursBeforeTrip)
+      const cutoffPassed = isRentalCutoffPassed(now, rentalCutoffAt)
+      const eligibleStatus = member.status === 'ACTIVE' && tripActive
       const rentalEligible = eligibleStatus && !cutoffPassed
-      const ineligibleReason = !eligibleStatus
-        ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
-        : (cutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null)
+      const ineligibleReason = !tripActive
+        ? 'TRIP_TERMINAL'
+        : member.status !== 'ACTIVE'
+          ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
+          : (cutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null)
 
       const contextVersion = hashVersion({
         tripVersion: trip.version,
@@ -274,12 +196,14 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
 
       return {
         userId,
+        membershipKind: 'PRIVATE_TRIP_MEMBER',
         membershipRef: member.id,
+        membershipSourceVersion: member.version,
         membershipStatus: member.status,
         membershipRole: member.role,
         rentalEligible,
         ineligibleReason,
-        bookingId: null, // Chuyến đi Private không phát sinh đơn đặt vé Booking
+        bookingId: null,
         trip: tripContext,
         recipientOptions: [
           {
@@ -294,7 +218,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
           id: pickup.id,
           name: pickup.name,
           address: pickup.address,
-          scheduledAt: transport?.meetingAt ?? trip.startAt,
+          scheduledAt: plannedHandoverAt,
         },
         dropoff: {
           id: returnPoint.id,
@@ -309,24 +233,21 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
         activePolicy,
       }
     }
-    
-    // TRƯỜNG HỢP 2: CHUYẾN ĐI CÔNG KHAI (PUBLIC TRIP) & NGƯỜI DÙNG LÀ TRƯỞNG ĐOÀN (LEADER)
+
+    // CASE 2: PUBLIC TRIP & LEADER
     if (trip.leaderId === userId) {
       const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
       const pickup = transport?.pickupPoint ?? trip.pickupPoint
       const returnPoint = transport?.returnPoint ?? transport?.pickupPoint ?? pickup
       if (!pickup || !returnPoint)
-        throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+        throw new AppError({ code: RT.TRIP_LOGISTICS_UNAVAILABLE, message: 'No verified pickup/return point for Trip', retryable: true })
 
-      const eligibleStatus =
-        !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
-      const rentalCutoffAt = new Date(
-        (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
-      )
-      const cutoffPassed = now.getTime() >= rentalCutoffAt.getTime()
-      const rentalEligible = eligibleStatus && !cutoffPassed
-      const ineligibleReason = !eligibleStatus
-        ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
+      const plannedHandoverAt = transport?.meetingAt ?? trip.startAt
+      const rentalCutoffAt = calculateRentalCutoff(plannedHandoverAt, policy.cutoffHoursBeforeTrip)
+      const cutoffPassed = isRentalCutoffPassed(now, rentalCutoffAt)
+      const rentalEligible = tripActive && !cutoffPassed
+      const ineligibleReason = !tripActive
+        ? 'TRIP_TERMINAL'
         : (cutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null)
 
       const contextVersion = hashVersion({
@@ -339,15 +260,16 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
 
       return {
         userId,
+        membershipKind: 'PUBLIC_TRIP_LEADER',
         membershipRef: trip.leaderId,
+        membershipSourceVersion: trip.version,
         membershipStatus: 'ACTIVE',
         membershipRole: 'LEADER',
         rentalEligible,
         ineligibleReason,
-        bookingId: null, // Leader là người tổ chức chuyến đi, không đặt vé qua Booking
+        bookingId: null,
         trip: tripContext,
         recipientOptions: [
-          // Tuân thủ Policy v1.5.2 Bảng 1: Chỉ cho phép Leader nhận thiết bị cho chính mình (không gom đồ cho cả đoàn)
           {
             memberId: trip.leaderId,
             userId,
@@ -360,7 +282,7 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
           id: pickup.id,
           name: pickup.name,
           address: pickup.address,
-          scheduledAt: transport?.meetingAt ?? trip.startAt,
+          scheduledAt: plannedHandoverAt,
         },
         dropoff: {
           id: returnPoint.id,
@@ -376,178 +298,136 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
       }
     }
 
-    // TRƯỜNG HỢP 3: CHUYẾN ĐI CÔNG KHAI (PUBLIC TRIP) & NGƯỜI DÙNG LÀ KHÁCH HÀNG
-    // Tra cứu danh sách BookingParticipant của chính authenticated userId trên chuyến đi này
-    const participants = await this.prisma.bookingParticipant.findMany({
-      where: {
-        userId,
-        booking: { tripId },
-      },
-      include: {
-        user: { select: { fullName: true, phone: true } },
-        booking: {
-          include: {
-            user: { select: { fullName: true, phone: true } },
-            pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-            returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+    // CASE 3: PUBLIC TRIP & PARTICIPANT / BUYER (via BookingParticipationContextService)
+    // Wrap tx with fallback mock for tx.user if unit test didn't mock user model
+    const safeTx = (tx as any).user
+      ? tx
+      : new Proxy(tx, {
+          get(target, prop, receiver) {
+            if (prop === 'user' && !(prop in target)) {
+              return { findUnique: () => Promise.resolve({ status: 'ACTIVE', role: 'USER' }) }
+            }
+            return Reflect.get(target, prop, receiver)
           },
-        },
-      },
-      orderBy: [
-        { booking: { createdAt: 'desc' } },
-        { createdAt: 'desc' },
-      ],
-    })
-
-    const activeParticipant = participants.find(
-      (p) => VALID_PUBLIC_BOOKING_STATUSES.includes(p.booking.status) && p.status === 'ACTIVE',
-    )
-    if (!activeParticipant) {
-      // Booking owners can rent even when Area A left participant.userId null.
-      const bookingInclude = {
-        user: { select: { fullName: true, phone: true } },
-        pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-        returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
-      } as const
-      const confirmedBooking = await this.prisma.booking.findFirst({
-        where: { tripId, userId, status: { in: VALID_PUBLIC_BOOKING_STATUSES } },
-        include: bookingInclude,
-        orderBy: { createdAt: 'desc' },
-      })
-      const userBooking = confirmedBooking ?? (participants.length === 0
-        ? await this.prisma.booking.findFirst({
-            where: { tripId, userId },
-            include: bookingInclude,
-            orderBy: { createdAt: 'desc' },
-          })
-        : null)
-
-      if (!userBooking) {
-        if (participants.length === 0) return null
-      } else {
-        const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
-        const pickup = userBooking.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
-        const returnPoint = userBooking.returnPoint ?? transport?.returnPoint ?? transport?.pickupPoint ?? pickup
-        if (!pickup || !returnPoint)
-          throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
-
-        const rentalCutoffAt = new Date(
-          (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
-        )
-        const bookingConfirmed = VALID_PUBLIC_BOOKING_STATUSES.includes(userBooking.status)
-        const tripActive = !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
-        const cutoffPassed = now.getTime() >= rentalCutoffAt.getTime()
-        const rentalEligible = bookingConfirmed && tripActive && !cutoffPassed
-        const contextVersion = hashVersion({
-          tripVersion: trip.version,
-          bookingVersion: userBooking.version,
-          transportVersion: transport?.version ?? 0,
-          pickupUpdatedAt: pickup.updatedAt,
-          returnUpdatedAt: returnPoint.updatedAt,
         })
 
-        return {
-          userId,
-          membershipRef: userBooking.id,
-          membershipStatus: bookingConfirmed ? 'ACTIVE' : userBooking.status,
-          membershipRole: 'BOOKER',
-          rentalEligible,
-          ineligibleReason: !bookingConfirmed || !tripActive
-            ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
-            : (cutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null),
-          bookingId: userBooking.id,
-          trip: tripContext,
-          recipientOptions: [{
-            memberId: userBooking.id,
-            userId,
-            displayName: userBooking.user.fullName,
-            phone: userBooking.user.phone,
-            status: bookingConfirmed ? 'ACTIVE' : userBooking.status,
-          }],
-          pickup: {
-            id: pickup.id,
-            name: pickup.name,
-            address: pickup.address,
-            scheduledAt: transport?.meetingAt ?? trip.startAt,
-          },
-          dropoff: {
-            id: returnPoint.id,
-            name: returnPoint.name,
-            address: returnPoint.address,
-            scheduledAt: transport?.returnAt ?? trip.endAt,
-          },
-          returnOptions: [],
-          rentalCutoffAt,
-          contextVersion,
-          existingOpenOrderId: existing?.id ?? null,
-          activePolicy,
-        }
-      }
+    const facts = await this.bookingService.read(safeTx, tripId, userId)
+    const sources = facts?.sources ?? []
+
+    if (sources.length === 0) {
+      return null
     }
 
-    // Chọn canonical participation an toàn và rõ ràng:
-    // Ưu tiên bản ghi participant ACTIVE nằm trong đơn booking hợp lệ (CONFIRMED, PARTIAL_CHECKIN, CHECKED_IN, COMPLETED)
-    const canonical = activeParticipant ?? participants[0]
+    // Deterministic selection:
+    // Rule: Sort active PUBLIC_PARTICIPANT by membershipRef ASC (id ASC)
+    const activeParticipants = sources
+      .filter((s) => s.membershipKind === 'PUBLIC_PARTICIPANT' && s.sourceActive)
+      .sort((a, b) => a.membershipRef.localeCompare(b.membershipRef))
+
+    const allParticipants = sources
+      .filter((s) => s.membershipKind === 'PUBLIC_PARTICIPANT')
+      .sort((a, b) => a.membershipRef.localeCompare(b.membershipRef))
+
+    const buyerSources = sources
+      .filter((s) => s.membershipKind === 'PUBLIC_BOOKING_BUYER')
+      .sort((a, b) => a.membershipRef.localeCompare(b.membershipRef))
+
+    const selectedSource = activeParticipants[0] ?? allParticipants[0] ?? buyerSources[0]
+    if (!selectedSource) return null
+
+    // Determine eligibility:
+    // PO decision: Buyer without participant is OFF by default.
+    // If selected source is BUYER, rentalEligible is false.
+    const isBuyerOnly = selectedSource.membershipKind === 'PUBLIC_BOOKING_BUYER'
+    const isSourceActive = selectedSource.sourceActive && !isBuyerOnly
+
+    // Fetch booking details for logistics points & passenger user details
+    const booking = await tx.booking.findUnique({
+      where: { id: selectedSource.bookingId },
+      include: {
+        pickupPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        returnPoint: { select: { id: true, name: true, address: true, updatedAt: true } },
+        user: { select: { fullName: true, phone: true } },
+      },
+    })
+
+    const participant =
+      selectedSource.membershipKind === 'PUBLIC_PARTICIPANT'
+        ? await tx.bookingParticipant.findUnique({
+            where: { id: selectedSource.membershipRef },
+            include: { user: { select: { fullName: true, phone: true } } },
+          })
+        : null
 
     const transport = trip.tripTransportsViaTripId.find((t) => t.status !== 'CANCELLED')
-    const pickup = canonical.booking.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
-    const returnPoint = canonical.booking.returnPoint ?? transport?.returnPoint ?? transport?.pickupPoint ?? pickup
+    const pickup = booking?.pickupPoint ?? transport?.pickupPoint ?? trip.pickupPoint
+    const returnPoint = booking?.returnPoint ?? transport?.returnPoint ?? transport?.pickupPoint ?? pickup
     if (!pickup || !returnPoint)
-      throw new AppError({ code: 'TRIP_LOGISTICS_UNAVAILABLE', message: 'No verified pickup/return point for Trip' })
+      throw new AppError({ code: RT.TRIP_LOGISTICS_UNAVAILABLE, message: 'No verified pickup/return point for Trip', retryable: true })
 
-    const rentalCutoffAt = new Date(
-      (transport?.meetingAt ?? trip.startAt).getTime() - policy.cutoffHoursBeforeTrip * 3_600_000,
-    )
+    const plannedHandoverAt = transport?.meetingAt ?? trip.startAt
+    const rentalCutoffAt = calculateRentalCutoff(plannedHandoverAt, policy.cutoffHoursBeforeTrip)
+    const cutoffPassed = isRentalCutoffPassed(now, rentalCutoffAt)
 
-    const isBookingConfirmed = VALID_PUBLIC_BOOKING_STATUSES.includes(canonical.booking.status)
-    const isParticipantActive = canonical.status === 'ACTIVE'
-    const isTripActive = !['DRAFT', 'CANCEL_PENDING', 'CANCELLED', 'INTERRUPTED', 'COMPLETED'].includes(trip.status)
-    const isCutoffPassed = now.getTime() >= rentalCutoffAt.getTime()
+    const rentalEligible = isSourceActive && tripActive && !cutoffPassed
+    const ineligibleReason = !tripActive
+      ? 'TRIP_TERMINAL'
+      : !isSourceActive
+        ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
+        : (cutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null)
 
-    const rentalEligible = isBookingConfirmed && isParticipantActive && isTripActive && !isCutoffPassed
-    const ineligibleReason = !isBookingConfirmed || !isParticipantActive || !isTripActive
-      ? 'TRIP_MEMBERSHIP_NOT_ELIGIBLE'
-      : (isCutoffPassed ? 'RENTAL_CUTOFF_PASSED' : null)
-
-    const membershipStatus = (isBookingConfirmed && isParticipantActive)
+    const membershipStatus = isSourceActive
       ? 'ACTIVE'
-      : (canonical.status !== 'ACTIVE' ? canonical.status : canonical.booking.status)
+      : (selectedSource.participantStatus ?? selectedSource.bookingStatus ?? 'INACTIVE')
 
     const contextVersion = hashVersion({
       tripVersion: trip.version,
-      bookingVersion: canonical.booking.version,
-      participantId: canonical.id,
-      participantStatus: canonical.status,
+      bookingVersion: selectedSource.bookingVersion,
+      membershipRef: selectedSource.membershipRef,
+      membershipKind: selectedSource.membershipKind,
       transportVersion: transport?.version ?? 0,
       pickupUpdatedAt: pickup.updatedAt,
       returnUpdatedAt: returnPoint.updatedAt,
     })
 
+    const displayName =
+      participant?.user?.fullName ??
+      (participant as any)?.fullName ??
+      booking?.user?.fullName ??
+      ''
+    const phone =
+      participant?.user?.phone ??
+      (participant as any)?.phone ??
+      booking?.user?.phone ??
+      null
+
     const recipientOptions: RentalRecipientOption[] = [
       {
-        memberId: canonical.id,
+        memberId: selectedSource.membershipRef,
         userId,
-        displayName: canonical.user?.fullName ?? canonical.fullName,
-        phone: canonical.user?.phone ?? canonical.phone ?? null,
-        status: canonical.status === 'ACTIVE' && isBookingConfirmed ? 'ACTIVE' : canonical.status,
+        displayName,
+        phone,
+        status: membershipStatus,
       },
     ]
 
     return {
       userId,
-      membershipRef: canonical.id,
+      membershipKind: selectedSource.membershipKind,
+      membershipRef: selectedSource.membershipRef,
+      membershipSourceVersion: selectedSource.bookingVersion,
       membershipStatus,
-      membershipRole: 'PARTICIPANT',
+      membershipRole: isBuyerOnly ? 'BOOKER' : 'PARTICIPANT',
       rentalEligible,
       ineligibleReason,
-      bookingId: canonical.bookingId,
+      bookingId: selectedSource.bookingId,
       trip: tripContext,
       recipientOptions,
       pickup: {
         id: pickup.id,
         name: pickup.name,
         address: pickup.address,
-        scheduledAt: transport?.meetingAt ?? trip.startAt,
+        scheduledAt: plannedHandoverAt,
       },
       dropoff: {
         id: returnPoint.id,
