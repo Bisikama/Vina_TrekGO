@@ -1,5 +1,9 @@
 import { DifficultyLevel, PersonalTrailVisibility, RecordStatus } from '@prisma/client'
-import { MyTrailsQuery, RawSamplesBatchInput } from '../../presentation/dtos/personal-trail.dto'
+import {
+  MyTrailsQuery,
+  RawSamplesBatchInput,
+  PersonalCheckpointInput,
+} from '../../presentation/dtos/personal-trail.dto'
 
 export interface TrailRecordingModel {
   id: string
@@ -90,6 +94,7 @@ export interface IPersonalTrailRepository {
     recordingId: string
     userId: string
     expectedUpdatedAt: Date
+    checkpoints?: PersonalCheckpointInput[]
     endedAt: Date
     processedGeojson: any
     metrics: {
