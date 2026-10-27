@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 
-export type LifecycleCancellationSource = 'TRIP' | 'BOOKING';
+export type LifecycleCancellationSource = 'TRIP' | 'BOOKING' | 'MEMBERSHIP';
 export type LifecycleRentalFinancialResult = {
   financialStatus: 'UNPAID' | 'PAID' | 'REFUND_PENDING' | null;
   reviewReason: string | null;
@@ -35,6 +35,14 @@ export async function reserveLifecycleRentalRefundWithTx(
     return { financialStatus: 'PAID', reviewReason: 'RENTAL_CANCELLATION_AMOUNT_UNVERIFIED' };
 
   let refundFee = source === 'TRIP';
+  if (source === 'MEMBERSHIP') {
+    const hours = order.rentalPolicy?.freeCancellationHours;
+    if (Number.isSafeInteger(hours) && hours >= 0) {
+      refundFee = now.getTime() <= order.rentalStartAt.getTime() - hours * 3_600_000;
+    } else {
+      refundFee = true;
+    }
+  }
   if (source === 'BOOKING') {
     if (!order.bookingId) return { financialStatus: 'PAID', reviewReason: 'BOOKING_CANCELLATION_SOURCE_UNVERIFIED' };
     const cancellation = await tx.bookingCancellation.findFirst({

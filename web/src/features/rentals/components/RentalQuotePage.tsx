@@ -9,6 +9,7 @@ import {
   createRentalOrder,
   createRentalPayment,
   createRentalQuote,
+  getRentalApiErrorCode,
   getRentalApiErrorMessage,
   getRentalAvailability,
   getRentalEligibility,
@@ -253,6 +254,80 @@ export function RentalQuotePage({
     }
   }
 
+  async function refreshQuoteAfterStaleContext() {
+    if (!data) return;
+
+    const eligibility = await getRentalEligibility(bookingId);
+    const nextRecipientId = eligibility.recipientOptions.some(
+      (option) => option.id === recipientId,
+    )
+      ? recipientId
+      : (eligibility.recipientOptions[0]?.id ?? "");
+
+    if (
+      !eligibility.eligible ||
+      !eligibility.allowedActions.includes("CREATE_RENTAL")
+    ) {
+      setData({ ...data, eligibility });
+      setQuote(null);
+      setOrderResult(null);
+      setPayment(null);
+      orderKeyRef.current = null;
+      paymentKeyRef.current = null;
+      setError(
+        eligibility.reason ??
+          "Thông tin chuyến đi đã thay đổi và hiện chưa đủ điều kiện thuê thiết bị.",
+      );
+      return;
+    }
+
+    const lines = await Promise.all(
+      data.lines.map(async (line) => ({
+        ...line,
+        availability: await getRentalAvailability(
+          eligibility.trip.id,
+          line.product.id,
+        ),
+      })),
+    );
+
+    setData({ eligibility, lines });
+    setRecipientId(nextRecipientId);
+
+    const unavailableLine = lines.find(
+      (line) => line.quantity > line.availability.availableCount,
+    );
+    if (unavailableLine) {
+      setQuote(null);
+      setOrderResult(null);
+      setPayment(null);
+      orderKeyRef.current = null;
+      paymentKeyRef.current = null;
+      setError(
+        `${unavailableLine.product.name} không còn đủ số lượng. Vui lòng cập nhật giỏ hành trang.`,
+      );
+      return;
+    }
+
+    const refreshedQuote = await createRentalQuote({
+      tripId: eligibility.trip.id,
+      recipientTripMemberId: nextRecipientId || undefined,
+      items: lines.map((line) => ({
+        productId: line.product.id,
+        quantity: line.quantity,
+      })),
+    });
+
+    setQuote(refreshedQuote);
+    setOrderResult(null);
+    setPayment(null);
+    orderKeyRef.current = null;
+    paymentKeyRef.current = null;
+    setError(
+      "Thông tin chuyến đi hoặc đặt chỗ vừa được cập nhật. Báo giá mới đã được tạo; vui lòng kiểm tra và xác nhận thanh toán lại.",
+    );
+  }
+
   async function handleCreateOrderAndPayment() {
     if (!quote || submitting) return;
     if (!paymentGateways.includes(gateway)) {
@@ -299,12 +374,25 @@ export function RentalQuotePage({
           : "Cổng thanh toán chưa trả về đường dẫn thanh toán.",
       );
     } catch (checkoutError) {
-      setError(
-        getRentalApiErrorMessage(
-          checkoutError,
-          "Không thể giữ thiết bị và khởi tạo thanh toán.",
-        ),
-      );
+      if (getRentalApiErrorCode(checkoutError) === "STALE_CONTEXT") {
+        try {
+          await refreshQuoteAfterStaleContext();
+        } catch (refreshError) {
+          setError(
+            getRentalApiErrorMessage(
+              refreshError,
+              "Thông tin chuyến đi đã thay đổi nhưng chưa thể tạo lại báo giá. Vui lòng thử lại.",
+            ),
+          );
+        }
+      } else {
+        setError(
+          getRentalApiErrorMessage(
+            checkoutError,
+            "Không thể giữ thiết bị và khởi tạo thanh toán.",
+          ),
+        );
+      }
     } finally {
       setSubmitting(false);
     }
