@@ -266,6 +266,8 @@ if (url) {
     await expect(service.invite(actor, trip.id, 1, input.startAt)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     const first = (await service.invite(actor, trip.id, 1)) as { inviteCode: string; tripVersion: number }
     const second = (await service.invite(actor, trip.id, first.tripVersion)) as { inviteCode: string }
+    expect(first.inviteCode).toMatch(/^[A-Z0-9]{6}$/)
+    expect(second.inviteCode).toMatch(/^[A-Z0-9]{6}$/)
     expect(second.inviteCode).not.toBe(first.inviteCode)
     expect((await db.privateTripInvite.findUniqueOrThrow({ where: { code: first.inviteCode } })).status).toBe('REVOKED')
     await expect(service.invite(actor, trip.id, 1)).rejects.toMatchObject({ code: 'PRIVATE_TRIP_VERSION_CONFLICT' })

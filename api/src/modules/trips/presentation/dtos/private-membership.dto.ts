@@ -1,5 +1,5 @@
 import { z } from 'zod'
-export const inviteCodeSchema = z.string().regex(/^[A-Za-z0-9_-]{32,120}$/)
+export const inviteCodeSchema = z.string().regex(/^[A-Z0-9]{6}$/)
 export const joinPrivateSchema = z.object({}).strict().optional()
 export const memberVersionSchema = z.object({ expectedMemberVersion: z.number().int().min(1) }).strict()
 export const removeMemberQuerySchema = z.object({ expectedMemberVersion: z.coerce.number().int().min(1) }).strict()
