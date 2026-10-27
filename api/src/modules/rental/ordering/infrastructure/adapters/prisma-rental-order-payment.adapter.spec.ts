@@ -78,8 +78,15 @@ describe('PrismaRentalOrderAdapter rental payment and ownership', () => {
     const paymentDate = new Date('2026-10-18T09:00:00.000Z')
     const futureExpires = new Date(Date.now() + 3_600_000)
     const pastExpires = new Date(Date.now() - 3_600_000)
+    const originalPrimary = process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID
+    const testLocationId = '11111111-1111-4111-8111-111111111111'
+
+    afterEach(() => {
+      process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = originalPrimary
+    })
 
     beforeEach(() => {
+      process.env.RENTAL_PRIMARY_INVENTORY_LOCATION_ID = testLocationId
       mockTx = {
         payment: {
           findUnique: jest.fn(),
@@ -115,8 +122,8 @@ describe('PrismaRentalOrderAdapter rental payment and ownership', () => {
           create: jest.fn().mockResolvedValue({ id: 'task-1' }),
         },
         inventoryLocation: {
-          findFirst: jest.fn().mockResolvedValue({ id: 'loc-1', status: 'ACTIVE', isPrimary: true }),
-          findUnique: jest.fn().mockResolvedValue({ id: 'loc-1', status: 'ACTIVE', isPrimary: true }),
+          findFirst: jest.fn().mockResolvedValue({ id: testLocationId, status: 'ACTIVE', isPrimary: true }),
+          findUnique: jest.fn().mockResolvedValue({ id: testLocationId, status: 'ACTIVE', isPrimary: true }),
         },
         refund: {
           upsert: jest.fn().mockResolvedValue({ id: 'ref-1', amount: new Prisma.Decimal(100000) }),

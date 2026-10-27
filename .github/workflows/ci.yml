@@ -112,6 +112,9 @@ jobs:
     env:
       DATABASE_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
       DIRECT_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
+      RENTAL_PRIMARY_INVENTORY_LOCATION_ID: "bf4a226c-47e0-4ed8-b2a3-d1fcdd6f78bc"
+      RENTAL_PICKUP_CODE_SECRET: "ci-dummy-rental-pickup-code-secret-min-32-chars"
+      RENTAL_MEDIA_ACCESS_ATTESTATION_SECRET: "ci-dummy-media-access-secret-32"
       NODE_ENV: test
       ACCESS_TOKEN_SECRET: "ci-dummy-access-secret-min-32-chars-ok"
       REFRESH_TOKEN_SECRET: "ci-dummy-refresh-secret-min-32-chars-ok"
