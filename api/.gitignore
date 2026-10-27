@@ -83,3 +83,4 @@ jest_output.txt
 /.invitation-test-pg
 /.invitation-test-mongo
 /scripts
+/prisma/seeds/data/*.local.json
