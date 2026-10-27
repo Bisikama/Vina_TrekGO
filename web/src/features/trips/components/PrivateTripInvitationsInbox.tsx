@@ -109,7 +109,6 @@ export function PrivateTripInvitationsInbox() {
           router.push(`/trip-room/${res.tripId}`);
         }, 1200);
       } else {
-        // ACCEPTED/200 chưa đủ để vào Room — hiện quyền hiện tại thật
         setAcceptResult({ ok: false, message: membershipExplain(res) });
       }
       await loadInbox();
@@ -169,9 +168,6 @@ export function PrivateTripInvitationsInbox() {
   if (invitations.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-2xl mb-2">
-          📬
-        </div>
         <p className="text-sm font-bold text-gray-800">Hộp thư lời mời trống</p>
         <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
           Khi có bạn bè hoặc Host tạo chuyến đi riêng và mời email của bạn, lời mời sẽ hiển thị tại đây.
@@ -184,8 +180,6 @@ export function PrivateTripInvitationsInbox() {
     <div className="space-y-3">
       {invitations.map((inv) => {
         const badge = badgeFor(inv);
-        const isPending = inv.status === "PENDING";
-        const isBusy = actionLoadingId === inv.id;
 
         return (
           <div
@@ -195,9 +189,6 @@ export function PrivateTripInvitationsInbox() {
             {/* Left info */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-sm">
-                  🎒
-                </span>
                 <span className="text-xs font-bold text-gray-500">
                   Lời mời từ Host: <strong className="text-gray-900">{inv.senderDisplay || "Host chuyến đi"}</strong>
                 </span>
@@ -215,11 +206,11 @@ export function PrivateTripInvitationsInbox() {
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                 {inv.trip?.startAt && (
                   <span>
-                    📅 Khởi hành: {new Date(inv.trip.startAt).toLocaleDateString("vi-VN")}
+                    Khởi hành: {new Date(inv.trip.startAt).toLocaleDateString("vi-VN")}
                   </span>
                 )}
                 <span>
-                  ⏰ Hạn phản hồi: {new Date(inv.expiresAt).toLocaleString("vi-VN")}
+                  Hạn phản hồi: {new Date(inv.expiresAt).toLocaleString("vi-VN")}
                 </span>
               </div>
             </div>
@@ -262,13 +253,13 @@ export function PrivateTripInvitationsInbox() {
                 <p className="text-sm font-bold text-gray-900">{preview.trip?.title || "Chuyến đi riêng tư"}</p>
                 <div className="grid gap-1 text-xs text-gray-600">
                   {preview.trip?.startAt && (
-                    <span>📅 Khởi hành: {new Date(preview.trip.startAt).toLocaleString("vi-VN")}</span>
+                    <span>Khởi hành: {new Date(preview.trip.startAt).toLocaleString("vi-VN")}</span>
                   )}
                   {preview.trip?.endAt && (
-                    <span>🏁 Kết thúc: {new Date(preview.trip.endAt).toLocaleString("vi-VN")}</span>
+                    <span>Kết thúc: {new Date(preview.trip.endAt).toLocaleString("vi-VN")}</span>
                   )}
-                  <span>⏰ Lời mời hết hạn: {new Date(preview.expiresAt).toLocaleString("vi-VN")}</span>
-                  {preview.recipientDisplay && <span>👤 Người nhận: {preview.recipientDisplay}</span>}
+                  <span>Lời mời hết hạn: {new Date(preview.expiresAt).toLocaleString("vi-VN")}</span>
+                  {preview.recipientDisplay && <span>Người nhận: {preview.recipientDisplay}</span>}
                 </div>
                 <span className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${badgeFor(preview as DirectMemberInvitationItem).class}`}>
                   {badgeFor(preview as DirectMemberInvitationItem).label}
@@ -315,7 +306,7 @@ export function PrivateTripInvitationsInbox() {
                     onClick={() => handleAccept(preview.id)}
                     className="w-full rounded-xl bg-[#1B5E41] px-4 py-3 text-sm font-bold text-white hover:bg-[#154B36] transition disabled:opacity-50 cursor-pointer"
                   >
-                    {actionLoadingId === preview.id ? "Đang xử lý..." : "✓ Chấp nhận tham gia"}
+                    {actionLoadingId === preview.id ? "Đang xử lý..." : "Chấp nhận tham gia"}
                   </button>
                 </div>
               )}
