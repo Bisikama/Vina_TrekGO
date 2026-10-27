@@ -66,6 +66,10 @@ import type {
   ReturnToInventoryLocationCommand,
 } from '../../application/ports/rental-return.port'
 
+const DELIVERY_CUSTODY_DISCREPANCY = 'DELIVERY_CUSTODY_DISCREPANCY'
+const DELIVERY_TRANSFER_OMISSION = `${DELIVERY_CUSTODY_DISCREPANCY}:TRANSFER_OMISSION`
+const DELIVERY_RECEIPT_SHORTAGE = `${DELIVERY_CUSTODY_DISCREPANCY}:WAREHOUSE_RECEIPT_SHORTAGE`
+
 @Injectable()
 export class PrismaRentalReturnAdapter implements RentalReturnPort {
   private readonly logger = new Logger(PrismaRentalReturnAdapter.name)
@@ -519,6 +523,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       {
         taskId: command.deliveryTaskId,
         unitIds: [...command.unitIds].sort(),
+        missingInCustodyUnitIds: [...command.missingInCustodyUnitIds].sort(),
+        incidentNote: command.incidentNote ?? null,
         packageId: command.packageId ?? null,
         pendingTransferId: command.pendingTransferId ?? null,
         expectedVersion: command.expectedVersion,
@@ -540,7 +546,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         )
         const assignmentByUnit = new Map(assignments.map((item: any) => [item.equipmentUnitId, item]))
         const unitIds = [...new Set(command.unitIds)]
-        for (const unitId of unitIds) {
+        const explicitlyMissing = [...new Set(command.missingInCustodyUnitIds)]
+        const overlap = explicitlyMissing.filter((unitId) => unitIds.includes(unitId))
+        if (overlap.length)
+          throw AppError.fromCode(RR.CUSTODY_MISMATCH, {
+            details: { reason: 'UNIT_CANNOT_BE_TRANSFERRED_AND_MISSING', unitIds: overlap },
+          })
+        for (const unitId of [...unitIds, ...explicitlyMissing]) {
           const assignment: any = assignmentByUnit.get(unitId)
           if (!assignment || assignment.status !== RentalUnitAssignmentStatus.RETURNED)
             throw AppError.fromCode(RR.UNIT_NOT_RETURNED, { details: { unitId } })
@@ -551,6 +563,35 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             throw AppError.fromCode(RR.RETURN_NOT_READY, {
               details: { unitId, reason: 'PRELIMINARY_INSPECTION_REQUIRED' },
             })
+        }
+        const returnedUnitIds = assignments
+          .filter((assignment: any) => assignment.status === RentalUnitAssignmentStatus.RETURNED)
+          .map((assignment: any) => assignment.equipmentUnitId)
+        const declared = new Set([...unitIds, ...explicitlyMissing])
+        const implicitlyMissing = returnedUnitIds.filter((unitId: string) => !declared.has(unitId))
+        const custodyMissingUnitIds = [...new Set([...explicitlyMissing, ...implicitlyMissing])]
+        if (custodyMissingUnitIds.length && !command.incidentNote)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { reason: 'CUSTODY_DISCREPANCY_NOTE_REQUIRED', unitIds: custodyMissingUnitIds },
+          })
+        const custodyCases: Array<Record<string, unknown>> = []
+        for (const unitId of custodyMissingUnitIds) {
+          const assignment: any = assignmentByUnit.get(unitId)
+          custodyCases.push(
+            await openDeliveryCustodyDiscrepancy(tx, {
+              orderId: order.id,
+              assignment,
+              openedBy: actor.id,
+              reasonCode: DELIVERY_TRANSFER_OMISSION,
+              incidentNote: command.incidentNote!,
+            }),
+          )
+        }
+        if (custodyCases.length) {
+          await tx.rentalOrder.update({
+            where: { id: order.id },
+            data: { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED, version: { increment: 1 } },
+          })
         }
         const inventoryTask = order.inventoryTaskViaOrderId
         if (!inventoryTask)
@@ -582,6 +623,28 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           }
         }
         if (command.pendingTransferId) throw AppError.fromCode(RR.CUSTODY_TRANSFER_NOT_FOUND)
+        if (!unitIds.length) {
+          await writeAudit(
+            tx,
+            actor.id,
+            'RETURN_CUSTODY_DISCREPANCY_REPORTED',
+            'DeliveryTask',
+            task.id,
+            undefined,
+            { orderId: order.id, missingUnitIds: custodyMissingUnitIds, incidentNote: command.incidentNote },
+            command.idempotencyKey,
+          )
+          return {
+            pendingTransferId: null,
+            unitIds: [],
+            missingInCustodyUnitIds: custodyMissingUnitIds,
+            custodyCases,
+            status: 'ACTION_REQUIRED',
+            transferStartedAt: null,
+            transferWatchAt: null,
+            monitoringStatus: 'INCIDENT_REPORTED',
+          }
+        }
         const transfer = await tx.returnCustodyTransfer.create({
           data: {
             orderId: order.id,
@@ -614,6 +677,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           transferStartedAt: transfer.transferStartedAt?.toISOString() ?? null,
           transferWatchAt: transfer.transferWatchAt?.toISOString() ?? null,
           monitoringStatus: transfer.monitoringStatus,
+          missingInCustodyUnitIds: custodyMissingUnitIds,
+          custodyCases,
         }
       },
     )
@@ -630,6 +695,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         transferId: command.pendingTransferId,
         inventoryLocationId: command.inventoryLocationId,
         scannedUnitIds: [...command.scannedUnitIds].sort(),
+        incidentNote: command.incidentNote ?? null,
         expectedVersion: command.expectedVersion,
       },
       async (tx) => {
@@ -731,6 +797,37 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         }
 
         const missing = [...expected].filter((id) => !previouslyReceived.has(id))
+        if (missing.length && !command.incidentNote)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { reason: 'CUSTODY_DISCREPANCY_NOTE_REQUIRED', unitIds: missing },
+          })
+        const assignmentByUnit = new Map(
+          order.rentalOrderLinesViaOrderId
+            .flatMap((line: any) => line.rentalUnitAssignmentsViaOrderLineId)
+            .map((assignment: any) => [assignment.equipmentUnitId, assignment]),
+        )
+        for (const unitId of missing) {
+          const assignment: any = assignmentByUnit.get(unitId)
+          const exceptionCase = await openDeliveryCustodyDiscrepancy(tx, {
+            orderId: order.id,
+            assignment,
+            openedBy: actor.id,
+            reasonCode: DELIVERY_RECEIPT_SHORTAGE,
+            incidentNote: command.incidentNote!,
+          })
+          discrepancies.push({
+            unitId,
+            reason: 'DELIVERY_CUSTODY_DISCREPANCY',
+            exceptionId: exceptionCase.id,
+            customerLiability: false,
+          })
+        }
+        if (missing.length) {
+          await tx.rentalOrder.update({
+            where: { id: order.id },
+            data: { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED, version: { increment: 1 } },
+          })
+        }
         const complete = missing.length === 0
         const updatedTransfer = await tx.returnCustodyTransfer.update({
           where: { id: transfer.id },
@@ -1704,7 +1801,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           : null
         const approvalRef = `APR-${randomUUID()}`
         let nextAction = 'NONE'
+        let resolvedInspectionId = exceptionCase.inspectionId
         const resolution = command.decision
+        const isDeliveryCustodyDiscrepancy = exceptionCase.reason.startsWith(DELIVERY_CUSTODY_DISCREPANCY)
+        if (isDeliveryCustodyDiscrepancy && command.decision !== 'CLOSE_NO_ACTION')
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { reason: 'DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER' },
+          })
 
         if (command.decision === 'APPROVE_DEDUCTION' || command.decision === 'REJECT_DEDUCTION') {
           if (!exceptionCase.inspection || !depositItem) throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
@@ -1801,10 +1904,45 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         } else {
           if (depositItem) {
             const snapshot = jsonObject(depositItem.decisionSnapshot)
+            let settlementInspectionId = exceptionCase.inspectionId
+            if (isDeliveryCustodyDiscrepancy) {
+              if (!exceptionCase.assignmentId || !exceptionCase.unitId)
+                throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
+              const finalInspection = await tx.returnInspection.upsert({
+                where: {
+                  assignmentId_stage: {
+                    assignmentId: exceptionCase.assignmentId,
+                    stage: InspectionStage.FINAL,
+                  },
+                },
+                update: {
+                  outcome: ReturnInspectionOutcome.LOST_CONFIRMED,
+                  notes: `INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY: ${command.reason}`,
+                  version: { increment: 1 },
+                },
+                create: {
+                  orderId: exceptionCase.orderId,
+                  assignmentId: exceptionCase.assignmentId,
+                  unitId: exceptionCase.unitId,
+                  inspectorId: actor.id,
+                  stage: InspectionStage.FINAL,
+                  outcome: ReturnInspectionOutcome.LOST_CONFIRMED,
+                  notes: `INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY: ${command.reason}`,
+                },
+              })
+              settlementInspectionId = finalInspection.id
+              resolvedInspectionId = finalInspection.id
+            }
             await tx.depositSettlementItem.update({
               where: { id: depositItem.id },
               data: {
+                inspectionId: settlementInspectionId,
                 status: DepositItemStatus.DEDUCTION_REJECTED,
+                deductionAmount: 0,
+                refundAmount: isDeliveryCustodyDiscrepancy ? depositItem.depositAmount : depositItem.refundAmount,
+                reason: isDeliveryCustodyDiscrepancy
+                  ? 'INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY'
+                  : depositItem.reason,
                 decisionSnapshot: jsonValue({
                   ...snapshot,
                   approvedDeduction: '0',
@@ -1817,7 +1955,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 version: { increment: 1 },
               },
             })
-            nextAction = exceptionCase.inspectionId ? 'CREATE_DEPOSIT_SETTLEMENT' : 'NONE'
+            nextAction = settlementInspectionId ? 'CREATE_DEPOSIT_SETTLEMENT' : 'NONE'
           }
         }
         const resolved = await tx.rentalExceptionCase.update({
@@ -1827,6 +1965,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             adminReviewStatus: 'DECIDED',
             resolution: `${resolution}: ${command.reason}`,
             approvalRef,
+            inspectionId: resolvedInspectionId,
             resolvedAt: command.now,
             version: { increment: 1 },
           },
@@ -1841,7 +1980,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           { status: resolved.status, decision: command.decision, approvalRef, nextAction },
           command.idempotencyKey,
         )
-        return { resolution: command.decision, nextAction, approvalRef }
+        if (
+          command.decision === 'CLOSE_NO_ACTION' &&
+          exceptionCase.reason.startsWith(DELIVERY_CUSTODY_DISCREPANCY)
+        ) {
+          await closeResolvedDeliveryCustodyChain(tx, exceptionCase.orderId, command.now)
+        }
+        return { resolution: command.decision, nextAction, approvalRef, assessmentId: resolvedInspectionId }
       },
     )
   }
@@ -3108,6 +3253,118 @@ async function ensureReviewCase(
       evidenceIds: jsonValue(input.evidenceIds),
       dueAt: input.dueAt,
     },
+  })
+}
+
+/**
+ * Records a break in the Delivery -> Inventory custody chain.
+ * The customer already returned this unit, so this case must never be treated
+ * as customer-side MISSING_PENDING_REVIEW or as an automatic deduction.
+ */
+async function openDeliveryCustodyDiscrepancy(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string
+    assignment: any
+    openedBy: string
+    reasonCode: string
+    incidentNote: string
+  },
+) {
+  if (!input.assignment)
+    throw AppError.fromCode(RR.UNIT_NOT_IN_RENTAL, { details: { reason: 'CUSTODY_ASSIGNMENT_NOT_FOUND' } })
+  const preliminary = await tx.returnInspection.findUnique({
+    where: {
+      assignmentId_stage: {
+        assignmentId: input.assignment.id,
+        stage: InspectionStage.PRELIMINARY,
+      },
+    },
+  })
+  if (!preliminary)
+    throw AppError.fromCode(RR.RETURN_NOT_READY, {
+      details: { unitId: input.assignment.equipmentUnitId, reason: 'PRELIMINARY_INSPECTION_REQUIRED' },
+    })
+  const reason = `${input.reasonCode}: ${input.incidentNote}`
+  const evidenceIds = stringArray(preliminary.evidenceIds)
+  const exceptionCase = await ensureReviewCase(tx, {
+    orderId: input.orderId,
+    assignmentId: input.assignment.id,
+    unitId: input.assignment.equipmentUnitId,
+    inspectionId: preliminary.id,
+    caseType: RentalExceptionType.OTHER,
+    openedBy: input.openedBy,
+    reason,
+    evidenceIds,
+    dueAt: null,
+  })
+  await tx.depositSettlementItem.updateMany({
+    where: { assignmentId: input.assignment.id, status: { not: DepositItemStatus.SETTLED } },
+    data: {
+      status: DepositItemStatus.REVIEW_REQUIRED,
+      inspectionId: preliminary.id,
+      reason: DELIVERY_CUSTODY_DISCREPANCY,
+      version: { increment: 1 },
+    },
+  })
+  return {
+    id: exceptionCase.id,
+    unitId: input.assignment.equipmentUnitId,
+    reason: DELIVERY_CUSTODY_DISCREPANCY,
+    customerLiability: false,
+  }
+}
+
+async function closeResolvedDeliveryCustodyChain(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  now: Date,
+) {
+  const pendingTransfers = await tx.returnCustodyTransfer.findMany({
+    where: { orderId, status: CustodyTransferStatus.PENDING_RECEIPT },
+  })
+  for (const transfer of pendingTransfers) {
+    const received = new Set(stringArray(transfer.receivedUnitIds))
+    const missing = stringArray(transfer.unitIds).filter((unitId) => !received.has(unitId))
+    const unresolved = missing.length
+      ? await tx.rentalExceptionCase.count({
+          where: {
+            orderId,
+            unitId: { in: missing },
+            caseType: RentalExceptionType.OTHER,
+            reason: { startsWith: DELIVERY_CUSTODY_DISCREPANCY },
+            status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+          },
+        })
+      : 0
+    if (!unresolved) {
+      await tx.returnCustodyTransfer.update({
+        where: { id: transfer.id },
+        data: {
+          status: CustodyTransferStatus.CANCELLED,
+          cancelledAt: now,
+          monitoringStatus: 'RESOLVED_WITH_CUSTODY_EXCEPTION',
+          version: { increment: 1 },
+        },
+      })
+    }
+  }
+  const openCustodyCases = await tx.rentalExceptionCase.count({
+    where: {
+      orderId,
+      caseType: RentalExceptionType.OTHER,
+      reason: { startsWith: DELIVERY_CUSTODY_DISCREPANCY },
+      status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+    },
+  })
+  if (openCustodyCases) return
+  await tx.deliveryTask.updateMany({
+    where: { orderId, taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.RETURNED },
+    data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } },
+  })
+  await tx.package.updateMany({
+    where: { orderId, status: PackageStatus.RETURNING },
+    data: { status: PackageStatus.CLOSED, version: { increment: 1 } },
   })
 }
 

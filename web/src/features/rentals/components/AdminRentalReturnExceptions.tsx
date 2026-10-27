@@ -24,6 +24,7 @@ const exceptionLabels: Record<string, string> = {
   DAMAGE: "Thiết bị hư hỏng",
   MISSING: "Thiết bị thiếu hoặc thất lạc",
   RETURN_EXCEPTION: "Ngoại lệ hoàn trả",
+  OTHER: "Sai lệch custody nội bộ",
 };
 
 const caseStatusLabels: Record<string, string> = {
@@ -74,6 +75,11 @@ function labelFor(labels: Record<string, string>, value: string) {
 
 function visibleReason(reason: string) {
   const value = reason.replace(/^\[refund:[0-9a-f-]{36}\]\s*/i, "");
+  if (value.startsWith("DELIVERY_CUSTODY_DISCREPANCY")) {
+    return value
+      .replace(/^DELIVERY_CUSTODY_DISCREPANCY:(TRANSFER_OMISSION|WAREHOUSE_RECEIPT_SHORTAGE):?\s*/i, "")
+      .trim();
+  }
   return errorLabels[value] ?? value.replace(/_/g, " ");
 }
 
@@ -198,6 +204,7 @@ export function AdminRentalReturnExceptions() {
   }
 
   const isRefundFailure = detail?.case.type === "REFUND_FAILURE";
+  const isCustodyIncident = detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
 
   return (
     <main className="min-h-screen bg-[#f7f8f5] px-4 py-6 text-slate-900 sm:px-6">
@@ -409,6 +416,20 @@ export function AdminRentalReturnExceptions() {
                   >
                     {busy ? "Đang gửi yêu cầu..." : "Yêu cầu đối soát lại hoàn cọc"}
                   </button>
+                ) : isCustodyIncident ? (
+                  <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-950">Sai lệch xảy ra sau khi Delivery đã nhận đồ từ khách.</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-900">
+                      Không được khấu trừ cọc của khách. Xác nhận sự việc sẽ chuyển toàn bộ cọc của món này sang chờ hoàn qua cổng thanh toán.
+                    </p>
+                    <button
+                      disabled={busy || reason.trim().length < 3}
+                      onClick={() => void decide("CLOSE_NO_ACTION")}
+                      className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      Xác nhận lỗi custody — hoàn đủ cọc cho khách
+                    </button>
+                  </div>
                 ) : (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <button

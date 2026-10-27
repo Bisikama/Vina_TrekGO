@@ -56,6 +56,8 @@ export function StaffReturnsInspection() {
   const [detail, setDetail] = useState<StaffReturnDetail>();
   const [rules, setRules] = useState<DamageAssessmentRule[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [receiptSelections, setReceiptSelections] = useState<string[]>([]);
+  const [custodyIncidentNote, setCustodyIncidentNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -87,6 +89,11 @@ export function StaffReturnsInspection() {
         listDamageAssessmentRules(),
       ]);
       setDetail(returnDetail);
+      const pendingReceiptUnitIds = returnDetail.pendingTransfer?.unitIds.filter(
+        (unitId) => !returnDetail.pendingTransfer?.receivedUnitIds.includes(unitId),
+      ) ?? [];
+      setReceiptSelections(pendingReceiptUnitIds);
+      setCustodyIncidentNote("");
       setRules(damageRules);
       setDrafts((current) => {
         const next = { ...current };
@@ -145,6 +152,10 @@ export function StaffReturnsInspection() {
       ) ?? [],
     [detail?.receivedUnits, inspectionByUnit],
   );
+  const pendingReceiptUnits = detail?.pendingTransfer?.unitIds.filter(
+    (unitId) => !detail.pendingTransfer?.receivedUnitIds.includes(unitId),
+  ) ?? [];
+  const receiptShortageCount = pendingReceiptUnits.length - receiptSelections.length;
 
   async function run(action: () => Promise<void>, success: string) {
     if (!detail || busy) return;
@@ -272,18 +283,66 @@ export function StaffReturnsInspection() {
                     {detail.pendingTransfer?.status === "PENDING_RECEIPT" ? (
                       <button
                         type="button"
-                        disabled={busy}
-                        onClick={() => void run(() => receiveStaffReturn(detail).then(() => undefined), "Đã xác nhận nhận thiết bị vào kho.")}
+                        disabled={busy || (receiptShortageCount > 0 && custodyIncidentNote.trim().length < 3)}
+                        onClick={() => void run(
+                          () => receiveStaffReturn(detail, receiptSelections, custodyIncidentNote).then(() => undefined),
+                          receiptShortageCount
+                            ? "Đã ghi nhận thiết bị thực nhận và mở hồ sơ sai lệch custody."
+                            : "Đã xác nhận nhận thiết bị vào kho.",
+                        )}
                         className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-black text-white disabled:opacity-50"
                       >
-                        Xác nhận nhận {detail.pendingTransfer.unitIds.length} thiết bị
+                        Xác nhận thực nhận {receiptSelections.length}/{pendingReceiptUnits.length}
                       </button>
                     ) : null}
                   </div>
                   {detail.pendingTransfer ? (
-                    <p className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-slate-700">
-                      Điểm nhận: <strong>{detail.pendingTransfer.inventoryLocationName}</strong> · transfer {detail.pendingTransfer.id}
-                    </p>
+                    <div className="mt-3 space-y-3">
+                      <p className="rounded-lg bg-blue-50 p-3 text-xs text-slate-700">
+                        Điểm nhận: <strong>{detail.pendingTransfer.inventoryLocationName}</strong> · transfer {detail.pendingTransfer.id}
+                      </p>
+                      {detail.pendingTransfer.status === "PENDING_RECEIPT" ? (
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <p className="text-xs font-black uppercase tracking-wide text-slate-700">Quét nhận từng thiết bị</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Chỉ tích những món kho thực tế nhận được. Món thiếu sẽ mở hồ sơ nội bộ, không tự quy lỗi cho khách.
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {pendingReceiptUnits.map((unitId) => {
+                              const unit = detail.expectedUnits.find((item) => item.unitId === unitId);
+                              const checked = receiptSelections.includes(unitId);
+                              return (
+                                <label key={unitId} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-xs ${checked ? "border-emerald-600 bg-emerald-50" : "border-red-300 bg-red-50"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => setReceiptSelections((current) =>
+                                      current.includes(unitId)
+                                        ? current.filter((id) => id !== unitId)
+                                        : [...current, unitId]
+                                    )}
+                                  />
+                                  <span><strong>{unit?.productName ?? unitId}</strong><br />{unit?.assetCode}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          {receiptShortageCount > 0 ? (
+                            <div className="mt-3 rounded-lg bg-red-50 p-3">
+                              <p className="text-xs font-bold text-red-800">
+                                Thiếu {receiptShortageCount} thiết bị so với transfer. Hãy mô tả sự việc.
+                              </p>
+                              <textarea
+                                value={custodyIncidentNote}
+                                onChange={(event) => setCustodyIncidentNote(event.target.value)}
+                                placeholder="Ví dụ: niêm phong rách, không có thiết bị trong kiện khi kho mở..."
+                                className="mt-2 min-h-20 w-full rounded-lg border border-red-200 bg-white p-3 text-xs"
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
 

@@ -55,7 +55,8 @@ export class StaffReturnController {
       properties: {
         pendingTransferId: { type: 'string', format: 'uuid', description: 'UUID pending custody transfer từ RB-API-603', example: '990e8400-e29b-41d4-a716-446655440010' },
         inventoryLocationId: { type: 'string', format: 'uuid', description: 'UUID vị trí kho nhận hàng (phải khớp transfer đích)', example: 'aa0e8400-e29b-41d4-a716-446655440020' },
-        scannedUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 100, description: 'UUID thiết bị đã quét xác nhận', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        scannedUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 100, description: 'UUID thiết bị thực tế đã quét nhận; có thể rỗng nếu toàn bộ transfer thất lạc', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        incidentNote: { type: 'string', description: 'Mô tả bắt buộc khi kho nhận thiếu so với transfer' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại', example: 4 },
       },
     },
