@@ -7,6 +7,7 @@ import { seedDamageAssessmentRules } from './seeds/damage-assessment-rule.seed'
 import { seedRentalPolicy } from './seeds/rental-policy.seed'
 import { seedBookingPolicies } from './seeds/booking-policy.seed'
 import { seedGearRules } from './seeds/gear-rule.seed'
+import { seedGpsPolicy } from './seeds/gps-policy.seed'
 
 const prisma = new PrismaClient()
 
@@ -21,6 +22,7 @@ async function main() {
   await seedRentalPolicy(prisma)
   await seedBookingPolicies(prisma)
   await seedGearRules(prisma)
+  await seedGpsPolicy(prisma)
 
   console.log('All seeding finished.')
 }
