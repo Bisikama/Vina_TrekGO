@@ -126,55 +126,79 @@ export function PublicBookingTrips() {
         )}
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {trips.map((trip: PublicTrip) => (
-            <SurfaceCard
-              key={trip.id}
-              interactive
-              className="flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-[#125238] tabular-nums">
-                    {trip.destination?.name} · Còn {trip.remainingSlots} chỗ
-                  </span>
-                  <StatusBadge status={trip.status} />
-                </div>
-                <h2 className="mt-3 text-lg font-bold text-[#1F2937] line-clamp-2">
-                  <Link href={`/trips/${trip.id}`} className="hover:text-[#125238]">
-                    {trip.title}
-                  </Link>
-                </h2>
-                <p className="mt-3 text-xs text-[#6B7280] tabular-nums">
-                  📅 Khởi hành: {formatBookingDateTime(trip.startAt)}
-                </p>
-                {trip.registrationDeadlineAt && (
-                  <p className="mt-1 text-xs text-amber-700 font-medium tabular-nums">
-                    ⏳ Đóng form: {formatBookingDateTime(trip.registrationDeadlineAt)}
-                  </p>
-                )}
-                <p className="mt-1 text-xs text-[#6B7280]">
-                  👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}
-                </p>
-              </div>
+          {trips.map((trip: PublicTrip) => {
+            const nowMs = Date.now();
+            const openAtMs = trip.registrationOpenAt
+              ? new Date(trip.registrationOpenAt).getTime()
+              : null;
+            const isNotOpenYet =
+              trip.status === 'OPEN' &&
+              openAtMs !== null &&
+              Number.isFinite(openAtMs) &&
+              nowMs < openAtMs;
+            const badgeStatus = isNotOpenYet ? 'NOT_OPEN_YET' : trip.status;
 
-              <div className="mt-5 pt-4 border-t border-[#E5E7EB] flex items-center justify-between">
+            return (
+              <SurfaceCard
+                key={trip.id}
+                interactive
+                className="flex flex-col justify-between"
+              >
                 <div>
-                  <span className="text-[10px] text-[#6B7280] block uppercase font-semibold tracking-wider">
-                    Giá vé trọn gói
-                  </span>
-                  <strong className="text-base text-[#125238] font-bold tabular-nums">
-                    {trip.pricePerPax ? formatMoneyVND(trip.pricePerPax) : 'Chưa có giá'}
-                  </strong>
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <span
+                      title={`${trip.destination?.name ?? ''} · Còn ${trip.remainingSlots} chỗ`}
+                      className="inline-block min-w-0 truncate rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-[#125238] tabular-nums"
+                    >
+                      {trip.destination?.name} · Còn {trip.remainingSlots} chỗ
+                    </span>
+                    <StatusBadge
+                      status={badgeStatus}
+                      className="shrink-0 text-[11px]"
+                    />
+                  </div>
+                  <h2 className="mt-3 text-lg font-bold text-[#1F2937] line-clamp-2">
+                    <Link href={`/trips/${trip.id}`} className="hover:text-[#125238]">
+                      {trip.title}
+                    </Link>
+                  </h2>
+                  <p className="mt-3 text-xs text-[#6B7280] tabular-nums">
+                    Khởi hành: {formatBookingDateTime(trip.startAt)}
+                  </p>
+                  {isNotOpenYet && trip.registrationOpenAt && (
+                    <p className="mt-1 text-xs text-amber-700 font-medium tabular-nums">
+                      Mở form: {formatBookingDateTime(trip.registrationOpenAt)}
+                    </p>
+                  )}
+                  {trip.registrationDeadlineAt && (
+                    <p className="mt-1 text-xs text-amber-700 font-medium tabular-nums">
+                      Đóng form: {formatBookingDateTime(trip.registrationDeadlineAt)}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-[#6B7280]">
+                    Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}
+                  </p>
                 </div>
-                <Link
-                  href={`/trips/${trip.id}`}
-                  className="rounded-xl bg-[#2F6B4F] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#1F4A36]"
-                >
-                  Xem chi tiết
-                </Link>
-              </div>
-            </SurfaceCard>
-          ))}
+
+                <div className="mt-5 pt-4 border-t border-[#E5E7EB] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-[#6B7280] block uppercase font-semibold tracking-wider">
+                      Giá vé trọn gói
+                    </span>
+                    <strong className="text-base text-[#125238] font-bold tabular-nums">
+                      {trip.pricePerPax ? formatMoneyVND(trip.pricePerPax) : 'Chưa có giá'}
+                    </strong>
+                  </div>
+                  <Link
+                    href={`/trips/${trip.id}`}
+                    className="rounded-xl bg-[#2F6B4F] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#1F4A36]"
+                  >
+                    Xem chi tiết
+                  </Link>
+                </div>
+              </SurfaceCard>
+            );
+          })}
         </div>
 
         <PaginationBar
@@ -316,8 +340,8 @@ export function PublicBookingTrip({
   const openAtMs = trip?.registrationOpenAt
     ? new Date(trip.registrationOpenAt).getTime()
     : trip?.publishedAt
-    ? new Date(trip.publishedAt).getTime()
-    : null;
+      ? new Date(trip.publishedAt).getTime()
+      : null;
   const deadlineMs = trip?.registrationDeadlineAt
     ? new Date(trip.registrationDeadlineAt).getTime()
     : null;
@@ -350,7 +374,7 @@ export function PublicBookingTrip({
           <>
             <TripSummaryBanner
               title={trip.title}
-              status={trip.status}
+              status={isNotOpenYet ? 'NOT_OPEN_YET' : trip.status}
               destinationName={trip.destination?.name}
               startAt={formatBookingDateTime(trip.startAt)}
               endAt={formatBookingDateTime(trip.endAt)}
@@ -376,18 +400,24 @@ export function PublicBookingTrip({
                 />
                 <div className="space-y-2 text-sm text-[#1F2937] tabular-nums">
                   <p>
-                    📅 Khởi hành: {formatBookingDateTime(trip.startAt)} –{' '}
+                    Khởi hành: {formatBookingDateTime(trip.startAt)} –{' '}
                     {formatBookingDateTime(trip.endAt)}
                   </p>
+                  {isNotOpenYet && trip.registrationOpenAt && (
+                    <p className="text-amber-800 font-medium">
+                      Mở form đăng ký:{' '}
+                      {formatBookingDateTime(trip.registrationOpenAt)}
+                    </p>
+                  )}
                   {trip.registrationDeadlineAt && (
                     <p className="text-amber-800 font-medium">
-                      ⏳ Hạn chót đăng ký:{' '}
+                      Hạn chót đăng ký:{' '}
                       {formatBookingDateTime(trip.registrationDeadlineAt)}
                     </p>
                   )}
-                  <p>👤 Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}</p>
+                  <p>Leader: {trip.leader?.fullName ?? 'Đang cập nhật'}</p>
                   <p>
-                    📍 Điểm tập kết:{' '}
+                    Điểm tập kết:{' '}
                     {trip.pickup
                       ? `${trip.pickup.name} (${trip.pickup.address})`
                       : 'Đang cập nhật'}
@@ -472,10 +502,10 @@ export function PublicBookingTrip({
                         isNotOpenYet
                           ? 'Chuyến đi chưa đến giờ mở form đăng ký.'
                           : trip.status === 'CLOSED' || isPastDeadline
-                          ? 'Chuyến đi đã đóng sổ đăng ký tạo đơn mới.'
-                          : trip.status === 'FULL' || trip.remainingSlots <= 0
-                          ? 'Chuyến đi đã đủ số lượng thành viên tối đa.'
-                          : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'
+                            ? 'Chuyến đi đã đóng sổ đăng ký tạo đơn mới.'
+                            : trip.status === 'FULL' || trip.remainingSlots <= 0
+                              ? 'Chuyến đi đã đủ số lượng thành viên tối đa.'
+                              : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'
                       }
                     >
                       Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn
