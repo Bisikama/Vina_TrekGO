@@ -24,6 +24,7 @@
     "seed:booking-policies": "ts-node prisma/seeds/booking-policy.seed.ts",
     "seed:gear-rules": "ts-node prisma/seeds/gear-rule.seed.ts",
     "seed:damage-rules": "ts-node prisma/seeds/damage-assessment-rule.seed.ts",
+    "seed:gps-policy": "ts-node prisma/seeds/gps-policy.seed.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
