@@ -65,11 +65,10 @@ function NavGroup({
           <Link
             key={item.label}
             href={item.href}
-            className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition ${
-              active
+            className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition ${active
                 ? "bg-[#2F6B4F] font-semibold text-white shadow-sm"
                 : "text-[#1F2937] hover:bg-[#EFEFE9] hover:text-[#125238]"
-            }`}
+              }`}
           >
             <span className="w-5 text-center text-base">
               {item.icon}

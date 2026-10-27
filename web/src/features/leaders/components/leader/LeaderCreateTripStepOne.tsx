@@ -301,7 +301,7 @@ export function LeaderCreateTripStepOne() {
     Math.round(
       (new Date(endDate + "T00:00:00").getTime() -
         new Date(startDate + "T00:00:00").getTime()) /
-        (1000 * 60 * 60 * 24),
+      (1000 * 60 * 60 * 24),
     ) + 1,
   );
   const nightsCount = Math.max(0, daysCount - 1);
@@ -759,11 +759,10 @@ export function LeaderCreateTripStepOne() {
                               setCustomDeadlineTouched(preset.hours !== 48);
                               setDateError("");
                             }}
-                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                              isActive
-                                ? "bg-[#125238] text-white"
-                                : "bg-white border border-[#E5E7EB] text-[#1F2937] hover:border-[#2F6B4F]"
-                            }`}
+                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${isActive
+                              ? "bg-[#125238] text-white"
+                              : "bg-white border border-[#E5E7EB] text-[#1F2937] hover:border-[#2F6B4F]"
+                              }`}
                           >
                             {preset.label}
                           </button>
@@ -1035,8 +1034,8 @@ export function LeaderCreateTripStepOne() {
                   {isSubmitting
                     ? "Đang xử lý..."
                     : tripId
-                    ? "Cập nhật & Tiếp tục: Chọn cung đường →"
-                    : "Tiếp tục: Chọn cung đường →"}
+                      ? "Cập nhật & Tiếp tục: Chọn cung đường →"
+                      : "Tiếp tục: Chọn cung đường →"}
                 </button>
               </div>
             </div>
