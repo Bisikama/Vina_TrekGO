@@ -35,6 +35,7 @@ const statusConfig: Record<string, { label: string; tone: StatusTone }> = {
   // Trip & Booking Statuses
   DRAFT: { label: "Bản nháp", tone: "neutral" },
   draft: { label: "Bản nháp", tone: "neutral" },
+  NOT_OPEN_YET: { label: "Chưa tới thời gian mở form", tone: "warning" },
   OPEN: { label: "Đang mở đăng ký", tone: "success" },
   open: { label: "Đang mở bán", tone: "success" },
   FULL: { label: "Đã đủ chỗ", tone: "warning" },
@@ -86,10 +87,10 @@ export function StatusBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold tracking-wide ${styles.badge} ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-bold tracking-wide ${styles.badge} ${className}`}
     >
       {showDot && (
-        <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${styles.dot}`} />
       )}
       <span>{customLabel ?? entry.label}</span>
     </span>

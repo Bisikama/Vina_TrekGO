@@ -105,7 +105,7 @@ export function LeaderShell({
       .slice(-2)
       .map((word) => word[0]?.toUpperCase())
       .join("") || "LD";
-  const userRole = user?.role === "LEADER" ? "Leader PRO" : user?.role || "Leader";
+  const userRole = user?.role === "LEADER" ? "Leader" : user?.role || "Leader";
 
   const handleLogout = () => {
     logout();
@@ -197,14 +197,6 @@ export function LeaderShell({
             <span className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white">
               {userRole}
             </span>
-
-            <button
-              type="button"
-              aria-label="Thông báo"
-              className="relative grid h-9 w-9 place-items-center rounded-lg bg-[#F7F7F4] border border-[#E5E7EB] text-[#1F2937] hover:bg-[#EFEFE9] transition"
-            >
-              ♟
-            </button>
 
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#125238] text-xs font-bold text-white">
               {initials}

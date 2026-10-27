@@ -96,6 +96,22 @@ export type DirectInvitationStatus =
   | 'EXPIRED'
   | 'INVALIDATED';
 
+export type DirectInvitationDeclineReason = 'NOT_INTERESTED' | 'SCHEDULE_CONFLICT' | 'OTHER';
+
+// DTO riêng cho POST accept — khác DirectMemberInvitationItem; chỉ mở Room khi canEnterRoom=true
+export interface PrivateMemberInvitationAcceptResponse {
+  invitationStatus: DirectInvitationStatus;
+  resolutionReason: string | null;
+  tripId: string;
+  memberId: string | null;
+  membershipStatus: 'ACTIVE' | 'LEFT' | 'REMOVED' | 'COMPLETED' | 'NO_SHOW' | null;
+  membershipVersion: number | null;
+  membershipVersionAtAccept: number | null;
+  canEnterRoom: boolean;
+  alreadyMember: boolean;
+  rejoined: boolean;
+}
+
 export interface DirectMemberInvitationItem {
   id: string;
   tripId: string;
@@ -235,9 +251,9 @@ export const privateTripMembershipApi = {
     return data;
   },
 
-  // M3: Chấp nhận lời mời tham gia
+  // M3: Chấp nhận lời mời tham gia — trả về quyền vào Room, không tự điều hướng
   acceptDirectInvitation: async (invitationId: string) => {
-    const { data } = await apiClient.post<DirectMemberInvitationItem>(
+    const { data } = await apiClient.post<PrivateMemberInvitationAcceptResponse>(
       `/api/v1/private-trip-member-invitations/${invitationId}/accept`,
       {}
     );
@@ -245,10 +261,10 @@ export const privateTripMembershipApi = {
   },
 
   // M3: Từ chối lời mời
-  declineDirectInvitation: async (invitationId: string, reason?: 'NOT_INTERESTED' | 'SCHEDULE_CONFLICT' | 'OTHER') => {
+  declineDirectInvitation: async (invitationId: string, reason?: DirectInvitationDeclineReason) => {
     const { data } = await apiClient.post<DirectMemberInvitationItem>(
       `/api/v1/private-trip-member-invitations/${invitationId}/decline`,
-      { reason }
+      reason ? { reason } : {}
     );
     return data;
   },

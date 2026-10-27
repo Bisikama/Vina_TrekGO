@@ -193,6 +193,23 @@ export function LeaderTripDetail({ tripId }: { tripId: string }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {trip?.status === "DRAFT" && (
+            <>
+              <Link
+                href={`/leader/create-trip?tripId=${tripId}`}
+                className="rounded-lg bg-[#125238] px-4 py-2 text-sm font-bold text-white hover:bg-[#2f6b4f] transition shadow"
+              >
+                Tiếp tục chỉnh nháp
+              </Link>
+              <Link
+                href={`/leader/create-trip/review?tripId=${tripId}`}
+                className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-bold text-[#125238] hover:bg-emerald-100 transition"
+              >
+                Xem lại &amp; Xuất bản
+              </Link>
+            </>
+          )}
+
           <Link
             href={`/leader/trips/${tripId}/edit`}
             className="rounded-lg bg-[#e5edfb] px-4 py-2 text-sm font-semibold hover:bg-[#d5e3f9] transition"

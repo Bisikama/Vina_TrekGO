@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import {
   privateTripMembershipApi,
   DirectMemberInvitationItem,
@@ -27,16 +28,26 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
   const [isSending, setIsSending] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [invitations, setInvitations] = useState<DirectMemberInvitationItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Key Idempotency cho một lần gửi logic: giữ nguyên khi retry sau timeout/mất mạng,
+  // chỉ sinh key mới cho yêu cầu gửi mới (đổi email hoặc gửi thành công).
+  const sendKeyRef = useRef<string | null>(null);
 
-  const loadSentInvitations = async () => {
+  const loadSentInvitations = async (targetPage = page) => {
     setIsLoadingList(true);
     try {
-      const res = await privateTripMembershipApi.getHostDirectInvitations(tripId, { pageSize: 50 });
+      const res = await privateTripMembershipApi.getHostDirectInvitations(tripId, { page: targetPage, pageSize: 20 });
       setInvitations(res?.items || []);
-    } catch {
-      // Bỏ qua lỗi tải lịch sử
+      setPage(res?.page || targetPage);
+      setTotalPages(res?.totalPages || 1);
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.error?.message ||
+          "Không tải được lịch sử lời mời. Vui lòng thử lại."
+      );
     } finally {
       setIsLoadingList(false);
     }
@@ -46,9 +57,16 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
     if (isOpen && tripId) {
       setError(null);
       setSuccessMsg(null);
-      loadSentInvitations();
+      loadSentInvitations(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, tripId]);
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    // Đổi nội dung gửi coi như yêu cầu mới — không tái sử dụng key của lần gửi trước
+    sendKeyRef.current = null;
+  };
 
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,18 +81,30 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
     setSuccessMsg(null);
 
     try {
-      await privateTripMembershipApi.createDirectInvitation(tripId, cleanEmail);
-      setSuccessMsg(`Đã gửi lời mời thành công tới ${cleanEmail}!`);
+      if (!sendKeyRef.current) sendKeyRef.current = crypto.randomUUID();
+      await privateTripMembershipApi.createDirectInvitation(tripId, cleanEmail, sendKeyRef.current);
+      sendKeyRef.current = null;
+      setSuccessMsg(`Đã gửi lời mời trong TrekGO tới ${cleanEmail}. Người nhận sẽ thấy lời mời trong mục Lời mời (không kèm email ngoài hộp thư).`);
       setEmail("");
-      await loadSentInvitations();
+      await loadSentInvitations(1);
     } catch (err: any) {
       const apiCode = err?.response?.data?.error?.code || err?.response?.data?.code;
       if (apiCode === "INVITATION_RECIPIENT_UNAVAILABLE") {
-        setError("Không tìm thấy tài khoản TrekGO với email này hoặc tài khoản đã tham gia đoàn.");
+        setError("Không thể mời tài khoản này. Kiểm tra lại email hoặc liên hệ người nhận (có thể họ đã tham gia đoàn).");
       } else if (apiCode === "PENDING_INVITATION_EXISTS") {
-        setError("Đã có một lời mời đang chờ gửi tới email này rồi.");
+        setError("Đã có một lời mời đang chờ gửi tới email này rồi. Thu hồi lời mời cũ trước khi gửi lại.");
+      } else if (apiCode === "INVITE_RATE_LIMITED") {
+        const retryAfter = err?.response?.data?.error?.details?.retryAfterSeconds;
+        setError(retryAfter
+          ? `Bạn gửi lời mời quá nhanh. Vui lòng chờ khoảng ${retryAfter} giây rồi thử lại.`
+          : "Bạn gửi lời mời quá nhiều trong thời gian ngắn. Vui lòng thử lại sau.");
       } else {
         setError(err?.response?.data?.error?.message || err?.message || "Không thể gửi lời mời.");
+      }
+      // Lỗi timeout/mất mạng (không có response): server có thể đã xử lý —
+      // giữ nguyên key để bấm gửi lại không tạo lời mời trùng.
+      if (axios.isAxiosError(err) && err.response) {
+        sendKeyRef.current = null;
       }
     } finally {
       setIsSending(false);
@@ -129,7 +159,7 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
                 placeholder="Ví dụ: ban_dong_hanh@gmail.com"
                 required
                 className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
@@ -154,17 +184,22 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
                 ✓ {successMsg}
               </div>
             )}
+
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              Email dùng để tìm tài khoản TrekGO đã đăng ký — lời mời hiển thị trong ứng dụng, không gửi email ra hộp thư.
+              Lời mời không giữ chỗ: nếu đoàn đã đủ người tại thời điểm người nhận chấp nhận, họ sẽ không vào được.
+            </p>
           </form>
 
           {/* Danh Sách Lời Mời Đã Gửi */}
           <div className="space-y-3 border-t border-gray-100 pt-5">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600">
-                Lịch sử lời mời đã gửi ({invitations.length})
+                Lịch sử lời mời đã gửi (trang {page}/{totalPages})
               </h4>
               <button
                 type="button"
-                onClick={loadSentInvitations}
+                onClick={() => loadSentInvitations()}
                 disabled={isLoadingList}
                 className="text-xs font-semibold text-emerald-700 hover:underline cursor-pointer"
               >
@@ -215,6 +250,27 @@ export function PrivateTripDirectInviteModal({ tripId, isOpen, onClose, onMember
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => loadSentInvitations(page - 1)}
+                  disabled={isLoadingList || page <= 1}
+                  className="text-xs font-semibold text-gray-600 hover:text-gray-900 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  ← Trang trước
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loadSentInvitations(page + 1)}
+                  disabled={isLoadingList || page >= totalPages}
+                  className="text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Trang sau →
+                </button>
               </div>
             )}
           </div>

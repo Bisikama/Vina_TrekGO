@@ -13,6 +13,7 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
   const { user } = useAuth();
   const { busy, invite, cancel } = usePrivateTrips();
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -46,6 +47,9 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
       const res = await invite(trip);
       if (res?.inviteCode) {
         setInviteCode(res.inviteCode);
+        // Link chia sẻ là URL server trả (WEB_APP_ORIGIN của môi trường deploy),
+        // không ghép origin phía client để tránh link localhost khi gửi qua Zalo.
+        setInviteUrl(res.inviteUrl || "");
         setInviteExpiresAt(res.expiresAt || null);
         setTrip((prev: any) => prev ? { ...prev, version: res.tripVersion } : prev);
       }
@@ -56,6 +60,7 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
 
   const getInviteUrl = () => {
     if (!inviteCode) return "";
+    if (inviteUrl) return inviteUrl;
     if (typeof window !== "undefined") {
       return `${window.location.origin}/invite/${inviteCode}`;
     }
@@ -214,10 +219,13 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                   <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-emerald-900">Mã QR mời tham gia nhóm</h4>
-                  <p className="text-[11px] text-emerald-700">Quét mã QR bằng điện thoại để vào thẳng chuyến đi.</p>
+                  <h4 className="text-sm font-bold text-emerald-900">Link mời tham gia nhóm</h4>
+                  <p className="text-[11px] text-emerald-700">Người có link có thể tham gia khi chuyến đi còn chỗ.</p>
                 </div>
               </div>
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
+                Tạo link mới sẽ vô hiệu link cũ (thành viên đã vào không bị ảnh hưởng). Gửi cả URL qua Zalo/email, không chỉ mã QR.
+              </p>
 
               <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm flex flex-col items-center">
                 <QRCodeCanvas

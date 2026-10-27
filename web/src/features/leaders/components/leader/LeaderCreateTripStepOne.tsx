@@ -108,17 +108,20 @@ export function LeaderCreateTripStepOne() {
   useEffect(() => {
     if (tripIdFromParam) {
       setTripId(tripIdFromParam);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("leader-create-trip-id", tripIdFromParam);
+      }
     } else if (typeof window !== "undefined") {
       const savedId = window.sessionStorage.getItem("leader-create-trip-id");
       if (savedId) setTripId(savedId);
     }
   }, [tripIdFromParam]);
 
-  const { trip } = useLeaderTripDetail({
+  const { trip, error: tripFetchError } = useLeaderTripDetail({
     tripId: tripId || undefined,
   });
 
-  const { destinations, fetchPickups } = useLeaderTripOptions();
+  const { destinations, isLoadingDestinations, fetchPickups } = useLeaderTripOptions();
   const {
     createDraft,
     updateTrip,
@@ -149,6 +152,31 @@ export function LeaderCreateTripStepOne() {
   const [dateError, setDateError] = useState("");
   const [submitError, setSubmitError] = useState("");
 
+  // Nếu tripId lưu trong sessionStorage không còn tồn tại trên server (VD: đổi DB hoặc bản nháp đã xóa), tự động xóa session cũ
+  useEffect(() => {
+    if (tripId && tripFetchError && !tripIdFromParam) {
+      window.sessionStorage.removeItem("leader-create-trip-id");
+      window.sessionStorage.removeItem("leader-create-trip-draft");
+      window.sessionStorage.removeItem("leader-create-trip-route");
+      setTripId(null);
+      setDestinationId("");
+      setPickupPointId("");
+      setApiPickups([]);
+    }
+  }, [tripId, tripFetchError, tripIdFromParam]);
+
+  // Nếu destinationId được khôi phục từ sessionStorage không nằm trong danh sách destinations khả dụng của DB hiện tại thì reset
+  useEffect(() => {
+    if (!isLoadingDestinations && destinations.length > 0 && destinationId) {
+      const exists = destinations.some((d) => d.id === destinationId);
+      if (!exists) {
+        setDestinationId("");
+        setPickupPointId("");
+        setApiPickups([]);
+      }
+    }
+  }, [isLoadingDestinations, destinations, destinationId]);
+
   // Tự động cập nhật hạn đóng form mặc định (trước 2 ngày = 48h) khi đổi ngày/giờ khởi hành nếu Leader chưa chỉnh tay
   useEffect(() => {
     if (!customDeadlineTouched && startDate && meetingTime) {
@@ -171,14 +199,21 @@ export function LeaderCreateTripStepOne() {
       if (trip.priceExplanation) setPriceExplanation(trip.priceExplanation);
       if (trip.destinationId) {
         setDestinationId(trip.destinationId);
-        fetchPickups(trip.destinationId).then((pickups) => {
-          setApiPickups(pickups);
-          if (trip.pickupPointId) {
-            setPickupPointId(trip.pickupPointId);
-          } else if (pickups.length > 0) {
-            setPickupPointId(pickups[0].id);
-          }
-        });
+        fetchPickups(trip.destinationId)
+          .then((pickups) => {
+            setApiPickups(pickups);
+            if (trip.pickupPointId && pickups.some((p) => p.id === trip.pickupPointId)) {
+              setPickupPointId(trip.pickupPointId);
+            } else if (pickups.length > 0) {
+              setPickupPointId(pickups[0].id);
+            } else {
+              setPickupPointId("");
+            }
+          })
+          .catch(() => {
+            setApiPickups([]);
+            setPickupPointId("");
+          });
       }
       if (trip.startAt) {
         const startObj = new Date(trip.startAt);
@@ -232,14 +267,23 @@ export function LeaderCreateTripStepOne() {
           }
           if (draft.destinationId) {
             setDestinationId(draft.destinationId);
-            fetchPickups(draft.destinationId).then((pickups) => {
-              setApiPickups(pickups);
-              if (draft.pickupPointId) {
-                setPickupPointId(draft.pickupPointId);
-              } else if (pickups.length > 0) {
-                setPickupPointId(pickups[0].id);
-              }
-            });
+            fetchPickups(draft.destinationId)
+              .then((pickups) => {
+                setApiPickups(pickups);
+                if (draft.pickupPointId && pickups.some((p) => p.id === draft.pickupPointId)) {
+                  setPickupPointId(draft.pickupPointId);
+                } else if (pickups.length > 0) {
+                  setPickupPointId(pickups[0].id);
+                } else {
+                  setDestinationId("");
+                  setPickupPointId("");
+                }
+              })
+              .catch(() => {
+                setDestinationId("");
+                setPickupPointId("");
+                setApiPickups([]);
+              });
           }
         } catch (err) {
           console.error("Lỗi đọc draft:", err);
@@ -257,7 +301,7 @@ export function LeaderCreateTripStepOne() {
     Math.round(
       (new Date(endDate + "T00:00:00").getTime() -
         new Date(startDate + "T00:00:00").getTime()) /
-      (1000 * 60 * 60 * 24),
+        (1000 * 60 * 60 * 24),
     ) + 1,
   );
   const nightsCount = Math.max(0, daysCount - 1);
@@ -715,10 +759,11 @@ export function LeaderCreateTripStepOne() {
                               setCustomDeadlineTouched(preset.hours !== 48);
                               setDateError("");
                             }}
-                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${isActive
-                              ? "bg-[#125238] text-white"
-                              : "bg-white border border-[#E5E7EB] text-[#1F2937] hover:border-[#2F6B4F]"
-                              }`}
+                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                              isActive
+                                ? "bg-[#125238] text-white"
+                                : "bg-white border border-[#E5E7EB] text-[#1F2937] hover:border-[#2F6B4F]"
+                            }`}
                           >
                             {preset.label}
                           </button>
@@ -990,8 +1035,8 @@ export function LeaderCreateTripStepOne() {
                   {isSubmitting
                     ? "Đang xử lý..."
                     : tripId
-                      ? "Cập nhật & Tiếp tục: Chọn cung đường →"
-                      : "Tiếp tục: Chọn cung đường →"}
+                    ? "Cập nhật & Tiếp tục: Chọn cung đường →"
+                    : "Tiếp tục: Chọn cung đường →"}
                 </button>
               </div>
             </div>

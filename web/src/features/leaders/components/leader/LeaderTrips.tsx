@@ -359,13 +359,30 @@ export function LeaderTrips() {
                         {statusStyle[trip.status].label}
                       </span>
 
-                      <div>
-                        <Link
-                          href={`/leader/trips/${cleanTripId}`}
-                          className="mt-3 inline-flex items-center text-sm font-bold text-[#125238] transition hover:text-[#2F6B4F] hover:underline"
-                        >
-                          Quản lý đoàn →
-                        </Link>
+                      <div className="mt-3 flex flex-col items-start gap-1.5">
+                        {trip.status === "draft" ? (
+                          <>
+                            <Link
+                              href={`/leader/create-trip?tripId=${cleanTripId}`}
+                              className="inline-flex items-center text-sm font-bold text-[#125238] transition hover:text-[#2F6B4F] hover:underline"
+                            >
+                              Tiếp tục chỉnh nháp →
+                            </Link>
+                            <Link
+                              href={`/leader/create-trip/review?tripId=${cleanTripId}`}
+                              className="inline-flex items-center text-xs font-semibold text-[#6B7280] transition hover:text-[#125238] hover:underline"
+                            >
+                              Xem lại &amp; Xuất bản →
+                            </Link>
+                          </>
+                        ) : (
+                          <Link
+                            href={`/leader/trips/${cleanTripId}`}
+                            className="inline-flex items-center text-sm font-bold text-[#125238] transition hover:text-[#2F6B4F] hover:underline"
+                          >
+                            Quản lý đoàn →
+                          </Link>
+                        )}
                       </div>
                     </div>
 

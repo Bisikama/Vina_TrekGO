@@ -48,6 +48,15 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (url.searchParams.has('vnp_ResponseCode') || url.searchParams.has('resultCode')) {
+        if (url.searchParams.has('vnp_ResponseCode') && url.searchParams.has('vnp_SecureHash')) {
+          const vnpQuery = new URLSearchParams();
+          url.searchParams.forEach((value, key) => {
+            if (key.startsWith('vnp_')) {
+              vnpQuery.set(key, value);
+            }
+          });
+          fetch(`/api/v1/payments/webhooks/vnpay?${vnpQuery.toString()}`).catch(() => {});
+        }
         url.searchParams.set('bookingId', bookingId);
         window.location.replace(`/payment-return?${url.searchParams.toString()}`);
       }
