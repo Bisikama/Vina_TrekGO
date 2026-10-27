@@ -45,7 +45,8 @@ export class RentalRefundsService {
     const requestHash = paymentHash({ ...input, idempotencyKey: undefined })
     const key = paymentHash(['refund', input.paymentId, input.idempotencyKey])
 
-    return this.db.$transaction(async (tx) => {
+    return this.db.$transaction(
+      async (tx) => {
       const itemIds = itemAllocations.map((a) => a.depositSettlementItemId)
       const initialItems = await tx.depositSettlementItem.findMany({
         where: { id: { in: itemIds } },
@@ -194,7 +195,6 @@ export class RentalRefundsService {
           amount: amountDecimal,
           currency: payment.currency,
           depositSettlementId: settlementId,
-          rentalOrderId: orderId,
           depositSettlementItemId:
             itemAllocations.length === 1 ? itemAllocations[0].depositSettlementItemId : null,
           idempotencyKey: key,
@@ -232,6 +232,8 @@ export class RentalRefundsService {
       })
 
       return refund
-    })
+    },
+    { timeout: 15000, maxWait: 10000 },
+  )
   }
 }
