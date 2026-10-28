@@ -280,6 +280,12 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const task = order.deliveryTasksViaOrderId.find((item: any) => item.taskType === DeliveryTaskType.RETURN)
         if (!task) throw AppError.fromCode(RR.RETURN_TASK_NOT_FOUND)
         if (task.staffId !== actor.id) throw AppError.fromCode(RR.FORBIDDEN)
+        // Observation is only valid while Delivery still holds the units. Re-running it after
+        // Inventory received them would reset FINAL deposit decisions back to REVIEW_REQUIRED.
+        if (![DeliveryTaskStatus.COLLECTING, DeliveryTaskStatus.RETURNED].includes(task.status as any))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { taskId: task.id, currentStatus: task.status },
+          })
 
         const assignmentByUnit = new Map<string, any>()
         for (const line of order.rentalOrderLinesViaOrderId) {
@@ -295,6 +301,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           if (!assignment) throw AppError.fromCode(RR.UNIT_NOT_IN_RENTAL, { details: { unitId: item.unitId } })
           if (assignment.status !== RentalUnitAssignmentStatus.RETURNED || !assignment.returnedAt)
             throw AppError.fromCode(RR.UNIT_NOT_RETURNED, { details: { unitId: item.unitId } })
+          // A partial warehouse receipt keeps the task RETURNED; units already at Inventory are out of Delivery scope.
+          if (await hasInventoryLocationReceipt(tx, order.id, item.unitId))
+            throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+              details: { unitId: item.unitId, reason: 'UNIT_ALREADY_RECEIVED_BY_INVENTORY' },
+            })
           await validateEvidence(tx, actor.id, item.evidenceIds, [
             MediaScope.RETURN_EVIDENCE,
             MediaScope.CONDITION_EVIDENCE,
@@ -1317,6 +1328,39 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           orderBy: { resolvedAt: 'desc' },
         })
         if (!exceptionCase) throw AppError.fromCode(RR.ASSESSMENT_NOT_APPROVED)
+        // Already dispatched (by an earlier call or by the deposit worker): replay the current
+        // result. Rewriting the item here would push a SETTLED item back to REFUND_PENDING.
+        if (
+          [DepositItemStatus.REFUND_PENDING, DepositItemStatus.REFUND_FAILED, DepositItemStatus.SETTLED].includes(
+            item.status as any,
+          )
+        ) {
+          const [settlement, refund, allocation] = await Promise.all([
+            tx.depositSettlement.findUnique({ where: { orderId: order.id } }),
+            tx.refund.findUnique({ where: { depositSettlementItemId: item.id }, select: { id: true } }),
+            tx.depositRefundItemAllocation.findUnique({
+              where: { depositSettlementItemId: item.id },
+              select: { refundId: true },
+            }),
+          ])
+          return {
+            settlement: settlement
+              ? {
+                  id: settlement.id,
+                  status: settlement.status,
+                  outcome: settlement.outcome,
+                  totalDeposit: decimalToInteger(settlement.totalDeposit),
+                  deductionAmount: decimalToInteger(settlement.totalDeduction),
+                  refundedAmount: decimalToInteger(settlement.refundAmount),
+                  version: settlement.version,
+                }
+              : null,
+            refundRef: refund?.id ?? allocation?.refundId ?? null,
+            deductionAmount: decimalToInteger(item.deductionAmount),
+            refundAmount: decimalToInteger(item.refundAmount),
+            status: item.status,
+          }
+        }
         const decision = jsonObject(item.decisionSnapshot)
         if (decimalFromUnknown(decision.approvedDeduction ?? '0').greaterThan(0)) {
           const windowMinutes = order.rentalPolicy.userAssessmentReviewMinutes
