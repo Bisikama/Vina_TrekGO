@@ -42,14 +42,10 @@ import { parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../applicati
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
-const OPEN_RENTAL_ORDER_STATUSES: RentalOrderStatus[] = [
+// Keep at most one unfinished checkout per customer and trip. Paid and later
+// lifecycle orders are independent rentals and must not block an additional one.
+const PENDING_PAYMENT_ORDER_STATUSES: RentalOrderStatus[] = [
   RentalOrderStatus.PENDING_PAYMENT,
-  RentalOrderStatus.PAID,
-  RentalOrderStatus.PREPARING,
-  RentalOrderStatus.READY_FOR_HANDOVER,
-  RentalOrderStatus.ACTIVE,
-  RentalOrderStatus.RETURN_PENDING,
-  RentalOrderStatus.RETURN_PROCESSING,
 ]
 
 
@@ -191,8 +187,36 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             now: command.now,
           })
 
+          // Eligibility ignores expired payment holds so the customer can start
+          // another checkout immediately. Expire the stale order under its row
+          // lock before inserting the new PENDING_PAYMENT order; this releases
+          // its reservations, invoices, payment attempts and emits its outbox
+          // event through the established expiry flow.
+          const expiredPendingOrder = await tx.rentalOrder.findFirst({
+            where: {
+              userId: quote.userId,
+              tripId: quote.tripId,
+              status: RentalOrderStatus.PENDING_PAYMENT,
+              paymentExpiresAt: { lte: command.now },
+            },
+            select: { id: true },
+          })
+          if (expiredPendingOrder) {
+            await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${expiredPendingOrder.id}::uuid FOR UPDATE`
+            const currentPendingOrder = await tx.rentalOrder.findUnique({
+              where: { id: expiredPendingOrder.id },
+              select: { status: true, paymentExpiresAt: true },
+            })
+            if (
+              currentPendingOrder?.status === RentalOrderStatus.PENDING_PAYMENT &&
+              currentPendingOrder.paymentExpiresAt <= command.now
+            ) {
+              await expireOrderWithTx(tx, expiredPendingOrder.id, command.now)
+            }
+          }
+
           const openOrder = await tx.rentalOrder.findFirst({
-            where: { userId: quote.userId, tripId: quote.tripId, status: { in: OPEN_RENTAL_ORDER_STATUSES } },
+            where: { userId: quote.userId, tripId: quote.tripId, status: { in: PENDING_PAYMENT_ORDER_STATUSES } },
             select: { id: true },
           })
           if (openOrder) throw AppError.fromCode(RT.OPEN_ORDER_EXISTS, { details: { rentalOrderId: openOrder.id } })
