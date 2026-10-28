@@ -337,6 +337,20 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(res2.status).toBe(200);
     });
 
+    it('RB-API-603: accepts an all-missing delivery custody incident with no transfer units', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/delivery/tasks/${dummyTaskId}/return-to-inventory-location`)
+        .set('x-mock-role', UserRole.STAFF_DELIVERY)
+        .set('idempotency-key', 'key-transfer-custody-missing')
+        .send({
+          unitIds: [],
+          missingInCustodyUnitIds: [dummyUnitId],
+          incidentNote: 'Thất lạc sau khi đã nhận từ khách',
+          expectedVersion: 1,
+        });
+      expect(res.status).toBe(200);
+    });
+
     it('RB-API-604: POST /api/v1/staff/returns/:returnId/receive returns 200', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/staff/returns/${dummyTaskId}/receive`)
@@ -350,6 +364,21 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         });
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ACCEPTED');
+    });
+
+    it('RB-API-604: accepts zero physically received units when a custody incident is described', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/staff/returns/${dummyTaskId}/receive`)
+        .set('x-mock-role', UserRole.STAFF_INVENTORY)
+        .set('idempotency-key', 'key-recv-zero-custody')
+        .send({
+          pendingTransferId: '33333333-3333-4333-8333-333333333333',
+          inventoryLocationId: '44444444-4444-4444-8444-444444444444',
+          scannedUnitIds: [],
+          incidentNote: 'Kho mở kiện nhưng không có thiết bị',
+          expectedVersion: 1,
+        });
+      expect(res.status).toBe(200);
     });
 
     it('RB-API-605: POST /api/v1/staff/returns/:returnId/final-inspection returns 201', async () => {

@@ -1,5 +1,16 @@
 # Booking demo seed V2
 
+## Chạy seed nguồn và booking bằng một lệnh
+
+Trong thư mục `api`, chạy:
+
+```sh
+npm run seed:booking-all -- --config=prisma/seeds/data/booking-demo.local.json
+```
+
+Thứ tự: users JSON → Núi Dinh JSON (destination, pickup, checkpoint, trail và liên kết) → booking policy JSON → booking demo → verify.
+Lệnh kiểm tra cấu hình và ID/role các actor trong users JSON trước khi ghi, dừng ngay khi một bước lỗi. Các bước không nằm trong một transaction chung; có thể có dữ liệu đã ghi nếu bước sau lỗi. Lệnh không xóa sạch database, không chạy seed rental/GPS và vẫn cần hồ sơ leader/chứng chỉ media cùng quyền truy cập tuyến private tồn tại theo điều kiện bên dưới. Script users hiện bỏ qua lỗi ghi Auth, nên bước booking sẽ kiểm tra lại danh tính. Chưa dùng chuỗi này để khôi phục database trống hoàn toàn.
+
 Seeder này thay dữ liệu của **cùng batch**, gồm thao tác booking trên UI của các trip demo. Không dùng `prisma migrate reset`, `TRUNCATE` hay seeder tổng (seeder tổng có rental).
 
 ## Chuẩn bị

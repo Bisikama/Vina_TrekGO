@@ -145,7 +145,7 @@ export class BookingsService {
       await this.invoice(tx, booking, 1)
       await syncTripRegistrationState(tx, tripId, now)
       return booking.id
-    })
+    }, { timeout: 15000, maxWait: 10000 })
     return this.detail(id, userId)
   }
 
@@ -281,7 +281,7 @@ export class BookingsService {
       )
       await syncTripRegistrationState(tx, initial.tripId, now)
       return null
-    })
+    }, { timeout: 15000, maxWait: 10000 })
     if (result) fail(result)
     return this.detail(id, userId)
   }
@@ -464,10 +464,13 @@ export class BookingsService {
   }
 
   async expire(tripId: string) {
-    return this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
-      return expireTripHolds(tx, tripId, await databaseTime(tx))
-    })
+    return this.db.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
+        return expireTripHolds(tx, tripId, await databaseTime(tx))
+      },
+      { timeout: 15000, maxWait: 10000 },
+    )
   }
 
   @Interval(5000)

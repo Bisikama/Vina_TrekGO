@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   approveDepositSettlement,
+  confirmRentalRefundSettlement,
   getRentalException,
   getStaffReturnErrorMessage,
   listRentalExceptions,
@@ -24,6 +25,7 @@ const exceptionLabels: Record<string, string> = {
   DAMAGE: "Thiết bị hư hỏng",
   MISSING: "Thiết bị thiếu hoặc thất lạc",
   RETURN_EXCEPTION: "Ngoại lệ hoàn trả",
+  OTHER: "Sai lệch custody nội bộ",
 };
 
 const caseStatusLabels: Record<string, string> = {
@@ -74,6 +76,11 @@ function labelFor(labels: Record<string, string>, value: string) {
 
 function visibleReason(reason: string) {
   const value = reason.replace(/^\[refund:[0-9a-f-]{36}\]\s*/i, "");
+  if (value.startsWith("DELIVERY_CUSTODY_DISCREPANCY")) {
+    return value
+      .replace(/^DELIVERY_CUSTODY_DISCREPANCY:(TRANSFER_OMISSION|WAREHOUSE_RECEIPT_SHORTAGE):?\s*/i, "")
+      .trim();
+  }
   return errorLabels[value] ?? value.replace(/_/g, " ");
 }
 
@@ -197,7 +204,41 @@ export function AdminRentalReturnExceptions() {
     }
   }
 
+  async function confirmRefundSettlement() {
+    if (!detail?.refund || reason.trim().length < 5 || busy) return;
+
+    const status = detail.refund.status.trim().toUpperCase();
+    if (status !== "PROCESSING" && status !== "PENDING") {
+      setError("Khoản hoàn cọc không còn ở trạng thái có thể xác nhận.");
+      return;
+    }
+
+    setBusy(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const result = await confirmRentalRefundSettlement({
+        refundId: detail.refund.id,
+        reason: reason.trim(),
+        expectedProviderStatus: status,
+      });
+      setReason("");
+      setNotice(
+        result.settlementProcessingStatus === "APPLIED"
+          ? "Đã xác nhận hoàn cọc thành công. Quyết toán và trạng thái đơn đã được cập nhật."
+          : "Đã xác nhận hoàn cọc. Hệ thống đang hoàn tất cập nhật quyết toán và trạng thái đơn.",
+      );
+      setDetail(await getRentalException(detail.case.id));
+      setItems((await listRentalExceptions()).items);
+    } catch (requestError) {
+      setError(getStaffReturnErrorMessage(requestError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const isRefundFailure = detail?.case.type === "REFUND_FAILURE";
+  const isCustodyIncident = detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
 
   return (
     <main className="min-h-screen bg-[#f7f8f5] px-4 py-6 text-slate-900 sm:px-6">
@@ -393,7 +434,7 @@ export function AdminRentalReturnExceptions() {
                     onChange={(event) => setReason(event.target.value)}
                     placeholder={
                       isRefundFailure
-                        ? "Nhập lý do yêu cầu đối soát lại hoàn cọc"
+                        ? "Nhập ghi chú xác nhận hoàn cọc (ít nhất 5 ký tự)"
                         : "Nhập lý do cho quyết định"
                     }
                     className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-normal outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white"
@@ -401,14 +442,44 @@ export function AdminRentalReturnExceptions() {
                 </label>
 
                 {isRefundFailure ? (
-                  <button
-                    type="button"
-                    disabled={busy || reason.trim().length < 3 || !detail.refund}
-                    onClick={() => void reconcileRefund()}
-                    className="mt-3 w-full rounded-xl bg-amber-700 px-4 py-3 text-sm font-medium text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {busy ? "Đang gửi yêu cầu..." : "Yêu cầu đối soát lại hoàn cọc"}
-                  </button>
+                  <div className="mt-3 space-y-2">
+                    {reason.trim().length >= 5 ? (
+                      <button
+                        type="button"
+                        disabled={busy || !detail.refund}
+                        onClick={() => void confirmRefundSettlement()}
+                        className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {busy ? "Đang xác nhận..." : "Xác nhận hoàn cọc"}
+                      </button>
+                    ) : (
+                      <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                        Nhập ghi chú ít nhất 5 ký tự để xác nhận hoàn cọc.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      disabled={busy || reason.trim().length < 5 || !detail.refund}
+                      onClick={() => void reconcileRefund()}
+                      className="w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {busy ? "Đang gửi yêu cầu..." : "Yêu cầu đối soát lại"}
+                    </button>
+                  </div>
+                ) : isCustodyIncident ? (
+                  <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-950">Sai lệch xảy ra sau khi Delivery đã nhận đồ từ khách.</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-900">
+                      Không được khấu trừ cọc của khách. Xác nhận sự việc sẽ chuyển toàn bộ cọc của món này sang chờ hoàn qua cổng thanh toán.
+                    </p>
+                    <button
+                      disabled={busy || reason.trim().length < 3}
+                      onClick={() => void decide("CLOSE_NO_ACTION")}
+                      className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      Xác nhận lỗi custody — hoàn đủ cọc cho khách
+                    </button>
+                  </div>
                 ) : (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <button
