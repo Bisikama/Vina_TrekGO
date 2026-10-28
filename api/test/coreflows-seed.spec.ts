@@ -127,7 +127,7 @@ if (
     model = mongo.model<Notification>(Notification.name, NotificationSchema)
     if (await model.countDocuments()) throw new Error('Integration Mongo database must be empty')
     const raw = baseConfig()
-    for (const [key, id] of Object.entries(raw.actors) as [string, string][]) {
+    for (const [key, id] of Object.entries(raw.actors)) {
       const authId = randomUUID()
       await db.$executeRaw`INSERT INTO auth.users (id) VALUES (${authId}::uuid)`
       await db.user.create({
