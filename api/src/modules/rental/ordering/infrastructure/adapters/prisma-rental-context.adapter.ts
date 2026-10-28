@@ -18,15 +18,12 @@ import type {
   RentalReturnOption,
 } from '../../application/ports/rental-context.port'
 
-const OPEN_STATUSES: RentalOrderStatus[] = [
-  'PENDING_PAYMENT',
-  'PAID',
-  'PREPARING',
-  'READY_FOR_HANDOVER',
-  'ACTIVE',
-  'RETURN_PENDING',
-  'RETURN_PROCESSING',
-] as RentalOrderStatus[]
+// A customer may add another order for the same trip after paying. Only a live
+// unfinished checkout blocks the next one; expired holds are released by the
+// create-order transaction when the customer proceeds to checkout again.
+const PENDING_PAYMENT_ORDER_STATUSES: RentalOrderStatus[] = [
+  RentalOrderStatus.PENDING_PAYMENT,
+]
 
 function hashVersion(value: unknown): number {
   const payload = JSON.stringify(value)
@@ -105,7 +102,12 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
     const activePolicy = { id: policy.id, ...policySnapshot, snapshot: policySnapshot }
 
     const existing = await tx.rentalOrder.findFirst({
-      where: { tripId, userId, status: { in: OPEN_STATUSES } },
+      where: {
+        tripId,
+        userId,
+        status: { in: PENDING_PAYMENT_ORDER_STATUSES },
+        paymentExpiresAt: { gt: now },
+      },
       select: { id: true },
       orderBy: { createdAt: 'desc' },
     })
