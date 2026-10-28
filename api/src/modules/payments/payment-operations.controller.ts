@@ -119,7 +119,7 @@ export class PaymentOperationsController {
   @ApiOperation({
     summary: 'Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
     description:
-      'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING. ' +
+      'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING hoặc không có API refund. ' +
       'API ghi nhận một kết quả provider SUCCEEDED giả lập qua Shared Payment; Rental chỉ cập nhật settlement bằng outbox worker. ' +
       'Không gọi API hoàn tiền thật và không chứng minh tiền đã về tài khoản.',
   })

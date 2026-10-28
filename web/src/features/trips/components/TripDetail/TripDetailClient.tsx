@@ -8,6 +8,7 @@ import { ServicesAndPolicy } from "./ServicesAndPolicy";
 import { TripCostBreakdown } from "./TripCostBreakdown";
 import { BookingSidebar } from "./BookingSidebar";
 import { TripRouteReviewMap } from "@/features/leaders/components/leader/TripRouteReviewMap";
+import { SurfaceCard } from "@/components/ui";
 import type { SystemTrailDetail } from "@/features/leaders/components/leader/StepTwoOverviewMap";
 
 const stripEmojis = (text: string) =>
@@ -47,7 +48,7 @@ export const TripDetailClient = ({
           <div className="flex-1 lg:max-w-[700px] xl:max-w-[800px] space-y-8">
             {/* Giới thiệu & Mô tả chi tiết chuyến đi */}
             {enrichedTrip.description ? (
-              <section className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-7 shadow-sm">
+              <SurfaceCard as="section" padding="lg" className="rounded-2xl">
                 <div className="mb-4 border-b border-gray-100 pb-3">
                   <h2 className="text-xl font-extrabold text-gray-900">
                     Giới thiệu &amp; Kế hoạch chuyến đi
@@ -56,11 +57,11 @@ export const TripDetailClient = ({
                 <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 font-normal">
                   {stripEmojis(enrichedTrip.description)}
                 </div>
-              </section>
+              </SurfaceCard>
             ) : null}
 
             {/* Map 3D Section */}
-            <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+            <SurfaceCard as="section" padding="lg" className="rounded-2xl">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-gray-900">
@@ -96,11 +97,11 @@ export const TripDetailClient = ({
                   </p>
                 </div>
               )}
-            </section>
+            </SurfaceCard>
 
             {/* Checkpoints Section */}
             {enrichedTrip.checkpoints && enrichedTrip.checkpoints.length > 0 && (
-              <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+              <SurfaceCard as="section" padding="lg" className="rounded-2xl">
                 <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
                   <h2 className="text-xl font-extrabold text-gray-900">
                     Các trạm kiểm soát (Checkpoints)
@@ -134,7 +135,7 @@ export const TripDetailClient = ({
                     </div>
                   ))}
                 </div>
-              </section>
+              </SurfaceCard>
             )}
 
             <ItineraryAccordion trip={enrichedTrip} />
