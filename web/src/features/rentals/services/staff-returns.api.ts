@@ -323,6 +323,44 @@ export async function reconcileRentalRefund(input: {
   return unwrap(response.data);
 }
 
+export async function confirmRentalRefundSettlement(input: {
+  refundId: string;
+  reason: string;
+  expectedProviderStatus: "PROCESSING" | "PENDING";
+}) {
+  const response = await apiClient.post<
+    Envelope<{
+      simulationId: string;
+      refundId: string;
+      rentalOrderId: string;
+      depositSettlementId: string;
+      providerRefundStatus: "SUCCEEDED";
+      settlementProcessingStatus: "PENDING" | "APPLIED";
+      orderStatus: string;
+      financialStatus: string;
+      warnings: string[];
+      notices: { userNotice: string; adminNotice: string };
+    }>
+  >(
+    `/api/v1/admin/payment-refunds/${encodeURIComponent(input.refundId)}/sandbox-simulate-settlement`,
+    {
+      reason: input.reason,
+      acknowledgeSandboxSimulation: true,
+      expectedProviderStatus: input.expectedProviderStatus,
+    },
+    {
+      headers: {
+        "Idempotency-Key": key(
+          "confirm-rental-refund",
+          input.refundId,
+          1,
+        ),
+      },
+    },
+  );
+  return unwrap(response.data);
+}
+
 export async function approveDepositSettlement(input: {
   orderId: string;
   assessmentId: string;
