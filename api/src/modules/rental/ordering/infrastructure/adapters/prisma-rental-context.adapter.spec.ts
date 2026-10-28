@@ -163,6 +163,16 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
     expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.trip.tripType).toBe('PRIVATE');
     expect(context?.recipientOptions).toHaveLength(1);
+    expect(prismaMock.rentalOrder.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tripId,
+          userId,
+          status: { in: ['PENDING_PAYMENT'] },
+          paymentExpiresAt: { gt: now },
+        }),
+      }),
+    );
     expect(context?.recipientOptions[0].displayName).toBe('Nguyễn Văn Member');
   });
 

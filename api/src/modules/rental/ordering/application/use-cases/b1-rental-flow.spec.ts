@@ -159,6 +159,22 @@ describe('B1 rental flow use cases', () => {
     expect(result.allowedActions).toEqual(['CREATE_RENTAL']);
   });
 
+  it('hides CREATE_RENTAL while a live pending-payment order exists', async () => {
+    const context = createContext();
+    context.existingOpenOrderId = 'pending-order-uuid';
+    contextPort.getByTripId.mockResolvedValue(context);
+    const useCase = new GetRentalEligibilityUseCase(contextPort);
+
+    const result = await useCase.execute({
+      tripId: context.trip.id,
+      userId: ownerUserId,
+      now,
+    });
+
+    expect(result.eligible).toBe(true);
+    expect(result.allowedActions).toEqual([]);
+  });
+
   it('RB-API-101: chặn User khác bằng FORBIDDEN', async () => {
     const useCase = new GetRentalEligibilityUseCase(contextPort);
 
