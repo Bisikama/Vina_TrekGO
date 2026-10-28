@@ -58,18 +58,9 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
     }
   };
 
-  const getInviteUrl = () => {
-    if (!inviteCode) return "";
-    if (inviteUrl) return inviteUrl;
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/invite/${inviteCode}`;
-    }
-    return `/invite/${inviteCode}`;
-  };
-
   const handleCopyInvite = () => {
     if (!inviteCode) return;
-    navigator.clipboard.writeText(getInviteUrl());
+    navigator.clipboard.writeText(inviteCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -219,26 +210,29 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                   <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1" /><rect width="5" height="5" x="16" y="3" rx="1" /><rect width="5" height="5" x="3" y="16" rx="1" /><path d="M21 16h-3a2 2 0 0 0-2 2v3" /><path d="M21 21v.01" /><path d="M12 7v3a2 2 0 0 1-2 2H7" /><path d="M3 12h.01" /><path d="M12 3h.01" /><path d="M12 16v.01" /><path d="M16 12h1" /><path d="M21 12v.01" /><path d="M12 21v-1" /></svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-emerald-900">Link mời tham gia nhóm</h4>
-                  <p className="text-[11px] text-emerald-700">Người có link có thể tham gia khi chuyến đi còn chỗ.</p>
+                  <h4 className="text-sm font-bold text-emerald-900">Mã mời tham gia nhóm</h4>
+                  <p className="text-[11px] text-emerald-700">Chia sẻ mã 6 ký tự hoặc mã QR để bạn bè cùng tham gia.</p>
                 </div>
               </div>
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
-                Tạo link mới sẽ vô hiệu link cũ (thành viên đã vào không bị ảnh hưởng). Gửi cả URL qua Zalo/email, không chỉ mã QR.
+                Tạo mã mới sẽ vô hiệu mã cũ (thành viên đã vào không bị ảnh hưởng).
               </p>
 
-              <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm flex flex-col items-center">
+              <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm flex flex-col items-center gap-2">
                 <QRCodeCanvas
                   ref={qrCanvasRef}
-                  value={getInviteUrl()}
+                  value={inviteCode}
                   size={180}
                   bgColor="#ffffff"
                   fgColor="#125238"
                   level="M"
                   includeMargin={true}
                 />
+                <div className="mt-1 px-4 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl font-mono text-xl font-black tracking-[0.25em] text-emerald-900">
+                  {inviteCode}
+                </div>
                 {inviteExpiresAt && (
-                  <p className="text-[11px] font-medium text-gray-500 mt-1">
+                  <p className="text-[11px] font-medium text-gray-500">
                     Hết hạn: {new Date(inviteExpiresAt).toLocaleString("vi-VN")}
                   </p>
                 )}
@@ -259,7 +253,7 @@ export function PrivateTripDetailClient({ initialTrip, initialPickups }: { initi
                   className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-100/60 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                  {copied ? "Đã chép link!" : "Sao chép link"}
+                  {copied ? "Đã chép mã!" : "Sao chép mã"}
                 </button>
               </div>
             </div>
