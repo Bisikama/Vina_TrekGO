@@ -133,18 +133,29 @@ export async function getStaffReturn(returnId: string, signal?: AbortSignal) {
   return unwrap(response.data);
 }
 
-export async function receiveStaffReturn(detail: StaffReturnDetail) {
+export async function receiveStaffReturn(
+  detail: StaffReturnDetail,
+  scannedUnitIds?: string[],
+  incidentNote?: string,
+) {
   if (!detail.pendingTransfer) throw new Error("Task chưa có yêu cầu bàn giao về kho.");
   const pendingUnitIds = detail.pendingTransfer.unitIds.filter(
     (unitId) => !detail.pendingTransfer?.receivedUnitIds.includes(unitId),
   );
   if (!pendingUnitIds.length) throw new Error("Không còn thiết bị chờ kho xác nhận.");
+  const receivedIds = scannedUnitIds ?? pendingUnitIds;
+  const unknown = receivedIds.filter((unitId) => !pendingUnitIds.includes(unitId));
+  if (unknown.length) throw new Error("Danh sách quét có thiết bị không thuộc transfer.");
+  if (receivedIds.length < pendingUnitIds.length && !incidentNote?.trim()) {
+    throw new Error("Hãy ghi rõ sai lệch custody khi kho nhận thiếu thiết bị.");
+  }
   const response = await apiClient.post<Envelope<unknown>>(
     `/api/v1/staff/returns/${encodeURIComponent(detail.id)}/receive`,
     {
       pendingTransferId: detail.pendingTransfer.id,
       inventoryLocationId: detail.pendingTransfer.inventoryLocationId,
-      scannedUnitIds: pendingUnitIds,
+      scannedUnitIds: receivedIds,
+      incidentNote: incidentNote?.trim() || undefined,
       expectedVersion: detail.version,
     },
     { headers: { "Idempotency-Key": key("receive-return", detail.id, detail.version) } },
@@ -308,6 +319,44 @@ export async function reconcileRentalRefund(input: {
   >(
     `/api/v1/admin/refunds/${encodeURIComponent(input.refundId)}/reconcile`,
     { reason: input.reason },
+  );
+  return unwrap(response.data);
+}
+
+export async function confirmRentalRefundSettlement(input: {
+  refundId: string;
+  reason: string;
+  expectedProviderStatus: "PROCESSING" | "PENDING";
+}) {
+  const response = await apiClient.post<
+    Envelope<{
+      simulationId: string;
+      refundId: string;
+      rentalOrderId: string;
+      depositSettlementId: string;
+      providerRefundStatus: "SUCCEEDED";
+      settlementProcessingStatus: "PENDING" | "APPLIED";
+      orderStatus: string;
+      financialStatus: string;
+      warnings: string[];
+      notices: { userNotice: string; adminNotice: string };
+    }>
+  >(
+    `/api/v1/admin/payment-refunds/${encodeURIComponent(input.refundId)}/sandbox-simulate-settlement`,
+    {
+      reason: input.reason,
+      acknowledgeSandboxSimulation: true,
+      expectedProviderStatus: input.expectedProviderStatus,
+    },
+    {
+      headers: {
+        "Idempotency-Key": key(
+          "confirm-rental-refund",
+          input.refundId,
+          1,
+        ),
+      },
+    },
   );
   return unwrap(response.data);
 }
