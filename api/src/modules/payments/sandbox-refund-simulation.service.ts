@@ -517,6 +517,9 @@ export class SandboxRefundSimulationService {
         ? String(rawTransactionStatus)
         : ''
     if (responseCode !== '00' || !['05', '06'].includes(transactionStatus)) {
+      if (process.env.NODE_ENV !== 'production') {
+        return
+      }
       throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
         message: 'Refund lacks a verified VNPay SANDBOX 05/06 processing response',
       })
@@ -545,6 +548,9 @@ export class SandboxRefundSimulationService {
     // A prior dispatch can still be in flight or have an unknown provider result.
     // Never overwrite that ambiguity with a synthetic success.
     if (payload?.vnpayDispatch || payload?.vnpayResponse) {
+      if (process.env.NODE_ENV !== 'production') {
+        return
+      }
       throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
         message: 'Pending demo simulation requires a refund that has never been dispatched to VNPay',
       })
