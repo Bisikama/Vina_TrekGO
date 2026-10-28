@@ -22,21 +22,25 @@ export function PrivateTripInvite({ code }: { code: string }) {
   const describeInviteError = (code: string | null, fallback: string): string => {
     switch (code) {
       case "INVITE_REVOKED":
-        return "Link mời đã bị host thu hồi. Vui lòng xin host gửi link mới.";
+        return "Mã mời đã bị trưởng đoàn thu hồi hoặc tạo mã mới.";
       case "INVITE_EXPIRED":
-        return "Link mời đã hết hạn. Vui lòng xin host tạo link mới.";
+        return "Mã mời đã hết hạn. Vui lòng xin trưởng đoàn gửi mã mới.";
       case "INVALID_STATE_TRANSITION":
         return "Chuyến đi không còn nhận thành viên mới (đã khởi hành hoặc không còn mở).";
       case "CAPACITY_CONFLICT":
-        return "Chuyến đi đã đủ số lượng thành viên. Liên hệ host để được hỗ trợ.";
+        return "Phòng đã đủ số lượng thành viên tối đa.";
+      case "INVITE_RATE_LIMITED":
+        return "Thao tác thử mã quá nhiều lần, vui lòng thử lại sau.";
+      case "VALIDATION_ERROR":
+        return "Mã mời không đúng định dạng 6 ký tự chữ in hoa và số.";
       case "INVITE_USAGE_LIMIT_REACHED":
-        return "Link mời đã hết lượt sử dụng. Vui lòng xin host tạo link mới.";
+        return "Mã mời đã hết lượt sử dụng. Vui lòng xin trưởng đoàn gửi mã mới.";
       case "MEMBER_REMOVED":
-        return "Bạn đã bị loại khỏi chuyến đi này nên không thể tự tham gia lại. Liên hệ host nếu cần xem lại.";
+        return "Bạn đã bị loại khỏi chuyến đi này nên không thể tự tham gia lại.";
       case "LEADER_CANNOT_CREATE_PRIVATE_TRIP":
-        return "Tài khoản Leader không thể tham gia chuyến riêng bằng link. Vui lòng dùng tài khoản USER.";
+        return "Tài khoản Leader không thể tham gia chuyến riêng bằng mã mời. Vui lòng dùng tài khoản USER.";
       case "NOT_FOUND":
-        return "Không tìm thấy lời mời. Kiểm tra lại link hoặc xin host gửi link mới.";
+        return "Không tìm thấy chuyến đi tương ứng với mã mời này.";
       default:
         return fallback;
     }
