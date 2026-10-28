@@ -125,11 +125,16 @@ export class SandboxRefundSimulationService {
     const prepared = await this.prepareSimulation(input, scope, requestHash)
     if (prepared.cachedResponse) return prepared.cachedResponse
 
-    // The shared handler atomically persists Refund SUCCEEDED and the durable
-    // REFUND_SUCCEEDED outbox event. Rental projections remain worker-owned.
-    await this.refunds.applyEvent(prepared.event)
+    try {
+      // The shared handler atomically persists Refund SUCCEEDED and the durable
+      // REFUND_SUCCEEDED outbox event. Rental projections remain worker-owned.
+      await this.refunds.applyEvent(prepared.event)
 
-    return this.finalizeSimulation(prepared, scope, requestHash, input.idempotencyKey)
+      return await this.finalizeSimulation(prepared, scope, requestHash, input.idempotencyKey)
+    } catch (error) {
+      await this.rollbackUncommittedSimulation(prepared.refundId, prepared.simulationId)
+      throw error
+    }
   }
 
   private async prepareSimulation(
@@ -214,11 +219,19 @@ export class SandboxRefundSimulationService {
 
       const providerPayload = refund.providerPayload as Prisma.JsonObject | null
       const existingSimulation = providerPayload?.sandboxSimulation as Record<string, unknown> | undefined
+      const isSimulationCommitted =
+        refund.status === 'SUCCEEDED' && existingSimulation?.status === 'SUCCEEDED'
       if (existingSimulation) {
-        if (existingSimulation.requestHash !== requestHash) {
-          throw AppError.fromCode(P.SANDBOX_SIMULATION_ALREADY_SIMULATED)
+        if (isSimulationCommitted) {
+          if (existingSimulation.requestHash !== requestHash) {
+            throw AppError.fromCode(P.SANDBOX_SIMULATION_ALREADY_SIMULATED)
+          }
+          // The same request may recover after a crash before response persistence.
+        } else if (refund.status !== 'SUCCEEDED') {
+          // Prior attempt created a REQUESTED simulation record but downstream
+          // Shared Payment application did not complete. Allow resume/replay.
+          this.assertRefundEligibleForSimulation(refund, input.body.expectedProviderStatus, providerPayload)
         }
-        // The same request may recover after a crash before response persistence.
       } else {
         this.assertRefundEligibleForSimulation(refund, input.body.expectedProviderStatus, providerPayload)
       }
@@ -238,9 +251,23 @@ export class SandboxRefundSimulationService {
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
       const simulationId = paymentHash(['ADMIN_SANDBOX_SIMULATION', refund.id, 'v1'])
       const providerEventId = `sandbox-refund-simulation:${refund.id}:succeeded:v1`
-      const refundTransactionRef = this.simulatedTransactionRef(refund.id)
+      const vnpayResponse = providerPayload?.vnpayResponse as Record<string, unknown> | undefined
+      const vnpayTransactionNo =
+        typeof vnpayResponse?.vnp_TransactionNo === 'string' && vnpayResponse.vnp_TransactionNo.trim().length > 0
+          ? vnpayResponse.vnp_TransactionNo.trim()
+          : typeof vnpayResponse?.vnp_TransactionNo === 'number'
+            ? String(vnpayResponse.vnp_TransactionNo)
+            : null
+      const refundTransactionRef =
+        (typeof refund.refundTransactionRef === 'string' && refund.refundTransactionRef.trim().length > 0
+          ? refund.refundTransactionRef.trim()
+          : null) ??
+        vnpayTransactionNo ??
+        this.simulatedTransactionRef(refund.id)
       const requestedAt =
-        typeof existingSimulation?.requestedAt === 'string' ? existingSimulation.requestedAt : now.toISOString()
+        isSimulationCommitted && typeof existingSimulation?.requestedAt === 'string'
+          ? existingSimulation.requestedAt
+          : now.toISOString()
 
       const event: VerifiedRefundEvent = {
         kind: 'REFUND',
@@ -258,7 +285,7 @@ export class SandboxRefundSimulationService {
         occurredAt: requestedAt,
       }
 
-      if (!existingSimulation) {
+      if (!existingSimulation || !isSimulationCommitted) {
         await tx.refund.update({
           where: { id: refund.id },
           data: {
@@ -283,25 +310,27 @@ export class SandboxRefundSimulationService {
             version: { increment: 1 },
           },
         })
-        await tx.auditLog.create({
-          data: {
-            userId: input.actorUserId,
-            action: 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
-            entityType: 'Refund',
-            entityId: refund.id,
-            newValues: {
-              simulationId,
-              providerEventId,
-              rentalOrderId: settlementOrderId,
-              depositSettlementId: refund.depositSettlementId,
-              paymentId: refund.paymentId,
-              environment: 'SANDBOX',
-              origin: 'ADMIN_SANDBOX_SIMULATION',
-              providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
-              warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+        if (!existingSimulation) {
+          await tx.auditLog.create({
+            data: {
+              userId: input.actorUserId,
+              action: 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
+              entityType: 'Refund',
+              entityId: refund.id,
+              newValues: {
+                simulationId,
+                providerEventId,
+                rentalOrderId: settlementOrderId,
+                depositSettlementId: refund.depositSettlementId,
+                paymentId: refund.paymentId,
+                environment: 'SANDBOX',
+                origin: 'ADMIN_SANDBOX_SIMULATION',
+                providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
+                warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+              },
             },
-          },
-        })
+          })
+        }
       }
 
       return {
@@ -316,6 +345,31 @@ export class SandboxRefundSimulationService {
         reason: input.body.reason,
       }
     })
+  }
+
+  private async rollbackUncommittedSimulation(refundId: string, simulationId: string): Promise<void> {
+    try {
+      await this.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${refundId}::uuid FOR UPDATE`
+        const refund = await tx.refund.findUnique({ where: { id: refundId } })
+        if (!refund || refund.status === 'SUCCEEDED') return
+        const payload = refund.providerPayload as Prisma.JsonObject | null
+        const simulation = payload?.sandboxSimulation as Record<string, unknown> | undefined
+        if (!simulation || simulation.simulationId !== simulationId || simulation.status === 'SUCCEEDED') {
+          return
+        }
+        const { sandboxSimulation: _removed, ...restPayload } = payload ?? {}
+        await tx.refund.update({
+          where: { id: refundId },
+          data: {
+            providerPayload: restPayload,
+            version: { increment: 1 },
+          },
+        })
+      })
+    } catch {
+      // Best-effort cleanup; prepareSimulation also supports resuming uncommitted simulations.
+    }
   }
 
   private async finalizeSimulation(

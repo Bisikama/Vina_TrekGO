@@ -522,7 +522,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     for (const secret of [f.other.email, 'PRIVATE_PHONE', 'PRIVATE_ID', 'checkinCode', 'bookingId', 'recipientUserId'])
       expect(JSON.stringify(first.body)).not.toContain(secret)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    const schema = (doc.paths['/me/invitations']!.get!.responses['200'] as any).content['application/json'].schema
+    const schema = (doc.paths['/me/invitations'].get!.responses['200'] as any).content['application/json'].schema
     const validate = new Ajv({ strict: false, nullable: true }).compile(schema)
     expect({ valid: validate(first.body), errors: validate.errors }).toEqual({ valid: true, errors: null })
     if (process.env.M8_CAPTURE_EXAMPLES === 'true')
@@ -553,7 +553,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     for (const secret of ['PRIVATE_PHONE', 'PRIVATE_ID', 'checkinCode', 'totalAmount', f.booking.id])
       expect(JSON.stringify(context.body)).not.toContain(secret)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    const schema = (doc.paths['/trips/{tripId}/navigation-context']!.get!.responses['200'] as any).content[
+    const schema = (doc.paths['/trips/{tripId}/navigation-context'].get!.responses['200'] as any).content[
       'application/json'
     ].schema
     const validate = new Ajv({ strict: false, nullable: true }).compile(schema)
@@ -664,7 +664,7 @@ suite('M5 real PostgreSQL and HTTP contract', () => {
     await request(app.getHttpServer()).get('/me/public-trip-participations/history').expect(401)
     const result = await history(f.other.id).expect(200)
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder().addBearerAuth(undefined, 'bearer').build())
-    const schema = (doc.paths['/me/public-trip-participations/history']!.get!.responses['200'] as any).content[
+    const schema = (doc.paths['/me/public-trip-participations/history'].get!.responses['200'] as any).content[
       'application/json'
     ].schema
     const validate = new Ajv({ strict: false, nullable: true }).compile(schema)

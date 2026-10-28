@@ -54,7 +54,9 @@ export const ReturnInspectionBodySchema = z.union([ReturnObservationBodySchema, 
 })]);
 
 export const ReturnToInventoryLocationBodySchema = z.object({
-  unitIds: z.array(UUID).min(1).max(100),
+  unitIds: z.array(UUID).max(100),
+  missingInCustodyUnitIds: z.array(UUID).max(100).optional().default([]),
+  incidentNote: z.string().trim().min(3).max(2000).optional(),
   packageId: UUID.optional(),
   pendingTransferId: UUID.optional(),
   expectedVersion: z.number().int().min(1),
@@ -63,7 +65,8 @@ export const ReturnToInventoryLocationBodySchema = z.object({
 export const ReceiveReturnBodySchema = z.object({
   pendingTransferId: UUID,
   inventoryLocationId: UUID, // RB-API-604: must match the pending custody transfer destination.
-  scannedUnitIds: z.array(UUID).min(1).max(100),
+  scannedUnitIds: z.array(UUID).max(100),
+  incidentNote: z.string().trim().min(3).max(2000).optional(),
   expectedVersion: z.number().int().min(1),
 });
 
