@@ -372,11 +372,21 @@ export class RefundsService {
         }))
       )
         reason = 'REFUND_TRANSACTION_ALREADY_RECORDED'
+      const recoverableSimulationReviewCodes = [
+        'PAYMENT_PROVIDER_UNAVAILABLE',
+        'RECOVERY_UNKNOWN',
+        'REFUND_REVIEW_REQUIRED',
+        'REFUND_TRANSACTION_MISMATCH',
+      ]
+      const canClearReviewForSimulation =
+        isSandboxSimulationEvent &&
+        (!refund.lastErrorCode || recoverableSimulationReviewCodes.includes(refund.lastErrorCode))
       if (
-        refund.reconcileStatus === 'NEEDS_REVIEW' ||
-        (options.lease &&
-          refund.lastErrorCode &&
-          !['PAYMENT_PROVIDER_UNAVAILABLE', 'RECOVERY_UNKNOWN'].includes(refund.lastErrorCode))
+        !canClearReviewForSimulation &&
+        (refund.reconcileStatus === 'NEEDS_REVIEW' ||
+          (options.lease &&
+            refund.lastErrorCode &&
+            !['PAYMENT_PROVIDER_UNAVAILABLE', 'RECOVERY_UNKNOWN'].includes(refund.lastErrorCode)))
       )
         reason = reason ?? 'REFUND_REVIEW_REQUIRED'
       const terminal = !['PENDING', 'PROCESSING'].includes(refund.status)
@@ -515,7 +525,8 @@ export class RefundsService {
           } else if (event.status === 'FAILED' || event.status === 'CANCELLED') {
             await tx.rentalOrder.updateMany({
               where: { id: refund.rentalOrderId, status: 'CANCELLED' },
-              data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 } },
+              data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 },
+              },
             })
           }
         }

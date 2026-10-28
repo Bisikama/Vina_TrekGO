@@ -9,7 +9,7 @@
     "test:trip-gps": "jest --runInBand --runTestsByPath src/modules/geo/trip-gps-recording.spec.ts src/modules/geo/trip-gps.gateway.spec.ts src/modules/geo/trip-gps-sync.spec.ts",
     "openapi:trip-gps": "ts-node scripts/generate-trip-gps-openapi.ts",
     "seed:coreflows": "ts-node prisma/seeds/coreflows-happy.seed.ts",
-    "test:coreflows-seed": "jest --config test/jest-cf02.json --testRegex coreflows-seed.spec.ts$ --runInBand",
+    "test:coreflows-seed": "node -r ts-node/register --test test/coreflows-seed.spec.ts",
     "start:cf02-mock": "cross-env PAYMENT_PROVIDER=mock PAYMENT_PROVIDER_ENVIRONMENT=MOCK PAYMENT_MOCK_ENABLED=true PAYMENT_EVENTS_WORKER_ENABLED=true PAYMENT_RECOVERY_WORKER_ENABLED=true nest start --watch",
     "start:cf02-momo": "cross-env PAYMENT_PROVIDER=momo PAYMENT_PROVIDER_ENVIRONMENT=SANDBOX PAYMENT_PROVIDER_TIMEOUT_SECONDS=35 PAYMENT_RECOVERY_LEASE_SECONDS=120 PAYMENT_EVENTS_WORKER_ENABLED=true PAYMENT_RECOVERY_WORKER_ENABLED=true nest start --watch",
     "openapi:booking-policies": "cross-env NODE_ENV=production MEDIA_DEV_UPLOAD_ENABLED=false ts-node scripts/generate-openapi.ts --booking-policies",
