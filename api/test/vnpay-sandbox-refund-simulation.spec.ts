@@ -406,10 +406,48 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       expect(harness.items.every((item) => item.status === DepositItemStatus.REFUND_PENDING)).toBe(true)
     })
 
-    it('does not finalize when the shared handler fails', async () => {
+    it('does not finalize when the shared handler fails and rolls back uncommitted simulation record', async () => {
       const harness = createHarness({ applyEventError: new Error('SHARED_PAYMENT_WRITE_FAILED') })
       await expect(invoke(harness)).rejects.toThrow('SHARED_PAYMENT_WRITE_FAILED')
       expect(harness.tx.idempotencyRecord.create).not.toHaveBeenCalled()
+      expect(harness.refund.providerPayload.sandboxSimulation).toBeUndefined()
+    })
+
+    it('resumes and completes a prior uncommitted simulation when retried with a new idempotency key and reason', async () => {
+      const harness = createHarness({
+        refund: {
+          status: 'PROCESSING',
+          refundTransactionRef: '987654321',
+          providerPayload: {
+            vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05', vnp_TransactionNo: '987654321' },
+            sandboxSimulation: {
+              simulationId: 'old-sim',
+              requestHash: 'old-stale-request-hash',
+              providerEventId: 'sandbox-refund-simulation:old:succeeded:v1',
+              origin: 'ADMIN_SANDBOX_SIMULATION',
+              environment: 'SANDBOX',
+              status: 'REQUESTED',
+            },
+          },
+        },
+      })
+      const result = await invoke(harness, {
+        idempotencyKey: 'retry-after-partial-failure-key',
+        reason: 'Retry simulation after fixing Shared Payment',
+      })
+      expect(result.providerRefundStatus).toBe('SUCCEEDED')
+      expect(harness.refunds.applyEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          refundTransactionRef: '987654321',
+          status: 'SUCCEEDED',
+        }),
+      )
+      expect(harness.refund.providerPayload.sandboxSimulation).toEqual(
+        expect.objectContaining({
+          status: 'SUCCEEDED',
+          reason: 'Retry simulation after fixing Shared Payment',
+        }),
+      )
     })
   })
 
@@ -649,6 +687,26 @@ describe('VNPay sandbox deposit-refund settlement', () => {
         expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }),
       )
     })
+
+    it('rejects a new request with a different requestHash once simulation is committed as SUCCEEDED', async () => {
+      const harness = createHarness({
+        refund: {
+          status: 'SUCCEEDED',
+          refundedAt: new Date(),
+          providerPayload: {
+            vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '05' },
+            sandboxSimulation: {
+              origin: 'ADMIN_SANDBOX_SIMULATION',
+              status: 'SUCCEEDED',
+              requestHash: 'committed-request-hash',
+            },
+          },
+        },
+      })
+      await expect(invoke(harness, { idempotencyKey: 'distinct-subsequent-key-003', reason: 'New reason' })).rejects.toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_ALREADY_SIMULATED }),
+      )
+    })
   })
 
   describe('RefundsService provider conflict reconciliation', () => {
@@ -670,6 +728,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
         payment: {
           id: paymentId,
           invoiceId,
+          amount: new Prisma.Decimal(780000),
           currency: 'VND',
           merchantRequestRef: `pay-req-${paymentId}`,
           transactionRef: '12345678',
@@ -695,10 +754,14 @@ describe('VNPay sandbox deposit-refund settlement', () => {
             if (args?.where?.id?.not) return Promise.resolve(null)
             return Promise.resolve(refund)
           }),
+          aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(780000) } }),
           update: jest.fn().mockImplementation(({ data }: any) => {
             Object.assign(refund, data)
             return Promise.resolve(refund)
           }),
+        },
+        invoice: {
+          update: jest.fn().mockResolvedValue({}),
         },
         auditLog: {
           create: jest.fn().mockResolvedValue({}),
@@ -715,6 +778,39 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       const service = new RefundsService(prismaMock, {} as any)
       return { refundId, refund, service, tx }
     }
+
+    it('accepts ADMIN_SANDBOX_SIMULATION event even when refund was previously parked in NEEDS_REVIEW', async () => {
+      const providerEventId = 'sandbox-refund-simulation:test:succeeded:v1'
+      const harness = createRefundsHarness('PROCESSING', {
+        origin: 'ADMIN_SANDBOX_SIMULATION',
+        providerEventId,
+      })
+      harness.refund.reconcileStatus = 'NEEDS_REVIEW'
+      harness.refund.lastErrorCode = 'REFUND_TRANSACTION_MISMATCH'
+
+      const simEvent: VerifiedRefundEvent = {
+        kind: 'REFUND',
+        gateway: 'vnpay',
+        environment: 'SANDBOX',
+        merchantAccountKey: 'TEST1234',
+        providerEventId,
+        merchantRequestRef: harness.refund.payment.merchantRequestRef,
+        merchantRefundRef: harness.refund.merchantRefundRef,
+        transactionRef: harness.refund.payment.transactionRef,
+        refundTransactionRef: '12345678',
+        status: 'SUCCEEDED',
+        amount: '780000',
+        currency: 'VND',
+        occurredAt: new Date().toISOString(),
+      }
+
+      await harness.service.applyEvent(simEvent)
+
+      expect(harness.refund.status).toBe('SUCCEEDED')
+      expect(harness.refund.reconcileStatus).toBe('RESOLVED')
+      expect(harness.refund.lastErrorCode).toBeNull()
+      expect(harness.tx.paymentOutboxEvent.create).toHaveBeenCalled()
+    })
 
     it('flags SANDBOX_SIMULATION_PROVIDER_CONFLICT when real provider reports FAILED after simulation SUCCEEDED', async () => {
       const harness = createRefundsHarness('SUCCEEDED', {

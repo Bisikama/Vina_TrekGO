@@ -87,7 +87,7 @@ export class GpsSyncService {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError ||
         error instanceof Prisma.PrismaClientInitializationError ||
-        ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT'].includes(String((error as any)?.code))
+        ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT'].includes(String((error)?.code))
       )
         throw new AppError({ code: E.SYNC_UNAVAILABLE, details: { retryAfterSeconds: 5 } })
       throw error

@@ -106,7 +106,7 @@ export class GpsSyncWorker {
         }
       }
     } catch (error) {
-      this.logger.warn(`GPS sync worker deferred: ${(error as any)?.code ?? 'DATABASE_UNAVAILABLE'}`)
+      this.logger.warn(`GPS sync worker deferred: ${(error)?.code ?? 'DATABASE_UNAVAILABLE'}`)
     } finally {
       this.running = false
     }
