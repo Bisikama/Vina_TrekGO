@@ -33,14 +33,14 @@ Resume không tạo lại trip/payment; hoàn tất xóa thông báo cũ, upsert
 
 ## Sáu kịch bản
 
-| Kịch bản | Dữ liệu | Demo |
-|---|---|---|
-| PUBLIC_D7 | OPEN, 0/12 khách | Booker tạo booking rồi thanh toán mock qua UI |
-| PUBLIC_D14 | OPEN, 4/12: booker1 1 vé, booker2 3 vé | Vé, invoice/payment, danh sách khách |
-| PUBLIC_D21 | OPEN, 3/12: booker1, claimedMember, vé đang mời invitedMember | Đăng nhập invitedMember và nhận vé |
-| PUBLIC_D28 | FULL, 6/6: hai booker, mỗi người 3 vé | Trạng thái đủ chỗ |
-| PRIVATE_D10 | Host + claimedMember + invitedMember, cùng link mời | Danh sách nhóm; một USER khác có thể vào qua link |
-| PRIVATE_D17 | Host + claimedMember đã nhận mời, invitedMember đang chờ | Đăng nhập invitedMember và nhận lời mời |
+| Kịch bản    | Dữ liệu                                                       | Demo                                              |
+| ----------- | ------------------------------------------------------------- | ------------------------------------------------- |
+| PUBLIC_D7   | OPEN, 0/12 khách                                              | Booker tạo booking rồi thanh toán mock qua UI     |
+| PUBLIC_D14  | OPEN, 4/12: booker1 1 vé, booker2 3 vé                        | Vé, invoice/payment, danh sách khách              |
+| PUBLIC_D21  | OPEN, 3/12: booker1, claimedMember, vé đang mời invitedMember | Đăng nhập invitedMember và nhận vé                |
+| PUBLIC_D28  | FULL, 6/6: hai booker, mỗi người 3 vé                         | Trạng thái đủ chỗ                                 |
+| PRIVATE_D10 | Host + claimedMember + invitedMember, cùng link mời           | Danh sách nhóm; một USER khác có thể vào qua link |
+| PRIVATE_D17 | Host + claimedMember đã nhận mời, invitedMember đang chờ      | Đăng nhập invitedMember và nhận lời mời           |
 
 Giờ bắt đầu 07:00 Việt Nam của D+n; thời lượng tối thiểu 8 giờ hoặc theo tuyến nếu dài hơn. Public đóng đăng ký trước khởi hành 48 giờ. Mọi vé ban đầu chưa check-in; private không có booking/invoice tham gia. Không seed refund/no-show/review/trip đã hoàn thành hay bài thi leader không được yêu cầu bởi luồng hiện tại.
 
