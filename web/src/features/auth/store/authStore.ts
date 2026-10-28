@@ -67,6 +67,25 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         setAuthCookies(null, null);
         useStaticDataStore.getState().clearStaticCache();
+
+        // Dọn sạch mọi cache mở khóa cung đường và phiên thanh toán trong storage
+        if (typeof window !== "undefined") {
+          try {
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && (k.startsWith("trail_unlocked:") || k.startsWith("trail-"))) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+            sessionStorage.removeItem("last_trail_purchase");
+          } catch (e) {
+            console.warn("Could not clear trail storage keys upon logout", e);
+          }
+        }
+
         set({
           user: null,
           accessToken: null,

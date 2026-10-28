@@ -272,8 +272,28 @@ export function TripRouteReviewMap({
 
       {/* Error State */}
       {error && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/90 p-4 text-center text-xs text-red-300">
-          {error}
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/90 p-6 text-center text-xs text-red-300">
+          <p className="font-semibold">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (trailCode) {
+                setError(null);
+                setLoading(true);
+                apiClient
+                  .get<SystemTrailDetail>(`/api/v1/system-trails/${encodeURIComponent(trailCode)}`)
+                  .then((res) => {
+                    setTrail(res.data);
+                    onTrailLoaded?.(res.data);
+                  })
+                  .catch(() => setError("Không thể nạp dữ liệu GPS từ máy chủ"))
+                  .finally(() => setLoading(false));
+              }
+            }}
+            className="mt-2.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition"
+          >
+            Thử tải lại
+          </button>
         </div>
       )}
 
