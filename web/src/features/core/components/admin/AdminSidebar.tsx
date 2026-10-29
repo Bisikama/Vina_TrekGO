@@ -72,6 +72,12 @@ export const AdminSidebar = () => {
           <svg className={getIconClass("/admin/rentals")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
           Thiết bị cho thuê
         </Link>
+        <Link href="/admin/rental-returns" className={getLinkClass("/admin/rental-returns")}>
+          <svg className={getIconClass("/admin/rental-returns")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h11a4 4 0 014 4v1M4 7l3-3M4 7l3 3m13 7H9a4 4 0 01-4-4v-1m15 5l-3-3m3 3l-3 3" />
+          </svg>
+          Hoàn trả & quyết toán
+        </Link>
         <div className="flex items-center justify-between px-3 py-2.5 rounded-lg text-red-600 hover:bg-red-50 text-[13px] font-semibold transition-colors cursor-pointer mt-4">
           <div className="flex items-center gap-3">
             <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
