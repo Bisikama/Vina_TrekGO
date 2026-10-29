@@ -508,7 +508,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.QUOTE_NOT_FOUND]: { status: 404, message: 'Rental quote not found', retryable: false },
   [RO.OPEN_ORDER_EXISTS]: {
     status: 409,
-    message: 'An open rental order already exists for this trip',
+    message: 'Đã có một đơn thuê đang chờ thanh toán cho chuyến đi này',
     retryable: false,
   },
   [RO.OPERATION_CONFLICT]: { status: 409, message: 'Operation conflict', retryable: false },
