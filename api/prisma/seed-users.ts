@@ -33,6 +33,30 @@ export async function seedUsersData(prismaClient: PrismaClient = prisma) {
   const rawData = fs.readFileSync(dataPath, 'utf8')
   const users: UserSeedItem[] = JSON.parse(rawData)
 
+  try {
+    await prismaClient.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS auth;`)
+    await prismaClient.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS auth.users (
+        id uuid PRIMARY KEY,
+        instance_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid,
+        email character varying,
+        encrypted_password character varying,
+        email_confirmed_at timestamptz DEFAULT now(),
+        raw_app_meta_data jsonb DEFAULT '{"provider":"email","providers":["email"]}'::jsonb,
+        raw_user_meta_data jsonb DEFAULT '{}'::jsonb,
+        aud character varying DEFAULT 'authenticated',
+        role character varying DEFAULT 'authenticated',
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now(),
+        is_super_admin boolean DEFAULT false,
+        is_sso_user boolean DEFAULT false,
+        is_anonymous boolean DEFAULT false
+      );
+    `)
+  } catch (schemaErr) {
+    // Bỏ qua nếu môi trường DB không cho phép tạo schema hoặc đã tồn tại
+  }
+
   for (const u of users) {
     // 1. Đồng bộ auth.users (nếu DB hỗ trợ và có password hash để Supabase Auth có thể login)
     if (u.encrypted_password) {
@@ -56,11 +80,11 @@ export async function seedUsersData(prismaClient: PrismaClient = prisma) {
           ) VALUES (
             $1::uuid,
             '00000000-0000-0000-0000-000000000000'::uuid,
-            $2,
-            $3,
+            $2::text,
+            $3::text,
             NOW(),
             '{"provider":"email","providers":["email"]}'::jsonb,
-            json_build_object('sub', $1, 'email', $2, 'phone', $4, 'full_name', $5, 'email_verified', true, 'phone_verified', false)::jsonb,
+            json_build_object('sub', $1::text, 'email', $2::text, 'phone', $4::text, 'full_name', $5::text, 'email_verified', true, 'phone_verified', false)::jsonb,
             'authenticated',
             'authenticated',
             $6::timestamptz,
