@@ -1,4 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
+import { HandleTripCancelledUseCase } from '../../application/use-cases/handle-trip-cancelled.use-case';
+import { CancellationDeliveryService } from '../../../../../shared/services/cancellation-delivery.service';
+import { AppError } from '../../../../../shared/errors';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { HandleMembershipSourceChangedUseCase } from '../../application/use-cases/handle-membership-source-changed.use-case';
 import { HandleBookingCancelledUseCase } from '../../application/use-cases/handle-booking-cancelled.use-case';
@@ -10,6 +14,8 @@ export const MEMBERSHIP_LIFECYCLE_EVENT_TYPES = [
   'PRIVATE_TRIP_MEMBER_JOINED',
   'PUBLIC_PARTICIPANT_CLAIMED',
   'BOOKING_CANCELLED',
+  'TRIP_CANCELLED',
+  'PRIVATE_TRIP_CANCELLED',
 ];
 
 @Injectable()
@@ -20,6 +26,8 @@ export class BookingMembershipEventConsumer {
     private readonly prisma: PrismaService,
     private readonly handleMembershipChanged: HandleMembershipSourceChangedUseCase,
     private readonly handleBookingCancelled: HandleBookingCancelledUseCase,
+    private readonly handleTripCancelled: HandleTripCancelledUseCase,
+    private readonly deliveries: CancellationDeliveryService,
   ) {}
 
   /**
@@ -37,20 +45,28 @@ export class BookingMembershipEventConsumer {
     const occurredAt = event.createdAt ? new Date(event.createdAt) : new Date();
     const payload = (typeof event.payload === 'object' && event.payload !== null) ? event.payload : {};
 
+    if (event.eventType === 'TRIP_CANCELLED' || event.eventType === 'PRIVATE_TRIP_CANCELLED') {
+      const version = payload.tripVersion ?? payload.version;
+      const effectiveAt = new Date(payload.effectiveAt ?? payload.cancelledAt ?? occurredAt);
+      if (!Number.isSafeInteger(version) || version < 1 || !Number.isFinite(effectiveAt.getTime())) throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID');
+      return this.handleTripCancelled.execute({eventId:event.id,eventType:'TRIP_CANCELLED',entityId:event.aggregateId,
+        entityVersion:version,correlationId:payload.correlationId ?? event.id,occurredAt,
+        payload:{tripId:payload.tripId ?? event.aggregateId,tripVersion:version,effectiveAt,reason:payload.reason ?? event.eventType}});
+    }
     if (event.eventType === 'BOOKING_CANCELLED') {
       return this.handleBookingCancelled.execute({
         eventId: event.id,
         eventType: 'BOOKING_CANCELLED',
         entityId: event.aggregateId,
-        entityVersion: payload.version ?? 1,
+        entityVersion: payload.bookingVersion ?? payload.version ?? 1,
         correlationId: payload.correlationId ?? event.id,
         occurredAt,
         payload: {
           bookingId: event.aggregateId,
           tripId: payload.tripId,
           reason: payload.reason ?? 'BOOKING_CANCELLED',
-          effectiveAt: payload.effectiveAt ? new Date(payload.effectiveAt) : occurredAt,
-          version: payload.version ?? 1,
+          effectiveAt: new Date(payload.effectiveAt ?? payload.cancelledAt ?? occurredAt),
+          version: payload.bookingVersion ?? payload.version ?? 1,
         },
       });
     }
@@ -70,15 +86,15 @@ export class BookingMembershipEventConsumer {
       eventId: event.id,
       eventType: event.eventType,
       entityId: event.aggregateId,
-      entityVersion: payload.version ?? 1,
+      entityVersion: payload.bookingVersion ?? payload.version ?? 1,
       correlationId: payload.correlationId ?? event.id,
       occurredAt,
       payload: {
         membershipKind,
         membershipRef,
-        version: payload.version ?? 1,
+        version: payload.bookingVersion ?? payload.version ?? 1,
         reason: payload.reason ?? event.eventType,
-        effectiveAt: payload.effectiveAt ? new Date(payload.effectiveAt) : occurredAt,
+        effectiveAt: new Date(payload.effectiveAt ?? payload.cancelledAt ?? occurredAt),
         tripId: payload.tripId,
         userId: payload.userId,
         bookingId: payload.bookingId,
@@ -93,33 +109,22 @@ export class BookingMembershipEventConsumer {
    * processed by Rental yet (receipt recorded in RentalInboxEvent).
    * Note: NEVER marks booking_outbox_events as PROCESSED.
    */
-  async consumePendingEvents(batchSize = 50): Promise<LifecycleExecutionResult[]> {
+  async consumePendingEvents(batchSize = 25): Promise<LifecycleExecutionResult[]> {
     const results: LifecycleExecutionResult[] = [];
-    const events = await this.prisma.bookingOutboxEvent.findMany({
-      where: {
-        eventType: { in: MEMBERSHIP_LIFECYCLE_EVENT_TYPES },
-      },
-      orderBy: { createdAt: 'asc' },
-      take: batchSize,
-    });
-
-    for (const event of events) {
-      // Check if already processed in RentalInboxEvent
-      const processed = await this.prisma.rentalInboxEvent.findUnique({
-        where: { eventId: event.id },
-        select: { id: true },
-      });
-      if (processed) continue;
-
-      try {
-        const res = await this.consume(event);
-        if (res) results.push(res);
-      } catch (err: any) {
-        this.logger.error(`Failed to consume booking event ${event.id}: ${err.message}`, err.stack);
-      }
-    }
-
+    await this.deliveries.run('rental-lifecycle-v1', MEMBERSHIP_LIFECYCLE_EVENT_TYPES, async event => {
+      const result = await this.consume(event);
+      if (!result || result.status === 'FAILED') throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID');
+      results.push(result);
+    }, batchSize);
     return results;
   }
+  private running = false;
+  @Interval(2000)
+  async tick() {
+    if (this.running || process.env.TRIP_CANCELLATION_WORKER_ENABLED !== 'true') return;
+    this.running = true;
+    try { for (let batch=0; batch<4; batch++) { const results=await this.consumePendingEvents(); if (!results.length) break; } }
+    catch { this.logger.warn('Rental lifecycle worker unavailable; retrying on next tick'); }
+    finally { this.running=false; }
+  }
 }
-

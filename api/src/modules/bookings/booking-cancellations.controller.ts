@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, Param, Post } from '@nestjs/common'
+import { Body, Controller, Headers, HttpCode, Param, Post, Get } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 import { ActiveUser } from '../../shared/decorators/active-user.decorator'
@@ -15,6 +15,16 @@ import { BookingCancellationService } from './booking-cancellation.service'
 @Auth([AuthType.Bearer])
 export class BookingCancellationsController {
   constructor(private readonly cancellations: BookingCancellationService) {}
+  @Get(':id/cancellation-preview')
+  @ApiOperation({ summary: 'Preview voluntary cancellation and related rental blockers' })
+  preview(
+    @Param('id', new ZodValidationPipe(z.string().uuid())) bookingId: string,
+    @ActiveUser() actor: ActiveUserData,
+  ) {
+    if (!actor?.id) throw AppError.fromCode('UNAUTHENTICATED')
+    return this.cancellations.preview(bookingId, actor.id)
+  }
+
   @Post([':id/cancellations', ':id/cancel'])
   @HttpCode(202)
   @ApiOperation({ summary: 'Cancel booking and schedule eligible refund', description: 'Use cancellations; cancel is a compatibility alias. Owners may cancel before departure. Refund amount comes from the saved booking policy, not the request. HTTP 202 confirms cancellation, not refund completion. Workers create and process the refund asynchronously. Unpaid bookings or zero refundable amount do not create refunds.' })

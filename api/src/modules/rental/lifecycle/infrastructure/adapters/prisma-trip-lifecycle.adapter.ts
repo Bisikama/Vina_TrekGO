@@ -1,3 +1,4 @@
+import { AppError } from '../../../../../shared/errors'
 import { Injectable } from '@nestjs/common'
 import {
   Prisma,
@@ -528,6 +529,10 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
     try {
       return await this.prisma.$transaction(
         async (tx) => {
+          await tx.$queryRaw`SELECT id FROM trips WHERE id=${command.payload.tripId}::uuid FOR UPDATE`
+          const sourceTrip = await tx.trip.findUnique({where:{id:command.payload.tripId}})
+          if (!sourceTrip || !['CANCELLED','INTERRUPTED'].includes(sourceTrip.status) || command.payload.tripVersion > sourceTrip.version)
+            throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID')
           // 1. Deduplication via RentalInboxEvent
           const existing = await tx.rentalInboxEvent.findUnique({
             where: { eventId: command.eventId },
@@ -536,6 +541,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             if (existing.result) {
               return existing.result as unknown as LifecycleExecutionResult
             }
+            if (existing.status !== EventStatus.PROCESSED) throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID')
             return {
               eventId: command.eventId,
               status: 'SKIPPED_DUPLICATE',
@@ -601,10 +607,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           const primaryLocationId = await resolveActivePrimaryRentalLocation(tx)
 
           for (const order of orders) {
-            // Out-of-order check
-            if (order.contextVersionSnapshot >= eventVersion) {
-              continue
-            }
+            // contextVersionSnapshot is an equality hash, not a Trip event sequence.
 
             const isBeforeHandover = BEFORE_HANDOVER_STATUSES.includes(order.status)
 
@@ -669,7 +672,6 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                     exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
                     financialStatus: financial.financialStatus ?? order.financialStatus,
                     cancelledAt: effectiveAt,
-                    contextVersionSnapshot: eventVersion,
                     version: { increment: 1 },
                   },
                 })
@@ -847,7 +849,6 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                         ? RentalOrderExceptionStatus.ACTION_REQUIRED
                         : RentalOrderExceptionStatus.NONE,
                     // Một lần tăng version sau khi đã xác định trạng thái thiết bị.
-                    contextVersionSnapshot: eventVersion,
                     version: { increment: 1 },
                   },
                 })
@@ -903,7 +904,6 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 where: { id: order.id, version: order.version },
                 data: {
                   exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
-                  contextVersionSnapshot: eventVersion,
                   version: { increment: 1 },
                 },
               })
@@ -1003,6 +1003,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             if (existing.result) {
               return existing.result as unknown as LifecycleExecutionResult
             }
+            if (existing.status !== EventStatus.PROCESSED) throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID')
             return {
               eventId: command.eventId,
               status: 'SKIPPED_DUPLICATE',
@@ -1066,14 +1067,20 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
           })
 
           await tx.$queryRaw`SELECT id FROM rental_orders 
-          WHERE ((membership_kind = 'PUBLIC_BOOKING_BUYER' AND membership_ref = ${command.payload.bookingId}::text)
-                 OR ((membership_kind IS NULL OR membership_kind = 'LEGACY') AND booking_id = ${command.payload.bookingId}::uuid))
+          WHERE ((membership_kind = 'PUBLIC_BOOKING_BUYER' AND membership_ref = ${command.payload.bookingId}::uuid)
+                 OR booking_id = ${command.payload.bookingId}::uuid
+                 OR recipient_participant_id IN (SELECT id FROM booking_participants WHERE booking_id=${command.payload.bookingId}::uuid)
+                 OR (membership_kind = 'PUBLIC_PARTICIPANT' AND membership_ref IN (SELECT id FROM booking_participants WHERE booking_id=${command.payload.bookingId}::uuid)))
           AND status::text IN ('PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER', 'ACTIVE')
           ORDER BY id FOR UPDATE`
+          const participantIds = (await tx.bookingParticipant.findMany({where:{bookingId:command.payload.bookingId},select:{id:true}})).map(p=>p.id)
           const candidateOrders = await tx.rentalOrder.findMany({
             where: {
               status: { in: OPEN_STATUSES },
               OR: [
+                { bookingId: command.payload.bookingId },
+                { membershipKind: 'PUBLIC_PARTICIPANT', membershipRef: { in: participantIds } },
+                { recipientParticipant: { bookingId: command.payload.bookingId } },
                 {
                   membershipKind: 'PUBLIC_BOOKING_BUYER',
                   membershipRef: command.payload.bookingId,
@@ -1521,6 +1528,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             if (existing.result) {
               return existing.result as unknown as LifecycleExecutionResult
             }
+            if (existing.status !== EventStatus.PROCESSED) throw AppError.fromCode('RENTAL_LIFECYCLE_EVENT_INVALID')
             return {
               eventId: command.eventId,
               status: 'SKIPPED_DUPLICATE',

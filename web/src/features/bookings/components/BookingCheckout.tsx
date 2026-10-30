@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth';
 import { bookingApi, bookingError, dateTime, money, statusLabels } from '../booking.api';
 import type { Booking, Participant, PaymentGateway, PaymentOption } from '../booking.api';
 import { BookingSignIn } from './BookingSignIn';
+import { BookingCancellation } from './BookingCancellation';
 
 const gatewayLabels: Record<string, string> = { momo: 'MoMo', vnpay: 'VNPAY' };
 
@@ -207,6 +208,7 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
         <BookingSignIn />
       ) : (
         <>
+          {booking && ['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status) && <BookingCancellation bookingId={booking.id} onCancelled={() => { setRetry(v => v + 1); }} />}
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50/90 p-4 text-xs font-medium text-red-700 shadow-xs">
               {error}

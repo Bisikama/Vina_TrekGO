@@ -92,7 +92,17 @@ const formatParticipantsPayload = (participants: Participant[]) => ({
   })),
 });
 
+export type CancellationPreview = {
+  tripCancellationPending?: boolean;
+  canCancel: boolean;
+  refundableAmount: string;
+  currency: string;
+  rentals: { orderId: string | null; status: string; ownedByViewer: boolean }[];
+};
+
 export const bookingApiService = {
+  cancellationPreview: async (id: string): Promise<CancellationPreview> =>
+    (await apiClient.get(`/api/v1/bookings/${id}/cancellation-preview`, config)).data,
   /**
    * GET /api/v1/trips
    * Khám phá các chuyến đi công khai mở đặt chỗ
@@ -246,9 +256,9 @@ export const bookingApiService = {
     bookingId: string,
     reason: string,
     idempotencyKey: string
-  ): Promise<{ status: string }> => {
-    const response = await apiClient.post<{ status: string }>(
-      `/api/v1/bookings/${bookingId}/cancel`,
+  ): Promise<{ status: string; refundableAmount: string }> => {
+    const response = await apiClient.post<{ status: string; refundableAmount: string }>(
+      `/api/v1/bookings/${bookingId}/cancellations`,
       { reason },
       headers(idempotencyKey)
     );

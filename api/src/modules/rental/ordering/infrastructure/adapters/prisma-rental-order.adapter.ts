@@ -637,12 +637,20 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
     })
     if (!order) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
     if (order.userId !== query.userId) throw AppError.fromCode('FORBIDDEN')
-    return calculateCancellationPreview(order, query.now)
+    const trip = await this.prisma.trip.findUnique({where:{id:order.tripId},select:{status:true}})
+    if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
+    return { ...calculateCancellationPreview(order, query.now), tripCancellationPending: trip?.status === 'CANCEL_PENDING' }
   }
 
   // RB-API-205
   async cancelOrder(command: CancelRentalOrderCommand): Promise<CancelRentalOrderResult> {
     return this.prisma.$transaction(async (tx) => {
+      const pointer = await tx.rentalOrder.findUnique({where:{id:command.orderId},select:{tripId:true,userId:true}})
+      if (!pointer) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
+      if (pointer.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
+      await tx.$queryRaw`SELECT id FROM trips WHERE id=${pointer.tripId}::uuid FOR UPDATE`
+      const trip = await tx.trip.findUnique({where:{id:pointer.tripId},select:{status:true}})
+      if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${command.orderId}::uuid FOR UPDATE`
       const order = await tx.rentalOrder.findUnique({
         where: { id: command.orderId },

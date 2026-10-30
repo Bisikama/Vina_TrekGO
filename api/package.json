@@ -44,7 +44,8 @@
     "openapi:generate": "cross-env NODE_ENV=production MEDIA_DEV_UPLOAD_ENABLED=false ts-node scripts/generate-openapi.ts",
     "openapi:generate:dev": "cross-env NODE_ENV=development MEDIA_DEV_UPLOAD_ENABLED=true ts-node scripts/generate-openapi.ts",
     "seed:demo-prereqs": "ts-node prisma/seed-demo-prereqs.ts",
-    "seed:booking-all": "ts-node prisma/seed-booking-all.ts"
+    "seed:booking-all": "ts-node prisma/seed-booking-all.ts",
+    "test:trip-cancellations": "node test/run-trip-cancellations.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",
