@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'on-secondary-container': '#731a04', 'inverse-on-surface': '#eaf1ff', 'on-primary': '#ffffff', 'on-background': '#121c2a', 'surface-container-low': '#eff4ff', 'primary-fixed': '#b1f0cd', 'secondary-container': '#ff8162', 'tertiary-fixed-dim': '#6fd8c8', 'primary-fixed-dim': '#96d4b2', 'on-tertiary-fixed': '#00201c', 'on-secondary': '#ffffff', 'primary': '#125238', 'primary-container': '#2f6b4f', 'outline': '#707972', 'on-primary-fixed': '#002113', 'on-secondary-fixed': '#3c0700', 'secondary': '#a33d23', 'secondary-fixed-dim': '#ffb4a2', 'on-primary-container': '#aae9c6', 'on-error': '#ffffff', 'surface-dim': '#d0dbed', 'error-container': '#ffdad6', 'surface-variant': '#d9e3f6', 'surface': '#f8f9ff', 'secondary-fixed': '#ffdad2', 'on-surface': '#121c2a', 'surface-container-highest': '#d9e3f6', 'on-tertiary-container': '#84eddd', 'surface-container': '#e6eeff', 'error': '#ba1a1a', 'on-secondary-fixed-variant': '#83260e', 'outline-variant': '#c0c9c1', 'tertiary-container': '#006c61', 'on-primary-fixed-variant': '#105137', 'on-surface-variant': '#404943', 'inverse-surface': '#27313f', 'background': '#f8f9ff', 'surface-tint': '#2d694d', 'surface-container-lowest': '#ffffff', 'tertiary': '#005249', 'inverse-primary': '#96d4b2', 'surface-container-high': '#dee9fc', 'on-tertiary-fixed-variant': '#005048', 'on-error-container': '#93000a', 'tertiary-fixed': '#8cf5e4', 'surface-bright': '#f8f9ff', 'on-tertiary': '#ffffff' }, borderRadius: { 'DEFAULT': '0.125rem', 'lg': '0.25rem', 'xl': '0.5rem', 'full': '0.75rem' }, spacing: { 'margin': '1rem', 'space-xl': '1.5rem', 'space-md': '0.75rem', 'space-lg': '1rem', 'space-sm': '0.5rem', 'gutter': '0.75rem', 'space-xs': '0.25rem' }, fontFamily: { 'headline-lg': ['Inter'], 'label-md': ['Inter'], 'headline-md': ['Inter'], 'label-lg': ['Inter'], 'headline-sm': ['Inter'], 'body-sm': ['Inter'], 'body-md': ['Inter'], 'label-sm': ['Inter'], 'headline-xl': ['Inter'], 'body-lg': ['Inter'] }, fontSize: { 'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.015em', fontWeight: '700' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.04em', fontWeight: '600' }], 'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '700' }], 'label-lg': ['14px', { lineHeight: '20px', letterSpacing: '0.02em', fontWeight: '700' }], 'headline-sm': ['18px', { lineHeight: '24px', letterSpacing: '0em', fontWeight: '600' }], 'body-sm': ['12px', { lineHeight: '16px', letterSpacing: '0.01em', fontWeight: '400' }], 'body-md': ['14px', { lineHeight: '20px', letterSpacing: '0em', fontWeight: '400' }], 'label-sm': ['10px', { lineHeight: '12px', letterSpacing: '0.06em', fontWeight: '700' }], 'headline-xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '800' }], 'body-lg': ['16px', { lineHeight: '24px', letterSpacing: '0em', fontWeight: '500' }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-28 px-margin flex flex-col justify-between py-space-xs"><div class="flex items-center justify-between gap-gutter"><div class="flex items-center gap-space-xs min-w-0"><button aria-label="Quay lại" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors -ml-space-xs" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Nhận Package Từ Kho</h1></div><span class="font-label-sm text-label-sm text-primary tracking-wider font-bold">#DEL-8921</span></div></div><div class="flex items-center gap-space-sm"><button aria-label="Khẩn cấp SOS" class="h-12 px-space-md bg-error text-on-error rounded-xl flex items-center gap-space-xs shadow-[0_2px_6px_rgba(186,26,26,0.35)] active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px] font-bold">sos</span><span class="font-label-lg text-label-lg uppercase tracking-wide">SOS</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="flex items-center gap-space-xs overflow-x-auto pb-space-xs"><span class="inline-flex items-center gap-space-xs px-space-xs py-0.5 rounded-lg bg-primary-container text-on-primary font-label-sm text-label-sm uppercase tracking-wider shrink-0"><span class="material-symbols-outlined text-[14px]">local_shipping</span>STAFF DELIVERY</span><span class="inline-flex items-center gap-space-xs px-space-xs py-0.5 rounded-lg bg-surface-container-high text-primary font-label-sm text-label-sm uppercase tracking-wider shrink-0"><span class="material-symbols-outlined text-[14px] text-primary">near_me</span>GPS ON</span><span class="inline-flex items-center gap-space-xs px-space-xs py-0.5 rounded-lg bg-surface-container-high text-tertiary font-label-sm text-label-sm uppercase tracking-wider shrink-0"><span class="material-symbols-outlined text-[14px] text-tertiary">sync</span>SYNC REALTIME</span></div></div></header><main class="flex flex-col relative w-full pt-28 bg-surface pb-safe min-h-screen"><div class="flex flex-col w-full pb-32">
+<!-- Tactical Operational Bar -->
+<section class="bg-surface-container-high px-margin py-space-sm flex flex-col gap-space-xs shadow-sm">
+<div class="flex items-center justify-between text-on-surface">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0"></span>
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider truncate">SẴN SÀNG NGOẠI TUYẾN 100%</span>
+</div>
+<div class="flex items-center gap-space-xs shrink-0 bg-surface-container-lowest px-space-xs py-0.5 rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-primary text-[14px]">my_location</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold tracking-wider">GPS: ±3M CHÍNH XÁC</span>
+</div>
+</div>
+<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
+<span class="truncate">CACHE BẢN ĐỒ &amp; DỮ LIỆU ĐÃ TẢI</span>
+<span class="font-bold text-primary shrink-0 tracking-wider">NHIỆM VỤ: #DEL-8921</span>
+</div>
+</section>
+<div class="px-margin flex flex-col gap-space-lg pt-space-md">
+<!-- Top Task Summary Card -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-space-xs px-space-xs py-0.5 rounded-lg bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm uppercase font-bold">
+<span class="material-symbols-outlined text-[14px]">warehouse</span>
+          KHO ĐÃ SẴN SÀNG
+        </span>
+<span class="font-label-sm text-label-sm font-bold text-secondary uppercase bg-secondary-fixed text-on-secondary-fixed px-space-xs py-0.5 rounded-lg">
+          ƯU TIÊN CAO
+        </span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">Giao thiết bị #BK-7892</h2>
+<div class="flex items-center gap-space-xs text-on-surface-variant pt-0.5">
+<span class="material-symbols-outlined text-[18px] text-primary">person</span>
+<span class="font-body-md text-body-md font-bold text-on-surface">Nguyễn Tuấn Anh</span>
+<span class="text-outline-variant">•</span>
+<span class="font-body-md text-body-md text-primary font-bold">0912.456.789</span>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-lg p-space-sm flex flex-col gap-space-xs">
+<div class="flex items-start gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[18px] shrink-0 mt-0.5">hiking</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Lộ trình &amp; Điểm tập kết</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">Fansipan 3N2Đ • Sa Pa Hub</span>
+</div>
+</div>
+<div class="flex items-start gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">schedule</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Khung giờ bàn giao</span>
+<span class="font-body-md text-body-md text-secondary font-bold">Sảnh Cổng Trạm Tôn (06:00 – 06:20 sáng nay)</span>
+</div>
+</div>
+<div class="flex items-center gap-space-xs pt-space-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-tertiary">info</span>
+<span class="font-body-sm text-body-sm italic">Giao trước giờ khởi hành đoàn 40 phút</span>
+</div>
+</div>
+</section>
+<!-- Field QR Scanner Section -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase font-bold tracking-wider flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">qr_code_scanner</span>
+          QUÉT XÁC NHẬN PACKAGE
+        </span>
+<span class="font-label-sm text-label-sm text-primary font-bold">MÃ DUY NHẤT</span>
+</div>
+<!-- Scanner Viewport Frame -->
+<div class="relative bg-inverse-surface rounded-xl overflow-hidden p-space-lg flex flex-col items-center justify-center min-h-[190px] shadow-sm">
+<!-- Viewfinder corner brackets -->
+<div class="absolute top-3 left-3 w-6 h-6 border-t-4 border-l-4 border-primary-fixed pointer-events-none"></div>
+<div class="absolute top-3 right-3 w-6 h-6 border-t-4 border-r-4 border-primary-fixed pointer-events-none"></div>
+<div class="absolute bottom-3 left-3 w-6 h-6 border-b-4 border-l-4 border-primary-fixed pointer-events-none"></div>
+<div class="absolute bottom-3 right-3 w-6 h-6 border-b-4 border-r-4 border-primary-fixed pointer-events-none"></div>
+<!-- Center Animated Optical Target -->
+<div class="relative w-36 h-36 flex items-center justify-center">
+<div class="absolute inset-0 bg-primary/20 rounded-lg animate-pulse"></div>
+<div class="w-full h-0.5 bg-primary-fixed absolute top-1/2 -translate-y-1/2 shadow-[0_0_8px_#b1f0cd]"></div>
+<span class="material-symbols-outlined text-primary-fixed text-[64px] opacity-75">qr_code_2</span>
+</div>
+<p class="font-label-sm text-label-sm text-inverse-on-surface tracking-wider uppercase font-bold text-center mt-space-xs">
+          Căn chỉnh mã QR Package vào chính giữa khung ngắm
+        </p>
+</div>
+<div class="flex flex-col gap-space-xs">
+<button class="w-full min-h-[48px] bg-primary-container text-on-primary font-label-lg text-label-lg uppercase tracking-wide rounded-lg flex items-center justify-center gap-space-xs shadow-sm active:opacity-90" type="button">
+<span class="material-symbols-outlined text-[20px]">photo_camera</span>
+          QUÉT QR PACKAGE
+        </button>
+<button class="w-full min-h-[48px] bg-surface-container-high text-primary font-label-md text-label-md uppercase tracking-wider rounded-lg flex items-center justify-center gap-space-xs active:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[18px]">keyboard</span>
+          Nhập mã package thủ công
+        </button>
+</div>
+<!-- Scanned Package Result Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm mt-space-xs">
+<div class="flex items-center justify-between pb-space-xs border-b border-surface-container-high">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">inventory_2</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">PKG-7892-A</span>
+</div>
+<span class="inline-flex items-center gap-space-xs px-space-xs py-0.5 rounded-lg bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm uppercase font-bold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+            ĐÃ QUÉT THÀNH CÔNG
+          </span>
+</div>
+<div class="flex gap-space-md items-center">
+<div class="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-surface-container shadow-sm">
+<img class="w-full h-full object-cover" data-alt="Túi đựng trang bị dã ngoại chuyên dụng leo núi Fansipan bọc niêm phong nhựa quân sự kèm mã vạch QR code kho rõ nét trên nền ánh sáng trắng xưởng hậu cần" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5roMTiWapTF5XePwAt3MLKqiQzVmVSVSzuS4_b9LWyBnElo_YkEbJKyYbhvBs3tKiXeP-673_MqjDpVhoSypnUpktU_KfOIc8CHbniGOVYnbsToYFpjYWX88bLmxi6TVw1x6fkxy935H5RYscLVYfIDQsxSQiR20M062rpSDA87EQd6QKoBqvamEWSmKoQ9PNRQ64U1hhAFheijuSMKI_tr2Dt5em7wSzJ02A5i8eTK7_CL3fcoDm"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-bold text-on-surface">04 món thiết bị dã ngoại</span>
+<span class="font-body-sm text-body-sm text-primary font-bold">Niêm phong Seal #SL-88319 còn nguyên vẹn</span>
+<div class="flex items-start gap-space-xs mt-1 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px] mt-0.5">verified_user</span>
+<span class="line-clamp-2">Đóng gói bởi: Staff Kho Sa Pa (Vũ Đình Toàn - ID: WH-014) • 05:20 (cách đây 45 phút)</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Detail Gear Checklist Section -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase font-bold tracking-wider">
+            DANH MỤC ĐỐI SOÁT THIẾT BỊ (04/04)
+          </span>
+<span class="font-body-sm text-body-sm text-outline">Đối chiếu ảnh Evidence thực tế do Kho lưu trữ</span>
+</div>
+<span class="font-label-md text-label-md bg-primary text-on-primary px-space-xs py-0.5 rounded-lg font-bold">100%</span>
+</div>
+<!-- Item 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex gap-space-sm min-w-0">
+<div class="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Balo trợ lực Osprey Kestrel 45L màu xanh rêu dã ngoại chuyên nghiệp có gắn thẻ tag mã vạch EQ-BL-4508 chụp kiểm tra kho" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdivexFL0aAjkWiYHMtWfVvFXRxkRUVjLwk4YLWSJpWzYrR-8wy3T1Hih-_SRVb04GUAv63IVRUFiHmTwvp8QeCMCx-72PD8d63PnD7NR1I0SpfD9KPrHKE8y8pVC4Js94fkdoBgMZLmFzpyHWB_3jQUJFuwFCAn2R_3Ue54VL93-BlThKXlvaSlQQh73ZImzQtLQWqBZcxbkvh3n1y1HZzgNlMNl4bYw0irAyPygOliXHpTZVXLgD"/>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-1.5 py-0.5 rounded-lg font-bold">#EQ-BL-4508</span>
+</div>
+<h3 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Balo trợ lực 45L Osprey Kestrel</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tình trạng: Mới 98% • Khóa kéo &amp; áo mưa bọc đáy hoàn hảo</p>
+</div>
+</div>
+<div class="w-12 h-12 flex items-center justify-center shrink-0">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] font-bold">check</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex gap-space-sm min-w-0">
+<div class="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Cặp gậy trekking carbon Black Diamond Trail Pro siêu nhẹ xếp gọn có khóa FlickLock và tem kiểm định kho" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpYYqbw3_Uvk9hizomN7stkfhj2kxtIDRzid32UOxJsngI0ErMFGaL680fmVH9BaWJbP2yWpWCS9msAVZAm02lLco4tRIE08b7Yz7PULaAKHNqoqwNWeHSjYhLrdMFXQvz3RHAnhMZSszYA-JyvJo3FHl8XtXtIN8SZjKEE1tKBBK4hRjSbBLdFWBfgSTgCoJDrhY7TQEp0bxGQLbMNS2n39ojJxOBKjQsFVhOkOMKj0OdNnI9oKUc"/>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-1.5 py-0.5 rounded-lg font-bold">#EQ-GT-8812</span>
+<span class="font-label-sm text-label-sm text-secondary font-bold">SL: x2</span>
+</div>
+<h3 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Gậy Trekking Carbon BD Trail Pro</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tình trạng: Khóa FlickLock chắc chắn • Đầu tip vonfram sắc nét</p>
+</div>
+</div>
+<div class="w-12 h-12 flex items-center justify-center shrink-0">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] font-bold">check</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex gap-space-sm min-w-0">
+<div class="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Áo khoác dã ngoại chống mưa Gore-Tex Paclite cỡ L gấp gọn trong túi nén chống thấm nước có mác xuất kho" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHDLDrS9umeKIRX4QizLO1Wmt-r4h1u6KO9hLrSO8T7PK8pRqAimmgt_fLVDa3JS_uDCKScTvLX81z15MeQHf9Cc5DuI9VJnCTH23q1AWGo6AHCe1qNUwJo0oqVhB4VegKfqFJ4WlDZ0UcF18-mTabPsOVi_8pdgXKx79CvOEBes7DgV2nl80qeK8RjhzCJ07o5xZbcFP9G3aC0lBNA-DmIP9It6EIjrUNIsaSmStnSqo0cfK11kxq"/>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-1.5 py-0.5 rounded-lg font-bold">#EQ-AM-1044</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">SIZE L</span>
+</div>
+<h3 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Áo mưa Gore-Tex Paclite Cỡ L</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tình trạng: Đã test ép seam nhiệt chống thấm 100%</p>
+</div>
+</div>
+<div class="w-12 h-12 flex items-center justify-center shrink-0">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] font-bold">check</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex gap-space-sm min-w-0">
+<div class="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Đèn pin đội đầu chuyên dụng leo núi Black Diamond Storm 400 lumens đang phát sáng kèm cáp sạc USB Type-C" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3ozAPxsbjyV-mEzOaTa-pOWteOzWDVueSafjfuG-UnzJSa_qpH2DJlD6Pcu7XzgS6AhFggi2KeC0oMeOqKlVcC4lgnE5OS0Ow5A7EMCx-nnT-LGFep2zvFxV_2x1quIjx-zUgRWR7NqjGF61OlsmwqA7WliEe15HK-vFQSMo4N6JA52YTSTtdaoPWuTtCdGH7qyp6_RjfCbxXlbGfiDc3MDGCE1LkqlW4N_dMemRXDRO7paao3M2h"/>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-primary px-1.5 py-0.5 rounded-lg font-bold">#EQ-HL-0302</span>
+</div>
+<h3 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Đèn pin đội đầu BD Storm 400</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tình trạng: Pin 100% • Kèm cáp Type-C trong hộp chống sốc</p>
+</div>
+</div>
+<div class="w-12 h-12 flex items-center justify-center shrink-0">
+<div class="w-6 h-6 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] font-bold">check</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Seal & Integrity Confirmation Toggles -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase font-bold tracking-wider">
+        NGHIỆM THU NIÊM PHONG KHO
+      </span>
+<div class="flex items-center justify-between min-h-[48px] py-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">lock</span>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-bold text-on-surface">Seal niêm phong còn nguyên</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Khớp mã #SL-88319</span>
+</div>
+</div>
+<!-- Tactical Toggle ON -->
+<button aria-label="Xác nhận seal niêm phong" class="w-12 h-7 bg-primary rounded-full relative p-0.5 flex items-center justify-end" type="button">
+<div class="w-6 h-6 bg-on-primary rounded-full shadow-md flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-primary font-bold">check</span>
+</div>
+</button>
+</div>
+<div class="flex items-center justify-between min-h-[48px] py-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">fact_check</span>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-bold text-on-surface">Đủ 04/04 món thiết bị đối soát</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Không rách, đủ phụ kiện kèm theo</span>
+</div>
+</div>
+<!-- Tactical Toggle ON -->
+<button aria-label="Xác nhận đủ số lượng" class="w-12 h-7 bg-primary rounded-full relative p-0.5 flex items-center justify-end" type="button">
+<div class="w-6 h-6 bg-on-primary rounded-full shadow-md flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-primary font-bold">check</span>
+</div>
+</button>
+</div>
+<button class="w-full min-h-[48px] mt-space-xs bg-error-container text-on-error-container font-label-md text-label-md uppercase tracking-wider rounded-lg flex items-center justify-center gap-space-xs active:bg-error active:text-on-error" type="button">
+<span class="material-symbols-outlined text-[20px]">report_problem</span>
+        BÁO THIẾU / HỎNG TỪ KHO
+      </button>
+</section>
+</div>
+<!-- Bottom Pinned Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-md p-space-md flex flex-col gap-space-xs shadow-[0_-4px_12px_rgba(0,0,0,0.08)] pb-safe">
+<div class="flex items-center justify-between px-space-xs">
+<div class="flex items-center gap-space-xs text-primary font-label-sm text-label-sm font-bold">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>XÁC THỰC KHO THÀNH CÔNG</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">4.2 KM ĐẾN TRẠM TÔN</span>
+</div>
+<button class="w-full min-h-[52px] bg-primary text-on-primary rounded-xl font-label-lg text-label-lg uppercase tracking-wide flex items-center justify-center gap-space-sm shadow-md active:bg-primary-container" type="button">
+<span class="material-symbols-outlined text-[22px]">two_wheeler</span>
+<span class="truncate">NHẬN PACKAGE &amp; BẮT ĐẦU DI CHUYỂN</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+<button class="w-full py-1 text-center font-label-md text-label-md text-primary font-bold underline active:opacity-75" type="button">
+      Xem chi tiết chỉ dẫn đường đến Cổng Trạm Tôn
+    </button>
+</div>
+</div></main></body></html>

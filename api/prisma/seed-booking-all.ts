@@ -39,6 +39,7 @@ function main() {
   process.env.DIRECT_URL = process.env.DATABASE_URL
   run('prisma/seed-users.ts')
   run('prisma/seed-nui-dinh.ts')
+  run('prisma/seed-demo-prereqs.ts')
   run('prisma/seeds/booking-policy.seed.ts')
   run('prisma/seeds/coreflows-happy.seed.ts', [`--config=${configPath}`])
   run('prisma/seeds/coreflows-happy.seed.ts', [`--config=${configPath}`, '--verify-only'])

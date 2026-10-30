@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { usePrivateTripMembership } from "../hooks/usePrivateTripMembership";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { PrivateTripDirectInviteModal } from "./PrivateTripDirectInviteModal";
@@ -171,6 +172,7 @@ export function PrivateTripRoom({ tripId }: { tripId: string }) {
       />
 
       {error && <ErrorAlert message={error} />}
+      {!isHost && room?.permissions?.canLeave && <InfoBanner tone="warning">Trước khi rời chuyến, vui lòng hủy đơn thuê liên quan hoặc hoàn tất trả thiết bị. Sau đó quay lại xác nhận rời chuyến. <Link className="underline" href="/rentals/orders">Xem đơn thuê của tôi</Link></InfoBanner>}
       {notice && (
         <InfoBanner tone="success" onDismiss={() => setNotice(null)}>
           {notice}

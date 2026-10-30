@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common'
+import { TripCancellationService } from '../bookings/trip-cancellation.service'
+import { AdminTripCancellationController, LeaderTripCancellationController } from '../bookings/trip-cancellation.controller'
 import { PaymentProvider } from './payment-provider.port'
 import { MockPaymentProvider } from './mock-payment.provider'
 import { MomoPaymentProvider } from './momo-payment.provider'
@@ -36,6 +38,7 @@ import { UserTransactionsController } from './user-transactions.controller'
 @Module({
   imports: [BookingsModule],
   controllers: [
+    AdminTripCancellationController, LeaderTripCancellationController,
     PaymentsController,
     PaymentOptionsController,
     MockPaymentCheckoutController,
@@ -50,6 +53,7 @@ import { UserTransactionsController } from './user-transactions.controller'
     UserTransactionsController,
   ],
   providers: [
+    TripCancellationService,
     RefundsService,
     SandboxRefundSimulationService,
     RentalRefundsService,

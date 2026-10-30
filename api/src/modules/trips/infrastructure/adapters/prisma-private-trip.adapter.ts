@@ -182,6 +182,8 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         aggregateId: next.id,
         payload: {
           tripId: next.id,
+          effectiveAt: (next.cancelledAt ?? new Date()).toISOString(),
+          tripVersion: next.version,
           creatorId: next.creatorId,
           oldWindow: { startAt: old.startAt.toISOString(), endAt: old.endAt.toISOString() },
           newWindow: { startAt: next.startAt.toISOString(), endAt: next.endAt.toISOString() },

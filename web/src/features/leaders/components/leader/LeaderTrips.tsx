@@ -10,7 +10,8 @@ type TripStatus =
   | "open"
   | "active"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "cancel_pending";
 
 type LeaderTrip = {
   id: string;
@@ -38,6 +39,7 @@ const tabs: Array<{
     { value: "active", label: "Đang diễn ra" },
     { value: "completed", label: "Đã hoàn thành" },
     { value: "cancelled", label: "Đã hủy" },
+    { value: "cancel_pending", label: "Chờ duyệt hủy" },
   ];
 
 const statusStyle: Record<
@@ -63,6 +65,7 @@ const statusStyle: Record<
     label: "Đã hoàn thành",
     className: "bg-blue-50 text-blue-800 border border-blue-200",
   },
+  cancel_pending: {label: "Chờ duyệt hủy", className: "bg-amber-50 text-amber-800"},
   cancelled: {
     label: "Đã hủy",
     className: "bg-red-50 text-red-700 border border-red-200",
@@ -87,7 +90,7 @@ export function LeaderTrips() {
         IN_PROGRESS: "active",
         COMPLETED: "completed",
         CANCELLED: "cancelled",
-        CANCEL_PENDING: "cancelled",
+        CANCEL_PENDING: "cancel_pending",
       };
 
       const start = t.startAt ? new Date(t.startAt).toLocaleDateString("vi-VN") : "";
@@ -139,6 +142,7 @@ export function LeaderTrips() {
 
   return (
     <main className="min-h-screen bg-[#F7F7F4]">
+      <Link href="/leader/trip-cancellation-requests" className="inline-block rounded-lg border px-4 py-2 text-sm font-semibold">Theo dõi yêu cầu hủy chuyến</Link>
       <section className="border-b border-[#E5E7EB] bg-white px-5 py-5 lg:px-8">
         <div className="mx-auto max-w-[1540px]">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">

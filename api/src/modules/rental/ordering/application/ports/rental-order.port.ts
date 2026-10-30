@@ -116,6 +116,7 @@ export interface RentalPaymentResult {
 }
 
 export interface RentalCancellationPreviewResult {
+  tripCancellationPending?: boolean
   canCancel: boolean
   feeRefund: number
   depositRefund: number

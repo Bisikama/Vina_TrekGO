@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#f8f9ff;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-container": "#731a04", "on-secondary-fixed-variant": "#83260e", "secondary-fixed-dim": "#ffb4a2", "on-primary": "#ffffff", "surface-container-lowest": "#ffffff", "tertiary-container": "#006c61", "inverse-surface": "#27313f", "tertiary-fixed": "#8cf5e4", "inverse-primary": "#96d4b2", "on-surface-variant": "#404943", "tertiary-fixed-dim": "#6fd8c8", "tertiary": "#005249", "on-secondary": "#ffffff", "on-secondary-fixed": "#3c0700", "surface-container-low": "#eff4ff", "on-error-container": "#93000a", "primary-container": "#2f6b4f", "on-tertiary-container": "#84eddd", "surface-container-high": "#dee9fc", "background": "#f8f9ff", "outline-variant": "#c0c9c1", "on-tertiary": "#ffffff", "surface-container": "#e6eeff", "surface-container-highest": "#d9e3f6", "secondary-container": "#ff8162", "secondary-fixed": "#ffdad2", "inverse-on-surface": "#eaf1ff", "surface": "#f8f9ff", "on-tertiary-fixed-variant": "#005048", "primary": "#125238", "outline": "#707972", "on-error": "#ffffff", "secondary": "#a33d23", "surface-variant": "#d9e3f6", "primary-fixed": "#b1f0cd", "error-container": "#ffdad6", "surface-tint": "#2d694d", "on-background": "#121c2a", "on-primary-fixed-variant": "#105137", "surface-bright": "#f8f9ff", "on-tertiary-fixed": "#00201c", "on-surface": "#121c2a", "on-primary-container": "#aae9c6", "error": "#ba1a1a", "surface-dim": "#d0dbed", "on-primary-fixed": "#002113", "primary-fixed-dim": "#96d4b2" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-md": "0.75rem", "space-xl": "1.5rem", "margin": "1rem", "space-xs": "0.25rem", "space-lg": "1rem", "gutter": "0.75rem", "space-sm": "0.5rem" }, "fontFamily": { "label-sm": ["Inter"], "body-lg": ["Inter"], "headline-lg": ["Inter"], "headline-md": ["Inter"], "body-md": ["Inter"], "headline-xl": ["Inter"], "headline-sm": ["Inter"], "body-sm": ["Inter"], "label-md": ["Inter"], "label-lg": ["Inter"] }, "fontSize": { "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.06em", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "700" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary"><span class="material-symbols-outlined text-[20px]">local_shipping</span></div><div class="flex flex-col"><span class="font-label-sm text-label-sm uppercase tracking-wider text-primary">TrekOps Delivery</span><h1 class="font-headline-sm text-headline-sm text-on-surface leading-tight">Lịch Sử Nhiệm Vụ</h1></div></div><div class="flex items-center gap-space-xs"><button aria-label="Bộ lọc lịch sử" class="w-11 h-11 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors"><span class="material-symbols-outlined text-[22px]">tune</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-surface px-margin"><div class="flex flex-col w-full pb-8 select-none">
+<!-- Operational Sub-Header & Operator Credentials -->
+<section class="flex flex-col gap-space-sm pt-space-sm mb-space-md">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary">Biên bản Thực địa Điểm giao</span>
+</div>
+<div class="flex items-center gap-space-xs mt-0.5">
+<span class="material-symbols-outlined text-primary text-[18px]">badge</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">Nguyễn Văn Tuấn</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface-variant font-mono">ID: ST-8821</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant">Trạng thái Mạng</span>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">cloud_done</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">ONLINE</span>
+</div>
+</div>
+</div>
+<!-- Quick Metric Pills Grid -->
+<div class="grid grid-cols-3 gap-space-xs mt-space-xs">
+<div class="flex flex-col p-space-sm rounded-xl bg-surface-container shadow-sm">
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Hoàn tất</span>
+</div>
+<span class="font-headline-md text-headline-md text-on-surface font-extrabold mt-1">14</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Đơn tuần này</span>
+</div>
+<div class="flex flex-col p-space-sm rounded-xl bg-surface-container shadow-sm">
+<div class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[16px]">report_problem</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Ghi chú</span>
+</div>
+<span class="font-headline-md text-headline-md text-secondary font-extrabold mt-1">02</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Sự cố thiết bị</span>
+</div>
+<div class="flex flex-col p-space-sm rounded-xl bg-surface-container shadow-sm">
+<div class="flex items-center gap-1 text-tertiary-container">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Đồng bộ</span>
+</div>
+<span class="font-headline-md text-headline-md text-tertiary-container font-extrabold mt-1">100%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Máy chủ Hub</span>
+</div>
+</div>
+<!-- Tactical Search Box -->
+<div class="relative w-full mt-space-xs">
+<div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full h-12 pl-10 pr-10 bg-surface-container-lowest rounded-xl font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-0 shadow-sm transition-all" id="taskSearchInput" placeholder="Tìm theo mã đơn (#BK-...), tên khách..." type="text"/>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+<button aria-label="Quét mã QR/RFID" class="p-1 rounded text-on-surface-variant hover:text-on-surface" type="button">
+<span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Segmented Period Switcher -->
+<section class="flex flex-col gap-space-xs mb-space-sm">
+<div class="p-1 bg-surface-container rounded-xl flex items-center shadow-inner">
+<button class="period-tab flex-1 h-10 rounded-lg flex items-center justify-center gap-1.5 font-label-md text-label-md transition-all text-on-surface-variant hover:text-on-surface" data-period="today" onclick="setPeriod(this)" type="button">
+<span>Hôm nay</span>
+<span class="period-badge px-1.5 py-0.5 rounded-full text-label-sm bg-surface-container-highest text-on-surface-variant">4</span>
+</button>
+<button class="period-tab flex-1 h-10 rounded-lg flex items-center justify-center gap-1.5 font-label-md text-label-md transition-all bg-primary text-on-primary shadow-sm font-bold" data-period="week" onclick="setPeriod(this)" type="button">
+<span>Tuần này</span>
+<span class="period-badge px-1.5 py-0.5 rounded-full text-label-sm bg-primary-container text-on-primary-container">16</span>
+</button>
+<button class="period-tab flex-1 h-10 rounded-lg flex items-center justify-center gap-1.5 font-label-md text-label-md transition-all text-on-surface-variant hover:text-on-surface" data-period="all" onclick="setPeriod(this)" type="button">
+<span>Tất cả</span>
+<span class="period-badge px-1.5 py-0.5 rounded-full text-label-sm bg-surface-container-highest text-on-surface-variant">142</span>
+</button>
+</div>
+<!-- Secondary Tactical Filter Chips -->
+<div class="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar -mx-margin px-margin">
+<button class="filter-chip flex-shrink-0 h-8 px-3 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-bold flex items-center gap-1 shadow-sm" onclick="setFilter(this, 'all')" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>Tất cả loại</span>
+</button>
+<button class="filter-chip flex-shrink-0 h-8 px-3 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-sm text-label-sm font-medium flex items-center gap-1 shadow-sm hover:text-on-surface" onclick="setFilter(this, 'handover')" type="button">
+<span class="material-symbols-outlined text-[14px]">outbox</span>
+<span>Chỉ Bàn giao (10)</span>
+</button>
+<button class="filter-chip flex-shrink-0 h-8 px-3 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-sm text-label-sm font-medium flex items-center gap-1 shadow-sm hover:text-on-surface" onclick="setFilter(this, 'return')" type="button">
+<span class="material-symbols-outlined text-[14px]">move_to_inbox</span>
+<span>Chỉ Thu hồi (6)</span>
+</button>
+<button class="filter-chip flex-shrink-0 h-8 px-3 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold flex items-center gap-1 shadow-sm" onclick="setFilter(this, 'incident')" type="button">
+<span class="material-symbols-outlined text-[14px] text-secondary">warning</span>
+<span>Có sự cố/Trầy xước (2)</span>
+</button>
+</div>
+</section>
+<!-- Task Card Stream -->
+<section class="flex flex-col gap-space-md mt-space-xs" id="taskCardList">
+<!-- Card 1: Handover - Clean / No Issues -->
+<article class="task-card flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-transform active:scale-[0.99]" data-order="#BK-9024" data-status="clean" data-type="handover">
+<!-- Header row: Type, code, date -->
+<div class="flex items-center justify-between mb-space-sm pb-space-xs">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Bàn giao thiết bị</span>
+<span class="font-body-md text-body-md font-bold text-on-surface font-mono">#BK-9024</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm font-semibold text-primary">Hôm nay, 08:30</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Đúng hẹn chuẩn lịch</span>
+</div>
+</div>
+<!-- Customer & Route Metadata -->
+<div class="p-space-sm rounded-lg bg-surface-container-low mb-space-sm flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">person</span>
+<span class="font-body-md text-body-md font-bold text-on-surface">Lê Hoàng Nam</span>
+</div>
+<a class="font-body-sm text-body-sm text-primary font-mono flex items-center gap-1 font-semibold" href="tel:0912345456">
+<span class="material-symbols-outlined text-[14px]">call</span>
+            0912***456
+          </a>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] flex-shrink-0 text-primary">location_on</span>
+<span class="font-body-sm text-body-sm truncate">Hub Sa Pa — Khách sạn Mường Hoa</span>
+</div>
+</div>
+<!-- Gear Checklist Summary -->
+<div class="mb-space-sm flex flex-col gap-1">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold">Thiết bị kiểm kê thực nhận:</span>
+<div class="flex flex-wrap gap-1.5 mt-0.5">
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">01 Lều Eureka Apex 3P</span>
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">02 Gậy leo núi Black Diamond</span>
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">01 Túi ngủ -5°C</span>
+</div>
+</div>
+<!-- Status Tag and Electronic Seal -->
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-fixed text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Hoàn hảo — Không sự cố</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">#HAND-9024-OK</span>
+</div>
+<!-- Detail Button Trigger -->
+<button class="w-full mt-space-sm h-11 rounded-lg bg-surface-container-high hover:bg-surface-container flex items-center justify-center gap-2 font-label-md text-label-md text-primary font-bold transition-colors" onclick="openDetailModal('#BK-9024', 'handover')" type="button">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span>Xem chi tiết biên bản bàn giao</span>
+</button>
+</article>
+<!-- Card 2: Return - Issue / Dispute Reported (Highlighted Amber) -->
+<article class="task-card flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-transform active:scale-[0.99] relative overflow-hidden" data-order="#BK-8841" data-status="incident" data-type="return">
+<!-- Tactical Incident Left Stripe Indicator -->
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-secondary-container"></div>
+<!-- Header row: Return icon, code, time -->
+<div class="flex items-center justify-between mb-space-sm pb-space-xs pl-1">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">assignment_returned</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">Thu hồi thiết bị</span>
+<span class="font-body-md text-body-md font-bold text-on-surface font-mono">#BK-8841</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm font-semibold text-secondary">Hôm qua, 17:15</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Hub Đức Trọng</span>
+</div>
+</div>
+<!-- Customer & Route Metadata -->
+<div class="p-space-sm rounded-lg bg-surface-container-low mb-space-sm flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">person</span>
+<span class="font-body-md text-body-md font-bold text-on-surface">Trần Minh Quân</span>
+</div>
+<a class="font-body-sm text-body-sm text-primary font-mono flex items-center gap-1 font-semibold" href="tel:0988112112">
+<span class="material-symbols-outlined text-[14px]">call</span>
+            0988***112
+          </a>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] flex-shrink-0 text-secondary">wrong_location</span>
+<span class="font-body-sm text-body-sm truncate">Trạm dừng chân Tà Năng (Hub Đức Trọng)</span>
+</div>
+</div>
+<!-- Equipment Details -->
+<div class="mb-space-sm flex flex-col gap-1">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold">Trang thiết bị kiểm tra:</span>
+<div class="flex flex-wrap gap-1.5 mt-0.5">
+<span class="px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-body-sm text-body-sm font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+            01 Bếp dã ngoại Soto WindMaster
+          </span>
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">01 Đèn Fenix HM65R</span>
+</div>
+</div>
+<!-- Discrepancy Observation Log -->
+<div class="p-space-sm rounded-lg bg-error-container/40 mb-space-sm flex flex-col gap-1">
+<div class="flex items-center gap-1 text-on-error-container">
+<span class="material-symbols-outlined text-[16px] text-error">flag</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Ghi nhận hiện trạng thực địa:</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface leading-relaxed">
+          Đã chụp 03 ảnh hiện trạng: Bếp móp cụm van áp suất do va chạm đá. Tạm giữ cọc chờ Staff Inventory Web thẩm định.
+        </p>
+</div>
+<!-- Action Button Trigger -->
+<button class="w-full h-11 rounded-lg bg-secondary text-on-secondary hover:bg-on-secondary-fixed-variant flex items-center justify-center gap-2 font-label-md text-label-md font-bold transition-all shadow-sm active:translate-y-0.5" onclick="openDetailModal('#BK-8841', 'incident')" type="button">
+<span class="material-symbols-outlined text-[18px]">policy</span>
+<span>Xem chi tiết biên bản ghi nhận</span>
+</button>
+</article>
+<!-- Card 3: Return - Normal Clean Completion -->
+<article class="task-card flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-transform active:scale-[0.99]" data-order="#BK-8790" data-status="clean" data-type="return">
+<div class="flex items-center justify-between mb-space-sm pb-space-xs">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">assignment_returned</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Thu hồi thiết bị</span>
+<span class="font-body-md text-body-md font-bold text-on-surface font-mono">#BK-8790</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm font-semibold text-primary">2 ngày trước, 14:00</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Phan Dũng</span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low mb-space-sm flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">person</span>
+<span class="font-body-md text-body-md font-bold text-on-surface">Đặng Thùy Dung</span>
+</div>
+<a class="font-body-sm text-body-sm text-primary font-mono flex items-center gap-1 font-semibold" href="tel:0903789789">
+<span class="material-symbols-outlined text-[14px]">call</span>
+            0903***789
+          </a>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] flex-shrink-0 text-primary">navigation</span>
+<span class="font-body-sm text-body-sm truncate">Điểm hẹn Trạm xe khách Phan Dũng</span>
+</div>
+</div>
+<div class="mb-space-sm flex flex-col gap-1">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold">Thiết bị thu gom:</span>
+<div class="flex flex-wrap gap-1.5 mt-0.5">
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">02 Ba lô Deuter Aircontact 65L</span>
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface">02 Áo mưa Gore-Tex</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-fixed text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Đã thu hồi đủ — Hoàn cọc 100%</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">#RET-8790-OK</span>
+</div>
+<button class="w-full mt-space-sm h-11 rounded-lg bg-surface-container-high hover:bg-surface-container flex items-center justify-center gap-2 font-label-md text-label-md text-primary font-bold transition-colors" onclick="openDetailModal('#BK-8790', 'handover')" type="button">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span>Xem chi tiết biên bản</span>
+</button>
+</article>
+<!-- Card 4: Handover - Clean High Value GPS Device -->
+<article class="task-card flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-transform active:scale-[0.99]" data-order="#BK-8655" data-status="clean" data-type="handover">
+<div class="flex items-center justify-between mb-space-sm pb-space-xs">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Bàn giao thiết bị</span>
+<span class="font-body-md text-body-md font-bold text-on-surface font-mono">#BK-8655</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm font-semibold text-primary">3 ngày trước, 06:45</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Sớm 15 phút</span>
+</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low mb-space-sm flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">person</span>
+<span class="font-body-md text-body-md font-bold text-on-surface">Phạm Quốc Bảo</span>
+</div>
+<a class="font-body-sm text-body-sm text-primary font-mono flex items-center gap-1 font-semibold" href="tel:0977334334">
+<span class="material-symbols-outlined text-[14px]">call</span>
+            0977***334
+          </a>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] flex-shrink-0 text-primary">pin_drop</span>
+<span class="font-body-sm text-body-sm truncate">Chân đèo Ô Quy Hồ, Sa Pa</span>
+</div>
+</div>
+<div class="mb-space-sm flex flex-col gap-1">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold">Thiết bị định vị cao cấp:</span>
+<div class="flex flex-wrap gap-1.5 mt-0.5">
+<span class="px-2 py-0.5 rounded bg-surface-container font-body-sm text-body-sm text-on-surface font-mono">01 Garmin inReach Mini 2 (Satellite Active)</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-fixed text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold uppercase">Bàn giao &amp; Test SOS thành công</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">#SAT-8655-OK</span>
+</div>
+<button class="w-full mt-space-sm h-11 rounded-lg bg-surface-container-high hover:bg-surface-container flex items-center justify-center gap-2 font-label-md text-label-md text-primary font-bold transition-colors" onclick="openDetailModal('#BK-8655', 'handover')" type="button">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span>Xem chi tiết biên bản</span>
+</button>
+</article>
+</section>
+<!-- Empty State Placeholder (hidden by default) -->
+<div class="hidden flex-col items-center justify-center p-space-xl text-center bg-surface-container-lowest rounded-xl mt-space-sm shadow-sm" id="emptySearchState">
+<div class="w-14 h-14 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant mb-space-sm">
+<span class="material-symbols-outlined text-[28px]">search_off</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">Không tìm thấy nhiệm vụ</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 max-w-xs">
+      Không có mã đơn hoặc tên khách nào khớp với bộ lọc hiện tại. Vui lòng kiểm tra lại từ khóa.
+    </p>
+</div>
+<!-- Interactive Detail Modal Sheet Backdrop -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm transition-opacity duration-300 opacity-0 pointer-events-none flex flex-col justify-end" id="modalBackdrop">
+<!-- Modal Dialog Sheet -->
+<div class="w-full max-h-[777px] bg-surface rounded-t-2xl shadow-xl flex flex-col transform translate-y-full transition-transform duration-300 overflow-hidden" id="modalContainer">
+<!-- Grab Bar & Modal Header -->
+<div class="flex flex-col px-space-md pt-3 pb-space-sm bg-surface-container-lowest shadow-sm flex-shrink-0">
+<div class="w-10 h-1 rounded-full bg-outline-variant self-center mb-2"></div>
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Biên bản Kiểm định Thực địa</span>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-black" id="modalOrderTitle">#BK-8841</h2>
+<span class="px-2 py-0.5 rounded text-label-sm font-bold bg-secondary-fixed text-on-secondary-fixed uppercase">Có biên bản sự cố</span>
+</div>
+</div>
+<button aria-label="Đóng biên bản" class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" onclick="closeDetailModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- Modal Scrollable Content Area -->
+<div class="flex-1 overflow-y-auto p-space-md flex flex-col gap-space-md">
+<!-- Status Banner -->
+<div class="p-space-sm rounded-xl bg-secondary-fixed/50 flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px] flex-shrink-0 mt-0.5">info</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-secondary-fixed font-bold">Trạng thái Kiểm định</span>
+<span class="font-body-sm text-body-sm text-on-surface">Đã ghi nhận hiện trạng sơ bộ tại điểm hẹn — Đang chuyển hồ sơ đối soát lên Web Warehouse.</span>
+</div>
+</div>
+<!-- Customer & Location Specs -->
+<div class="flex flex-col p-space-sm bg-surface-container-lowest rounded-xl shadow-sm gap-2">
+<span class="font-label-sm text-label-sm uppercase font-bold text-on-surface-variant">Thông tin Khách hàng &amp; Địa điểm</span>
+<div class="grid grid-cols-2 gap-2 text-body-sm">
+<div>
+<span class="text-on-surface-variant font-label-sm text-label-sm block">Khách hàng:</span>
+<span class="font-bold text-on-surface">Trần Minh Quân</span>
+</div>
+<div>
+<span class="text-on-surface-variant font-label-sm text-label-sm block">Số CCCD gắn chip:</span>
+<span class="font-mono text-on-surface">00109****231</span>
+</div>
+<div class="col-span-2">
+<span class="text-on-surface-variant font-label-sm text-label-sm block">Tọa độ thực địa bàn giao:</span>
+<span class="font-mono text-primary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">my_location</span>
+                11°38'24"N 108°21'05"E (Trạm dừng chân Tà Năng)
+              </span>
+</div>
+</div>
+</div>
+<!-- Scanned RFID Assets and Defect Inspection -->
+<div class="flex flex-col p-space-sm bg-surface-container-lowest rounded-xl shadow-sm gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase font-bold text-on-surface-variant">Danh mục Thiết bị &amp; Mã RFID</span>
+<!-- Item 1: Damaged -->
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm font-bold text-on-surface">Bếp dã ngoại Soto WindMaster</span>
+<span class="font-label-sm text-label-sm font-mono px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">#RFID-ST-402</span>
+</div>
+<div class="flex items-center gap-1.5 text-secondary">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+<span class="font-body-sm text-body-sm font-semibold">Cảnh báo: Trầy xước vỏ &amp; van biến dạng nhẹ</span>
+</div>
+</div>
+<!-- Item 2: Normal -->
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm font-bold text-on-surface">Đèn pin đội đầu Fenix HM65R</span>
+<span class="font-label-sm text-label-sm font-mono px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">#RFID-FN-108</span>
+</div>
+<div class="flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-body-sm text-body-sm">Đầy đủ pin, hoạt động tốt, không trầy thấu kính</span>
+</div>
+</div>
+</div>
+<!-- Photo Evidences of Condition -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase font-bold text-on-surface-variant">Ảnh chụp hiện trường (03 Ảnh)</span>
+<span class="font-label-sm text-label-sm text-primary font-mono">Đã đính kèm GPS EXIF</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<!-- Photo 1: Stove dent -->
+<div class="relative rounded-lg overflow-hidden bg-surface-container shadow-sm aspect-square flex flex-col">
+<img class="w-full h-full object-cover" data-alt="A tactical close up macro photograph of a damaged camping gas stove brass valve with a slight dent on the rim, resting on an outdoor wooden field table in deep forest daylight with green gear background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfSOCGXRRuPnaXC99peu17As8ctZtEl2zkNrkOEpSohCJBYi8AmMzEI-_oibZlXvO6lQKZryfsAB1j7I7XwFRlw6haAhj8ACiJsDapXeyphSk1fCigI6qccWItruh-HBCpQeuEFcuko7mcwmsj_c8ouz4YKjBB3RSe2VwE-eAwyjLLf_J5uFJuIsvxJjH97gyrp7iaBYwmwdJyRJpFrmIcQ43ZEQem2Of6-yXUKhJGMBJ7kW4qYRvY"/>
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/80 p-1 flex items-center justify-between text-inverse-on-surface text-[9px] font-mono">
+<span>Cụm van</span>
+<span>17:16</span>
+</div>
+</div>
+<!-- Photo 2: Scratched body -->
+<div class="relative rounded-lg overflow-hidden bg-surface-container shadow-sm aspect-square flex flex-col">
+<img class="w-full h-full object-cover" data-alt="Close up photography of tactical outdoor cooking gear showing surface scratches along the metal canister base, outdoor trail setting with morning dew and rugged trekking backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAB1YGi_jlPrO0NVM-EoZWlI6C1h5ezxEOpSEVdoA1QJdAGjA4T8JS7myIjU-36GHYIW3RsM2jthggzOgR6AoLD4qkWUKaekYdbWF904wltQFRtr0thYoeKOmbqmThufXlYL_5Y_nZwjYJbGiq3dYd078h9Hj-WAObqZglCh9KWwM-5OjBhct-xvs7piY9HksrUJRbOkB2JrgcnF9wktnZ5ghnTDluP0zR501iaW0y_59l9rZ8vKZj"/>
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/80 p-1 flex items-center justify-between text-inverse-on-surface text-[9px] font-mono">
+<span>Vỏ đáy</span>
+<span>17:17</span>
+</div>
+</div>
+<!-- Photo 3: Customer Handover Verification -->
+<div class="relative rounded-lg overflow-hidden bg-surface-container shadow-sm aspect-square flex flex-col">
+<img class="w-full h-full object-cover" data-alt="Vietnamese delivery courier in forest green uniform holding a digital tablet with customer signing outdoors at mountain campsite trail marker in Vietnam, realistic bright outdoor natural light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzZBu4icT8A9lbRvc6rAnVXm88aOzSyTNCk0Oi3jsydFXXjGm1BLBCqqfSsBDeuBvDB1c3iG3vHnILS1Lu5Zhzh13OTtD8UsMnr57-nXP_4PDLKe0t3p00-soWDnffVd04s6EKs6rcF9ZdDLagdpgyqAJsgwjd_L0-al5EkaaihrDbi524al80-LVrIEppLzkdgmJR8WW6cd3jKlKfhrPukxXgHommKtskJl-d2tMbXLxaDNQ8023V"/>
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/80 p-1 flex items-center justify-between text-inverse-on-surface text-[9px] font-mono">
+<span>Tại chỗ</span>
+<span>17:18</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Field Signature & Verification Stamp -->
+<div class="flex flex-col p-space-sm bg-surface-container-lowest rounded-xl shadow-sm gap-2">
+<span class="font-label-sm text-label-sm uppercase font-bold text-on-surface-variant">Chữ ký số &amp; Xác nhận điện tử</span>
+<!-- Mock Electronic Signature Canvas Area -->
+<div class="w-full h-24 rounded-lg bg-surface-container-low flex flex-col justify-between p-2 relative overflow-hidden">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm font-semibold">Chữ ký khách hàng:</span>
+<span class="font-label-sm text-label-sm font-mono text-primary font-bold">Xác thực OTP 849-102</span>
+</div>
+<!-- Decorative Vector Signature -->
+<div class="flex items-center justify-center my-auto">
+<svg class="w-44 h-12 text-primary" fill="none" viewbox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 40 C35 10, 45 55, 70 20 C95 -10, 110 50, 140 25 C160 5, 175 45, 190 35" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+<path d="M50 48 L150 48" stroke="currentColor" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="1.5"></path>
+</svg>
+</div>
+<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
+<span class="font-bold text-on-surface">Trần Minh Quân</span>
+<span class="font-mono">24/10/2024 17:18:42</span>
+</div>
+</div>
+<div class="flex items-center justify-between text-body-sm pt-1">
+<span class="text-on-surface-variant font-label-sm text-label-sm">Nhân viên chốt biên bản:</span>
+<span class="font-semibold text-on-surface">Nguyễn Văn Tuấn (NV-8821)</span>
+</div>
+</div>
+<!-- Read-Only Policy Disclaimer -->
+<div class="p-3 rounded-lg bg-surface-container flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px] flex-shrink-0">shield</span>
+<span class="font-label-sm text-label-sm text-on-surface leading-tight">
+            Biên bản lưu trữ chỉ đọc tại thực địa. Mọi điều chỉnh và quyết định giải tỏa tiền cọc sẽ do Quản lý Kho Hub thẩm định cuối cùng trên Web.
+          </span>
+</div>
+</div>
+<!-- Modal Bottom Actions Pinned -->
+<div class="p-space-md bg-surface-container-lowest shadow-md flex gap-2">
+<button class="flex-1 h-12 rounded-lg bg-surface-container-high text-on-surface font-label-lg text-label-lg font-bold hover:bg-surface-container transition-colors" onclick="closeDetailModal()" type="button">
+          Đóng biên bản
+        </button>
+<button class="h-12 px-4 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-1 shadow-sm active:translate-y-0.5 transition-all" onclick="shareInspectionLog()" type="button">
+<span class="material-symbols-outlined text-[18px]">share</span>
+<span>Chia sẻ Hub</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Filter and Tab state handlers
+  function setPeriod(el) {
+    const tabs = document.querySelectorAll('.period-tab');
+    tabs.forEach(tab => {
+      tab.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm', 'font-bold');
+      tab.classList.add('text-on-surface-variant');
+      const badge = tab.querySelector('.period-badge');
+      if (badge) {
+        badge.classList.remove('bg-primary-container', 'text-on-primary-container');
+        badge.classList.add('bg-surface-container-highest', 'text-on-surface-variant');
+      }
+    });
+
+    el.classList.add('bg-primary', 'text-on-primary', 'shadow-sm', 'font-bold');
+    el.classList.remove('text-on-surface-variant');
+    const activeBadge = el.querySelector('.period-badge');
+    if (activeBadge) {
+      activeBadge.classList.add('bg-primary-container', 'text-on-primary-container');
+      activeBadge.classList.remove('bg-surface-container-highest', 'text-on-surface-variant');
+    }
+  }
+
+  function setFilter(el, type) {
+    const chips = document.querySelectorAll('.filter-chip');
+    chips.forEach(chip => {
+      chip.classList.remove('bg-primary', 'text-on-primary', 'font-bold');
+      chip.classList.add('bg-surface-container-lowest', 'text-on-surface-variant', 'font-medium');
+    });
+
+    el.classList.remove('bg-surface-container-lowest', 'text-on-surface-variant', 'font-medium');
+    el.classList.add('bg-primary', 'text-on-primary', 'font-bold');
+
+    const cards = document.querySelectorAll('.task-card');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+      const cardType = card.getAttribute('data-type');
+      const cardStatus = card.getAttribute('data-status');
+
+      if (type === 'all') {
+        card.style.display = 'flex';
+        visibleCount++;
+      } else if (type === 'handover' && cardType === 'handover') {
+        card.style.display = 'flex';
+        visibleCount++;
+      } else if (type === 'return' && cardType === 'return') {
+        card.style.display = 'flex';
+        visibleCount++;
+      } else if (type === 'incident' && cardStatus === 'incident') {
+        card.style.display = 'flex';
+        visibleCount++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const empty = document.getElementById('emptySearchState');
+    if (empty) {
+      empty.classList.toggle('hidden', visibleCount > 0);
+      empty.classList.toggle('flex', visibleCount === 0);
+    }
+  }
+
+  // Interactive Live Search
+  const searchInput = document.getElementById('taskSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const cards = document.querySelectorAll('.task-card');
+      let visibleCount = 0;
+
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(query)) {
+          card.style.display = 'flex';
+          visibleCount++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      const empty = document.getElementById('emptySearchState');
+      if (empty) {
+        empty.classList.toggle('hidden', visibleCount > 0);
+        empty.classList.toggle('flex', visibleCount === 0);
+      }
+    });
+  }
+
+  // Tactical Read-Only Inspection Modal Sheet Logic
+  function openDetailModal(orderCode, type) {
+    const backdrop = document.getElementById('modalBackdrop');
+    const container = document.getElementById('modalContainer');
+    const title = document.getElementById('modalOrderTitle');
+    
+    if (title && orderCode) {
+      title.textContent = orderCode;
+    }
+
+    if (backdrop && container) {
+      backdrop.classList.remove('pointer-events-none', 'opacity-0');
+      backdrop.classList.add('opacity-100');
+      container.classList.remove('translate-y-full');
+      container.classList.add('translate-y-0');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function closeDetailModal() {
+    const backdrop = document.getElementById('modalBackdrop');
+    const container = document.getElementById('modalContainer');
+
+    if (backdrop && container) {
+      backdrop.classList.add('opacity-0');
+      container.classList.remove('translate-y-0');
+      container.classList.add('translate-y-full');
+      setTimeout(() => {
+        backdrop.classList.add('pointer-events-none');
+        document.body.style.overflow = '';
+      }, 250);
+    }
+  }
+
+  function shareInspectionLog() {
+    if (navigator.share) {
+      navigator.share({
+        title: 'Biên bản thực địa Vina_TrekGo',
+        text: 'Chi tiết biên bản kiểm định thiết bị bàn giao tại hiện trường.',
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      alert('Đã sao chép liên kết biên bản vào bộ nhớ tạm.');
+    }
+  }
+
+  // Dismiss modal if clicked outside
+  const backdrop = document.getElementById('modalBackdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        closeDetailModal();
+      }
+    });
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="h-20 px-space-xs grid grid-cols-4 items-center"><a class="flex flex-col items-center justify-center gap-space-xs h-full min-h-[48px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="nhiem-vu" href="#"><span class="material-symbols-outlined text-[24px]">assignment</span><span class="font-label-md text-label-md">Nhiệm vụ</span></a><a class="flex flex-col items-center justify-center gap-space-xs h-full min-h-[48px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="lich-su-nhiem-vu" href="#"><span class="material-symbols-outlined text-[24px]">history</span><span class="font-label-md text-label-md">Lịch sử</span></a><a class="flex flex-col items-center justify-center gap-space-xs h-full min-h-[48px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="thong-bao" href="#"><span class="material-symbols-outlined text-[24px]">notifications</span><span class="font-label-md text-label-md">Thông báo</span></a><a class="flex flex-col items-center justify-center gap-space-xs h-full min-h-[48px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="ca-nhan" href="#"><span class="material-symbols-outlined text-[24px]">account_circle</span><span class="font-label-md text-label-md">Cá nhân</span></a></div></nav></body></html>

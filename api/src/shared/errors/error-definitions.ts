@@ -134,6 +134,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     retryable: false,
   },
   [B.BOOKING_POLICY_UNAVAILABLE]: { status: 503, message: 'An effective booking policy is required', retryable: true },
+  [B.RELATED_RENTALS_REQUIRE_RESOLUTION]: {
+    status: 409,
+    message: 'Vui lòng xử lý đơn thuê liên quan trước, sau đó quay lại hủy đặt chỗ.',
+    retryable: false,
+  },
+  [B.TRIP_CANCELLATION_VERSION_CONFLICT]: { status: 409, message: 'Thông tin chuyến hoặc yêu cầu đã thay đổi. Vui lòng tải lại.', retryable: false },
+  [B.TRIP_CANCELLATION_NOT_REVIEWABLE]: { status: 409, message: 'Yêu cầu không còn ở trạng thái chờ duyệt hoặc chuyến đã vận hành.', retryable: false },
+  [B.TRIP_CANCELLATION_PROCESSING]: { status: 409, message: 'Chuyến đã được hủy. Hệ thống đang xử lý đơn theo chính sách tổ chức hủy.', retryable: false },
+  [B.TRIP_CANCELLATION_REVIEW_DISABLED]: { status: 503, message: 'Chức năng duyệt hủy chưa được bật.', retryable: false },
+  [B.TRIP_CANCELLATION_REPLAY_NOT_ALLOWED]: { status: 409, message: 'Chỉ có thể thử lại delivery thất bại hoặc sự kiện lịch sử đã đối soát.', retryable: false },
   [B.BOOKING_CANCELLATION_NOT_ALLOWED]: {
     status: 409,
     message: 'Booking cannot be cancelled in its current state',
