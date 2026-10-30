@@ -487,7 +487,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       include: {
         rentalOrderLinesViaOrderId: {
           include: {
-            product: { select: { id: true, sku: true, name: true } },
+            product: { select: { id: true, sku: true, name: true, grade: true, gradeGroupId: true } },
             rentalQuantityReservationsViaOrderLineId: { orderBy: { reservationCycle: 'desc' } },
             rentalUnitAssignmentsViaOrderLineId: {
               include: { equipmentUnit: { select: { id: true, assetCode: true, status: true, condition: true } } },
@@ -529,6 +529,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         assignmentId: a.id,
         orderLineId: line.id,
         productId: line.productId,
+        // Hạng khách đã thuê (theo dòng đơn). Món được pick luôn thuộc đúng sản phẩm này.
+        productName: line.product.name,
+        grade: line.product.grade,
         unitId: a.equipmentUnit.id,
         assetCode: a.equipmentUnit.assetCode,
         assignmentStatus: a.status,

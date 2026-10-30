@@ -39,6 +39,15 @@ export interface RentalProductView {
   spec: any;
   recommendationTags: string[];
   requiresDeepInspectionAfterReturn: boolean;
+  /** Nhóm hạng; null = sản phẩm thường. FE gom các sản phẩm cùng gradeGroupId thành một thẻ. */
+  gradeGroupId: string | null;
+  grade: 'LIKE_NEW' | 'GOOD_USED' | null;
+}
+
+/** Người thực hiện thao tác ghi; role quyết định quyền với các field tiền và trạng thái ban đầu. */
+export interface RentalProductActor {
+  actorUserId: string;
+  actorRole: string;
 }
 
 export interface ListRentalProductsParams {
@@ -60,26 +69,34 @@ export interface ChangeRentalProductStatusParams {
   expectedVersion: number;
 }
 
-export interface CreateRentalProductParams {
+/**
+ * replacementValue và depositPolicy: bắt buộc khi ADMIN tạo; STAFF_INVENTORY không được gửi
+ * (sản phẩm tạo ra ở INACTIVE, chờ ADMIN đặt cọc và giá trị thay thế).
+ * grade + gradeGroupId: grade có giá trị và không có gradeGroupId = mở nhóm mới; có gradeGroupId = vào nhóm sẵn có.
+ */
+export interface CreateRentalProductParams extends RentalProductActor {
   categoryId: string;
   sku: string;
   name: string;
   description?: string | null;
   dailyPrice: number;
   currency: string;
-  replacementValue: number;
-  depositPolicy: {
+  replacementValue?: number;
+  depositPolicy?: {
     type: string;
     amount?: number;
     percentage?: number;
   };
+  grade?: 'LIKE_NEW' | 'GOOD_USED';
+  gradeGroupId?: string;
   imageMediaIds?: string[];
   spec?: any;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
 }
 
-export interface UpdateRentalProductParams {
+/** Nhóm và hạng không đổi được sau khi tạo (đổi hạng của món đồ đi qua luồng phân hạng, không qua đây). */
+export interface UpdateRentalProductParams extends RentalProductActor {
   id: string;
   name?: string;
   description?: string | null;

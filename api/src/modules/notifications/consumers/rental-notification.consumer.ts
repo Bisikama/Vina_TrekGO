@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule'
 import { EventStatus } from '@prisma/client'
 import envConfig from '../../../shared/config'
 import { PrismaService } from '../../../shared/services/prisma.service'
+import { SYSTEM_FAULT_CANCELLATION_REASON } from '../../rental/ordering/application/ports/rental-system-fault-cancellation.port'
 import { NotificationsService } from '../notifications.service'
 import {
   NotificationType,
@@ -41,14 +42,23 @@ export class RentalNotificationConsumer {
         status: {
           in: [EventStatus.PENDING, EventStatus.PROCESSED],
         },
-        eventType: {
-          in: [
-            'RENTAL_PAID',
-            'RENTAL_ORDER_CONFIRMED',
-            'DEPOSIT_REFUND_SUCCEEDED',
-            'DEPOSIT_RETAINED',
-          ],
-        },
+        OR: [
+          {
+            eventType: {
+              in: [
+                'RENTAL_PAID',
+                'RENTAL_ORDER_CONFIRMED',
+                'DEPOSIT_REFUND_SUCCEEDED',
+                'DEPOSIT_RETAINED',
+              ],
+            },
+          },
+          // Chỉ báo khách khi ADMIN huỷ do lỗi TrekGo; các luồng huỷ khác giữ nguyên hành vi.
+          {
+            eventType: 'RENTAL_ORDER_CANCELLED',
+            payload: { path: ['reason'], equals: SYSTEM_FAULT_CANCELLATION_REASON },
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       take: 25,
@@ -117,6 +127,25 @@ export class RentalNotificationConsumer {
             },
           })
           this.logger.log(`[RentalConsumer] Đã tạo thông báo DEPOSIT_RETAINED cho user ${userId}`)
+        } else if (
+          event.eventType === 'RENTAL_ORDER_CANCELLED' &&
+          payload.reason === SYSTEM_FAULT_CANCELLATION_REASON
+        ) {
+          await this.notificationsService.createNotification({
+            userId,
+            title: 'Đơn thuê thiết bị đã bị huỷ',
+            content: `Rất tiếc, TrekGo không thể chuẩn bị đủ thiết bị cho đơn thuê #${rentalOrder.id.slice(0, 8)} nên đã huỷ đơn. Toàn bộ tiền thuê và tiền cọc sẽ được hoàn về tài khoản thanh toán của bạn.`,
+            notificationType: NotificationType.RENTAL_ORDER_CANCELLED,
+            referenceType: ReferenceType.RENTAL_ORDER,
+            referenceId: rentalOrder.id,
+            metadata: {
+              outboxEventId: event.id,
+              orderId: rentalOrder.id,
+              refundId: payload.refundRef,
+              reasonCode: payload.reasonCode,
+            },
+          })
+          this.logger.log(`[RentalConsumer] Đã tạo thông báo RENTAL_ORDER_CANCELLED (system fault) cho user ${userId}`)
         }
       } catch (err) {
         this.logger.warn(`Lỗi xử lý rental event ${event.id}: ${err.message}`)

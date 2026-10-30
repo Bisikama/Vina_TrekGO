@@ -246,6 +246,27 @@ describe('B1 rental flow use cases', () => {
     );
   });
 
+  it('sản phẩm hạng Rất mới tính tiền như sản phẩm thường: 2 món, 100k/ngày, cọc 600k, 60 giờ', async () => {
+    // Hạng không đổi luồng thuê: giá/cọc lấy từ chính sản phẩm của hạng đó (60 giờ → 3 ngày theo CEIL_24H).
+    catalogPort.getProductsByIds.mockResolvedValue([
+      { ...createProduct(), name: 'Lều 3 người – Rất mới', dailyPrice: '100000.00', depositValue: '600000.00' },
+    ]);
+    const useCase = new CreateRentalQuoteUseCase(contextPort, catalogPort, availabilityPort, quotePort);
+
+    const result = await useCase.execute({
+      tripId: createContext().trip.id,
+      userId: ownerUserId,
+      items: [{ productId: createProduct().id, quantity: 2 }],
+      now,
+    });
+
+    expect(result.chargedDays).toBe(3);
+    expect(result.items[0]).toMatchObject({ feeAmount: 600000, depositPerUnit: 600000, depositAmount: 1200000 });
+    expect(quotePort.createQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ rentalFee: '600000.00', totalDeposit: '1200000.00', totalAmount: '1800000.00' }),
+    );
+  });
+
   it('RB-API-103: reject khi quantity vượt availableCount', async () => {
     availabilityPort.getAvailableCount.mockResolvedValue(1);
     const useCase = new CreateRentalQuoteUseCase(

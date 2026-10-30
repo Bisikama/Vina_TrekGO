@@ -294,6 +294,61 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Version conflict. The resource was updated by another transaction.',
     retryable: true,
   },
+  [RENTAL_ERROR_CODES.RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY]: {
+    status: 403,
+    message: 'Chỉ ADMIN được đặt tiền cọc và giá trị thay thế của sản phẩm thuê',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_PRODUCT_PRICING_NOT_APPROVED]: {
+    status: 409,
+    message: 'ADMIN chưa đặt tiền cọc và giá trị thay thế; chưa thể kích hoạt sản phẩm',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DEPOSIT_MUST_BE_FIXED]: {
+    status: 422,
+    message: 'Sản phẩm có hạng phải dùng tiền cọc cố định (FIXED)',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_PRICE_ORDER_INVALID]: {
+    status: 422,
+    message: 'Hạng Rất mới phải có giá thuê và tiền cọc cao hơn hạng Đã sử dụng tốt',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_GROUP_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy nhóm hạng sản phẩm',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_GROUP_CATEGORY_MISMATCH]: {
+    status: 422,
+    message: 'Các hạng trong cùng nhóm phải thuộc cùng danh mục và cùng loại tiền',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_ALREADY_IN_GROUP]: {
+    status: 409,
+    message: 'Nhóm này đã có sản phẩm cho hạng được chọn',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DECISION_REQUIRED]: {
+    status: 422,
+    message: 'Thiết bị thuộc sản phẩm có hạng, cần chọn giữ hạng hoặc hạ hạng',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DECISION_NOT_APPLICABLE]: {
+    status: 422,
+    message: 'Thiết bị thuộc sản phẩm không phân hạng, không được gửi quyết định hạng',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DOWNGRADE_NOT_ALLOWED]: {
+    status: 422,
+    message: 'Chỉ được hạ hạng từ Rất mới xuống Đã sử dụng tốt',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_TARGET_NOT_FOUND]: {
+    status: 422,
+    message: 'Nhóm chưa có sản phẩm hạng Đã sử dụng tốt để chuyển thiết bị sang',
+    retryable: false,
+  },
   [RENTAL_ERROR_CODES.INVENTORY_LOCATION_NOT_FOUND]: {
     status: 404,
     message: 'Inventory location not found',
@@ -334,6 +389,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_MAINTAINABLE]: {
     status: 409,
     message: 'Equipment unit state is not maintainable',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_REGRADABLE]: {
+    status: 409,
+    message: 'Thiết bị phải ở trạng thái AVAILABLE, không được gán cho đơn và không có cam kết sẵn sàng mới được đổi hạng',
     retryable: false,
   },
   [RENTAL_ERROR_CODES.BATCH_QUANTITY_INVALID]: {
@@ -533,6 +593,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.INVENTORY_LOCATION_NOT_CONFIGURED]: {
     status: 500,
     message: 'Primary rental inventory location is not configured or inactive',
+    retryable: false,
+  },
+  [RO.CANCELLATION_REQUIRES_CUSTODY_RETURN]: {
+    status: 409,
+    message: 'Kiện hàng đã giao cho nhân viên giao hàng; cần đưa về kho trước khi huỷ đơn',
+    retryable: false,
+  },
+  [RO.RENTAL_SYSTEM_FAULT_CANCELLATION_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Chỉ huỷ do lỗi TrekGo được với đơn đã thanh toán và chưa bàn giao',
     retryable: false,
   },
   [RO.TERMS_NOT_ACCEPTED]: { status: 400, message: 'Extension terms must be accepted', retryable: false },
