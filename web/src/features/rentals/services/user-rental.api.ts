@@ -186,3 +186,11 @@ export async function createRentalReview(
   );
   return unwrap(response.data);
 }
+
+export type RentalCancellationPreview = { tripCancellationPending?: boolean; canCancel: boolean; feeRefund: number; depositRefund: number; previewVersion: string; reason: string };
+export async function previewRentalCancellation(orderId: string) {
+  return unwrap((await apiClient.get<Envelope<RentalCancellationPreview>>(`/api/v1/rental-orders/${encodeURIComponent(orderId)}/cancellation-preview`)).data);
+}
+export async function cancelRentalOrder(orderId: string, input: { reason: string; previewVersion: string; expectedVersion: number }) {
+  return unwrap((await apiClient.post(`/api/v1/rental-orders/${encodeURIComponent(orderId)}/cancel`, input)).data);
+}

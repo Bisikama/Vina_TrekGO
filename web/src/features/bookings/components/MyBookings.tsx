@@ -13,6 +13,7 @@ import {
   type PersonalTicket,
 } from '../services/booking.api';
 import { BookingSignIn } from './BookingSignIn';
+import { BookingCancellation } from './BookingCancellation';
 import {
   PageShell,
   PageHeader,
@@ -310,6 +311,7 @@ export function MyBookings() {
                   </div>
                 </div>
 
+                {['PENDING_PAYMENT', 'CONFIRMED'].includes(b.status) && <BookingCancellation bookingId={b.id} onCancelled={() => { void refetch(); void loadTickets(); }} />}
                 <Link
                   href={`/bookings/${b.id}`}
                   className="inline-flex h-9 items-center justify-center rounded-lg border border-[#125238] px-4 text-xs font-bold text-[#125238] transition hover:bg-[#2F6B4F]/10"

@@ -464,6 +464,19 @@ export class PrismaPrivateMembershipAdapter extends PrivateMembershipPort {
       if (old.version !== version) fail(B.MEMBERSHIP_VERSION_CONFLICT)
       joinable(trip, now)
       if (old.status !== 'ACTIVE' && !(memberId && old.status === 'LEFT')) fail(B.INVALID_STATE_TRANSITION)
+      if (!memberId) {
+        const rental = await tx.rentalOrder.findFirst({
+          where: {
+            tripId,
+            OR: [{ userId: old.userId }, { membershipKind: 'PRIVATE_TRIP_MEMBER', membershipRef: old.id }],
+            status: { notIn: ['CANCELLED', 'EXPIRED', 'COMPLETED'] },
+          },
+          select: { id: true },
+        })
+        if (rental) throw AppError.fromCode(B.RELATED_RENTALS_REQUIRE_RESOLUTION, {
+          message: 'Vui lòng hủy đơn thuê hoặc hoàn tất trả thiết bị trước, sau đó quay lại rời chuyến.',
+        })
+      }
       const next = await tx.tripMember.update({
         where: { id: old.id },
         data: { status, leftAt: now, version: { increment: 1 } },

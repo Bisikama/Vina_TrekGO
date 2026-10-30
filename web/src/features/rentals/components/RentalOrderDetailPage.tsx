@@ -17,6 +17,8 @@ import { privateTripsApi } from "@/features/trips/services/private-trips.api";
 
 import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
 
+import { RentalCancellation } from "./RentalCancellation";
+
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
 const depositStatusLabels: Record<string, string> = {
@@ -161,6 +163,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
           <State text={error || "Không tìm thấy đơn thuê."} />
         ) : (
           <>
+            <RentalCancellation orderId={orderId} status={detail.order.status} onCancelled={async () => { setDetail(await getMyRentalOrder(orderId)); await loadDeposit(); }} />
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               <Info label="Trạng thái" value={detail.order.status.replaceAll("_", " ")} />
               <Info

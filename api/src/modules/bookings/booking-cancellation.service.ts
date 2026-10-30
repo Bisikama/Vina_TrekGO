@@ -18,12 +18,67 @@ export class BookingCancellationService {
     private readonly payments: PaymentsPort,
   ) {}
 
+  private async rentalBlockers(tx: Prisma.TransactionClient, bookingId: string, actorId: string) {
+    const participants = await tx.bookingParticipant.findMany({ where: { bookingId }, select: { id: true } })
+    const orders = await tx.rentalOrder.findMany({
+      where: {
+        OR: [
+          { bookingId },
+          { membershipKind: 'PUBLIC_BOOKING_BUYER', membershipRef: bookingId },
+          { membershipKind: 'PUBLIC_PARTICIPANT', membershipRef: { in: participants.map(p => p.id) } },
+          { recipientParticipantId: { in: participants.map(p => p.id) } },
+        ],
+        status: { notIn: ['CANCELLED', 'EXPIRED', 'COMPLETED'] },
+      },
+      select: { id: true, status: true, userId: true },
+      orderBy: { id: 'asc' },
+    })
+    // Do not disclose or offer access to another participant's rental order.
+    return orders.map(o => ({
+      orderId: o.userId === actorId ? o.id : null,
+      status: o.status,
+      ownedByViewer: o.userId === actorId,
+    }))
+  }
+
+  async preview(bookingId: string, actorId: string) {
+    return this.db.$transaction(async tx => {
+      const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { trip: true } })
+      if (!booking) throw AppError.fromCode(B.NOT_FOUND)
+      if (booking.userId !== actorId) throw AppError.fromCode('FORBIDDEN')
+      if (booking.trip.status === 'CANCELLED') throw AppError.fromCode(B.TRIP_CANCELLATION_PROCESSING)
+      const now = await databaseTime(tx)
+      if (!['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status) || booking.trip.startAt <= now)
+        throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+      if (booking.status === 'PENDING_PAYMENT' && booking.expiresAt <= now)
+        throw AppError.fromCode(B.BOOKING_HOLD_EXPIRED)
+      const rentals = await this.rentalBlockers(tx, bookingId, actorId)
+      let refundableAmount = '0'
+      if (booking.status === 'CONFIRMED') {
+        const percent = refundPercentAt(booking.policySnapshot, booking.trip.startAt, now)
+        if (percent === null) throw AppError.fromCode(B.BOOKING_CANCELLATION_POLICY_INVALID)
+        const applied = await tx.paymentApplication.findFirst({
+          where: { status: 'APPLIED', invoice: { bookingId } }, include: { payment: true },
+        })
+        if (!applied) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+        const reserved = await tx.refund.aggregate({
+          where: { paymentId: applied.paymentId, status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
+          _sum: { amount: true },
+        })
+        refundableAmount = Prisma.Decimal.max(0, applied.payment.amount.mul(percent).div(100).floor()
+          .minus(reserved._sum.amount ?? 0)).toFixed()
+      }
+      return { canCancel: rentals.length === 0, rentals, refundableAmount, currency: 'VND', tripCancellationPending: booking.trip.status === 'CANCEL_PENDING' }
+    })
+  }
+
   async cancel(input: {
     bookingId: string
     actorId: string
     actorRole: string
     idempotencyKey: string
     reason: string
+    tripCancellationRequestId?: string
   }) {
     const key = paymentHash([input.actorId, 'booking-cancellation', input.idempotencyKey])
     const requestHash = paymentHash({ bookingId: input.bookingId, reason: input.reason })
@@ -35,7 +90,10 @@ export class BookingCancellationService {
       await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${input.bookingId}::uuid FOR UPDATE`
       const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, include: { trip: true } })
       if (booking.tripId !== initial.tripId) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
-      const source =
+      const approvedRequest = input.tripCancellationRequestId ? await tx.tripCancellationRequest.findUnique({ where: { id: input.tripCancellationRequestId } }) : null
+      if (input.tripCancellationRequestId && (!approvedRequest || approvedRequest.tripId !== booking.tripId || approvedRequest.status !== 'APPROVED' || approvedRequest.reviewedBy !== input.actorId || booking.trip.status !== 'CANCELLED'))
+        throw AppError.fromCode('FORBIDDEN')
+      const source = approvedRequest ? 'ORGANIZER' :
         input.actorRole === 'ADMIN'
           ? 'ADMIN'
           : input.actorId === booking.trip.creatorId && booking.trip.status === 'CANCELLED'
@@ -52,16 +110,23 @@ export class BookingCancellationService {
           throw AppError.fromCode(E.IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
         return existing
       }
+      if (source === 'USER' && booking.trip.status === 'CANCELLED') throw AppError.fromCode(B.TRIP_CANCELLATION_PROCESSING)
+      if (source === 'USER' && ['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) {
+        // Trip lock is shared with rental createOrder/lockAndRead: no new order can slip past this guard.
+        const rentals = await this.rentalBlockers(tx, booking.id, input.actorId)
+        if (rentals.length) throw AppError.fromCode(B.RELATED_RENTALS_REQUIRE_RESOLUTION, { details: { rentals } })
+      }
       if (booking.status === 'PENDING_PAYMENT') {
         const now = await databaseTime(tx)
-        if (booking.expiresAt <= now) {
+        if (source === 'USER' && booking.expiresAt <= now) {
           await expireTripHolds(tx, booking.tripId, now)
           return null
         }
-        if (booking.trip.startAt <= now) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
+        if (source === 'USER' && booking.trip.startAt <= now) throw AppError.fromCode(B.BOOKING_CANCELLATION_NOT_ALLOWED)
         const record = await tx.bookingCancellation.create({
           data: {
             bookingId: booking.id,
+            tripCancellationRequestId: approvedRequest?.id,
             source,
             idempotencyKey: key,
             cancelledBy: input.actorId,
@@ -95,6 +160,9 @@ export class BookingCancellationService {
             payload: {
               schemaVersion: 1,
               cancellationId: record.id,
+              version: booking.version + 1,
+              effectiveAt: now.toISOString(),
+              reason: input.reason,
               bookingVersion: booking.version + 1,
               bookingId: booking.id,
               tripId: booking.tripId,
@@ -144,6 +212,7 @@ export class BookingCancellationService {
       const record = await tx.bookingCancellation.create({
         data: {
           bookingId: booking.id,
+          tripCancellationRequestId: approvedRequest?.id,
           source,
           idempotencyKey: key,
           cancelledBy: input.actorId,
@@ -182,6 +251,9 @@ export class BookingCancellationService {
           payload: {
             schemaVersion: 1,
             cancellationId: record.id,
+            version: booking.version + 1,
+            effectiveAt: now.toISOString(),
+            reason: input.reason,
             bookingVersion: booking.version + 1,
             bookingId: booking.id,
             paymentId: payment.id,
