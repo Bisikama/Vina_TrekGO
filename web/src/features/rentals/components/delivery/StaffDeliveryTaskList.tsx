@@ -281,15 +281,15 @@ function TaskInformation({
     <div className="flex items-start gap-2.5">
       <Icon
         name={icon}
-        className="mt-0.5 h-4 w-4 shrink-0 text-slate-500"
+        className="mt-0.5 h-4 w-4 shrink-0 text-emerald-100/50"
       />
 
       <div>
-        <p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+        <p className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-100/35">
           {label}
         </p>
 
-        <p className="mt-1 text-sm font-semibold text-slate-800">
+        <p className="mt-1 text-sm font-semibold text-emerald-50/90">
           {value}
         </p>
       </div>
@@ -319,7 +319,7 @@ function TaskCard({
 
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${config.border}`}
+      className={`relative overflow-hidden rounded-2xl border bg-[#0d1f16] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${config.border}`}
     >
       <div
         className={`absolute inset-y-0 left-0 w-1.5 ${config.accent}`}
@@ -329,7 +329,7 @@ function TaskCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-400">
+              <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-100/35">
                 #{task.bookingId}
               </span>
 
@@ -340,7 +340,7 @@ function TaskCard({
               ) : null}
             </div>
 
-            <h3 className="mt-2 text-lg font-extrabold text-slate-950">
+            <h3 className="mt-2 text-lg font-extrabold text-white">
               {task.customer}
             </h3>
 
@@ -356,7 +356,7 @@ function TaskCard({
           </span>
         </div>
 
-        <div className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+        <div className="mt-5 grid gap-3 rounded-xl bg-[#10251a] p-4 sm:grid-cols-2">
           <TaskInformation
             icon="location"
             label="Điểm thực hiện"
@@ -410,7 +410,7 @@ function TaskCard({
                   `Đã mở chỉ đường đến ${task.location} cho đơn ${task.bookingId}.`,
                 )
               }
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-[#0d5b3a] hover:text-[#0d5b3a]"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-900 bg-[#0d1f16] px-4 py-3 text-sm font-bold text-emerald-50/80 transition hover:border-[#0d5b3a] hover:text-[#0d5b3a]"
             >
               <Icon
                 name="route"
@@ -523,9 +523,9 @@ export function StaffDeliveryTaskList() {
   }
 
   return (
-    <main className="min-h-full bg-[#f4f7fd] px-5 py-6 lg:px-8">
+    <main className="min-h-full bg-[#0a1710] px-5 py-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
-        <div className="text-xs font-medium text-slate-500">
+        <div className="text-xs font-medium text-emerald-100/50">
           Giao nhận thực địa
           <span className="mx-2">›</span>
           Nhiệm vụ hôm nay
@@ -534,7 +534,7 @@ export function StaffDeliveryTaskList() {
         <div className="mt-4 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-black tracking-tight text-slate-950">
+              <h1 className="text-3xl font-black tracking-tight text-white">
                 Nhiệm vụ hôm nay
               </h1>
 
@@ -548,7 +548,7 @@ export function StaffDeliveryTaskList() {
               </span>
             </div>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100/65">
               Theo dõi các lượt giao, thu hồi và xác nhận
               bàn giao thiết bị trong ca làm việc.
             </p>
@@ -561,7 +561,7 @@ export function StaffDeliveryTaskList() {
                 "Dữ liệu nhiệm vụ mock đã được đồng bộ.",
               )
             }
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:border-[#0d5b3a] hover:text-[#0d5b3a]"
+            className="inline-flex w-fit items-center gap-2 rounded-xl border border-emerald-900 bg-[#0d1f16] px-4 py-2.5 text-sm font-bold text-emerald-50/80 shadow-sm hover:border-[#0d5b3a] hover:text-[#0d5b3a]"
           >
             <Icon
               name="refresh"
@@ -615,8 +615,8 @@ export function StaffDeliveryTaskList() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-400">
+          <div className="rounded-2xl border border-emerald-900 bg-[#0d1f16] p-5 shadow-sm">
+            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-100/35">
               Ca làm việc hiện tại
             </p>
 
@@ -629,11 +629,11 @@ export function StaffDeliveryTaskList() {
               </div>
 
               <div>
-                <p className="text-xl font-black text-slate-950">
+                <p className="text-xl font-black text-white">
                   06:00 - 14:00
                 </p>
 
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-emerald-100/50">
                   Điểm điều phối: Sa Pa Hub HQ
                 </p>
               </div>
@@ -676,7 +676,7 @@ export function StaffDeliveryTaskList() {
               key={stat.label}
               className={`rounded-2xl border border-white p-5 shadow-sm ${stat.background}`}
             >
-              <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">
+              <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-emerald-100/50">
                 {stat.label}
               </p>
 
@@ -686,14 +686,14 @@ export function StaffDeliveryTaskList() {
                 {stat.value}
               </p>
 
-              <p className="mt-2 text-xs font-medium text-slate-500">
+              <p className="mt-2 text-xs font-medium text-emerald-100/50">
                 {stat.detail}
               </p>
             </article>
           ))}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="mt-6 rounded-2xl border border-emerald-900 bg-[#0d1f16] p-4 shadow-sm">
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
             <div className="flex flex-wrap gap-2">
               {filters.map((filter) => {
@@ -710,7 +710,7 @@ export function StaffDeliveryTaskList() {
                     className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
                       active
                         ? "bg-[#0d5b3a] text-white shadow-sm"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        : "bg-[#163123] text-emerald-100/65 hover:bg-slate-200"
                     }`}
                   >
                     {filter.label}
@@ -719,7 +719,7 @@ export function StaffDeliveryTaskList() {
                       className={`ml-2 rounded-full px-2 py-0.5 text-[11px] ${
                         active
                           ? "bg-white/20 text-white"
-                          : "bg-white text-slate-500"
+                          : "bg-[#0d1f16] text-emerald-100/50"
                       }`}
                     >
                       {filter.count}
@@ -732,7 +732,7 @@ export function StaffDeliveryTaskList() {
             <label className="relative block w-full xl:max-w-sm">
               <Icon
                 name="search"
-                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-100/35"
               />
 
               <input
@@ -741,7 +741,7 @@ export function StaffDeliveryTaskList() {
                   setSearch(event.target.value)
                 }
                 placeholder="Tìm mã đơn, khách hàng, địa điểm..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0d5b3a] focus:bg-white focus:ring-2 focus:ring-[#0d5b3a]/10"
+                className="w-full rounded-xl border border-emerald-900 bg-[#10251a] py-3 pl-10 pr-4 text-sm text-emerald-50/90 outline-none transition placeholder:text-emerald-100/35 focus:border-[#0d5b3a] focus:bg-[#0d1f16] focus:ring-2 focus:ring-[#0d5b3a]/10"
               />
             </label>
           </div>
@@ -749,17 +749,17 @@ export function StaffDeliveryTaskList() {
 
         <div className="mt-5 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-extrabold text-slate-950">
+            <h2 className="text-lg font-extrabold text-white">
               Danh sách nhiệm vụ
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-emerald-100/50">
               Hiển thị {visibleTasks.length} nhiệm vụ mẫu
               phù hợp.
             </p>
           </div>
 
-          <div className="hidden items-center gap-2 text-xs font-semibold text-slate-500 sm:flex">
+          <div className="hidden items-center gap-2 text-xs font-semibold text-emerald-100/50 sm:flex">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             Cập nhật vừa xong
           </div>
@@ -776,12 +776,12 @@ export function StaffDeliveryTaskList() {
             ))}
           </section>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-            <h3 className="font-extrabold text-slate-800">
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-[#0d1f16] px-6 py-14 text-center">
+            <h3 className="font-extrabold text-emerald-50/90">
               Không tìm thấy nhiệm vụ
             </h3>
 
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-emerald-100/50">
               Hãy thử đổi bộ lọc hoặc nhập từ khóa khác.
             </p>
           </div>

@@ -13,6 +13,7 @@ import {
 } from "@/features/rentals/services/staff-preparation.api";
 import { getStaffInventoryErrorMessage } from "@/features/rentals/services/staff-inventory.api";
 import type { PreparationTaskDetail, RentalAssignee } from "@/features/rentals/services/staff-preparation.api";
+import { RentalThreeCanvas } from "@/features/rentals/components/visuals/RentalThreeCanvas";
 
 export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
   const [detail, setDetail] = useState<PreparationTaskDetail | null>(null);
@@ -118,32 +119,40 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
   const isReady = detail.task.status === "READY" || detail.task.status === "TRANSFERRED";
 
   return (
-    <main className="px-6 py-5">
-      <div className="mx-auto max-w-5xl">
-        <Link href={`/staff/orders/${encodeURIComponent(taskId)}`} className="text-xs font-bold text-emerald-800">← Quay lại kiểm tra</Link>
+    <main>
+      <div className="space-y-5">
+        <Link href={`/staff/orders/${encodeURIComponent(taskId)}`} className="text-xs font-bold text-emerald-100/65">← Quay lại kiểm tra</Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black">Đóng gói & bàn giao vận chuyển</h1>
-            <p className="mt-2 text-sm text-slate-600">Task {detail.task.id} · {detail.pickupContext.name}</p>
+            <h1 className="text-4xl font-black tracking-[-0.04em] text-[#eef4ef]">Đóng gói & bàn giao vận chuyển</h1>
+            <p className="mt-2 text-sm text-emerald-100/60">Đơn #{detail.task.id.replaceAll("-", "").slice(-6).toUpperCase()} · {detail.pickupContext.name}</p>
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-900">{detail.task.status}</span>
         </div>
+
+        <ol className="flex flex-wrap items-center gap-3 text-sm font-bold text-emerald-100/65" aria-label="Tiến trình đóng gói">
+          <li className="flex items-center gap-2"><b className="grid h-8 w-8 place-items-center rounded-full bg-[#f58b36] text-[#271205]">✓</b>Đóng gói & tạo QR</li>
+          <li className="h-px w-8 bg-emerald-700" />
+          <li className="flex items-center gap-2"><b className={`grid h-8 w-8 place-items-center rounded-full ${detail.package ? "bg-[#f58b36] text-[#271205]" : "bg-[#173a2a]"}`}>{detail.package ? "✓" : "2"}</b>Sẵn sàng giao</li>
+          <li className="h-px w-8 bg-emerald-700" />
+          <li className="flex items-center gap-2 text-white"><b className="grid h-8 w-8 place-items-center rounded-full bg-[#f58b36] text-[#271205]">3</b>Bàn giao custody</li>
+        </ol>
 
         {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
 
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-[22px] border border-emerald-800/60 bg-[#0f1c15] p-5">
           <h2 className="font-black">Thiết bị trong kiện</h2>
           <div className="mt-4 space-y-2">
             {detail.pickedUnits.map((unit) => (
-              <div key={unit.unitId} className="flex items-center justify-between rounded-lg bg-[#edf3ff] p-3 text-sm">
+              <div key={unit.unitId} className="flex items-center justify-between rounded-xl bg-[#14241b] p-3 text-sm text-emerald-50">
                 <span><strong>{unit.assetCode}</strong> · {unit.condition}</span>
-                <span className={unit.evidenceCaptured ? "text-emerald-800" : "text-red-700"}>{unit.evidenceCaptured ? "✓ Có ảnh" : "Thiếu ảnh"}</span>
+                <span className={unit.evidenceCaptured ? "font-bold text-emerald-300" : "text-red-300"}>{unit.evidenceCaptured ? "✓ Có ảnh" : "Thiếu ảnh"}</span>
               </div>
             ))}
           </div>
 
           {!detail.package && (
-            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm">
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl bg-[#123d27] p-4 text-sm text-emerald-200">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-800" />
               <span>Tôi đã đối chiếu đủ asset, ảnh ngoại quan và niêm phong kiện.</span>
             </label>
@@ -156,17 +165,27 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
           )}
 
           {!canPack && !detail.package && (
-            <p className="mt-3 text-xs text-orange-800">Backend chỉ cho đóng gói khi đã pick đủ và mọi unit đều có ảnh tình trạng.</p>
+            <p className="mt-3 text-xs text-orange-300">Backend chỉ cho đóng gói khi đã pick đủ và mọi unit đều có ảnh tình trạng.</p>
           )}
         </section>
 
+        <aside className="overflow-hidden rounded-[22px] border border-emerald-800/60 bg-[#0f1c15] text-center">
+          <div className="h-[300px]"><RentalThreeCanvas variant="package" /></div>
+          <div className="space-y-1 px-5 pb-5">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">Package</p>
+            <p className="font-mono text-xl font-black text-white">{detail.package?.code || "CHƯA TẠO KIỆN"}</p>
+            <p className="text-xs text-emerald-100/60">{detail.pickedUnits.length} thiết bị · <b className="text-emerald-300">{detail.package?.status || detail.task.status}</b></p>
+          </div>
+        </aside>
+        </div>
+
         {detail.package && (
-          <section className="mt-5 grid gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[180px_1fr]">
-            <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200"><QRCodeSVG value={detail.package.qrValue} size={150} /></div>
+          <section className="grid gap-5 rounded-[22px] border border-emerald-800/60 bg-[#0f1c15] p-5 md:grid-cols-[180px_1fr]">
+            <div className="rounded-xl bg-white p-3"><QRCodeSVG value={detail.package.qrValue} size={150} /></div>
             <div>
-              <p className="text-xs font-bold uppercase text-slate-500">Package</p>
+              <p className="text-xs font-bold uppercase text-emerald-100/60">Mã QR custody thật</p>
               <h2 className="mt-2 font-mono text-2xl font-black">{detail.package.code}</h2>
-              <p className="mt-2 text-sm text-slate-600">{detail.package.unitIds.length} thiết bị · trạng thái {detail.package.status}</p>
+              <p className="mt-2 text-sm text-emerald-100/60">{detail.package.unitIds.length} thiết bị · trạng thái {detail.package.status}</p>
 
               {!isReady && (
                 <button type="button" onClick={() => void ready()} disabled={Boolean(busy) || detail.package.status !== "PACKED"} className="mt-5 rounded-lg bg-[#0d5b3a] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
@@ -178,9 +197,9 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
         )}
 
         {isReady && (
-          <section className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-            <h2 className="font-black text-emerald-900">Đã sẵn sàng giao</h2>
-            <p className="mt-2 text-sm text-emerald-800">Backend đã tạo task outbound cho Staff Delivery{deliveryTaskId ? `: ${deliveryTaskId}` : "."}</p>
+          <section className="rounded-[22px] border-2 border-[#f58b36] bg-[#0f1c15] p-5">
+            <h2 className="font-black text-white">Bàn giao custody cho Staff Delivery</h2>
+            <p className="mt-2 text-sm text-emerald-100/60">Backend đã tạo task outbound cho Staff Delivery{deliveryTaskId ? `: ${deliveryTaskId}` : "."}</p>
             {detail.pendingTransfer ? (
               <div className="mt-4 rounded-lg bg-white p-4 text-sm text-slate-700">
                 <p><strong>Đã chuyển cho:</strong> {detail.pendingTransfer.toStaff.displayName}</p>

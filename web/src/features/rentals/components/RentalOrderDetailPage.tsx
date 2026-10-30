@@ -15,9 +15,10 @@ import {
 } from "@/features/rentals/services/user-rental.api";
 import { privateTripsApi } from "@/features/trips/services/private-trips.api";
 
-import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
+import { dateTime, money, shortCode } from "./RentalSectionNav";
 
 import { RentalCancellation } from "./RentalCancellation";
+import { RentalThreeVisual } from "./visuals/RentalThreeVisual";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -148,14 +149,8 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
   }, [orderId]);
 
   return (
-    <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-10 sm:px-6 lg:px-8">
-      <section className="mx-auto max-w-5xl">
-        <RentalPageHeader
-          eyebrow={`Đơn #${shortCode(orderId)}`}
-          title={tripName}
-          description="Chi tiết thiết bị, thời gian giao nhận và tình trạng tài chính của đơn thuê."
-          active="/rentals/orders"
-        />
+    <main className="space-y-5">
+        <Link href="/rentals/orders" className="inline-flex items-center gap-2 text-sm font-semibold text-[#58685f] hover:text-[#102119]">← Đơn thuê của bạn</Link>
 
         {loading ? (
           <State text="Đang tải chi tiết đơn thuê..." />
@@ -163,8 +158,18 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
           <State text={error || "Không tìm thấy đơn thuê."} />
         ) : (
           <>
+            <RentalThreeVisual
+              variant="order"
+              progress={orderProgress(detail.order.status)}
+              eyebrow={`Hành trình đơn #${shortCode(orderId)}`}
+              title={tripName}
+              description={`${dateTime(detail.trip.rentalStartAt)} – ${dateTime(detail.order.dueAt)} · ${detail.items.length} thiết bị. Đường trail cam là chặng đơn đã đi qua.`}
+              badge={detail.order.status.replaceAll("_", " ")}
+              footer={`ĐƠN #${shortCode(orderId)} · THEO DÕI THỜI GIAN THỰC`}
+              compact
+            />
             <RentalCancellation orderId={orderId} status={detail.order.status} onCancelled={async () => { setDetail(await getMyRentalOrder(orderId)); await loadDeposit(); }} />
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-3">
               <Info label="Trạng thái" value={detail.order.status.replaceAll("_", " ")} />
               <Info
                 label="Tổng thanh toán"
@@ -177,13 +182,13 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               <PaymentCountdown expiresAt={detail.order.paymentExpiresAt} />
             ) : null}
 
-            <section className="mt-6">
-              <h2 className="text-xl font-black text-gray-900">Thiết bị trong đơn</h2>
+            <section className="mt-1">
+              <h2 className="text-[22px] font-black tracking-[-0.025em] text-[#102119]">Thiết bị trong đơn</h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 {detail.items.map((item) => {
                   const visual = visuals[item.product.id] || item.product;
                   return (
-                    <article key={item.id} className="flex gap-4 rounded-2xl bg-white p-4 shadow-sm">
+                    <article key={item.id} className="flex gap-4 rounded-2xl border border-[#d6ded6] bg-white p-4">
                       {visual.imageUrl ? (
                         <img
                           src={visual.imageUrl}
@@ -249,9 +254,27 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
             </div>
           </>
         )}
-      </section>
     </main>
   );
+}
+
+function orderProgress(status: string) {
+  const stages = [
+    "PENDING_PAYMENT",
+    "PAID",
+    "PREPARING",
+    "READY",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+    "IN_USE",
+    "RETURNING",
+    "RETURNED",
+    "INSPECTING",
+    "COMPLETED",
+  ];
+  const index = stages.indexOf(status);
+  if (status === "CANCELLED" || status === "EXPIRED") return 0;
+  return index < 0 ? 0.25 : index / (stages.length - 1);
 }
 
 function DepositSettlementPanel({
@@ -415,9 +438,9 @@ function DepositAmount({
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-2 font-extrabold text-gray-900">{value}</p>
+    <div className="rounded-2xl border border-[#d6ded6] bg-white p-5">
+      <p className="text-xs font-semibold text-[#58685f]">{label}</p>
+      <p className="mt-2 text-xl font-black tracking-[-0.02em] text-[#102119]">{value}</p>
     </div>
   );
 }
@@ -430,10 +453,10 @@ function Location({
   point: RentalOrderDetail["pickupPoint"];
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
-      <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">{title}</p>
-      <p className="mt-2 font-black text-gray-900">{point?.name || "Chưa cập nhật"}</p>
-      <p className="mt-1 text-sm text-gray-600">{point?.address}</p>
+    <div className="rounded-2xl border border-[#d6ded6] bg-white p-5">
+      <p className="text-xs font-extrabold uppercase tracking-wider text-[#2c6e3e]">{title}</p>
+      <p className="mt-2 font-black text-[#102119]">{point?.name || "Chưa cập nhật"}</p>
+      <p className="mt-1 text-sm text-[#58685f]">{point?.address}</p>
     </div>
   );
 }

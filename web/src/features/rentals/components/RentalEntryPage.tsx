@@ -12,7 +12,7 @@ import {
   type PrivateTrip,
 } from "@/features/trips/services/private-trips.api";
 import { RentalCatalogPage } from "@/features/rentals/components/RentalCatalogPage";
-import { RentalSectionNav } from "@/features/rentals/components/RentalSectionNav";
+import { RentalThreeVisual } from "@/features/rentals/components/visuals/RentalThreeVisual";
 
 type RentalEntryPageProps = {
   tripId?: string;
@@ -29,6 +29,17 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function tripCalendar(startAt: string, endAt: string) {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+  return {
+    month: `THÁNG ${start.getMonth() + 1}`,
+    day: String(start.getDate()).padStart(2, "0"),
+    length: `${days + 1}N${Math.max(1, days)}Đ`,
+  };
 }
 
 export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
@@ -97,52 +108,30 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
   }
 
   return (
-    <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-12 sm:px-6 lg:px-8">
-      <section className="mx-auto max-w-5xl">
-        <div className="rounded-3xl bg-[#153E2E] p-7 text-white shadow-sm sm:p-9">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
-            Rental context
-          </p>
-          <h1 className="mt-3 text-3xl font-black">
-            Chọn chuyến đi để thuê thiết bị
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50/80">
-            TrekGo sẽ kiểm tra tư cách thành viên, hạn thuê và tồn kho theo chuyến bạn chọn.
-          </p>
-        </div>
-
-        <div className="mt-5">
-          <RentalSectionNav active="/rentals" />
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["/rentals/orders", "Đơn thuê", "Theo dõi giao nhận và hoàn cọc"],
-            ["/rentals/wardrobe", "Tủ đồ", "Khai báo đồ trekking đang có"],
-            ["/rentals/reviews", "Đánh giá", "Nhận xét thiết bị đã dùng"],
-            ["/rentals/transactions", "Lịch sử giao dịch", "Thanh toán và hoàn tiền"],
-          ].map(([href, title, description]) => (
-            <Link key={href} href={href} className="rounded-2xl border border-emerald-900/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-500/30">
-              <p className="text-sm font-extrabold text-gray-900">{title}</p>
-              <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
-            </Link>
-          ))}
-        </div>
+    <main className="space-y-6">
+        <RentalThreeVisual
+          variant="trips"
+          eyebrow="Bước 1 · Chọn chuyến đi"
+          title="Chọn chuyến, hành trang theo sau."
+          description="Vina TrekGo kiểm tra tư cách thành viên, hạn thuê và tồn kho theo đúng chuyến bạn chọn — để đồ sẵn sàng trước giờ xuất phát."
+          checks={["Tư cách thành viên", "Hạn chót đặt thuê", "Tồn kho theo lịch"]}
+        />
 
         {loading && (
-          <div className="mt-6 rounded-2xl bg-white p-8 text-center text-sm font-semibold text-gray-500 shadow-sm">
-            Đang tải các chuyến đã xác nhận...
+          <div className="rounded-[22px] border border-[#d6ded6] bg-white p-8 text-center text-sm font-bold text-[#58685f]">
+            Đang tải các chuyến đã xác nhận…
+            <div className="mx-auto mt-4 h-1.5 max-w-md overflow-hidden rounded-full bg-[#e9eee9]"><span className="block h-full w-3/5 animate-pulse rounded-full bg-[#2c6e3e]" /></div>
           </div>
         )}
 
         {error && (
-          <div className="mt-6 rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
             <p className="text-sm font-semibold text-red-700">{error}</p>
           </div>
         )}
 
         {!loading && !error && tripOptions.length === 0 && (
-          <div className="mt-6 rounded-2xl bg-white p-8 text-center shadow-sm">
+          <div className="rounded-[22px] border border-dashed border-[#cbd6cc] bg-white p-8 text-center">
             <h2 className="text-xl font-extrabold text-gray-900">
               Chưa có chuyến phù hợp
             </h2>
@@ -159,40 +148,54 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
         )}
 
         {!loading && tripOptions.length > 0 && (
-          <div className="mt-6 grid gap-4">
-            {tripOptions.map((trip) => (
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2c6e3e]">{tripOptions.length} chuyến đủ điều kiện</p>
+                <h2 className="mt-1 text-[22px] font-black tracking-[-0.025em] text-[#0f1f17]">Chuyến sắp khởi hành của bạn</h2>
+              </div>
+              <p className="text-sm text-[#58685f]">Chỉ hiện booking đã xác nhận hoặc chuyến tự tổ chức đang mở.</p>
+            </div>
+            <div className="space-y-3">
+            {tripOptions.map((trip) => {
+              const calendar = tripCalendar(trip.startAt, trip.endAt);
+              return (
               <article
                 key={trip.id}
-                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+                className="flex flex-wrap overflow-hidden rounded-[22px] border border-[#d6ded6] bg-white transition hover:border-orange-400 hover:shadow-[0_16px_36px_rgba(15,31,23,0.1)]"
               >
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
-                      {trip.type} · {trip.status}
-                    </span>
-                    <h2 className="mt-3 text-xl font-extrabold text-gray-900">
+                <div className="flex w-[138px] shrink-0 flex-col justify-center border-r border-dashed border-[#d6ded6] bg-[#f4f7f3] p-5">
+                  <span className="text-[11px] font-black tracking-[0.14em] text-[#2c6e3e]">{calendar.month}</span>
+                  <span className="text-[46px] font-black leading-none tracking-[-0.04em] text-[#102119]">{calendar.day}</span>
+                  <span className="text-xs text-[#58685f]">{calendar.length}</span>
+                </div>
+                <div className="flex min-w-0 flex-[999_1_420px] flex-wrap items-center justify-between gap-5 p-5 sm:px-6">
+                  <div className="min-w-0 flex-[1_1_350px]">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[#e9ece7] px-3 py-1 text-[11px] font-bold text-[#58685f]">{trip.type}</span>
+                      <span className="rounded-full bg-[#dcf3e3] px-3 py-1 text-[11px] font-bold text-[#145a32]">● {trip.status}</span>
+                    </div>
+                    <h2 className="mt-3 text-[21px] font-black tracking-[-0.025em] text-[#0f1f17]">
                       {trip.title}
                     </h2>
-                    <p className="mt-2 text-sm text-gray-600">
+                    <p className="mt-2 text-sm text-[#58685f]">
                       {formatDate(trip.startAt)} – {formatDate(trip.endAt)}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-emerald-700">
-                      Sẵn sàng kiểm tra hành trang cho chuyến này
+                    <p className="mt-2 text-xs font-bold text-[#9a4a0e]">
+                      ◷ Có thể thuê thiết bị trước thời hạn chuyến
                     </p>
                   </div>
-
-                  <Link
-                    href={`/rentals?tripId=${encodeURIComponent(trip.id)}`}
-                    className="inline-flex shrink-0 justify-center rounded-xl bg-[#1B5E41] px-5 py-3 text-sm font-extrabold text-white"
-                  >
-                    Chọn chuyến này
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="rounded-[13px] border border-[#d6ded6] bg-white px-4 py-3 text-sm font-black text-[#102119]">⌾ Xem trên bản đồ</button>
+                    <Link href={`/rentals?tripId=${encodeURIComponent(trip.id)}`} className="inline-flex shrink-0 justify-center rounded-[13px] bg-[#f58b36] px-5 py-3 text-sm font-black text-[#271205]">Chọn chuyến này →</Link>
+                  </div>
                 </div>
               </article>
-            ))}
-          </div>
+              );
+            })}
+            </div>
+          </section>
         )}
-      </section>
     </main>
   );
 }

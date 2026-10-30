@@ -241,17 +241,17 @@ export function AdminRentalReturnExceptions() {
   const isCustodyIncident = detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
 
   return (
-    <main className="min-h-screen bg-[#f7f8f5] px-4 py-6 text-slate-900 sm:px-6">
+    <main className="min-h-screen rounded-[28px] bg-[#07110c] px-4 py-6 text-[#edf5ef] sm:px-6">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-700">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#80d6a0]">
               Quản trị thuê thiết bị
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
               Ngoại lệ hoàn trả và quyết toán cọc
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-100/60">
               Theo dõi kiểm định, khấu trừ và các giao dịch hoàn cọc cần xử lý.
             </p>
           </div>
@@ -276,10 +276,10 @@ export function AdminRentalReturnExceptions() {
         ) : null}
 
         <div className="mt-6 grid items-start gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <aside className="rounded-2xl border border-emerald-900 bg-[#0d1f16] p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Hồ sơ cần theo dõi</h2>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+              <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-emerald-100/70">
                 {items.length}
               </span>
             </div>
@@ -293,28 +293,28 @@ export function AdminRentalReturnExceptions() {
                     onClick={() => void selectException(item.id)}
                     className={`w-full rounded-xl border p-4 text-left transition ${
                       selected
-                        ? "border-emerald-600 bg-emerald-50/70 shadow-sm"
-                        : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"
+                        ? "border-[#f58b36] bg-[#173425] shadow-sm"
+                        : "border-emerald-900 bg-[#09170f] hover:border-emerald-700 hover:bg-[#10251a]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="font-semibold leading-5 text-slate-900">
+                      <p className="font-semibold leading-5 text-white">
                         {item.order.tripTitle}
                       </p>
                       <span className="shrink-0 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-medium text-orange-700">
                         {labelFor(caseStatusLabels, item.status)}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-emerald-100/70">
                       {item.order.customerName}
                     </p>
-                    <p className="mt-2 text-xs font-medium text-emerald-700">
+                    <p className="mt-2 text-xs font-medium text-[#7fdda3]">
                       {item.unit?.assetCode ?? labelFor(exceptionLabels, item.type)}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-emerald-100/55">
                       {visibleReason(item.reason)}
                     </p>
-                    <p className="mt-2 text-[11px] text-slate-400">
+                    <p className="mt-2 text-[11px] text-emerald-100/40">
                       Mã hồ sơ {shortCode(item.id)}
                     </p>
                   </button>
@@ -323,19 +323,19 @@ export function AdminRentalReturnExceptions() {
             </div>
           </aside>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-emerald-900 bg-[#0d1f16] p-5 shadow-sm sm:p-6">
             {!detail ? (
               <div className="py-16 text-center">
-                <p className="text-base font-medium text-slate-700">
+                <p className="text-base font-medium text-emerald-50/80">
                   Chọn một hồ sơ để xem chi tiết
                 </p>
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-sm text-emerald-100/50">
                   Thông tin chuyến đi và người thuê sẽ hiển thị tại đây.
                 </p>
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-emerald-900 pb-5">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
                       {labelFor(exceptionLabels, detail.case.type)}
@@ -343,7 +343,7 @@ export function AdminRentalReturnExceptions() {
                     <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
                       {detail.case.order.tripTitle}
                     </h2>
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-2 text-sm text-emerald-100/55">
                       Người thuê: {detail.case.order.customerName}
                       <span className="mx-2 text-slate-300">•</span>
                       Hồ sơ {shortCode(detail.case.id)}
@@ -354,11 +354,11 @@ export function AdminRentalReturnExceptions() {
                   </span>
                 </div>
 
-                <div className="mt-5 rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="mt-5 rounded-xl bg-[#13291d] p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-100/45">
                     Nội dung cần xử lý
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">
+                  <p className="mt-2 text-sm leading-6 text-emerald-50/85">
                     {visibleReason(detail.case.reason)}
                   </p>
                 </div>
@@ -416,9 +416,9 @@ export function AdminRentalReturnExceptions() {
                 ) : null}
 
                 {detail.assessment ? (
-                  <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
-                    <p className="font-medium text-slate-800">Kết quả kiểm định</p>
-                    <p className="mt-2 text-slate-600">
+                  <div className="mt-5 rounded-xl border border-emerald-900 bg-black/10 p-4 text-sm">
+                    <p className="font-medium text-white">Kết quả kiểm định</p>
+                    <p className="mt-2 text-emerald-100/65">
                       {labelFor({}, detail.assessment.outcome)} · Mức đề xuất{" "}
                       {detail.assessment.findings
                         .map((finding) => formatMoney(finding.amount, "VND"))
@@ -427,7 +427,7 @@ export function AdminRentalReturnExceptions() {
                   </div>
                 ) : null}
 
-                <label className="mt-5 block text-sm font-medium text-slate-700">
+                <label className="mt-5 block text-sm font-medium text-emerald-50/80">
                   Ghi chú xử lý
                   <textarea
                     value={reason}
@@ -437,7 +437,7 @@ export function AdminRentalReturnExceptions() {
                         ? "Nhập ghi chú xác nhận hoàn cọc (ít nhất 5 ký tự)"
                         : "Nhập lý do cho quyết định"
                     }
-                    className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-normal outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white"
+                    className="mt-2 min-h-24 w-full rounded-xl border border-emerald-900 bg-[#08150e] p-3 text-sm font-normal text-white outline-none transition placeholder:text-emerald-100/35 focus:border-emerald-500"
                   />
                 </label>
 

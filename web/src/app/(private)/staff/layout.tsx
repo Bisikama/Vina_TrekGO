@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-import { StaffShell } from "@/features/rentals/components/staff/StaffShell";
+import { RentalWorkspaceShell } from "@/features/rentals/components/workspace/RentalWorkspaceShell";
 
 export default function StaffLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  return <StaffShell>{children}</StaffShell>;
+  return <RentalWorkspaceShell role="staff">{children}</RentalWorkspaceShell>;
 }
