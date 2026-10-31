@@ -715,6 +715,12 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(footwearLine.dailyPrice).toBe(80000)
       expect(footwearLine.rentalFee).toBe(160000) // 80k * 2 days
       expect(footwearLine.deposit).toBe(300000)
+      expect(footwearLine.depositPerUnit).toBe(300000)
+      expect(footwearLine.replacementValue).toBe(2500000)
+      expect(footwearLine.depositExplanation).toEqual({
+        percentageOfReplacementValue: 12,
+        formula: 'depositPerUnit / replacementValue * 100',
+      })
 
       // Hạng sản phẩm đi theo dòng thuê; sản phẩm không chia hạng trả null
       expect(footwearLine.grade).toBe('GOOD_USED')

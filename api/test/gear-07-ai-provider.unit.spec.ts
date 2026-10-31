@@ -74,6 +74,21 @@ describe('Gear Advisor V3.1.5 — Phase 07 Gemini AI Provider & Schemas Unit Tes
   })
 
   describe('Evidence Verification in Schema Normalization (B06)', () => {
+    it('accepts null optional evidence metadata without accepting unsupported attributes', () => {
+      const normalized = normalizeExtractionResult({
+        category: 'JACKET', name: 'Jacket', brand: 'Adidas',
+        attributes: { windproof: true, weight_g: 350 },
+        evidence: [{ id: 'ev-1', fieldPath: 'windproof', originalText: 'windproof', unit: null, sourceLocator: null }],
+      })
+
+      expect(normalized.evidence[0]).toMatchObject({ fieldPath: 'windproof', originalText: 'windproof' })
+      expect(normalized.evidence[0].unit).toBeUndefined()
+      expect(normalized.evidence[0].sourceLocator).toBeUndefined()
+      expect(normalized.attributes.windproof).toBe(true)
+      expect(normalized.attributes.weight_g).toBeUndefined()
+      expect(normalized.fieldsUnknown).toContain('weight_g')
+    })
+
     it('strips non-null technical attributes that lack matching evidence and moves them to fieldsUnknown', () => {
       const rawPayload = {
         category: 'JACKET',

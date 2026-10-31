@@ -34,6 +34,7 @@ import {
   MEDIA_ERROR_CODES,
 } from '../../../../../shared/errors';
 import envConfig from '../../../../../shared/config';
+import { calculateDepositPerUnit, describeDeposit, parseWholeVnd, toSafeNumber } from '../../../ordering/application/services/rental-ordering.rules';
 
 type RawCatalogMediaAsset = {
   id: string;
@@ -260,6 +261,24 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
       .map((id) => mediaById.get(id))
       .filter((item): item is RentalProductImageView => Boolean(item));
 
+    // Dữ liệu cũ có thể không phải VND nguyên; không để một dòng lỗi làm hỏng API catalog.
+    let depositPerUnit: number | null = null;
+    let depositExplanation = { percentageOfReplacementValue: null as number | null, formula: 'depositPerUnit / replacementValue * 100' };
+    try {
+      const replacementValue = parseWholeVnd(product.replacementValue.toString());
+      const deposit = calculateDepositPerUnit({
+        depositPolicyType: product.depositPolicyType,
+        depositValue: product.depositValue.toString(),
+        replacementValue: product.replacementValue.toString(),
+      });
+      if (replacementValue >= 0n) {
+        depositPerUnit = toSafeNumber(deposit);
+        depositExplanation = describeDeposit(deposit, replacementValue);
+      }
+    } catch {
+      // Quote cũng không thể tính từ dữ liệu này; client ẩn phần giải thích.
+    }
+
     return {
       id: product.id,
       sku: product.sku,
@@ -286,6 +305,8 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
             ? product.depositValue.toNumber()
             : undefined,
       },
+      depositPerUnit,
+      depositExplanation,
       currency: product.currency,
       replacementValue: product.replacementValue.toNumber(),
       status: product.status,

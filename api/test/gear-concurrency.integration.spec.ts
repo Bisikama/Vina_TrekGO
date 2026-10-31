@@ -144,10 +144,14 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
 
     try {
       expect(createdItems.length).toBe(1)
-      const fulfilled = results.filter((r) => r.status === 'fulfilled')
+      const fulfilled = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof draftRepo.confirmDraft>>> => r.status === 'fulfilled')
       const rejected = results.filter((r) => r.status === 'rejected')
-      expect(fulfilled.length).toBe(1)
-      expect(rejected.length).toBe(1)
+      expect(fulfilled.length).toBeGreaterThanOrEqual(1)
+      expect(fulfilled.filter((r) => !r.value.replayed)).toHaveLength(1)
+      expect(fulfilled.every((r) => r.value.item.id === createdItems[0].id)).toBe(true)
+      if (rejected.length === 0) {
+        expect(fulfilled.filter((r) => r.value.replayed)).toHaveLength(1)
+      }
     } finally {
       for (const it of createdItems) {
         await prisma.userGearItem.delete({ where: { id: it.id } }).catch(() => {})

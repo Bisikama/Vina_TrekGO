@@ -231,6 +231,8 @@ describe('B1 rental flow use cases', () => {
       dailyPrice: 120000,
       feeAmount: 720000,
       depositPerUnit: 500000,
+      replacementValue: 2000000,
+      depositExplanation: { percentageOfReplacementValue: 25, formula: 'depositPerUnit / replacementValue * 100' },
       depositAmount: 1000000,
       availableCount: 3,
     });

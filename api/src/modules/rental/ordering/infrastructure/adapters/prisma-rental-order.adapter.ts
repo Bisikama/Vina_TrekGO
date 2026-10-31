@@ -38,7 +38,7 @@ import type {
   RentalPaymentResult,
 } from '../../application/ports/rental-order.port'
 import { RENTAL_CONTEXT_PORT, type RentalContextPort } from '../../application/ports/rental-context.port'
-import { parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
+import { describeDeposit, parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
@@ -549,6 +549,10 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         dailyPrice: decimalVndToApiInteger(line.dailyPriceSnapshot.toString()),
         depositPerUnit: decimalVndToApiInteger(line.depositPerUnitSnapshot.toString()),
         replacementValue: decimalVndToApiInteger(line.replacementValueSnapshot.toString()),
+        depositExplanation: describeDeposit(
+          parseWholeVnd(line.depositPerUnitSnapshot.toString()),
+          parseWholeVnd(line.replacementValueSnapshot.toString()),
+        ),
         chargedDays: line.chargedDays,
         feeAmount: decimalVndToApiInteger(line.lineRentalFee.toString()),
         depositAmount: decimalVndToApiInteger(line.lineDeposit.toString()),

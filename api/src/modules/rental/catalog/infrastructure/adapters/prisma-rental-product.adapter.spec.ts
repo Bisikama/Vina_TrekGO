@@ -1,3 +1,10 @@
+import { Test } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { RentalProductController } from '../../presentation/controllers/rental-product.controller';
+import { GetRentalProductUseCase } from '../../application/use-cases/get-rental-product.use-case';
+import { ListRentalProductsUseCase } from '../../application/use-cases/list-rental-products.use-case';
+import { RENTAL_PRODUCT_PORT } from '../../application/ports/rental-product.port';
 import { PrismaRentalProductAdapter } from './prisma-rental-product.adapter';
 import {
   MediaScope,
@@ -114,6 +121,31 @@ describe('PrismaRentalProductAdapter — Media Integration & Catalog Lifecycle',
   });
 
   describe('Reading & Resolving Product Media (listActiveProducts / getProductById)', () => {
+    it.each([
+      ['fixed', { depositPolicyType: 'FIXED', depositValue: makeDecimal(400000), replacementValue: makeDecimal(2000000) }, 400000, 20],
+      ['percentage rounded to VND', { depositPolicyType: 'PERCENT_REPLACEMENT_VALUE', depositValue: makeDecimal(33.33), replacementValue: makeDecimal(10) }, 3, 30],
+      ['zero replacement value', { depositPolicyType: 'FIXED', depositValue: makeDecimal(400000), replacementValue: makeDecimal(0) }, 400000, null],
+      ['fractional legacy amount', { depositPolicyType: 'FIXED', depositValue: makeDecimal(400000.5), replacementValue: makeDecimal(2000000) }, null, null],
+    ])('maps %s deposit consistently with quote without breaking catalog reads', async (_name, overrides, depositPerUnit, percentage) => {
+      mockPrisma.rentalProduct.findUnique.mockResolvedValue(makeRawProduct({ ...overrides, images: [] }));
+      const result = await adapter.getProductById('prod-1');
+      expect(result).toMatchObject({
+        depositPerUnit,
+        depositExplanation: { percentageOfReplacementValue: percentage, formula: 'depositPerUnit / replacementValue * 100' },
+      });
+    });
+
+    it('lists each grade with its own deposit explanation', async () => {
+      mockPrisma.rentalProduct.findMany.mockResolvedValue([
+        makeRawProduct({ id: 'new', images: [], grade: 'LIKE_NEW', depositValue: makeDecimal(600000) }),
+        makeRawProduct({ id: 'used', images: [], grade: 'GOOD_USED', depositValue: makeDecimal(400000) }),
+      ]);
+      mockPrisma.rentalProduct.count.mockResolvedValue(2);
+      const result = await adapter.listActiveProducts({ page: 1, pageSize: 20 });
+      expect(result.items.map(item => [item.depositPerUnit, item.depositExplanation?.percentageOfReplacementValue]))
+        .toEqual([[600000, 30], [400000, 20]]);
+    });
+
     it('resolves imageMediaIds into structured images with Cloudinary transformation variants in order', async () => {
       const rawProduct = makeRawProduct({ images: [MEDIA_ID_2, MEDIA_ID_1] });
       mockPrisma.rentalProduct.findUnique.mockResolvedValue(rawProduct);
@@ -616,6 +648,38 @@ describe('PrismaRentalProductAdapter — Media Integration & Catalog Lifecycle',
 
       expect(result.status).toBe(RentalProductStatus.ACTIVE);
       expect(mockPrisma.rentalProductPriceHistory.findFirst).not.toHaveBeenCalled();
+    });
+  });
+});
+
+
+describe('Public rental product detail HTTP', () => {
+  let app: INestApplication;
+  beforeAll(async () => {
+    const prisma = {
+      rentalProduct: { findUnique: jest.fn().mockResolvedValue({
+        id: '11111111-1111-4111-8111-111111111111', sku: 'TENT', name: 'Tent',
+        category: { id: 'cat', name: 'Tent', status: 'ACTIVE' }, description: null,
+        dailyPrice: new Prisma.Decimal(65000), depositPolicyType: 'FIXED',
+        depositValue: new Prisma.Decimal(400000), replacementValue: new Prisma.Decimal(2000000),
+        currency: 'VND', status: 'ACTIVE', version: 1, images: [],
+      }) },
+    };
+    const moduleRef = await Test.createTestingModule({
+      controllers: [RentalProductController],
+      providers: [GetRentalProductUseCase, ListRentalProductsUseCase,
+        { provide: RENTAL_PRODUCT_PORT, useValue: new PrismaRentalProductAdapter(prisma as never) }],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    await app.init();
+  });
+  afterAll(async () => { await app.close(); });
+  it('returns deposit explanation from the real catalog mapper', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v1/rental-products/11111111-1111-4111-8111-111111111111').expect(200);
+    expect(response.body).toMatchObject({
+      depositPolicy: { amount: 400000 }, depositPerUnit: 400000, replacementValue: 2000000,
+      depositExplanation: { percentageOfReplacementValue: 20, formula: 'depositPerUnit / replacementValue * 100' },
     });
   });
 });

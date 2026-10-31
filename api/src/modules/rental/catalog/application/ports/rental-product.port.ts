@@ -30,6 +30,9 @@ export interface RentalProductView {
     referenceValue?: number;
     percentage?: number;
   };
+  /** Tiền cọc mỗi món theo quy tắc báo giá; null nếu dữ liệu catalog không hợp lệ. */
+  depositPerUnit?: number | null;
+  depositExplanation?: { percentageOfReplacementValue: number | null; formula: string };
   currency: string;
   replacementValue: number;
   status: string;

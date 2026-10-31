@@ -51,6 +51,7 @@ import {
   calculateOccupiedWindow,
   parseWholeVnd,
   calculateDepositPerUnit,
+  describeDeposit,
   rentalOccupiedFrom,
 } from '../../../../modules/rental/ordering/application/services/rental-ordering.rules'
 import { getVerifiedCapacitySnapshot } from '../../../../modules/rental/ordering/infrastructure/adapters/rental-capacity-snapshot'
@@ -947,6 +948,8 @@ export class GearPlanService {
           dailyPrice,
           rentalFee,
           deposit,
+          replacementValue: Number(parseWholeVnd(product.replacementValue.toString())),
+          depositExplanation: describeDeposit(BigInt(deposit), parseWholeVnd(product.replacementValue.toString())),
           availableCount,
           weight_g,
           attributes: profileAttrs || undefined,
