@@ -1912,6 +1912,34 @@ model BookingNotificationReceipt {
   @@map("booking_notification_receipts")
 }
 
+model RentalNotificationReceipt {
+  eventId       String            @map("event_id") @db.Uuid
+  consumer      String            @db.VarChar(100)
+  completedAt   DateTime?         @map("completed_at") @db.Timestamptz(6)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?           @map("last_error") @db.VarChar(100)
+  event         RentalOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, consumer])
+  @@index([consumer, completedAt, nextAttemptAt], map: "rental_notification_retry_idx")
+  @@map("rental_notification_receipts")
+}
+
+model PaymentNotificationReceipt {
+  eventId       String            @map("event_id") @db.Uuid
+  consumer      String            @db.VarChar(100)
+  completedAt   DateTime?         @map("completed_at") @db.Timestamptz(6)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?           @map("last_error") @db.VarChar(100)
+  event         PaymentOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, consumer])
+  @@index([consumer, completedAt, nextAttemptAt], map: "payment_notification_retry_idx")
+  @@map("payment_notification_receipts")
+}
+
 model BookingOutboxEvent {
   cancellationDeliveries CancellationDelivery[]
   notificationReceipts BookingNotificationReceipt[]
@@ -2907,6 +2935,7 @@ model CustodyEvent {
 }
 
 model RentalOutboxEvent {
+  notificationReceipts RentalNotificationReceipt[]
   id               String      @id @default(uuid()) @db.Uuid
   deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
   eventType        String      @map("event_type") @db.VarChar(140)
@@ -3591,9 +3620,11 @@ model PaymentOutboxEvent {
   publishedAt      DateTime?                @map("published_at") @db.Timestamptz(6)
   processedAt      DateTime?                @map("processed_at") @db.Timestamptz(6)
   receipts         PaymentConsumerReceipt[]
+  notificationReceipts PaymentNotificationReceipt[]
 
   @@index([status, nextRetryAt])
   @@index([aggregateType, aggregateId, createdAt])
+  @@index([eventType, createdAt])
   @@map("payment_outbox_events")
 }
 

@@ -197,7 +197,7 @@ describe('applyGradeDecision', () => {
     )
     expect(tx.rentalOrder.updateMany).toHaveBeenCalledTimes(2)
     expect(tx.rentalOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o-paid', status: { in: ['PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER'] }, exceptionStatus: { not: 'ACTION_REQUIRED' } },
+      where: { id: 'o-paid', status: { in: ['PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER'] } },
       data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 } },
     })
     expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
@@ -209,6 +209,74 @@ describe('applyGradeDecision', () => {
         }),
       }),
     )
+  })
+
+  it('does not notify or report an order that is no longer pre-handover', async () => {
+    const tx = makeTx({ supply: 0, reservations: [reservationRow('r1', 'o1', RentalOrderStatus.PAID, 10, 20)] })
+    tx.rentalOrder.updateMany.mockResolvedValue({ count: 0 })
+    const result = await applyGradeDecision(tx, {
+      unitId: 'u-1', product: LIKE_NEW,
+      decision: { decision: 'DOWNGRADE', reason: 'wear' }, actorId: 'staff-1', now: NOW,
+    })
+    expect(result.shortage.orderIds).toEqual([])
+    expect(tx.rentalOutboxEvent.upsert).not.toHaveBeenCalled()
+  })
+
+  it('DOWNGRADE never touches deposit, refunds, order lines or reservations, even when it flags a shortage', async () => {
+    // Chỉ cho phép đúng các model hạ hạng được phép đụng; truy cập model tiền/snapshot nào khác là lỗi.
+    const allowed = new Set([
+      '$queryRaw',
+      'rentalProduct',
+      'equipmentUnit',
+      'equipmentGradeReview',
+      'rentalQuantityReservation',
+      'rentalCapacityAlert',
+      'rentalOrder',
+      'rentalOutboxEvent',
+    ])
+    const base = makeTx({
+      supply: 0,
+      reservations: [
+        reservationRow('r-own', 'o-returned', RentalOrderStatus.RETURN_PROCESSING, -48, 6, 0),
+        reservationRow('r-next', 'o-next', RentalOrderStatus.PAID, 2, 30),
+      ],
+    })
+    const strictTx = new Proxy(base, {
+      get(target, prop) {
+        if (typeof prop === 'string' && !allowed.has(prop)) throw new Error(`applyGradeDecision touched tx.${prop}`)
+        return target[prop]
+      },
+    })
+
+    const result = await applyGradeDecision(strictTx, {
+      unitId: 'u-1',
+      product: LIKE_NEW,
+      decision: { decision: 'DOWNGRADE', reason: 'Vải lều bạc màu' },
+      actorId: 'staff-1',
+      now: NOW,
+      assignmentId: 'as-returned',
+    })
+
+    expect(result.shortage.orderIds).toEqual(['o-next'])
+    // Sản phẩm và reservation chỉ được đọc (mock không có hàm ghi nên gọi là TypeError).
+    expect(Object.keys(base.rentalProduct)).toEqual(['findFirst', 'findUnique'])
+    expect(Object.keys(base.rentalQuantityReservation)).toEqual(['findMany'])
+    // Unit chỉ đổi sản phẩm; không đổi tình trạng/trạng thái để tránh sinh khấu trừ.
+    for (const [arg] of base.equipmentUnit.update.mock.calls) {
+      expect(Object.keys(arg.data).sort()).toEqual(['productId', 'version'])
+    }
+    // Đơn bị thiếu chỉ đổi exceptionStatus; không đổi tiền, trạng thái tài chính hay snapshot.
+    expect(base.rentalOrder.updateMany).toHaveBeenCalled()
+    for (const [arg] of base.rentalOrder.updateMany.mock.calls) {
+      expect(Object.keys(arg.data).sort()).toEqual(['exceptionStatus', 'version'])
+    }
+    // Outbox chỉ có sự kiện cần xử lý, không có sự kiện tiền/cọc.
+    for (const [arg] of base.rentalOutboxEvent.upsert.mock.calls) {
+      expect(arg.create.eventType).toBe('RENTAL_ACTION_REQUIRED')
+      expect(Object.keys(arg.create.payload).sort()).toEqual(
+        ['gradeReviewId', 'orderId', 'productId', 'reason', 'status', 'tripId', 'unitId'],
+      )
+    }
   })
 
   it('does not report a false shortage from the reservation of the order that just returned', async () => {

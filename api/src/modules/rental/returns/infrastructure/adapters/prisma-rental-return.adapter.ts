@@ -284,7 +284,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         if (task.staffId !== actor.id) throw AppError.fromCode(RR.FORBIDDEN)
         // Observation is only valid while Delivery still holds the units. Re-running it after
         // Inventory received them would reset FINAL deposit decisions back to REVIEW_REQUIRED.
-        if (![DeliveryTaskStatus.COLLECTING, DeliveryTaskStatus.RETURNED].includes(task.status as any))
+        if (![DeliveryTaskStatus.COLLECTING, DeliveryTaskStatus.RETURNED].includes(task.status))
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { taskId: task.id, currentStatus: task.status },
           })

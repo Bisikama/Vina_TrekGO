@@ -335,6 +335,13 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       expect(mockTx.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ status: { in: ['PENDING', 'PROCESSING'] } }),
       }));
+      // Notification consumer dựa vào nguồn huỷ + trạng thái tiền để viết nội dung cho khách.
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({
+          eventType: 'RENTAL_ORDER_CANCELLED',
+          payload: expect.objectContaining({ cancellationSource: 'TRIP', financialStatus: 'REFUND_PENDING' }),
+        }),
+      }));
     });
 
     it('Booking USER hủy sau hạn: chỉ hoàn cọc cho Rental đã thanh toán', async () => {
@@ -362,6 +369,13 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       }));
       expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ financialStatus: 'REFUND_PENDING' }),
+      }));
+      // Notification consumer dựa vào nguồn huỷ + trạng thái tiền để viết nội dung cho khách.
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({
+          eventType: 'RENTAL_ORDER_CANCELLED',
+          payload: expect.objectContaining({ cancellationSource: 'BOOKING', financialStatus: 'REFUND_PENDING' }),
+        }),
       }));
     });
 

@@ -35,7 +35,7 @@ Ví dụ một dòng báo giá cho hai món (VND):
 
 Frontend có thể hiển thị “750.000đ ÷ 2.500.000đ × 100% = 30%”; định dạng tiền bằng `Intl.NumberFormat('vi-VN')`. Tỷ lệ là tỷ lệ tương ứng của tiền cọc thực tế mỗi món so với giá trị thay thế, làm tròn nửa lên đến 2 chữ số thập phân. Đây không nhất thiết là tỷ lệ cấu hình chính sách cọc. Không dùng tỷ lệ để tính tiền hoặc cộng giá trị thay thế vào số phải trả. Nếu tỷ lệ là `null`, ẩn phép chia và tỷ lệ.
 
-Ở API catalog, `depositPerUnit` là tiền cọc hiện tại mỗi món theo quy tắc báo giá; trường này có thể là `null` nếu dữ liệu cũ không hợp lệ để tính bằng VND nguyên. Trường `depositPolicy.amount` cũ được giữ nguyên để tương thích; dùng `depositPerUnit` mới cho phần giải thích. Giá catalog có thể thay đổi trước khi tạo báo giá.
+Ở API catalog, `depositPerUnit` là tiền cọc hiện tại mỗi món theo quy tắc báo giá; trường này có thể là `null` nếu dữ liệu cũ không hợp lệ để tính bằng VND nguyên. Trường `depositPolicy.amount` vẫn được trả; với dữ liệu hợp lệ, giá trị này cũng dùng mức cọc nguyên VND của báo giá (có thể khác giá trị thập phân trước đây). Dùng `depositPerUnit` cho phần giải thích. Giá catalog có thể thay đổi trước khi tạo báo giá.
 
 Quote và đơn dùng snapshot tại thời điểm báo giá và đặt đơn. Gear advisor dùng dữ liệu sản phẩm tại thời điểm tạo phương án, chỉ là ước tính; tiền cọc cả dòng của Gear có tên `deposit`, không phải `depositAmount`. Các phương án Gear đã lưu trước thay đổi có thể thiếu trường mới, vì vậy client cần xử lý trường vắng mặt và tạo lại phương án khi cần.
 

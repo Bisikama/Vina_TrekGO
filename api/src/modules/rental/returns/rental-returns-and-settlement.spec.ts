@@ -3388,7 +3388,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         actorUserId: staffId,
         idempotencyKey: 'settle-second-click',
         now: new Date(),
-      } as any);
+      });
 
       expect(result).toMatchObject({
         status: DepositItemStatus.SETTLED,

@@ -715,6 +715,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(footwearLine.dailyPrice).toBe(80000)
       expect(footwearLine.rentalFee).toBe(160000) // 80k * 2 days
       expect(footwearLine.deposit).toBe(300000)
+      expect(footwearLine.depositAmount).toBe(300000)
       expect(footwearLine.depositPerUnit).toBe(300000)
       expect(footwearLine.replacementValue).toBe(2500000)
       expect(footwearLine.depositExplanation).toEqual({
@@ -1883,6 +1884,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(data.prefillRentalQuote.items).toHaveLength(data.lines.length)
       const footwearIntentLine = data.lines.find((l: any) => l.category === 'FOOTWEAR')
       expect(footwearIntentLine).toMatchObject({ grade: 'GOOD_USED', gradeGroupId: FOOTWEAR_GRADE_GROUP_ID })
+      expect(footwearIntentLine.depositAmount).toBe(footwearIntentLine.deposit)
     })
 
     it('links valid confirmed quote to plan revision idempotently', async () => {

@@ -293,9 +293,9 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
       depositPolicy: {
         type: product.depositPolicyType,
         amount:
-          product.depositPolicyType === 'FIXED'
+          depositPerUnit ?? (product.depositPolicyType === 'FIXED'
             ? product.depositValue.toNumber()
-            : (product.replacementValue.toNumber() * product.depositValue.toNumber()) / 100,
+            : (product.replacementValue.toNumber() * product.depositValue.toNumber()) / 100),
         referenceValue:
           product.depositPolicyType === 'PERCENT_REPLACEMENT_VALUE'
             ? product.replacementValue.toNumber()

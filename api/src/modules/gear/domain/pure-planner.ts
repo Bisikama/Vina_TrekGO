@@ -47,7 +47,10 @@ export interface RentalLine {
   quantity: number
   dailyPrice: number
   rentalFee: number
+  /** @deprecated Dùng `depositAmount`; vẫn trả để client cũ không vỡ. */
   deposit: number
+  /** Tiền cọc cả dòng (= `deposit`), cùng tên với `items[].depositAmount` của quote/order. */
+  depositAmount: number
   depositPerUnit?: number
   replacementValue?: number
   depositExplanation?: { percentageOfReplacementValue: number | null; formula: string }
@@ -564,6 +567,7 @@ export function solveDeterministicPlannerOption(
       existing.quantity += qty
       existing.rentalFee += p.rentalFee * qty
       existing.deposit += p.deposit * qty
+      existing.depositAmount = existing.deposit
     } else {
       rentalLinesMap.set(p.id, {
         requirementId: assign.needId,
@@ -574,6 +578,7 @@ export function solveDeterministicPlannerOption(
         dailyPrice: p.dailyPrice,
         rentalFee: p.rentalFee * qty,
         deposit: p.deposit * qty,
+        depositAmount: p.deposit * qty,
         depositPerUnit: p.deposit,
         replacementValue: p.replacementValue,
         depositExplanation: p.depositExplanation,

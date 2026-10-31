@@ -19,7 +19,8 @@ import {
   type GradedProductRef,
 } from '../application/services/equipment-grade.rules'
 
-export const GRADE_DOWNGRADE_SHORTAGE_REASON = 'GRADE_DOWNGRADE_CAPACITY_SHORTAGE'
+import { GRADE_DOWNGRADE_SHORTAGE_REASON } from '../../../../shared/constants/rental-event-reasons.constant'
+export { GRADE_DOWNGRADE_SHORTAGE_REASON }
 
 /** Đơn chưa bàn giao: còn có thể xử lý thiếu hàng bằng cách tìm món khác hoặc huỷ system-fault. */
 const PRE_HANDOVER_STATUSES: RentalOrderStatus[] = [
@@ -242,16 +243,18 @@ async function flagDowngradeShortage(
     .filter((o) => PRE_HANDOVER_STATUSES.includes(o.status))
     .sort((a, b) => a.id.localeCompare(b.id))
 
+  const flaggedOrderIds: string[] = []
   for (const order of affected) {
-    await tx.rentalOrder.updateMany({
+    const updated = await tx.rentalOrder.updateMany({
       // Kiểm lại trạng thái: đơn có thể vừa bàn giao/huỷ sau lúc đọc reservation (đơn không bị khoá ở đây).
       where: {
         id: order.id,
         status: { in: PRE_HANDOVER_STATUSES },
-        exceptionStatus: { not: RentalOrderExceptionStatus.ACTION_REQUIRED },
       },
       data: { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED, version: { increment: 1 } },
     })
+    if (updated.count === 0) continue
+    flaggedOrderIds.push(order.id)
     const deduplicationKey = `grade-downgrade-shortage:${order.id}:${input.reviewId}`
     await tx.rentalOutboxEvent.upsert({
       where: { deduplicationKey },
@@ -275,5 +278,5 @@ async function flagDowngradeShortage(
     })
   }
 
-  return { orderIds: affected.map((o) => o.id), alertKeys }
+  return { orderIds: flaggedOrderIds, alertKeys }
 }

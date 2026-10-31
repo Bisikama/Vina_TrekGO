@@ -6,14 +6,14 @@ export const CreateRentalProductSchema = z
     sku: z.string().min(1).max(80),
     name: z.string().min(1).max(200),
     description: z.string().optional().nullable(),
-    dailyPrice: z.number().min(0),
+    dailyPrice: z.number().int().min(0),
     currency: z.string().default('VND'),
     // Bắt buộc khi ADMIN tạo; STAFF_INVENTORY không gửi (kiểm ở use-case vì phụ thuộc role).
-    replacementValue: z.number().min(0).optional(),
+    replacementValue: z.number().int().min(0).optional(),
     depositPolicy: z
       .object({
         type: z.enum(['FIXED', 'PERCENT_REPLACEMENT_VALUE']),
-        amount: z.number().min(0).optional(),
+        amount: z.number().int().min(0).optional(),
         percentage: z.number().min(0).max(100).optional(),
       })
       .optional(),
