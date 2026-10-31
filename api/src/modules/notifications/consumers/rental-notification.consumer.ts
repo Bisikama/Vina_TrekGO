@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule'
 import { Prisma, UserRole, UserStatus } from '@prisma/client'
 import envConfig from '../../../shared/config'
 import { PrismaService } from '../../../shared/services/prisma.service'
+import { SYSTEM_FAULT_CANCELLATION_REASON } from '../../rental/ordering/application/ports/rental-system-fault-cancellation.port'
 import { NotificationsService } from '../notifications.service'
 import { drainNotificationOutbox, NOTIFICATION_OUTBOX_SOURCES, NotificationOutboxEvent } from './notification-outbox-drain'
 import {
