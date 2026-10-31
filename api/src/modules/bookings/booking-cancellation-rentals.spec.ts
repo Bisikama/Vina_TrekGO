@@ -41,7 +41,7 @@ describe('Voluntary booking cancellation rental prerequisite', () => {
   })
   it('preserves successful idempotent replay without rechecking rentals', async () => {
     const { service, tx } = setup()
-    tx.bookingCancellation.findUnique.mockResolvedValue({ bookingId: 'booking', id: 'cancellation', refundableAmount: new Prisma.Decimal(0), policySnapshot: { decision: { requestHash: paymentHash({ bookingId: input.bookingId, reason: input.reason }) } } } as never)
+    tx.bookingCancellation.findUnique.mockResolvedValue({ bookingId: 'booking', id: 'cancellation', refundableAmount: new Prisma.Decimal(0), policySnapshot: { decision: { requestHash: paymentHash({ bookingId: input.bookingId, reason: input.reason }) } } })
     await expect(service.cancel(input)).resolves.toMatchObject({ status: 'CANCELLED', cancellationId: 'cancellation' })
     expect(tx.rentalOrder.findMany).not.toHaveBeenCalled()
   })

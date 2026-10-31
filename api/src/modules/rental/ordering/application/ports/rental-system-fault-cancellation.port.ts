@@ -9,7 +9,7 @@ export const SYSTEM_FAULT_REASON_CODES = [
 export type SystemFaultReasonCode = (typeof SYSTEM_FAULT_REASON_CODES)[number]
 
 /** Giá trị `reason` của event RENTAL_ORDER_CANCELLED; notification consumer dựa vào đây để báo khách. */
-export const SYSTEM_FAULT_CANCELLATION_REASON = 'SYSTEM_FAULT_CANCELLATION'
+export { SYSTEM_FAULT_CANCELLATION_REASON } from '../../../../../shared/constants/rental-event-reasons.constant'
 
 export interface CancelRentalOrderSystemFaultCommand {
   orderId: string
