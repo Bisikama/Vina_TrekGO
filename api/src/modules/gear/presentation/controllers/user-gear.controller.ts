@@ -53,6 +53,7 @@ export function toWireUserGearItem(item: UserGearItemDomain) {
     brand: item.brand,
     condition: GearMappers.condition.toWire(item.condition),
     attributes: item.attributes,
+    attributeProvenance: item.attributeProvenance ?? null,
     photoRef: item.photoRef,
     photos: (item.photos || []).map((p) => ({
       id: p.id,

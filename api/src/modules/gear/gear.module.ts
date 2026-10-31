@@ -49,6 +49,8 @@ import { StaffGearProfileController } from './presentation/controllers/staff-gea
 import { GearPlanController } from './presentation/controllers/gear-plan.controller'
 import { GearExtractionController } from './presentation/controllers/gear-extraction.controller'
 import { GearCapabilitiesController } from './presentation/controllers/gear-capabilities.controller'
+import { GearPhase2Controller } from './presentation/controllers/gear-phase2.controller'
+import { GearPhase2Service } from './application/services/gear-phase2.service'
 
 export const GEAR_REPOSITORY_PROVIDERS = [
   {
@@ -130,6 +132,7 @@ export const GEAR_SERVICES = [
   StaffProductProfileService,
   GearPlanService,
   GearExtractionService,
+  GearPhase2Service,
 ]
 
 @Module({
@@ -142,6 +145,7 @@ export const GEAR_SERVICES = [
     GearPlanController,
     GearExtractionController,
     GearCapabilitiesController,
+    GearPhase2Controller,
   ],
   providers: [...GEAR_REPOSITORY_PROVIDERS, ...GEAR_SERVICES],
   exports: [...GEAR_REPOSITORY_PROVIDERS, ...GEAR_SERVICES],
