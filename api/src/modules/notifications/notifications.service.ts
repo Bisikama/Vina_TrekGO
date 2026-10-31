@@ -39,6 +39,14 @@ export class NotificationsService {
   }
 
   async deliverBookingEvent(eventId: string, semanticType: string, data: Partial<Notification> & { userId: string }) {
+    return this.deliverEvent(eventId, semanticType, data)
+  }
+
+  /**
+   * Gửi một thông báo cho một outbox event, an toàn khi gọi lại: khoá `${eventId}:${userId}:${semanticType}` unique.
+   * Dùng chung cho consumer booking, rental và payment (id event là uuid nên không trùng giữa các bảng).
+   */
+  async deliverEvent(eventId: string, semanticType: string, data: Partial<Notification> & { userId: string }) {
     await this.ensureDeliveryIndex()
     // Legacy deliveries lacked semanticType. A recipient's receipt must not suppress another recipient.
     const legacy = await this.notificationModel

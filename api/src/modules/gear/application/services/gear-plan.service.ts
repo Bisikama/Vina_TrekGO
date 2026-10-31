@@ -1429,6 +1429,8 @@ export class GearPlanService {
       dailyPrice: l.dailyPrice,
       rentalFee: l.rentalFee,
       deposit: l.deposit,
+      // Phương án lưu trước khi có alias không có `depositAmount`.
+      depositAmount: l.depositAmount ?? l.deposit,
       grade: l.grade ?? null,
       gradeGroupId: l.gradeGroupId ?? null,
     }))
