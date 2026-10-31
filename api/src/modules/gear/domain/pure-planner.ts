@@ -19,10 +19,17 @@ export interface CandidateProduct {
   dailyPrice: number
   rentalFee: number
   deposit: number
+  replacementValue?: number
+  depositExplanation?: { percentageOfReplacementValue: number | null; formula: string }
   availableCount: number
   weight_g: number | null
   attributes?: Record<string, unknown>
+  /** Hạng thuê (LIKE_NEW | GOOD_USED); null với sản phẩm thường. Không ảnh hưởng cách chọn. */
+  grade?: RentalGradeValue | null
+  gradeGroupId?: string | null
 }
+
+export type RentalGradeValue = 'LIKE_NEW' | 'GOOD_USED'
 
 export interface OwnedAssignment {
   requirementId: string
@@ -41,8 +48,13 @@ export interface RentalLine {
   dailyPrice: number
   rentalFee: number
   deposit: number
+  depositPerUnit?: number
+  replacementValue?: number
+  depositExplanation?: { percentageOfReplacementValue: number | null; formula: string }
   weight_g: number | null
   availableCount: number
+  grade: RentalGradeValue | null
+  gradeGroupId: string | null
 }
 
 export interface PlannerOptionResult {
@@ -562,8 +574,13 @@ export function solveDeterministicPlannerOption(
         dailyPrice: p.dailyPrice,
         rentalFee: p.rentalFee * qty,
         deposit: p.deposit * qty,
+        depositPerUnit: p.deposit,
+        replacementValue: p.replacementValue,
+        depositExplanation: p.depositExplanation,
         weight_g: p.weight_g,
         availableCount: p.availableCount,
+        grade: p.grade ?? null,
+        gradeGroupId: p.gradeGroupId ?? null,
       })
     }
 

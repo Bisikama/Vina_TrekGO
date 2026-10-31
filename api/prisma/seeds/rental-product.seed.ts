@@ -1,6 +1,9 @@
-import { DepositPolicyType, PrismaClient, RentalProductStatus } from '@prisma/client'
+import { DepositPolicyType, PrismaClient, RentalGrade, RentalProductStatus } from '@prisma/client'
 
-interface RentalProductSeed {
+export interface RentalProductSeed {
+  /** Có cả hai = sản phẩm thuộc một nhóm hạng; không có = sản phẩm thường. */
+  gradeGroupId?: string
+  grade?: RentalGrade
   id?: string
   categorySlug: string
   sku: string
@@ -15,6 +18,9 @@ interface RentalProductSeed {
   requiredAccessories: string[]
   requiresDeepReturnInspection: boolean
 }
+
+export const GRADE_GROUP_TENT_3P = '5d2f7c1a-3b4e-4f60-8a71-0c9e2b6d4a01'
+export const GRADE_GROUP_PACK_45L = '5d2f7c1a-3b4e-4f60-8a71-0c9e2b6d4a02'
 
 export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
   {
@@ -354,10 +360,104 @@ export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
     requiredAccessories: ['Dây đeo', 'Cáp sạc', 'Túi bảo vệ'],
     requiresDeepReturnInspection: true,
   },
+  // Cặp sản phẩm hai hạng (phần mở rộng ngoài Policy 1.5.2). Cùng replacementValue;
+  // hạng Rất mới có giá ngày và cọc cao hơn hẳn (cọc ~30% / ~20% giá trị thay thế).
+  {
+    gradeGroupId: GRADE_GROUP_TENT_3P,
+    grade: RentalGrade.LIKE_NEW,
+    categorySlug: 'leu-trai',
+    sku: 'TENT-G3-LN',
+    name: 'Lều trekking 3 người – Rất mới',
+    description: 'Lều hai lớp cho nhóm 2–3 người. Hạng Rất mới: vải và khung gần như mới, chưa có vết sửa.',
+    dailyPrice: 140_000,
+    replacementValue: 3_000_000,
+    depositValue: 900_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 3, weightKg: 3.2, waterproofMm: 3000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_TENT_3P,
+    grade: RentalGrade.GOOD_USED,
+    categorySlug: 'leu-trai',
+    sku: 'TENT-G3-GU',
+    name: 'Lều trekking 3 người – Đã sử dụng tốt',
+    description:
+      'Lều hai lớp cho nhóm 2–3 người. Hạng Đã sử dụng tốt: có dấu hiệu sử dụng nhưng chống mưa và khung đầy đủ. Rẻ hơn cả giá thuê mỗi ngày lẫn tiền cọc.',
+    dailyPrice: 100_000,
+    replacementValue: 3_000_000,
+    depositValue: 600_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 3, weightKg: 3.2, waterproofMm: 3000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_PACK_45L,
+    grade: RentalGrade.LIKE_NEW,
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-G45-LN',
+    name: 'Balo trekking 45L – Rất mới',
+    description: 'Balo trợ lực 45L cho chuyến 2–3 ngày. Hạng Rất mới: khoá kéo, đai và vải gần như mới.',
+    dailyPrice: 90_000,
+    replacementValue: 2_000_000,
+    depositValue: 600_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 45, weightKg: 1.5, rainCoverIncluded: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_PACK_45L,
+    grade: RentalGrade.GOOD_USED,
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-G45-GU',
+    name: 'Balo trekking 45L – Đã sử dụng tốt',
+    description:
+      'Balo trợ lực 45L cho chuyến 2–3 ngày. Hạng Đã sử dụng tốt: vải có dấu hiệu sử dụng, đai và khoá hoạt động tốt. Rẻ hơn cả giá thuê mỗi ngày lẫn tiền cọc.',
+    dailyPrice: 65_000,
+    replacementValue: 2_000_000,
+    depositValue: 400_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 45, weightKg: 1.5, rainCoverIncluded: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
 ]
+
+/**
+ * Kiểm các nhóm hạng trong seed theo đúng quy tắc của Catalog, để seed sai dừng trước khi ghi DB:
+ * mỗi nhóm đúng một LIKE_NEW và một GOOD_USED, cùng danh mục, cùng replacementValue,
+ * LIKE_NEW có giá ngày và cọc lớn hơn hẳn GOOD_USED. Seed luôn dùng cọc FIXED.
+ */
+export function assertGradeSeedPairs(seeds: readonly RentalProductSeed[] = RENTAL_PRODUCT_SEEDS): void {
+  const groups = new Map<string, RentalProductSeed[]>()
+  for (const seed of seeds) {
+    if (!seed.gradeGroupId !== !seed.grade) throw new Error(`${seed.sku}: gradeGroupId và grade phải đi cùng nhau`)
+    if (seed.gradeGroupId) groups.set(seed.gradeGroupId, [...(groups.get(seed.gradeGroupId) ?? []), seed])
+  }
+  for (const [groupId, members] of groups) {
+    const likeNew = members.filter((m) => m.grade === RentalGrade.LIKE_NEW)
+    const goodUsed = members.filter((m) => m.grade === RentalGrade.GOOD_USED)
+    if (members.length !== 2 || likeNew.length !== 1 || goodUsed.length !== 1)
+      throw new Error(`Nhóm hạng ${groupId} phải có đúng một LIKE_NEW và một GOOD_USED`)
+    const [ln, gu] = [likeNew[0], goodUsed[0]]
+    if (ln.categorySlug !== gu.categorySlug) throw new Error(`Nhóm hạng ${groupId}: hai hạng khác danh mục`)
+    if (ln.replacementValue !== gu.replacementValue)
+      throw new Error(`Nhóm hạng ${groupId}: replacementValue hai hạng phải bằng nhau`)
+    if (!(ln.dailyPrice > gu.dailyPrice) || !(ln.depositValue > gu.depositValue))
+      throw new Error(`Nhóm hạng ${groupId}: LIKE_NEW phải có giá ngày và cọc lớn hơn hẳn GOOD_USED`)
+  }
+}
 
 export async function seedRentalProducts(prisma: PrismaClient) {
   console.log('Seeding Rental Products...')
+  assertGradeSeedPairs()
 
   const requiredSlugs = [...new Set(RENTAL_PRODUCT_SEEDS.map((product) => product.categorySlug))]
   const categories = await prisma.rentalCategory.findMany({
@@ -372,10 +472,12 @@ export async function seedRentalProducts(prisma: PrismaClient) {
   }
 
   for (const product of RENTAL_PRODUCT_SEEDS) {
-    const { id, categorySlug, sku, ...data } = product
+    const { id, categorySlug, sku, gradeGroupId, grade, ...data } = product
     const categoryId = categoryIdBySlug.get(categorySlug)!
     const persistedData = {
       ...data,
+      gradeGroupId: gradeGroupId ?? null,
+      grade: grade ?? null,
       categoryId,
       currency: 'VND',
       depositPolicyType: DepositPolicyType.FIXED,

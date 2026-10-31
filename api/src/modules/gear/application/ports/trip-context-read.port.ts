@@ -9,6 +9,8 @@ export interface TripContextFactData {
   difficulty: number;
   terrain: string[];
   destination?: string;
+  /** Toạ độ đại diện của chuyến (tâm điểm đến, nếu thiếu thì checkpoint đầu tiên); null khi không có. */
+  coordinates?: { lat: number; lng: number } | null;
   contextVersion?: string;
   sourceReferences?: {
     tripId: string;

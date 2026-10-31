@@ -19,6 +19,7 @@ import { UpdateEquipmentUnitUseCase } from './application/use-cases/update-equip
 import { BatchCreateEquipmentUnitsUseCase } from './application/use-cases/batch-create-equipment-units.use-case';
 import { GenerateEquipmentLabelsUseCase } from './application/use-cases/generate-equipment-labels.use-case';
 import { ChangeEquipmentMaintenanceUseCase } from './application/use-cases/change-equipment-maintenance.use-case';
+import { DowngradeEquipmentGradeUseCase } from './application/use-cases/downgrade-equipment-grade.use-case';
 import { EQUIPMENT_UNIT_PORT } from './application/ports/equipment-unit.port';
 import { PrismaEquipmentUnitAdapter } from './infrastructure/adapters/prisma-equipment-unit.adapter';
 
@@ -41,6 +42,7 @@ import { PrismaEquipmentUnitAdapter } from './infrastructure/adapters/prisma-equ
     BatchCreateEquipmentUnitsUseCase,
     GenerateEquipmentLabelsUseCase,
     ChangeEquipmentMaintenanceUseCase,
+    DowngradeEquipmentGradeUseCase,
     {
       provide: INVENTORY_LOCATION_PORT,
       useClass: PrismaInventoryLocationAdapter,

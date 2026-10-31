@@ -4,9 +4,11 @@ import { APP_GUARD } from '@nestjs/core';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { Readable } from 'stream';
+import sharp from 'sharp';
 import { UserRole, UserStatus } from '@prisma/client';
 
 import { GearExtractionController } from '../src/modules/gear/presentation/controllers/gear-extraction.controller';
+import { GearCapabilitiesController } from '../src/modules/gear/presentation/controllers/gear-capabilities.controller';
 import { GearExtractionService } from '../src/modules/gear/application/services/gear-extraction.service';
 import { GEAR_EXTRACTION_DRAFT_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-extraction-draft.repository.port';
 import { GEAR_EXTRACTION_CACHE_PORT } from '../src/modules/gear/application/ports/gear-extraction-cache.port';
@@ -26,6 +28,7 @@ import { PrismaService } from '../src/shared/services/prisma.service';
 import { GlobalErrorFilter } from '../src/shared/errors/global-error.filter';
 import { AppError } from '../src/shared/errors/app-error';
 import { GEAR_ERROR_CODES } from '../src/shared/errors/codes/gear.error-codes';
+import { ERROR_DEFINITIONS } from '../src/shared/errors/error-definitions';
 import {
   GearExtractionDraftDomain,
   GearExtractionCacheDomain,
@@ -51,6 +54,10 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
 
   let aiCallCount = 0;
   let draftCounterToday = 0;
+  let aiPortMock: any;
+  let storageMock: any;
+  let cachePortMock: any;
+  let leasePortMock: any;
 
   beforeAll(async () => {
     // 1. Mock Media Asset Port
@@ -226,6 +233,11 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
       }),
     };
 
+    aiPortMock = mockAiPort;
+    storageMock = mockMediaStoragePort;
+    cachePortMock = mockCachePort;
+    leasePortMock = mockLeasePort;
+
     const mockPrisma: any = {
       $transaction: jest.fn(async (cb: any) => cb(mockPrisma)),
       user: {
@@ -308,7 +320,7 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
     };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
-      controllers: [GearExtractionController],
+      controllers: [GearExtractionController, GearCapabilitiesController],
       providers: [
         GearExtractionService,
         { provide: MEDIA_ASSET_PORT, useValue: mockMediaPort },
@@ -707,5 +719,213 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
 
       expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_DRAFT_PAYLOAD_MISMATCH);
     });
+  });
+
+  describe('AI không dùng được → bản nháp nhập tay (không trả lỗi)', () => {
+    const newUpload = (ownerUserId = aliceId) => {
+      const id = randomUUID();
+      mediaAssets.set(id, {
+        id,
+        ownerUserId,
+        scope: 'USER_GEAR',
+        status: 'READY',
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+      });
+      return id;
+    };
+    // Ảnh PNG khác byte mỗi lần để không trúng cache của test trước.
+    const uniqueImageStream = async () => {
+      const png = await sharp({
+        create: {
+          width: 2,
+          height: 2,
+          channels: 3,
+          background: { r: Math.floor(Math.random() * 256), g: Math.floor(Math.random() * 256), b: 7 },
+        },
+      })
+        .png()
+        .toBuffer();
+      return { stream: Readable.from([png]) };
+    };
+    const post = (uploadId: string) =>
+      request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({ source: 'IMAGE', uploadId });
+
+    const prevImageFlag = process.env.GEAR_IMAGE_EXTRACTION_ENABLED;
+    const prevQuota = process.env.GEAR_EXTRACTION_DAILY_QUOTA;
+    afterEach(() => {
+      if (prevImageFlag === undefined) delete process.env.GEAR_IMAGE_EXTRACTION_ENABLED;
+      else process.env.GEAR_IMAGE_EXTRACTION_ENABLED = prevImageFlag;
+      if (prevQuota === undefined) delete process.env.GEAR_EXTRACTION_DAILY_QUOTA;
+      else process.env.GEAR_EXTRACTION_DAILY_QUOTA = prevQuota;
+      delete aiPortMock.isConfigured;
+    });
+
+    it('tiện ích tắt → 201 READY nhập tay AI_DISABLED, không tải ảnh, không gọi AI', async () => {
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'false';
+      const streamCalls = storageMock.openOriginalStream.mock.calls.length;
+      const aiCalls = aiCallCount;
+
+      const res = await post(newUpload()).expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.manualEntry).toEqual({ required: true, reasonCode: 'AI_DISABLED', messageVi: expect.any(String) });
+      expect(res.body.extractedData.category).toBeUndefined();
+      expect(storageMock.openOriginalStream.mock.calls.length).toBe(streamCalls);
+      expect(aiCallCount).toBe(aiCalls);
+    });
+
+    it('AI chưa cấu hình (isConfigured = false) → nhập tay AI_NOT_CONFIGURED, không tải ảnh', async () => {
+      aiPortMock.isConfigured = () => false;
+      const streamCalls = storageMock.openOriginalStream.mock.calls.length;
+
+      const res = await post(newUpload()).expect(201);
+
+      expect(res.body.manualEntry.reasonCode).toBe('AI_NOT_CONFIGURED');
+      expect(storageMock.openOriginalStream.mock.calls.length).toBe(streamCalls);
+    });
+
+    it('lỗi đầu vào vẫn trả lỗi khi tiện ích tắt: ảnh của người khác → 403', async () => {
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'false';
+      const res = await post(newUpload(bobId)).expect(403);
+      expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_FORBIDDEN);
+    });
+
+    it('nhà cung cấp AI giới hạn (GEAR_AI_RATE_LIMITED) → nhập tay AI_RATE_LIMITED, lượt không bị tính', async () => {
+      storageMock.openOriginalStream.mockImplementationOnce(uniqueImageStream);
+      aiPortMock.extractGear.mockRejectedValueOnce(AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_RATE_LIMITED));
+
+      const res = await post(newUpload()).expect(201);
+
+      expect(res.body.manualEntry.reasonCode).toBe('AI_RATE_LIMITED');
+      expect(res.body.extractedData._manualEntry).toBe(true);
+    });
+
+    it('hết lượt trong ngày → nhập tay DAILY_QUOTA_EXCEEDED, không gọi AI', async () => {
+      process.env.GEAR_EXTRACTION_DAILY_QUOTA = '0';
+      storageMock.openOriginalStream.mockImplementationOnce(uniqueImageStream);
+      const aiCalls = aiCallCount;
+
+      const res = await post(newUpload()).expect(201);
+
+      expect(res.body.manualEntry.reasonCode).toBe('DAILY_QUOTA_EXCEEDED');
+      expect(aiCallCount).toBe(aiCalls);
+    });
+
+    it('GET /gear/capabilities (không cần đăng nhập) phản ánh cờ và isConfigured() của AI', async () => {
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'true';
+      aiPortMock.isConfigured = () => false;
+
+      const res = await request(app.getHttpServer()).get('/api/v1/gear/capabilities').expect(200);
+
+      expect(res.body.ruleBasedAdvice).toMatchObject({ enabled: true, configured: true });
+      expect(res.body.imageExtraction).toMatchObject({ enabled: true, configured: false });
+      expect(res.body.imageExtraction.messageVi).toEqual(expect.any(String));
+    });
+
+    it('GET bản nháp nhập tay trả lại manualEntry', async () => {
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'false';
+      const created = await post(newUpload()).expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/gear/extractions/${created.body.id}`)
+        .set('Authorization', aliceToken)
+        .expect(200);
+
+      expect(res.body.manualEntry.reasonCode).toBe('AI_DISABLED');
+    });
+
+    it('AI thành công nhưng ghi cache lỗi (khoá hết hạn) → vẫn READY với dữ liệu AI, không chuyển nhập tay', async () => {
+      storageMock.openOriginalStream.mockImplementationOnce(uniqueImageStream);
+      cachePortMock.setCache.mockRejectedValueOnce(AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT));
+      const aiCalls = aiCallCount;
+
+      const res = await post(newUpload()).expect(201);
+
+      expect(aiCallCount).toBe(aiCalls + 1);
+      expect(res.body.status).toBe('READY');
+      expect(res.body.manualEntry).toBeNull();
+      expect(res.body.extractedData._manualEntry).toBeUndefined();
+      expect(res.body.extractedData.category).toBe('JACKET');
+    });
+
+    it('nhả khoá AI lỗi (DB lỗi) → vẫn 201 READY với dữ liệu AI, không thành 5xx', async () => {
+      storageMock.openOriginalStream.mockImplementationOnce(uniqueImageStream);
+      // Chỉ nhả khoá AI bị lỗi; khoá quota (gear:quota:...) vẫn nhả bình thường.
+      leasePortMock.releaseLease.mockImplementation(async (key: string) => {
+        if (key.startsWith('gear:lease:')) throw new Error('connection terminated');
+        return true;
+      });
+      try {
+        const res = await post(newUpload()).expect(201);
+
+        expect(res.body.status).toBe('READY');
+        expect(res.body.manualEntry).toBeNull();
+        expect(res.body.extractedData.category).toBe('JACKET');
+        expect(
+          leasePortMock.releaseLease.mock.calls.some((c: any[]) => String(c[0]).startsWith('gear:lease:')),
+        ).toBe(true);
+      } finally {
+        leasePortMock.releaseLease.mockImplementation(async () => true);
+      }
+    });
+
+    it('khoá AI sống lâu hơn thời gian chờ AI (GEMINI_TIMEOUT_MS + biên)', async () => {
+      const prevTimeout = process.env.GEMINI_TIMEOUT_MS;
+      process.env.GEMINI_TIMEOUT_MS = '40000';
+      try {
+        storageMock.openOriginalStream.mockImplementationOnce(uniqueImageStream);
+        leasePortMock.acquireLease.mockClear();
+
+        await post(newUpload()).expect(201);
+
+        const aiLeaseCall = leasePortMock.acquireLease.mock.calls.find((c: any[]) =>
+          String(c[0]).startsWith('gear:lease:'),
+        );
+        expect(aiLeaseCall?.[2]).toBe(40000 + 15000);
+      } finally {
+        if (prevTimeout === undefined) delete process.env.GEMINI_TIMEOUT_MS;
+        else process.env.GEMINI_TIMEOUT_MS = prevTimeout;
+      }
+    });
+
+    it('quá giới hạn bản nháp nhập tay trong một giờ → 429 GEAR_MANUAL_DRAFT_RATE_LIMITED', async () => {
+      const prevLimit = process.env.GEAR_MANUAL_DRAFT_HOURLY_LIMIT;
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'false';
+      process.env.GEAR_MANUAL_DRAFT_HOURLY_LIMIT = '1';
+      try {
+        // Các test trước đã tạo bản nháp nhập tay cho alice → đã chạm giới hạn 1.
+        const res = await post(newUpload()).expect(429);
+
+        expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_MANUAL_DRAFT_RATE_LIMITED);
+        expect(res.body.error.retryable).toBe(true);
+        expect(res.body.error.details).toMatchObject({ limit: 1, retryAfterSeconds: expect.any(Number) });
+      } finally {
+        if (prevLimit === undefined) delete process.env.GEAR_MANUAL_DRAFT_HOURLY_LIMIT;
+        else process.env.GEAR_MANUAL_DRAFT_HOURLY_LIMIT = prevLimit;
+      }
+    });
+  });
+
+  it('thiếu dịch vụ media → GEAR_MEDIA_UNAVAILABLE (503), không phải lỗi AI', async () => {
+    const service = new GearExtractionService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      aiPortMock,
+      {} as any,
+    );
+
+    const err = await service
+      .createExtraction(aliceId, { source: 'IMAGE', uploadId: randomUUID() } as any)
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(GEAR_ERROR_CODES.GEAR_MEDIA_UNAVAILABLE);
+    expect(ERROR_DEFINITIONS[err.code].status).toBe(503);
   });
 });

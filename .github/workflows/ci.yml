@@ -181,6 +181,17 @@ jobs:
       - name: "Step 9 - CF01 HTTP Tests (mock, no external DB)"
         run: npm run test:cf01
 
+      # Step 10: Gear advisor tests (test/gear-*.spec.ts)
+      # Phan lon dung mock; gear-concurrency.integration.spec.ts chay that tren DB container
+      # (da migrate o Step 6) va can 28 quy tac gear → seed truoc.
+      # Khong can khoa AI: Gear advisor chay bang bo quy tac khi khong co GEMINI_API_KEY.
+      - name: "Step 10 - Seed gear rules (for gear PG integration test)"
+        run: npm run seed:gear-rules
+      - name: "Step 11 - Gear Advisor Tests"
+        run: npm run test:gear
+        env:
+          TEST_DATABASE_URL: "postgresql://ci_user@localhost:5432/trekgo_ci"
+
   # ---------------------------------------------------------------------------
   # JOB 2: Kiem tra Web (Next.js) - chi chay khi co file trong web/ thay doi
   # ---------------------------------------------------------------------------

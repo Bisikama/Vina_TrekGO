@@ -62,6 +62,11 @@ export interface GearAdviceAiResult {
 }
 
 export interface GearAiPort {
+  isConfigured?(): boolean
+  /** Nhà cung cấp hiện tại có sinh lời khuyên được không. Không khai báo = có (nếu có generateAdvice). */
+  supportsAdvice?(): boolean
+  /** Tên nhà cung cấp đang dùng (gemini | openai), để báo ở capabilities. */
+  providerName?(): string
   extractGear(request: GearExtractionAiRequest): Promise<GearExtractionAiResult>
   generateAdvice?(request: GearAdviceAiRequest): Promise<GearAdviceAiResult>
 }

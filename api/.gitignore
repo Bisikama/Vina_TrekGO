@@ -84,3 +84,7 @@ jest_output.txt
 /.invitation-test-mongo
 /scripts
 /prisma/seeds/data/*.local.json
+
+# Claude Code personal files
+CLAUDE.local.md
+.claude/settings.local.json

@@ -12,10 +12,11 @@ import { GearPlanService } from '../src/modules/gear/application/services/gear-p
 /**
  * Isolated PostgreSQL Integration Test Suite for Gear Advisor V3.1.5 Concurrency & Lifecycle
  *
- * Uses DATABASE_URL with a runId-isolated test fixture.
+ * Uses TEST_DATABASE_URL (an isolated test database, never the dev DATABASE_URL) with a runId-isolated
+ * test fixture. The test database needs migrations applied and gear rules seeded (seed:gear-rules).
  * Cleans up exact created IDs in finally blocks without truncating DB or overwriting global seed data.
  */
-const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
+const databaseUrl = process.env.TEST_DATABASE_URL
 const describeIntegration = databaseUrl ? describe : describe.skip
 
 describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId Fixture)', () => {
@@ -54,6 +55,7 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
   })
 
   afterAll(async () => {
+    delete process.env.GEAR_AI_ADVICE_ENABLED
     if (hasDbConnection && testUserId) {
       try {
         await prisma.gearAdviceRun.deleteMany({ where: { planRevision: { plan: { userId: testUserId } } } })
@@ -142,10 +144,14 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
 
     try {
       expect(createdItems.length).toBe(1)
-      const fulfilled = results.filter((r) => r.status === 'fulfilled')
+      const fulfilled = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof draftRepo.confirmDraft>>> => r.status === 'fulfilled')
       const rejected = results.filter((r) => r.status === 'rejected')
-      expect(fulfilled.length).toBe(1)
-      expect(rejected.length).toBe(1)
+      expect(fulfilled.length).toBeGreaterThanOrEqual(1)
+      expect(fulfilled.filter((r) => !r.value.replayed)).toHaveLength(1)
+      expect(fulfilled.every((r) => r.value.item.id === createdItems[0].id)).toBe(true)
+      if (rejected.length === 0) {
+        expect(fulfilled.filter((r) => r.value.replayed)).toHaveLength(1)
+      }
     } finally {
       for (const it of createdItems) {
         await prisma.userGearItem.delete({ where: { id: it.id } }).catch(() => {})
@@ -240,6 +246,8 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
 
   it('INTEG-05: Blocker B.1 — Actual GearPlanService advice generation aborts with GEAR_PLAN_STALE under concurrent mutation barrier', async () => {
     expect(hasDbConnection).toBe(true)
+    // Rào chắn nằm trong lúc gọi AI advice; AI advice mặc định tắt nên bật cờ cho test này.
+    process.env.GEAR_AI_ADVICE_ENABLED = 'true'
 
     // 1. Create plan with inputRevision 1, evaluatedRevision 1
     const plan = await prisma.gearPlan.create({
@@ -325,9 +333,8 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
       userGearRepo,
       tripContextPort,
       prisma as any,
-      undefined,
-      undefined,
-      undefined,
+      undefined, // optionSetRepo
+      undefined, // quoteLinkRepo
       mockAiPort,
     )
 
@@ -384,7 +391,7 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
 
 if (!databaseUrl) {
   describe('PostgreSQL Integration Tests (NOTICE)', () => {
-    it('DATABASE_URL is not set; integration tests skipped cleanly', () => {
+    it('TEST_DATABASE_URL is not set; integration tests skipped cleanly', () => {
       console.log('[GEAR_INTEGRATION_NOTICE] Database URL not configured. Integration test suite skipped gracefully.')
       expect(true).toBe(true)
     })
