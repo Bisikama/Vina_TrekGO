@@ -46,6 +46,7 @@
     "@types/react": "~19.3.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~58.0.4",
+    "maplibre-gl": "4.7.1",
     "openapi-typescript-codegen": "^0.31.0",
     "typescript": "~6.0.3"
   },
@@ -58,6 +59,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "api:gen": "node ./scripts/generate-api.js",
+    "map:bundle": "node ./scripts/generate-maplibre-bundle.js",
+    "map:build": "node --env-file=.env ./scripts/build-offline-map.cjs",
+    "test:offline-map": "node --test src/services/map/offlineMap.test.cjs",
     "postinstall": "node ./scripts/fix-debugger-locales.js"
   },
   "private": true
