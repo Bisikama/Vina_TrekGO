@@ -279,6 +279,17 @@ export default function RentalScreen() {
           <TouchableOpacity
             style={styles.quickActionCard}
             activeOpacity={0.85}
+            onPress={() => router.push("/gear-advisor" as Href)}
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="checkmark-done-outline" size={21} color={Colors.primaryDark} />
+            </View>
+            <Text style={styles.quickActionTitle}>Kế hoạch đồ</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            activeOpacity={0.85}
             onPress={() => router.push("/rental-transactions" as Href)}
           >
             <View style={styles.quickActionIcon}>
