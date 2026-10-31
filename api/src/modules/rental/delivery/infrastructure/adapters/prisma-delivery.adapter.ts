@@ -779,7 +779,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         packageViaOrderId: {
           include: {
             packageItemsViaPackageId: {
-              include: { equipmentUnit: { include: { product: { select: { id: true, name: true } } } } },
+              include: { equipmentUnit: { include: { product: { select: { id: true, name: true, grade: true } } } } },
             },
           },
         },
@@ -802,7 +802,11 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         units: order.packageViaOrderId.packageItemsViaPackageId.map((item) => ({
           unitId: item.equipmentUnitId,
           assetCode: item.equipmentUnit.assetCode,
-          product: { id: item.equipmentUnit.product.id, name: item.equipmentUnit.product.name },
+          product: {
+            id: item.equipmentUnit.product.id,
+            name: item.equipmentUnit.product.name,
+            grade: item.equipmentUnit.product.grade,
+          },
           condition: item.equipmentUnit.condition,
         })),
       },

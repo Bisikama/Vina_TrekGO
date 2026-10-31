@@ -22,8 +22,8 @@ export const extractionEvidenceSchema = z.object({
   id: z.string(),
   fieldPath: z.string(),
   originalText: z.string(),
-  sourceLocator: z.string().optional(),
-  unit: z.string().optional(),
+  sourceLocator: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
+  unit: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
 });
 
 export const gearExtractionWireSchema = z.object({

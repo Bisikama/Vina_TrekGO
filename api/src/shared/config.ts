@@ -181,17 +181,48 @@ const envConfigSchema = z
       .transform((val) => val === 'true'),
 
     // AI GEAR ADVISOR (GEMINI & FIRECRAWL)
-    GEMINI_API_KEY: z.string().optional(),
+    GEAR_AI_ADVICE_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('false')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+    GEAR_IMAGE_EXTRACTION_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('true')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+    GEAR_LINK_EXTRACTION_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('false')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+
+    GEMINI_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
     GEMINI_MODEL_EXTRACTION: z.string().default('gemini-2.5-flash'),
     GEMINI_MODEL_ADVISOR: z.string().default('gemini-2.5-flash'),
     GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
     GEMINI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
 
-    FIRECRAWL_API_KEY: z.string().optional(),
+    // Nhà cung cấp AI của Gear advisor. openai hiện chỉ hỗ trợ đọc thông số (ảnh/link); lời khuyên dùng bộ quy tắc.
+    GEAR_AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
+    OPENAI_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
+    OPENAI_MODEL_EXTRACTION: z.string().default('gpt-4o-mini'),
+    OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    OPENAI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+
+    FIRECRAWL_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
     FIRECRAWL_API_URL: z.string().url().default('https://api.firecrawl.dev'),
     FIRECRAWL_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
 
     GEAR_EXTRACTION_DAILY_QUOTA: z.coerce.number().int().positive().default(20),
+    // Giới hạn số bản nháp "cần nhập tay" mỗi user mỗi giờ (bản nháp này không tính quota ngày).
+    GEAR_MANUAL_DRAFT_HOURLY_LIMIT: z.coerce.number().int().positive().default(30),
 
     // TEST DATABASE OVERRIDES (OPTIONAL)
     CF01_TEST_DATABASE_URL: z.string().optional(),

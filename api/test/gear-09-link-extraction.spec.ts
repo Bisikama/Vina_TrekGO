@@ -31,6 +31,7 @@ import {
 } from '../src/modules/gear/domain/gear.types';
 import { PAGE_READER_PORT } from '../src/modules/gear/application/ports/page-reader.port';
 import { isPrivateOrReservedIp } from '../src/modules/gear/infrastructure/adapters/safe-link-fetcher';
+import { FirecrawlPageReaderAdapter } from '../src/modules/gear/infrastructure/adapters/firecrawl-page-reader.adapter';
 
 describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline (/api/v1/gear/extractions)', () => {
   let app: INestApplication;
@@ -44,8 +45,15 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
   const userItems = new Map<string, UserGearItemDomain>();
 
   let aiCallCount = 0;
+  let pageReaderMock: any;
+  let aiPortMock: any;
+  let cachePortMock: any;
+  let leasePortMock: any;
+  // Đọc link mặc định tắt (GEAR_LINK_EXTRACTION_ENABLED=false); suite này kiểm đường đọc link nên bật cờ.
+  const prevLinkFlag = process.env.GEAR_LINK_EXTRACTION_ENABLED;
 
   beforeAll(async () => {
+    process.env.GEAR_LINK_EXTRACTION_ENABLED = 'true';
     // 1. Mock Draft Repository Port
     const mockDraftRepo = {
       createDraft: jest.fn(async (input: any) => {
@@ -211,6 +219,11 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
       }),
     };
 
+    pageReaderMock = mockPageReader;
+    cachePortMock = mockCachePort;
+    leasePortMock = mockLeasePort;
+    aiPortMock = mockAiPort;
+
     const mockPrisma: any = {
       $transaction: jest.fn(async (cb: any) => cb(mockPrisma)),
       user: {
@@ -323,6 +336,8 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
 
   afterAll(async () => {
     await app.close();
+    if (prevLinkFlag === undefined) delete process.env.GEAR_LINK_EXTRACTION_ENABLED;
+    else process.env.GEAR_LINK_EXTRACTION_ENABLED = prevLinkFlag;
   });
 
   describe('SSRF Protection Guard', () => {
@@ -557,6 +572,181 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
       const draft = drafts.get(draftId);
       expect(draft?.status).toBe('CONFIRMED');
       expect(draft?.confirmedItemId).toBe(res.body.item.id);
+    });
+  });
+
+  describe('AI không dùng được → bản nháp nhập tay (không trả lỗi)', () => {
+    const manualUrl = 'https://outdoor-gear-vietnam.vn/products/manual-entry-tent';
+
+    beforeEach(() => {
+      jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
+    });
+    afterEach(() => {
+      process.env.GEAR_LINK_EXTRACTION_ENABLED = 'true';
+    });
+
+    const post = (url: string) =>
+      request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({ source: 'LINK', url: `${url}?r=${randomUUID()}` });
+
+    it('tiện ích đọc link tắt → 201, bản nháp READY nhập tay, không đọc trang, không gọi AI', async () => {
+      process.env.GEAR_LINK_EXTRACTION_ENABLED = 'false';
+      const readCalls = pageReaderMock.readPage.mock.calls.length;
+      const aiCalls = aiCallCount;
+
+      const res = await post(manualUrl).expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.manualEntry).toEqual({
+        required: true,
+        reasonCode: 'LINK_READER_DISABLED',
+        messageVi: expect.any(String),
+      });
+      expect(res.body.extractedData.category).toBeUndefined();
+      expect(pageReaderMock.readPage.mock.calls.length).toBe(readCalls);
+      expect(aiCallCount).toBe(aiCalls);
+    });
+
+    it('vẫn trả 400 GEAR_SSRF_BLOCKED cho URL bị chặn kể cả khi tiện ích tắt', async () => {
+      process.env.GEAR_LINK_EXTRACTION_ENABLED = 'false';
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({ source: 'LINK', url: 'http://insecure-store.vn/item/1' })
+        .expect(400);
+      expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_SSRF_BLOCKED);
+    });
+
+    it('không đọc được trang (GEAR_PAGE_FETCH_FAILED) → bản nháp nhập tay LINK_FETCH_FAILED', async () => {
+      pageReaderMock.readPage.mockRejectedValueOnce(
+        AppError.fromCode(GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED, { message: 'blocked by site' }),
+      );
+      const res = await post(manualUrl).expect(201);
+      expect(res.body.manualEntry.reasonCode).toBe('LINK_FETCH_FAILED');
+    });
+
+    it('AI hết giờ sau khi đọc trang → bản nháp nhập tay AI_TIMEOUT, giữ tiêu đề trang', async () => {
+      pageReaderMock.readPage.mockResolvedValueOnce({
+        url: manualUrl,
+        finalUrl: manualUrl,
+        markdown: '# Lều thử nghiệm',
+        contentHash: `mock-content-hash-${randomUUID()}`,
+        title: 'Lều thử nghiệm',
+        readAt: new Date(),
+      });
+      aiPortMock.extractGear.mockRejectedValueOnce(AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_TIMEOUT));
+
+      const res = await post(manualUrl).expect(201);
+
+      expect(res.body.manualEntry.reasonCode).toBe('AI_TIMEOUT');
+      expect(res.body.extractedData.title).toBe('Lều thử nghiệm');
+      expect(res.body.extractedData._manualEntry).toBe(true);
+    });
+
+    it('confirm bản nháp nhập tay tạo món đồ source = manual', async () => {
+      process.env.GEAR_LINK_EXTRACTION_ENABLED = 'false';
+      const created = await post(manualUrl).expect(201);
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/gear/extractions/${created.body.id}/confirm`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedVersion: created.body.version,
+          acknowledgeDuplicate: true,
+          item: {
+            name: 'Lều nhập tay',
+            category: 'TENT',
+            condition: 'GOOD',
+            attributes: { sleeping_places: 2, flysheet_waterproof_mm: 2000, floor_waterproof_mm: 3000, weight_g: 2500 },
+          },
+        })
+        .expect(200);
+
+      expect(res.body.item.source).toBe('manual');
+    });
+
+    const freshPage = () => ({
+      url: manualUrl,
+      finalUrl: manualUrl,
+      markdown: '# Lều thử nghiệm',
+      contentHash: `mock-content-hash-${randomUUID()}`,
+      title: 'Lều thử nghiệm',
+      readAt: new Date(),
+    });
+
+    it('Firecrawl bị giới hạn tần suất (HTTP 429) → 201 nhập tay LINK_FETCH_FAILED, không phải quota ngày của user', async () => {
+      const prevKey = process.env.FIRECRAWL_API_KEY;
+      process.env.FIRECRAWL_API_KEY = 'test-firecrawl-key';
+      const realReader = new FirecrawlPageReaderAdapter();
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(new Response('rate limited', { status: 429 }));
+      try {
+        // Adapter thật: 429 phải ra GEAR_PAGE_FETCH_FAILED (trước đây là GEAR_EXTRACTION_QUOTA_EXCEEDED).
+        const err = await realReader.readPage(`${manualUrl}?direct=1`).catch((e) => e);
+        expect(err).toBeInstanceOf(AppError);
+        expect(err.code).toBe(GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED);
+
+        // Qua HTTP: service chuyển sang bản nháp nhập tay thay vì trả 429.
+        fetchSpy.mockResolvedValueOnce(new Response('rate limited', { status: 429 }));
+        pageReaderMock.readPage.mockImplementationOnce((url: string) => realReader.readPage(url));
+        const aiCalls = aiCallCount;
+
+        const res = await post(manualUrl).expect(201);
+
+        expect(res.body.status).toBe('READY');
+        expect(res.body.manualEntry.reasonCode).toBe('LINK_FETCH_FAILED');
+        expect(aiCallCount).toBe(aiCalls);
+      } finally {
+        fetchSpy.mockRestore();
+        if (prevKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+        else process.env.FIRECRAWL_API_KEY = prevKey;
+      }
+    });
+
+    it('AI thành công nhưng ghi cache lỗi (khoá hết hạn) → vẫn READY với dữ liệu AI', async () => {
+      pageReaderMock.readPage.mockResolvedValueOnce(freshPage());
+      cachePortMock.setCache
+        .mockRejectedValueOnce(AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT))
+        .mockRejectedValueOnce(AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT));
+      const aiCalls = aiCallCount;
+
+      const res = await post(manualUrl).expect(201);
+
+      expect(aiCallCount).toBe(aiCalls + 1);
+      expect(res.body.status).toBe('READY');
+      expect(res.body.manualEntry).toBeNull();
+      expect(res.body.extractedData._manualEntry).toBeUndefined();
+      expect(res.body.extractedData.title).toBe('Lều thử nghiệm');
+    });
+
+    it('không lấy được khoá AI nhưng tiến trình khác vừa ghi cache nội dung → READY từ cache, không gọi AI', async () => {
+      const page = freshPage();
+      pageReaderMock.readPage.mockResolvedValueOnce(page);
+      // Kiểm cache tầng 1 (URL) và tầng 2 (nội dung) ban đầu đều trống; lần kiểm lại sau khi mất khoá thì có.
+      cachePortMock.getCache.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      caches.set(`${aliceId}:${page.contentHash}`, {
+        id: randomUUID(),
+        ownerScope: aliceId,
+        contentHash: page.contentHash,
+        status: 'SUCCESS',
+        resultJson: { category: 'TENT', name: 'Lều từ tiến trình khác', attributes: {} },
+        createdAt: new Date(),
+      } as any);
+      // Khoá quota lấy được, khoá AI thì không.
+      leasePortMock.acquireLease
+        .mockResolvedValueOnce({ acquired: true, fencingToken: 1 })
+        .mockResolvedValueOnce({ acquired: false, fencingToken: 0 });
+      const aiCalls = aiCallCount;
+
+      const res = await post(manualUrl).expect(201);
+
+      expect(aiCallCount).toBe(aiCalls);
+      expect(res.body.status).toBe('READY');
+      expect(res.body.extractedData._cacheHit).toBe(true);
+      expect(res.body.extractedData.name).toBe('Lều từ tiến trình khác');
     });
   });
 });

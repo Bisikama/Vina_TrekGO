@@ -38,7 +38,7 @@ import type {
   RentalPaymentResult,
 } from '../../application/ports/rental-order.port'
 import { RENTAL_CONTEXT_PORT, type RentalContextPort } from '../../application/ports/rental-context.port'
-import { parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
+import { describeDeposit, parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
@@ -487,7 +487,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       include: {
         rentalOrderLinesViaOrderId: {
           include: {
-            product: { select: { id: true, sku: true, name: true } },
+            product: { select: { id: true, sku: true, name: true, grade: true, gradeGroupId: true } },
             rentalQuantityReservationsViaOrderLineId: { orderBy: { reservationCycle: 'desc' } },
             rentalUnitAssignmentsViaOrderLineId: {
               include: { equipmentUnit: { select: { id: true, assetCode: true, status: true, condition: true } } },
@@ -529,6 +529,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         assignmentId: a.id,
         orderLineId: line.id,
         productId: line.productId,
+        // Hạng khách đã thuê (theo dòng đơn). Món được pick luôn thuộc đúng sản phẩm này.
+        productName: line.product.name,
+        grade: line.product.grade,
         unitId: a.equipmentUnit.id,
         assetCode: a.equipmentUnit.assetCode,
         assignmentStatus: a.status,
@@ -546,6 +549,10 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         dailyPrice: decimalVndToApiInteger(line.dailyPriceSnapshot.toString()),
         depositPerUnit: decimalVndToApiInteger(line.depositPerUnitSnapshot.toString()),
         replacementValue: decimalVndToApiInteger(line.replacementValueSnapshot.toString()),
+        depositExplanation: describeDeposit(
+          parseWholeVnd(line.depositPerUnitSnapshot.toString()),
+          parseWholeVnd(line.replacementValueSnapshot.toString()),
+        ),
         chargedDays: line.chargedDays,
         feeAmount: decimalVndToApiInteger(line.lineRentalFee.toString()),
         depositAmount: decimalVndToApiInteger(line.lineDeposit.toString()),

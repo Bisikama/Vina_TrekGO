@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common'
 import { SharedModule } from '../../shared/shared.module'
 import { MediaModule } from '../media/media.module'
+import { WeatherModule } from '../weather/weather.module'
+import { TRIP_FORECAST_PORT } from './application/ports/trip-forecast.port'
+import { OpenMeteoTripForecastAdapter } from './infrastructure/adapters/open-meteo-trip-forecast.adapter'
 import {
   USER_GEAR_REPOSITORY_PORT,
   GEAR_RULE_REPOSITORY_PORT,
@@ -10,7 +13,6 @@ import {
   GEAR_PLAN_REPOSITORY_PORT,
   GEAR_PLAN_REVISION_REPOSITORY_PORT,
   GEAR_PLAN_OPTION_SET_REPOSITORY_PORT,
-  GEAR_ADVICE_RUN_REPOSITORY_PORT,
   GEAR_QUOTE_LINK_REPOSITORY_PORT,
   PRODUCT_TECHNICAL_PROFILE_REPOSITORY_PORT,
   TRIP_CONTEXT_READ_PORT,
@@ -26,12 +28,12 @@ import {
   PrismaGearPlanRepository,
   PrismaGearPlanRevisionRepository,
   PrismaGearPlanOptionSetRepository,
-  PrismaGearAdviceRunRepository,
   PrismaGearQuoteLinkRepository,
   PrismaProductTechnicalProfileRepository,
   PrismaTripContextReadAdapter,
-  OpenAiGearAiAdapter,
   GeminiGearAiAdapter,
+  OpenAiGearAiAdapter,
+  SelectableGearAiAdapter,
   FirecrawlPageReaderAdapter,
 } from './infrastructure/adapters'
 import { UserGearService } from './application/services/user-gear.service'
@@ -46,6 +48,7 @@ import { GearRulesController } from './presentation/controllers/gear-rules.contr
 import { StaffGearProfileController } from './presentation/controllers/staff-gear-profile.controller'
 import { GearPlanController } from './presentation/controllers/gear-plan.controller'
 import { GearExtractionController } from './presentation/controllers/gear-extraction.controller'
+import { GearCapabilitiesController } from './presentation/controllers/gear-capabilities.controller'
 
 export const GEAR_REPOSITORY_PROVIDERS = [
   {
@@ -81,10 +84,6 @@ export const GEAR_REPOSITORY_PROVIDERS = [
     useClass: PrismaGearPlanOptionSetRepository,
   },
   {
-    provide: GEAR_ADVICE_RUN_REPOSITORY_PORT,
-    useClass: PrismaGearAdviceRunRepository,
-  },
-  {
     provide: GEAR_QUOTE_LINK_REPOSITORY_PORT,
     useClass: PrismaGearQuoteLinkRepository,
   },
@@ -97,12 +96,19 @@ export const GEAR_REPOSITORY_PROVIDERS = [
     useClass: PrismaTripContextReadAdapter,
   },
   {
+    // Chọn Gemini / OpenAI bằng GEAR_AI_PROVIDER (đọc lúc gọi).
     provide: GEAR_AI_PORT,
-    useClass: GeminiGearAiAdapter,
+    useClass: SelectableGearAiAdapter,
   },
+  GeminiGearAiAdapter,
+  OpenAiGearAiAdapter,
   {
     provide: PAGE_READER_PORT,
     useClass: FirecrawlPageReaderAdapter,
+  },
+  {
+    provide: TRIP_FORECAST_PORT,
+    useClass: OpenMeteoTripForecastAdapter,
   },
   PrismaUserGearRepository,
   PrismaGearRuleRepository,
@@ -112,11 +118,9 @@ export const GEAR_REPOSITORY_PROVIDERS = [
   PrismaGearPlanRepository,
   PrismaGearPlanRevisionRepository,
   PrismaGearPlanOptionSetRepository,
-  PrismaGearAdviceRunRepository,
   PrismaGearQuoteLinkRepository,
   PrismaProductTechnicalProfileRepository,
   PrismaTripContextReadAdapter,
-  OpenAiGearAiAdapter,
 ]
 
 export const GEAR_SERVICES = [
@@ -129,7 +133,7 @@ export const GEAR_SERVICES = [
 ]
 
 @Module({
-  imports: [SharedModule, MediaModule],
+  imports: [SharedModule, MediaModule, WeatherModule],
   controllers: [
     UserGearController,
     GearCheckController,
@@ -137,6 +141,7 @@ export const GEAR_SERVICES = [
     StaffGearProfileController,
     GearPlanController,
     GearExtractionController,
+    GearCapabilitiesController,
   ],
   providers: [...GEAR_REPOSITORY_PROVIDERS, ...GEAR_SERVICES],
   exports: [...GEAR_REPOSITORY_PROVIDERS, ...GEAR_SERVICES],

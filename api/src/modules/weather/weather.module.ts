@@ -15,6 +15,6 @@ import { OpenMeteoClient } from './infrastructure/external/open-meteo.client'
       useClass: PrismaWeatherAdapter,
     },
   ],
-  exports: [GetTripWeatherUseCase, WeatherPort],
+  exports: [GetTripWeatherUseCase, WeatherPort, OpenMeteoClient],
 })
 export class WeatherModule {}

@@ -42,6 +42,8 @@ import { PrismaService } from 'src/shared/services/prisma.service'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_RETURN_ERROR_CODES as RR } from 'src/shared/errors/codes/rental-return.error-codes'
 import { RENTAL_DOCUMENT_ERROR_CODES as RD } from 'src/shared/errors/codes/rental-document.error-codes'
+import { assertGradeDecision } from '../../../inventory/application/services/equipment-grade.rules'
+import { applyGradeDecision } from '../../../inventory/infrastructure/equipment-grade-transfer'
 import type {
   CreateAssessmentReviewCommand,
   CreateDepositSettlementCommand,
@@ -2046,6 +2048,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         inspectionId: command.inspectionId ?? null,
         accessoriesChecked: command.accessoriesChecked,
         expectedVersion: command.expectedVersion,
+        gradeDecision: command.gradeDecision ?? null,
       },
       async (tx) => {
         const actor = await requireActiveRole(tx, command.actorUserId, UserRole.STAFF_INVENTORY)
@@ -2076,6 +2079,14 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         ) {
           throw AppError.fromCode(RR.RETURN_ITEM_REVIEW_REQUIRED)
         }
+        // Phân hạng bắt buộc với sản phẩm có hạng; kiểm trước khi đổi trạng thái để lỗi không để lại gì.
+        const gradedProduct = await tx.rentalProduct.findUnique({
+          where: { id: unit.productId },
+          select: { id: true, gradeGroupId: true, grade: true },
+        })
+        const gradeDecision = gradedProduct
+          ? assertGradeDecision(gradedProduct, command.gradeDecision, { required: true })
+          : null
         const updated = await tx.equipmentUnit.update({
           where: { id: unit.id },
           data: { status: EquipmentUnitStatus.AVAILABLE, expectedReadyAt: null, version: { increment: 1 } },
@@ -2092,14 +2103,28 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           })
           if (orderLine) await tryCompleteOrder(tx, orderLine.orderId, command.now)
         }
+        // Chạy sau tryCompleteOrder: khoá đơn trước, nhóm sản phẩm sau (cùng thứ tự với gia hạn).
+        const gradeResult =
+          gradedProduct && gradeDecision
+            ? await applyGradeDecision(tx, {
+                unitId: unit.id,
+                product: gradedProduct,
+                decision: gradeDecision,
+                actorId: actor.id,
+                now: command.now,
+                assignmentId: assignment.id,
+              })
+            : null
+        const finalProductId = gradeResult?.toProductId ?? updated.productId
+        const finalVersion = gradeResult?.unitVersion ?? updated.version
         await writeAudit(
           tx,
           actor.id,
           'RETURNED_UNIT_AVAILABLE',
           'EquipmentUnit',
           unit.id,
-          { status: unit.status, version: unit.version },
-          { status: updated.status, version: updated.version },
+          { status: unit.status, version: unit.version, productId: unit.productId },
+          { status: updated.status, version: finalVersion, productId: finalProductId },
           command.idempotencyKey,
         )
         return {
@@ -2108,9 +2133,19 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             assetCode: updated.assetCode,
             status: updated.status,
             condition: updated.condition,
-            version: updated.version,
+            productId: finalProductId,
+            version: finalVersion,
           },
           readyAt: command.now.toISOString(),
+          gradeReview: gradeResult
+            ? {
+                id: gradeResult.reviewId,
+                decision: gradeResult.decision,
+                fromProductId: gradeResult.fromProductId,
+                toProductId: gradeResult.toProductId,
+                shortageOrderIds: gradeResult.shortage.orderIds,
+              }
+            : null,
         }
       },
     )

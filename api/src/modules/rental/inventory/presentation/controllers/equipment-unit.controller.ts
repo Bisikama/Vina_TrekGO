@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Param, Query, Patch } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiParam, ApiBody } from '@nestjs/swagger'
+import { Controller, Get, Post, Body, Param, Query, Patch, Headers, HttpCode } from '@nestjs/common'
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiParam, ApiBody, ApiHeader } from '@nestjs/swagger'
+import { AppError, RENTAL_ORDERING_ERROR_CODES } from 'src/shared/errors'
 import { Auth } from 'src/shared/decorators/auth.decorator'
 import { Roles } from 'src/shared/decorators/roles.decorator'
 import { AuthType } from 'src/shared/constants/auth.constant'
@@ -27,6 +28,12 @@ import {
 } from '../dtos/batch-create-equipment-units.dto'
 import { GenerateEquipmentLabelsSchema, type GenerateEquipmentLabelsDto } from '../dtos/generate-equipment-labels.dto'
 import { ChangeEquipmentMaintenanceSchema, type ChangeEquipmentMaintenanceDto } from '../dtos/equipment-maintenance.dto'
+import { DowngradeEquipmentGradeUseCase } from '../../application/use-cases/downgrade-equipment-grade.use-case'
+import {
+  EquipmentGradeDowngradeSchema,
+  EquipmentIdempotencyKeySchema,
+  type EquipmentGradeDowngradeDto,
+} from '../dtos/equipment-grade-downgrade.dto'
 
 const IdParamSchema = z.object({
   id: z.string().uuid(),
@@ -45,6 +52,7 @@ export class EquipmentUnitController {
     private readonly batchCreateEquipmentUnitsUseCase: BatchCreateEquipmentUnitsUseCase,
     private readonly generateEquipmentLabelsUseCase: GenerateEquipmentLabelsUseCase,
     private readonly changeEquipmentMaintenanceUseCase: ChangeEquipmentMaintenanceUseCase,
+    private readonly downgradeEquipmentGradeUseCase: DowngradeEquipmentGradeUseCase,
   ) {}
 
   @ApiOperation({
@@ -528,5 +536,82 @@ COMPLETE:
       return this.changeEquipmentMaintenanceUseCase.execute(params.id, { ...body, staffId: actor.id })
     }
     return this.changeEquipmentMaintenanceUseCase.execute(params.id, body)
+  }
+
+  @ApiOperation({
+    summary: 'Hạ hạng thiết bị đang ở kho (Rất mới → Đã sử dụng tốt)',
+    description: `
+Chuyển một thiết bị AVAILABLE sang sản phẩm hạng "Đã sử dụng tốt" cùng nhóm. Quyền: STAFF_INVENTORY | ADMIN
+- Dùng cho kiểm kho định kỳ hoặc món sửa xong. Món vừa trả về phân hạng ở bước đánh dấu AVAILABLE (RB-API-611), không dùng endpoint này.
+- Chỉ hạ hạng, không nâng. Thiết bị phải thuộc sản phẩm hạng "Rất mới".
+- Thiết bị phải AVAILABLE, không có assignment còn mở và không có cam kết sẵn sàng (readiness commitment).
+- Nếu hạ hạng làm thiếu hàng cho đơn đã đặt chưa bàn giao: đơn không đổi tiền/số lượng, được đánh dấu ACTION_REQUIRED để nhân viên xử lý (shortageOrderIds).
+- Retry cùng body với cùng Idempotency-Key trả lại kết quả cũ.
+`,
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'EquipmentUnit UUID' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'Khóa duy nhất để tránh gọi trùng (8–200 ký tự)', example: 'grade-down-20261031-abc123' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['reason', 'expectedVersion'],
+      properties: {
+        reason: { type: 'string', minLength: 3, maxLength: 1000, description: 'Lý do hạ hạng' },
+        note: { type: 'string', maxLength: 3000 },
+        evidenceIds: { type: 'array', maxItems: 10, items: { type: 'string', format: 'uuid' }, description: 'UUID ảnh bằng chứng' },
+        expectedVersion: { type: 'integer', minimum: 1 },
+      },
+      example: { reason: 'Vải lều bạc màu sau kiểm kho', expectedVersion: 5 },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Thiết bị sau khi chuyển sang sản phẩm GOOD_USED và bản ghi phân hạng',
+    schema: {
+      type: 'object',
+      properties: {
+        unit: { type: 'object' },
+        gradeReview: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            decision: { type: 'string', enum: ['DOWNGRADE'] },
+            fromProductId: { type: 'string', format: 'uuid' },
+            toProductId: { type: 'string', format: 'uuid' },
+            shortageOrderIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+          },
+        },
+      },
+    },
+  })
+  @ApiErrorResponse(400, 'Thiếu Idempotency-Key', 'IDEMPOTENCY_KEY_REQUIRED', 'Gửi header Idempotency-Key 8–200 ký tự')
+  @ApiErrorResponse(404, 'Không tìm thấy thiết bị', 'EQUIPMENT_UNIT_NOT_FOUND', 'unitId không tồn tại')
+  @ApiErrorResponses(409, 'Không thể hạ hạng lúc này', [
+    { name: 'notRegradable', summary: 'Thiết bị không AVAILABLE, đang gán cho đơn hoặc có cam kết sẵn sàng', code: 'EQUIPMENT_UNIT_NOT_REGRADABLE', message: 'details.reason: STATUS_NOT_AVAILABLE | OPEN_ASSIGNMENT | READINESS_COMMITMENT' },
+    { name: 'version', summary: 'Xung đột phiên bản', code: 'VERSION_CONFLICT', message: 'Thiết bị đã thay đổi; lấy version mới rồi thử lại' },
+    { name: 'keyReused', summary: 'Idempotency-Key dùng lại với body khác', code: 'IDEMPOTENCY_KEY_REUSED', message: 'Dùng khoá mới cho yêu cầu mới' },
+  ])
+  @ApiErrorResponses(422, 'Không áp dụng được quy tắc hạng', [
+    { name: 'notApplicable', summary: 'Sản phẩm không phân hạng', code: 'RENTAL_GRADE_DECISION_NOT_APPLICABLE', message: 'Thiết bị thuộc sản phẩm không phân hạng' },
+    { name: 'notAllowed', summary: 'Không phải hạng Rất mới', code: 'RENTAL_GRADE_DOWNGRADE_NOT_ALLOWED', message: 'Chỉ hạ từ Rất mới xuống Đã sử dụng tốt' },
+    { name: 'noTarget', summary: 'Nhóm chưa có hạng Đã sử dụng tốt', code: 'RENTAL_GRADE_TARGET_NOT_FOUND', message: 'Tạo sản phẩm GOOD_USED cho nhóm trước' },
+  ])
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @HttpCode(200)
+  @Post(':id/grade-downgrade')
+  async downgradeGrade(
+    @Param(new ZodValidationPipe(IdParamSchema)) params: { id: string },
+    @Body(new ZodValidationPipe(EquipmentGradeDowngradeSchema)) body: EquipmentGradeDowngradeDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser() actor: ActiveUserData,
+  ) {
+    const key = EquipmentIdempotencyKeySchema.safeParse(rawKey)
+    if (!key.success) throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.IDEMPOTENCY_KEY_REQUIRED)
+    return this.downgradeEquipmentGradeUseCase.execute({
+      unitId: params.id,
+      actorId: actor.id,
+      idempotencyKey: key.data,
+      ...body,
+    })
   }
 }
