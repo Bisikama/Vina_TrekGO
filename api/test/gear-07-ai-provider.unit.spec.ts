@@ -2,6 +2,14 @@ import { GeminiGearAiAdapter } from '../src/modules/gear/infrastructure/adapters
 import { GEAR_EXTRACTION_PROMPT, GEAR_ADVISOR_PROMPT } from '../src/modules/gear/infrastructure/prompts/prompt-assets'
 import { GEAR_ERROR_CODES } from '../src/shared/errors/codes/gear.error-codes'
 import { normalizeExtractionResult } from '../src/modules/gear/domain/gear-extraction-schema'
+import {
+  getGearCapabilities,
+  manualReasonFromErrorCode,
+  readGearFlags,
+  readGearRuntimeConfig,
+  toManualEntryView,
+  buildManualEntryData,
+} from '../src/modules/gear/application/services/gear-capabilities'
 
 describe('Gear Advisor V3.1.5 — Phase 07 Gemini AI Provider & Schemas Unit Tests', () => {
   const originalEnv = process.env
@@ -179,6 +187,132 @@ describe('Gear Advisor V3.1.5 — Phase 07 Gemini AI Provider & Schemas Unit Tes
       ).rejects.toMatchObject({
         code: GEAR_ERROR_CODES.GEAR_EXTRACTION_SCHEMA_MISMATCH,
       })
+    })
+  })
+
+  describe('Provider rate limit & configuration', () => {
+    it('maps a provider 429 to GEAR_AI_RATE_LIMITED, not the user daily quota code', async () => {
+      process.env.GEMINI_API_KEY = 'mock-gemini-key'
+      process.env.GEMINI_MAX_RETRIES = '1'
+      const geminiAdapter = new GeminiGearAiAdapter()
+      ;(geminiAdapter as any).aiClient = {
+        models: {
+          generateContent: jest
+            .fn()
+            .mockRejectedValue(Object.assign(new Error('429 RESOURCE_EXHAUSTED'), { status: 429 })),
+        },
+      }
+
+      await expect(
+        geminiAdapter.extractGear({ sourceType: 'IMAGE', imageBase64: 'base64-data', mimeType: 'image/jpeg' }),
+      ).rejects.toMatchObject({ code: GEAR_ERROR_CODES.GEAR_AI_RATE_LIMITED })
+    })
+
+    it('isConfigured() is false for a missing or blank key, true for a real one', () => {
+      delete process.env.GEMINI_API_KEY
+      expect(new GeminiGearAiAdapter().isConfigured()).toBe(false)
+      process.env.GEMINI_API_KEY = '   '
+      expect(new GeminiGearAiAdapter().isConfigured()).toBe(false)
+      process.env.GEMINI_API_KEY = 'mock-gemini-key'
+      expect(new GeminiGearAiAdapter().isConfigured()).toBe(true)
+    })
+  })
+
+  describe('Gear flags & manual-entry helpers', () => {
+    it('reads flags at call time with the same defaults as config.ts; unknown values fall back to default', () => {
+      delete process.env.GEAR_AI_ADVICE_ENABLED
+      delete process.env.GEAR_IMAGE_EXTRACTION_ENABLED
+      delete process.env.GEAR_LINK_EXTRACTION_ENABLED
+      expect(readGearFlags()).toEqual({
+        aiAdviceEnabled: false,
+        imageExtractionEnabled: true,
+        linkExtractionEnabled: false,
+      })
+
+      process.env.GEAR_AI_ADVICE_ENABLED = 'true'
+      process.env.GEAR_IMAGE_EXTRACTION_ENABLED = 'false'
+      process.env.GEAR_LINK_EXTRACTION_ENABLED = 'yes'
+      expect(readGearFlags()).toEqual({
+        aiAdviceEnabled: true,
+        imageExtractionEnabled: false,
+        linkExtractionEnabled: false,
+      })
+    })
+
+    it('reads runtime config at call time with config.ts defaults; invalid values fall back to default', () => {
+      for (const name of [
+        'GEAR_EXTRACTION_DAILY_QUOTA',
+        'GEAR_MANUAL_DRAFT_HOURLY_LIMIT',
+        'GEMINI_TIMEOUT_MS',
+        'GEMINI_MAX_RETRIES',
+        'GEMINI_MODEL_EXTRACTION',
+        'GEMINI_MODEL_ADVISOR',
+        'FIRECRAWL_API_URL',
+        'FIRECRAWL_TIMEOUT_MS',
+        'GEAR_AI_PROVIDER',
+        'OPENAI_MODEL_EXTRACTION',
+        'OPENAI_TIMEOUT_MS',
+        'OPENAI_MAX_RETRIES',
+      ]) {
+        delete process.env[name]
+      }
+      expect(readGearRuntimeConfig()).toEqual({
+        aiProvider: 'gemini',
+        openaiModelExtraction: 'gpt-4o-mini',
+        openaiTimeoutMs: 30000,
+        openaiMaxRetries: 2,
+        dailyQuota: 20,
+        manualDraftHourlyLimit: 30,
+        geminiTimeoutMs: 30000,
+        geminiMaxRetries: 2,
+        geminiModelExtraction: 'gemini-2.5-flash',
+        geminiModelAdvisor: 'gemini-2.5-flash',
+        firecrawlApiUrl: 'https://api.firecrawl.dev',
+        firecrawlTimeoutMs: 30000,
+      })
+
+      process.env.GEAR_EXTRACTION_DAILY_QUOTA = '0'
+      process.env.GEAR_MANUAL_DRAFT_HOURLY_LIMIT = '0' // < 1 → mặc định
+      process.env.GEMINI_TIMEOUT_MS = 'abc' // không phải số → mặc định
+      process.env.GEMINI_MAX_RETRIES = '5'
+      process.env.GEMINI_MODEL_EXTRACTION = 'gemini-x'
+      const cfg = readGearRuntimeConfig()
+      expect(cfg.dailyQuota).toBe(0)
+      expect(cfg.manualDraftHourlyLimit).toBe(30)
+      expect(cfg.geminiTimeoutMs).toBe(30000)
+      expect(cfg.geminiMaxRetries).toBe(5)
+      expect(cfg.geminiModelExtraction).toBe('gemini-x')
+    })
+
+    it('maps AI/page-reader error codes to manual-entry reasons, unknown → AI_FAILED', () => {
+      expect(manualReasonFromErrorCode(GEAR_ERROR_CODES.GEAR_AI_TIMEOUT)).toBe('AI_TIMEOUT')
+      expect(manualReasonFromErrorCode(GEAR_ERROR_CODES.GEAR_AI_RATE_LIMITED)).toBe('AI_RATE_LIMITED')
+      expect(manualReasonFromErrorCode(GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED)).toBe('LINK_FETCH_FAILED')
+      expect(manualReasonFromErrorCode('SOMETHING_ELSE')).toBe('AI_FAILED')
+      expect(manualReasonFromErrorCode(undefined)).toBe('AI_FAILED')
+    })
+
+    it('exposes manualEntry only for manual drafts', () => {
+      expect(toManualEntryView({ category: 'TENT' })).toBeNull()
+      expect(toManualEntryView(null)).toBeNull()
+      expect(toManualEntryView(buildManualEntryData('AI_DISABLED', { uploadId: 'u' }))).toEqual({
+        required: true,
+        reasonCode: 'AI_DISABLED',
+        messageVi: expect.any(String),
+      })
+    })
+
+    it('capabilities: rules always on; AI parts reflect flags and adapter isConfigured()', () => {
+      delete process.env.GEAR_AI_ADVICE_ENABLED
+      delete process.env.GEAR_LINK_EXTRACTION_ENABLED
+      delete process.env.GEAR_IMAGE_EXTRACTION_ENABLED
+      const notConfigured = { isConfigured: () => false, extractGear: jest.fn() } as any
+      const caps = getGearCapabilities(notConfigured, { isConfigured: () => false, readPage: jest.fn() })
+      expect(caps.ruleBasedAdvice).toMatchObject({ enabled: true, configured: true })
+      expect(caps.aiAdvice).toMatchObject({ enabled: false, configured: false })
+      expect(caps.imageExtraction).toMatchObject({ enabled: true, configured: false })
+      expect(caps.linkExtraction).toMatchObject({ enabled: false, configured: false })
+      expect(JSON.stringify(caps)).not.toMatch(/mock-gemini-key|apiKey/i)
     })
   })
 

@@ -52,6 +52,40 @@ import type {
 } from '../../application/dtos/gear-plan.dto';
 import { ApiErrorResponse } from '../../../../shared/swagger/api-error-response.helper';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
+import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
+
+const GRADE_SCHEMA_PROPERTIES: Record<string, SchemaObject> = {
+  grade: {
+    type: 'string',
+    enum: ['LIKE_NEW', 'GOOD_USED'],
+    nullable: true,
+    example: 'GOOD_USED',
+    description: 'Hạng thuê: LIKE_NEW (Rất mới) hoặc GOOD_USED (Đã sử dụng tốt). null với sản phẩm không chia hạng.',
+  },
+  gradeGroupId: {
+    type: 'string',
+    format: 'uuid',
+    nullable: true,
+    description: 'Nhóm hạng: các sản phẩm cùng gradeGroupId là các hạng của cùng một món đồ.',
+  },
+};
+
+const RENTAL_LINE_SCHEMA: SchemaObject = {
+  type: 'object',
+  properties: {
+    requirementId: { type: 'string', example: 'req_tent' },
+    category: { type: 'string', example: 'TENT' },
+    productId: { type: 'string', format: 'uuid' },
+    productName: { type: 'string', example: 'Lều 3 người – Đã sử dụng tốt' },
+    quantity: { type: 'integer', example: 1 },
+    dailyPrice: { type: 'number', example: 100000 },
+    rentalFee: { type: 'number', example: 200000 },
+    deposit: { type: 'number', example: 600000 },
+    weight_g: { type: 'number', nullable: true, example: 2500 },
+    availableCount: { type: 'integer', example: 3 },
+    ...GRADE_SCHEMA_PROPERTIES,
+  },
+};
 
 @ApiTags('Gear - Plan (Kế hoạch chuẩn bị đồ & Liên kết thuê)')
 @ApiBearerAuth('bearer')
@@ -379,6 +413,13 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
         expectedRevision: { type: 'integer', minimum: 1, example: 1, description: 'Phiên bản đánh giá hiện tại' },
         budgetLimit: { type: 'number', example: 500000, description: 'Giới hạn ngân sách thuê (tùy chọn)' },
         objective: { type: 'string', enum: ['BALANCED', 'MIN_RENTAL_FEE', 'MIN_KNOWN_TOTAL_WEIGHT'], example: 'BALANCED' },
+        candidateLimit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          default: 20,
+          description: 'Số sản phẩm thuê tối đa xét cho mỗi danh mục (lấy theo giá ngày tăng dần)',
+        },
       },
       example: {
         expectedRevision: 1,
@@ -389,7 +430,33 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
   })
   @ApiResponse({
     status: 200,
-    description: 'Tập phương án tối ưu được sinh ra kèm optionRef (thời hạn hiệu lực 15 phút)',
+    description:
+      'Tập phương án tối ưu được sinh ra kèm optionRef (thời hạn hiệu lực 15 phút). Mỗi rentalLine có grade/gradeGroupId để hiện hạng sản phẩm.',
+    schema: {
+      type: 'object',
+      properties: {
+        setId: { type: 'string', format: 'uuid' },
+        planRevisionId: { type: 'string', format: 'uuid' },
+        revision: { type: 'integer', example: 1 },
+        objective: { type: 'string', example: 'ECONOMICAL' },
+        expiresAt: { type: 'string', format: 'date-time' },
+        options: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'opt_min_fee' },
+              rentalLines: { type: 'array', items: RENTAL_LINE_SCHEMA },
+              summary: { type: 'object' },
+            },
+          },
+        },
+        optionRef: {
+          type: 'object',
+          properties: { setId: { type: 'string', format: 'uuid' }, optionId: { type: 'string', example: 'opt_min_fee' } },
+        },
+      },
+    },
   })
   @ApiErrorResponse(400, 'Chưa đánh giá kế hoạch', GEAR_ERROR_CODES.GEAR_PLAN_NOT_EVALUATED, 'Kế hoạch cần được đánh giá trước khi tìm phương án thuê')
   @ApiErrorResponse(409, 'Kế hoạch đã bị sửa', GEAR_ERROR_CODES.GEAR_PLAN_STALE, 'Kế hoạch đã thay đổi sau lần đánh giá cuối')
@@ -404,10 +471,11 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
   @Post(':id/advice')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Sinh lời khuyên an toàn từ AI dựa trên phương án đã chọn (AI Advisor)',
+    summary: 'Sinh lời khuyên an toàn dựa trên phương án đã chọn (bộ quy tắc, AI tuỳ chọn)',
     description: `
-Sử dụng Gemini AI tổng hợp lời khuyên trang bị dựa trên dữ kiện thật của chuyến đi và phương án đã chọn.
-- Hệ thống tự động kiểm chứng tính xác thực (\`fact grounding\`). Nếu AI bịa đặt hoặc thiếu an toàn, hệ thống tự động chuyển sang \`RULE_FALLBACK\` tin cậy.
+Tổng hợp lời khuyên trang bị từ dữ kiện thật của chuyến đi và phương án đã chọn. **Luôn trả lời khuyên, không báo lỗi vì AI.**
+- Mặc định (\`GEAR_AI_ADVICE_ENABLED=false\`) hoặc AI chưa cấu hình/lỗi/hết giờ: lời khuyên theo bộ quy tắc, \`source = RULE_FALLBACK\`.
+- Khi bật AI: Gemini chỉ chọn trong các nhận định đã được server kiểm chứng (\`fact grounding\`); nếu AI bịa đặt hoặc thiếu an toàn, hệ thống tự chuyển sang \`RULE_FALLBACK\`.
 `,
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'ID kế hoạch trang bị', example: '550e8400-e29b-41d4-a716-446655440300' })
@@ -496,7 +564,22 @@ Chuyển đổi phương án trang bị đã chọn thành payload chuẩn \`pre
         planId: { type: 'string', format: 'uuid' },
         planRevision: { type: 'number', example: 1 },
         tripId: { type: 'string', format: 'uuid' },
-        lines: { type: 'array', items: { type: 'object' } },
+        lines: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', format: 'uuid' },
+              productName: { type: 'string', example: 'Lều 3 người – Đã sử dụng tốt' },
+              category: { type: 'string', example: 'TENT' },
+              quantity: { type: 'integer', example: 1 },
+              dailyPrice: { type: 'number', example: 100000 },
+              rentalFee: { type: 'number', example: 200000 },
+              deposit: { type: 'number', example: 600000 },
+              ...GRADE_SCHEMA_PROPERTIES,
+            },
+          },
+        },
         prefillRentalQuote: {
           type: 'object',
           properties: {

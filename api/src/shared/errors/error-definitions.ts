@@ -978,6 +978,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
       'Bạn đã sử dụng hết hạn mức 20 lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.',
     retryable: false,
   },
+  [G.GEAR_MANUAL_DRAFT_RATE_LIMITED]: {
+    status: 429,
+    message: 'Bạn đã tạo quá nhiều bản nháp trang bị trong một giờ. Vui lòng thử lại sau.',
+    retryable: true,
+  },
+  [G.GEAR_MEDIA_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ lưu trữ ảnh tạm thời chưa sẵn sàng. Vui lòng thử lại sau.',
+    retryable: true,
+  },
   [G.GEAR_PAGE_READER_UNAVAILABLE]: {
     status: 503,
     message: 'Dịch vụ đọc link sản phẩm chưa được cấu hình hoặc không khả dụng. Vui lòng tải ảnh hoặc nhập bằng tay.',

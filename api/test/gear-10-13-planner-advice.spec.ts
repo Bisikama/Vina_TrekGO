@@ -8,6 +8,8 @@ import { UserRole, UserStatus } from '@prisma/client'
 import { GearPlanController } from '../src/modules/gear/presentation/controllers/gear-plan.controller'
 import { GearPlanService } from '../src/modules/gear/application/services/gear-plan.service'
 import { GearRuleService } from '../src/modules/gear/application/services/gear-rule.service'
+import { renderNarrativeFromClaims } from '../src/modules/gear/domain/advice-grounding'
+import { GEAR_RULE_METADATA_REGISTRY } from '../src/modules/gear/domain'
 
 import { GEAR_PLAN_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-plan.repository.port'
 import { GEAR_PLAN_REVISION_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-plan-revision.repository.port'
@@ -15,7 +17,6 @@ import { USER_GEAR_REPOSITORY_PORT } from '../src/modules/gear/application/ports
 import { TRIP_CONTEXT_READ_PORT } from '../src/modules/gear/application/ports/trip-context-read.port'
 import { GEAR_RULE_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-rule.repository.port'
 import { GEAR_PLAN_OPTION_SET_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-plan-option-set.repository.port'
-import { GEAR_ADVICE_RUN_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-advice-run.repository.port'
 import { GEAR_QUOTE_LINK_REPOSITORY_PORT } from '../src/modules/gear/application/ports/gear-quote-link.repository.port'
 import { GEAR_AI_PORT } from '../src/modules/gear/application/ports/gear-ai.port'
 
@@ -35,6 +36,10 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
   let app: INestApplication
   let mockPrisma: any
   let mockAiPort: any
+  // Một mốc thời gian chung cho mock trip và quote: gọi Date.now() riêng ở mỗi mock làm lệch vài ms giữa
+  // rentalEndAt của quote và endAt của trip, khiến test liên kết quote thỉnh thoảng trả GEAR_QUOTE_NOT_ELIGIBLE.
+  const BASE_NOW = Date.now()
+  const FOOTWEAR_GRADE_GROUP_ID = randomUUID()
 
   // Test Principals
   const aliceId = randomUUID()
@@ -123,6 +128,8 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       depositValue: '300000.00',
       replacementValue: '2500000.00',
       status: 'ACTIVE',
+      grade: 'GOOD_USED',
+      gradeGroupId: FOOTWEAR_GRADE_GROUP_ID,
       technicalProfile: {
         attributes: {
           waterproof: true,
@@ -245,8 +252,8 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
         return {
           tripId: tId,
           status: 'UPCOMING',
-          startAt: new Date(Date.now() + 86400000 * 5),
-          endAt: new Date(Date.now() + 86400000 * 7),
+          startAt: new Date(BASE_NOW + 86400000 * 5),
+          endAt: new Date(BASE_NOW + 86400000 * 7),
           days: 2,
           difficulty: 3,
           terrain: ['FOREST', 'MOUNTAIN'],
@@ -290,8 +297,8 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
           if (where.id === tripId) {
             return {
               id: tripId,
-              startAt: new Date(Date.now() + 86400000 * 5),
-              endAt: new Date(Date.now() + 86400000 * 7),
+              startAt: new Date(BASE_NOW + 86400000 * 5),
+              endAt: new Date(BASE_NOW + 86400000 * 7),
               status: 'UPCOMING',
             }
           }
@@ -375,9 +382,9 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: tripId,
               status: 'CONFIRMED',
-              rentalStartAt: new Date(Date.now() + 86400000 * 5),
-              rentalEndAt: new Date(Date.now() + 86400000 * 7),
-              expiresAt: new Date(Date.now() + 3600000),
+              rentalStartAt: new Date(BASE_NOW + 86400000 * 5),
+              rentalEndAt: new Date(BASE_NOW + 86400000 * 7),
+              expiresAt: new Date(BASE_NOW + 3600000),
             }
           }
           if (where.id === shortWindowQuoteId) {
@@ -386,9 +393,9 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: tripId,
               status: 'CONFIRMED',
-              rentalStartAt: new Date(Date.now() + 86400000 * 5),
-              rentalEndAt: new Date(Date.now() + 86400000 * 5 + 60000), // Ends after 1 min on day 1!
-              expiresAt: new Date(Date.now() + 3600000),
+              rentalStartAt: new Date(BASE_NOW + 86400000 * 5),
+              rentalEndAt: new Date(BASE_NOW + 86400000 * 5 + 60000), // Ends after 1 min on day 1!
+              expiresAt: new Date(BASE_NOW + 3600000),
             }
           }
           if (where.id === ambiguousQuoteId) {
@@ -397,9 +404,9 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: tripId,
               status: 'CONFIRMED',
-              rentalStartAt: new Date(Date.now() + 86400000 * 5),
-              rentalEndAt: new Date(Date.now() + 86400000 * 7),
-              expiresAt: new Date(Date.now() + 3600000),
+              rentalStartAt: new Date(BASE_NOW + 86400000 * 5),
+              rentalEndAt: new Date(BASE_NOW + 86400000 * 7),
+              expiresAt: new Date(BASE_NOW + 3600000),
             }
           }
           if (where.id === mismatchedTripQuoteId) {
@@ -408,7 +415,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: randomUUID(), // Mismatched trip!
               status: 'CONFIRMED',
-              expiresAt: new Date(Date.now() + 3600000),
+              expiresAt: new Date(BASE_NOW + 3600000),
             }
           }
           if (where.id === expiredQuoteId) {
@@ -417,7 +424,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: aliceId,
               tripId: tripId,
               status: 'EXPIRED',
-              expiresAt: new Date(Date.now() - 3600000),
+              expiresAt: new Date(BASE_NOW - 3600000),
             }
           }
           if (where.id === foreignQuoteId) {
@@ -426,7 +433,7 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
               userId: bobId,
               tripId: tripId,
               status: 'CONFIRMED',
-              expiresAt: new Date(Date.now() + 3600000),
+              expiresAt: new Date(BASE_NOW + 3600000),
             }
           }
           return null
@@ -709,6 +716,18 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(footwearLine.rentalFee).toBe(160000) // 80k * 2 days
       expect(footwearLine.deposit).toBe(300000)
 
+      // Hạng sản phẩm đi theo dòng thuê; sản phẩm không chia hạng trả null
+      expect(footwearLine.grade).toBe('GOOD_USED')
+      expect(footwearLine.gradeGroupId).toBe(FOOTWEAR_GRADE_GROUP_ID)
+      for (const line of minWeightOption.rentalLines.filter((l: any) => l.category === 'JACKET')) {
+        expect(line.grade).toBeNull()
+      }
+
+      // Tập ứng viên lấy theo thứ tự cố định (giá ngày, rồi id)
+      expect(mockPrisma.rentalProduct.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: [{ dailyPrice: 'asc' }, { id: 'asc' }] }),
+      )
+
       // BACKPACK has no rental candidates in mock catalog -> listed in missingRequirements
       expect(minFeeOption.summary.missingRequirements).toContain('req_backpack')
 
@@ -767,6 +786,36 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
         id: tripId,
         status: 'COMPLETED',
         endAt: new Date(Date.now() - 86400000),
+      }))
+
+      try {
+        const res = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/options`)
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1 })
+
+        expect(res.status).toBe(400)
+        expect(res.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE)
+      } finally {
+        mockPrisma.trip.findUnique = origFindUnique
+      }
+    })
+
+    it('chuyến INTERRUPTED (endAt còn ở tương lai) cũng bị chặn 400 GEAR_TRIP_NOT_ELIGIBLE', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: { temp_min_c: 12, temp_max_c: 24, temp_min_night_c: 8, rain_prob_pct: 60 },
+        })
+        .expect(200)
+
+      const origFindUnique = mockPrisma.trip.findUnique
+      mockPrisma.trip.findUnique = jest.fn(async () => ({
+        id: tripId,
+        status: 'INTERRUPTED',
+        endAt: new Date(Date.now() + 86400000 * 7),
       }))
 
       try {
@@ -982,6 +1031,47 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
   })
 
   describe('Phase 12: Gemini Advisor on Approved Facts (/api/v1/gear/plans/:id/advice)', () => {
+    // AI advice là tuỳ chọn (mặc định tắt); nhóm test này kiểm đường AI nên bật cờ.
+    const prevAdviceFlag = process.env.GEAR_AI_ADVICE_ENABLED
+    beforeAll(() => {
+      process.env.GEAR_AI_ADVICE_ENABLED = 'true'
+    })
+    afterAll(() => {
+      if (prevAdviceFlag === undefined) delete process.env.GEAR_AI_ADVICE_ENABLED
+      else process.env.GEAR_AI_ADVICE_ENABLED = prevAdviceFlag
+    })
+
+    it('flag off (default): returns rule-based advice without calling the AI port', async () => {
+      process.env.GEAR_AI_ADVICE_ENABLED = 'false'
+      const callsBefore = mockAiPort.generateAdvice.mock.calls.length
+      try {
+        await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+          .set('Authorization', aliceToken)
+          .send({
+            expectedInputRevision: 1,
+            confirmedClimate: { temp_min_c: 12, temp_max_c: 24, temp_min_night_c: 8, rain_prob_pct: 60 },
+          })
+        const optRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/options`)
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1 })
+        const adviceRes = await request(app.getHttpServer())
+          .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+          .set('Authorization', aliceToken)
+          .send({ expectedRevision: 1, optionRef: optRes.body.optionRef })
+
+        expect(adviceRes.status).toBe(200)
+        expect(adviceRes.body.source).toBe('RULE_FALLBACK')
+        expect(adviceRes.body.narrativeVi).toEqual(expect.any(String))
+        expect(adviceRes.body.narrativeVi.length).toBeGreaterThan(0)
+        expect(adviceRes.body.disclaimerVi).toBeDefined()
+        expect(mockAiPort.generateAdvice.mock.calls.length).toBe(callsBefore)
+      } finally {
+        process.env.GEAR_AI_ADVICE_ENABLED = 'true'
+      }
+    })
+
     it('generates structured advice referencing verified facts and chosen option', async () => {
       // 1. Evaluate plan
       await request(app.getHttpServer())
@@ -1022,6 +1112,37 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(advice.actionRefs).toBeDefined()
       expect(advice.disclaimerVi).toBeDefined()
       expect(advice.source).toBe('AI')
+    })
+
+    it('lưu và trả cùng một factRefs, gồm cả fact ref của các claim AI đã chọn', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/evaluate`)
+        .set('Authorization', aliceToken)
+        .send({
+          expectedInputRevision: 1,
+          confirmedClimate: { temp_min_c: 12, temp_max_c: 24, temp_min_night_c: 8, rain_prob_pct: 60 },
+        })
+      const optRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/options`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1 })
+      mockAiPort.generateAdvice.mockClear()
+      mockPrisma.gearAdviceRun.create.mockClear()
+
+      const adviceRes = await request(app.getHttpServer())
+        .post(`/api/v1/gear/plans/${testPlanId}/advice`)
+        .set('Authorization', aliceToken)
+        .send({ expectedRevision: 1, optionRef: optRes.body.optionRef })
+        .expect(200)
+
+      const aiRequest = mockAiPort.generateAdvice.mock.calls[0][0]
+      const claimIds = aiRequest.approvedClaims.map((c: any) => c.id)
+      const expectedClaimRefs = renderNarrativeFromClaims(claimIds, aiRequest.approvedClaims).factRefs
+      const stored = mockPrisma.gearAdviceRun.create.mock.calls[0][0].data.factRefs
+
+      expect(adviceRes.body.source).toBe('AI')
+      expect(adviceRes.body.factRefs).toEqual(stored)
+      expect(stored).toEqual(expect.arrayContaining(expectedClaimRefs))
     })
 
     it('rejects invalid or non-existent option set with 404 GEAR_OPTION_SET_NOT_FOUND', async () => {
@@ -1754,6 +1875,8 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
       expect(data.prefillRentalQuote).toBeDefined()
       expect(data.prefillRentalQuote.tripId).toBe(tripId)
       expect(data.prefillRentalQuote.items).toHaveLength(data.lines.length)
+      const footwearIntentLine = data.lines.find((l: any) => l.category === 'FOOTWEAR')
+      expect(footwearIntentLine).toMatchObject({ grade: 'GOOD_USED', gradeGroupId: FOOTWEAR_GRADE_GROUP_ID })
     })
 
     it('links valid confirmed quote to plan revision idempotently', async () => {
@@ -1873,6 +1996,29 @@ describe('Gear Advisor V3.1.5 — Phase 10–13 Planner, Advice & Quote Integrat
 
       expect(intentRes.status).toBe(409)
       expect(intentRes.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_PLAN_STALE)
+    })
+  })
+
+  describe('ruleVersions ghi vào revision lấy từ bộ quy tắc thật', () => {
+    it('GearRuleService.getActiveRuleSetInfo đọc rule đang hoạt động trong DB', async () => {
+      const dbRules = [
+        { ...GEAR_RULE_METADATA_REGISTRY[0], ruleVersion: '3.2.0' },
+        { ...GEAR_RULE_METADATA_REGISTRY[1], ruleVersion: '3.1.1' },
+        { ...GEAR_RULE_METADATA_REGISTRY[2], ruleVersion: '3.2.0' },
+      ]
+      const service = new GearRuleService({ findActive: async () => dbRules } as any)
+
+      expect(await service.getActiveRuleSetInfo()).toEqual({ version: '3.1.1,3.2.0', rulesCount: 3 })
+    })
+
+    it('không có repo hoặc DB rỗng → theo registry chuẩn', async () => {
+      const registryVersions = Array.from(new Set(GEAR_RULE_METADATA_REGISTRY.map((r) => r.ruleVersion)))
+        .sort()
+        .join(',')
+      const expected = { version: registryVersions, rulesCount: GEAR_RULE_METADATA_REGISTRY.length }
+
+      expect(await new GearRuleService().getActiveRuleSetInfo()).toEqual(expected)
+      expect(await new GearRuleService({ findActive: async () => [] } as any).getActiveRuleSetInfo()).toEqual(expected)
     })
   })
 })

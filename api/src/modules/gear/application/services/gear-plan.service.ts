@@ -1,3 +1,4 @@
+import { readGearFlags } from './gear-capabilities'
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import * as crypto from 'crypto'
 import { AppError } from '../../../../shared/errors/app-error'
@@ -7,6 +8,7 @@ import { RENTAL_ORDERING_ERROR_CODES } from '../../../../shared/errors/codes/ren
 import {
   buildTripRequirements,
   evaluateGearCheck,
+  GEAR_RULE_METADATA_REGISTRY,
   isCoreGearCategory,
   lookupClimateEstimate,
   PlanCoverageResult,
@@ -25,14 +27,14 @@ import { TRIP_CONTEXT_READ_PORT } from '../ports/trip-context-read.port'
 import type { TripContextReadPort } from '../ports/trip-context-read.port'
 import { GEAR_PLAN_OPTION_SET_REPOSITORY_PORT } from '../ports/gear-plan-option-set.repository.port'
 import type { GearPlanOptionSetRepositoryPort } from '../ports/gear-plan-option-set.repository.port'
-import { GEAR_ADVICE_RUN_REPOSITORY_PORT } from '../ports/gear-advice-run.repository.port'
-import type { GearAdviceRunRepositoryPort } from '../ports/gear-advice-run.repository.port'
 import { GEAR_QUOTE_LINK_REPOSITORY_PORT } from '../ports/gear-quote-link.repository.port'
 import type { GearQuoteLinkRepositoryPort } from '../ports/gear-quote-link.repository.port'
 import { GEAR_AI_PORT } from '../ports/gear-ai.port'
 import type { GearAiPort } from '../ports/gear-ai.port'
+import { TRIP_FORECAST_PORT } from '../ports/trip-forecast.port'
+import type { TripForecastPort } from '../ports/trip-forecast.port'
 import { PrismaService } from '../../../../shared/services/prisma.service'
-import { GearRuleService } from './gear-rule.service'
+import { GearRuleService, summarizeRuleSet } from './gear-rule.service'
 import type {
   CreatePlanInputDto,
   EvaluatePlanDto,
@@ -60,11 +62,24 @@ import {
   OwnedAssignment,
 } from '../../domain/pure-planner'
 import {
-  validateNarrativeViGrounding,
   buildApprovedClaims,
   renderNarrativeFromClaims,
   ApprovedClaim,
 } from '../../domain/advice-grounding'
+
+const CAPACITY_CHECK_BATCH_SIZE = 5
+
+/** Gợi ý khí hậu trả cho FE: 4 thông số dùng để đánh giá + nguồn (CLIMATE_ESTIMATE | FORECAST) và metadata. */
+type ClimateSuggestion = {
+  temp_min_c: number
+  temp_max_c: number
+  temp_min_night_c: number
+  rain_prob_pct: number
+  source: 'CLIMATE_ESTIMATE' | 'FORECAST'
+  [key: string]: unknown
+}
+const FORECAST_NOTE_VI =
+  'Dự báo tại tâm điểm đến, chưa hiệu chỉnh theo độ cao. Vui lòng kiểm tra lại trước khi xác nhận.'
 
 function canonicalStringify(obj: any): string {
   if (obj === null || typeof obj !== 'object') {
@@ -95,9 +110,6 @@ export class GearPlanService {
     @Inject(GEAR_PLAN_OPTION_SET_REPOSITORY_PORT)
     private readonly optionSetRepo?: GearPlanOptionSetRepositoryPort,
     @Optional()
-    @Inject(GEAR_ADVICE_RUN_REPOSITORY_PORT)
-    private readonly adviceRunRepo?: GearAdviceRunRepositoryPort,
-    @Optional()
     @Inject(GEAR_QUOTE_LINK_REPOSITORY_PORT)
     private readonly quoteLinkRepo?: GearQuoteLinkRepositoryPort,
     @Optional()
@@ -105,6 +117,9 @@ export class GearPlanService {
     private readonly gearAiPort?: GearAiPort,
     @Optional()
     private readonly ruleService?: GearRuleService,
+    @Optional()
+    @Inject(TRIP_FORECAST_PORT)
+    private readonly forecastPort?: TripForecastPort,
   ) {}
 
   /**
@@ -113,18 +128,9 @@ export class GearPlanService {
   async getTripPrefill(tripId: string, userId: string): Promise<Record<string, unknown>> {
     const facts = await this.tripContextPort.getTripContext(tripId, userId)
 
-    let month: number | null = null
-    if (facts.startAt) {
-      const startAtDate = new Date(facts.startAt)
-      const saigonMonthStr = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Saigon',
-        month: 'numeric',
-      }).format(startAtDate)
-      month = parseInt(saigonMonthStr, 10)
-    }
-
     const destination = facts.destination || null
-    const climate = destination && month ? lookupClimateEstimate(destination, month) : null
+    const { suggestedClimate, forecastClimate } = await this.suggestClimate(facts)
+    const climate = suggestedClimate
 
     let requirements: any[] = []
     if (climate && facts.difficulty && facts.days) {
@@ -151,18 +157,62 @@ export class GearPlanService {
       terrain: facts.terrain,
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
-      suggestedClimate: climate
-        ? {
-            temp_min_c: climate.temp_min_c,
-            temp_max_c: climate.temp_max_c,
-            temp_min_night_c: climate.temp_min_night_c,
-            rain_prob_pct: climate.rain_prob_pct,
-            source: 'CLIMATE_ESTIMATE',
-            sourceReference: climate.sourceReference,
-          }
-        : null,
+      suggestedClimate,
+      forecastClimate,
       requirements,
     }
+  }
+
+  /**
+   * Gợi ý khí hậu cho chuyến (người dùng vẫn phải xác nhận qua confirmedClimate trước khi đánh giá).
+   * - Có bảng ước tính tĩnh (đã tính theo độ cao cung trek) → dùng làm gợi ý chính.
+   * - Chuyến trong tầm dự báo và có toạ độ → thêm `forecastClimate`; nếu không có bảng ước tính thì dự báo
+   *   thành gợi ý chính, kèm ghi chú chưa hiệu chỉnh độ cao.
+   */
+  private async suggestClimate(
+    facts: {
+      destination?: string | null
+      startAt?: Date | null
+      endAt?: Date | null
+      coordinates?: { lat: number; lng: number } | null
+    } | null,
+  ): Promise<{ suggestedClimate: ClimateSuggestion | null; forecastClimate: ClimateSuggestion | null }> {
+    if (!facts) return { suggestedClimate: null, forecastClimate: null }
+
+    let month: number | null = null
+    if (facts.startAt) {
+      const saigonMonthStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Saigon',
+        month: 'numeric',
+      }).format(new Date(facts.startAt))
+      month = parseInt(saigonMonthStr, 10)
+    }
+    const estimate = facts.destination && month ? lookupClimateEstimate(facts.destination, month) : null
+    const estimateClimate: ClimateSuggestion | null = estimate
+      ? {
+          temp_min_c: estimate.temp_min_c,
+          temp_max_c: estimate.temp_max_c,
+          temp_min_night_c: estimate.temp_min_night_c,
+          rain_prob_pct: estimate.rain_prob_pct,
+          source: 'CLIMATE_ESTIMATE',
+          sourceReference: estimate.sourceReference,
+        }
+      : null
+
+    let forecastClimate: ClimateSuggestion | null = null
+    if (this.forecastPort && facts.coordinates && facts.startAt && facts.endAt) {
+      const forecast = await this.forecastPort.getForecastClimate({
+        lat: facts.coordinates.lat,
+        lng: facts.coordinates.lng,
+        startAt: new Date(facts.startAt),
+        endAt: new Date(facts.endAt),
+      })
+      if (forecast) {
+        forecastClimate = { ...forecast, noteVi: FORECAST_NOTE_VI }
+      }
+    }
+
+    return { suggestedClimate: estimateClimate ?? forecastClimate, forecastClimate }
   }
 
   async createPlan(userId: string, input: CreatePlanInputDto): Promise<GearPlanDomain> {
@@ -190,16 +240,7 @@ export class GearPlanService {
     }
 
     const destination = facts?.destination || null
-    let month: number | null = null
-    if (facts?.startAt) {
-      const startAtDate = new Date(facts.startAt)
-      const saigonMonthStr = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Saigon',
-        month: 'numeric',
-      }).format(startAtDate)
-      month = parseInt(saigonMonthStr, 10)
-    }
-    const climate = destination && month ? lookupClimateEstimate(destination, month) : null
+    const { suggestedClimate, forecastClimate } = await this.suggestClimate(facts)
 
     const canonicalContext: Record<string, unknown> = {
       tripId: input.tripId,
@@ -212,16 +253,8 @@ export class GearPlanService {
       contextVersion: facts?.contextVersion ?? null,
       sourceReferences: facts?.sourceReferences ?? null,
       missingContext,
-      suggestedClimate: climate
-        ? {
-            temp_min_c: climate.temp_min_c,
-            temp_max_c: climate.temp_max_c,
-            temp_min_night_c: climate.temp_min_night_c,
-            rain_prob_pct: climate.rain_prob_pct,
-            source: 'CLIMATE_ESTIMATE',
-            sourceReference: climate.sourceReference,
-          }
-        : null,
+      suggestedClimate,
+      forecastClimate,
       confirmedClimate: null,
     }
 
@@ -311,20 +344,7 @@ export class GearPlanService {
 
     // Block mutation if trip is ended or ineligible (F06)
     if (plan.tripId) {
-      if (this.prisma.trip) {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: plan.tripId },
-          select: { id: true, status: true, endAt: true },
-        })
-        if (
-          trip &&
-          (trip.status === 'COMPLETED' || trip.status === 'CANCELLED' || (trip.endAt && trip.endAt < new Date()))
-        ) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-            message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
-          })
-        }
-      }
+      await this.assertTripStillOpen(plan.tripId)
       await this.tripContextPort.getTripContext(plan.tripId, userId)
     }
 
@@ -353,20 +373,7 @@ export class GearPlanService {
 
     // Verify trip is active and eligible (progress cannot be modified after trip ends)
     if (plan.tripId) {
-      if (this.prisma.trip) {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: plan.tripId },
-          select: { id: true, status: true, endAt: true },
-        })
-        if (
-          trip &&
-          (trip.status === 'COMPLETED' || trip.status === 'CANCELLED' || (trip.endAt && trip.endAt < new Date()))
-        ) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-            message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
-          })
-        }
-      }
+      await this.assertTripStillOpen(plan.tripId)
       await this.tripContextPort.getTripContext(plan.tripId, userId)
     }
 
@@ -613,7 +620,9 @@ export class GearPlanService {
       inputSnapshot,
       resultSnapshot,
       contextVersion: tripFacts.contextVersion || '3.1.5',
-      ruleVersions: { version: '3.1.5', rulesCount: 28 },
+      ruleVersions: this.ruleService
+        ? await this.ruleService.getActiveRuleSetInfo()
+        : summarizeRuleSet(GEAR_RULE_METADATA_REGISTRY),
     })
 
     // 11. Atomically set evaluated revision on plan with CAS expectedInputRevision and persist canonicalContext
@@ -780,22 +789,7 @@ export class GearPlanService {
       })
     }
 
-    if (this.prisma.trip) {
-      const tripRecord = await this.prisma.trip.findUnique({
-        where: { id: tripId },
-        select: { id: true, startAt: true, endAt: true, status: true },
-      })
-      if (
-        tripRecord &&
-        (tripRecord.status === 'COMPLETED' ||
-          tripRecord.status === 'CANCELLED' ||
-          (tripRecord.endAt && tripRecord.endAt < new Date()))
-      ) {
-        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-          message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để thao tác kế hoạch',
-        })
-      }
-    }
+    await this.assertTripStillOpen(tripId, 'Chuyến đi đã kết thúc hoặc không còn khả dụng để thao tác kế hoạch')
 
     const trip = await this.tripContextPort.getTripContext(tripId, userId)
 
@@ -902,14 +896,15 @@ export class GearPlanService {
         continue
       }
 
+      // orderBy cố định để tập ứng viên giống nhau giữa các lần chạy khi danh mục có nhiều hơn candidateLimit.
       const products = await this.prisma.rentalProduct.findMany({
         where: { categoryId: rentalCat.id, status: 'ACTIVE' },
         include: { technicalProfile: true },
+        orderBy: [{ dailyPrice: 'asc' }, { id: 'asc' }],
         take: dto.candidateLimit ?? 20,
       })
 
-      const candidateList: CandidateProduct[] = []
-      for (const product of products) {
+      const toCandidate = async (product: (typeof products)[number]): Promise<CandidateProduct> => {
         const profileAttrs = (product.technicalProfile?.attributes as Record<string, unknown> | null) || null
 
         const dailyPriceBigInt = parseWholeVnd(product.dailyPrice.toString())
@@ -945,7 +940,7 @@ export class GearPlanService {
 
         const weight_g = typeof profileAttrs?.weight_g === 'number' ? profileAttrs.weight_g : null
 
-        candidateList.push({
+        return {
           id: product.id,
           name: product.name,
           category: catKey,
@@ -955,7 +950,16 @@ export class GearPlanService {
           availableCount,
           weight_g,
           attributes: profileAttrs || undefined,
-        })
+          grade: product.grade ?? null,
+          gradeGroupId: product.gradeGroupId ?? null,
+        }
+      }
+
+      // Kiểm sức chứa song song theo lô nhỏ (mỗi sản phẩm 2 query chỉ đọc) để không làm cạn connection pool.
+      const candidateList: CandidateProduct[] = []
+      for (let i = 0; i < products.length; i += CAPACITY_CHECK_BATCH_SIZE) {
+        const batch = products.slice(i, i + CAPACITY_CHECK_BATCH_SIZE)
+        candidateList.push(...(await Promise.all(batch.map(toCandidate))))
       }
 
       candidatesPerCategory.set(catKey, candidateList)
@@ -1103,20 +1107,7 @@ export class GearPlanService {
     }
 
     if (plan.tripId) {
-      if (this.prisma.trip) {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: plan.tripId },
-          select: { id: true, status: true, endAt: true },
-        })
-        if (
-          trip &&
-          (trip.status === 'COMPLETED' || trip.status === 'CANCELLED' || (trip.endAt && trip.endAt < new Date()))
-        ) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-            message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
-          })
-        }
-      }
+      await this.assertTripStillOpen(plan.tripId)
       await this.tripContextPort.getTripContext(plan.tripId, userId)
     }
 
@@ -1222,25 +1213,46 @@ export class GearPlanService {
       },
     })
 
+    // AI tuỳ chọn: tắt (mặc định), chưa cấu hình hay lỗi đều trả lời khuyên theo bộ quy tắc, không báo lỗi.
+    const isAiAdviceEnabled = readGearFlags().aiAdviceEnabled
+
     let adviceResult: any
-    try {
-      if (!this.gearAiPort || !this.gearAiPort.generateAdvice) throw new Error('GEAR_AI_UNAVAILABLE')
-      adviceResult = await this.gearAiPort.generateAdvice({
-        planId,
-        revision: revision.revision,
-        tripContext,
-        requirements: (revision.resultSnapshot as any)?.checklist || [],
-        coverage: (revision.resultSnapshot as any)?.summary || {},
-        options: [selectedOption],
+    if (!isAiAdviceEnabled) {
+      // DEFAULT: Do NOT invoke Gemini. Deterministic rule-based advice from verified facts.
+      const fallbackRender = renderNarrativeFromClaims(
+        approvedClaims.map((c) => c.id),
         approvedClaims,
-      })
-    } catch {
+      )
       adviceResult = {
         source: 'RULE_FALLBACK' as GearAdviceSource,
-        narrativeVi: '',
-        factRefs,
+        narrativeVi: fallbackRender.narrativeVi,
+        selectedClaimIds: approvedClaims.map((c) => c.id),
+        claimIds: approvedClaims.map((c) => c.id),
+        factRefs: fallbackRender.factRefs,
         actionRefs,
         candidateRefs,
+      }
+    } else {
+      try {
+        if (!this.gearAiPort || !this.gearAiPort.generateAdvice) throw new Error('GEAR_AI_UNAVAILABLE')
+        adviceResult = await this.gearAiPort.generateAdvice({
+          planId,
+          revision: revision.revision,
+          tripContext,
+          requirements: (revision.resultSnapshot as any)?.checklist || [],
+          coverage: (revision.resultSnapshot as any)?.summary || {},
+          options: [selectedOption],
+          approvedClaims,
+        })
+      } catch (err: any) {
+        this.logger.warn(`AI advice generation failed, falling back to rule-based advice: ${err?.message}`)
+        adviceResult = {
+          source: 'RULE_FALLBACK' as GearAdviceSource,
+          narrativeVi: '',
+          factRefs,
+          actionRefs,
+          candidateRefs,
+        }
       }
     }
 
@@ -1324,7 +1336,7 @@ export class GearPlanService {
           source: finalSource,
           contextHash: revision.contentHash,
           narrativeVi: finalNarrative,
-          factRefs: factRefs as any,
+          factRefs: finalFactRefs as any,
           actionRefs: actionRefs as any,
           candidateRefs: candidateRefs as any,
           disclaimerVi: SERVER_DISCLAIMER,
@@ -1340,7 +1352,7 @@ export class GearPlanService {
       revision: revision.revision,
       source: adviceRun.source,
       narrativeVi: adviceRun.narrativeVi,
-      factRefs,
+      factRefs: finalFactRefs,
       actionRefs,
       candidateRefs,
       disclaimerVi: adviceRun.disclaimerVi,
@@ -1361,20 +1373,7 @@ export class GearPlanService {
     }
 
     if (plan.tripId) {
-      if (this.prisma.trip) {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: plan.tripId },
-          select: { id: true, status: true, endAt: true },
-        })
-        if (
-          trip &&
-          (trip.status === 'COMPLETED' || trip.status === 'CANCELLED' || (trip.endAt && trip.endAt < new Date()))
-        ) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-            message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
-          })
-        }
-      }
+      await this.assertTripStillOpen(plan.tripId)
       await this.tripContextPort.getTripContext(plan.tripId, userId)
     }
 
@@ -1427,6 +1426,8 @@ export class GearPlanService {
       dailyPrice: l.dailyPrice,
       rentalFee: l.rentalFee,
       deposit: l.deposit,
+      grade: l.grade ?? null,
+      gradeGroupId: l.gradeGroupId ?? null,
     }))
 
     return {
@@ -1464,20 +1465,7 @@ export class GearPlanService {
     }
 
     if (plan.tripId) {
-      if (this.prisma.trip) {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: plan.tripId },
-          select: { id: true, status: true, endAt: true },
-        })
-        if (
-          trip &&
-          (trip.status === 'COMPLETED' || trip.status === 'CANCELLED' || (trip.endAt && trip.endAt < new Date()))
-        ) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, {
-            message: 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
-          })
-        }
-      }
+      await this.assertTripStillOpen(plan.tripId)
       await this.tripContextPort.getTripContext(plan.tripId, userId)
     }
 
@@ -1518,15 +1506,23 @@ export class GearPlanService {
     }
   }
 
-  private renderRuleFallbackNarrative(params: { tripContext: any; selectedOption: any }): string {
-    const { tripContext, selectedOption } = params
-    const approvedClaims = buildApprovedClaims({
-      tripContext,
-      selectedOption,
+  /**
+   * Chặn thao tác ghi khi chuyến đã kết thúc (COMPLETED, CANCELLED, INTERRUPTED hoặc quá endAt) — cùng điều kiện
+   * với `getTripContext`. Đọc thẳng trạng thái chuyến để báo đúng lỗi trước các kiểm tra khác.
+   */
+  private async assertTripStillOpen(
+    tripId: string,
+    message = 'Chuyến đi đã kết thúc hoặc không còn khả dụng để tư vấn trang bị',
+  ): Promise<void> {
+    if (!this.prisma.trip) return
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true, status: true, endAt: true },
     })
-    return renderNarrativeFromClaims(
-      approvedClaims.map((c) => c.id),
-      approvedClaims,
-    ).narrativeVi
+    if (!trip) return
+    const ended = ['COMPLETED', 'CANCELLED', 'INTERRUPTED'].includes(trip.status)
+    if (ended || (trip.endAt && trip.endAt < new Date())) {
+      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_TRIP_NOT_ELIGIBLE, { message })
+    }
   }
 }

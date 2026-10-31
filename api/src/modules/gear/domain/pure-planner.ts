@@ -22,7 +22,12 @@ export interface CandidateProduct {
   availableCount: number
   weight_g: number | null
   attributes?: Record<string, unknown>
+  /** Hạng thuê (LIKE_NEW | GOOD_USED); null với sản phẩm thường. Không ảnh hưởng cách chọn. */
+  grade?: RentalGradeValue | null
+  gradeGroupId?: string | null
 }
+
+export type RentalGradeValue = 'LIKE_NEW' | 'GOOD_USED'
 
 export interface OwnedAssignment {
   requirementId: string
@@ -43,6 +48,8 @@ export interface RentalLine {
   deposit: number
   weight_g: number | null
   availableCount: number
+  grade: RentalGradeValue | null
+  gradeGroupId: string | null
 }
 
 export interface PlannerOptionResult {
@@ -564,6 +571,8 @@ export function solveDeterministicPlannerOption(
         deposit: p.deposit * qty,
         weight_g: p.weight_g,
         availableCount: p.availableCount,
+        grade: p.grade ?? null,
+        gradeGroupId: p.gradeGroupId ?? null,
       })
     }
 
