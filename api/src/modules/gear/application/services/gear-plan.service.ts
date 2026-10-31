@@ -33,6 +33,7 @@ import { GEAR_AI_PORT } from '../ports/gear-ai.port'
 import type { GearAiPort } from '../ports/gear-ai.port'
 import { TRIP_FORECAST_PORT } from '../ports/trip-forecast.port'
 import type { TripForecastPort } from '../ports/trip-forecast.port'
+import { buildContextQuestions, buildGearGuidance, withDisplayGuidance } from '../../domain/gear-guidance'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { GearRuleService, summarizeRuleSet } from './gear-rule.service'
 import type {
@@ -581,7 +582,7 @@ export class GearPlanService {
     // If identical content hash already exists and is the current evaluated head: idempotent return
     if (existingRevision) {
       if (existingRevision.contentHash === contentHash && plan.evaluatedRevision === targetRevision) {
-        return existingRevision.resultSnapshot
+        return withDisplayGuidance(existingRevision.resultSnapshot)
       }
       // If contentHash changed while at this inputRevision (source item/Trip changed),
       // CAS bump to new inputRevision per MASTER 4.1: "source item/Trip đổi được CAS thành input mới trước publish"
@@ -635,7 +636,7 @@ export class GearPlanService {
       contextUpdated ? updatedCanonicalContext : undefined,
     )
 
-    return resultSnapshot
+    return withDisplayGuidance(resultSnapshot)
   }
 
   async getPlanRevisions(id: string, userId: string): Promise<GearPlanRevisionDomain[]> {
@@ -652,6 +653,27 @@ export class GearPlanService {
       })
     }
     return rev
+  }
+
+  async getPlanRevisionGuidance(id: string, revision: number, userId: string) {
+    const plan = await this.getPlan(id, userId)
+    const rev = await this.planRevisionRepo.findByPlanAndRevision(id, revision)
+    if (!rev) {
+      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_REVISION_NOT_FOUND, {
+        message: `Không tìm thấy phiên bản ${revision} của kế hoạch trang bị`,
+      })
+    }
+    return {
+      planId: id,
+      revision,
+      inputRevision: plan.inputRevision,
+      evaluatedRevision: plan.evaluatedRevision,
+      isLatestEvaluation: revision === plan.evaluatedRevision,
+      isStale: plan.isStale === true,
+      needsReevaluation: plan.isStale === true || plan.inputRevision !== plan.evaluatedRevision,
+      contextQuestions: buildContextQuestions(rev.resultSnapshot, rev.inputSnapshot),
+      ...buildGearGuidance(rev.resultSnapshot, rev.inputSnapshot),
+    }
   }
 
   async getPlanDiff(

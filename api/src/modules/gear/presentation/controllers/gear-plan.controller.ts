@@ -70,6 +70,19 @@ const GRADE_SCHEMA_PROPERTIES: Record<string, SchemaObject> = {
   },
 };
 
+const DISPLAY_GUIDANCE_SCHEMA: SchemaObject = {
+  type: 'object',
+  properties: {
+    state: { type: 'string', enum: ['READY', 'NEEDS_INFO', 'NEEDS_PREPARATION'] },
+    actions: { type: 'array', items: { type: 'string', enum: ['SUPPLEMENT_INFO', 'VIEW_RENTAL_OPTIONS', 'SELF_PREPARE'] } },
+    missingAttributes: { type: 'array', items: { type: 'object', properties: {
+      key: { type: 'string', example: 'waterproof_mm' }, type: { type: 'string', example: 'number' },
+      unit: { type: 'string', example: 'mm' }, requiredBy: { type: 'array', items: { type: 'string' }, example: ['R01'] },
+    } } },
+  },
+  example: { state: 'NEEDS_INFO', actions: ['SUPPLEMENT_INFO'], missingAttributes: [{ key: 'waterproof_mm', type: 'number', unit: 'mm', requiredBy: ['R01'] }] },
+};
+
 const RENTAL_LINE_SCHEMA: SchemaObject = {
   type: 'object',
   properties: {
@@ -345,6 +358,10 @@ Xác nhận điều kiện thời tiết của chuyến đi, đánh giá từng 
   @ApiResponse({
     status: 200,
     description: 'Đánh giá thành công, trả về Checklist, Coverage Summary và lưu immutable snapshot revision',
+    schema: { type: 'object', properties: {
+      itemVerdicts: { type: 'array', items: { type: 'object', properties: { itemId: { type: 'string', format: 'uuid' }, verdict: { type: 'string', enum: ['SUITABLE', 'NOT_SUITABLE'] }, reasons: { type: 'array', items: { type: 'string' } }, displayGuidance: DISPLAY_GUIDANCE_SCHEMA } } },
+      coreCheck: { type: 'object', properties: { items: { type: 'array', items: { type: 'object', properties: { displayGuidance: DISPLAY_GUIDANCE_SCHEMA } } } } },
+    } },
   })
   @ApiErrorResponse(400, 'Thiếu thông số thời tiết', GEAR_ERROR_CODES.GEAR_NEEDS_CONTEXT, 'Thời tiết chưa được xác nhận')
   @ApiErrorResponse(409, 'Xung đột phiên bản', GEAR_ERROR_CODES.GEAR_PLAN_CAS_CONFLICT, 'Kế hoạch đã thay đổi dữ liệu đầu vào')
@@ -379,6 +396,35 @@ Xác nhận điều kiện thời tiết của chuyến đi, đánh giá từng 
     @Param('revision', ParseIntPipe) revision: number,
   ) {
     return this.gearPlanService.getPlanRevisionDetail(id, revision, userId);
+  }
+
+  @Get(':id/revisions/:revision/guidance')
+  @ApiOperation({
+    summary: 'Hướng dẫn bổ sung thông tin còn thiếu cho từng món đồ đã đánh giá',
+    description: 'Hướng dẫn thuộc snapshot được yêu cầu. isLatestEvaluation cho biết snapshot có phải lần đánh giá mới nhất; needsReevaluation phản ánh thay đổi phiên bản hoặc isStale theo kiểm tra hiện có của kế hoạch.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'ID kế hoạch' })
+  @ApiParam({ name: 'revision', type: Number, description: 'Phiên bản đánh giá' })
+  @ApiResponse({ status: 200, description: 'Hướng dẫn đọc từ snapshot, không thay đổi kết quả đánh giá', schema: {
+    type: 'object', properties: {
+      contextQuestions: { type: 'object', description: 'Câu hỏi theo món được chọn và constraint chưa đủ dữ liệu trong snapshot; không phải verdict.', properties: {
+        available: { type: 'boolean' }, items: { type: 'array', items: { type: 'object', properties: {
+          itemId: { type: 'string', format: 'uuid' }, nameAtEvaluation: { type: 'string', nullable: true }, category: { type: 'string' },
+          questions: { type: 'array', items: { type: 'object', properties: {
+            field: { type: 'string' }, question: { type: 'string' }, valueType: { type: 'string' }, requirementId: { type: 'string' },
+            constraintIds: { type: 'array', items: { type: 'string' } }, allowUnknown: { type: 'boolean' },
+          } } },
+        } } },
+      } },
+    },
+  } })
+  @ApiErrorResponse(404, 'Không tìm thấy kế hoạch hoặc phiên bản', GEAR_ERROR_CODES.GEAR_REVISION_NOT_FOUND, 'Phiên bản đánh giá không tồn tại')
+  async getRevisionGuidance(
+    @ActiveUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('revision', ParseIntPipe) revision: number,
+  ) {
+    return this.gearPlanService.getPlanRevisionGuidance(id, revision, userId);
   }
 
   @Get(':id/diff')
