@@ -4,6 +4,7 @@ import { PageReaderPort, PageReadResult } from '../../application/ports/page-rea
 import { AppError } from '../../../../shared/errors/app-error';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
 import { SafeLinkFetcher } from './safe-link-fetcher';
+import { readGearRuntimeConfig } from '../../application/services/gear-capabilities';
 
 @Injectable()
 export class FirecrawlPageReaderAdapter implements PageReaderPort {
@@ -15,9 +16,15 @@ export class FirecrawlPageReaderAdapter implements PageReaderPort {
   private readonly timeoutMs: number;
 
   constructor() {
-    this.apiKey = process.env.FIRECRAWL_API_KEY || null;
-    this.apiUrl = (process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev').replace(/\/+$/, '');
-    this.timeoutMs = parseInt(process.env.FIRECRAWL_TIMEOUT_MS || '30000', 10);
+    const rawKey = process.env.FIRECRAWL_API_KEY?.trim() || null;
+    this.apiKey = rawKey && rawKey.length > 0 ? rawKey : null;
+    const runtime = readGearRuntimeConfig();
+    this.apiUrl = runtime.firecrawlApiUrl.replace(/\/+$/, '');
+    this.timeoutMs = runtime.firecrawlTimeoutMs;
+  }
+
+  isConfigured(): boolean {
+    return Boolean(this.apiKey && this.apiKey.length > 0);
   }
 
   async readPage(rawUrl: string): Promise<PageReadResult> {
@@ -56,9 +63,12 @@ export class FirecrawlPageReaderAdapter implements PageReaderPort {
             message: 'Khóa truy cập dịch vụ đọc link không hợp lệ hoặc hết hạn',
           });
         }
+        // Firecrawl giới hạn tần suất là lỗi của dịch vụ đọc trang, không phải quota ngày của người dùng
+        // (GEAR_EXTRACTION_QUOTA_EXCEEDED). Dùng GEAR_PAGE_FETCH_FAILED để service chuyển sang nhập tay.
         if (response.status === 429) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED, {
             message: 'Dịch vụ đọc trang đang vượt quá hạn mức yêu cầu, vui lòng thử lại sau',
+            details: { providerStatus: 429 },
           });
         }
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED, {
