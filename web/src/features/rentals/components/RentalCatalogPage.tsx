@@ -55,6 +55,43 @@ function categoryKey(value: string) {
   return cleanCategoryName(value).toLocaleLowerCase("vi");
 }
 
+const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Đã qua sử dụng" } as const;
+const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
+
+type CatalogGroup = { key: string; name: string; variants: RentalCatalogItem[] };
+
+// Backend: mỗi hạng là một RentalProduct riêng, nối bằng gradeGroupId;
+// FE gom các sản phẩm cùng gradeGroupId thành một thẻ.
+function gradeFamilyName(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function groupCatalogItems(items: RentalCatalogItem[]): CatalogGroup[] {
+  const groups = new Map<string, CatalogGroup>();
+  items.forEach((item) => {
+    const key = item.gradeGroupId ? `grade:${item.gradeGroupId}` : item.id;
+    const current = groups.get(key);
+    if (current) current.variants.push(item);
+    else
+      groups.set(key, {
+        key,
+        name: item.gradeGroupId ? gradeFamilyName(item.name) : item.name,
+        variants: [item],
+      });
+  });
+  groups.forEach((group) =>
+    group.variants.sort(
+      (a, b) =>
+        (a.grade ? GRADE_ORDER[a.grade] : 9) -
+        (b.grade ? GRADE_ORDER[b.grade] : 9),
+    ),
+  );
+  return [...groups.values()];
+}
+
 function CartIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg
@@ -116,15 +153,22 @@ function QuantityControl({
 
 function ProductCard({
   item,
+  title,
+  variants,
+  onSelectVariant,
   bookingId,
   quantity,
   onQuantityChange,
 }: {
   item: RentalCatalogItem;
+  title: string;
+  variants: RentalCatalogItem[];
+  onSelectVariant: (id: string) => void;
   bookingId: string;
   quantity: number;
   onQuantityChange: (quantity: number) => void;
 }) {
+  const gradeVariants = variants.filter((variant) => variant.grade);
   const availableCount = item.availableCount ?? 0;
   const checking = item.availableCount === null;
   const detailUrl = `/rental-products/${encodeURIComponent(item.id)}?bookingId=${encodeURIComponent(bookingId)}`;
@@ -153,6 +197,13 @@ function ProductCard({
             ✦ Hợp chuyến đi
           </span>
         )}
+        {item.grade && (
+          <span
+            className={`absolute right-3 top-3 rounded-full px-3 py-1.5 text-[11px] font-bold shadow-sm backdrop-blur ${item.grade === "LIKE_NEW" ? "bg-white/95 text-[#17603F]" : "bg-[#FFF6E0]/95 text-[#8A5A00]"}`}
+          >
+            {GRADE_LABELS[item.grade]}
+          </span>
+        )}
         <span
           className={`absolute bottom-3 right-3 rounded-full px-3 py-1.5 text-[10px] font-black shadow-sm backdrop-blur ${checking ? "bg-sky-700/90 text-white" : availableCount > 0 ? "bg-white/95 text-[#17603F]" : "bg-gray-900/85 text-white"}`}
         >
@@ -172,8 +223,31 @@ function ProductCard({
           href={detailUrl}
           className="mt-2 line-clamp-2 min-h-12 text-base font-black leading-6 text-[#17251D] transition hover:text-emerald-700"
         >
-          {item.name}
+          {title}
         </Link>
+        {gradeVariants.length > 1 && (
+          <div
+            role="radiogroup"
+            aria-label="Chọn tình trạng"
+            className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-[#EEF3EF] p-1"
+          >
+            {gradeVariants.map((variant) => {
+              const selected = variant.id === item.id;
+              return (
+                <button
+                  key={variant.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => onSelectVariant(variant.id)}
+                  className={`h-8 rounded-lg text-xs font-bold transition ${selected ? "bg-white text-[#174B36] shadow-sm" : "text-gray-500 hover:text-[#174B36]"}`}
+                >
+                  {variant.grade ? GRADE_LABELS[variant.grade] : variant.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {item.sku && (
           <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
             SKU {item.sku}
@@ -194,6 +268,22 @@ function ProductCard({
                   /ngày
                 </span>
               </p>
+              {typeof item.depositPerUnit === "number" && (
+                <p className="mt-1 text-[11px] font-semibold text-gray-500">
+                  Cọc {formatMoney(item.depositPerUnit, item.currency)}/món
+                  {typeof item.depositExplanation?.percentageOfReplacementValue ===
+                    "number" && (
+                    <span className="text-gray-400">
+                      {" "}
+                      · ≈{" "}
+                      {item.depositExplanation.percentageOfReplacementValue.toLocaleString(
+                        "vi-VN",
+                      )}
+                      % giá trị thay thế
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
             <Link
               href={detailUrl}
@@ -244,6 +334,9 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [cartOpen, setCartOpen] = useState(false);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<
+    Record<string, string>
+  >({});
   const categoryRailRef = useRef<HTMLDivElement | null>(null);
   const cart = useRentalCart(bookingId);
 
@@ -306,6 +399,11 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
             .includes(keyword)),
     );
   }, [activeCategory, data, search]);
+
+  const groupedItems = useMemo(
+    () => groupCatalogItems(filteredItems),
+    [filteredItems],
+  );
 
   if (loading)
     return (
@@ -497,19 +595,31 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
             </h2>
           </div>
           <p className="text-sm font-bold text-gray-500">
-            {filteredItems.length} sản phẩm
+            {groupedItems.length} sản phẩm
           </p>
         </div>
-        {filteredItems.length ? (
+        {groupedItems.length ? (
           <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredItems.map((item) => {
+            {groupedItems.map((group) => {
+              const item =
+                group.variants.find(
+                  (variant) => variant.id === selectedVariantIds[group.key],
+                ) ?? group.variants[0];
               const cartItem = cart.items.find(
                 (entry) => entry.product.id === item.id,
               );
               return (
                 <ProductCard
-                  key={item.id}
+                  key={group.key}
                   item={item}
+                  title={group.name}
+                  variants={group.variants}
+                  onSelectVariant={(id) =>
+                    setSelectedVariantIds((current) => ({
+                      ...current,
+                      [group.key]: id,
+                    }))
+                  }
                   bookingId={bookingId}
                   quantity={cartItem?.quantity ?? 0}
                   onQuantityChange={(quantity) =>

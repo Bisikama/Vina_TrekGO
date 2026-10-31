@@ -478,10 +478,34 @@ export function RentalQuotePage({
                       {formatMoney(item.dailyPrice, quote.amounts.currency)}
                       /ngày
                     </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Cọc{" "}
+                      {formatMoney(item.depositPerUnit, quote.amounts.currency)}
+                      /món × {item.quantity} ={" "}
+                      <span className="font-bold text-gray-700">
+                        {formatMoney(item.depositAmount, quote.amounts.currency)}
+                      </span>
+                      {typeof item.depositExplanation?.percentageOfReplacementValue ===
+                      "number" ? (
+                        <span className="text-gray-400">
+                          {" "}
+                          · ≈{" "}
+                          {item.depositExplanation.percentageOfReplacementValue.toLocaleString(
+                            "vi-VN",
+                          )}
+                          % giá trị thay thế
+                        </span>
+                      ) : null}
+                    </p>
                   </div>
-                  <p className="text-sm font-black text-[#174B36]">
-                    {formatMoney(item.feeAmount, quote.amounts.currency)}
-                  </p>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      Phí thuê
+                    </p>
+                    <p className="text-sm font-black text-[#174B36]">
+                      {formatMoney(item.feeAmount, quote.amounts.currency)}
+                    </p>
+                  </div>
                 </div>
               );
             })}
@@ -495,7 +519,10 @@ export function RentalQuotePage({
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-gray-600">Tiền cọc</dt>
+              <dt className="text-gray-600">
+                Tiền cọc{" "}
+                <span className="text-xs text-gray-400">(hoàn lại sau khi trả đồ đạt chuẩn)</span>
+              </dt>
               <dd className="font-black">
                 {formatMoney(
                   quote.amounts.depositAmount,

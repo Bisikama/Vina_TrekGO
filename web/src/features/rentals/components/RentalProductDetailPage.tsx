@@ -21,6 +21,24 @@ function formatMoney(value: number, currency: string) {
   }).format(value);
 }
 
+const GRADE_LABELS = {
+  LIKE_NEW: "Mới",
+  GOOD_USED: "Đã qua sử dụng",
+} as const;
+
+// Tên sản phẩm có hạng thường kèm hậu tố hạng; nhãn hạng đã hiển thị riêng.
+function displayProductName(name: string, hasGrade: boolean) {
+  return hasGrade
+    ? name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
+    : name;
+}
+
+function formatPercent(value: number) {
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
 
@@ -155,6 +173,14 @@ export function RentalProductDetailPage({
   } = data;
 
   const available = availability.availableCount > 0;
+  // Dùng tiền cọc mỗi món do server tính; dữ liệu cũ chưa có thì mới dùng cấu hình chính sách.
+  const depositPerUnit =
+    product.depositPerUnit ?? product.depositPolicy.amount;
+  const depositPercentage =
+    product.depositPerUnit != null
+      ? product.depositExplanation?.percentageOfReplacementValue ?? null
+      : null;
+  const replacementValue = product.replacementValue ?? 0;
   const cartEntry = cart.items.find(
     (item) => item.product.id === product.id,
   );
@@ -225,6 +251,14 @@ export function RentalProductDetailPage({
                 {product.category.name}
               </span>
 
+              {product.grade && (
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-bold ${product.grade === "LIKE_NEW" ? "bg-emerald-50 text-[#17603F] ring-1 ring-emerald-200" : "bg-[#FFF6E0] text-[#8A5A00] ring-1 ring-amber-200"}`}
+                >
+                  {GRADE_LABELS[product.grade]}
+                </span>
+              )}
+
               <span
                 className={`rounded-full px-3 py-1 text-[11px] font-bold ${
                   available
@@ -239,7 +273,7 @@ export function RentalProductDetailPage({
             </div>
 
             <h1 className="mt-5 text-3xl font-black text-gray-950">
-              {product.name}
+              {displayProductName(product.name, Boolean(product.grade))}
             </h1>
 
             {product.sku && (
@@ -284,13 +318,35 @@ export function RentalProductDetailPage({
                 <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
                   Tiền đặt cọc
                 </p>
-                <p className="mt-2 text-xl font-black text-gray-900">
-                  {formatMoney(
-                    product.depositPolicy.amount,
-                    product.currency,
-                  )}
+                <p className="mt-2 text-xl font-black tabular-nums text-gray-900">
+                  {formatMoney(depositPerUnit, product.currency)}
+                  <span className="ml-1 text-xs font-bold text-gray-500">
+                    /món
+                  </span>
                 </p>
+                {depositPercentage !== null && (
+                  <p className="mt-1 text-xs font-semibold text-gray-600">
+                    Tương ứng {formatPercent(depositPercentage)}% giá trị thay thế
+                  </p>
+                )}
               </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-gray-200 p-4 text-xs leading-6 text-gray-600">
+              {depositPercentage !== null && replacementValue > 0 && (
+                <p className="tabular-nums">
+                  {formatMoney(depositPerUnit, product.currency)} ÷{" "}
+                  {formatMoney(replacementValue, product.currency)} × 100% ={" "}
+                  <strong className="text-gray-900">
+                    {formatPercent(depositPercentage)}%
+                  </strong>
+                </p>
+              )}
+              <p>
+                Tiền cọc tính theo số món, không nhân theo số ngày thuê. Cọc
+                được hoàn sau khi thiết bị được trả và kiểm định; tiền thuê và
+                tiền cọc là hai khoản riêng trong báo giá.
+              </p>
             </div>
 
             <div className="mt-6 rounded-2xl border border-gray-200 p-4">
