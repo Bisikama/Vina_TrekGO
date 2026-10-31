@@ -179,6 +179,8 @@ const envConfigSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((val) => val === 'true'),
+    // Nhắc ADMIN/STAFF_INVENTORY khi đơn vẫn thiếu hàng do hạ hạng và còn ít hơn số giờ này tới giờ nhận đồ.
+    GRADE_SHORTAGE_ALERT_HOURS: z.coerce.number().int().min(1).max(168).default(24),
 
     // AI GEAR ADVISOR (GEMINI & FIRECRAWL)
     GEAR_AI_ADVICE_ENABLED: z

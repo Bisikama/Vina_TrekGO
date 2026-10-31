@@ -4,7 +4,12 @@ import { Prisma } from '@prisma/client'
 import envConfig from '../../../shared/config'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { NotificationsService } from '../notifications.service'
-import { bookingNotificationEvents, bookingNotificationProjection } from './booking-notification.projection'
+import {
+  BookingNotificationContext,
+  bookingCancelledByOthers,
+  bookingNotificationEvents,
+  bookingNotificationProjection,
+} from './booking-notification.projection'
 
 const consumer = 'booking-notifications-v1'
 type Event = { id: string; eventType: string; payload: unknown }
@@ -43,7 +48,8 @@ export class BookingNotificationConsumer {
       if (!events.length) break
       for (const event of events) {
         try {
-          for (const delivery of bookingNotificationProjection(event.eventType, event.payload))
+          const context = await this.loadContext(event)
+          for (const delivery of bookingNotificationProjection(event.eventType, event.payload, context))
             await this.notificationsService.deliverBookingEvent(event.id, delivery.semanticType, delivery.data)
           // Mongo insert may succeed before this write. Unique delivery keys make replay safe.
           await this.db
@@ -66,5 +72,30 @@ export class BookingNotificationConsumer {
         }
       }
     }
+  }
+
+  /** Tra người nhận phụ; chỉ chạy cho các event cần (giữ nguyên chi phí cho event khác). */
+  private async loadContext(event: Event): Promise<BookingNotificationContext> {
+    const payload = (event.payload ?? {}) as Record<string, unknown>
+    if (event.eventType === 'BOOKING_CANCELLED' && bookingCancelledByOthers(payload) && typeof payload.bookingId === 'string') {
+      const participants = await this.db.bookingParticipant.findMany({
+        // Huỷ booking chuyển participant ACTIVE → CANCELLED, nên chỉ loại người đã kết thúc vé trước đó.
+        where: { bookingId: payload.bookingId, userId: { not: null }, status: { notIn: ['NO_SHOW', 'COMPLETED'] } },
+        select: { userId: true },
+      })
+      return { participantUserIds: participants.map((p) => p.userId!) }
+    }
+    if (
+      (event.eventType === 'PRIVATE_TRIP_CANCELLED' || event.eventType === 'PRIVATE_TRIP_UPDATED') &&
+      typeof payload.tripId === 'string'
+    ) {
+      // Huỷ Trip riêng không đổi trạng thái thành viên, nên thành viên ACTIVE lúc này là người cần báo.
+      const members = await this.db.tripMember.findMany({
+        where: { tripId: payload.tripId, status: 'ACTIVE' },
+        select: { userId: true },
+      })
+      return { memberUserIds: members.map((m) => m.userId) }
+    }
+    return {}
   }
 }

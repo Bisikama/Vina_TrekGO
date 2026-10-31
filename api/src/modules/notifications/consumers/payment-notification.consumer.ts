@@ -1,14 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
-import { EventStatus } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import envConfig from '../../../shared/config'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { NotificationsService } from '../notifications.service'
+import { drainNotificationOutbox, NOTIFICATION_OUTBOX_SOURCES, NotificationOutboxEvent } from './notification-outbox-drain'
 import {
-  NotificationType,
-  ReferenceType,
-} from '../schemas/notification.schema'
+  PAYMENT_NOTIFICATION_CONSUMER,
+  paymentNotificationEvents,
+  paymentNotificationProjection,
+  PaymentSucceededContext,
+  RefundSucceededContext,
+} from './payment-notification.projection'
 
+/** Thông báo trong app từ payment_outbox_events, có receipt theo consumer (payment_notification_receipts). */
 @Injectable()
 export class PaymentNotificationConsumer {
   private readonly logger = new Logger(PaymentNotificationConsumer.name)
@@ -21,74 +26,86 @@ export class PaymentNotificationConsumer {
 
   @Interval(3000)
   async tick() {
-    if (this.isProcessing || !envConfig.NOTIFICATION_CONSUMER_ENABLED) {
-      return
-    }
-
+    if (this.isProcessing || !envConfig.NOTIFICATION_CONSUMER_ENABLED) return
     this.isProcessing = true
     try {
       await this.processPaymentEvents()
-    } catch (err) {
-      this.logger.error('Lỗi khi quét payment_outbox_events:', err)
+    } catch {
+      this.logger.error('Payment notification scanner failed; retry on next tick')
     } finally {
       this.isProcessing = false
     }
   }
 
-  private async processPaymentEvents() {
-    const events = await this.db.paymentOutboxEvent.findMany({
-      where: {
-        status: {
-          in: [EventStatus.PENDING, EventStatus.PROCESSED],
-        },
-        eventType: 'PAYMENT_SUCCEEDED',
-        aggregateType: 'Payment',
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 25,
+  processPaymentEvents() {
+    return drainNotificationOutbox({
+      db: this.db,
+      source: NOTIFICATION_OUTBOX_SOURCES.payment,
+      consumer: PAYMENT_NOTIFICATION_CONSUMER,
+      eventTypes: paymentNotificationEvents,
+      deliver: (event) => this.deliver(event),
+      logger: this.logger,
     })
+  }
 
-    for (const event of events) {
-      try {
-        const payload = event.payload as Record<string, any>
-        if (!payload || !payload.paymentId) continue
+  private async deliver(event: NotificationOutboxEvent) {
+    const ctx = await this.loadContext(event)
+    // Không tìm thấy dữ liệu nguồn (hoặc event không thuộc loại cần báo): ghi receipt hoàn tất.
+    if (!ctx) return
+    for (const delivery of paymentNotificationProjection(event.eventType, ctx))
+      await this.notificationsService.deliverEvent(event.id, delivery.semanticType, {
+        ...delivery.data,
+        userId: delivery.userId,
+      })
+  }
 
-        // Kiểm tra Idempotency
-        const existing = await this.notificationsService.findByOutboxEventId(event.id)
-        if (existing) continue
-
-        // Lấy thông tin thanh toán và hóa đơn để tìm userId nhận thông báo
-        const payment = await this.db.payment.findUnique({
-          where: { id: payload.paymentId },
-          include: { invoice: true },
-        })
-
-        if (!payment || !payment.invoice) continue
-
-        const userId = payment.invoice.userId
-        const amountFormatted = new Intl.NumberFormat('vi-VN', {
-          style: 'currency',
-          currency: 'VND',
-        }).format(Number(payment.amount))
-
-        await this.notificationsService.createNotification({
-          userId,
-          title: 'Giao dịch thanh toán thành công',
-          content: `Bạn đã thanh toán thành công số tiền ${amountFormatted} cho hóa đơn ${payment.invoice.invoiceNo || ''}.`,
-          notificationType: NotificationType.PAYMENT_SUCCESS,
-          referenceType: ReferenceType.PAYMENT,
-          referenceId: payment.id,
-          metadata: {
-            outboxEventId: event.id,
-            invoiceId: payment.invoiceId,
-            paymentGateway: payment.paymentGateway,
-            amount: payment.amount.toString(),
-          },
-        })
-        this.logger.log(`[PaymentConsumer] Đã tạo thông báo PAYMENT_SUCCESS cho user ${userId}`)
-      } catch (err) {
-        this.logger.warn(`Lỗi xử lý payment event ${event.id}: ${err.message}`)
+  private async loadContext(
+    event: NotificationOutboxEvent,
+  ): Promise<PaymentSucceededContext | RefundSucceededContext | null> {
+    const payload = (event.payload ?? {}) as Record<string, unknown>
+    if (event.eventType === 'PAYMENT_SUCCEEDED') {
+      if (event.aggregateType !== 'Payment' || typeof payload.paymentId !== 'string') return null
+      const payment = await this.db.payment.findUnique({ where: { id: payload.paymentId }, include: { invoice: true } })
+      if (!payment?.invoice) return null
+      return {
+        kind: 'PAYMENT',
+        paymentId: payment.id,
+        userId: payment.invoice.userId,
+        amount: payment.amount.toString(),
+        invoiceId: payment.invoiceId,
+        invoiceNo: payment.invoice.invoiceNo ?? null,
+        paymentGateway: payment.paymentGateway ?? null,
       }
     }
+    if (event.eventType === 'REFUND_SUCCEEDED') {
+      if (event.aggregateType !== 'Refund') return null
+      const refund = await this.db.refund.findUnique({
+        where: { id: event.aggregateId },
+        select: {
+          id: true,
+          status: true,
+          amount: true,
+          purpose: true,
+          rentalOrderId: true,
+          providerPayload: true,
+          bookingCancellation: { select: { bookingId: true } },
+          payment: { select: { invoice: { select: { userId: true } } } },
+        },
+      })
+      // Event chỉ phát khi SUCCEEDED; vẫn kiểm lại để không bao giờ báo "đã hoàn" sai.
+      if (!refund || refund.status !== 'SUCCEEDED' || !refund.payment?.invoice) return null
+      const providerPayload = refund.providerPayload as Prisma.JsonObject | null
+      return {
+        kind: 'REFUND',
+        refundId: refund.id,
+        userId: refund.payment.invoice.userId,
+        amount: refund.amount.toString(),
+        purpose: refund.purpose,
+        rentalOrderId: refund.rentalOrderId,
+        bookingId: refund.bookingCancellation?.bookingId ?? null,
+        simulated: Boolean(providerPayload?.sandboxSimulation),
+      }
+    }
+    return null
   }
 }

@@ -19,7 +19,8 @@ import {
   type GradedProductRef,
 } from '../application/services/equipment-grade.rules'
 
-export const GRADE_DOWNGRADE_SHORTAGE_REASON = 'GRADE_DOWNGRADE_CAPACITY_SHORTAGE'
+import { GRADE_DOWNGRADE_SHORTAGE_REASON } from '../../../../shared/constants/rental-event-reasons.constant'
+export { GRADE_DOWNGRADE_SHORTAGE_REASON }
 
 /** Đơn chưa bàn giao: còn có thể xử lý thiếu hàng bằng cách tìm món khác hoặc huỷ system-fault. */
 const PRE_HANDOVER_STATUSES: RentalOrderStatus[] = [
