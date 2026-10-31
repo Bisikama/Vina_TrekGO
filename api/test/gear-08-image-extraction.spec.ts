@@ -436,6 +436,7 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
       expect(res.body.extractedData).toBeDefined();
       expect(res.body.extractedData.category).toBe('JACKET');
       expect(res.body.extractedData.attributes.waterproof_mm).toBe(10000);
+      expect(res.body.extractionFieldProvenance).toEqual(expect.arrayContaining([{ field: 'waterproof_mm', extractionStatus: 'FOUND' }]));
       expect(aiCallCount).toBe(initialAiCalls + 1);
     });
 
@@ -607,6 +608,26 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
       readyDraftId = draft.id;
     });
 
+    it('rejects a boolean submitted to a numeric attribute during confirmation', async () => {
+      await request(app.getHttpServer()).post(`/api/v1/gear/extractions/${readyDraftId}/confirm`)
+        .set('Authorization', aliceToken)
+        .send({ expectedVersion: 2, item: { name: 'Jacket', category: 'JACKET', condition: 'GOOD', attributes: { waterproof_mm: true } } })
+        .expect(400);
+      expect(drafts.get(readyDraftId)?.status).toBe('READY');
+    });
+
+    it('preserves missing extracted fields and reports provenance after confirmation', async () => {
+      drafts.get(readyDraftId)!.extractedData = { category: 'JACKET', attributes: { windproof: true } };
+      const res = await request(app.getHttpServer()).post(`/api/v1/gear/extractions/${readyDraftId}/confirm`)
+        .set('Authorization', aliceToken)
+        .send({ expectedVersion: 2, acknowledgeDuplicate: true, item: { name: 'Partial jacket', category: 'JACKET', condition: 'GOOD', attributes: { windproof: true } } })
+        .expect(200);
+      expect(res.body.item.attributes.waterproof_mm).toBeNull();
+      expect(res.body.extractionFieldProvenance).toEqual(expect.arrayContaining([
+        { field: 'windproof', extractionStatus: 'FOUND' }, { field: 'waterproof_mm', extractionStatus: 'MISSING' },
+      ]));
+    });
+
     it('detects duplicate without acknowledgeDuplicate and returns 409 (draft stays READY)', async () => {
       // Seed closet with a similar jacket
       const existingJacket: UserGearItemDomain = {
@@ -683,6 +704,7 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
 
       expect(replayRes.body.replayed).toBe(true);
       expect(replayRes.body.item.id).toBe(res.body.item.id);
+      expect(replayRes.body.extractionFieldProvenance).toEqual(res.body.extractionFieldProvenance);
     });
 
     it('rejects confirm with 409 GEAR_DRAFT_PAYLOAD_MISMATCH if payload differs on replay', async () => {

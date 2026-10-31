@@ -8,6 +8,11 @@ import { PrismaGearPlanRepository } from '../src/modules/gear/infrastructure/ada
 import { PrismaGearPlanRevisionRepository } from '../src/modules/gear/infrastructure/adapters/prisma-gear-plan-revision.repository'
 import { GearExtractionService } from '../src/modules/gear/application/services/gear-extraction.service'
 import { GearPlanService } from '../src/modules/gear/application/services/gear-plan.service'
+import { UserGearService } from '../src/modules/gear/application/services/user-gear.service'
+import { createUserGearItemSchema, patchUserGearItemSchema } from '../src/modules/gear/application/dtos/user-gear.dto'
+import { GearPhase2Service } from '../src/modules/gear/application/services/gear-phase2.service'
+import { preparationSelectionSchema } from '../src/modules/gear/application/dtos/gear-phase2.dto'
+import { confirmedExtractionProvenance } from '../src/modules/gear/domain/attribute-provenance'
 
 /**
  * Isolated PostgreSQL Integration Test Suite for Gear Advisor V3.1.5 Concurrency & Lifecycle
@@ -105,6 +110,136 @@ describeIntegration('PostgreSQL Concurrency & Lifecycle Integration Tests (runId
       expect(reloaded?.attributes.weight_g).toBe(350)
     } finally {
       await userRepo.delete(item.id, testUserId)
+    }
+  })
+
+  it('creates a minimal item, evaluates, patches and re-evaluates without changing the old snapshot', async () => {
+    const destination = await prisma.destination.create({ data: { name: `Gear test ${runId}` } })
+    let tripId: string | undefined
+    try {
+      const trip = await prisma.trip.create({ data: {
+        tripType: 'PRIVATE', title: `Gear test ${runId}`, destinationId: destination.id, creatorId: testUserId,
+        startAt: new Date(Date.now() + 86400000), endAt: new Date(Date.now() + 172800000), maxPax: 1,
+      } })
+      tripId = trip.id
+      const userRepo = new PrismaUserGearRepository(prisma as any)
+      const itemService = new UserGearService(userRepo)
+      await expect(itemService.createItem(testUserId, createUserGearItemSchema.parse({ name: 'Invalid', category: 'JACKET', condition: 'GOOD', attributes: { waterproof_mm: true } }))).rejects.toBeDefined()
+      const item = await itemService.createItem(testUserId, createUserGearItemSchema.parse({ name: `Jacket ${runId}`, category: 'JACKET', condition: 'GOOD' }))
+      expect(item.attributes.waterproof_mm).toBeNull()
+      const planRepo = new PrismaGearPlanRepository(prisma as any)
+      const revisionRepo = new PrismaGearPlanRevisionRepository(prisma as any)
+      const facts = { tripId, days: 1, difficulty: 1, terrain: [], contextVersion: 'test' }
+      const service = new GearPlanService(planRepo, revisionRepo, userRepo, { getTripContext: jest.fn(async () => facts) } as any, prisma as any)
+      const plan = await service.createPlan(testUserId, { title: 'Plan test', contextMode: 'TRIP', tripId, selectedItemIds: [item.id], preferences: {} })
+      const climate = { temp_min_c: 20, temp_max_c: 24, temp_min_night_c: 18, rain_prob_pct: 70 }
+      const first = await service.evaluatePlan(plan.id, testUserId, { expectedInputRevision: 1, confirmedClimate: climate }) as any
+      expect(first.itemVerdicts[0]).toMatchObject({ verdict: 'NOT_SUITABLE', displayGuidance: { state: 'NEEDS_INFO' } })
+      const guidance = await service.getPlanRevisionGuidance(plan.id, 1, testUserId)
+      expect(guidance.contextQuestions.items).toEqual(expect.arrayContaining([expect.objectContaining({
+        itemId: item.id, questions: expect.arrayContaining([expect.objectContaining({ field: 'waterproof_mm', requirementId: 'req_jacket' })]),
+      })]))
+      expect(first.checklist.find((row: any) => row.category === 'JACKET').isChecked).toBe(false)
+      const skipped = await service.evaluatePlan(plan.id, testUserId, { expectedInputRevision: 1, confirmedClimate: climate }) as any
+      expect(skipped.itemVerdicts[0].displayGuidance.state).toBe('NEEDS_INFO')
+      const before = await revisionRepo.findByPlanAndRevision(plan.id, 1)
+      expect((before!.resultSnapshot.itemVerdicts as any[])[0]).not.toHaveProperty('displayGuidance')
+      await expect(itemService.patchItem(item.id, testUserId, patchUserGearItemSchema.parse({ expectedVersion: item.version, attributes: { waterproof_mm: true } }))).rejects.toBeDefined()
+      const patched = await itemService.patchItem(item.id, testUserId, patchUserGearItemSchema.parse({ expectedVersion: item.version, attributes: { waterproof_mm: 10000 } }))
+      expect(patched.attributes.temp_rating_c).toBeNull()
+      expect(patched.attributes.weight_g).toBeNull()
+      const second = await service.evaluatePlan(plan.id, testUserId, { expectedInputRevision: 1, confirmedClimate: climate }) as any
+      expect(second.itemVerdicts[0]).toMatchObject({ verdict: 'SUITABLE', displayGuidance: { state: 'READY' } })
+      expect((await planRepo.findByIdAndUser(plan.id, testUserId))?.evaluatedRevision).toBe(2)
+      expect(await revisionRepo.findByPlanAndRevision(plan.id, 1)).toEqual(before)
+      await prisma.gearPlan.delete({ where: { id: plan.id } })
+      await prisma.userGearItem.delete({ where: { id: item.id } })
+    } finally {
+      if (tripId) {
+        await prisma.gearPlan.deleteMany({ where: { tripId, userId: testUserId } })
+        await prisma.trip.delete({ where: { id: tripId } })
+      }
+      await prisma.destination.delete({ where: { id: destination.id } })
+    }
+  })
+
+  it('keeps preparation choices separate and manages reviewed catalog and per-field provenance', async () => {
+    const planRepo = new PrismaGearPlanRepository(prisma as any)
+    const userRepo = new PrismaUserGearRepository(prisma as any)
+    const plans = new GearPlanService(planRepo, new PrismaGearPlanRevisionRepository(prisma as any), userRepo, {} as any, prisma as any)
+    const service = new GearPhase2Service(prisma as any, plans, userRepo)
+    const plan = await prisma.gearPlan.create({ data: { userId: testUserId, title: `Phase2 ${runId}`, contextMode: 'TRIP' } })
+    let catalogId: string | undefined
+    let itemId: string | undefined
+    try {
+      expect((await service.getSelections(plan.id, testUserId)).version).toBe(0)
+      await expect(service.getSelections(plan.id, randomUUID())).rejects.toMatchObject({ code: 'GEAR_PLAN_NOT_FOUND' })
+      expect(preparationSelectionSchema.safeParse({ expectedVersion: 0, choices: [{ category: 'JACKET', status: 'HAVE' }, { category: 'JACKET', status: 'NOT_HAVE' }] }).success).toBe(false)
+      const created = await service.putSelections(plan.id, testUserId, { expectedVersion: 0, choices: [{ category: 'JACKET', status: 'HAVE' }] })
+      expect(created.version).toBe(1)
+      await expect(service.putSelections(plan.id, testUserId, { expectedVersion: 0, choices: [] })).rejects.toMatchObject({ code: 'GEAR_PROGRESS_CAS_CONFLICT' })
+      const concurrent = await Promise.allSettled([
+        service.putSelections(plan.id, testUserId, { expectedVersion: 1, choices: [{ category: 'JACKET', status: 'CHECK_LATER' }] }),
+        service.putSelections(plan.id, testUserId, { expectedVersion: 1, choices: [{ category: 'JACKET', status: 'NOT_HAVE' }] }),
+      ])
+      expect(concurrent.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+      expect(concurrent.filter((result) => result.status === 'rejected')).toHaveLength(1)
+      expect((await service.getSelections(plan.id, testUserId)).version).toBe(2)
+      expect(await planRepo.findByIdAndUser(plan.id, testUserId)).toMatchObject({ inputRevision: 1, progressVersion: 1, progressJson: [] })
+
+      await expect(service.createDraft(testUserId, { name: 'Missing evidence', category: 'JACKET', attributes: { waterproof_mm: 5000 }, evidence: {} })).rejects.toBeDefined()
+      const draft = await service.createDraft(testUserId, { name: `Catalog ${runId}`, category: 'JACKET', attributes: { waterproof_mm: 10000, windproof: true }, evidence: { waterproof_mm: 'Manufacturer specification', windproof: 'Manufacturer label' } })
+      catalogId = draft.id
+      expect((await service.search({ q: runId })).items.length).toBe(0)
+      await expect(service.getCatalogItem(draft.id)).rejects.toMatchObject({ code: 'GEAR_ITEM_NOT_FOUND' })
+      await expect(service.createItemFromCatalog(draft.id, testUserId, { condition: 'GOOD' })).rejects.toMatchObject({ code: 'GEAR_ITEM_NOT_FOUND' })
+      const updatedDraft = await service.updateDraft(draft.id, { expectedVersion: 1, name: draft.name, category: 'JACKET', attributes: { waterproof_mm: 10000, windproof: true }, evidence: { waterproof_mm: 'Manufacturer specification', windproof: 'Manufacturer label' } })
+      expect(updatedDraft.version).toBe(2)
+      const verified = await service.verify(draft.id, testUserId, 2)
+      expect(verified.state).toBe('VERIFIED')
+      await expect(service.verify(draft.id, testUserId, 1)).rejects.toMatchObject({ code: 'GEAR_PROFILE_VERSION_CONFLICT' })
+      expect(await service.getCatalogItem(draft.id)).toMatchObject({ state: 'VERIFIED' })
+      expect((await service.search({ q: runId })).items[0].id).toBe(draft.id)
+      const item = await service.createItemFromCatalog(draft.id, testUserId, { condition: 'GOOD', acknowledgeDuplicate: true })
+      itemId = item.id
+      expect(item.attributeProvenance).toMatchObject({ waterproof_mm: { source: 'VERIFIED_CATALOG', referenceId: draft.id }, windproof: { source: 'VERIFIED_CATALOG' } })
+      const patched = await new UserGearService(userRepo).patchItem(item.id, testUserId, patchUserGearItemSchema.parse({ expectedVersion: item.version, attributes: { waterproof_mm: 9000 } }))
+      expect(patched.attributeProvenance).toMatchObject({ waterproof_mm: { source: 'USER' }, windproof: { source: 'VERIFIED_CATALOG' } })
+      await service.revoke(draft.id, testUserId, verified.version)
+      expect((await service.search({ q: runId })).items.length).toBe(0)
+      const revoked = await service.getCatalogItem(draft.id)
+      expect(revoked).toMatchObject({ state: 'REVOKED' })
+      expect(revoked).not.toHaveProperty('attributes')
+      await expect(service.createItemFromCatalog(draft.id, testUserId, { condition: 'GOOD' })).rejects.toMatchObject({ code: 'GEAR_ITEM_NOT_FOUND' })
+      expect(confirmedExtractionProvenance({ waterproof_mm: 10000, windproof: false }, { category: 'JACKET', attributes: { waterproof_mm: 10000, windproof: true } }, 'JACKET', 'AI_IMAGE', 'draft-id')).toEqual({
+        waterproof_mm: { source: 'AI_IMAGE', referenceId: 'draft-id' }, windproof: { source: 'USER' },
+      })
+    } finally {
+      if (itemId) await prisma.userGearItem.delete({ where: { id: itemId } })
+      if (catalogId) await prisma.gearPersonalCatalogItem.delete({ where: { id: catalogId } })
+      await prisma.gearPlan.delete({ where: { id: plan.id } })
+    }
+  })
+
+  it('stores extraction provenance for retained values and user provenance for changed values', async () => {
+    const draftRepo = new PrismaGearExtractionDraftRepository(prisma as any)
+    const userRepo = new PrismaUserGearRepository(prisma as any)
+    const draft = await draftRepo.createDraft({ userId: testUserId, sourceType: 'IMAGE', sourceHash: `source-${runId}`, expiresAt: new Date(Date.now() + 60000) })
+    const ready = await draftRepo.updateExtractedData(draft.id, { category: 'JACKET', attributes: { waterproof_mm: 10000, windproof: true } }, 'READY')
+    const extraction = new GearExtractionService(draftRepo, new PrismaGearExtractionCacheAdapter(prisma as any),
+      new PrismaGearConcurrencyLeaseAdapter(prisma as any), userRepo, {} as any, prisma as any)
+    try {
+      const result = await extraction.confirmDraft(draft.id, testUserId, {
+        expectedVersion: ready.version, acknowledgeDuplicate: true,
+        item: createUserGearItemSchema.parse({ name: `AI ${runId}`, category: 'JACKET', condition: 'GOOD', attributes: { waterproof_mm: 10000, windproof: false } }),
+      })
+      expect(result.item.attributeProvenance).toEqual({
+        waterproof_mm: { source: 'AI_IMAGE', referenceId: draft.id }, windproof: { source: 'USER' },
+      })
+      const stored = await userRepo.findByIdAndUser(result.item.id, testUserId)
+      expect(stored?.attributeProvenance).toEqual(result.item.attributeProvenance)
+    } finally {
+      await prisma.gearExtractionDraft.delete({ where: { id: draft.id } })
     }
   })
 

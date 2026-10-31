@@ -24,6 +24,8 @@ import { PAGE_READER_PORT } from '../ports/page-reader.port'
 import type { PageReaderPort } from '../ports/page-reader.port'
 import { CreateExtractionDto, ConfirmExtractionDraftDto } from '../dtos/gear-extraction.dto'
 import { normalizeCreateAttributes } from '../dtos/user-gear.dto'
+import { extractionFieldProvenance } from '../../domain/gear-extraction-schema'
+import { confirmedExtractionProvenance } from '../../domain/attribute-provenance'
 import { findSimilarItems } from '../../domain/duplicate-detector'
 import { GEAR_EXTRACTION_PROMPT } from '../../infrastructure/prompts/prompt-assets'
 import { SafeLinkFetcher } from '../../infrastructure/adapters/safe-link-fetcher'
@@ -765,7 +767,7 @@ export class GearExtractionService {
     draftId: string,
     userId: string,
     dto: ConfirmExtractionDraftDto,
-  ): Promise<{ item: UserGearItemDomain; replayed: boolean }> {
+  ): Promise<{ item: UserGearItemDomain; replayed: boolean; extractionFieldProvenance: ReturnType<typeof extractionFieldProvenance> }> {
     const payloadHash = createHash('sha256').update(canonicalStringify(dto.item)).digest('hex')
 
     return this.prisma.$transaction(async (tx) => {
@@ -823,6 +825,7 @@ export class GearExtractionService {
             brand: existingItem.brand,
             condition: existingItem.condition as any,
             attributes: (existingItem.attributes as Record<string, unknown>) || {},
+            attributeProvenance: (existingItem.attributeProvenance as Record<string, unknown>) ?? null,
             photoRef: existingItem.photoRef,
             source: existingItem.source as any,
             version: existingItem.version,
@@ -837,6 +840,7 @@ export class GearExtractionService {
             })),
           },
           replayed: true,
+          extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, existingItem.category as any),
         }
       }
 
@@ -972,6 +976,7 @@ export class GearExtractionService {
           brand: dto.item.brand ?? null,
           condition: dto.item.condition as any,
           attributes: normalizedAttrs as any,
+          attributeProvenance: confirmedExtractionProvenance(normalizedAttrs, draft.extractedData, dto.item.category, itemSource, draftId) as any,
           photoRef: coverPhotoRef,
           source: itemSource as any,
           version: 1,
@@ -1036,6 +1041,7 @@ export class GearExtractionService {
           brand: createdItem.brand,
           condition: createdItem.condition as any,
           attributes: normalizedAttrs,
+          attributeProvenance: (createdItem.attributeProvenance as Record<string, unknown>) ?? null,
           photoRef: createdItem.photoRef,
           source: itemSource,
           version: createdItem.version,
@@ -1044,6 +1050,7 @@ export class GearExtractionService {
           photos: photosCreated,
         },
         replayed: false,
+        extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, createdItem.category as any),
       }
     })
   }
