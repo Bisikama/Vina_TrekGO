@@ -41,6 +41,10 @@ import {
   readGearRuntimeConfig,
   type ManualEntryReasonCode,
 } from './gear-capabilities'
+import { normalizeProductLink } from '../../domain/product-link-normalizer'
+
+/** ownerScope của cache LINK dùng chung giữa mọi user (IMAGE vẫn theo user vì ảnh là dữ liệu riêng). */
+const SHARED_LINK_CACHE_SCOPE = 'shared:link'
 
 function getStartOfDaySaigon(): Date {
   const now = new Date()
@@ -450,10 +454,11 @@ export class GearExtractionService {
       // 1. Mandatory Public HTTPS & SSRF validation (B05) — lỗi đầu vào vẫn trả 400 kể cả khi tiện ích tắt
       await this.safeLinkFetcher.validateAndResolveUrl(dto.url)
 
-      // Normalize URL: lowercase protocol and host, preserve path & query case
-      const parsedUrl = new URL(dto.url.trim())
-      const normalizedUrl = `${parsedUrl.protocol}//${parsedUrl.host.toLowerCase()}${parsedUrl.pathname}${parsedUrl.search}`
-      const urlHash = createHash('sha256').update(`url:${normalizedUrl}`).digest('hex')
+      // Bỏ tham số theo dõi (utm_*, fbclid, gclid...) để cùng một trang dùng chung khoá cache.
+      const { displayUrl: normalizedUrl, cacheKeyUrl } = normalizeProductLink(dto.url)
+      const urlHash = createHash('sha256').update(`url:${cacheKeyUrl}`).digest('hex')
+      // Nội dung trang công khai không phụ thuộc người dán link → cache LINK dùng chung; quota vẫn tính theo user.
+      const linkCacheScope = SHARED_LINK_CACHE_SCOPE
 
       if (!flags.linkExtractionEnabled) {
         return this.createManualDraft(userId, 'LINK', urlHash, expiresAt, 'LINK_READER_DISABLED', {
@@ -463,7 +468,7 @@ export class GearExtractionService {
 
       // Layer 1 URL Cache Check (if !forceRefresh)
       if (!dto.forceRefresh) {
-        const cachedUrl = await this.cachePort.getCache(userId, urlHash, promptVersion, modelVersion, schemaVersion)
+        const cachedUrl = await this.cachePort.getCache(linkCacheScope, urlHash, promptVersion, modelVersion, schemaVersion)
         if (cachedUrl && cachedUrl.status === 'SUCCESS') {
           const draft = await this.draftRepo.createDraft({
             userId,
@@ -522,7 +527,7 @@ export class GearExtractionService {
       // Layer 2 Content Cache Check (always check Layer 2 on forceRefresh unless bypassContentCache is true - MASTER 5 & B06)
       if (!dto.bypassContentCache) {
         const cachedContent = await this.cachePort.getCache(
-          userId,
+          linkCacheScope,
           contentHash,
           promptVersion,
           modelVersion,
@@ -532,7 +537,7 @@ export class GearExtractionService {
         if (cachedContent && cachedContent.status === 'SUCCESS') {
           // Also update/refresh Layer 1 URL cache
           await this.cachePort.setCache({
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
@@ -572,14 +577,14 @@ export class GearExtractionService {
       }
 
       // Concurrency lease for extraction
-      const resourceKey = `gear:lease:${userId}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
+      const resourceKey = `gear:lease:${linkCacheScope}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
       const ownerToken = randomUUID()
       const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, aiLeaseTtlMs)
 
       if (!lease.acquired) {
         // Tiến trình khác có thể vừa ghi xong cache nội dung → dùng luôn, giống nhánh IMAGE.
         const recheckCache = await this.cachePort.getCache(
-          userId,
+          linkCacheScope,
           contentHash,
           promptVersion,
           modelVersion,
@@ -633,7 +638,7 @@ export class GearExtractionService {
         // Layer 2 (nội dung) rồi Layer 1 (URL). Lỗi ghi cache không được làm mất kết quả AI đã có.
         await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash,
             promptVersion,
             modelVersion,
@@ -646,7 +651,7 @@ export class GearExtractionService {
         )
         await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
