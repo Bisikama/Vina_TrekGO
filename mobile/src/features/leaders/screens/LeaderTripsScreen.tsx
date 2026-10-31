@@ -56,15 +56,15 @@ function getStatusBadge(status: string) {
     case "DRAFT":
       return {
         label: "Bản nháp",
-        bg: "#f1f5f9",
-        color: "#475569",
+        bg: "#e8ebe6",
+        color: "#454745",
         icon: "create-outline" as const,
       };
     case "OPEN":
       return {
         label: "Đang mở bán",
-        bg: "#dcfce7",
-        color: "#166534",
+        bg: "#e2f6d5",
+        color: "#054d28",
         icon: "checkmark-circle" as const,
       };
     case "FULL":
@@ -77,36 +77,36 @@ function getStatusBadge(status: string) {
     case "IN_PROGRESS":
       return {
         label: "Đang diễn ra",
-        bg: "#fef9c3",
-        color: "#854d0e",
+        bg: "#fff9db",
+        color: "#b86700",
         icon: "walk" as const,
       };
     case "COMPLETED":
       return {
         label: "Đã hoàn thành",
-        bg: "#f3e8ff",
-        color: "#6b21a8",
+        bg: "#e2f6d5",
+        color: "#054d28",
         icon: "flag" as const,
       };
     case "CANCEL_PENDING":
       return {
         label: "Chờ hủy",
         bg: "#fee2e2",
-        color: "#991b1b",
+        color: "#a7000d",
         icon: "time" as const,
       };
     case "CANCELLED":
       return {
         label: "Đã hủy",
         bg: "#fee2e2",
-        color: "#991b1b",
+        color: "#a7000d",
         icon: "close-circle" as const,
       };
     default:
       return {
         label: status,
-        bg: "#f1f5f9",
-        color: "#475569",
+        bg: "#e8ebe6",
+        color: "#454745",
         icon: "ellipse" as const,
       };
   }
@@ -511,7 +511,7 @@ export function LeaderTripsScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8faf7",
+    backgroundColor: "#e8ebe6",
   },
   header: {
     backgroundColor: "#ffffff",
@@ -538,12 +538,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: "#121c2a",
+    color: "#0e0f0c",
     letterSpacing: 0.3,
   },
   headerSubtitle: {
     fontSize: 11.5,
-    color: "#707972",
+    color: "#868685",
     marginTop: 2,
   },
   createBtn: {
@@ -551,15 +551,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingVertical: 10,
-    borderRadius: Radius.md,
+    borderRadius: 20,
     ...Shadows.card,
   },
   createBtnText: {
-    color: "#ffffff",
+    color: "#0e0f0c",
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
   tabsWrapper: {
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1f5f9",
   },
   tabItemActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
   },
   tabLabel: {
     fontSize: 12,
@@ -619,16 +619,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: "#f4f6f4",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
   },
   searchInput: {
     flex: 1,
     fontSize: 12.5,
-    color: "#121c2a",
+    color: "#0e0f0c",
     padding: 0,
   },
   listContent: {
@@ -644,13 +644,13 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
-    color: "#707972",
+    color: "#868685",
   },
   errorBox: {
     backgroundColor: "#fff8f7",
     borderWidth: 1,
     borderColor: "#ffdad6",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 20,
     alignItems: "center",
     gap: 8,
@@ -682,19 +682,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     gap: 10,
   },
   emptyTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   emptySubtitle: {
     fontSize: 12,
-    color: "#707972",
+    color: "#868685",
     textAlign: "center",
     lineHeight: 18,
   },
@@ -702,10 +702,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: Radius.md,
+    borderRadius: 20,
     marginTop: 6,
   },
   emptyActionBtnText: {
@@ -715,10 +715,10 @@ const styles = StyleSheet.create({
   },
   tripCard: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     ...Shadows.card,
     gap: 10,
   },
@@ -754,12 +754,12 @@ const styles = StyleSheet.create({
   tripTitle: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#121c2a",
+    color: "#0e0f0c",
     lineHeight: 20,
   },
   tripSubtitle: {
     fontSize: 11.5,
-    color: "#707972",
+    color: "#868685",
     marginTop: -4,
   },
   trailRow: {
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#f4fbf4",
     borderWidth: 1,
-    borderColor: "#d1e8d5",
+    borderColor: "#d6dbd2",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
@@ -813,7 +813,7 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: "900",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   remainingSlotsText: {
     fontSize: 11,
@@ -843,7 +843,7 @@ const styles = StyleSheet.create({
   },
   revenueLabel: {
     fontSize: 10,
-    color: "#707972",
+    color: "#868685",
     textTransform: "uppercase",
   },
   revenueValue: {
@@ -855,7 +855,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 6,
@@ -881,7 +881,7 @@ const styles = StyleSheet.create({
     borderColor: "#125238",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: Radius.md,
+    borderRadius: 20,
     ...Shadows.card,
     minWidth: 200,
   },

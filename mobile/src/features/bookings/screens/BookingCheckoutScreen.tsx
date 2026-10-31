@@ -319,13 +319,15 @@ export function BookingCheckoutScreen({
     );
   }
 
-  const isPending = booking.status === "PENDING_PAYMENT";
+  const isTripCancelled = booking.trip?.status === "CANCELLED";
+  const isCancelled = booking.status === "CANCELLED" || isTripCancelled;
+  const isPending = !isCancelled && booking.status === "PENDING_PAYMENT";
   const isConfirmed =
-    booking.status === "CONFIRMED" ||
-    booking.status === "PARTIAL_CHECKIN" ||
-    booking.status === "CHECKED_IN" ||
-    booking.status === "COMPLETED";
-  const isCancelled = booking.status === "CANCELLED";
+    !isCancelled &&
+    (booking.status === "CONFIRMED" ||
+      booking.status === "PARTIAL_CHECKIN" ||
+      booking.status === "CHECKED_IN" ||
+      booking.status === "COMPLETED");
   const isExpired = booking.status === "EXPIRED" || (isPending && isHoldExpired);
 
   const mins = Math.floor(remainingSeconds / 60);
@@ -473,7 +475,21 @@ export function BookingCheckoutScreen({
           </View>
         ) : null}
 
-        {isConfirmed ? (
+        {isTripCancelled || isCancelled ? (
+          <View style={styles.cancelledBanner}>
+            <Ionicons name="close-circle" size={26} color="#DC2626" />
+            <View style={styles.flex1}>
+              <Text style={styles.cancelledTitle}>
+                {isTripCancelled ? "Chuyến đi đã bị hủy" : "Đặt chỗ đã bị hủy"}
+              </Text>
+              <Text style={styles.cancelledSub}>
+                {isTripCancelled
+                  ? "Chuyến đi này đã được hủy bởi Ban tổ chức / Trưởng đoàn. Toàn bộ tiền vé và chi phí dịch vụ liên quan sẽ được tự động hoàn trả 100% về tài khoản của bạn."
+                  : "Đặt chỗ của bạn đã được hủy thành công. Hệ thống đang tiến hành thủ tục hoàn tiền theo chính sách."}
+              </Text>
+            </View>
+          </View>
+        ) : isConfirmed ? (
           <View style={styles.confirmedBanner}>
             <Ionicons name="checkmark-circle" size={26} color="#16A34A" />
             <View style={styles.flex1}>
@@ -489,9 +505,9 @@ export function BookingCheckoutScreen({
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.tripEyebrow}>CHUYẾN ĐI CÔNG KHAI</Text>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>
-                {BOOKING_STATUS_LABELS[booking.status] || booking.status}
+            <View style={[styles.statusPill, (isTripCancelled || isCancelled) && styles.statusPillCancelled]}>
+              <Text style={[styles.statusPillText, (isTripCancelled || isCancelled) && styles.statusPillTextCancelled]}>
+                {isTripCancelled ? "Chuyến đi đã hủy" : BOOKING_STATUS_LABELS[booking.status] || booking.status}
               </Text>
             </View>
           </View>
@@ -882,7 +898,7 @@ export function BookingCheckoutScreen({
         ) : null}
 
         {/* Cancellation Option */}
-        {booking.canCancel ? (
+        {booking.canCancel && !isTripCancelled && !isCancelled ? (
           <TouchableOpacity
             style={styles.cancelBookingBtn}
             onPress={() => setShowCancelModal(true)}
@@ -1316,6 +1332,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#991B1B",
     marginTop: 2,
+  },
+  cancelledBanner: {
+    flexDirection: "row",
+    backgroundColor: "#FEE2E2",
+    padding: 16,
+    borderRadius: Radius.xl,
+    marginBottom: 14,
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  cancelledTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
+  cancelledSub: {
+    fontSize: 12,
+    color: "#B91C1C",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  statusPillCancelled: {
+    backgroundColor: "#FEE2E2",
+  },
+  statusPillTextCancelled: {
+    color: "#DC2626",
+    fontWeight: "800",
   },
   confirmedBanner: {
     flexDirection: "row",

@@ -301,10 +301,10 @@ export default function ProfileScreen() {
             onPress={() => router.push("/(tabs)/rental" as Href)}
           />
           <ActivityButton
-            icon="person-add-outline"
-            title="Ghép đoàn"
-            detail={`${groupTrips.filter((trip) => trip.joinStatus !== "NONE").length} đang theo dõi`}
-            onPress={() => router.push("/group-trips" as Href)}
+            icon="people-outline"
+            title="Private Trip"
+            detail="Chuyến đi riêng & đoàn"
+            onPress={() => router.push("/private-trips" as Href)}
           />
           <ActivityButton
             icon="people-outline"

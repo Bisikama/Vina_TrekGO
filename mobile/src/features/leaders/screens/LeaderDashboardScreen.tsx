@@ -38,21 +38,21 @@ function formatTripDates(startAt?: string, endAt?: string) {
 function getStatusBadge(status: string) {
   switch (status) {
     case "DRAFT":
-      return { label: "Bản nháp", bg: "#f1f5f9", color: "#475569" };
+      return { label: "Bản nháp", bg: "#e8ebe6", color: "#454745" };
     case "OPEN":
-      return { label: "Đang mở nhận khách", bg: "#dcfce7", color: "#166534" };
+      return { label: "Đang mở nhận khách", bg: "#e2f6d5", color: "#054d28" };
     case "FULL":
-      return { label: "Đã đủ chỗ", bg: "#e0f2fe", color: "#0369a1" };
+      return { label: "Đã đủ chỗ", bg: "#fff9db", color: "#b86700" };
     case "IN_PROGRESS":
-      return { label: "Đang diễn ra", bg: "#fef9c3", color: "#854d0e" };
+      return { label: "Đang diễn ra", bg: "#e0f2fe", color: "#0369a1" };
     case "COMPLETED":
-      return { label: "Đã hoàn thành", bg: "#f3e8ff", color: "#6b21a8" };
+      return { label: "Đã hoàn thành", bg: "#e2f6d5", color: "#054d28" };
     case "CANCEL_PENDING":
-      return { label: "Chờ hủy", bg: "#fee2e2", color: "#991b1b" };
+      return { label: "Chờ hủy", bg: "#fee2e2", color: "#a7000d" };
     case "CANCELLED":
-      return { label: "Đã hủy", bg: "#fee2e2", color: "#991b1b" };
+      return { label: "Đã hủy", bg: "#fee2e2", color: "#a7000d" };
     default:
-      return { label: status, bg: "#f1f5f9", color: "#475569" };
+      return { label: status, bg: "#e8ebe6", color: "#454745" };
   }
 }
 
@@ -119,12 +119,12 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={Colors.primaryDark}
-            colors={[Colors.primaryDark]}
+            tintColor="#0e0f0c"
+            colors={["#0e0f0c", "#9fe870"]}
           />
         }
       >
-        {/* Header hiện đại */}
+        {/* Header hiện đại theo phong cách Wise */}
         <View style={styles.header}>
           <View style={styles.headerInfo}>
             <View style={styles.roleTag}>
@@ -141,9 +141,9 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
             accessibilityLabel="Làm mới dữ liệu"
           >
             {loadingTrips && !refreshing ? (
-              <ActivityIndicator size="small" color={Colors.primaryDark} />
+              <ActivityIndicator size="small" color="#0e0f0c" />
             ) : (
-              <Ionicons name="refresh-outline" size={20} color={Colors.primaryDark} />
+              <Ionicons name="refresh-outline" size={20} color="#0e0f0c" />
             )}
           </TouchableOpacity>
         </View>
@@ -151,16 +151,16 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
         {/* Lưới thống kê thực tế từ API */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: "#eaf5e1" }]}>
-              <Ionicons name="trail-sign-outline" size={17} color={Colors.primaryDark} />
+            <View style={[styles.statIconWrap, { backgroundColor: "#e2f6d5" }]}>
+              <Ionicons name="trail-sign-outline" size={17} color="#0e0f0c" />
             </View>
             <Text style={styles.statNumber}>{totalTrips}</Text>
             <Text style={styles.statLabel}>Tổng chuyến</Text>
           </View>
 
           <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: "#dcfce7" }]}>
-              <Ionicons name="pricetag-outline" size={17} color="#166534" />
+            <View style={[styles.statIconWrap, { backgroundColor: "#cdffad" }]}>
+              <Ionicons name="pricetag-outline" size={17} color="#0e0f0c" />
             </View>
             <Text style={styles.statNumber}>{openTrips}</Text>
             <Text style={styles.statLabel}>Đang mở bán</Text>
@@ -175,8 +175,8 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
           </View>
 
           <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: "#fef3c7" }]}>
-              <Ionicons name="cash-outline" size={17} color="#92400e" />
+            <View style={[styles.statIconWrap, { backgroundColor: "#fff9db" }]}>
+              <Ionicons name="cash-outline" size={17} color="#b86700" />
             </View>
             <Text style={styles.statNumber} numberOfLines={1}>
               {totalRevenue >= 1_000_000
@@ -225,13 +225,13 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
 
               <View style={styles.heroMetaRow}>
                 <View style={styles.heroMetaItem}>
-                  <Ionicons name="calendar-outline" size={13} color="#166534" />
+                  <Ionicons name="calendar-outline" size={14} color="#0e0f0c" />
                   <Text style={styles.heroMetaText}>
                     {formatTripDates(highlightTrip.startAt, highlightTrip.endAt)}
                   </Text>
                 </View>
                 <View style={styles.heroMetaItem}>
-                  <Ionicons name="location-outline" size={13} color="#166534" />
+                  <Ionicons name="location-outline" size={14} color="#0e0f0c" />
                   <Text style={styles.heroMetaText}>
                     {highlightTrip.checkpoints?.length || 0} trạm kiểm soát
                   </Text>
@@ -240,7 +240,7 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
 
               {highlightTrip.trails?.[0]?.snapshotName && (
                 <View style={styles.heroTrailBox}>
-                  <Ionicons name="trail-sign-outline" size={13} color="#166534" />
+                  <Ionicons name="trail-sign-outline" size={14} color="#0e0f0c" />
                   <Text style={styles.heroTrailText} numberOfLines={1}>
                     {highlightTrip.trails[0].snapshotName}
                   </Text>
@@ -272,7 +272,7 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
                 activeOpacity={0.88}
               >
                 <Text style={styles.heroActionBtnText}>Xem chi tiết chuyến đi</Text>
-                <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+                <Ionicons name="arrow-forward" size={16} color="#0e0f0c" />
               </TouchableOpacity>
             </View>
           </View>
@@ -290,8 +290,8 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
               }}
               activeOpacity={0.8}
             >
-              <View style={[styles.quickActionIconWrap, { backgroundColor: "#eaf5e1" }]}>
-                <Ionicons name="add-circle-outline" size={22} color={Colors.primaryDark} />
+              <View style={[styles.quickActionIconWrap, { backgroundColor: "#e2f6d5" }]}>
+                <Ionicons name="add-circle-outline" size={22} color="#0e0f0c" />
               </View>
               <Text style={styles.quickActionTitle}>Tạo chuyến mới</Text>
               <Text style={styles.quickActionSub}>Mở Public Trip</Text>
@@ -319,8 +319,8 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
               }}
               activeOpacity={0.8}
             >
-              <View style={[styles.quickActionIconWrap, { backgroundColor: "#fef3c7" }]}>
-                <Ionicons name="person-outline" size={22} color="#92400e" />
+              <View style={[styles.quickActionIconWrap, { backgroundColor: "#fff9db" }]}>
+                <Ionicons name="person-outline" size={22} color="#b86700" />
               </View>
               <Text style={styles.quickActionTitle}>Hồ sơ cá nhân</Text>
               <Text style={styles.quickActionSub}>VFRS Level 2</Text>
@@ -343,7 +343,7 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
         ) : !loadingTrips ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIconWrap}>
-              <Ionicons name="compass-outline" size={38} color={Colors.primaryDark} />
+              <Ionicons name="compass-outline" size={38} color="#0e0f0c" />
             </View>
             <Text style={styles.emptyTitle}>Chưa có chuyến đi công khai nào</Text>
             <Text style={styles.emptySub}>
@@ -355,10 +355,10 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
                 if (onNavigateTab) onNavigateTab("create");
                 else router.push("/field-operations/leader-create-trip" as any);
               }}
-              activeOpacity={0.86}
+              activeOpacity={0.88}
             >
-              <Ionicons name="add-circle-outline" size={17} color="#ffffff" />
-              <Text style={styles.emptyCreateBtnText}>Tạo Public Trip ngay</Text>
+              <Ionicons name="add" size={18} color="#0e0f0c" />
+              <Text style={styles.emptyCreateBtnText}>Tạo chuyến đi đầu tiên</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -368,44 +368,67 @@ export function LeaderDashboardScreen({ onNavigateTab }: LeaderDashboardScreenPr
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8faf7" },
-  content: { padding: 18, paddingBottom: 36 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#e8ebe6", // Sage canvas soft per DESIGN-wise.md
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 40,
+  },
+
+  // Header
   header: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    backgroundColor: "#ffffff",
+    borderRadius: 24, // Radius.xl
+    borderWidth: 1,
+    borderColor: "#d6dbd2",
+    padding: 18,
     marginBottom: 16,
-    paddingTop: 4,
+    ...Shadows.card,
   },
-  headerInfo: { flex: 1 },
+  headerInfo: { flex: 1, paddingRight: 10 },
   roleTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    backgroundColor: "#0e0f0c",
     alignSelf: "flex-start",
-    backgroundColor: "#eaf5e1",
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     marginBottom: 6,
   },
-  roleDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primaryDark },
-  roleTagText: {
-    color: Colors.primaryDark,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.6,
+  roleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#9fe870", // Wise lime accent
   },
-  heading: { color: Colors.ink, fontSize: 24, fontWeight: "900", letterSpacing: -0.3 },
-  subheading: { color: Colors.body, fontSize: 12, marginTop: 2 },
+  roleTagText: {
+    color: "#9fe870",
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  heading: {
+    color: "#0e0f0c",
+    fontSize: 22,
+    fontWeight: "900", // Wise display heavy 900
+    letterSpacing: -0.3,
+  },
+  subheading: { color: "#454745", fontSize: 13, marginTop: 2 },
   refreshBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
+    width: 42,
+    height: 42,
+    borderRadius: Radius.pill,
+    backgroundColor: "#e8ebe6",
     alignItems: "center",
     justifyContent: "center",
-    ...Shadows.card,
   },
 
   // Stats Grid
@@ -417,21 +440,23 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
-    padding: 11,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#d6dbd2",
+    padding: 12,
     alignItems: "flex-start",
     ...Shadows.card,
   },
   statIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
+    width: 30,
+    height: 30,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
-  statNumber: { color: Colors.ink, fontSize: 16, fontWeight: "900" },
-  statLabel: { color: Colors.onSurfaceMuted, fontSize: 10, fontWeight: "600", marginTop: 2 },
+  statNumber: { color: "#0e0f0c", fontSize: 16, fontWeight: "900" },
+  statLabel: { color: "#454745", fontSize: 10, fontWeight: "600", marginTop: 2 },
 
   // Hero Card
   heroSection: { marginBottom: 20 },
@@ -439,52 +464,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 9,
+    marginBottom: 10,
   },
   sectionTitle: {
-    color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    color: "#0e0f0c",
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
   heroCard: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 1.5,
-    borderColor: "#bbf7d0",
-    borderRadius: Radius.lg,
-    padding: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d6dbd2",
+    borderRadius: 24, // Radius.xl
+    padding: 20,
     ...Shadows.card,
   },
-  heroHeader: { marginBottom: 8 },
+  heroHeader: { marginBottom: 10 },
   heroBadgeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   heroIdTag: {
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e8ebe6",
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
   },
   heroIdText: {
-    color: "#166534",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
   heroStatusPill: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
   },
-  heroStatusText: { fontSize: 10, fontWeight: "800" },
+  heroStatusText: { fontSize: 10.5, fontWeight: "700" },
   heroTitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 20,
     fontWeight: "900",
     lineHeight: 26,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   heroMetaRow: {
     flexDirection: "row",
@@ -492,75 +517,73 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   heroMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  heroMetaText: { color: "#4b5563", fontSize: 12, fontWeight: "600" },
+  heroMetaText: { color: "#454745", fontSize: 13, fontWeight: "600" },
   heroTrailBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
+    backgroundColor: "#e8ebe6",
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.pill,
     marginBottom: 14,
   },
-  heroTrailText: { color: "#166534", fontSize: 12, fontWeight: "700", flex: 1 },
+  heroTrailText: { color: "#0e0f0c", fontSize: 12, fontWeight: "600", flex: 1 },
   heroMetricsRow: {
     flexDirection: "row",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: Radius.sm,
-    padding: 10,
-    marginBottom: 14,
+    backgroundColor: "#e8ebe6",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
   },
   heroMetric: { flex: 1, alignItems: "center" },
-  heroMetricDivider: { width: 1, backgroundColor: "#e5e7eb" },
-  heroMetricLabel: { color: "#6b7280", fontSize: 10, fontWeight: "600" },
-  heroMetricVal: { color: "#125238", fontSize: 13, fontWeight: "800", marginTop: 2 },
+  heroMetricDivider: { width: 1, backgroundColor: "#d6dbd2" },
+  heroMetricLabel: { color: "#868685", fontSize: 11, fontWeight: "600" },
+  heroMetricVal: { color: "#0e0f0c", fontSize: 14, fontWeight: "800", marginTop: 2 },
   heroActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-    backgroundColor: "#166534",
-    paddingVertical: 12,
-    borderRadius: Radius.sm,
+    gap: 8,
+    backgroundColor: "#9fe870", // Wise lime CTA
+    paddingVertical: 14,
+    borderRadius: 24, // Radius.xl
   },
-  heroActionBtnText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  heroActionBtnText: { color: "#0e0f0c", fontSize: 14, fontWeight: "700" },
 
   // Quick Actions Section
   quickActionsSection: { marginBottom: 20 },
   quickActionsGrid: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 9,
+    marginTop: 8,
   },
   quickActionCard: {
     flex: 1,
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
-    padding: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#d6dbd2",
+    padding: 14,
     alignItems: "center",
     ...Shadows.card,
   },
   quickActionIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
   quickActionTitle: {
-    color: Colors.ink,
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
   },
   quickActionSub: {
-    color: Colors.onSurfaceMuted,
+    color: "#868685",
     fontSize: 10,
     marginTop: 2,
     textAlign: "center",
@@ -572,31 +595,33 @@ const styles = StyleSheet.create({
   // Empty Card
   emptyCard: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#d6dbd2",
     padding: 24,
     alignItems: "center",
     ...Shadows.card,
     marginTop: 6,
   },
   emptyIconWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#eaf5e1",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#e2f6d5",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   emptyTitle: {
-    color: Colors.ink,
-    fontSize: 15,
+    color: "#0e0f0c",
+    fontSize: 16,
     fontWeight: "800",
     marginBottom: 6,
     textAlign: "center",
   },
   emptySub: {
-    color: Colors.body,
-    fontSize: 12,
+    color: "#454745",
+    fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
     marginBottom: 16,
@@ -605,10 +630,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Colors.primaryDark,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: Radius.sm,
+    backgroundColor: "#9fe870",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  emptyCreateBtnText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  emptyCreateBtnText: { color: "#0e0f0c", fontSize: 13, fontWeight: "700" },
 });

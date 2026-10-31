@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { type Href, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -48,6 +48,10 @@ const joinStatusMeta: Record<
 
 export default function GroupTripsScreen() {
   const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/private-trips" as Href);
+  }, [router]);
   const { groupTrips } = useApp();
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<DifficultyFilter>("Tất cả");

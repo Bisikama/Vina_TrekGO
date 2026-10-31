@@ -276,7 +276,7 @@ export function LeaderTripEditScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerLoading}>
-          <ActivityIndicator size="large" color="#125238" />
+          <ActivityIndicator size="large" color="#0e0f0c" />
           <Text style={styles.loadingText}>Đang tải thông tin chuyến đi...</Text>
         </View>
       </SafeAreaView>
@@ -331,7 +331,7 @@ export function LeaderTripEditScreen() {
         {/* 1. THÔNG TIN CƠ BẢN */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Ionicons name="information-circle-outline" size={18} color="#125238" />
+            <Ionicons name="information-circle-outline" size={18} color="#0e0f0c" />
             <Text style={styles.cardTitle}>1. THÔNG TIN CƠ BẢN</Text>
           </View>
 
@@ -351,7 +351,7 @@ export function LeaderTripEditScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Loại hình chuyến đi</Text>
             <View style={styles.fixedTypeBox}>
-              <Ionicons name="shield-checkmark" size={16} color="#125238" />
+              <Ionicons name="shield-checkmark" size={16} color="#0e0f0c" />
               <Text style={styles.fixedTypeText}>Chuyến đi Công khai (Public Trip)</Text>
             </View>
           </View>
@@ -374,7 +374,7 @@ export function LeaderTripEditScreen() {
         {/* 2. LỊCH TRÌNH & THỜI GIAN */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Ionicons name="calendar-outline" size={18} color="#125238" />
+            <Ionicons name="calendar-outline" size={18} color="#0e0f0c" />
             <Text style={styles.cardTitle}>2. LỊCH TRÌNH & THỜI GIAN</Text>
           </View>
 
@@ -408,7 +408,7 @@ export function LeaderTripEditScreen() {
         {/* 3. QUY MÔ ĐOÀN & CƠ CẤU GIÁ VÉ */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Ionicons name="pricetag-outline" size={18} color="#125238" />
+            <Ionicons name="pricetag-outline" size={18} color="#0e0f0c" />
             <Text style={styles.cardTitle}>3. QUY MÔ ĐOÀN & CƠ CẤU GIÁ VÉ</Text>
           </View>
 
@@ -479,7 +479,7 @@ export function LeaderTripEditScreen() {
         {/* 4. HẠN ĐÓNG FORM ĐĂNG KÝ */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Ionicons name="lock-closed-outline" size={18} color="#125238" />
+            <Ionicons name="lock-closed-outline" size={18} color="#0e0f0c" />
             <Text style={styles.cardTitle}>4. HẠN ĐÓNG FORM ĐĂNG KÝ</Text>
           </View>
 
@@ -603,7 +603,7 @@ export function LeaderTripEditScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8faf7",
+    backgroundColor: "#e8ebe6",
   },
   centerLoading: {
     flex: 1,
@@ -627,10 +627,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   primaryActionBtn: {
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: Radius.md,
+    borderRadius: 20,
   },
   primaryActionBtnText: {
     color: "#ffffff",
@@ -681,7 +681,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff8f7",
     borderWidth: 1,
     borderColor: "#ffdad6",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 12,
   },
   errorBannerText: {
@@ -691,10 +691,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     ...Shadows.card,
     gap: 12,
   },
@@ -727,8 +727,8 @@ const styles = StyleSheet.create({
   },
   textInput: {
     borderWidth: 1,
-    borderColor: "#e1e9e2",
-    borderRadius: Radius.md,
+    borderColor: "#d6dbd2",
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13,
@@ -748,12 +748,12 @@ const styles = StyleSheet.create({
     borderColor: "#d1e8d5",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: Radius.md,
+    borderRadius: 20,
   },
   fixedTypeText: {
     fontSize: 12.5,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   dateRow: {
     flexDirection: "row",
@@ -767,16 +767,16 @@ const styles = StyleSheet.create({
   stepperCap: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   stepperBox: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#f8faf7",
+    backgroundColor: "#e8ebe6",
     borderWidth: 1,
-    borderColor: "#e1e9e2",
-    borderRadius: Radius.md,
+    borderColor: "#d6dbd2",
+    borderRadius: 20,
     padding: 8,
   },
   stepperBtn: {
@@ -785,13 +785,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     alignItems: "center",
     justifyContent: "center",
   },
   stepperBtnPlus: {
-    backgroundColor: "#125238",
-    borderColor: "#125238",
+    backgroundColor: "#0e0f0c",
+    borderColor: "#0e0f0c",
   },
   stepperDisplay: {
     alignItems: "center",
@@ -809,8 +809,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e1e9e2",
-    borderRadius: Radius.md,
+    borderColor: "#d6dbd2",
+    borderRadius: 20,
     backgroundColor: "#fbfcfb",
     paddingHorizontal: 12,
   },
@@ -839,9 +839,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
     paddingVertical: 14,
-    borderRadius: Radius.md,
+    borderRadius: 20,
     ...Shadows.card,
   },
   saveBtnDisabled: {
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ffdad6",
     paddingVertical: 12,
-    borderRadius: Radius.md,
+    borderRadius: 20,
   },
   cancelTripBtnText: {
     fontSize: 13,
@@ -879,7 +879,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     padding: 20,
     gap: 10,
     ...Shadows.card,
@@ -907,7 +907,7 @@ const styles = StyleSheet.create({
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     borderRadius: 8,
     padding: 10,
     fontSize: 12,
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
   },
   modalCloseBtnText: {
     fontSize: 12.5,

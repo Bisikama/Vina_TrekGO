@@ -1,6 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  bookingApiService,
+  getBookingErrorMessage,
+} from "@/features/bookings/services/booking.api";
+import type { BookingDetail } from "@/features/bookings/types";
 import {
   ActivityIndicator,
   Alert,
@@ -32,28 +37,38 @@ export default function CancelBookingScreen() {
     amount?: string;
   }>();
 
-  const tripName = params.name || "Tà Năng – Phan Dũng (3N2Đ)";
+  const [bookingDetail, setBookingDetail] = useState<BookingDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
-  const bookingCode = params.bookingCode || "#BK-8842";
+  useEffect(() => {
+    if (params.id && !params.name) {
+      setLoadingDetail(true);
+      bookingApiService
+        .getBookingDetail(params.id)
+        .then((detail) => setBookingDetail(detail))
+        .catch(() => {})
+        .finally(() => setLoadingDetail(false));
+    }
+  }, [params.id, params.name]);
 
-  const paidAmount = Number(params.amount) || 2850000;
+  const tripName = bookingDetail?.trip?.title || params.name || "Chuyến đi";
+  const bookingCode =
+    bookingDetail?.bookingCode ||
+    params.bookingCode ||
+    (params.id ? `#BK-${params.id.slice(0, 6).toUpperCase()}` : "Đang cập nhật");
 
+  const paidAmount = Number(bookingDetail?.totalAmount || params.amount || 0);
   const cancellationFee = Math.round(paidAmount * 0.1);
-
-  const refundAmount = paidAmount - cancellationFee;
+  const refundAmount = Math.max(0, paidAmount - cancellationFee);
 
   const [step, setStep] = useState<CancellationStep>("FORM");
-
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
-
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
 
   function continueToReview() {
     if (!selectedReason) {
       Alert.alert("Chưa chọn lý do", "Bạn cần chọn lý do hủy booking.");
-
       return;
     }
 
@@ -62,7 +77,6 @@ export default function CancelBookingScreen() {
         "Chưa xác nhận chính sách",
         "Bạn cần đọc và đồng ý với chính sách hủy chuyến.",
       );
-
       return;
     }
 
@@ -81,13 +95,25 @@ export default function CancelBookingScreen() {
         {
           text: "Hủy booking",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
             setSubmitting(true);
-
-            setTimeout(() => {
-              setSubmitting(false);
+            try {
+              if (params.id) {
+                await bookingApiService.cancelBooking(
+                  params.id,
+                  selectedReason || "Khách hàng yêu cầu hủy",
+                );
+              }
               setStep("SUCCESS");
-            }, 1200);
+            } catch (err) {
+              const errInfo = getBookingErrorMessage(
+                err,
+                "Không thể hủy booking vào lúc này. Vui lòng thử lại sau.",
+              );
+              Alert.alert("Hủy không thành công", errInfo.message);
+            } finally {
+              setSubmitting(false);
+            }
           },
         },
       ],
