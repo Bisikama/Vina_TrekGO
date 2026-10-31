@@ -197,7 +197,7 @@ describe('applyGradeDecision', () => {
     )
     expect(tx.rentalOrder.updateMany).toHaveBeenCalledTimes(2)
     expect(tx.rentalOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o-paid', status: { in: ['PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER'] }, exceptionStatus: { not: 'ACTION_REQUIRED' } },
+      where: { id: 'o-paid', status: { in: ['PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY_FOR_HANDOVER'] } },
       data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 } },
     })
     expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
@@ -209,6 +209,17 @@ describe('applyGradeDecision', () => {
         }),
       }),
     )
+  })
+
+  it('does not notify or report an order that is no longer pre-handover', async () => {
+    const tx = makeTx({ supply: 0, reservations: [reservationRow('r1', 'o1', RentalOrderStatus.PAID, 10, 20)] })
+    tx.rentalOrder.updateMany.mockResolvedValue({ count: 0 })
+    const result = await applyGradeDecision(tx, {
+      unitId: 'u-1', product: LIKE_NEW,
+      decision: { decision: 'DOWNGRADE', reason: 'wear' }, actorId: 'staff-1', now: NOW,
+    })
+    expect(result.shortage.orderIds).toEqual([])
+    expect(tx.rentalOutboxEvent.upsert).not.toHaveBeenCalled()
   })
 
   it('DOWNGRADE never touches deposit, refunds, order lines or reservations, even when it flags a shortage', async () => {

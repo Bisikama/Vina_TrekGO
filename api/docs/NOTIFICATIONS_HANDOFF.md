@@ -58,6 +58,44 @@ Refund mô phỏng trong sandbox có tiêu đề bắt đầu bằng `[Sandbox]`
 
 ## 4. Vận hành
 
+### Đối soát thông báo cũ — chỉ đọc, không tự gửi lại
+
+Các receipt `BACKFILLED_AT_MIGRATION` không chứng minh người dùng đã nhận thông báo. Event quá 3 ngày không có receipt hoàn tất cũng không còn được consumer rental/payment chọn. Chạy các truy vấn sau trên môi trường cần đối soát; đây chỉ là danh sách **ứng viên cần kiểm tra**, không phải danh sách chắc chắn chưa gửi. Consumer booking có chính sách retry riêng.
+
+```sql
+SELECT e.id, e.event_type, e.created_at, r.completed_at, r.last_error
+FROM rental_outbox_events e
+LEFT JOIN rental_notification_receipts r
+  ON r.event_id = e.id AND r.consumer = 'rental-notifications-v1'
+WHERE e.event_type IN ('RENTAL_PAID', 'RENTAL_ORDER_CONFIRMED', 'DEPOSIT_REFUND_SUCCEEDED',
+  'DEPOSIT_RETAINED', 'RENTAL_ORDER_CANCELLED', 'RENTAL_ACTION_REQUIRED', 'RENTAL_SCHEDULE_NOTICE_ISSUED')
+  AND (r.last_error = 'BACKFILLED_AT_MIGRATION'
+    OR (r.completed_at IS NULL AND e.created_at <= now() - interval '3 days'))
+ORDER BY e.created_at, e.id;
+
+SELECT e.id, e.event_type, e.created_at, r.completed_at, r.last_error
+FROM payment_outbox_events e
+LEFT JOIN payment_notification_receipts r
+  ON r.event_id = e.id AND r.consumer = 'payment-notifications-v1'
+WHERE e.event_type IN ('PAYMENT_SUCCEEDED', 'REFUND_SUCCEEDED')
+  AND (r.last_error = 'BACKFILLED_AT_MIGRATION'
+    OR (r.completed_at IS NULL AND e.created_at <= now() - interval '3 days'))
+ORDER BY e.created_at, e.id;
+
+SELECT e.id, e.event_type, e.created_at, r.completed_at, r.last_error
+FROM booking_outbox_events e
+JOIN booking_notification_receipts r
+  ON r.event_id = e.id AND r.consumer = 'booking-notifications-v1'
+WHERE r.last_error = 'BACKFILLED_AT_MIGRATION'
+ORDER BY e.created_at, e.id;
+```
+
+Đối chiếu từng ứng viên với loại event, người nhận thực tế và thông báo MongoDB (`metadata.outboxEventId` cùng userId); một số event không có người nhận theo projection. Chỉ sau đó vận hành quyết định cách xử lý thủ công. Không xoá receipt hoặc reset retry hàng loạt: điều đó có thể gửi trùng hoặc gửi nội dung đã lỗi thời. Việc cập nhật `next_attempt_at` không khiến consumer chọn event đã quá 3 ngày.
+
+### Thời điểm báo khách khi thiếu hàng
+
+Khi mới phát hiện nguy cơ thiếu hàng do hạ hạng, hệ thống báo staff. Khi ADMIN xác nhận không thể phục vụ và thực hiện huỷ system-fault, `RENTAL_ORDER_CANCELLED` được đưa vào luồng thông báo khách; nội dung phân biệt “sẽ hoàn” với thông báo hoàn thành sau xác nhận provider. Chưa có event thông báo khách riêng ở thời điểm xác nhận nếu nhân viên xác nhận mà chưa hủy đơn; cần tổ chức xử lý trước giờ hẹn theo Business Flow.
+
 - Consumer: `rental-notifications-v1`, `payment-notifications-v1`, `booking-notifications-v1`; bật bằng `NOTIFICATION_CONSUMER_ENABLED=true`.
 - Lỗi gửi: retry backoff 3s × 2ⁿ (tối đa 5 phút); sau 20 lần lỗi (~1 giờ) chuyển sang thử **mỗi giờ**, không dừng hẳn — MongoDB sập vài giờ thì khi hồi phục thông báo vẫn được gửi.
 - Event cũ hơn **3 ngày** không gửi nữa (kể cả event chưa từng xử lý, ví dụ khi tắt `NOTIFICATION_CONSUMER_ENABLED` quá 3 ngày): tránh gửi thông báo đã quá cũ; event dữ liệu hỏng cũng tự dừng sau 3 ngày. Xem event đang lỗi:

@@ -5,6 +5,8 @@ import { RentalProductController } from '../../presentation/controllers/rental-p
 import { GetRentalProductUseCase } from '../../application/use-cases/get-rental-product.use-case';
 import { ListRentalProductsUseCase } from '../../application/use-cases/list-rental-products.use-case';
 import { RENTAL_PRODUCT_PORT } from '../../application/ports/rental-product.port';
+import { CreateRentalProductSchema } from '../../presentation/dtos/create-rental-product.dto';
+import { UpdateRentalProductSchema } from '../../presentation/dtos/update-rental-product.dto';
 import { PrismaRentalProductAdapter } from './prisma-rental-product.adapter';
 import {
   MediaScope,
@@ -133,6 +135,7 @@ describe('PrismaRentalProductAdapter — Media Integration & Catalog Lifecycle',
         depositPerUnit,
         depositExplanation: { percentageOfReplacementValue: percentage, formula: 'depositPerUnit / replacementValue * 100' },
       });
+      if (depositPerUnit !== null) expect(result!.depositPolicy.amount).toBe(depositPerUnit);
     });
 
     it('lists each grade with its own deposit explanation', async () => {
@@ -683,3 +686,13 @@ describe('Public rental product detail HTTP', () => {
     });
   });
 });
+
+describe('Rental product VND validation', () => {
+  it('rejects fractional VND but allows fractional percentage', () => {
+    const input = { categoryId: '11111111-1111-4111-8111-111111111111', sku: 'TENT', name: 'Tent', dailyPrice: 10, replacementValue: 100, depositPolicy: { type: 'PERCENT_REPLACEMENT_VALUE', percentage: 33.33 } }
+    expect(CreateRentalProductSchema.safeParse(input).success).toBe(true)
+    expect(CreateRentalProductSchema.safeParse({ ...input, dailyPrice: 10.5 }).success).toBe(false)
+    expect(UpdateRentalProductSchema.safeParse({ expectedVersion: 1, replacementValue: 1.5 }).success).toBe(false)
+    expect(UpdateRentalProductSchema.safeParse({ expectedVersion: 1, depositPolicy: { type: 'FIXED', amount: 1.5 } }).success).toBe(false)
+  })
+})
