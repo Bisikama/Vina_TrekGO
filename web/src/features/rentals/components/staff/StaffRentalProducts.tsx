@@ -70,7 +70,7 @@ type ProductForm = {
 
 const GRADE_LABELS: Record<RentalGrade, string> = {
   LIKE_NEW: "Mới",
-  GOOD_USED: "Đã qua sử dụng",
+  GOOD_USED: "Sử dụng tốt",
 };
 
 // Chỉ là gợi ý, lấy từ cặp mẫu trong seed backend (rental-product.seed.ts):
@@ -255,7 +255,7 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
       } else
         groups.set(product.gradeGroupId, {
           id: product.gradeGroupId,
-          label: product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim(),
+          label: product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim(),
           grades: [product.grade],
           members: [product],
         });
@@ -924,7 +924,7 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-black text-slate-800">Tình trạng (tuỳ chọn)</p>
                 <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                  Dùng khi cùng một món có cả bản Mới và bản Đã qua sử dụng. Hai bản là hai sản phẩm riêng,
+                  Dùng khi cùng một món có cả bản Mới và bản Sử dụng tốt. Hai bản là hai sản phẩm riêng,
                   được ghép thành một thẻ có nút chọn ở trang thuê. Bản Mới phải có giá thuê và tiền cọc cao
                   hơn; tiền cọc là số tiền cố định.
                 </p>

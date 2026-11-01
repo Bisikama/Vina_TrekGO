@@ -29,6 +29,11 @@ import {
   type PreparationStatus,
 } from "@/features/gear/advisor-api";
 import { gearApi } from "@/features/gear/api";
+import {
+  generateGearRentalOptions,
+  lineDepositAmount,
+  type GearRentalOptionSet,
+} from "@/features/gear/rental-options-api";
 import type { GearCategory, UserGearItem } from "@/features/gear/types";
 
 const CATEGORIES: [GearCategory, string][] = [
@@ -507,10 +512,16 @@ export default function GearAdvisorScreen() {
                             </View>
                           );
                         })}
-                        {guidance.requirements.some((requirement) => (requirement.remainingQuantity ?? 0) > 0) ? (
-                          <TouchableOpacity onPress={() => router.push("/rental" as Href)}>
-                            <Text style={styles.link}>Thiếu đồ? Thuê thêm ở danh mục TrekGo ›</Text>
-                          </TouchableOpacity>
+                        {guidance.requirements.some((requirement) => (requirement.remainingQuantity ?? 0) > 0) &&
+                        plan?.evaluatedRevision &&
+                        !guidance.needsReevaluation &&
+                        accessToken ? (
+                          <RentalOptions
+                            planId={plan.id}
+                            evaluatedRevision={plan.evaluatedRevision}
+                            accessToken={accessToken}
+                            onOpenCatalog={() => router.push("/rental" as Href)}
+                          />
                         ) : null}
                       </>
                     ) : null}
@@ -593,6 +604,95 @@ export default function GearAdvisorScreen() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+const vnd = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
+const OPTION_LABELS: Record<string, string> = { opt_min_fee: "Tiết kiệm chi phí nhất", opt_min_weight: "Nhẹ nhất" };
+
+/** Phương án thuê đồ còn thiếu — chỉ là ước tính, chưa giữ hàng hay tạo đơn. */
+function RentalOptions({
+  planId,
+  evaluatedRevision,
+  accessToken,
+  onOpenCatalog,
+}: {
+  planId: string;
+  evaluatedRevision: number;
+  accessToken: string;
+  onOpenCatalog: () => void;
+}) {
+  const [optionSet, setOptionSet] = useState<GearRentalOptionSet | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      setOptionSet(await generateGearRentalOptions(planId, evaluatedRevision, accessToken));
+    } catch (loadError: unknown) {
+      setError(gearErrorMessage(loadError, "Không tạo được phương án thuê."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View style={styles.optionsBox}>
+      <Text style={styles.sectionTitle}>Phương án thuê đồ còn thiếu</Text>
+      <Text style={styles.hint}>Giá và tiền cọc là ước tính theo giá hiện tại; số chính thức có ở báo giá.</Text>
+      <TouchableOpacity style={[styles.secondaryButton, loading && styles.buttonDisabled]} disabled={loading} onPress={() => void load()}>
+        <Text style={styles.secondaryButtonText}>{loading ? "Đang tìm..." : optionSet ? "Tìm lại" : "Xem phương án thuê"}</Text>
+      </TouchableOpacity>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {optionSet && optionSet.options.length === 0 ? (
+        <Text style={styles.muted}>Hiện chưa có sản phẩm cho thuê phù hợp với phần còn thiếu.</Text>
+      ) : null}
+      {optionSet?.options.map((option) => {
+        const deposits = option.rentalLines.map(lineDepositAmount);
+        const feeTotal = option.rentalLines.reduce((sum, line) => sum + (line.rentalFee ?? 0), 0);
+        const depositTotal = deposits.every((value) => value !== null)
+          ? deposits.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+          : null;
+        return (
+          <View key={option.id} style={styles.resultCard}>
+            <View style={styles.resultHead}>
+              <Text style={styles.resultName}>{OPTION_LABELS[option.id] ?? "Phương án"}</Text>
+              <Text style={[styles.badge, { color: "#8A5A00", backgroundColor: "#FFF6E0" }]}>Ước tính</Text>
+            </View>
+            {option.rentalLines.map((line) => {
+              const lineDeposit = lineDepositAmount(line);
+              const percent = line.depositExplanation?.percentageOfReplacementValue;
+              return (
+                <View key={`${line.productId}-${line.requirementId ?? ""}`} style={styles.optionLine}>
+                  <Text style={styles.optionLineName}>
+                    {line.productName} × {line.quantity}
+                    {line.grade ? ` · ${line.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
+                  </Text>
+                  <Text style={styles.hint}>
+                    {typeof line.rentalFee === "number" ? `Phí thuê ${vnd(line.rentalFee)}` : ""}
+                    {lineDeposit !== null
+                      ? ` · Cọc ${typeof line.depositPerUnit === "number" ? `${vnd(line.depositPerUnit)}/món × ${line.quantity} = ` : ""}${vnd(lineDeposit)}`
+                      : ""}
+                    {typeof percent === "number" ? ` · ≈ ${percent.toLocaleString("vi-VN")}%` : ""}
+                  </Text>
+                </View>
+              );
+            })}
+            <Text style={styles.optionTotal}>Phí thuê (ước tính): {vnd(feeTotal)}</Text>
+            {depositTotal !== null ? (
+              <Text style={styles.optionTotal}>Tiền cọc (ước tính, hoàn lại): {vnd(depositTotal)}</Text>
+            ) : null}
+          </View>
+        );
+      })}
+      {optionSet ? (
+        <TouchableOpacity onPress={onOpenCatalog}>
+          <Text style={styles.link}>Phương án chưa giữ hàng. Mở danh mục thuê để chọn các món trên ›</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
@@ -767,6 +867,10 @@ const styles = StyleSheet.create({
   segmentItemActive: { backgroundColor: "#fff" },
   segmentText: { color: Colors.onSurfaceVariant, fontSize: 11, fontWeight: "600" },
   segmentTextActive: { color: Colors.primaryDark, fontWeight: "800" },
+  optionsBox: { marginTop: 8, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainerLow, gap: 8 },
+  optionLine: { marginTop: 6, gap: 2 },
+  optionLineName: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
+  optionTotal: { marginTop: 4, color: Colors.onSurface, fontSize: 12, fontWeight: "700" },
   banner: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: Radius.md },
   bannerError: { backgroundColor: Colors.errorContainer },
   bannerOk: { backgroundColor: Colors.primaryPale },

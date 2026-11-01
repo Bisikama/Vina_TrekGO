@@ -50,7 +50,7 @@ type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
 
 const GRADE_LABELS: Record<RentalGrade, string> = {
   LIKE_NEW: "Mới",
-  GOOD_USED: "Đã qua sử dụng",
+  GOOD_USED: "Sử dụng tốt",
 };
 
 const splitIds = (value: string) =>
@@ -240,7 +240,7 @@ export function StaffReturnsInspection() {
         throw requestError;
       }
     }, () =>
-      `${input.assetCode} đã AVAILABLE${downgraded ? " và chuyển sang hạng Đã qua sử dụng" : ""}.` +
+      `${input.assetCode} đã AVAILABLE${downgraded ? " và chuyển sang hạng Sử dụng tốt" : ""}.` +
       (shortageCount > 0
         ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn đã đặt; các đơn này đã được đánh dấu cần xử lý.`
         : ""),
@@ -497,7 +497,7 @@ export function StaffReturnsInspection() {
                                       checked={gradeDraft.decision === "DOWNGRADE"}
                                       onChange={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, decision: "DOWNGRADE" } }))}
                                     />
-                                    Hạ xuống &quot;Đã qua sử dụng&quot;
+                                    Hạ xuống &quot;Sử dụng tốt&quot;
                                   </label>
                                 ) : null}
                               </div>

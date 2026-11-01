@@ -55,7 +55,7 @@ function categoryKey(value: string) {
   return cleanCategoryName(value).toLocaleLowerCase("vi");
 }
 
-const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Đã qua sử dụng" } as const;
+const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Sử dụng tốt" } as const;
 const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
 
 type CatalogGroup = { key: string; name: string; variants: RentalCatalogItem[] };
@@ -64,7 +64,7 @@ type CatalogGroup = { key: string; name: string; variants: RentalCatalogItem[] }
 // FE gom các sản phẩm cùng gradeGroupId thành một thẻ.
 function gradeFamilyName(name: string) {
   return name
-    .replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
