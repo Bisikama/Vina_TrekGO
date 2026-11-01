@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TopHeader } from "@/components/TopHeader";
-import { TripPrepModal } from "@/components/TripPrepModal";
 import { EmptyState, LoadingState } from "@/components/ui";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
@@ -43,22 +42,11 @@ const DIFFICULTY_LABELS: Record<string, string> = {
   EXTREME: "Thách thức",
 };
 
-const completedTrip = {
-  id: "trip-bidoup-completed",
-  name: "Bidoup – Núi Bà (2N1Đ)",
-  destination: "Lạc Dương, Lâm Đồng",
-  date: "18 – 19 Tháng 08, 2026",
-  duration: "2 ngày 1 đêm",
-  leader: "Leader Hoàng Nam",
-  distance: "27 km",
-  elevation: "2.287 m",
-  members: 11,
-  reviewed: false,
-};
+
 
 export default function TripsScreen() {
   const router = useRouter();
-  const { activeTrip, user } = useApp();
+  const { user } = useApp();
   const { user: authUser, accessToken } = useAuth();
   const isLeader = authUser?.role === "LEADER" || user?.role === "LEADER";
 
@@ -270,34 +258,11 @@ export default function TripsScreen() {
     pendingBookings.length > 0 ? "PENDING" : "UPCOMING",
   );
 
-  const [prepModalVisible, setPrepModalVisible] = useState(false);
-
   function openTripDetail(tripId: string) {
     router.push({
       pathname: "/trips/[id]",
       params: {
         id: tripId,
-      },
-    } as unknown as Href);
-  }
-
-  function openTicket() {
-    router.push({
-      pathname: "/trips/[id]/ticket",
-      params: {
-        id: activeTrip.id,
-      },
-    } as unknown as Href);
-  }
-
-  function openReview() {
-    router.push({
-      pathname: "/trips/[id]/review",
-      params: {
-        id: completedTrip.id,
-        name: completedTrip.name,
-        leader: completedTrip.leader,
-        date: completedTrip.date,
       },
     } as unknown as Href);
   }
@@ -1361,21 +1326,7 @@ export default function TripsScreen() {
         )}
       </ScrollView>
 
-      <TripPrepModal
-        visible={prepModalVisible}
-        trip={activeTrip}
-        onClose={() => setPrepModalVisible(false)}
-        onStartNavigation={() =>
-          router.push({
-            pathname: "/navigation",
-            params: {
-              tripId: activeTrip?.id,
-              tripTitle: activeTrip?.name,
-              tripType: "PUBLIC",
-            },
-          })
-        }
-      />
+
     </SafeAreaView>
   );
 }

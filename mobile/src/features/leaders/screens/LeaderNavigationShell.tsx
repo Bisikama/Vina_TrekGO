@@ -6,8 +6,8 @@ import {
   LeaderTripsScreen,
 } from "@/features/leaders/screens";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { BackHandler, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type LeaderTabKey = "dashboard" | "trips" | "create" | "profile";
@@ -58,6 +58,15 @@ export function LeaderNavigationShell({
   const [activeTab, setActiveTab] = useState<LeaderTabKey>(initialTab);
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    if (activeTab === "dashboard" || activeTab === "create") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setActiveTab("dashboard");
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeTab]);
+
   const handleNavigateTab = (tab: LeaderTabKey) => {
     setActiveTab(tab);
   };
@@ -70,10 +79,7 @@ export function LeaderNavigationShell({
           <LeaderDashboardScreen onNavigateTab={handleNavigateTab} />
         )}
         {activeTab === "trips" && (
-          <LeaderTripsScreen
-            showBackButton={false}
-            onNavigateTab={handleNavigateTab}
-          />
+          <LeaderTripsScreen showBackButton={false} onNavigateTab={handleNavigateTab} />
         )}
         {activeTab === "create" && (
           <LeaderCreateTripScreen onNavigateTab={handleNavigateTab} />
@@ -106,7 +112,7 @@ export function LeaderNavigationShell({
                 onPress={() => setActiveTab("create")}
               >
                 <View style={[styles.createIconCircle, isActive && styles.createIconCircleActive]}>
-                  <Ionicons name="add" size={26} color="#ffffff" />
+                  <Ionicons name="add" size={26} color="#0e0f0c" />
                 </View>
                 <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                   {tab.label}
@@ -125,7 +131,7 @@ export function LeaderNavigationShell({
               <Ionicons
                 name={isActive ? tab.activeIcon : tab.inactiveIcon}
                 size={22}
-                color={isActive ? "#125238" : "#707972"}
+                color={isActive ? "#0e0f0c" : "#868685"}
               />
               <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                 {tab.label}
@@ -141,7 +147,7 @@ export function LeaderNavigationShell({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8faf7",
+    backgroundColor: "#e8ebe6", // Sage canvas soft
   },
   contentArea: {
     flex: 1,
@@ -152,7 +158,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: "#e1e9e2",
+    borderTopColor: "rgba(14, 15, 12, 0.08)",
     ...Shadows.card,
     paddingTop: 6,
   },
@@ -170,25 +176,25 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   createIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#125238",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#9fe870", // Wise lime green
     alignItems: "center",
     justifyContent: "center",
     ...Shadows.card,
   },
   createIconCircleActive: {
-    backgroundColor: "#002113",
+    backgroundColor: "#cdffad",
     transform: [{ scale: 1.05 }],
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: "700",
-    color: "#707972",
+    fontWeight: "600",
+    color: "#868685",
   },
   tabLabelActive: {
-    color: "#125238",
-    fontWeight: "900",
+    color: "#0e0f0c",
+    fontWeight: "800",
   },
 });
