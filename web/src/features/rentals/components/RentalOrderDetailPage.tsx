@@ -202,10 +202,30 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                           </p>
                         ) : null}
                         <h3 className="mt-1 font-black text-gray-900">{visual.name}</h3>
-                        <p className="mt-2 text-xs text-gray-500">Số lượng: {item.quantity}</p>
-                        <p className="mt-1 text-sm font-extrabold text-gray-900">
-                          {money(item.feeAmount, detail.order.currency)}
+                        <p className="mt-2 text-xs text-gray-500">
+                          Số lượng: {item.quantity}
+                          {item.product.grade ? (
+                            <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              {item.product.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}
+                            </span>
+                          ) : null}
                         </p>
+                        <p className="mt-1 text-sm font-extrabold text-gray-900">
+                          Phí thuê {money(item.feeAmount, detail.order.currency)}
+                        </p>
+                        {typeof item.depositPerUnit === "number" ? (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Cọc {money(item.depositPerUnit, detail.order.currency)}/món × {item.quantity} ={" "}
+                            <span className="font-bold text-gray-700">
+                              {money(item.depositAmount, detail.order.currency)}
+                            </span>
+                            {typeof item.depositExplanation?.percentageOfReplacementValue === "number" ? (
+                              <span className="text-gray-400">
+                                {" "}· ≈ {item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : null}
                       </div>
                     </article>
                   );

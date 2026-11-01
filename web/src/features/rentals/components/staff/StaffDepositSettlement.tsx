@@ -26,6 +26,16 @@ function statusLabel(status: string) {
   return settlementStatusLabels[status] ?? status.replaceAll("_", " ").toLocaleLowerCase("vi-VN");
 }
 
+// Món kiểm định FINAL đạt (NORMAL) và không khấu trừ vẫn mang trạng thái REVIEW_REQUIRED trong lúc
+// chờ các món khác của đơn kiểm định xong để gom hoàn một lần. Không cần Admin duyệt món này.
+function isAwaitingGroupedRefund(
+  item: StaffReturnDetail["depositActions"][number],
+  detail: StaffReturnDetail,
+) {
+  const final = detail.inspection.find((entry) => entry.unitId === item.unitId)?.final;
+  return item.status === "REVIEW_REQUIRED" && item.deductionAmount === 0 && final?.outcome === "NORMAL";
+}
+
 export function StaffDepositSettlement({ returnId }: { returnId: string }) {
   const [detail, setDetail] = useState<StaffReturnDetail>();
   const [error, setError] = useState<string>();
@@ -54,6 +64,7 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
           <div className="mt-5 space-y-3">
             {detail.depositActions.map((item) => {
               const unit = detail.expectedUnits.find((entry) => entry.unitId === item.unitId);
+              const awaitingGroupedRefund = isAwaitingGroupedRefund(item, detail);
               return (
                 <article key={item.unitId} className="rounded-xl border bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap justify-between gap-3">
@@ -61,13 +72,20 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
                       <h2 className="font-black">{unit?.productName ?? item.unitId}</h2>
                       <p className="mt-1 font-mono text-xs text-slate-500">{unit?.assetCode}</p>
                     </div>
-                    <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">{statusLabel(item.status)}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${awaitingGroupedRefund ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>
+                      {awaitingGroupedRefund ? "Đạt chuẩn · chờ hoàn cọc gộp" : statusLabel(item.status)}
+                    </span>
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <Amount label="Tiền cọc" value={item.depositAmount} />
                     <Amount label="Khấu trừ" value={item.deductionAmount} />
                     <Amount label="Khoản phải hoàn" value={item.refundAmount} />
                   </div>
+                  {awaitingGroupedRefund ? (
+                    <p className="mt-3 text-xs leading-5 text-emerald-800">
+                      Món đã đạt kiểm định. Hệ thống tự gom hoàn cọc khi các món còn lại của đơn kiểm định xong; không cần Admin duyệt.
+                    </p>
+                  ) : null}
                   {item.refundAmount > 0 && item.status !== "SETTLED" ? (
                     <p className="mt-3 text-xs leading-5 text-amber-700">
                       Khoản phải hoàn chưa đồng nghĩa tiền đã về tài khoản khách. Chỉ trạng thái hoàn tiền thành công mới xác nhận đã hoàn.

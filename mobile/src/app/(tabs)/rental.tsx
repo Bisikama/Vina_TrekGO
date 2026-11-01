@@ -79,14 +79,38 @@ function productFamilyName(product: RentalProduct) {
     .trim();
 }
 
+const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Đã qua sử dụng" } as const;
+const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
+
+// Backend: mỗi hạng là một RentalProduct riêng, nối bằng gradeGroupId;
+// FE gom các sản phẩm cùng gradeGroupId thành một thẻ.
+function gradeFamilyName(product: RentalProduct) {
+  return product.name
+    .replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function groupRentalProducts(products: RentalProduct[]): RentalProductGroup[] {
   const groups = new Map<string, RentalProductGroup>();
   products.forEach((product) => {
-    const familyName = productFamilyName(product);
-    const key = `${product.category.id}:${familyName.toLocaleLowerCase("vi-VN")}`;
+    const familyName = product.gradeGroupId
+      ? gradeFamilyName(product)
+      : productFamilyName(product);
+    const key = product.gradeGroupId
+      ? `grade:${product.gradeGroupId}`
+      : `${product.category.id}:${familyName.toLocaleLowerCase("vi-VN")}`;
     const current = groups.get(key);
     if (current) current.variants.push(product);
     else groups.set(key, { key, name: familyName, variants: [product] });
+  });
+  groups.forEach((group) => {
+    if (group.variants.some((variant) => variant.grade)) {
+      group.variants.sort(
+        (a, b) =>
+          (a.grade ? GRADE_ORDER[a.grade] : 9) - (b.grade ? GRADE_ORDER[b.grade] : 9),
+      );
+    }
   });
   return [...groups.values()];
 }
@@ -250,6 +274,17 @@ export default function RentalScreen() {
               <Ionicons name="bag-handle-outline" size={21} color={Colors.primaryDark} />
             </View>
             <Text style={styles.quickActionTitle}>Tủ đồ cá nhân</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            activeOpacity={0.85}
+            onPress={() => router.push("/gear-advisor" as Href)}
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="checkmark-done-outline" size={21} color={Colors.primaryDark} />
+            </View>
+            <Text style={styles.quickActionTitle}>Kế hoạch đồ</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -536,6 +571,7 @@ export default function RentalScreen() {
               const sizes = group.variants
                 .map((variant) => ({ variant, size: productSize(variant) }))
                 .filter((item): item is { variant: RentalProduct; size: string } => Boolean(item.size));
+              const gradeVariants = group.variants.filter((variant) => variant.grade);
 
               return (
                 <View key={group.key} style={styles.productCard}>
@@ -566,6 +602,27 @@ export default function RentalScreen() {
                           {availableCount > 0 ? `Còn ${availableCount}` : "Tạm hết"}
                         </Text>
                       </View>
+                      {product.grade ? (
+                        <View
+                          style={[
+                            styles.gradeBadge,
+                            product.grade === "LIKE_NEW"
+                              ? styles.gradeBadgeLikeNew
+                              : styles.gradeBadgeGoodUsed,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.gradeBadgeText,
+                              product.grade === "LIKE_NEW"
+                                ? styles.gradeBadgeTextLikeNew
+                                : styles.gradeBadgeTextGoodUsed,
+                            ]}
+                          >
+                            {GRADE_LABELS[product.grade]}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                   </TouchableOpacity>
 
@@ -575,7 +632,37 @@ export default function RentalScreen() {
                       {group.name}
                     </Text>
                     {product.sku ? <Text style={styles.productSku}>SKU {product.sku}</Text> : null}
-                    {sizes.length > 1 ? (
+                    {gradeVariants.length > 1 ? (
+                      <View style={styles.variantBlock}>
+                        <View style={styles.gradeSegment}>
+                          {gradeVariants.map((variant) => {
+                            const selected = variant.id === product.id;
+                            return (
+                              <TouchableOpacity
+                                key={variant.id}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected }}
+                                accessibilityLabel={`Tình trạng ${variant.grade ? GRADE_LABELS[variant.grade] : ""}`}
+                                style={[styles.gradeSegmentItem, selected && styles.gradeSegmentItemActive]}
+                                onPress={() =>
+                                  setSelectedVariantIds((current) => ({
+                                    ...current,
+                                    [group.key]: variant.id,
+                                  }))
+                                }
+                              >
+                                <Text
+                                  numberOfLines={1}
+                                  style={[styles.gradeSegmentText, selected && styles.gradeSegmentTextActive]}
+                                >
+                                  {variant.grade ? GRADE_LABELS[variant.grade] : variant.name}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ) : sizes.length > 1 ? (
                       <View style={styles.variantBlock}>
                         <Text style={styles.variantLabel}>Chọn kích cỡ</Text>
                         <View style={styles.sizeRow}>
@@ -610,6 +697,12 @@ export default function RentalScreen() {
                     <Text style={styles.depositPrice}>
                       Cọc dự kiến: {formatMoney(deposit)}
                     </Text>
+                    {typeof product.depositPerUnit === "number" &&
+                    typeof product.depositExplanation?.percentageOfReplacementValue === "number" ? (
+                      <Text style={styles.depositRatio}>
+                        ≈ {product.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế
+                      </Text>
+                    ) : null}
 
                     {cartEntry ? (
                       <View style={styles.quantityControl}>
@@ -782,7 +875,8 @@ function rentalOrderStatus(status: string) {
 
 function rentalExceptionLabel(status: string) {
   const labels: Record<string, string> = {
-    ACTION_REQUIRED: "Đơn cần được hỗ trợ xử lý",
+    // Quân: ACTION_REQUIRED = đơn đang cần xử lý nội bộ, không phải huỷ/thiếu hàng; không làm khách lo.
+    ACTION_REQUIRED: "TrekGo đang kiểm tra đơn của bạn",
     OVERDUE: "Đơn đã quá hạn trả thiết bị",
     PAYMENT_REVIEW: "Thanh toán đang chờ đối soát",
     REFUND_REVIEW: "Hoàn cọc đang chờ đối soát",
@@ -1123,6 +1217,19 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "600",
   },
+  gradeBadge: {
+    position: "absolute",
+    left: 8,
+    top: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  gradeBadgeLikeNew: { backgroundColor: "rgba(255,255,255,0.93)" },
+  gradeBadgeGoodUsed: { backgroundColor: "#FFF6E0" },
+  gradeBadgeText: { fontSize: 8, fontWeight: "700" },
+  gradeBadgeTextLikeNew: { color: Colors.primaryDark },
+  gradeBadgeTextGoodUsed: { color: "#8A5A00" },
   productBody: { padding: 12 },
   categoryTag: {
     color: Colors.primaryDark,
@@ -1141,6 +1248,23 @@ const styles = StyleSheet.create({
   },
   productSku: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9, lineHeight: 12, letterSpacing: 0.3 },
   variantBlock: { marginTop: 9 },
+  gradeSegment: {
+    flexDirection: "row",
+    gap: 3,
+    padding: 3,
+    borderRadius: 9,
+    backgroundColor: Colors.surfaceContainerHigh,
+  },
+  gradeSegmentItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    borderRadius: 7,
+  },
+  gradeSegmentItemActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  gradeSegmentText: { color: Colors.onSurfaceVariant, fontSize: 9, fontWeight: "600" },
+  gradeSegmentTextActive: { color: Colors.primaryDark, fontWeight: "800" },
   variantLabel: { color: Colors.onSurfaceVariant, fontSize: 9, fontWeight: "600" },
   sizeRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 },
   sizeChip: { minWidth: 30, alignItems: "center", borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 5, backgroundColor: "#fff" },
@@ -1155,6 +1279,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   perDay: { color: Colors.onSurfaceVariant, fontSize: 10, fontWeight: "500" },
+  depositRatio: { marginTop: 1, color: Colors.onSurfaceVariant, fontSize: 8 },
   depositPrice: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
