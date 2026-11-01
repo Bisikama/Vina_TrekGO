@@ -668,7 +668,7 @@ function RentalOptions({
                 <View key={`${line.productId}-${line.requirementId ?? ""}`} style={styles.optionLine}>
                   <Text style={styles.optionLineName}>
                     {line.productName} × {line.quantity}
-                    {line.grade ? ` · ${line.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}` : ""}
+                    {line.grade ? ` · ${line.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
                   </Text>
                   <Text style={styles.hint}>
                     {typeof line.rentalFee === "number" ? `Phí thuê ${vnd(line.rentalFee)}` : ""}

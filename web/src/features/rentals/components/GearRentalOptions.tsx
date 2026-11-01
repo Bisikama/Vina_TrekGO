@@ -87,7 +87,7 @@ export function GearRentalOptions({ planId, evaluatedRevision }: { planId: strin
                               {line.productName}
                               {line.grade ? (
                                 <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                                  {line.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}
+                                  {line.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
                                 </span>
                               ) : null}
                             </p>
