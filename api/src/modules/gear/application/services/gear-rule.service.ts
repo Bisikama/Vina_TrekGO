@@ -10,6 +10,13 @@ import {
 } from '../ports/gear-rule.repository.port';
 import type { GearRuleRepositoryPort } from '../ports/gear-rule.repository.port';
 
+export function summarizeRuleSet(
+  rules: readonly Pick<GearRequirementRuleMetadata, 'ruleVersion'>[],
+): { version: string; rulesCount: number } {
+  const versions = Array.from(new Set(rules.map((r) => r.ruleVersion).filter(Boolean))).sort();
+  return { version: versions.join(','), rulesCount: rules.length };
+}
+
 @Injectable()
 export class GearRuleService {
   constructor(
@@ -68,6 +75,16 @@ export class GearRuleService {
         });
       }
     }
+  }
+
+  /**
+   * Phiên bản và số quy tắc đang hoạt động, ghi vào revision kế hoạch để biết đánh giá dựa trên bộ quy tắc nào.
+   * Không có repo (hoặc DB rỗng) → lấy theo registry chuẩn.
+   */
+  async getActiveRuleSetInfo(): Promise<{ version: string; rulesCount: number }> {
+    const rules =
+      (this.ruleRepo ? await this.ruleRepo.findActive() : null) ?? [];
+    return summarizeRuleSet(rules.length > 0 ? rules : GEAR_RULE_METADATA_REGISTRY);
   }
 
   async getRequirementRules(): Promise<GearRequirementRuleMetadata[]> {

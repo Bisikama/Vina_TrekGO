@@ -24,6 +24,30 @@ describe('PrismaRentalOrderAdapter rental payment and ownership', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
 
+  it('explains deposit using order snapshots even when catalog values have changed', async () => {
+    const now = new Date('2026-10-18T10:00:00.000Z')
+    findUnique.mockResolvedValue({
+      id: 'order-1', userId: 'user-1', status: 'PAID', financialStatus: 'PAID',
+      rentalFee: new Prisma.Decimal(100), totalDeposit: new Prisma.Decimal(1500000),
+      totalAmount: new Prisma.Decimal(1500100), currency: 'VND',
+      paymentExpiresAt: now, rentalStartAt: now, rentalEndAt: now, occupiedEndAt: now, createdAt: now, policySnapshot: {},
+      invoicesViaRentalOrderId: [],
+      rentalOrderLinesViaOrderId: [{
+        id: 'line-1', productId: 'p1', quantity: 2, chargedDays: 1,
+        product: { name: 'Tent', replacementValue: 9000000 },
+        dailyPriceSnapshot: new Prisma.Decimal(50), depositPerUnitSnapshot: new Prisma.Decimal(750000),
+        replacementValueSnapshot: new Prisma.Decimal(2500000),
+        lineRentalFee: new Prisma.Decimal(100), lineDeposit: new Prisma.Decimal(1500000),
+        rentalUnitAssignmentsViaOrderLineId: [], rentalQuantityReservationsViaOrderLineId: [],
+      }],
+    })
+    const result = await adapter.getOrder({ orderId: 'order-1', actorUserId: 'user-1', actorRole: 'USER' })
+    expect(result.items).toEqual([expect.objectContaining({
+      depositPerUnit: 750000, replacementValue: 2500000, depositAmount: 1500000,
+      depositExplanation: { percentageOfReplacementValue: 30, formula: 'depositPerUnit / replacementValue * 100' },
+    })])
+  })
+
   it('returns the authoritative payment, application, reconciliation, and order states', async () => {
     findUnique.mockResolvedValue({
       id: 'order-1',

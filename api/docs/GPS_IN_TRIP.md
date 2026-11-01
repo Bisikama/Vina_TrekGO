@@ -904,6 +904,8 @@ export interface ActualRouteResponse {
   gapConnections: GapConnectionDto[]
   checkpointProgress: CheckpointProgressDto
   sourceSessionIds: UUID[]
+  startedAt: ISODateTime | null // Earliest session start.
+  movingDurationSeconds: number | null // Recording intervals only; null while a session is open.
   uploadDeadline: ISODateTime | null
 }
 

@@ -16,6 +16,7 @@ import {
 } from '../../application/ports/user-gear.repository.port'
 import { findSimilarItems } from '../../domain/duplicate-detector'
 import { validateAttributesForCategory } from '../../application/dtos/user-gear.dto'
+import { manualAttributeProvenance, mergeManualAttributeProvenance } from '../../domain/attribute-provenance'
 
 function isUuid(val: string | null | undefined): boolean {
   if (!val || typeof val !== 'string') return false
@@ -76,6 +77,13 @@ export class PrismaUserGearRepository implements UserGearRepositoryPort {
     maxLimit: number = 50,
   ): Promise<UserGearItemDomain> {
     return this.prisma.$transaction(async (tx) => {
+      if (item.catalogReference) {
+        await tx.$queryRaw`SELECT id FROM gear_personal_catalog_items WHERE id = ${item.catalogReference.id}::uuid FOR SHARE`
+        const catalog = await tx.gearPersonalCatalogItem.findFirst({ where: {
+          id: item.catalogReference.id, state: 'VERIFIED', version: item.catalogReference.version,
+        } })
+        if (!catalog) throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PROFILE_VERSION_CONFLICT, { message: 'Hồ sơ sản phẩm đã thay đổi hoặc ngừng công bố' })
+      }
       // 1. Acquire owner lock to serialize concurrent creation requests per user
       if (typeof tx.$executeRaw === 'function') {
         try {
@@ -167,6 +175,7 @@ export class PrismaUserGearRepository implements UserGearRepositoryPort {
           brand: item.brand ?? null,
           condition: item.condition as any,
           attributes: (item.attributes ?? {}) as any,
+          attributeProvenance: (item.attributeProvenance ?? manualAttributeProvenance(item.attributes ?? {})) as any,
           photoRef: photoRefToSave,
           source: item.source as any,
           version: 1,
@@ -285,6 +294,9 @@ export class PrismaUserGearRepository implements UserGearRepositoryPort {
             ...(patch.category !== undefined ? { category: patch.category as any } : {}),
             ...(photoRefUuid !== undefined ? { photoRef: photoRefUuid } : {}),
             attributes: newAttributes as any,
+            ...(patch.attributes !== undefined || isCategoryChange ? {
+              attributeProvenance: mergeManualAttributeProvenance(existing.attributeProvenance, patch.attributes ?? {}, isCategoryChange) as any,
+            } : {}),
             version: { increment: 1 },
           },
         })
@@ -562,6 +574,7 @@ export class PrismaUserGearRepository implements UserGearRepositoryPort {
       brand: record.brand,
       condition: record.condition as GearCondition,
       attributes: (record.attributes as Record<string, unknown>) || {},
+      attributeProvenance: (record.attributeProvenance as Record<string, unknown>) ?? null,
       photoRef: record.photoRef,
       source: record.source as GearItemSource,
       version: record.version,

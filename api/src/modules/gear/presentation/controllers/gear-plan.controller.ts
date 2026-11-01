@@ -52,6 +52,60 @@ import type {
 } from '../../application/dtos/gear-plan.dto';
 import { ApiErrorResponse } from '../../../../shared/swagger/api-error-response.helper';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
+import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
+
+const GRADE_SCHEMA_PROPERTIES: Record<string, SchemaObject> = {
+  grade: {
+    type: 'string',
+    enum: ['LIKE_NEW', 'GOOD_USED'],
+    nullable: true,
+    example: 'GOOD_USED',
+    description: 'Hạng thuê: LIKE_NEW (Rất mới) hoặc GOOD_USED (Đã sử dụng tốt). null với sản phẩm không chia hạng.',
+  },
+  gradeGroupId: {
+    type: 'string',
+    format: 'uuid',
+    nullable: true,
+    description: 'Nhóm hạng: các sản phẩm cùng gradeGroupId là các hạng của cùng một món đồ.',
+  },
+};
+
+const DISPLAY_GUIDANCE_SCHEMA: SchemaObject = {
+  type: 'object',
+  properties: {
+    state: { type: 'string', enum: ['READY', 'NEEDS_INFO', 'NEEDS_PREPARATION'] },
+    actions: { type: 'array', items: { type: 'string', enum: ['SUPPLEMENT_INFO', 'VIEW_RENTAL_OPTIONS', 'SELF_PREPARE'] } },
+    missingAttributes: { type: 'array', items: { type: 'object', properties: {
+      key: { type: 'string', example: 'waterproof_mm' }, type: { type: 'string', example: 'number' },
+      unit: { type: 'string', example: 'mm' }, requiredBy: { type: 'array', items: { type: 'string' }, example: ['R01'] },
+    } } },
+  },
+  example: { state: 'NEEDS_INFO', actions: ['SUPPLEMENT_INFO'], missingAttributes: [{ key: 'waterproof_mm', type: 'number', unit: 'mm', requiredBy: ['R01'] }] },
+};
+
+const RENTAL_LINE_SCHEMA: SchemaObject = {
+  type: 'object',
+  properties: {
+    requirementId: { type: 'string', example: 'req_tent' },
+    category: { type: 'string', example: 'TENT' },
+    productId: { type: 'string', format: 'uuid' },
+    productName: { type: 'string', example: 'Lều 3 người – Đã sử dụng tốt' },
+    quantity: { type: 'integer', example: 1 },
+    dailyPrice: { type: 'number', example: 100000 },
+    rentalFee: { type: 'number', example: 200000 },
+    deposit: { type: 'number', example: 600000, deprecated: true, description: 'Tiền cọc cả dòng, ước tính. Deprecated: dùng `depositAmount`.' },
+    depositAmount: { type: 'number', example: 600000, description: 'Tiền cọc cả dòng, ước tính (cùng giá trị với `deposit`, cùng tên với `items[].depositAmount` của quote/order).' },
+    depositPerUnit: { type: 'number', example: 600000, description: 'Tiền cọc ước tính mỗi món.' },
+    replacementValue: { type: 'number', example: 2000000, description: 'Giá trị thay thế mỗi món.' },
+    depositExplanation: { type: 'object', properties: {
+      percentageOfReplacementValue: { type: 'number', nullable: true, example: 30, description: 'Tỷ lệ cọc thực tế, làm tròn tối đa 2 chữ số thập phân; null nếu giá trị thay thế bằng 0.' },
+      formula: { type: 'string', example: 'depositPerUnit / replacementValue * 100' },
+    } },
+    weight_g: { type: 'number', nullable: true, example: 2500 },
+    availableCount: { type: 'integer', example: 3 },
+    ...GRADE_SCHEMA_PROPERTIES,
+  },
+};
 
 @ApiTags('Gear - Plan (Kế hoạch chuẩn bị đồ & Liên kết thuê)')
 @ApiBearerAuth('bearer')
@@ -304,6 +358,10 @@ Xác nhận điều kiện thời tiết của chuyến đi, đánh giá từng 
   @ApiResponse({
     status: 200,
     description: 'Đánh giá thành công, trả về Checklist, Coverage Summary và lưu immutable snapshot revision',
+    schema: { type: 'object', properties: {
+      itemVerdicts: { type: 'array', items: { type: 'object', properties: { itemId: { type: 'string', format: 'uuid' }, verdict: { type: 'string', enum: ['SUITABLE', 'NOT_SUITABLE'] }, reasons: { type: 'array', items: { type: 'string' } }, displayGuidance: DISPLAY_GUIDANCE_SCHEMA } } },
+      coreCheck: { type: 'object', properties: { items: { type: 'array', items: { type: 'object', properties: { displayGuidance: DISPLAY_GUIDANCE_SCHEMA } } } } },
+    } },
   })
   @ApiErrorResponse(400, 'Thiếu thông số thời tiết', GEAR_ERROR_CODES.GEAR_NEEDS_CONTEXT, 'Thời tiết chưa được xác nhận')
   @ApiErrorResponse(409, 'Xung đột phiên bản', GEAR_ERROR_CODES.GEAR_PLAN_CAS_CONFLICT, 'Kế hoạch đã thay đổi dữ liệu đầu vào')
@@ -338,6 +396,35 @@ Xác nhận điều kiện thời tiết của chuyến đi, đánh giá từng 
     @Param('revision', ParseIntPipe) revision: number,
   ) {
     return this.gearPlanService.getPlanRevisionDetail(id, revision, userId);
+  }
+
+  @Get(':id/revisions/:revision/guidance')
+  @ApiOperation({
+    summary: 'Hướng dẫn bổ sung thông tin còn thiếu cho từng món đồ đã đánh giá',
+    description: 'Hướng dẫn thuộc snapshot được yêu cầu. isLatestEvaluation cho biết snapshot có phải lần đánh giá mới nhất; needsReevaluation phản ánh thay đổi phiên bản hoặc isStale theo kiểm tra hiện có của kế hoạch.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'ID kế hoạch' })
+  @ApiParam({ name: 'revision', type: Number, description: 'Phiên bản đánh giá' })
+  @ApiResponse({ status: 200, description: 'Hướng dẫn đọc từ snapshot, không thay đổi kết quả đánh giá', schema: {
+    type: 'object', properties: {
+      contextQuestions: { type: 'object', description: 'Câu hỏi theo món được chọn và constraint chưa đủ dữ liệu trong snapshot; không phải verdict.', properties: {
+        available: { type: 'boolean' }, items: { type: 'array', items: { type: 'object', properties: {
+          itemId: { type: 'string', format: 'uuid' }, nameAtEvaluation: { type: 'string', nullable: true }, category: { type: 'string' },
+          questions: { type: 'array', items: { type: 'object', properties: {
+            field: { type: 'string' }, question: { type: 'string' }, valueType: { type: 'string' }, requirementId: { type: 'string' },
+            constraintIds: { type: 'array', items: { type: 'string' } }, allowUnknown: { type: 'boolean' },
+          } } },
+        } } },
+      } },
+    },
+  } })
+  @ApiErrorResponse(404, 'Không tìm thấy kế hoạch hoặc phiên bản', GEAR_ERROR_CODES.GEAR_REVISION_NOT_FOUND, 'Phiên bản đánh giá không tồn tại')
+  async getRevisionGuidance(
+    @ActiveUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('revision', ParseIntPipe) revision: number,
+  ) {
+    return this.gearPlanService.getPlanRevisionGuidance(id, revision, userId);
   }
 
   @Get(':id/diff')
@@ -379,6 +466,13 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
         expectedRevision: { type: 'integer', minimum: 1, example: 1, description: 'Phiên bản đánh giá hiện tại' },
         budgetLimit: { type: 'number', example: 500000, description: 'Giới hạn ngân sách thuê (tùy chọn)' },
         objective: { type: 'string', enum: ['BALANCED', 'MIN_RENTAL_FEE', 'MIN_KNOWN_TOTAL_WEIGHT'], example: 'BALANCED' },
+        candidateLimit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          default: 20,
+          description: 'Số sản phẩm thuê tối đa xét cho mỗi danh mục (lấy theo giá ngày tăng dần)',
+        },
       },
       example: {
         expectedRevision: 1,
@@ -389,7 +483,33 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
   })
   @ApiResponse({
     status: 200,
-    description: 'Tập phương án tối ưu được sinh ra kèm optionRef (thời hạn hiệu lực 15 phút)',
+    description:
+      'Tập phương án tối ưu được sinh ra kèm optionRef (thời hạn hiệu lực 15 phút). Mỗi rentalLine có grade/gradeGroupId để hiện hạng sản phẩm.',
+    schema: {
+      type: 'object',
+      properties: {
+        setId: { type: 'string', format: 'uuid' },
+        planRevisionId: { type: 'string', format: 'uuid' },
+        revision: { type: 'integer', example: 1 },
+        objective: { type: 'string', example: 'ECONOMICAL' },
+        expiresAt: { type: 'string', format: 'date-time' },
+        options: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'opt_min_fee' },
+              rentalLines: { type: 'array', items: RENTAL_LINE_SCHEMA },
+              summary: { type: 'object' },
+            },
+          },
+        },
+        optionRef: {
+          type: 'object',
+          properties: { setId: { type: 'string', format: 'uuid' }, optionId: { type: 'string', example: 'opt_min_fee' } },
+        },
+      },
+    },
   })
   @ApiErrorResponse(400, 'Chưa đánh giá kế hoạch', GEAR_ERROR_CODES.GEAR_PLAN_NOT_EVALUATED, 'Kế hoạch cần được đánh giá trước khi tìm phương án thuê')
   @ApiErrorResponse(409, 'Kế hoạch đã bị sửa', GEAR_ERROR_CODES.GEAR_PLAN_STALE, 'Kế hoạch đã thay đổi sau lần đánh giá cuối')
@@ -404,10 +524,11 @@ Thuật toán tối ưu hóa đối chiếu các món đồ còn thiếu với k
   @Post(':id/advice')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Sinh lời khuyên an toàn từ AI dựa trên phương án đã chọn (AI Advisor)',
+    summary: 'Sinh lời khuyên an toàn dựa trên phương án đã chọn (bộ quy tắc, AI tuỳ chọn)',
     description: `
-Sử dụng Gemini AI tổng hợp lời khuyên trang bị dựa trên dữ kiện thật của chuyến đi và phương án đã chọn.
-- Hệ thống tự động kiểm chứng tính xác thực (\`fact grounding\`). Nếu AI bịa đặt hoặc thiếu an toàn, hệ thống tự động chuyển sang \`RULE_FALLBACK\` tin cậy.
+Tổng hợp lời khuyên trang bị từ dữ kiện thật của chuyến đi và phương án đã chọn. **Luôn trả lời khuyên, không báo lỗi vì AI.**
+- Mặc định (\`GEAR_AI_ADVICE_ENABLED=false\`) hoặc AI chưa cấu hình/lỗi/hết giờ: lời khuyên theo bộ quy tắc, \`source = RULE_FALLBACK\`.
+- Khi bật AI: Gemini chỉ chọn trong các nhận định đã được server kiểm chứng (\`fact grounding\`); nếu AI bịa đặt hoặc thiếu an toàn, hệ thống tự chuyển sang \`RULE_FALLBACK\`.
 `,
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'ID kế hoạch trang bị', example: '550e8400-e29b-41d4-a716-446655440300' })
@@ -496,7 +617,23 @@ Chuyển đổi phương án trang bị đã chọn thành payload chuẩn \`pre
         planId: { type: 'string', format: 'uuid' },
         planRevision: { type: 'number', example: 1 },
         tripId: { type: 'string', format: 'uuid' },
-        lines: { type: 'array', items: { type: 'object' } },
+        lines: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', format: 'uuid' },
+              productName: { type: 'string', example: 'Lều 3 người – Đã sử dụng tốt' },
+              category: { type: 'string', example: 'TENT' },
+              quantity: { type: 'integer', example: 1 },
+              dailyPrice: { type: 'number', example: 100000 },
+              rentalFee: { type: 'number', example: 200000 },
+              deposit: { type: 'number', example: 600000, deprecated: true, description: 'Deprecated: dùng `depositAmount`.' },
+              depositAmount: { type: 'number', example: 600000, description: 'Tiền cọc cả dòng (cùng giá trị với `deposit`).' },
+              ...GRADE_SCHEMA_PROPERTIES,
+            },
+          },
+        },
         prefillRentalQuote: {
           type: 'object',
           properties: {

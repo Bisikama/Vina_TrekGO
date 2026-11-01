@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { useAuth } from "@/features/auth/AuthContext";
+import { ApiError } from "@/lib/api-client";
 import { uploadInventoryEvidence } from "@/features/rentals/staff-inventory-api";
 import {
   DamageAssessmentRule,
@@ -37,6 +38,7 @@ type Draft = {
 };
 
 type EvidenceKind = "image" | "video";
+type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
 
 function shortAssetCode(value?: string | null) {
   const compact = (value ?? "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -106,6 +108,9 @@ export default function InventoryReturnsScreen() {
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  // Thiết bị thuộc sản phẩm có hạng: server trả RENTAL_GRADE_DECISION_REQUIRED, khi đó mở ô phân hạng.
+  const [gradeRequiredUnits, setGradeRequiredUnits] = useState<string[]>([]);
+  const [gradeDrafts, setGradeDrafts] = useState<Record<string, GradeDraft>>({});
 
   const loadList = useCallback(
     async (silent = false) => {
@@ -189,14 +194,14 @@ export default function InventoryReturnsScreen() {
     if (message) setNotice(message);
   }
 
-  async function run(action: string, request: () => Promise<unknown>, success: string) {
+  async function run(action: string, request: () => Promise<unknown>, success: string | (() => string)) {
     if (busy) return;
     setBusy(action);
     setError(undefined);
     setNotice(undefined);
     try {
       await request();
-      await refreshDetail(success);
+      await refreshDetail(typeof success === "function" ? success() : success);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Thao tác chưa thể hoàn tất.");
     } finally {
@@ -237,6 +242,49 @@ export default function InventoryReturnsScreen() {
     } finally {
       setBusy(undefined);
     }
+  }
+
+  async function markReady(unitId: string, assetCode: string, inspectionId: string, expectedVersion: number) {
+    if (!accessToken) return;
+    const needsGrade = gradeRequiredUnits.includes(unitId);
+    const grade: GradeDraft = gradeDrafts[unitId] ?? { decision: "KEEP", reason: "" };
+    if (needsGrade && grade.decision === "DOWNGRADE" && grade.reason.trim().length < 3) {
+      setError("Nhập lý do hạ hạng (tối thiểu 3 ký tự).");
+      return;
+    }
+    let shortageCount = 0;
+    let downgraded = false;
+    await run(
+      `ready-${unitId}`,
+      async () => {
+        try {
+          const result = await staffReturnsApi.markReady(
+            {
+              unitId,
+              inspectionId,
+              expectedVersion,
+              gradeDecision: needsGrade
+                ? grade.decision === "DOWNGRADE"
+                  ? { decision: "DOWNGRADE", reason: grade.reason.trim() }
+                  : { decision: "KEEP" }
+                : undefined,
+            },
+            accessToken,
+          );
+          shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
+          downgraded = result?.gradeReview?.decision === "DOWNGRADE";
+        } catch (requestError) {
+          if (requestError instanceof ApiError && requestError.code === "RENTAL_GRADE_DECISION_REQUIRED") {
+            setGradeRequiredUnits((current) => (current.includes(unitId) ? current : [...current, unitId]));
+            throw new Error(`Mã ${shortAssetCode(assetCode)} thuộc sản phẩm có hạng. Chọn Giữ hạng hoặc Hạ hạng rồi bấm lại.`);
+          }
+          throw requestError;
+        }
+      },
+      () =>
+        `${assetCode} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
+        (shortageCount > 0 ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn; các đơn này đã được đánh dấu cần xử lý.` : ""),
+    );
   }
 
   function toggleScan(unitId: string) {
@@ -432,11 +480,45 @@ export default function InventoryReturnsScreen() {
                     </View>
                   </>
                 ) : final.outcome === "NORMAL" && expected?.unitStatus === "CLEANING" ? (
-                  <Action
-                    label="ĐÃ VỆ SINH, ĐỦ PHỤ KIỆN — SẴN SÀNG CHO THUÊ"
-                    disabled={Boolean(busy)}
-                    onPress={() => void run(`ready-${received.unitId}`, () => staffReturnsApi.markReady({ unitId: received.unitId, inspectionId: final.id, expectedVersion: expected.unitVersion }, accessToken!), `${received.assetCode} đã sẵn sàng cho thuê.`)}
-                  />
+                  <>
+                    {gradeRequiredUnits.includes(received.unitId) ? (
+                      <View style={styles.gradeBox}>
+                        <Text style={styles.unitTitle}>Phân hạng sau khi trả</Text>
+                        <View style={styles.choiceRow}>
+                          {(["KEEP", "DOWNGRADE"] as const).map((decision) => {
+                            const grade: GradeDraft = gradeDrafts[received.unitId] ?? { decision: "KEEP", reason: "" };
+                            const active = grade.decision === decision;
+                            return (
+                              <TouchableOpacity
+                                key={decision}
+                                style={[styles.choice, active && styles.choiceActive]}
+                                onPress={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...grade, decision } }))}
+                              >
+                                <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
+                                  {decision === "KEEP" ? "Giữ hạng" : "Hạ xuống Sử dụng tốt"}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        {gradeDrafts[received.unitId]?.decision === "DOWNGRADE" ? (
+                          <TextInput
+                            value={gradeDrafts[received.unitId]?.reason ?? ""}
+                            onChangeText={(reason) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { decision: "DOWNGRADE", reason } }))}
+                            placeholder="Lý do hạ hạng (bắt buộc)"
+                            placeholderTextColor={Colors.onSurfaceMuted}
+                            style={styles.input}
+                          />
+                        ) : null}
+                        <Text style={styles.meta}>Phân hạng không ảnh hưởng tiền cọc của khách vừa trả.</Text>
+                      </View>
+                    ) : null}
+                    <Action
+                      label="ĐÃ VỆ SINH, ĐỦ PHỤ KIỆN — SẴN SÀNG CHO THUÊ"
+                      disabled={Boolean(busy)}
+                      onPress={() => void markReady(received.unitId, received.assetCode, final.id, expected.unitVersion)}
+                    />
+                  </>
                 ) : final.outcome !== "NORMAL" ? (
                   <Text style={styles.warning}>Thiết bị có vấn đề đang chờ Admin xử lý ngoại lệ.</Text>
                 ) : null}
@@ -542,6 +624,7 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: Colors.primaryDark, borderRadius: Radius.xl, padding: 15, alignItems: "center", marginBottom: 14 },
   primaryText: { color: "#fff", fontSize: 12, fontWeight: "600", textAlign: "center" },
   disabled: { opacity: 0.5 },
+  gradeBox: { marginTop: 12, marginBottom: 10, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: Radius.md, padding: 12 },
   warning: { color: "#9b6700", backgroundColor: "#fff5d7", borderRadius: 8, padding: 11, fontSize: 11, marginTop: 12 },
   errorBanner: { color: Colors.error, backgroundColor: "#ffe8e5", borderRadius: 9, padding: 12, marginBottom: 12 },
   noticeBanner: { color: Colors.primaryDark, backgroundColor: "#eaf5e1", borderRadius: 9, padding: 12, marginBottom: 12 },

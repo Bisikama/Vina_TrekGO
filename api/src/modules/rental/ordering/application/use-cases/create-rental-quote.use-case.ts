@@ -21,6 +21,7 @@ import {
 import {
   calculateChargedDays,
   calculateDepositPerUnit,
+  describeDeposit,
   calculateOccupiedWindow,
   evaluateRentalEligibility,
   formatPolicyVersion,
@@ -310,6 +311,8 @@ export class CreateRentalQuoteUseCase {
         dailyPrice: toSafeNumber(line.dailyPrice),
         feeAmount: toSafeNumber(line.feeAmount),
         depositPerUnit: toSafeNumber(line.depositPerUnit),
+        replacementValue: toSafeNumber(line.replacementValue),
+        depositExplanation: describeDeposit(line.depositPerUnit, line.replacementValue),
         depositAmount: toSafeNumber(line.depositAmount),
       })),
       amounts: {

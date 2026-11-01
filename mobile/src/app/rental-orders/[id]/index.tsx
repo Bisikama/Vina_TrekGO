@@ -55,7 +55,7 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const EXCEPTION_LABELS: Record<string, string> = {
-  ACTION_REQUIRED: "Đơn cần được hỗ trợ xử lý",
+  ACTION_REQUIRED: "TrekGo đang kiểm tra đơn của bạn",
   OVERDUE: "Đơn đã quá hạn trả thiết bị",
   PAYMENT_REVIEW: "Thanh toán đang chờ đối soát",
   REFUND_REVIEW: "Hoàn cọc đang chờ đối soát",
@@ -690,7 +690,17 @@ export default function RentalOrderDetailScreen() {
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
                   {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
+                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
                 </Text>
+                {typeof item.depositPerUnit === "number" && typeof item.depositAmount === "number" ? (
+                  <Text style={styles.lineMeta}>
+                    Cọc {money(item.depositPerUnit, order.currency)}/món × {item.quantity} ={" "}
+                    {money(item.depositAmount, order.currency)}
+                    {typeof item.depositExplanation?.percentageOfReplacementValue === "number"
+                      ? ` · ≈ ${item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế`
+                      : ""}
+                  </Text>
+                ) : null}
               </View>
               <Text style={styles.lineAmount}>
                 {money(item.feeAmount, order.currency)}

@@ -16,6 +16,7 @@ export interface CreateUserGearItemRepoInput extends Omit<
   'id' | 'createdAt' | 'updatedAt' | 'version' | 'photos'
 > {
   acknowledgeDuplicate?: boolean
+  catalogReference?: { id: string; version: number }
 }
 
 export interface UserGearRepositoryPort {

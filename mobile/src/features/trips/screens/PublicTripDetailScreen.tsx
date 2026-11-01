@@ -44,6 +44,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { TripShareButton } from "@/features/trip-gps";
+
 export interface PublicTripDetailScreenProps {
   tripId: string;
 }
@@ -206,6 +208,10 @@ export function PublicTripDetailScreen({
             }}
             onViewAllTrips={() => router.push("/(tabs)/trips" as any)}
           />
+        )}
+
+        {hasConfirmedAccess && (
+          <TripShareButton tripId={tripId} style={{ marginHorizontal: 16, marginTop: 12 }} />
         )}
 
         {/* 3. Giới thiệu & Kế hoạch chuyến đi (Matching Web) */}

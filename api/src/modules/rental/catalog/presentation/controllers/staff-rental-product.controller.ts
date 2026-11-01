@@ -107,6 +107,10 @@ Chi tiết thông tin sản phẩm dành cho nhân viên quản lý kho / admin.
 Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARCHIVED).
 - Yêu cầu \`expectedVersion\` để kiểm soát đồng thời.
 - Archive một sản phẩm đồng nghĩa với việc sản phẩm đó không còn public nữa.
+- Kích hoạt (ACTIVE): sản phẩm có lịch sử giá phải có bản ghi do ADMIN đặt khớp tiền cọc và giá trị thay thế hiện tại,
+  nếu không -> 409 RENTAL_PRODUCT_PRICING_NOT_APPROVED.
+- Sản phẩm có hạng: khi cả hai hạng cùng ACTIVE, hạng LIKE_NEW phải có giá ngày và tiền cọc cao hơn hẳn GOOD_USED,
+  nếu không -> 422 RENTAL_GRADE_PRICE_ORDER_INVALID.
 `,
   })
   @ApiParam({
@@ -125,6 +129,18 @@ Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARC
     },
   })
   @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Sản phẩm đã thay đổi; lấy version mới rồi thử lại')
+  @ApiErrorResponse(
+    409,
+    'ADMIN chưa đặt giá/cọc',
+    'RENTAL_PRODUCT_PRICING_NOT_APPROVED',
+    'ADMIN chưa đặt tiền cọc và giá trị thay thế; chưa thể kích hoạt sản phẩm',
+  )
+  @ApiErrorResponse(
+    422,
+    'Sai thứ tự giá giữa hai hạng',
+    'RENTAL_GRADE_PRICE_ORDER_INVALID',
+    'Hạng Rất mới phải có giá thuê và tiền cọc cao hơn hạng Đã sử dụng tốt',
+  )
   @ApiBody({
     description: 'Lấy expectedVersion từ kết quả xem hoặc liệt kê sản phẩm. Chọn một trạng thái mới.',
     schema: {
@@ -158,9 +174,16 @@ Cho phép thay đổi lifecycle status của sản phẩm (ACTIVE, INACTIVE, ARC
   @ApiOperation({
     summary: 'Tạo mới sản phẩm thuê (staff)',
     description: `
-Tạo một sản phẩm (catalog item) mới.
-- Khởi tạo mặc định ở trạng thái ACTIVE để sẵn sàng phục vụ thuê.
-- Nếu muốn tạm ẩn, nhân viên có thể gọi PATCH /api/v1/staff/rental-products/{id}/status để chuyển sang INACTIVE.
+Tạo một sản phẩm (catalog item) mới. Trạng thái ban đầu phụ thuộc người tạo
+(Policy: ADMIN đặt tiền cọc và giá trị thay thế, ADMIN duyệt giá trước khi mở bán):
+- ADMIN tạo: bắt buộc gửi \`replacementValue\` và \`depositPolicy\`; sản phẩm ở trạng thái ACTIVE để sẵn sàng phục vụ thuê.
+- STAFF_INVENTORY tạo: không được gửi \`replacementValue\`/\`depositPolicy\` (403 RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY);
+  sản phẩm ở trạng thái INACTIVE cho tới khi ADMIN đặt tiền cọc và giá trị thay thế rồi kích hoạt.
+- Nếu muốn tạm ẩn, gọi PATCH /api/v1/staff/rental-products/{id}/status để chuyển sang INACTIVE.
+- **Hạng (Rất mới / Đã sử dụng tốt):** gửi \`grade\` để mở nhóm hạng mới, hoặc \`grade\` + \`gradeGroupId\` của nhóm sẵn có.
+  Sản phẩm có hạng bắt buộc tiền cọc FIXED; các hạng cùng nhóm phải cùng danh mục, cùng loại tiền và dùng chung
+  \`replacementValue\` (đổi một hạng thì các hạng khác đổi theo). Khi cả hai hạng ACTIVE, LIKE_NEW phải có giá ngày và
+  tiền cọc cao hơn hẳn GOOD_USED.
 - **TÍCH HỢP VỚI GEAR ADVISOR:** Sau khi tạo sản phẩm, nhân viên kho có thể mở endpoint \`PUT /api/v1/staff/gear/product-profiles/{productId}\` để cấu hình thông số kỹ thuật (độ chống nước, giữ nhiệt, dung tích...), giúp sản phẩm tham gia vào các thuật toán gợi ý tối ưu của Gear Advisor.
 `,
   })
@@ -170,12 +193,37 @@ Tạo một sản phẩm (catalog item) mới.
     schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' } } },
   })
   @ApiErrorResponse(409, 'SKU đã tồn tại', 'RENTAL_PRODUCT_SKU_EXISTS', 'Hãy dùng mã SKU chưa được tạo')
+  @ApiErrorResponse(
+    403,
+    'Chỉ ADMIN được đặt tiền cọc/giá trị thay thế',
+    'RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY',
+    'Chỉ ADMIN được đặt tiền cọc và giá trị thay thế của sản phẩm thuê',
+  )
+  @ApiErrorResponse(
+    422,
+    'Sản phẩm có hạng phải dùng cọc FIXED',
+    'RENTAL_GRADE_DEPOSIT_MUST_BE_FIXED',
+    'Sản phẩm có hạng phải dùng tiền cọc cố định (FIXED)',
+  )
+  @ApiErrorResponse(
+    404,
+    'Không tìm thấy nhóm hạng',
+    'RENTAL_GRADE_GROUP_NOT_FOUND',
+    'Không tìm thấy nhóm hạng sản phẩm',
+  )
+  @ApiErrorResponse(
+    409,
+    'Nhóm đã có hạng này',
+    'RENTAL_GRADE_ALREADY_IN_GROUP',
+    'Nhóm này đã có sản phẩm cho hạng được chọn',
+  )
   @ApiBody({
     description:
-      'Dùng categoryId có thật từ GET /api/v1/rental-categories. SKU phải duy nhất; ảnh chỉ gửi khi đã có media ID.',
+      'Dùng categoryId có thật từ GET /api/v1/rental-categories. SKU phải duy nhất; ảnh chỉ gửi khi đã có media ID. ' +
+      'replacementValue và depositPolicy bắt buộc khi ADMIN tạo, không được gửi khi STAFF_INVENTORY tạo.',
     schema: {
       type: 'object',
-      required: ['categoryId', 'sku', 'name', 'dailyPrice', 'replacementValue', 'depositPolicy'],
+      required: ['categoryId', 'sku', 'name', 'dailyPrice'],
       properties: {
         categoryId: {
           type: 'string',
@@ -209,6 +257,16 @@ Tạo một sản phẩm (catalog item) mới.
           example: false,
           description: 'Bật kiểm tra sâu sau khi khách hoàn trả thiết bị (mặc định false)',
         },
+        grade: {
+          type: 'string',
+          enum: ['LIKE_NEW', 'GOOD_USED'],
+          description: 'Hạng của sản phẩm (tuỳ chọn). Không gửi = sản phẩm thường không có hạng',
+        },
+        gradeGroupId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'Nhóm hạng sẵn có (lấy từ gradeGroupId của hạng kia). Không gửi kèm grade = mở nhóm mới',
+        },
       },
       example: {
         categoryId: '550e8400-e29b-41d4-a716-446655440010',
@@ -222,8 +280,11 @@ Tạo một sản phẩm (catalog item) mới.
     },
   })
   @Post()
-  async createProduct(@Body(new ZodValidationPipe(CreateRentalProductSchema)) body: CreateRentalProductDto) {
-    return this.createRentalProductUseCase.execute(body)
+  async createProduct(
+    @Body(new ZodValidationPipe(CreateRentalProductSchema)) body: CreateRentalProductDto,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.createRentalProductUseCase.execute({ ...body, actorUserId: user.id, actorRole: user.role })
   }
 
   @ApiOperation({
@@ -232,6 +293,12 @@ Tạo một sản phẩm (catalog item) mới.
 Cập nhật các thuộc tính của sản phẩm.
 - Hỗ trợ optimistic locking thông qua \`expectedVersion\`.
 - Lưu ý: imageMediaIds thay thế hoàn toàn mảng cũ bằng mảng mới (nếu gửi lên).
+- \`dailyPrice\` và các field khác: STAFF_INVENTORY và ADMIN đều sửa được.
+- \`replacementValue\`, \`depositPolicy\`: chỉ ADMIN được đổi (gửi lại đúng giá trị hiện tại thì không bị chặn);
+  người khác đổi -> 403 RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY.
+- Mỗi lần đổi giá ngày, tiền cọc hoặc giá trị thay thế đều ghi lịch sử giá.
+- Sản phẩm có hạng: tiền cọc phải FIXED; đổi \`replacementValue\` một hạng thì các hạng cùng nhóm đổi theo;
+  khi cả hai hạng ACTIVE, LIKE_NEW phải có giá ngày và tiền cọc cao hơn hẳn GOOD_USED. Không đổi được nhóm/hạng.
 `,
   })
   @ApiParam({
@@ -247,6 +314,18 @@ Cập nhật các thuộc tính của sản phẩm.
     schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, version: { type: 'integer' } } },
   })
   @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Sản phẩm đã thay đổi; lấy version mới rồi thử lại')
+  @ApiErrorResponse(
+    403,
+    'Chỉ ADMIN được đổi tiền cọc/giá trị thay thế',
+    'RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY',
+    'Chỉ ADMIN được đặt tiền cọc và giá trị thay thế của sản phẩm thuê',
+  )
+  @ApiErrorResponse(
+    422,
+    'Sai thứ tự giá giữa hai hạng',
+    'RENTAL_GRADE_PRICE_ORDER_INVALID',
+    'Hạng Rất mới phải có giá thuê và tiền cọc cao hơn hạng Đã sử dụng tốt',
+  )
   @ApiBody({
     description:
       'Gửi expectedVersion hiện tại và ít nhất một trường cần đổi; imageMediaIds nếu gửi sẽ thay toàn bộ danh sách ảnh.',
@@ -287,10 +366,13 @@ Cập nhật các thuộc tính của sản phẩm.
   async updateProduct(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateRentalProductSchema)) body: UpdateRentalProductDto,
+    @ActiveUser() user: ActiveUserData,
   ) {
     return this.updateRentalProductUseCase.execute({
       id,
       ...body,
+      actorUserId: user.id,
+      actorRole: user.role,
     })
   }
 }

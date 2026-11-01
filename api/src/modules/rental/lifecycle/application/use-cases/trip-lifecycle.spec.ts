@@ -193,6 +193,8 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       adapter = new PrismaTripLifecycleAdapter(mockPrisma);
 
       mockTx = {
+        trip: { findUnique: jest.fn().mockResolvedValue({ id: 'trip-1', status: 'CANCELLED', version: 2 }) },
+        bookingParticipant: { findMany: jest.fn().mockResolvedValue([]) },
         inventoryLocation: {
           findFirst: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
           findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
@@ -333,6 +335,13 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       expect(mockTx.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ status: { in: ['PENDING', 'PROCESSING'] } }),
       }));
+      // Notification consumer dựa vào nguồn huỷ + trạng thái tiền để viết nội dung cho khách.
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({
+          eventType: 'RENTAL_ORDER_CANCELLED',
+          payload: expect.objectContaining({ cancellationSource: 'TRIP', financialStatus: 'REFUND_PENDING' }),
+        }),
+      }));
     });
 
     it('Booking USER hủy sau hạn: chỉ hoàn cọc cho Rental đã thanh toán', async () => {
@@ -360,6 +369,13 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       }));
       expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ financialStatus: 'REFUND_PENDING' }),
+      }));
+      // Notification consumer dựa vào nguồn huỷ + trạng thái tiền để viết nội dung cho khách.
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({
+          eventType: 'RENTAL_ORDER_CANCELLED',
+          payload: expect.objectContaining({ cancellationSource: 'BOOKING', financialStatus: 'REFUND_PENDING' }),
+        }),
       }));
     });
 
@@ -430,7 +446,21 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
     });
 
-    it('OUT-OF-ORDER (P1-05): skips cancellation if order.contextVersionSnapshot >= eventVersion', async () => {
+    it.each([
+      ['non-cancelled trip', { status: 'OPEN', version: 2 }],
+      ['event newer than source', { status: 'CANCELLED', version: 1 }],
+      ['missing trip', null],
+    ])('rejects cancellation for %s', async (_label, sourceTrip) => {
+      mockTx.trip.findUnique.mockResolvedValue(sourceTrip);
+      await expect(adapter.processTripCancelled({
+        eventId: 'evt-invalid-cancel', eventType: 'TRIP_CANCELLED', entityId: 'trip-1',
+        entityVersion: 2, correlationId: 'corr-invalid', occurredAt: new Date(),
+        payload: { tripId: 'trip-1', reason: 'Cancelled', effectiveAt: new Date(), tripVersion: 2 },
+      })).rejects.toMatchObject({ code: 'RENTAL_LIFECYCLE_EVENT_INVALID' });
+      expect(mockTx.rentalOrder.findMany).not.toHaveBeenCalled();
+    });
+
+    it('TRIP CANCELLATION: context hash is not an event sequence and does not suppress cancellation', async () => {
       mockTx.rentalOrder.findMany.mockResolvedValue([
         {
           id: 'order-newer',
@@ -454,13 +484,15 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
           tripId: 'trip-1',
           reason: 'Old event',
           effectiveAt: new Date(),
-          tripVersion: 2, // Older than order contextVersionSnapshot 4
+          tripVersion: 2, // Trip version and context hash are not comparable
         },
       };
 
       const result = await adapter.processTripCancelled(cmd);
-      expect(result.cancelledOrderIds).toEqual([]);
-      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      expect(result.cancelledOrderIds).toEqual(['order-newer']);
+      expect(mockTx.rentalOrder.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.not.objectContaining({ contextVersionSnapshot: expect.anything() }),
+      }));
     });
 
     it('RESCHEDULE CAPACITY (P0-03 & P1-04): excludes own existing reservations and applies RB-POL-30 formula (12h prep, 24h buffer, no 8h+8h)', async () => {
@@ -901,7 +933,6 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         where: { id: order.id, version: order.version },
         data: expect.objectContaining({
           cancelledAt: cmd.payload.effectiveAt,
-          contextVersionSnapshot: cmd.payload.tripVersion,
           version: { increment: 1 },
         }),
       }));
@@ -976,7 +1007,6 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
           where: { id: 'order-active-cancel', version: 4 },
           data: expect.objectContaining({
             exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
-            contextVersionSnapshot: 2,
           }),
         }),
       );
@@ -985,6 +1015,7 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         (c: any) => c[0].where.id === 'order-active-cancel',
       );
       expect(updateCall[0].data.operationalReturnDueAt).toBeUndefined();
+      expect(updateCall[0].data.contextVersionSnapshot).toBeUndefined();
 
       // Emits RENTAL_ACTION_REQUIRED with custody info
       expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(

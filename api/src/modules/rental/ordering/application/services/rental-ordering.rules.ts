@@ -158,6 +158,17 @@ export function calculateDepositPerUnit(params: {
   throw new Error(`Unsupported deposit policy: ${params.depositPolicyType}`);
 }
 
+/** Display-only ratio of the actual per-unit deposit to its replacement value. */
+export function describeDeposit(depositPerUnit: bigint, replacementValue: bigint) {
+  const hundredthsOfPercent = replacementValue > 0n
+    ? roundDivide(depositPerUnit * 10_000n, replacementValue)
+    : null;
+  return {
+    percentageOfReplacementValue: hundredthsOfPercent === null ? null : Number(hundredthsOfPercent) / 100,
+    formula: 'depositPerUnit / replacementValue * 100',
+  };
+}
+
 export function toPrismaDecimalVnd(value: bigint): string {
   return `${value.toString()}.00`;
 }
