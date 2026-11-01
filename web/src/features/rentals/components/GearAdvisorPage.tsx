@@ -32,6 +32,7 @@ import {
   type PreparationSelections,
   type PreparationStatus,
 } from "@/features/rentals/services/gear-advisor.api";
+import { GearRentalOptions } from "./GearRentalOptions";
 import { RentalPageHeader } from "./RentalSectionNav";
 
 const CATEGORIES: Array<[GearCategory, string]> = [
@@ -593,11 +594,12 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                             </li>
                           ))}
                         </ul>
-                        {guidance.requirements.some((requirement) => (requirement.remainingQuantity ?? 0) > 0) ? (
-                          <p className="mt-3 text-sm text-slate-600">
-                            Thiếu đồ? Bạn có thể{" "}
-                            <Link href="/rentals" className="font-bold text-emerald-700 underline">thuê thêm ở danh mục TrekGo</Link>.
-                          </p>
+                        {guidance.requirements.some((requirement) => (requirement.remainingQuantity ?? 0) > 0) &&
+                        plan?.evaluatedRevision &&
+                        !guidance.needsReevaluation ? (
+                          <div className="mt-4">
+                            <GearRentalOptions planId={plan.id} evaluatedRevision={plan.evaluatedRevision} />
+                          </div>
                         ) : null}
                       </div>
                     ) : null}
