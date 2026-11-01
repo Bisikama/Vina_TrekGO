@@ -690,7 +690,7 @@ export default function RentalOrderDetailScreen() {
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
                   {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
-                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}` : ""}
+                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
                 </Text>
                 {typeof item.depositPerUnit === "number" && typeof item.depositAmount === "number" ? (
                   <Text style={styles.lineMeta}>

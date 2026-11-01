@@ -23,13 +23,13 @@ function formatMoney(value: number, currency: string) {
 
 const GRADE_LABELS = {
   LIKE_NEW: "Mới",
-  GOOD_USED: "Đã qua sử dụng",
+  GOOD_USED: "Sử dụng tốt",
 } as const;
 
 // Tên sản phẩm có hạng thường kèm hậu tố hạng; nhãn hạng đã hiển thị riêng.
 function displayProductName(name: string, hasGrade: boolean) {
   return hasGrade
-    ? name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
+    ? name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
     : name;
 }
 

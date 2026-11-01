@@ -165,7 +165,7 @@ export default function RentalProductDetailScreen() {
             <Text style={styles.category}>{product.category.name}</Text>
             <Text style={styles.productName}>
               {product.grade
-                ? product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
+                ? product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
                 : product.name}
             </Text>
             {product.sku ? <Text style={styles.sku}>SKU: {product.sku}</Text> : null}
@@ -176,7 +176,7 @@ export default function RentalProductDetailScreen() {
                   product.grade === "GOOD_USED" && styles.gradeBadgeUsed,
                 ]}
               >
-                {product.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}
+                {product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
               </Text>
             ) : null}
           </View>
