@@ -20,6 +20,7 @@ import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { useAuth } from "@/features/auth/AuthContext";
 import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebViewModal";
 import { rentalApi } from "@/features/rentals/api";
+import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -122,6 +123,35 @@ const depositItemLabel = (status: string) => {
     DEDUCTED: "Đã khấu trừ",
   };
   return labels[status] || "Đang xử lý";
+};
+
+const DEPOSIT_REASON_LABELS: Record<string, string> = {
+  FINAL_PASS_AWAIT_GROUPED_REFUND: "Kiểm định đạt · chờ hoàn cọc",
+  INVENTORY_FINAL_PASS: "Kiểm định đạt · đang hoàn cọc",
+  DEDUCTION_REVIEW_REQUIRED: "Kiểm định ghi nhận hư hại",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
+  REFUND_REVIEW_REQUIRED: "Hoàn cọc đang được đối soát",
+  POLICY_OR_INVENTORY_REVIEW_REQUIRED: "Đang được kiểm tra thêm",
+  MISSING_PENDING_REVIEW: "Thiết bị chưa được nhận lại · đang xác minh",
+  LOST_CONFIRMED: "Đã xác nhận thất lạc",
+};
+
+/** Mã lý do backend → tiếng Việt; mã lạ thì ẩn để khách không thấy mã thô. */
+const depositReasonText = (reason?: string | null) => {
+  if (!reason) return null;
+  if (DEPOSIT_REASON_LABELS[reason]) return DEPOSIT_REASON_LABELS[reason];
+  return /^[A-Z0-9_]+$/.test(reason) ? null : reason;
+};
+
+const isPendingDeduction = (item: RentalDepositStatus["items"][number]) =>
+  (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
+
+const depositBadgeLabel = (item: RentalDepositStatus["items"][number]) => {
+  if (isPendingDeduction(item)) {
+    if (item.reviewStatus === "SUBMITTED") return "Đang xử lý phản đối";
+    return item.canSubmitReview ? "Có khoản trừ · chờ hết hạn phản đối" : "Có khoản trừ · chờ quyết toán";
+  }
+  return depositItemLabel(item.status);
 };
 
 const gatewayLabel = (gateway: RentalPaymentGateway) =>
@@ -866,16 +896,39 @@ export default function RentalOrderDetailScreen() {
             />
             <MoneyRow label="Đã hoàn" value={deposit.refundedAmount} currency={order.currency} />
             <MoneyRow label="Khấu trừ" value={deposit.deductionAmount} currency={order.currency} />
+            {(() => {
+              const pending = deposit.items
+                .filter(isPendingDeduction)
+                .reduce((sum, item) => sum + (item.approvedDeduction ?? 0), 0);
+              return pending > 0 ? (
+                <Text style={styles.readOnlyNote}>
+                  Có {money(pending, order.currency)} khoản trừ đã duyệt nhưng chưa quyết toán, nên chưa tính vào “Khấu trừ”. Số này chỉ được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
+                </Text>
+              ) : null;
+            })()}
             {deposit.items.map((item) => (
-              <View key={item.unitId} style={styles.depositItem}>
+              <View key={item.unitId}>
+              <View style={styles.depositItem}>
                 <View style={styles.flexOne}>
                   <Text style={styles.lineName}>Mã thiết bị {shortAssetCode(item.assetCode)}</Text>
-                  <Text style={styles.lineMeta}>{depositItemLabel(item.status)}</Text>
-                  {item.reason ? <Text style={styles.reasonText}>{item.reason}</Text> : null}
+                  <Text style={styles.lineMeta}>{depositBadgeLabel(item)}</Text>
+                  {depositReasonText(item.reason) ? (
+                    <Text style={styles.lineMeta}>{depositReasonText(item.reason)}</Text>
+                  ) : null}
                 </View>
                 <Text style={styles.lineAmount}>
                   {money(item.depositAmount ?? item.amount, order.currency)}
                 </Text>
+              </View>
+              {orderId ? (
+                <DeductionReviewCard
+                  orderId={orderId}
+                  item={item}
+                  currency={order.currency}
+                  accessToken={accessToken}
+                  onChanged={() => loadOrder(true)}
+                />
+              ) : null}
               </View>
             ))}
             {deposit.items.some(

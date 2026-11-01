@@ -18,6 +18,7 @@ import { privateTripsApi } from "@/features/trips/services/private-trips.api";
 import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
 
 import { RentalCancellation } from "./RentalCancellation";
+import { DeductionReviewPanel } from "./DeductionReviewPanel";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -41,6 +42,36 @@ const refundStatusLabels: Record<string, string> = {
 function labelOf(labels: Record<string, string>, value?: string | null) {
   if (!value) return "Chưa phát sinh";
   return labels[value] ?? value.replaceAll("_", " ").toLocaleLowerCase("vi-VN");
+}
+
+/** Mã lý do của backend → câu tiếng Việt. Mã lạ (chỉ chữ in hoa) thì ẩn để khách không thấy mã thô. */
+const depositReasonLabels: Record<string, string> = {
+  FINAL_PASS_AWAIT_GROUPED_REFUND: "Kiểm định đạt · chờ hoàn cọc",
+  INVENTORY_FINAL_PASS: "Kiểm định đạt · đang hoàn cọc",
+  DEDUCTION_REVIEW_REQUIRED: "Kiểm định ghi nhận hư hại",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
+  REFUND_REVIEW_REQUIRED: "Hoàn cọc đang được đối soát",
+  POLICY_OR_INVENTORY_REVIEW_REQUIRED: "Đang được kiểm tra thêm",
+  MISSING_PENDING_REVIEW: "Thiết bị chưa được nhận lại · đang xác minh",
+  LOST_CONFIRMED: "Đã xác nhận thất lạc",
+};
+
+function depositReasonText(reason?: string | null) {
+  if (!reason) return null;
+  if (depositReasonLabels[reason]) return depositReasonLabels[reason];
+  return /^[A-Z0-9_]+$/.test(reason) ? null : reason;
+}
+
+/** Nhãn trạng thái từng món: món đã duyệt trừ nhưng chưa quyết toán thì nói rõ đang ở giai đoạn nào. */
+function depositBadge(item: RentalDepositItem) {
+  const pendingDeduction =
+    (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
+  if (pendingDeduction) {
+    if (item.reviewStatus === "SUBMITTED") return { label: "Đang xử lý phản đối", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+    if (item.canSubmitReview) return { label: "Có khoản trừ · chờ hết hạn phản đối", tone: "border-red-200 bg-red-50 text-red-700" };
+    return { label: "Có khoản trừ · chờ quyết toán", tone: "border-red-200 bg-red-50 text-red-700" };
+  }
+  return { label: labelOf(depositStatusLabels, item.status), tone: depositTone(item) };
 }
 
 function depositTone(item: RentalDepositItem) {
@@ -239,6 +270,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
             </div>
 
             <DepositSettlementPanel
+              orderId={orderId}
               deposit={deposit}
               currency={detail.order.currency}
               loading={depositLoading}
@@ -275,12 +307,14 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
 }
 
 function DepositSettlementPanel({
+  orderId,
   deposit,
   currency,
   loading,
   error,
   onRetry,
 }: {
+  orderId: string;
   deposit?: RentalDepositStatus;
   currency: string;
   loading: boolean;
@@ -349,6 +383,17 @@ function DepositSettlementPanel({
             />
           </div>
 
+          {(() => {
+            const pending = deposit.items
+              .filter((item) => (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status))
+              .reduce((sum, item) => sum + (item.approvedDeduction ?? 0), 0);
+            return pending > 0 ? (
+              <p className="mt-4 rounded-xl border border-red-100 bg-red-50/60 p-3 text-xs leading-5 text-red-800">
+                Có {money(pending, currency)} khoản trừ đã duyệt nhưng chưa quyết toán, nên chưa tính vào ô “Khấu trừ”. Số này chỉ được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
+              </p>
+            ) : null;
+          })()}
+
           {deposit.refundPendingAmount > 0 ? (
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
               Khoản “Chờ hoàn” mới là yêu cầu đang xử lý. Chỉ khi cổng thanh toán trả trạng thái thành công, số tiền mới chuyển sang “Đã hoàn”.
@@ -364,8 +409,8 @@ function DepositSettlementPanel({
           {deposit.items.length ? (
             <div className="mt-5 space-y-3">
               {deposit.items.map((item) => (
+                <div key={item.unitId}>
                 <article
-                  key={item.unitId}
                   className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4"
                 >
                   <div>
@@ -375,13 +420,13 @@ function DepositSettlementPanel({
                     <p className="mt-1 text-sm font-semibold text-slate-800">
                       Cọc {money(item.depositAmount ?? item.amount ?? 0, currency)}
                     </p>
-                    {item.reason ? (
-                      <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
+                    {depositReasonText(item.reason) ? (
+                      <p className="mt-1 text-xs text-slate-500">{depositReasonText(item.reason)}</p>
                     ) : null}
                   </div>
                   <div className="text-right">
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositTone(item)}`}>
-                      {labelOf(depositStatusLabels, item.status)}
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositBadge(item).tone}`}>
+                      {depositBadge(item).label}
                     </span>
                     {item.refundStatus ? (
                       <p className="mt-2 text-xs text-slate-500">
@@ -395,6 +440,13 @@ function DepositSettlementPanel({
                     ) : null}
                   </div>
                 </article>
+                <DeductionReviewPanel
+                  orderId={orderId}
+                  item={item}
+                  currency={currency}
+                  onChanged={onRetry}
+                />
+                </div>
               ))}
             </div>
           ) : (
