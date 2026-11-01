@@ -196,7 +196,7 @@ export function LeaderTripReviewStep({
           onPress={onSaveDraft || (() => Alert.alert("Đã lưu nháp", "Bản nháp đã được lưu vào hệ thống."))}
           activeOpacity={0.8}
         >
-          <Ionicons name="bookmark-outline" size={14} color="#125238" />
+          <Ionicons name="bookmark-outline" size={14} color="#0e0f0c" />
           <Text style={styles.draftTopBtnText}>Lưu bản nháp</Text>
         </TouchableOpacity>
       </View>
@@ -204,13 +204,13 @@ export function LeaderTripReviewStep({
       {/* 3-Step Stepper Header */}
       <View style={styles.stepperContainer}>
         <View style={styles.stepperItemDone}>
-          <Ionicons name="checkmark-circle" size={16} color="#125238" />
+          <Ionicons name="checkmark-circle" size={16} color="#0e0f0c" />
           <Text style={styles.stepperItemTextDone} numberOfLines={1}>
             1. Thông tin cơ bản & Lịch trình
           </Text>
         </View>
         <View style={styles.stepperItemDone}>
-          <Ionicons name="checkmark-circle" size={16} color="#125238" />
+          <Ionicons name="checkmark-circle" size={16} color="#0e0f0c" />
           <Text style={styles.stepperItemTextDone} numberOfLines={1}>
             2. Cung đường & Trạm dừng
           </Text>
@@ -238,7 +238,7 @@ export function LeaderTripReviewStep({
 
         {canPublish ? (
           <View style={styles.readinessPassBox}>
-            <Ionicons name="checkmark-circle" size={24} color="#125238" />
+            <Ionicons name="checkmark-circle" size={24} color="#0e0f0c" />
             <View style={{ flex: 1 }}>
               <Text style={styles.readinessPassTitle}>Đủ điều kiện xuất bản</Text>
               <Text style={styles.readinessPassSub}>
@@ -303,7 +303,7 @@ export function LeaderTripReviewStep({
             onPress={onBackToStep1 || onBackToForm}
             activeOpacity={0.8}
           >
-            <Ionicons name="create-outline" size={13} color="#125238" />
+            <Ionicons name="create-outline" size={13} color="#0e0f0c" />
             <Text style={styles.editStepBtnText}>Chỉnh sửa Bước 1</Text>
           </TouchableOpacity>
         </View>
@@ -328,7 +328,7 @@ export function LeaderTripReviewStep({
             </View>
             <Text style={styles.tripH1Title}>{form.name || "Chuyến đi mới"}</Text>
             <View style={styles.vfrsTagRow}>
-              <Ionicons name="shield-checkmark" size={12} color="#125238" />
+              <Ionicons name="shield-checkmark" size={12} color="#0e0f0c" />
               <Text style={styles.vfrsTagText}>Công khai VFRS · Đạt chuẩn</Text>
             </View>
           </View>
@@ -455,7 +455,7 @@ export function LeaderTripReviewStep({
 
           <View style={styles.infoColCard}>
             <Text style={styles.infoColLabel}>Chính sách hủy</Text>
-            <Text style={[styles.infoColVal, { color: "#125238" }]}>Linh hoạt</Text>
+            <Text style={[styles.infoColVal, { color: "#0e0f0c" }]}>Linh hoạt</Text>
             <Text style={styles.infoColSub}>Hoàn 100% trước 7 ngày</Text>
           </View>
         </View>
@@ -478,7 +478,7 @@ export function LeaderTripReviewStep({
             onPress={onBackToForm}
             activeOpacity={0.8}
           >
-            <Ionicons name="create-outline" size={13} color="#125238" />
+            <Ionicons name="create-outline" size={13} color="#0e0f0c" />
             <Text style={styles.editStepBtnText}>Chỉnh sửa Bước 2</Text>
           </TouchableOpacity>
         </View>
@@ -578,7 +578,7 @@ export function LeaderTripReviewStep({
                       Mốc GPS ({latStr}, {lngStr}) · Bán kính 50m
                     </Text>
                   </View>
-                  <Ionicons name="checkmark" size={18} color="#125238" />
+                  <Ionicons name="checkmark" size={18} color="#0e0f0c" />
                 </View>
               );
             })}
@@ -624,7 +624,7 @@ export function LeaderTripReviewStep({
         <View style={styles.explanationWrapBox}>
           <View style={styles.cardHeaderBetween}>
             <View style={styles.cardHeaderLeft}>
-              <Ionicons name="receipt-outline" size={18} color="#125238" />
+              <Ionicons name="receipt-outline" size={18} color="#0e0f0c" />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.expTitle}>Cơ cấu giải trình giá vé</Text>
                 <Text style={styles.expSub}>AUTOMATED PRICE EXPLANATION (TG-PTR-PRICING-01)</Text>
@@ -755,7 +755,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   headerSubtitle: {
     fontSize: 10,
@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   draftTopBtnText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     borderColor: "#bbf7d0",
   },
   stepperItemTextDone: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "700",
     flex: 1,
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -829,14 +829,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   stepperItemTextActive: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "800",
     flex: 1,
   },
   readinessCard: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     borderWidth: 1,
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
   readinessTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   readinessPassBox: {
     flexDirection: "row",
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
     borderColor: "#bbf7d0",
   },
   readinessPassTitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "800",
   },
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     borderWidth: 1,
@@ -943,13 +943,13 @@ const styles = StyleSheet.create({
   sectionEyebrow: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
     letterSpacing: 0.5,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     marginTop: 2,
   },
   editStepBtn: {
@@ -964,7 +964,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   editStepBtnText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "700",
   },
@@ -1006,7 +1006,7 @@ const styles = StyleSheet.create({
   tripH1Title: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   vfrsTagRow: {
     flexDirection: "row",
@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
   vfrsTagText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   itineraryBox: {
     marginTop: 12,
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
   itineraryTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   itinerarySub: {
     fontSize: 10,
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   templateActionBtn: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: Radius.sm,
@@ -1065,7 +1065,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   saveDescActionBtnText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "700",
   },
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   rentalTagsTitle: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   rentalTagsSub: {
     fontSize: 9,
@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   editorTabActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
   },
   editorTabText: {
     fontSize: 10,
@@ -1140,8 +1140,8 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   editorTabTextActive: {
-    color: "#ffffff",
-    fontWeight: "800",
+    color: "#0e0f0c",
+    fontWeight: "700",
   },
   descInputArea: {
     backgroundColor: "#ffffff",
@@ -1152,7 +1152,7 @@ const styles = StyleSheet.create({
     padding: 10,
     minHeight: 120,
     fontSize: 11,
-    color: "#121c2a",
+    color: "#0e0f0c",
     lineHeight: 16,
   },
   descPreviewArea: {
@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
   infoColVal: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     marginTop: 2,
   },
   infoColSub: {
@@ -1230,7 +1230,7 @@ const styles = StyleSheet.create({
   trailBannerTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   trailBannerSub: {
     fontSize: 10,
@@ -1241,7 +1241,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.pill,
@@ -1273,7 +1273,7 @@ const styles = StyleSheet.create({
   fourStatVal: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     marginTop: 2,
   },
   mapWrap: {
@@ -1283,7 +1283,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
   },
   countBadgePill: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.pill,
@@ -1323,7 +1323,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1340,10 +1340,10 @@ const styles = StyleSheet.create({
   cpWebName: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   cpReqBadge: {
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
   expTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   expSub: {
     fontSize: 9,
@@ -1396,7 +1396,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.pill,
@@ -1486,14 +1486,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   publishMainBtn: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingVertical: 14,
     borderRadius: Radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
   publishMainBtnActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
   },
   disabledBtn: {
     backgroundColor: "#94a3b8",
@@ -1516,7 +1516,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   saveDraftBottomBtnText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1525,7 +1525,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   backLinkBtnText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "700",
   },

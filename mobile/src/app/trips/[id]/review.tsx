@@ -38,11 +38,11 @@ export default function TripReviewScreen() {
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const tripName = params.name ?? "Bidoup – Núi Bà (2N1Đ)";
+  const tripName = params.name || "Chuyến đi";
 
-  const leaderName = params.leader ?? "Leader Hoàng Nam";
+  const leaderName = params.leader || "Leader phụ trách";
 
-  const tripDate = params.date ?? "18 – 19 Tháng 08, 2026";
+  const tripDate = params.date || "Chuyến đi đã hoàn thành";
 
   function toggleHighlight(highlight: string) {
     setSelectedHighlights((current) => {

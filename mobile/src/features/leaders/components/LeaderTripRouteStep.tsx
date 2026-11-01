@@ -97,7 +97,7 @@ export function LeaderTripRouteStep({
           onPress={onSaveDraft || (() => Alert.alert("Đã lưu nháp", "Lộ trình đã được lưu vào bản nháp."))}
           activeOpacity={0.8}
         >
-          <Ionicons name="bookmark-outline" size={14} color="#125238" />
+          <Ionicons name="bookmark-outline" size={14} color="#0e0f0c" />
           <Text style={styles.draftTopBtnText}>Lưu nháp</Text>
         </TouchableOpacity>
       </View>
@@ -105,7 +105,7 @@ export function LeaderTripRouteStep({
       {/* 3-Step Stepper Header */}
       <View style={styles.stepperContainer}>
         <View style={styles.stepperItemDone}>
-          <Ionicons name="checkmark-circle" size={16} color="#125238" />
+          <Ionicons name="checkmark-circle" size={16} color="#0e0f0c" />
           <Text style={styles.stepperItemTextDone} numberOfLines={1}>
             1. Thông tin cơ bản
           </Text>
@@ -137,7 +137,7 @@ export function LeaderTripRouteStep({
             <Text style={styles.errorText}>{submitError}</Text>
             {onRetry && (
               <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
-                <Ionicons name="reload" size={13} color="#125238" />
+                <Ionicons name="reload" size={13} color="#0e0f0c" />
                 <Text style={styles.retryBtnText}>Thử lại</Text>
               </TouchableOpacity>
             )}
@@ -149,7 +149,7 @@ export function LeaderTripRouteStep({
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderIcon}>
-            <Ionicons name="map" size={18} color="#125238" />
+            <Ionicons name="map" size={18} color="#0e0f0c" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>
@@ -164,7 +164,7 @@ export function LeaderTripRouteStep({
         {/* Cung đường đã thẩm định Box */}
         <View style={styles.verifiedBadgeBox}>
           <View style={styles.verifiedPill}>
-            <Ionicons name="shield-checkmark" size={14} color="#125238" />
+            <Ionicons name="shield-checkmark" size={14} color="#0e0f0c" />
             <Text style={styles.verifiedPillText}>Cung đường đã thẩm định</Text>
             <View style={styles.verifiedTag}>
               <Text style={styles.verifiedTagText}>VFRS Verified</Text>
@@ -194,7 +194,7 @@ export function LeaderTripRouteStep({
 
         {isLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color="#125238" />
+            <ActivityIndicator size="large" color="#0e0f0c" />
             <Text style={styles.loadingText}>Đang tải danh sách cung đường chuẩn từ hệ thống...</Text>
           </View>
         ) : filteredSuggestions.length === 0 ? (
@@ -358,7 +358,7 @@ export function LeaderTripRouteStep({
             {/* Safety Rules Box */}
             <View style={styles.safetyBox}>
               <View style={styles.safetyHeader}>
-                <Ionicons name="shield-outline" size={14} color="#125238" />
+                <Ionicons name="shield-outline" size={14} color="#0e0f0c" />
                 <Text style={styles.safetyTitle}>Quy chuẩn An toàn Trạm dừng VFRS</Text>
               </View>
               <Text style={styles.safetyText}>
@@ -376,7 +376,7 @@ export function LeaderTripRouteStep({
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderIcon}>
-            <Ionicons name="flag" size={18} color="#125238" />
+            <Ionicons name="flag" size={18} color="#0e0f0c" />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.checkpointHeaderTitleRow}>
@@ -406,7 +406,7 @@ export function LeaderTripRouteStep({
           </View>
         ) : currentCheckpoints.length === 0 ? (
           <View style={styles.disabledPromptBox}>
-            <ActivityIndicator size="small" color="#125238" />
+            <ActivityIndicator size="small" color="#0e0f0c" />
             <Text style={styles.disabledPromptText}>
               Đang đồng bộ tọa độ các trạm kiểm soát của cung đường này...
             </Text>
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   headerSubtitle: {
     fontSize: 10,
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   draftTopBtnText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     borderColor: "#bbf7d0",
   },
   stepperItemTextDone: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "700",
     flex: 1,
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   stepperItemTextActive: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "800",
     flex: 1,
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     borderWidth: 1,
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   cardSubtitle: {
     fontSize: 10,
@@ -656,10 +656,10 @@ const styles = StyleSheet.create({
   verifiedPillText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   verifiedTag: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 11,
-    color: "#121c2a",
+    color: "#0e0f0c",
     padding: 0,
   },
   loadingBox: {
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     marginTop: 6,
   },
   emptySub: {
@@ -778,14 +778,14 @@ const styles = StyleSheet.create({
   trailName: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     flex: 1,
   },
   trailNameSelected: {
-    color: "#125238",
+    color: "#0e0f0c",
   },
   cpBadge: {
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
   metricVal: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   diffChip: {},
   diffVal: {
@@ -856,7 +856,7 @@ const styles = StyleSheet.create({
   overviewTitle: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   overviewSubTitle: {
     fontSize: 10,
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   peakBadge: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
   statStripVal: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
     marginTop: 2,
   },
   safetyBox: {
@@ -914,7 +914,7 @@ const styles = StyleSheet.create({
   safetyTitle: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   safetyText: {
     fontSize: 9,
@@ -931,7 +931,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   reqCpBadgeDark: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 7,
     paddingVertical: 2.5,
     borderRadius: Radius.pill,
@@ -972,7 +972,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -989,10 +989,10 @@ const styles = StyleSheet.create({
   cpName: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   cpBadgeRequired: {
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
   backStep1BtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   rightActionsGroup: {
     flexDirection: "row",
@@ -1043,10 +1043,10 @@ const styles = StyleSheet.create({
   saveDraftBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#121c2a",
+    color: "#0e0f0c",
   },
   primaryProceedBtn: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: Radius.sm,
@@ -1093,7 +1093,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: {
     fontSize: 10,
-    color: "#125238",
+    color: "#0e0f0c",
     fontWeight: "700",
   },
 });
