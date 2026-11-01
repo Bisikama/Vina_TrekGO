@@ -9,6 +9,9 @@ import { RENTAL_CONTEXT_PORT } from './application/ports/rental-context.port';
 import { RENTAL_ORDER_PORT } from './application/ports/rental-order.port';
 import { RENTAL_QUOTE_PORT } from './application/ports/rental-quote.port';
 import { CancelRentalOrderUseCase } from './application/use-cases/cancel-rental-order.use-case';
+import { CancelRentalOrderSystemFaultUseCase } from './application/use-cases/cancel-rental-order-system-fault.use-case';
+import { RENTAL_SYSTEM_FAULT_CANCELLATION_PORT } from './application/ports/rental-system-fault-cancellation.port';
+import { PrismaRentalSystemFaultCancellationAdapter } from './infrastructure/adapters/prisma-rental-system-fault-cancellation.adapter';
 import { CreateRentalOrderUseCase } from './application/use-cases/create-rental-order.use-case';
 import { CreateRentalQuoteUseCase } from './application/use-cases/create-rental-quote.use-case';
 import { ExpirePendingRentalOrdersUseCase } from './application/use-cases/expire-pending-rental-orders.use-case';
@@ -55,6 +58,7 @@ import { BookingsModule } from '../../bookings/bookings.module';
     GetRentalPaymentUseCase,
     PreviewRentalCancellationUseCase,
     CancelRentalOrderUseCase,
+    CancelRentalOrderSystemFaultUseCase,
     ProcessRentalPaymentEventUseCase,
     ExpirePendingRentalOrdersUseCase,
     RentalOrderExpiryScheduler,
@@ -63,6 +67,7 @@ import { BookingsModule } from '../../bookings/bookings.module';
     { provide: RENTAL_AVAILABILITY_PORT, useClass: PrismaRentalAvailabilityAdapter },
     { provide: RENTAL_QUOTE_PORT, useClass: PrismaRentalQuoteAdapter },
     { provide: RENTAL_ORDER_PORT, useClass: PrismaRentalOrderAdapter },
+    { provide: RENTAL_SYSTEM_FAULT_CANCELLATION_PORT, useClass: PrismaRentalSystemFaultCancellationAdapter },
   ],
   exports: [ProcessRentalPaymentEventUseCase],
 })

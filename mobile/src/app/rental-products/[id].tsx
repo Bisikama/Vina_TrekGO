@@ -129,8 +129,14 @@ export default function RentalProductDetailScreen() {
   }
 
   const deposit = calculateProductDeposit(product);
-  const dailySubtotal = product.dailyPrice * quantity;
-  const depositSubtotal = deposit * quantity;
+  // Chưa chọn số lượng thì hiện giá cho 1 món thay vì 0đ.
+  const summaryQuantity = Math.max(quantity, 1);
+  const dailySubtotal = product.dailyPrice * summaryQuantity;
+  const depositSubtotal = deposit * summaryQuantity;
+  const depositPercentage =
+    typeof product.depositPerUnit === "number"
+      ? product.depositExplanation?.percentageOfReplacementValue ?? null
+      : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -157,8 +163,22 @@ export default function RentalProductDetailScreen() {
           )}
           <View style={styles.heroBottom}>
             <Text style={styles.category}>{product.category.name}</Text>
-            <Text style={styles.productName}>{product.name}</Text>
+            <Text style={styles.productName}>
+              {product.grade
+                ? product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
+                : product.name}
+            </Text>
             {product.sku ? <Text style={styles.sku}>SKU: {product.sku}</Text> : null}
+            {product.grade ? (
+              <Text
+                style={[
+                  styles.gradeBadge,
+                  product.grade === "GOOD_USED" && styles.gradeBadgeUsed,
+                ]}
+              >
+                {product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
+              </Text>
+            ) : null}
           </View>
           {(product.imageUrls?.length ?? 0) > 1 && (
             <View style={styles.galleryCounter}>
@@ -220,6 +240,11 @@ export default function RentalProductDetailScreen() {
             <Text style={styles.depositValue}>
               {deposit.toLocaleString("vi-VN")}đ
             </Text>
+            {depositPercentage !== null ? (
+              <Text style={styles.depositRatio}>
+                ≈ {depositPercentage.toLocaleString("vi-VN")}% giá trị thay thế
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -286,11 +311,11 @@ export default function RentalProductDetailScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Giá tham khảo</Text>
           <SummaryRow
-            label="Phí thuê mỗi ngày"
+            label={quantity > 0 ? `Phí thuê mỗi ngày (${quantity} món)` : "Phí thuê mỗi ngày (1 món)"}
             value={`${dailySubtotal.toLocaleString("vi-VN")}đ`}
           />
           <SummaryRow
-            label="Tổng tiền cọc dự kiến"
+            label={quantity > 0 ? `Tổng tiền cọc dự kiến (${quantity} món)` : "Tiền cọc dự kiến (1 món)"}
             value={`${depositSubtotal.toLocaleString("vi-VN")}đ`}
           />
           <View style={styles.notice}>
@@ -582,6 +607,20 @@ const styles = StyleSheet.create({
     marginTop: 3,
     color: Colors.onSurface,
     fontSize: 13,
+    fontWeight: "800",
+  },
+  depositRatio: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
+  gradeBadgeUsed: { backgroundColor: "#FFF6E0", color: "#8A5A00" },
+  gradeBadge: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    color: Colors.primaryDark,
+    fontSize: 10,
     fontWeight: "800",
   },
   sectionCard: {

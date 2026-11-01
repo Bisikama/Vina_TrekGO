@@ -2,8 +2,8 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, listMyGear,
-  updateMyGear, uploadUserGearPhoto, type GearCategory, type GearCondition,
+  confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, getGearCapabilities, listMyGear,
+  updateMyGear, uploadUserGearPhoto, type GearCapabilities, type GearCategory, type GearCondition,
   type GearExtractionDraft, type GearItemInput, type UserGearItem,
 } from "@/features/rentals/services/gear.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
@@ -26,9 +26,28 @@ const attributeConfig: Record<GearCategory, Array<[string, string, string]>> = {
   RAIN_GEAR: [["waterproof_mm", "Chống nước", "mm"], ["coverage", "Phạm vi che", "coverage"], ["weight_g", "Trọng lượng", "g"]],
 };
 
+const BASE_FIELD_LABELS: Record<string, string> = { name: "Tên món đồ", brand: "Thương hiệu", category: "Loại đồ", condition: "Tình trạng" };
+// Nhãn tiếng Việt cho field AI trả về; field ngoài bảng thông số (ví dụ attributes.gender) giữ nguyên tên kỹ thuật.
+function fieldLabel(path: string) {
+  if (BASE_FIELD_LABELS[path]) return BASE_FIELD_LABELS[path];
+  const key = path.replace(/^attributes\./, "");
+  for (const rows of Object.values(attributeConfig)) {
+    const row = rows.find(([attr]) => attr === key);
+    if (row) return row[1];
+  }
+  return key;
+}
+const safeHttpUrl = (value: string | null | undefined) => (value && /^https?:\/\//i.test(value) ? value : null);
 const categoryLabel = (key: GearCategory) => categories.find(([value]) => value === key)?.[1] ?? key;
 const categoryIcon = (key: GearCategory) => categories.find(([value]) => value === key)?.[2] ?? "🎒";
 const conditionLabel = (key: GearCondition) => conditions.find(([value]) => value === key)?.[1] ?? key;
+// Nguồn từng thông số (Gear phase 2). Chỉ là dấu vết dữ liệu, không phải xác minh.
+const attributeSourceLabel: Record<string, string> = {
+  USER: "Bạn nhập",
+  AI_IMAGE: "AI đọc ảnh",
+  AI_LINK: "AI đọc link",
+  VERIFIED_CATALOG: "Catalog đã duyệt",
+};
 const sourceLabel = (source: UserGearItem["source"]) => source === "ai_image" ? "AI Camera" : source === "ai_link" ? "AI Link" : "Nhập tay";
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-[#27735a] focus:ring-2 focus:ring-emerald-100";
 
@@ -40,7 +59,20 @@ function issueOf(reason: unknown) {
     code: String(error?.code ?? ""),
     status: Number((reason as { response?: { status?: number } })?.response?.status ?? 0),
     details: (error?.details ?? {}) as Record<string, unknown>,
+    retryable: error?.retryable === true,
   };
+}
+
+// Lỗi kho ảnh tạm thời (ví dụ read ECONNRESET): không hiện chi tiết kỹ thuật, cho người dùng thử lại.
+const MEDIA_RETRY_MESSAGE = "Kết nối tới kho ảnh bị gián đoạn tạm thời. Vui lòng thử lại; nếu vẫn lỗi, bạn có thể nhập tay.";
+function isRetryableMediaIssue(issue: ReturnType<typeof issueOf>) {
+  return issue.code === "MEDIA_PROVIDER_ERROR" && issue.retryable;
+}
+
+// Tiện ích chưa dùng được (tắt hoặc thiếu cấu hình) thì trả câu giải thích của server; dùng được thì null.
+function capabilityNotice(status: GearCapabilities["imageExtraction"] | undefined) {
+  if (!status || (status.enabled && status.configured)) return null;
+  return status.messageVi;
 }
 
 export function RentalWardrobePage() {
@@ -55,8 +87,20 @@ export function RentalWardrobePage() {
   const [duplicate, setDuplicate] = useState<{ input: GearItemInput; item?: UserGearItem; draft?: GearExtractionDraft; details: Record<string, unknown> } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [aiProgress, setAiProgress] = useState<{ source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" } | null>(null);
+  const [capabilities, setCapabilities] = useState<GearCapabilities | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const aiRequestLock = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    // Chỉ để thông báo trước; thiếu dữ liệu này thì nút AI vẫn dùng được và server trả bản nháp nhập tay.
+    getGearCapabilities()
+      .then((result) => { if (active) setCapabilities(result); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  const imageNotice = capabilityNotice(capabilities?.imageExtraction);
+  const linkNotice = capabilityNotice(capabilities?.linkExtraction);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +154,8 @@ export function RentalWardrobePage() {
       const issue = issueOf(reason);
       if (issue.status === 409 || issue.code === "GEAR_CONCURRENCY_CONFLICT") {
         setNotice("Ảnh này đang được TrekGo AI phân tích. Vui lòng chờ tác vụ hiện tại hoàn tất rồi thử lại, không cần nạp ảnh nhiều lần.");
+      } else if (isRetryableMediaIssue(issue)) {
+        setError(MEDIA_RETRY_MESSAGE);
       } else {
         setError(getRentalApiErrorMessage(reason, reason instanceof Error ? reason.message : "Không thể đọc ảnh bằng AI."));
       }
@@ -138,6 +184,10 @@ export function RentalWardrobePage() {
         </div>
         <div className="flex flex-col gap-3 lg:items-end">
           <span className="w-fit rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">✦ AI · giới hạn 20 lượt trích xuất/ngày</span>
+          {(imageNotice || linkNotice) && <div className="max-w-md space-y-1 text-xs leading-5 text-amber-700 lg:text-right">
+            {imageNotice && <p>Ảnh: {imageNotice}</p>}
+            {linkNotice && <p>Link: {linkNotice}</p>}
+          </div>}
           <div className="flex flex-wrap gap-2">
             <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
             <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) fileRef.current?.click(); }} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "IMAGE" ? "⛰️ Đang phân tích..." : "✦ Nạp ảnh bằng AI"}</button>
@@ -146,6 +196,8 @@ export function RentalWardrobePage() {
           </div>
         </div>
       </div>
+
+      <ExtractionGuide capabilities={capabilities} />
 
       {aiProgress && <AiExtractionLoader source={aiProgress.source} stage={aiProgress.stage} />}
       {busy && !aiProgress && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">⛰️ TrekGo đang cập nhật hành trang...</div>}
@@ -185,6 +237,8 @@ export function RentalWardrobePage() {
         setLinkOpen(false);
         if (issue.status === 409 || issue.code === "GEAR_CONCURRENCY_CONFLICT") {
           setNotice("Link này đang được TrekGo AI phân tích. Vui lòng chờ tác vụ hiện tại hoàn tất rồi thử lại, không cần gửi link nhiều lần.");
+        } else if (isRetryableMediaIssue(issue)) {
+          setError(MEDIA_RETRY_MESSAGE);
         } else {
           setError(getRentalApiErrorMessage(reason, "Không thể đọc link sản phẩm."));
         }
@@ -238,7 +292,7 @@ function GearCard({ item, onEdit, onDelete }: { item: UserGearItem; onEdit: () =
     <div className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">{categoryLabel(item.category)}</p><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">● {conditionLabel(item.condition)}</span></div>
       <h3 className="mt-2 line-clamp-2 min-h-12 text-lg font-black leading-6 text-slate-950">{item.name}</h3>
       <p className="mt-1 text-xs text-slate-500">{item.brand || "Chưa khai thương hiệu"}</p>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-100 py-3">{stats.length ? stats.map(([key, label, unit]) => <div key={key} className="min-w-0"><p className="truncate text-[9px] font-bold uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-slate-800">{formatAttribute(item.attributes[key], unit)}</p></div>) : <p className="col-span-3 text-xs text-amber-700">⚠ Chưa có thông số kỹ thuật</p>}</div>
+      <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-100 py-3">{stats.length ? stats.map(([key, label, unit]) => <div key={key} className="min-w-0"><p className="truncate text-[9px] font-bold uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-black text-slate-800">{formatAttribute(item.attributes[key], unit)}</p>{item.attributeProvenance?.[key]?.source ? <p className="mt-0.5 truncate text-[9px] text-slate-400">{attributeSourceLabel[item.attributeProvenance[key].source] ?? item.attributeProvenance[key].source}</p> : null}</div>) : <p className="col-span-3 text-xs text-amber-700">⚠ Chưa có thông số kỹ thuật</p>}</div>
       <div className="mt-4 flex items-center justify-between"><button onClick={onDelete} className="rounded-lg px-2 py-2 text-xs font-bold text-red-600 hover:bg-red-50">♲ Gỡ bỏ</button><button onClick={onEdit} className="rounded-xl bg-[#e8f0ff] px-4 py-2.5 text-xs font-black text-slate-900">Xem & Sửa ›</button></div>
     </div>
   </article>;
@@ -246,25 +300,47 @@ function GearCard({ item, onEdit, onDelete }: { item: UserGearItem; onEdit: () =
 
 function GearEditor({ context, busy, onClose, onSave }: { context: { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string }; busy: boolean; onClose: () => void; onSave: (input: GearItemInput) => void }) {
   const seed = context.item ?? context.draft?.extractedData;
-  const [category, setCategory] = useState<GearCategory>((seed?.category as GearCategory) ?? "BACKPACK");
+  // Không đoán loại đồ: AI không nhận ra (category null) hoặc nhập tay mới thì người dùng phải tự chọn.
+  const [category, setCategory] = useState<GearCategory | "">(seed?.category ?? "");
   const [attributes, setAttributes] = useState<Record<string, unknown>>(seed?.attributes ?? {});
+  const manualEntry = context.draft?.manualEntry?.required ? context.draft.manualEntry : null;
+  // FOUND/MISSING theo từng thuộc tính; key có thể có tiền tố "attributes.".
+  const fieldStatus = (key: string) => {
+    const map = context.draft?.extractionFieldProvenance;
+    if (!map || category !== (context.draft?.extractedData.category ?? "")) return null;
+    return map[key] ?? map[`attributes.${key}`] ?? null;
+  };
+  const itemSource = (key: string) => context.item?.attributeProvenance?.[key]?.source ?? null;
+  const warnings = context.draft && !manualEntry ? (context.draft.extractedData.warnings ?? []).filter(Boolean) : [];
+  const categoryUnknown = Boolean(context.draft) && !manualEntry && !context.draft?.extractedData.category;
   function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = new FormData(event.currentTarget); const parsed: Record<string, unknown> = {};
+    event.preventDefault(); if (!category) return;
+    const form = new FormData(event.currentTarget); const parsed: Record<string, unknown> = {};
     attributeConfig[category].forEach(([key, , unit]) => { const raw = String(form.get(`attr_${key}`) ?? ""); if (!raw) parsed[key] = null; else if (unit === "bool") parsed[key] = raw === "true"; else if (unit === "coverage") parsed[key] = raw; else parsed[key] = Number(raw); });
     onSave({ name: String(form.get("name") ?? "").trim(), brand: String(form.get("brand") ?? "").trim() || null, category, condition: String(form.get("condition")) as GearCondition, attributes: parsed, photoRef: context.photoRef ?? context.item?.photoRef ?? null });
   }
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#27735a]">{context.draft ? "AI · Bản nháp cần xác nhận" : context.item ? "Tủ đồ cá nhân" : "Nhập tay số liệu"}</p><h2 className="mt-1 text-xl font-black text-slate-950">{context.item ? "Xem & sửa trang bị" : "Thêm trang bị vào tủ"}</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full bg-slate-100">✕</button></div>
+    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#27735a]">{manualEntry ? "Bản nháp · cần nhập tay" : context.draft ? "AI · Bản nháp cần xác nhận" : context.item ? "Tủ đồ cá nhân" : "Nhập tay số liệu"}</p><h2 className="mt-1 text-xl font-black text-slate-950">{context.item ? "Xem & sửa trang bị" : "Thêm trang bị vào tủ"}</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full bg-slate-100">✕</button></div>
     <div className="grid gap-4 p-6 sm:grid-cols-2">
-      {context.draft && <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900">✦ AI đã tạo bản nháp. Hãy kiểm tra các field chưa rõ trước khi xác nhận lưu.</div>}
+      {manualEntry ? <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">{manualEntry.messageVi}</div>
+        : context.draft && <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900">✦ AI đã tạo bản nháp. Hãy kiểm tra các field chưa rõ trước khi xác nhận lưu.</div>}
+      {context.draft && <p className="sm:col-span-2 text-[11px] text-slate-500">
+        Nguồn: <b>{context.draft.sourceType === "LINK" ? "Link sản phẩm" : "Ảnh tem/mác"}</b>
+        {" · "}Bản nháp hiệu lực đến <b>{formatDateTime(context.draft.expiresAt)}</b> (24 giờ kể từ khi tạo)
+        {manualEntry ? <> · Mã lý do: <code className="rounded bg-slate-100 px-1">{manualEntry.reasonCode}</code> · không tính vào lượt AI</> : null}
+      </p>}
+      {context.draft && !manualEntry && <DraftSourceDetails data={context.draft.extractedData} />}
+      {categoryUnknown && <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">AI chưa xác định được loại đồ. Hãy chọn đúng loại đồ trước khi nhập thông số.</div>}
+      {warnings.length > 0 && <ul className="sm:col-span-2 list-disc space-y-1 rounded-xl border border-slate-200 bg-slate-50 py-3 pl-7 pr-3 text-xs text-slate-600">{warnings.slice(0, 6).map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
       <Field label="Tên món đồ"><input name="name" required defaultValue={seed?.name ?? ""} className={inputClass} placeholder="Ví dụ: Balo Naturehike 45L" /></Field>
       <Field label="Thương hiệu"><input name="brand" defaultValue={seed?.brand ?? ""} className={inputClass} placeholder="Không bắt buộc" /></Field>
-      <Field label="Loại đồ"><select name="category" value={category} onChange={(event) => { setCategory(event.target.value as GearCategory); setAttributes({}); }} className={inputClass}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+      <Field label="Loại đồ"><select name="category" required value={category} onChange={(event) => { setCategory(event.target.value as GearCategory | ""); setAttributes({}); }} className={inputClass}><option value="" disabled>Chọn loại đồ</option>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
       <Field label="Tình trạng"><select name="condition" defaultValue={(seed?.condition as GearCondition) ?? "good"} className={inputClass}>{conditions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
       <div className="sm:col-span-2 mt-2"><p className="text-sm font-black text-slate-900">Thông số kỹ thuật</p><p className="mt-1 text-xs text-slate-500">Để trống nếu chưa biết, TrekGo không tự biến thành 0.</p></div>
-      {attributeConfig[category].map(([key, label, unit]) => <Field key={key} label={`${label}${!["bool", "coverage"].includes(unit) ? ` (${unit})` : ""}`}>{unit === "bool" ? <select name={`attr_${key}`} defaultValue={attributes[key] === true ? "true" : attributes[key] === false ? "false" : ""} className={inputClass}><option value="">Chưa biết</option><option value="true">Có</option><option value="false">Không</option></select> : unit === "coverage" ? <select name={`attr_${key}`} defaultValue={String(attributes[key] ?? "")} className={inputClass}><option value="">Chưa biết</option><option value="UPPER_BODY">Thân trên</option><option value="FULL_BODY">Toàn thân</option></select> : <input name={`attr_${key}`} type="number" defaultValue={typeof attributes[key] === "number" ? String(attributes[key]) : ""} className={inputClass} placeholder="Chưa biết" />}</Field>)}
+      {!category && <p className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500">Chọn loại đồ để hiện các thông số kỹ thuật tương ứng.</p>}
+      {category && attributeConfig[category].map(([key, label, unit]) => <Field key={key} label={`${label}${!["bool", "coverage"].includes(unit) ? ` (${unit})` : ""}${fieldStatus(key) === "FOUND" ? " · AI đọc được" : fieldStatus(key) === "MISSING" ? " · AI không thấy" : itemSource(key) ? ` · ${attributeSourceLabel[itemSource(key) as string] ?? itemSource(key)}` : ""}`}>{unit === "bool" ? <select name={`attr_${key}`} defaultValue={attributes[key] === true ? "true" : attributes[key] === false ? "false" : ""} className={inputClass}><option value="">Chưa biết</option><option value="true">Có</option><option value="false">Không</option></select> : unit === "coverage" ? <select name={`attr_${key}`} defaultValue={String(attributes[key] ?? "")} className={inputClass}><option value="">Chưa biết</option><option value="UPPER_BODY">Thân trên</option><option value="FULL_BODY">Toàn thân</option></select> : <input name={`attr_${key}`} type="number" defaultValue={typeof attributes[key] === "number" ? String(attributes[key]) : ""} className={inputClass} placeholder="Chưa biết" />}</Field>)}
     </div>
-    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold">Hủy</button><button disabled={busy} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
+    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold">Hủy</button><button disabled={busy || !category} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
   </form></div>;
 }
 
@@ -273,3 +349,58 @@ function LinkDialog({ busy, onClose, onSubmit }: { busy: boolean; onClose: () =>
 function DuplicateDialog({ data, busy, onBack, onConfirm }: { data: Record<string, unknown>; busy: boolean; onBack: () => void; onConfirm: () => void }) { const similar = data.similarItem as { name?: string } | undefined; const matched = Array.isArray(data.matchedFields) ? data.matchedFields.join(", ") : "các thông số kỹ thuật"; return <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4"><div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="bg-orange-50 px-6 py-5"><p className="text-[10px] font-black uppercase tracking-wider text-orange-600">409 · Possible duplicate</p><h3 className="mt-1 text-lg font-black">Tủ đã có một món có thông số tương tự</h3></div><div className="p-6 text-sm text-slate-600"><p>Món tương tự: <b className="text-slate-950">{similar?.name ?? "Trang bị đã lưu"}</b></p><p className="mt-2">Thông số trùng: <b>{matched}</b></p><p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs">Đây chỉ là so sánh thông số, không khẳng định cùng một vật thật.</p></div><div className="flex justify-end gap-3 border-t p-4"><button onClick={onBack} className="rounded-xl border px-4 py-2.5 text-sm font-bold">Quay lại chỉnh sửa</button><button disabled={busy} onClick={onConfirm} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-black text-white">Vẫn lưu thêm</button></div></div></div>; }
 function State({ title, description }: { title: string; description: string }) { return <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><div className="text-4xl">🎒</div><p className="mt-4 font-black text-slate-900">{title}</p><p className="mt-2 text-sm text-slate-500">{description}</p></div>; }
 function formatAttribute(value: unknown, unit: string) { if (value === true) return "Có"; if (value === false) return "Không"; if (value === null || value === undefined || value === "") return "Chưa biết"; if (unit === "coverage") return value === "FULL_BODY" ? "Toàn thân" : "Thân trên"; return `${String(value)}${unit}`; }
+function formatDateTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date); }
+function CapabilityRow({ label, status }: { label: string; status?: GearCapabilities["imageExtraction"] }) {
+  const ready = Boolean(status?.enabled && status.configured);
+  const tone = !status ? "bg-slate-100 text-slate-600" : ready ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800";
+  const badge = !status ? "Đang kiểm tra" : ready ? "Sẵn sàng" : !status.enabled ? "Đang tắt" : "Chưa cấu hình";
+  return <div className="flex flex-col gap-1 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between">
+    <div><p className="text-xs font-black text-slate-800">{label}</p>{status && <p className="mt-1 text-[11px] leading-5 text-slate-500">{status.messageVi}</p>}</div>
+    <span className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${tone}`}>{badge}</span>
+  </div>;
+}
+function ExtractionGuide({ capabilities }: { capabilities: GearCapabilities | null }) {
+  return <details className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+    <summary className="cursor-pointer font-black text-slate-900">Cách TrekGo đọc thông số trang bị (AI là tuỳ chọn)</summary>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="space-y-2">
+        <p className="text-xs font-black uppercase tracking-wider text-[#27735a]">Trạng thái tiện ích</p>
+        <CapabilityRow label="Đọc từ ảnh tem/mác" status={capabilities?.imageExtraction} />
+        <CapabilityRow label="Đọc từ link sản phẩm" status={capabilities?.linkExtraction} />
+        <CapabilityRow label="Tư vấn theo bộ quy tắc" status={capabilities?.ruleBasedAdvice} />
+        <CapabilityRow label="Tư vấn bổ sung bằng AI" status={capabilities?.aiAdvice} />
+      </div>
+      <div className="space-y-3 text-xs leading-5">
+        <p className="font-black uppercase tracking-wider text-[#27735a]">Cách dùng</p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li><b>Ảnh:</b> chụp rõ tem/mác ghi tính năng của đồ (chống nước, nhiệt độ, chất liệu, dung tích...). Ảnh toàn thân món đồ thường không đọc được thông số. JPEG/PNG/WebP, tối đa 5MB.</li>
+          <li><b>Link:</b> dán đường dẫn trang sản phẩm có bảng thông số kỹ thuật.</li>
+          <li>TrekGo tạo <b>bản nháp</b>; bạn kiểm tra, sửa field chưa rõ rồi bấm xác nhận để lưu vào tủ.</li>
+        </ol>
+        <p className="font-black uppercase tracking-wider text-[#27735a]">Hạn mức</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>20 lượt đọc bằng AI mỗi ngày (theo giờ Việt Nam). Kết quả trùng ảnh/link đã đọc được dùng lại, không tính thêm lượt.</li>
+          <li>Hết lượt hoặc AI không dùng được: vẫn nhận bản nháp để <b>nhập tay</b>, không báo lỗi và không tính lượt.</li>
+          <li>Bản nháp có hiệu lực 24 giờ. Tủ đồ tối đa 50 món, mỗi món tối đa 3 ảnh.</li>
+        </ul>
+      </div>
+    </div>
+  </details>;
+}
+function DraftSourceDetails({ data }: { data: GearExtractionDraft["extractedData"] }) {
+  const url = safeHttpUrl(data.url);
+  const evidence = (data.evidence ?? []).filter((item) => item.originalText);
+  const unknown = (data.fieldsUnknown ?? []).filter(Boolean);
+  if (!url && !evidence.length && !unknown.length && !data._cacheHit) return null;
+  return <div className="sm:col-span-2 space-y-2 rounded-xl border border-slate-200 p-3 text-xs text-slate-600">
+    {url && <p>Trang nguồn: <a href={url} target="_blank" rel="noopener noreferrer" className="break-all font-bold text-[#165c45] underline">{url}</a>{data.readAt ? <> · đọc lúc {formatDateTime(data.readAt)}</> : null}</p>}
+    {data._cacheHit && <p className="text-emerald-800">Kết quả dùng lại từ lần đọc trước của cùng nguồn, không tính thêm lượt AI.</p>}
+    {evidence.length > 0 && <details open>
+      <summary className="cursor-pointer font-black text-slate-800">Căn cứ AI đọc được ({evidence.length})</summary>
+      <ul className="mt-2 space-y-1.5">{evidence.map((item) => <li key={item.id} className="rounded-lg bg-slate-50 px-3 py-2">
+        <b className="text-slate-800">{fieldLabel(item.fieldPath)}:</b> “{item.originalText}”{item.sourceLocator ? <span className="text-slate-400"> · {item.sourceLocator}</span> : null}
+      </li>)}</ul>
+    </details>}
+    {unknown.length > 0 && <p>Chưa đọc được: <b>{unknown.map(fieldLabel).join(", ")}</b>. Bạn có thể tự nhập nếu biết.</p>}
+  </div>;
+}

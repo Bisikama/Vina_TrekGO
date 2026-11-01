@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+
+import { useLogout } from "@/features/auth/hooks/useLogout";
 
 const navigation = [
   {
@@ -72,6 +74,14 @@ function NavIcon({ type }: { type: string }) {
 
 export function StaffShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout, isLoading: loggingOut } = useLogout();
+
+  async function handleLogout() {
+    // useLogout luôn xoá phiên cục bộ (kể cả khi API đăng xuất lỗi) nên chuyển về trang đăng nhập.
+    await logout();
+    router.replace("/public/login");
+  }
 
   return (
     <div className="min-h-screen bg-[#f4f7fd] text-slate-900">
@@ -130,7 +140,18 @@ export function StaffShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto p-3">
+        <div className="mt-auto space-y-3 p-3">
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7" />
+            </svg>
+            {loggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
+          </button>
           <div className="rounded-xl border border-blue-100 bg-[#eef4ff] p-4 text-[11px] text-slate-700">
             <div className="flex items-center justify-between">
               <span className="font-bold">Hub North-01</span>

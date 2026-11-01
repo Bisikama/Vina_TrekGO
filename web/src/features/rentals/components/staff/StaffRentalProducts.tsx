@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { useAuthStore } from "@/features/auth/store/authStore";
 import { getRentalCategories } from "@/features/rentals/services/rental.api";
 import {
   changeStaffRentalProductStatus,
@@ -19,6 +20,7 @@ import {
 import type {
   RentalCategory,
   RentalDepositPolicyType,
+  RentalGrade,
   RentalPagination,
   RentalProduct,
   StaffRentalProductStatus,
@@ -36,7 +38,7 @@ const statusConfig: Record<
   { label: string; className: string }
 > = {
   ACTIVE: {
-    label: "Đang bán",
+    label: "Đang cho thuê",
     className: "bg-emerald-100 text-emerald-800",
   },
   INACTIVE: {
@@ -62,6 +64,20 @@ type ProductForm = {
   imageMediaIds: string;
   recommendationTags: string;
   specJson: string;
+  grade: RentalGrade | "";
+  gradeGroupId: string;
+};
+
+const GRADE_LABELS: Record<RentalGrade, string> = {
+  LIKE_NEW: "Mới",
+  GOOD_USED: "Sử dụng tốt",
+};
+
+// Chỉ là gợi ý, lấy từ cặp mẫu trong seed backend (rental-product.seed.ts):
+// "cọc ~30% / ~20% giá trị thay thế". ADMIN vẫn tự nhập số tiền cọc.
+const GRADE_DEPOSIT_HINT_PERCENT: Record<RentalGrade, number> = {
+  LIKE_NEW: 30,
+  GOOD_USED: 20,
 };
 
 const emptyForm: ProductForm = {
@@ -77,10 +93,12 @@ const emptyForm: ProductForm = {
   imageMediaIds: "",
   recommendationTags: "",
   specJson: "{}",
+  grade: "",
+  gradeGroupId: "",
 };
 
 const inputClass =
-  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
+  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
 
 function asStatus(value?: string): StaffRentalProductStatus {
   if (value === "ACTIVE" || value === "ARCHIVED") {
@@ -129,7 +147,15 @@ function parseSpec(value: string) {
   return parsed as Record<string, unknown>;
 }
 
-export function StaffRentalProducts() {
+type StaffRentalProductsProps = {
+  /** "admin": hiển thị trong khung Admin (chữ lớn hơn, nét đậm vừa, tiêu đề theo cổng admin). */
+  variant?: "staff" | "admin";
+};
+
+export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsProps = {}) {
+  const isAdminLayout = variant === "admin";
+  // Policy RB-POL-03: chỉ ADMIN đặt tiền cọc và giá trị thay thế. STAFF_INVENTORY không gửi hai field này.
+  const isAdmin = useAuthStore((state) => state.user?.role === "ADMIN");
   const [products, setProducts] = useState<RentalProduct[]>([]);
   const [categories, setCategories] = useState<RentalCategory[]>([]);
   const [pagination, setPagination] =
@@ -214,6 +240,39 @@ export function StaffRentalProducts() {
     };
   }, [products]);
 
+  // Nhóm hạng đang có trên trang hiện tại (để thêm hạng còn thiếu vào nhóm sẵn có).
+  const gradeGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { id: string; label: string; grades: RentalGrade[]; members: RentalProduct[] }
+    >();
+    products.forEach((product) => {
+      if (!product.gradeGroupId || !product.grade) return;
+      const current = groups.get(product.gradeGroupId);
+      if (current) {
+        current.grades.push(product.grade);
+        current.members.push(product);
+      } else
+        groups.set(product.gradeGroupId, {
+          id: product.gradeGroupId,
+          label: product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim(),
+          grades: [product.grade],
+          members: [product],
+        });
+    });
+    return [...groups.values()];
+  }, [products]);
+
+  const selectedGradeGroup = gradeGroups.find(
+    (group) => group.id === form.gradeGroupId,
+  );
+  const gradeDepositHint =
+    form.grade && Number(form.replacementValue) > 0
+      ? Math.round(
+          (Number(form.replacementValue) * GRADE_DEPOSIT_HINT_PERCENT[form.grade]) / 100,
+        )
+      : null;
+
   function requestReload(message?: string) {
     setLoading(true);
     setNotice(message ?? "");
@@ -248,6 +307,8 @@ export function StaffRentalProducts() {
       imageMediaIds: (product.imageMediaIds ?? []).join("\n"),
       recommendationTags: (product.recommendationTags ?? []).join(", "),
       specJson: stringifySpec(product.spec),
+      grade: product.grade ?? "",
+      gradeGroupId: product.gradeGroupId ?? "",
     });
     setError("");
     setModalMode("edit");
@@ -278,8 +339,12 @@ export function StaffRentalProducts() {
         throw new Error("Giá thuê mỗi ngày không hợp lệ.");
       }
 
-      if (!Number.isFinite(replacementValue) || replacementValue < 0) {
+      if (isAdmin && (!Number.isFinite(replacementValue) || replacementValue < 0)) {
         throw new Error("Giá trị thay thế không hợp lệ.");
+      }
+
+      if (form.grade && form.depositType !== "FIXED") {
+        throw new Error("Sản phẩm có hạng phải dùng tiền cọc cố định.");
       }
 
       const depositPolicy =
@@ -297,8 +362,7 @@ export function StaffRentalProducts() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         dailyPrice,
-        replacementValue,
-        depositPolicy,
+        ...(isAdmin ? { replacementValue, depositPolicy } : {}),
         imageMediaIds: splitValues(form.imageMediaIds),
         spec,
         recommendationTags: splitValues(form.recommendationTags),
@@ -310,10 +374,20 @@ export function StaffRentalProducts() {
           sku: form.sku.trim(),
           currency: "VND",
           ...sharedInput,
+          ...(isAdmin && form.grade
+            ? {
+                grade: form.grade,
+                ...(form.gradeGroupId ? { gradeGroupId: form.gradeGroupId } : {}),
+              }
+            : {}),
         });
         setModalMode(null);
         setSelectedProduct(null);
-        requestReload("Đã tạo sản phẩm ở trạng thái chưa công khai.");
+        requestReload(
+          isAdmin
+            ? "Đã tạo sản phẩm."
+            : "Đã tạo sản phẩm ở trạng thái chưa công khai. ADMIN cần đặt tiền cọc và giá trị thay thế trước khi mở cho thuê.",
+        );
       } else if (selectedProduct?.id && selectedProduct.version) {
         await updateStaffRentalProduct(selectedProduct.id, {
           expectedVersion: selectedProduct.version,
@@ -374,24 +448,35 @@ export function StaffRentalProducts() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-70px)] p-6">
+    <main
+      className={
+        isAdminLayout
+          ? "p-6 text-[15px] [&_.font-black]:font-bold [&_.text-xs]:text-[13px]"
+          : "min-h-[calc(100vh-70px)] p-6"
+      }
+    >
       <section className="mx-auto max-w-[1500px] space-y-5">
         <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-800">
-                W02 · Rental Catalog
-              </span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold text-blue-700">
-                API thật · Optimistic locking
-              </span>
-            </div>
-
-            <h1 className="mt-3 text-2xl font-black text-[#123f2d]">
-              Quản lý danh mục cho thuê
+            {isAdminLayout ? (
+              <p className="text-sm text-gray-500">
+                Hậu cần &amp; Vật tư <span className="mx-1.5">›</span>
+                <span className="font-medium text-gray-900">Thiết bị cho thuê</span>
+              </p>
+            ) : null}
+            <h1
+              className={
+                isAdminLayout
+                  ? "mt-1 text-2xl font-bold text-gray-900"
+                  : "text-2xl font-black text-[#123f2d]"
+              }
+            >
+              {isAdminLayout ? "Thiết bị cho thuê" : "Quản lý danh mục cho thuê"}
             </h1>
             <p className="mt-1 text-xs text-slate-500">
-              Tạo loại thiết bị, cấu hình giá thuê và chỉ công khai khi dữ liệu đã hoàn thiện.
+              {isAdminLayout
+                ? "Đặt giá thuê, giá trị thay thế, tiền cọc và tình trạng sản phẩm. Chỉ công khai khi dữ liệu đã hoàn thiện."
+                : "Tạo loại thiết bị, cấu hình giá thuê và chỉ công khai khi dữ liệu đã hoàn thiện."}
             </p>
           </div>
 
@@ -441,7 +526,7 @@ export function StaffRentalProducts() {
             color="text-slate-950"
           />
           <StatCard
-            label="Đang bán trên trang"
+            label="Đang cho thuê trên trang"
             value={pageStats.active}
             detail="User có thể nhìn thấy"
             color="text-emerald-700"
@@ -477,7 +562,7 @@ export function StaffRentalProducts() {
             <div className="flex flex-wrap gap-2">
               {([
                 ["", "Tất cả"],
-                ["ACTIVE", "Đang bán"],
+                ["ACTIVE", "Đang cho thuê"],
                 ["INACTIVE", "Chưa công khai"],
                 ["ARCHIVED", "Đã lưu trữ"],
               ] as const).map(([value, label]) => (
@@ -544,6 +629,13 @@ export function StaffRentalProducts() {
                             <div>
                               <p className="text-xs font-black text-slate-950">
                                 {product.name}
+                                {product.grade ? (
+                                  <span
+                                    className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${product.grade === "LIKE_NEW" ? "bg-[#E4F6D8] text-[#17603F]" : "bg-[#FFF2D1] text-[#8A5A00]"}`}
+                                  >
+                                    {GRADE_LABELS[product.grade]}
+                                  </span>
+                                ) : null}
                               </p>
                               <p className="mt-1 font-mono text-[10px] font-bold text-emerald-800">
                                 {product.sku || "NO-SKU"}
@@ -670,6 +762,7 @@ export function StaffRentalProducts() {
                 <Field label="Danh mục">
                   <select
                     required
+                    disabled={Boolean(form.gradeGroupId)}
                     value={form.categoryId}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -756,7 +849,8 @@ export function StaffRentalProducts() {
               </Field>
               <Field label="Giá trị thay thế (VND)">
                 <input
-                  required
+                  required={isAdmin}
+                  disabled={!isAdmin || Boolean(form.gradeGroupId)}
                   type="number"
                   min={0}
                   value={form.replacementValue}
@@ -774,6 +868,7 @@ export function StaffRentalProducts() {
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Kiểu tiền cọc">
                 <select
+                  disabled={!isAdmin || Boolean(form.grade)}
                   value={form.depositType}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -790,7 +885,8 @@ export function StaffRentalProducts() {
               {form.depositType === "FIXED" ? (
                 <Field label="Tiền cọc cố định (VND)">
                   <input
-                    required
+                    required={isAdmin}
+                    disabled={!isAdmin}
                     type="number"
                     min={0}
                     value={form.depositAmount}
@@ -806,7 +902,8 @@ export function StaffRentalProducts() {
               ) : (
                 <Field label="Tỷ lệ cọc (%)">
                   <input
-                    required
+                    required={isAdmin}
+                    disabled={!isAdmin}
                     type="number"
                     min={0}
                     max={100}
@@ -822,6 +919,120 @@ export function StaffRentalProducts() {
                 </Field>
               )}
             </div>
+
+            {isAdmin && modalMode === "create" ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-black text-slate-800">Tình trạng (tuỳ chọn)</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  Dùng khi cùng một món có cả bản Mới và bản Sử dụng tốt. Hai bản là hai sản phẩm riêng,
+                  được ghép thành một thẻ có nút chọn ở trang thuê. Bản Mới phải có giá thuê và tiền cọc cao
+                  hơn; tiền cọc là số tiền cố định.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Field label="Tình trạng">
+                    <select
+                      value={form.grade}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          grade: event.target.value as RentalGrade | "",
+                          gradeGroupId: event.target.value ? current.gradeGroupId : "",
+                          depositType: event.target.value ? "FIXED" : current.depositType,
+                        }))
+                      }
+                      className={inputClass}
+                    >
+                      <option value="">Không phân loại</option>
+                      <option value="LIKE_NEW">{GRADE_LABELS.LIKE_NEW}</option>
+                      <option value="GOOD_USED">{GRADE_LABELS.GOOD_USED}</option>
+                    </select>
+                  </Field>
+                  <Field label="Ghép với sản phẩm">
+                    <select
+                      disabled={!form.grade}
+                      value={form.gradeGroupId}
+                      onChange={(event) => {
+                        const sibling = gradeGroups.find(
+                          (group) => group.id === event.target.value,
+                        )?.members[0];
+                        // Hai hạng cùng nhóm dùng chung danh mục và giá trị thay thế.
+                        setForm((current) => ({
+                          ...current,
+                          gradeGroupId: event.target.value,
+                          ...(sibling
+                            ? {
+                                categoryId: sibling.category.id,
+                                replacementValue: String(sibling.replacementValue ?? 0),
+                              }
+                            : {}),
+                        }));
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">Chưa có bản còn lại (tạo mới)</option>
+                      {gradeGroups.map((group) => (
+                        <option
+                          key={group.id}
+                          value={group.id}
+                          disabled={Boolean(form.grade) && group.grades.includes(form.grade as RentalGrade)}
+                        >
+                          {group.label} (đã có: {group.grades.map((grade) => GRADE_LABELS[grade]).join(", ")})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                {selectedGradeGroup ? (
+                  <ul className="mt-3 space-y-1 text-[11px] leading-5 text-slate-600">
+                    {selectedGradeGroup.members.map((member) => (
+                      <li key={member.id}>
+                        Bản {member.grade ? GRADE_LABELS[member.grade] : ""}:{" "}
+                        {formatMoney(member.dailyPrice)}/ngày · cọc{" "}
+                        {formatMoney(member.depositPolicy.amount ?? 0)}.{" "}
+                        {form.grade === "GOOD_USED"
+                          ? "Bản này phải thấp hơn cả hai số."
+                          : "Bản này phải cao hơn cả hai số."}
+                      </li>
+                    ))}
+                    <li>Danh mục và giá trị thay thế lấy theo bản còn lại.</li>
+                  </ul>
+                ) : null}
+                {form.grade && gradeDepositHint !== null ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span>
+                      Gợi ý cọc ~{GRADE_DEPOSIT_HINT_PERCENT[form.grade]}% giá trị thay thế:{" "}
+                      <strong>{formatMoney(gradeDepositHint)}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          depositType: "FIXED",
+                          depositAmount: String(gradeDepositHint),
+                        }))
+                      }
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      Dùng gợi ý
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {modalMode === "edit" && form.grade ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                Tình trạng: <strong>{GRADE_LABELS[form.grade]}</strong> · không đổi được sau khi tạo.
+              </p>
+            ) : null}
+
+            {!isAdmin ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                Tiền cọc và giá trị thay thế do ADMIN đặt. Nhân viên kho chỉ sửa giá thuê, mô tả và thông số; sản phẩm mới
+                ở trạng thái chưa công khai cho tới khi ADMIN duyệt giá.
+              </p>
+            ) : null}
 
             <Field label="Media IDs hoặc URL ảnh — mỗi dòng một giá trị">
               <textarea

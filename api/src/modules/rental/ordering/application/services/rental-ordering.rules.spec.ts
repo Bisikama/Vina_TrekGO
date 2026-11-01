@@ -1,6 +1,7 @@
 import {
   calculateChargedDays,
   calculateDepositPerUnit,
+  describeDeposit,
   calculateOccupiedWindow,
   evaluateRentalEligibility,
   normalizeQuoteItems,
@@ -184,5 +185,18 @@ describe('rental-ordering.rules', () => {
         replacementValue: '2000000.00',
       }),
     ).toBe(500000n);
+  });
+});
+
+
+describe('deposit explanation', () => {
+  it('reports the actual per-unit ratio and rounds to two decimal places', () => {
+    expect(describeDeposit(750000n, 2500000n)).toEqual({ percentageOfReplacementValue: 30, formula: 'depositPerUnit / replacementValue * 100' });
+    expect(describeDeposit(1n, 3n).percentageOfReplacementValue).toBe(33.33);
+    expect(describeDeposit(2n, 3n).percentageOfReplacementValue).toBe(66.67);
+    expect(describeDeposit(0n, 100n).percentageOfReplacementValue).toBe(0);
+  });
+  it('returns null when the replacement value is zero', () => {
+    expect(describeDeposit(100n, 0n).percentageOfReplacementValue).toBeNull();
   });
 });

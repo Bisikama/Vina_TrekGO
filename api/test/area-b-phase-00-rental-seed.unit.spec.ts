@@ -4,7 +4,28 @@ import {
   PRIMARY_RENTAL_LOCATION_CODE,
   seedEquipmentUnits,
 } from '../prisma/seeds/equipment-unit.seed'
-import { RENTAL_PRODUCT_SEEDS } from '../prisma/seeds/rental-product.seed'
+import { RENTAL_PRODUCT_SEEDS, assertGradeSeedPairs } from '../prisma/seeds/rental-product.seed'
+
+describe('Rental product grade seed', () => {
+  const graded = RENTAL_PRODUCT_SEEDS.filter((p) => p.gradeGroupId)
+
+  it('seeds complete LIKE_NEW / GOOD_USED pairs that satisfy the catalog grade rules', () => {
+    expect(graded.length).toBeGreaterThanOrEqual(2)
+    expect(() => assertGradeSeedPairs()).not.toThrow()
+  })
+
+  it('rejects a pair where LIKE_NEW is not strictly more expensive', () => {
+    const broken = graded.map((p) => (p.grade === 'GOOD_USED' ? { ...p, depositValue: 10_000_000 } : p))
+    expect(() => assertGradeSeedPairs(broken)).toThrow('LIKE_NEW phải có giá ngày và cọc lớn hơn hẳn')
+  })
+
+  it('rejects a group with a missing grade or different replacement values', () => {
+    const lonely = graded.filter((p) => p.grade === 'LIKE_NEW')
+    expect(() => assertGradeSeedPairs(lonely)).toThrow('đúng một LIKE_NEW và một GOOD_USED')
+    const drift = graded.map((p) => (p.grade === 'GOOD_USED' ? { ...p, replacementValue: p.replacementValue + 1 } : p))
+    expect(() => assertGradeSeedPairs(drift)).toThrow('replacementValue hai hạng phải bằng nhau')
+  })
+})
 
 describe('Rental equipment unit seed', () => {
   const locationId = '11111111-1111-4111-8111-111111111111'
