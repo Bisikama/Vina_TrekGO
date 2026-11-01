@@ -2747,6 +2747,8 @@ model RentalExceptionCase {
   adminReviewStatus      String                    @default("PENDING") @map("admin_review_status") @db.VarChar(32)
   adminSlaBreachedAt     DateTime?                 @map("admin_sla_breached_at") @db.Timestamptz(6)
   evidenceAccessibleAt   DateTime?                 @map("evidence_accessible_at") @db.Timestamptz(6)
+  evidenceAccessBlockedAt DateTime?                @map("evidence_access_blocked_at") @db.Timestamptz(6)
+  evidenceAccessCustomerConfirmationRequired Boolean @default(false) @map("evidence_access_customer_confirmation_required")
   evidenceCompleteAt     DateTime?                 @map("evidence_complete_at") @db.Timestamptz(6)
   evidencePublishedAt    DateTime?                 @map("evidence_published_at") @db.Timestamptz(6)
   inAppNoticePublishedAt DateTime?                 @map("in_app_notice_published_at") @db.Timestamptz(6)

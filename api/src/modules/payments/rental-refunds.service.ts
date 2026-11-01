@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { paymentHash } from './payment-utils'
+import { deductionReviewGate } from '../rental/returns/application/deduction-review-gate'
 
 export type DepositRefundCommand = {
   paymentId: string
@@ -150,6 +151,18 @@ export class RentalRefundsService {
           },
         })
         if (openCase) throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+
+        if (item.deductionAmount.gt(0) || item.status === 'DEDUCTION_APPROVED') {
+          const order = await tx.rentalOrder.findUniqueOrThrow({
+            where: { id: orderId }, include: { rentalPolicy: true },
+          })
+          const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+          const reason = await deductionReviewGate(tx, {
+            orderId, inspectionId: item.inspection.id, assignmentId: item.assignmentId,
+            reviewMinutes: order.rentalPolicy.userAssessmentReviewMinutes, now,
+          })
+          if (reason) throw AppError.fromCode(E.REFUND_SOURCE_INVALID, { details: { reason } })
+        }
 
         const existingAlloc = await tx.depositRefundItemAllocation.findFirst({
           where: {

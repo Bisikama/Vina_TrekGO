@@ -8,6 +8,7 @@ import { AppError, PAYMENT_ERROR_CODES as E } from '../../../shared/errors'
 import { updateSettlementProgress } from './settlement-progress'
 import { planDepositRefundGroups, DepositRefundCandidate } from '../returns/application/deposit-grouping.policy'
 import { tryCompleteOrder } from '../returns/infrastructure/adapters/prisma-rental-return.adapter'
+import { deductionReviewGate } from '../returns/application/deduction-review-gate'
 
 @Injectable()
 export class RentalDepositWorker {
@@ -257,6 +258,15 @@ export class RentalDepositWorker {
         )
           throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
         if (item.status === 'SETTLED') return null
+        const order = await tx.rentalOrder.findUniqueOrThrow({
+          where: { id: item.settlement.orderId }, include: { rentalPolicy: true },
+        })
+        const [{ now: gateNow }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        const reason = await deductionReviewGate(tx, {
+          orderId: order.id, inspectionId: item.inspection.id, assignmentId: item.assignmentId,
+          reviewMinutes: order.rentalPolicy.userAssessmentReviewMinutes, now: gateNow,
+        })
+        if (reason) throw AppError.fromCode(E.REFUND_SOURCE_INVALID, { details: { reason } })
         const payment = await tx.payment.findFirst({
           where: {
             invoice: { rentalOrderId: item.settlement.orderId },
