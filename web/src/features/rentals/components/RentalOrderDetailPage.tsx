@@ -206,7 +206,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                           Số lượng: {item.quantity}
                           {item.product.grade ? (
                             <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              {item.product.grade === "LIKE_NEW" ? "Mới" : "Đã qua sử dụng"}
+                              {item.product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
                             </span>
                           ) : null}
                         </p>

@@ -282,7 +282,7 @@ export default function InventoryReturnsScreen() {
         }
       },
       () =>
-        `${assetCode} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Đã qua sử dụng)" : ""}.` +
+        `${assetCode} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
         (shortageCount > 0 ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn; các đơn này đã được đánh dấu cần xử lý.` : ""),
     );
   }
@@ -495,7 +495,7 @@ export default function InventoryReturnsScreen() {
                                 onPress={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...grade, decision } }))}
                               >
                                 <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
-                                  {decision === "KEEP" ? "Giữ hạng" : "Hạ xuống Đã qua sử dụng"}
+                                  {decision === "KEEP" ? "Giữ hạng" : "Hạ xuống Sử dụng tốt"}
                                 </Text>
                               </TouchableOpacity>
                             );
