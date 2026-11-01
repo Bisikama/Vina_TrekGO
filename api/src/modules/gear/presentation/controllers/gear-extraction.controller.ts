@@ -26,6 +26,17 @@ import { toWireUserGearItem } from './user-gear.controller';
 import { ApiErrorResponse } from '../../../../shared/swagger/api-error-response.helper';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
 import { toManualEntryView } from '../../application/services/gear-capabilities';
+import { extractionFieldProvenance } from '../../domain/gear-extraction-schema';
+
+const EXTRACTION_PROVENANCE_SCHEMA = {
+  type: 'array' as const,
+  nullable: true,
+  description: 'Trạng thái từng trường trong bản nháp trích xuất; không khẳng định nguồn giá trị người dùng đã chỉnh sửa. null khi chưa biết hoặc đổi danh mục.',
+  items: { type: 'object' as const, properties: {
+    field: { type: 'string' as const, example: 'waterproof_mm' },
+    extractionStatus: { type: 'string' as const, enum: ['FOUND', 'MISSING'], example: 'MISSING' },
+  } },
+};
 
 const MANUAL_ENTRY_SCHEMA = {
   type: 'object',
@@ -201,6 +212,7 @@ Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc ngư�
       properties: {
         id: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440199' },
         manualEntry: MANUAL_ENTRY_SCHEMA,
+        extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA,
         sourceType: { type: 'string', example: 'LINK' },
         status: { type: 'string', example: 'READY' },
         extractedData: {
@@ -236,6 +248,7 @@ Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc ngư�
       status: draft.status,
       extractedData: draft.extractedData,
       manualEntry: toManualEntryView(draft.extractedData),
+      extractionFieldProvenance: extractionFieldProvenance(draft.extractedData),
       version: draft.version,
       expiresAt: draft.expiresAt,
       createdAt: draft.createdAt,
@@ -245,7 +258,7 @@ Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc ngư�
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết bản nháp trích xuất' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'ID của bản nháp trích xuất', example: '550e8400-e29b-41d4-a716-446655440199' })
-  @ApiResponse({ status: 200, description: 'Thông tin chi tiết bản nháp trích xuất' })
+  @ApiResponse({ status: 200, description: 'Thông tin chi tiết bản nháp trích xuất', schema: { type: 'object', properties: { extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA } } })
   @ApiErrorResponse(404, 'Không tìm thấy', GEAR_ERROR_CODES.GEAR_EXTRACTION_DRAFT_NOT_FOUND, 'Bản nháp trích xuất không tồn tại hoặc đã hết hạn')
   async getDraft(
     @ActiveUser('id') userId: string,
@@ -260,6 +273,7 @@ Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc ngư�
       status: draft.status,
       extractedData: draft.extractedData,
       manualEntry: toManualEntryView(draft.extractedData),
+      extractionFieldProvenance: extractionFieldProvenance(draft.extractedData),
       confirmedItemId: draft.confirmedItemId,
       version: draft.version,
       expiresAt: draft.expiresAt,
@@ -335,6 +349,7 @@ Người dùng kiểm tra thông số AI đã trích xuất, chỉnh sửa thôn
   @ApiResponse({
     status: 200,
     description: 'Xác nhận thành công, trả về thông tin món đồ đã lưu vào tủ đồ',
+    schema: { type: 'object', properties: { item: { type: 'object' }, replayed: { type: 'boolean' }, extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA } },
   })
   @ApiErrorResponse(404, 'Không tìm thấy bản nháp', GEAR_ERROR_CODES.GEAR_EXTRACTION_DRAFT_NOT_FOUND, 'Bản nháp không tồn tại hoặc đã hết hạn')
   @ApiErrorResponse(409, 'Tủ đồ đã đầy', GEAR_ERROR_CODES.GEAR_ITEM_LIMIT_EXCEEDED, 'Tủ đồ đã đạt giới hạn tối đa 50 món')
@@ -348,6 +363,7 @@ Người dùng kiểm tra thông số AI đã trích xuất, chỉnh sửa thôn
     return {
       item: toWireUserGearItem(res.item),
       replayed: res.replayed,
+      extractionFieldProvenance: res.extractionFieldProvenance,
     };
   }
 }

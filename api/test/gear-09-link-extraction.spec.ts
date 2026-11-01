@@ -39,6 +39,9 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
   const aliceId = randomUUID();
   const aliceAuthId = randomUUID();
   const aliceToken = 'Bearer alice-token';
+  const bobId = randomUUID();
+  const bobAuthId = randomUUID();
+  const bobToken = 'Bearer bob-token';
 
   const drafts = new Map<string, GearExtractionDraftDomain>();
   const caches = new Map<string, GearExtractionCacheDomain>();
@@ -201,6 +204,7 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
     const mockSupabase = {
       verifyToken: jest.fn(async (token: string) => {
         if (token === 'alice-token') return { id: aliceAuthId, email: 'alice@trekgo.vn' };
+        if (token === 'bob-token') return { id: bobAuthId, email: 'bob@trekgo.vn' };
         return null;
       }),
     };
@@ -230,6 +234,9 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
         findUnique: jest.fn(async ({ where }: { where: { authUserId: string } }) => {
           if (where.authUserId === aliceAuthId) {
             return { id: aliceId, authUserId: aliceAuthId, email: 'alice@trekgo.vn', role: UserRole.MEMBER, status: UserStatus.ACTIVE };
+          }
+          if (where.authUserId === bobAuthId) {
+            return { id: bobId, authUserId: bobAuthId, email: 'bob@trekgo.vn', role: UserRole.MEMBER, status: UserStatus.ACTIVE };
           }
           return null;
         }),
@@ -487,6 +494,40 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
       expect(aiCallCount).toBe(currentCalls); // Cache hit!
     });
 
+    it('link có tham số theo dõi, www., / cuối và # vẫn trúng cache URL: không đọc trang, không gọi AI', async () => {
+      const readCalls = pageReaderMock.readPage.mock.calls.length;
+      const aiCalls = aiCallCount;
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', aliceToken)
+        .send({
+          source: 'LINK',
+          url: 'https://WWW.outdoor-gear-vietnam.vn/products/naturehike-cloud-up-2/?utm_source=fb&fbclid=abc&gclid=x#reviews',
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.extractedData._cacheHit).toBe(true);
+      expect(res.body.extractedData.url).toBe('https://www.outdoor-gear-vietnam.vn/products/naturehike-cloud-up-2/');
+      expect(pageReaderMock.readPage.mock.calls.length).toBe(readCalls);
+      expect(aiCallCount).toBe(aiCalls);
+    });
+
+    it('user khác dán cùng link dùng lại cache chung, không gọi AI', async () => {
+      const aiCalls = aiCallCount;
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/gear/extractions')
+        .set('Authorization', bobToken)
+        .send({ source: 'LINK', url: validPublicUrl })
+        .expect(201);
+
+      expect(res.body.status).toBe('READY');
+      expect(res.body.extractedData._cacheHit).toBe(true);
+      expect(aiCallCount).toBe(aiCalls);
+    });
+
     it('bypasses cache when forceRefresh and bypassContentCache are true and calls AI provider again', async () => {
       const currentCalls = aiCallCount;
 
@@ -727,9 +768,9 @@ describe('Gear Advisor V3.1.5 — Phase 09 Link Extraction & SSRF HTTP Pipeline 
       pageReaderMock.readPage.mockResolvedValueOnce(page);
       // Kiểm cache tầng 1 (URL) và tầng 2 (nội dung) ban đầu đều trống; lần kiểm lại sau khi mất khoá thì có.
       cachePortMock.getCache.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-      caches.set(`${aliceId}:${page.contentHash}`, {
+      caches.set(`shared:link:${page.contentHash}`, {
         id: randomUUID(),
-        ownerScope: aliceId,
+        ownerScope: 'shared:link',
         contentHash: page.contentHash,
         status: 'SUCCESS',
         resultJson: { category: 'TENT', name: 'Lều từ tiến trình khác', attributes: {} },

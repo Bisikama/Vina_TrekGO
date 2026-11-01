@@ -15,18 +15,51 @@ export type UserGearItem = {
   condition: GearCondition; attributes: Record<string, unknown>;
   photoRef: string | null; photos?: UserGearPhoto[]; photoUrl?: string;
   source: GearSource; version: number; createdAt: string; updatedAt: string;
+  /** Nguồn của từng thông số (key = tên thuộc tính). null/thiếu = dữ liệu cũ, không suy ra nguồn. */
+  attributeProvenance?: Record<string, GearAttributeProvenance> | null;
 };
+export type GearAttributeSource = "USER" | "AI_IMAGE" | "AI_LINK" | "VERIFIED_CATALOG";
+export type GearAttributeProvenance = { source: GearAttributeSource; referenceId?: string | null };
+/** Mỗi thuộc tính trong bản nháp: AI đọc được (FOUND) hay không thấy (MISSING). */
+export type GearFieldProvenanceStatus = "FOUND" | "MISSING";
 export type GearItemInput = {
   name: string; category: GearCategory; brand?: string | null;
   condition: GearCondition; attributes?: Record<string, unknown>;
   photoRef?: string | null; acknowledgeDuplicate?: boolean;
 };
+export type GearEvidence = { id: string; fieldPath: string; originalText: string; sourceLocator?: string | null; unit?: string | null };
+/** Bản nháp "cần nhập tay" khi AI không dùng được (tắt, chưa cấu hình, hết lượt...). null = do AI điền. */
+export type GearManualEntry = { required: boolean; reasonCode: string; messageVi: string };
 export type GearExtractionDraft = {
   id: string; sourceType: "IMAGE" | "LINK";
   status: "PENDING" | "READY" | "FAILED" | "CONFIRMED";
-  extractedData: Partial<GearItemInput> & { attributes?: Record<string, unknown> };
+  extractedData: Omit<Partial<GearItemInput>, "category" | "name" | "brand"> & {
+    name?: string | null; brand?: string | null; category?: GearCategory | null;
+    attributes?: Record<string, unknown>;
+    warnings?: string[]; fieldsUnknown?: string[]; needsConfirmation?: boolean;
+    /** Link nguồn và thời điểm đọc (chỉ có với sourceType LINK). */
+    url?: string | null; readAt?: string | null;
+    /** Đoạn chữ gốc AI dùng làm căn cứ cho từng field. */
+    evidence?: GearEvidence[];
+    /** true = dùng lại kết quả đọc trước đó, không tính lượt AI. */
+    _cacheHit?: boolean;
+  };
+  manualEntry?: GearManualEntry | null;
+  /** null khi bản nháp chưa xác định danh mục. Chỉ mô tả nội dung trích xuất, không xác minh giá trị. */
+  extractionFieldProvenance?: Record<string, GearFieldProvenanceStatus> | null;
   version: number; expiresAt: string;
 };
+export type GearCapabilityStatus = { enabled: boolean; configured: boolean; messageVi: string };
+export type GearCapabilities = {
+  aiProvider: string | null;
+  ruleBasedAdvice: GearCapabilityStatus; aiAdvice: GearCapabilityStatus;
+  imageExtraction: GearCapabilityStatus; linkExtraction: GearCapabilityStatus;
+};
+
+export async function getGearCapabilities() {
+  const response = await apiClient.get<Envelope<GearCapabilities>>("/api/v1/gear/capabilities");
+  return unwrap(response.data);
+}
 
 async function resolvePhoto(item: UserGearItem): Promise<UserGearItem> {
   if (!item.photoRef) return item;

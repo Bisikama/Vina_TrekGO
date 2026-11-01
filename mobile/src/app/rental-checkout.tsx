@@ -434,11 +434,19 @@ export default function RentalCheckoutScreen() {
                   {quote.chargedDays} ngày thuê
                 </Text>
                 {quote.items.map((item) => (
-                  <SummaryRow
-                    key={item.productId}
-                    label={`${item.name} × ${item.quantity}`}
-                    value={money(item.feeAmount, quote.amounts.currency)}
-                  />
+                  <View key={item.productId}>
+                    <SummaryRow
+                      label={`${item.name} × ${item.quantity}`}
+                      value={money(item.feeAmount, quote.amounts.currency)}
+                    />
+                    <Text style={styles.depositLine}>
+                      Cọc {money(item.depositPerUnit, quote.amounts.currency)}/món × {item.quantity} ={" "}
+                      {money(item.depositAmount, quote.amounts.currency)}
+                      {typeof item.depositExplanation?.percentageOfReplacementValue === "number"
+                        ? ` · ≈ ${item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế`
+                        : ""}
+                    </Text>
+                  </View>
                 ))}
                 <View style={styles.divider} />
                 <SummaryRow
@@ -707,6 +715,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   summaryLabel: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 13 },
+  depositLine: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 11 },
   summaryValue: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
   divider: { height: 1, backgroundColor: Colors.surfaceContainerHighest },
   totalRow: {

@@ -4,6 +4,7 @@ const links = [
   ["/rentals", "Danh mục"],
   ["/rentals/orders", "Đơn thuê"],
   ["/rentals/wardrobe", "Tủ đồ"],
+  ["/rentals/gear-advisor", "Kế hoạch đồ"],
   ["/rentals/reviews", "Đánh giá"],
   ["/rentals/transactions", "Lịch sử giao dịch"],
 ] as const;

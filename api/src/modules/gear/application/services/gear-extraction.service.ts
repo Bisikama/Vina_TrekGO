@@ -24,6 +24,8 @@ import { PAGE_READER_PORT } from '../ports/page-reader.port'
 import type { PageReaderPort } from '../ports/page-reader.port'
 import { CreateExtractionDto, ConfirmExtractionDraftDto } from '../dtos/gear-extraction.dto'
 import { normalizeCreateAttributes } from '../dtos/user-gear.dto'
+import { extractionFieldProvenance } from '../../domain/gear-extraction-schema'
+import { confirmedExtractionProvenance } from '../../domain/attribute-provenance'
 import { findSimilarItems } from '../../domain/duplicate-detector'
 import { GEAR_EXTRACTION_PROMPT } from '../../infrastructure/prompts/prompt-assets'
 import { SafeLinkFetcher } from '../../infrastructure/adapters/safe-link-fetcher'
@@ -39,6 +41,10 @@ import {
   readGearRuntimeConfig,
   type ManualEntryReasonCode,
 } from './gear-capabilities'
+import { normalizeProductLink } from '../../domain/product-link-normalizer'
+
+/** ownerScope của cache LINK dùng chung giữa mọi user (IMAGE vẫn theo user vì ảnh là dữ liệu riêng). */
+const SHARED_LINK_CACHE_SCOPE = 'shared:link'
 
 function getStartOfDaySaigon(): Date {
   const now = new Date()
@@ -448,10 +454,11 @@ export class GearExtractionService {
       // 1. Mandatory Public HTTPS & SSRF validation (B05) — lỗi đầu vào vẫn trả 400 kể cả khi tiện ích tắt
       await this.safeLinkFetcher.validateAndResolveUrl(dto.url)
 
-      // Normalize URL: lowercase protocol and host, preserve path & query case
-      const parsedUrl = new URL(dto.url.trim())
-      const normalizedUrl = `${parsedUrl.protocol}//${parsedUrl.host.toLowerCase()}${parsedUrl.pathname}${parsedUrl.search}`
-      const urlHash = createHash('sha256').update(`url:${normalizedUrl}`).digest('hex')
+      // Bỏ tham số theo dõi (utm_*, fbclid, gclid...) để cùng một trang dùng chung khoá cache.
+      const { displayUrl: normalizedUrl, cacheKeyUrl } = normalizeProductLink(dto.url)
+      const urlHash = createHash('sha256').update(`url:${cacheKeyUrl}`).digest('hex')
+      // Nội dung trang công khai không phụ thuộc người dán link → cache LINK dùng chung; quota vẫn tính theo user.
+      const linkCacheScope = SHARED_LINK_CACHE_SCOPE
 
       if (!flags.linkExtractionEnabled) {
         return this.createManualDraft(userId, 'LINK', urlHash, expiresAt, 'LINK_READER_DISABLED', {
@@ -461,7 +468,7 @@ export class GearExtractionService {
 
       // Layer 1 URL Cache Check (if !forceRefresh)
       if (!dto.forceRefresh) {
-        const cachedUrl = await this.cachePort.getCache(userId, urlHash, promptVersion, modelVersion, schemaVersion)
+        const cachedUrl = await this.cachePort.getCache(linkCacheScope, urlHash, promptVersion, modelVersion, schemaVersion)
         if (cachedUrl && cachedUrl.status === 'SUCCESS') {
           const draft = await this.draftRepo.createDraft({
             userId,
@@ -520,7 +527,7 @@ export class GearExtractionService {
       // Layer 2 Content Cache Check (always check Layer 2 on forceRefresh unless bypassContentCache is true - MASTER 5 & B06)
       if (!dto.bypassContentCache) {
         const cachedContent = await this.cachePort.getCache(
-          userId,
+          linkCacheScope,
           contentHash,
           promptVersion,
           modelVersion,
@@ -530,7 +537,7 @@ export class GearExtractionService {
         if (cachedContent && cachedContent.status === 'SUCCESS') {
           // Also update/refresh Layer 1 URL cache
           await this.cachePort.setCache({
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
@@ -570,14 +577,14 @@ export class GearExtractionService {
       }
 
       // Concurrency lease for extraction
-      const resourceKey = `gear:lease:${userId}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
+      const resourceKey = `gear:lease:${linkCacheScope}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
       const ownerToken = randomUUID()
       const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, aiLeaseTtlMs)
 
       if (!lease.acquired) {
         // Tiến trình khác có thể vừa ghi xong cache nội dung → dùng luôn, giống nhánh IMAGE.
         const recheckCache = await this.cachePort.getCache(
-          userId,
+          linkCacheScope,
           contentHash,
           promptVersion,
           modelVersion,
@@ -631,7 +638,7 @@ export class GearExtractionService {
         // Layer 2 (nội dung) rồi Layer 1 (URL). Lỗi ghi cache không được làm mất kết quả AI đã có.
         await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash,
             promptVersion,
             modelVersion,
@@ -644,7 +651,7 @@ export class GearExtractionService {
         )
         await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
@@ -765,7 +772,7 @@ export class GearExtractionService {
     draftId: string,
     userId: string,
     dto: ConfirmExtractionDraftDto,
-  ): Promise<{ item: UserGearItemDomain; replayed: boolean }> {
+  ): Promise<{ item: UserGearItemDomain; replayed: boolean; extractionFieldProvenance: ReturnType<typeof extractionFieldProvenance> }> {
     const payloadHash = createHash('sha256').update(canonicalStringify(dto.item)).digest('hex')
 
     return this.prisma.$transaction(async (tx) => {
@@ -823,6 +830,7 @@ export class GearExtractionService {
             brand: existingItem.brand,
             condition: existingItem.condition as any,
             attributes: (existingItem.attributes as Record<string, unknown>) || {},
+            attributeProvenance: (existingItem.attributeProvenance as Record<string, unknown>) ?? null,
             photoRef: existingItem.photoRef,
             source: existingItem.source as any,
             version: existingItem.version,
@@ -837,6 +845,7 @@ export class GearExtractionService {
             })),
           },
           replayed: true,
+          extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, existingItem.category as any),
         }
       }
 
@@ -972,6 +981,7 @@ export class GearExtractionService {
           brand: dto.item.brand ?? null,
           condition: dto.item.condition as any,
           attributes: normalizedAttrs as any,
+          attributeProvenance: confirmedExtractionProvenance(normalizedAttrs, draft.extractedData, dto.item.category, itemSource, draftId) as any,
           photoRef: coverPhotoRef,
           source: itemSource as any,
           version: 1,
@@ -1036,6 +1046,7 @@ export class GearExtractionService {
           brand: createdItem.brand,
           condition: createdItem.condition as any,
           attributes: normalizedAttrs,
+          attributeProvenance: (createdItem.attributeProvenance as Record<string, unknown>) ?? null,
           photoRef: createdItem.photoRef,
           source: itemSource,
           version: createdItem.version,
@@ -1044,6 +1055,7 @@ export class GearExtractionService {
           photos: photosCreated,
         },
         replayed: false,
+        extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, createdItem.category as any),
       }
     })
   }

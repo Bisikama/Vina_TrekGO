@@ -1,5 +1,7 @@
 import { apiClient } from "@/lib/axios";
 import type {
+  RentalDepositExplanation,
+  RentalGrade,
   RentalOrderSummary,
   RentalPagination,
 } from "@/features/rentals/types/rental";
@@ -16,12 +18,15 @@ function unwrap<T>(payload: Envelope<T>): T {
 export type RentalOrderLine = {
   id: string;
   productId?: string;
-  product: { id: string; sku?: string; name: string };
+  product: { id: string; sku?: string; name: string; grade?: RentalGrade | null };
   quantity: number;
   dailyPrice: number;
   depositPerUnit: number;
   feeAmount: number;
   depositAmount: number;
+  /** Snapshot lúc đặt; dùng để giải thích tỷ lệ cọc, không cộng vào số tiền phải trả. */
+  replacementValue?: number | null;
+  depositExplanation?: RentalDepositExplanation | null;
 };
 
 export type RentalOrderDetail = {

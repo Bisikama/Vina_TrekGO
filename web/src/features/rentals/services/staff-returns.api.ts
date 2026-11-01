@@ -117,6 +117,12 @@ export function getStaffReturnErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Không thể xử lý yêu cầu hoàn trả.";
 }
 
+export function getStaffReturnErrorCode(error: unknown) {
+  if (!axios.isAxiosError(error)) return null;
+  const data = error.response?.data as { error?: { code?: string } } | undefined;
+  return data?.error?.code ?? null;
+}
+
 export async function listStaffReturns(status?: ReturnQueueStatus, signal?: AbortSignal) {
   const response = await apiClient.get<Envelope<Paginated<StaffReturnSummary>>>(
     "/api/v1/staff/returns",
@@ -218,17 +224,36 @@ export async function finalizeNormalReturnUnits(
   return unwrap(response.data);
 }
 
+export type GradeDecisionInput =
+  | { decision: "KEEP" }
+  | { decision: "DOWNGRADE"; reason: string; note?: string; evidenceIds?: string[] };
+
+export type MarkReturnedUnitReadyResult = {
+  unit?: { id: string; productId?: string; status?: string; version?: number };
+  readyAt?: string;
+  gradeReview: {
+    id: string;
+    decision: "KEEP" | "DOWNGRADE";
+    fromProductId: string;
+    toProductId: string | null;
+    shortageOrderIds: string[];
+  } | null;
+};
+
 export async function markReturnedUnitReady(input: {
   unitId: string;
   inspectionId: string;
   expectedVersion: number;
+  /** Bắt buộc với sản phẩm có hạng; không gửi với sản phẩm thường. */
+  gradeDecision?: GradeDecisionInput;
 }) {
-  const response = await apiClient.post<Envelope<unknown>>(
+  const response = await apiClient.post<Envelope<MarkReturnedUnitReadyResult>>(
     `/api/v1/staff/equipment-units/${encodeURIComponent(input.unitId)}/ready`,
     {
       inspectionId: input.inspectionId,
       accessoriesChecked: true,
       expectedVersion: input.expectedVersion,
+      ...(input.gradeDecision ? { gradeDecision: input.gradeDecision } : {}),
     },
     {
       headers: {

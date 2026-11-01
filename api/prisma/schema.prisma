@@ -4280,6 +4280,7 @@ model UserGearItem {
   brand      String?        @db.VarChar(100)
   condition  GearCondition  @default(GOOD) @map("condition")
   attributes Json           @default("{}") @map("attributes")
+  attributeProvenance Json?  @map("attribute_provenance")
   photoRef   String?        @map("photo_ref") @db.Uuid
   photo      MediaAsset?    @relation("R_UserGearItem_photo_ref", fields: [photoRef], references: [id], onDelete: SetNull)
   source     GearItemSource @default(MANUAL) @map("source")
@@ -4393,10 +4394,42 @@ model GearPlan {
   updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   revisions GearPlanRevision[]
+  preparationSelections GearPlanPreparationSelection?
 
   @@index([userId], map: "gear_plan_user_idx")
   @@index([tripId], map: "gear_plan_trip_idx")
   @@map("gear_plans")
+}
+
+model GearPlanPreparationSelection {
+  planId    String   @id @map("plan_id") @db.Uuid
+  plan      GearPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  choices   Json     @default("[]")
+  version   Int      @default(1)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("gear_plan_preparation_selections")
+}
+
+model GearPersonalCatalogItem {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(200)
+  brand       String?      @db.VarChar(100)
+  category    GearCategory
+  attributes  Json
+  evidence    Json
+  state       String       @default("DRAFT") @db.VarChar(16)
+  version     Int          @default(1)
+  createdBy   String       @map("created_by") @db.Uuid
+  reviewedBy  String?      @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  revokedBy   String?      @map("revoked_by") @db.Uuid
+  revokedAt   DateTime?    @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([state, category], map: "gear_personal_catalog_state_category_idx")
+  @@map("gear_personal_catalog_items")
 }
 
 model GearPlanRevision {
