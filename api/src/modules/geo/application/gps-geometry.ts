@@ -14,6 +14,20 @@ export const roundDistance = (n: number) => Math.round(n * 100) / 100
 export function inInterval(p: TrackPoint, intervals: ActiveInterval[]) {
   return intervals.findIndex((i) => p.recordedAt >= i.start && (!i.end || p.recordedAt <= i.end))
 }
+/** Total recorded time across sessions; null until every session has stopped. */
+export function movingDurationSeconds(
+  sessions: { startedAt: Date; endedAt: Date | null; intervals?: ActiveInterval[] }[],
+): number | null {
+  if (!sessions.length || sessions.some((s) => !s.endedAt)) return null
+  let totalMs = 0
+  for (const session of sessions) {
+    const endedAt = session.endedAt!.toISOString()
+    // Same fallback as track assembly for sessions without stored intervals.
+    const intervals = session.intervals ?? [{ start: session.startedAt.toISOString(), end: endedAt }]
+    for (const interval of intervals) totalMs += Math.max(0, Date.parse(interval.end ?? endedAt) - Date.parse(interval.start))
+  }
+  return Math.round(totalMs / 1000)
+}
 export function gapReason(
   a: TrackPoint,
   b: TrackPoint,
