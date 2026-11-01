@@ -1,3 +1,4 @@
+import { MAPLIBRE_CSS, MAPLIBRE_JS } from "@/components/map/maplibre-bundle.generated";
 import { MAPTILER_STYLE_URL } from "@/constants/map";
 import React, { useCallback, useMemo } from "react";
 import {
@@ -55,8 +56,8 @@ function buildMapHtml(trail: SystemTrailDetail): string {
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>TrekGo 3D Trail</title>
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script>${MAPLIBRE_JS}</script>
+<style>${MAPLIBRE_CSS}</style>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body, #map { width:100%; height:100%; overflow:hidden; background:#141d13; }

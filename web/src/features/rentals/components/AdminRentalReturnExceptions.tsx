@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui";
 
 import {
   approveDepositSettlement,
@@ -26,12 +27,25 @@ const exceptionLabels: Record<string, string> = {
   MISSING: "Thiết bị thiếu hoặc thất lạc",
   RETURN_EXCEPTION: "Ngoại lệ hoàn trả",
   OTHER: "Sai lệch custody nội bộ",
+  DAMAGE_DISPUTE: "Hư hại / khoản trừ cọc",
+  OVERDUE: "Trả thiết bị quá hạn",
+  RETURN_INCOMPLETE: "Trả thiếu thiết bị",
+  PAYMENT_MISMATCH: "Sai lệch thanh toán",
+};
+
+const outcomeLabels: Record<string, string> = {
+  NORMAL: "Đạt",
+  ISSUE: "Có hư hại",
+  MISSING_PENDING_REVIEW: "Thiếu thiết bị · chờ xác minh",
+  DAMAGE_CONFIRMED: "Đã xác nhận hư hại",
+  LOST_CONFIRMED: "Đã xác nhận thất lạc",
 };
 
 const caseStatusLabels: Record<string, string> = {
   OPEN: "Cần xử lý",
   UNDER_REVIEW: "Đang xem xét",
   RESOLVED: "Đã xử lý",
+  REJECTED: "Đã từ chối",
   CLOSED: "Đã đóng",
 };
 
@@ -60,6 +74,9 @@ const errorLabels: Record<string, string> = {
   RECOVERY_UNKNOWN: "Chưa xác định được trạng thái từ cổng thanh toán",
   REFUND_QUERY_MISMATCH: "Kết quả đối soát không khớp lệnh hoàn tiền",
   REFUND_LEGACY_METADATA: "Lệnh hoàn tiền thiếu dữ liệu đối soát",
+  DEDUCTION_APPROVAL_REQUIRED: "Kiểm định ghi nhận hư hại · cần duyệt khoản trừ",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · cần xử lý riêng",
+  ASSESSMENT_REQUIRED_FOR_FINAL_ISSUE: "Kiểm định cuối có lỗi · cần đánh giá",
 };
 
 function shortCode(value: string) {
@@ -149,17 +166,22 @@ export function AdminRentalReturnExceptions() {
         expectedVersion: detail.case.version,
       });
       let settlementResult: Awaited<ReturnType<typeof approveDepositSettlement>> | undefined;
+      let settlementError: string | undefined;
       let settlementAssessment = detail.assessment;
       if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && !settlementAssessment) {
         settlementAssessment = (await getRentalException(detail.case.id)).assessment;
       }
-      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && settlementAssessment) {
-        settlementResult = await approveDepositSettlement({
+      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && settlementAssessment && decision !== "APPROVE_DEDUCTION" && decision !== "CONFIRM_LOST") {
+        try {
+          settlementResult = await approveDepositSettlement({
           orderId: detail.case.orderId,
           assessmentId: settlementAssessment.id,
           approvalRef: result.approvalRef,
           version: settlementAssessment.version,
-        });
+          });
+        } catch (error) {
+          settlementError = getStaffReturnErrorMessage(error);
+        }
       }
       if (settlementResult?.refundRef) {
         setNotice(
@@ -167,8 +189,12 @@ export function AdminRentalReturnExceptions() {
         );
       } else if (settlementResult) {
         setNotice("Đã chốt quyết toán cọc. Không phát sinh khoản phải hoàn qua cổng thanh toán.");
+      } else if (settlementError) {
+        setNotice(`Đã lưu quyết định. Quyết toán chưa hoàn tất: ${settlementError}`);
+      } else if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && (decision === "APPROVE_DEDUCTION" || decision === "CONFIRM_LOST")) {
+        setNotice("Đã lưu quyết định. Cần công bố chứng cứ và chờ thời hạn phản hồi trước khi quyết toán.");
       } else if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT") {
-        setNotice("Đã lưu quyết định nhưng chưa lấy được kết quả kiểm định để tạo quyết toán. Hãy tải lại hồ sơ.");
+        setNotice("Đã lưu quyết định; chưa lấy được kết quả kiểm định để quyết toán. Hãy tải lại hồ sơ.");
       } else {
         setNotice("Đã lưu quyết định ngoại lệ. Không phát sinh bước quyết toán mới.");
       }
@@ -180,6 +206,18 @@ export function AdminRentalReturnExceptions() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function retrySettlement() {
+    if (!detail?.assessment || !detail.case.approvalRef || busy) return;
+    setBusy(true); setError(undefined); setNotice(undefined);
+    try {
+      const result = await approveDepositSettlement({ orderId: detail.case.orderId,
+        assessmentId: detail.assessment.id, approvalRef: detail.case.approvalRef, version: detail.assessment.version });
+      setNotice(result.refundAmount > 0 ? "Đã yêu cầu quyết toán; theo dõi trạng thái hoàn tiền." : "Đã quyết toán khoản cọc.");
+      setDetail(await getRentalException(detail.case.id));
+    } catch (error) { setError(getStaffReturnErrorMessage(error)); }
+    finally { setBusy(false); }
   }
 
   async function reconcileRefund() {
@@ -419,12 +457,18 @@ export function AdminRentalReturnExceptions() {
                   <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
                     <p className="font-medium text-slate-800">Kết quả kiểm định</p>
                     <p className="mt-2 text-slate-600">
-                      {labelFor({}, detail.assessment.outcome)} · Mức đề xuất{" "}
+                      {labelFor(outcomeLabels, detail.assessment.outcome)} · Mức đề xuất{" "}
                       {detail.assessment.findings
                         .map((finding) => formatMoney(finding.amount, "VND"))
                         .join(" · ") || "0 ₫"}
                     </p>
                   </div>
+                ) : null}
+
+                {detail.case.status === "RESOLVED" && detail.case.approvalRef && detail.assessment ? (
+                  <Button type="button" disabled={busy} onClick={() => void retrySettlement()}>
+                    Thử quyết toán cọc
+                  </Button>
                 ) : null}
 
                 <label className="mt-5 block text-sm font-medium text-slate-700">
@@ -487,7 +531,7 @@ export function AdminRentalReturnExceptions() {
                       onClick={() => void decide("APPROVE_DEDUCTION")}
                       className="rounded-xl bg-red-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
                     >
-                      Duyệt khấu trừ và quyết toán
+                      Duyệt đề xuất khấu trừ
                     </button>
                     <button
                       disabled={busy || reason.trim().length < 3}
