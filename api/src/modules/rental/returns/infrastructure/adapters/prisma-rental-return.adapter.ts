@@ -1,6 +1,7 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
+import { deductionReviewGate } from '../../application/deduction-review-gate'
 import { Injectable, Logger } from '@nestjs/common'
 import {
   CustodyActorType,
@@ -1119,6 +1120,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
 
           let exceptionCase: any = null
           if (proposed.greaterThan(0) || finalOutcome !== ReturnInspectionOutcome.NORMAL) {
+            const caseEvidenceIds = [...new Set([...item.evidenceIds, ...item.damage.flatMap((damage) => damage.evidenceIds ?? [])])]
             exceptionCase = await ensureReviewCase(tx, {
               orderId: order.id,
               assignmentId: assignment.id,
@@ -1131,10 +1133,10 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 : proposed.greaterThan(0)
                   ? 'DEDUCTION_APPROVAL_REQUIRED'
                   : 'ASSESSMENT_REQUIRED_FOR_FINAL_ISSUE',
-              evidenceIds: item.evidenceIds,
+              evidenceIds: caseEvidenceIds,
               dueAt: policyDueAt(order.rentalPolicy.adminApprovalMinutes, command.now),
             })
-            if (exceptionCase && proposed.greaterThan(0) && item.evidenceIds.length > 0) {
+            if (exceptionCase && proposed.greaterThan(0) && caseEvidenceIds.length > 0) {
               // Evidence has been checked against READY Media records above.
               const approvalHours = order.rentalPolicy.adminApprovalMinutes
               if (!approvalHours || approvalHours <= 0)
@@ -1142,6 +1144,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               await tx.rentalExceptionCase.update({
                 where: { id: exceptionCase.id },
                 data: {
+                  evidenceIds: jsonValue(caseEvidenceIds),
                   evidenceCompleteAt: command.now,
                   adminReviewStatus: 'PENDING',
                   adminApprovalDueAt: new Date(command.now.getTime() + approvalHours * 60_000),
@@ -1330,6 +1333,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           orderBy: { resolvedAt: 'desc' },
         })
         if (!exceptionCase) throw AppError.fromCode(RR.ASSESSMENT_NOT_APPROVED)
+        const currentDecision = jsonObject(item.decisionSnapshot)
+        if (currentDecision.approvalRef !== command.approvalRef)
+          throw AppError.fromCode(RR.ASSESSMENT_NOT_APPROVED)
         // Already dispatched (by an earlier call or by the deposit worker): replay the current
         // result. Rewriting the item here would push a SETTLED item back to REFUND_PENDING.
         if (
@@ -1365,18 +1371,18 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         }
         const decision = jsonObject(item.decisionSnapshot)
         if (decimalFromUnknown(decision.approvedDeduction ?? '0').greaterThan(0)) {
-          const windowMinutes = order.rentalPolicy.userAssessmentReviewMinutes
-          if (
-            !exceptionCase.evidenceAccessibleAt ||
-            !windowMinutes ||
-            command.now.getTime() < exceptionCase.evidenceAccessibleAt.getTime() + windowMinutes * 60_000
-          )
-            throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
-              details: { reason: 'USER_48H_REVIEW_WINDOW_NOT_CLOSED' },
-            })
-          const dispute = await tx.rentalAssessmentReview.findFirst({ where: { inspectionId: assessment.id } })
-          if (dispute)
-            throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'USER_DISPUTE_MUST_BE_RESOLVED' } })
+          const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+          const reason = await deductionReviewGate(tx, {
+            orderId: order.id, inspectionId: assessment.id, assignmentId: item.assignmentId,
+            reviewMinutes: order.rentalPolicy.userAssessmentReviewMinutes, now,
+          })
+          if (reason) throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason } })
+        } else {
+          const openCase = await tx.rentalExceptionCase.findFirst({ where: {
+            orderId: order.id, status: { in: ['OPEN', 'UNDER_REVIEW'] },
+            OR: [{ assignmentId: item.assignmentId }, { inspectionId: assessment.id }, { assignmentId: null, inspectionId: null }],
+          }, select: { id: true } })
+          if (openCase) throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'USER_DISPUTE_MUST_BE_RESOLVED' } })
         }
         const approvedDeduction = decimalFromUnknown(decision.approvedDeduction ?? decision.cappedDeduction ?? '0')
         if (approvedDeduction.greaterThan(item.depositAmount)) throw AppError.fromCode(RR.DEDUCTION_EXCEEDS_DEPOSIT)
@@ -1451,6 +1457,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     const order = await this.prisma.rentalOrder.findUnique({
       where: { id: query.orderId },
       include: {
+        rentalPolicy: true,
         depositSettlementViaOrderId: {
           include: {
             depositSettlementItemsViaSettlementId: {
@@ -1484,6 +1491,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       select: { unitId: true, receivedAt: true, inspectionDueAt: true },
     })
     const taskByUnit = new Map(inspectionTasks.map((t) => [t.unitId, t]))
+    const [reviewCases, reviews] = await Promise.all([
+      this.prisma.rentalExceptionCase.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.rentalAssessmentReview.findMany({
+        where: { orderId: order.id, userId: order.userId }, include: { exceptionCase: true },
+      }),
+    ])
+    const now = Date.now()
     const refundById = new Map<string, { refundRef: string; status: RefundStatus; amount: number; itemIds: string[] }>()
     const items = settlement.depositSettlementItemsViaSettlementId.map((item) => {
       const grouped = item.depositRefundAllocations[0]
@@ -1505,8 +1519,38 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         refundById.set(refund.id, existing)
       }
       const task = taskByUnit.get(item.unitId)
+      const assessmentId = item.inspectionId
+      const publishedCase = reviewCases
+        .filter((c) => assessmentId && c.inspectionId === assessmentId && c.evidenceAccessibleAt)
+        .sort((a, b) => b.evidenceAccessibleAt!.getTime() - a.evidenceAccessibleAt!.getTime())[0]
+      const review = reviews.find((r) => r.inspectionId === assessmentId)
+      const minutes = order.rentalPolicy.userAssessmentReviewMinutes
+      const windowEndsAt = publishedCase?.evidenceAccessibleAt && minutes && minutes > 0
+        ? (publishedCase.dueAt ?? new Date(publishedCase.evidenceAccessibleAt.getTime() + minutes * 60_000)) : null
+      const snapshot = jsonObject(item.decisionSnapshot)
+      const approved = decimalFromUnknown(snapshot.approvedDeduction ?? '0')
+      const reason = query.actorUserId !== order.userId ? 'ORDER_OWNER_ONLY'
+        : !assessmentId ? 'ASSESSMENT_NOT_READY'
+        : review ? 'REVIEW_ALREADY_SUBMITTED'
+        : !approved.gt(0) ? 'NO_APPROVED_DEDUCTION'
+        : publishedCase?.evidenceAccessBlockedAt ? 'EVIDENCE_ACCESS_INTERRUPTED'
+        : !windowEndsAt ? 'EVIDENCE_NOT_ACCESSIBLE'
+        : now >= windowEndsAt.getTime() ? 'USER_REVIEW_WINDOW_EXPIRED'
+        : ['REFUND_PENDING', 'REFUND_FAILED', 'SETTLED'].includes(item.status) ? 'SETTLEMENT_ALREADY_STARTED'
+        : null
       return {
         unitId: item.unitId,
+        assessmentId,
+        exceptionCaseId: publishedCase?.id ?? null,
+        reviewCaseId: review?.exceptionCaseId ?? null,
+        evidenceAccessibleAt: publishedCase?.evidenceAccessibleAt?.toISOString() ?? null,
+        evidenceAccessBlockedAt: publishedCase?.evidenceAccessBlockedAt?.toISOString() ?? null,
+        evidenceAccessCustomerConfirmationRequired: publishedCase?.evidenceAccessCustomerConfirmationRequired ?? false,
+        reviewWindowEndsAt: publishedCase?.evidenceAccessBlockedAt ? null : windowEndsAt?.toISOString() ?? null,
+        reviewStatus: review ? ([RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(review.exceptionCase.status as any) ? 'SUBMITTED' : 'RESOLVED') : 'NOT_SUBMITTED',
+        canSubmitReview: reason === null,
+        cannotSubmitReviewReason: reason,
+        approvedDeduction: decimalToInteger(approved),
         assetCode: item.unit.assetCode,
         depositAmount: decimalToInteger(item.depositAmount),
         amount: decimalToInteger(item.depositAmount), // legacy compatible field
@@ -1719,26 +1763,38 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         evidenceIds: command.evidenceIds,
       },
       async (tx) => {
+        await lockOrder(tx, command.orderId)
         const order = await tx.rentalOrder.findUnique({
           where: { id: command.orderId },
           include: { rentalPolicy: true },
         })
         if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND)
         if (order.userId !== command.actorUserId) throw AppError.fromCode(RR.FORBIDDEN)
+        const existingReview = await tx.rentalAssessmentReview.findUnique({
+          where: { inspectionId_userId: { inspectionId: command.assessmentId, userId: command.actorUserId } },
+        })
+        if (existingReview) throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'REVIEW_ALREADY_SUBMITTED' } })
         const inspection = await tx.returnInspection.findFirst({
           where: { id: command.assessmentId, orderId: order.id, stage: InspectionStage.FINAL },
         })
         if (!inspection) throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
+        const depositItem = await tx.depositSettlementItem.findUnique({ where: { assignmentId: inspection.assignmentId } })
+        if (!depositItem || !decimalFromUnknown(jsonObject(depositItem.decisionSnapshot).approvedDeduction ?? '0').gt(0))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'NO_APPROVED_DEDUCTION' } })
+        if (['REFUND_PENDING', 'REFUND_FAILED', 'SETTLED'].includes(depositItem.status))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'SETTLEMENT_ALREADY_STARTED' } })
         const publishedCase = await tx.rentalExceptionCase.findFirst({
           where: { inspectionId: inspection.id, evidenceAccessibleAt: { not: null } },
           orderBy: { evidenceAccessibleAt: 'desc' },
         })
         if (!publishedCase?.evidenceAccessibleAt)
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_NOT_ACCESSIBLE' } })
-        if (
-          command.now.getTime() >
-          publishedCase.evidenceAccessibleAt.getTime() + (order.rentalPolicy.userAssessmentReviewMinutes ?? 0) * 60_000
-        )
+        if (publishedCase.evidenceAccessBlockedAt)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_ACCESS_INTERRUPTED' } })
+        const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        const reviewWindowEndsAt = publishedCase.dueAt ?? new Date(
+          publishedCase.evidenceAccessibleAt.getTime() + (order.rentalPolicy.userAssessmentReviewMinutes ?? 0) * 60_000)
+        if (now.getTime() >= reviewWindowEndsAt.getTime())
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'USER_REVIEW_WINDOW_EXPIRED' } })
         await validateEvidence(tx, command.actorUserId, command.evidenceIds, [
           MediaScope.EXCEPTION_EVIDENCE,
@@ -1763,7 +1819,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               openedBy: command.actorUserId,
               reason: command.reason,
               evidenceIds: jsonValue(command.evidenceIds),
-              dueAt: policyDueAt(order.rentalPolicy.userAssessmentReviewMinutes, publishedCase.evidenceAccessibleAt),
+              // The dispute concerns the already approved assessment and its evidence.
+              evidenceCompleteAt: publishedCase.evidenceCompleteAt,
+              dueAt: reviewWindowEndsAt,
             },
           })
         } else {
@@ -1799,10 +1857,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           reviewStatus: exceptionCase.status,
           dueAt: exceptionCase.dueAt?.toISOString() ?? null,
           evidenceAccessibleAt: publishedCase.evidenceAccessibleAt.toISOString(),
-          windowEndsAt: new Date(
-            publishedCase.evidenceAccessibleAt.getTime() +
-              (order.rentalPolicy.userAssessmentReviewMinutes ?? 0) * 60_000,
-          ).toISOString(),
+          windowEndsAt: reviewWindowEndsAt.toISOString(),
         }
       },
     )
@@ -1823,6 +1878,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       },
       async (tx) => {
         const actor = await requireActiveRole(tx, command.actorUserId, UserRole.ADMIN)
+        const initialCase = await tx.rentalExceptionCase.findUnique({ where: { id: command.exceptionId }, select: { orderId: true } })
+        if (!initialCase) throw AppError.fromCode(RR.EXCEPTION_NOT_FOUND)
+        await lockOrder(tx, initialCase.orderId)
         await tx.$queryRaw`SELECT id FROM rental_exception_cases WHERE id = ${command.exceptionId}::uuid FOR UPDATE`
         const exceptionCase = await tx.rentalExceptionCase.findUnique({
           where: { id: command.exceptionId },
@@ -2397,12 +2455,22 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const openCase = assessment.rentalExceptionCasesViaInspectionId.find((item) =>
           [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(item.status as any),
         )
+        const publishedCase = assessment.rentalExceptionCasesViaInspectionId
+          .filter((item) => item.evidenceAccessibleAt)
+          .sort((a, b) => b.evidenceAccessibleAt!.getTime() - a.evidenceAccessibleAt!.getTime())[0]
         return {
           inspectionId: assessment.id,
           unit: assessment.unit,
           outcome: assessment.outcome,
           proposedDeduction: decimalToInteger(decimalFromUnknown(decision.proposedDeduction ?? '0')),
           approvedDeduction: decimalToInteger(decimalFromUnknown(decision.approvedDeduction ?? '0')),
+          publishedDecision: publishedCase ? {
+            caseId: publishedCase.id,
+            resolution: publishedCase.resolution,
+            evidenceIds: jsonArray(publishedCase.evidenceIds),
+            evidenceAccessibleAt: publishedCase.evidenceAccessibleAt?.toISOString() ?? null,
+            evidenceAccessBlockedAt: publishedCase.evidenceAccessBlockedAt?.toISOString() ?? null,
+          } : null,
           evidence: jsonArray(assessment.evidenceIds),
           findings: assessment.findingsViaInspectionId.map((finding) => ({
             ruleId: finding.ruleId,
@@ -2410,7 +2478,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             quantity: finding.quantity,
             evidenceIds: jsonArray(finding.evidenceIds),
           })),
-          reviewDueAt: openCase?.dueAt?.toISOString() ?? null,
+          reviewDueAt: publishedCase?.evidenceAccessBlockedAt ? null : (openCase?.dueAt ?? publishedCase?.dueAt)?.toISOString() ?? null,
           caseId: openCase?.id ?? null,
         }
       }),
@@ -2422,9 +2490,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       reviewDueAt:
         assessments
           .flatMap((assessment) => assessment.rentalExceptionCasesViaInspectionId)
-          .find((item) =>
-            [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(item.status as any),
-          )
+          .filter((item) => item.evidenceAccessibleAt && item.dueAt && !item.evidenceAccessBlockedAt)
+          .sort((a, b) => b.evidenceAccessibleAt!.getTime() - a.evidenceAccessibleAt!.getTime())[0]
           ?.dueAt?.toISOString() ?? null,
     }
   }
@@ -3997,7 +4064,8 @@ function publicDepositStatus(
   if (status === DepositItemStatus.REVIEW_REQUIRED) return 'REVIEW_REQUIRED'
   if (status === DepositItemStatus.REFUND_PENDING) return 'REFUND_PENDING'
   if (status === DepositItemStatus.REFUND_FAILED) return 'REFUND_FAILED'
-  if (status === DepositItemStatus.DEDUCTION_APPROVED) return 'DEDUCTED'
+  // Approval is provisional until the customer window and settlement complete.
+  if (status === DepositItemStatus.DEDUCTION_APPROVED) return 'REVIEW_REQUIRED'
   if (status === DepositItemStatus.DEDUCTION_REJECTED) return 'REVIEW_REQUIRED'
   if (status === DepositItemStatus.SETTLED && deductionAmount?.greaterThan(0)) return 'DEDUCTED'
   if (status === DepositItemStatus.SETTLED && refundStatus === RefundStatus.SUCCEEDED) return 'REFUNDED'

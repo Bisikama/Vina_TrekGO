@@ -37,11 +37,16 @@ import { RentalDocumentService } from '../documents/application/rental-document.
 import { DOCUMENT_STORAGE_PORT, SupabaseDocumentStorage } from '../documents/infrastructure/document-storage.port';
 import { RentalPdfRenderer } from '../documents/infrastructure/rental-pdf.renderer';
 import { RentalDocumentRenderWorker } from '../documents/infrastructure/rental-document-render.worker';
+import { MediaModule } from '../../media/media.module';
+import { RentalEvidencePublicationWorker } from './infrastructure/integration/rental-evidence-publication.worker';
+import { RentalApprovedSettlementWorker } from './infrastructure/jobs/rental-approved-settlement.worker';
+import { RentalEvidenceReportController } from './presentation/controllers/rental-evidence-report.controller';
 
 @Module({
-  imports: [SharedModule],
+  imports: [SharedModule, MediaModule],
   controllers: [
     RentalReturnController,
+    RentalEvidenceReportController,
     DeliveryReturnController,
     StaffReturnController,
     StaffDamageAssessmentRuleController,
@@ -54,6 +59,8 @@ import { RentalDocumentRenderWorker } from '../documents/infrastructure/rental-d
   providers: [
     RentalOperationalEscalationScheduler,
     RentalEvidenceAccessService,
+    RentalEvidencePublicationWorker,
+    RentalApprovedSettlementWorker,
     ReturnScanUseCase,
     ReturnInspectionUseCase,
     ReturnToInventoryLocationUseCase,

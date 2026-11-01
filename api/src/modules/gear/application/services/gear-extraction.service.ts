@@ -845,7 +845,7 @@ export class GearExtractionService {
             })),
           },
           replayed: true,
-          extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, existingItem.category as any),
+          extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, existingItem.category),
         }
       }
 
@@ -1055,7 +1055,7 @@ export class GearExtractionService {
           photos: photosCreated,
         },
         replayed: false,
-        extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, createdItem.category as any),
+        extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, createdItem.category),
       }
     })
   }
