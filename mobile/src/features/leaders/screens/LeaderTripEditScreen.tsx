@@ -224,7 +224,7 @@ export function LeaderTripEditScreen() {
         [
           {
             text: "Xem chi tiết",
-            onPress: () => router.back(),
+            onPress: () => (router.canGoBack() ? router.back() : router.replace("/field-operations" as any)),
           },
         ],
       );
@@ -290,7 +290,10 @@ export function LeaderTripEditScreen() {
           <Ionicons name="alert-circle-outline" size={48} color="#ba1a1a" />
           <Text style={styles.errorTitle}>Lỗi tải chuyến đi</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.primaryActionBtn} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.primaryActionBtn}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/field-operations" as any))}
+          >
             <Text style={styles.primaryActionBtnText}>Quay lại</Text>
           </TouchableOpacity>
         </View>
@@ -308,7 +311,7 @@ export function LeaderTripEditScreen() {
         <View style={styles.headerTop}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/field-operations" as any))}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={22} color={Colors.ink} />

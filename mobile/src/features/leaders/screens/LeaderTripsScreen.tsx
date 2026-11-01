@@ -235,7 +235,15 @@ export function LeaderTripsScreen({
           {showBackButton && (
             <TouchableOpacity
               style={styles.backBtn}
-              onPress={() => router.back()}
+              onPress={() => {
+                if (onNavigateTab) {
+                  onNavigateTab("dashboard");
+                } else if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/field-operations" as any);
+                }
+              }}
               activeOpacity={0.7}
             >
               <Ionicons name="arrow-back" size={22} color={Colors.ink} />
@@ -348,7 +356,10 @@ export function LeaderTripsScreen({
             </Text>
             <TouchableOpacity
               style={styles.emptyActionBtn}
-              onPress={() => router.push("/field-operations/leader-create-trip" as any)}
+              onPress={() => {
+                if (onNavigateTab) onNavigateTab("create");
+                else router.push("/field-operations/leader-create-trip" as any);
+              }}
             >
               <Ionicons name="add" size={16} color="#fff" />
               <Text style={styles.emptyActionBtnText}>Tạo chuyến đi đầu tiên</Text>

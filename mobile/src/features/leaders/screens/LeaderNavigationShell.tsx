@@ -6,8 +6,8 @@ import {
   LeaderTripsScreen,
 } from "@/features/leaders/screens";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { BackHandler, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type LeaderTabKey = "dashboard" | "trips" | "create" | "profile";
@@ -58,6 +58,15 @@ export function LeaderNavigationShell({
   const [activeTab, setActiveTab] = useState<LeaderTabKey>(initialTab);
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    if (activeTab === "dashboard" || activeTab === "create") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setActiveTab("dashboard");
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeTab]);
+
   const handleNavigateTab = (tab: LeaderTabKey) => {
     setActiveTab(tab);
   };
@@ -70,7 +79,7 @@ export function LeaderNavigationShell({
           <LeaderDashboardScreen onNavigateTab={handleNavigateTab} />
         )}
         {activeTab === "trips" && (
-          <LeaderTripsScreen onNavigateTab={handleNavigateTab} />
+          <LeaderTripsScreen showBackButton={false} onNavigateTab={handleNavigateTab} />
         )}
         {activeTab === "create" && (
           <LeaderCreateTripScreen onNavigateTab={handleNavigateTab} />
