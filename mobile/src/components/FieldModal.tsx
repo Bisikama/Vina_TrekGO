@@ -12,9 +12,11 @@ interface FieldModalProps {
   actionLabel?: string;
   onAction?: () => void;
   onClose: () => void;
+  /** Hide "Để sau" for notices that have nothing to postpone. */
+  hideSecondary?: boolean;
 }
 
-export function FieldModal({ visible, title, message, icon = 'checkmark-circle', tone = 'success', actionLabel = 'Đóng', onAction, onClose }: FieldModalProps) {
+export function FieldModal({ visible, title, message, icon = 'checkmark-circle', tone = 'success', actionLabel = 'Đóng', onAction, onClose, hideSecondary = false }: FieldModalProps) {
   const iconColor = tone === 'success' ? Colors.primaryDark : tone === 'warning' ? '#9b6700' : Colors.error;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -26,7 +28,7 @@ export function FieldModal({ visible, title, message, icon = 'checkmark-circle',
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
           <View style={styles.actions}>
-            <Pressable style={styles.secondaryButton} onPress={onClose}><Text style={styles.secondaryText}>Để sau</Text></Pressable>
+            {hideSecondary ? null : <Pressable style={styles.secondaryButton} onPress={onClose}><Text style={styles.secondaryText}>Để sau</Text></Pressable>}
             <Pressable style={styles.primaryButton} onPress={onAction ?? onClose}><Text style={styles.primaryText}>{actionLabel}</Text></Pressable>
           </View>
         </View>

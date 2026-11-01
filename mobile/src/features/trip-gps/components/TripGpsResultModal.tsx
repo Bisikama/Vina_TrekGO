@@ -12,9 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radius, Shadows } from '@/constants/theme';
 import type { ActualRouteResponse, LocalSyncStatus } from '../types';
 import { TripGpsRouteArt } from './TripGpsRouteArt';
+import { TripShareButton } from './TripShareButton';
 import { getTripGpsResult } from '../services/trip-gps.result';
 
 interface TripGpsResultModalProps {
+  tripId?: string;
   syncStatus?: LocalSyncStatus;
   rejectedSampleCount?: number;
   visible: boolean;
@@ -30,6 +32,7 @@ interface TripGpsResultModalProps {
 }
 
 export function TripGpsResultModal({
+  tripId,
   visible,
   actualRoute,
   liveRouteCoords,
@@ -132,6 +135,7 @@ export function TripGpsResultModal({
               <Text style={styles.primaryBtnText}>Hoàn Tất & Xem Bản Đồ</Text>
               <Ionicons name="arrow-forward" size={18} color={Colors.onPrimary} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
+            <TripShareButton tripId={tripId} expectRoute onBeforeOpen={onClose} style={{ marginTop: 10 }} />
           </ScrollView>
         </View>
       </View>

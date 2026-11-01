@@ -833,6 +833,7 @@ export default function NavigationScreen() {
 
       {/* Trip Result Summary Modal */}
       <TripGpsResultModal
+        tripId={effectiveTripId}
         visible={resultModalVisible}
         actualRoute={actualRoute}
         liveRouteCoords={summaryRouteCoords}
