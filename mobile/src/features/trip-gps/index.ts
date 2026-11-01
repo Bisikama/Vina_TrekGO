@@ -7,3 +7,4 @@ export * from './components/TripGpsRosterDrawer';
 export * from './components/TripGpsCheckpointSheet';
 export * from './components/TripGpsResultModal';
 export * from './components/TripGpsRouteArt';
+export * from './components/TripShareButton';

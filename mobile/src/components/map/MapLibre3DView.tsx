@@ -1,5 +1,5 @@
-import { MAPTILER_STYLE_URL } from "@/constants/map";
 import { Colors, Radius, Shadows } from "@/constants/theme";
+import { lookupPackResource } from "@/services/map/offlineMapPack";
 import { Ionicons } from "@expo/vector-icons";
 import React, {
   forwardRef,
@@ -18,6 +18,8 @@ import {
   View,
 } from "react-native";
 import { WebView, type WebViewProps } from "react-native-webview";
+
+import { MAPLIBRE_CSS, MAPLIBRE_JS } from "./maplibre-bundle.generated";
 
 type MapWebViewHandle = {
   injectJavaScript: (script: string) => void;
@@ -139,6 +141,7 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
   ) => {
     const webViewRef = useRef<MapWebViewHandle | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [usingPack, setUsingPack] = useState(false);
     const [is3DMode, setIs3DMode] = useState(is3D);
     const [currentBearing, setCurrentBearing] = useState(0);
 
@@ -302,7 +305,18 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
     const handleMessage = (event: any) => {
       try {
         const data = JSON.parse(event.nativeEvent.data);
-        if (data.type === "MAP_READY") {
+        if (data.type === "PACK_REQUEST") {
+          const reply = (found: { base64?: string; remoteUrl?: string }) => {
+            webViewRef.current?.injectJavaScript(
+              `window.__packReply(${JSON.stringify(data.id)}, ${JSON.stringify(found.base64 ?? null)}, ${JSON.stringify(found.remoteUrl ?? null)}); true;`,
+            );
+          };
+          const key = decodeURIComponent(data.key);
+          void lookupPackResource(key).then((found) => {
+            if (key === "style/style.json" && "base64" in found) setUsingPack(true);
+            reply(found);
+          });
+        } else if (data.type === "MAP_READY") {
           setIsLoaded(true);
           onMapReady?.();
         } else if (data.type === "CHECKPOINT_CLICK") {
@@ -333,8 +347,8 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>TrekGo Tactical 3D Map</title>
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>${MAPLIBRE_CSS}</style>
+  <script>${MAPLIBRE_JS}</script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; overflow: hidden; background: #081008; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -440,10 +454,58 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
     const INITIAL_PITCH = ${initialConfig.pitch};
     const INITIAL_BEARING = ${initialConfig.bearing};
 
+    // Đọc bản đồ từ gói có sẵn qua React Native; mục không có trong gói mới tải từ mạng.
+    var packRequests = {};
+    var packRequestSeq = 0;
+
+    function packResult(bytes, type) {
+      if (type === 'json') return JSON.parse(new TextDecoder().decode(bytes));
+      if (type === 'string') return new TextDecoder().decode(bytes);
+      return bytes.buffer;
+    }
+
+    window.__packReply = function(id, base64, remoteUrl) {
+      var request = packRequests[id];
+      if (!request) return;
+      delete packRequests[id];
+      if (base64 !== null) {
+        try {
+          var binary = atob(base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          request.resolve({ data: packResult(bytes, request.type) });
+        } catch (err) {
+          request.reject(err);
+        }
+        return;
+      }
+      fetch(remoteUrl, { signal: request.signal })
+        .then(function(response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.arrayBuffer();
+        })
+        .then(function(buffer) {
+          request.resolve({ data: packResult(new Uint8Array(buffer), request.type) });
+        })
+        .catch(function(err) { request.reject(err); });
+    };
+
+    maplibregl.addProtocol('trekgo', function(params, abortController) {
+      return new Promise(function(resolve, reject) {
+        var id = ++packRequestSeq;
+        packRequests[id] = { resolve: resolve, reject: reject, type: params.type, signal: abortController.signal };
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'PACK_REQUEST',
+          id: id,
+          key: params.url.slice('trekgo://'.length)
+        }));
+      });
+    });
+
     const map = new maplibregl.Map({
       container: 'map',
       attributionControl: false,
-      style: ${JSON.stringify(MAPTILER_STYLE_URL)},
+      style: 'trekgo://style/style.json',
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       minZoom: ${initialConfig.minZoom},
@@ -949,11 +1011,11 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
         // 1. Thêm nguồn địa hình 3D (Terrarium DEM)
         map.addSource('terrain-dem-source', {
           type: 'raster-dem',
-          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          tiles: ['trekgo://terrarium/{z}/{x}/{y}.png'],
           encoding: 'terrarium',
           tileSize: 256,
           minzoom: 5,
-          maxzoom: 15
+          maxzoom: 12 // Khớp mức zoom DEM trong gói bản đồ
         });
 
         if (${initialConfig.is3D}) {
@@ -1100,7 +1162,9 @@ const MapLibre3DViewBase = forwardRef<MapLibre3DViewRef, MapLibre3DViewProps>(
         {!isLoaded && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={Colors.primary} />
-            <Text style={styles.loadingText}>Đang tải bản đồ 3D...</Text>
+            <Text style={styles.loadingText}>
+              {usingPack ? "Đang mở bản đồ có sẵn..." : "Đang tải bản đồ 3D..."}
+            </Text>
           </View>
         )}
 

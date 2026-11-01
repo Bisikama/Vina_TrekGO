@@ -446,6 +446,18 @@ export type RentalDepositItem = {
   heldReason?: string | null;
   deduction?: number | null;
   reason?: string | null;
+  /** Khiếu nại khoản trừ (web/docs/RENTAL_DEPOSIT_DISPUTE_FRONTEND_HANDOFF.md). */
+  assessmentId?: string | null;
+  exceptionCaseId?: string | null;
+  reviewCaseId?: string | null;
+  evidenceAccessibleAt?: string | null;
+  evidenceAccessBlockedAt?: string | null;
+  evidenceAccessCustomerConfirmationRequired?: boolean;
+  reviewWindowEndsAt?: string | null;
+  reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
+  canSubmitReview?: boolean;
+  cannotSubmitReviewReason?: string | null;
+  approvedDeduction?: number | null;
 };
 
 export type RentalDepositStatus = {

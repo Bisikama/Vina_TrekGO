@@ -27,12 +27,25 @@ const exceptionLabels: Record<string, string> = {
   MISSING: "Thiết bị thiếu hoặc thất lạc",
   RETURN_EXCEPTION: "Ngoại lệ hoàn trả",
   OTHER: "Sai lệch custody nội bộ",
+  DAMAGE_DISPUTE: "Hư hại / khoản trừ cọc",
+  OVERDUE: "Trả thiết bị quá hạn",
+  RETURN_INCOMPLETE: "Trả thiếu thiết bị",
+  PAYMENT_MISMATCH: "Sai lệch thanh toán",
+};
+
+const outcomeLabels: Record<string, string> = {
+  NORMAL: "Đạt",
+  ISSUE: "Có hư hại",
+  MISSING_PENDING_REVIEW: "Thiếu thiết bị · chờ xác minh",
+  DAMAGE_CONFIRMED: "Đã xác nhận hư hại",
+  LOST_CONFIRMED: "Đã xác nhận thất lạc",
 };
 
 const caseStatusLabels: Record<string, string> = {
   OPEN: "Cần xử lý",
   UNDER_REVIEW: "Đang xem xét",
   RESOLVED: "Đã xử lý",
+  REJECTED: "Đã từ chối",
   CLOSED: "Đã đóng",
 };
 
@@ -61,6 +74,9 @@ const errorLabels: Record<string, string> = {
   RECOVERY_UNKNOWN: "Chưa xác định được trạng thái từ cổng thanh toán",
   REFUND_QUERY_MISMATCH: "Kết quả đối soát không khớp lệnh hoàn tiền",
   REFUND_LEGACY_METADATA: "Lệnh hoàn tiền thiếu dữ liệu đối soát",
+  DEDUCTION_APPROVAL_REQUIRED: "Kiểm định ghi nhận hư hại · cần duyệt khoản trừ",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · cần xử lý riêng",
+  ASSESSMENT_REQUIRED_FOR_FINAL_ISSUE: "Kiểm định cuối có lỗi · cần đánh giá",
 };
 
 function shortCode(value: string) {
@@ -441,7 +457,7 @@ export function AdminRentalReturnExceptions() {
                   <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
                     <p className="font-medium text-slate-800">Kết quả kiểm định</p>
                     <p className="mt-2 text-slate-600">
-                      {labelFor({}, detail.assessment.outcome)} · Mức đề xuất{" "}
+                      {labelFor(outcomeLabels, detail.assessment.outcome)} · Mức đề xuất{" "}
                       {detail.assessment.findings
                         .map((finding) => formatMoney(finding.amount, "VND"))
                         .join(" · ") || "0 ₫"}
