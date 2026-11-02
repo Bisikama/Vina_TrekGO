@@ -4,14 +4,57 @@ import {
   PRIMARY_RENTAL_LOCATION_CODE,
   seedEquipmentUnits,
 } from '../prisma/seeds/equipment-unit.seed'
-import { RENTAL_PRODUCT_SEEDS, assertGradeSeedPairs } from '../prisma/seeds/rental-product.seed'
+import { RENTAL_PRODUCT_SEEDS, assertGradeSeedPairs, rentalSeedImage, seedRentalProducts } from '../prisma/seeds/rental-product.seed'
+
+describe('Local rental catalog replacement', () => {
+  const originalDirectUrl = process.env.DIRECT_URL
+  const originalDatabaseUrl = process.env.DATABASE_URL
+  afterEach(() => {
+    if (originalDirectUrl === undefined) delete process.env.DIRECT_URL; else process.env.DIRECT_URL = originalDirectUrl
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalDatabaseUrl
+  })
+
+  it('replaces only non-seed products locally and writes a suitable image for every seed SKU', async () => {
+    process.env.DIRECT_URL = 'postgresql://localhost/test'
+    const tx = { rentalProduct: { updateMany: jest.fn().mockResolvedValue({ count: 2 }), upsert: jest.fn().mockResolvedValue({}) } }
+    const prisma = {
+      rentalCategory: { findMany: jest.fn().mockResolvedValue([...new Set(RENTAL_PRODUCT_SEEDS.map(p => p.categorySlug))].map(slug => ({ id: slug, slug }))) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    }
+    await seedRentalProducts(prisma as unknown as PrismaClient)
+    expect(tx.rentalProduct.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ sku: { notIn: RENTAL_PRODUCT_SEEDS.map(p => p.sku) } }),
+      data: expect.objectContaining({ status: 'INACTIVE' }),
+    }))
+    expect(tx.rentalProduct.upsert).toHaveBeenCalledTimes(RENTAL_PRODUCT_SEEDS.length)
+    for (const product of RENTAL_PRODUCT_SEEDS) expect(rentalSeedImage(product.sku)).toMatch(/^https:\/\//)
+  })
+
+  it('never deactivates the existing catalog for a non-local database', async () => {
+    process.env.DIRECT_URL = 'postgresql://example.com/test'
+    const tx = { rentalProduct: { updateMany: jest.fn(), upsert: jest.fn().mockResolvedValue({}) } }
+    const prisma = {
+      rentalCategory: { findMany: jest.fn().mockResolvedValue([...new Set(RENTAL_PRODUCT_SEEDS.map(p => p.categorySlug))].map(slug => ({ id: slug, slug }))) },
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    }
+    await seedRentalProducts(prisma as unknown as PrismaClient)
+    expect(tx.rentalProduct.updateMany).not.toHaveBeenCalled()
+  })
+})
 
 describe('Rental product grade seed', () => {
   const graded = RENTAL_PRODUCT_SEEDS.filter((p) => p.gradeGroupId)
 
   it('seeds complete LIKE_NEW / GOOD_USED pairs that satisfy the catalog grade rules', () => {
-    expect(graded.length).toBeGreaterThanOrEqual(2)
+    expect(graded).toHaveLength(RENTAL_PRODUCT_SEEDS.length)
+    expect(new Set(graded.map((product) => product.sku)).size).toBe(graded.length)
     expect(() => assertGradeSeedPairs()).not.toThrow()
+    const groups = new Map<string, typeof graded>()
+    for (const product of graded) groups.set(product.gradeGroupId!, [...(groups.get(product.gradeGroupId!) ?? []), product])
+    for (const pair of groups.values()) {
+      expect(pair).toHaveLength(2)
+      expect(rentalSeedImage(pair[0].sku)).toBe(rentalSeedImage(pair[1].sku))
+    }
   })
 
   it('rejects a pair where LIKE_NEW is not strictly more expensive', () => {
