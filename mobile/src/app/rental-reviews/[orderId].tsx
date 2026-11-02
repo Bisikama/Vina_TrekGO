@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,105 +18,102 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
-import { rentalApi } from "@/features/rentals/api";
 import {
+  REVIEW_INELIGIBLE_LABELS,
   rentalReviewApi,
-  type CreateRentalProductReviewInput,
+  type ReviewableItem,
 } from "@/features/rentals/review-api";
-import type { RentalOrderDetail, RentalOrderLine } from "@/features/rentals/types";
 
 type ReviewDraft = { rating: number; comment: string };
 
-function resolvedProductId(item: RentalOrderLine) {
-  const directId = typeof item.productId === "string" ? item.productId.trim() : "";
-  const nestedId = typeof item.product?.id === "string" ? item.product.id.trim() : "";
-  return directId || nestedId;
+function newKey(orderId: string, productId: string) {
+  return `rental-review:${orderId}:${productId}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Đánh giá theo GET /rental-orders/:id/reviewable-items: backend quyết định món nào được đánh giá
+ * (đơn hoàn tất + đã quyết toán cọc + món đã bàn giao + chưa đánh giá). Không tự suy từ chi tiết đơn.
+ */
 export default function RentalReviewDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ orderId?: string | string[] }>();
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
   const { accessToken } = useAuth();
-  const [detail, setDetail] = useState<RentalOrderDetail>();
+  const [items, setItems] = useState<ReviewableItem[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  // Mỗi món giữ một Idempotency-Key cho tới khi nội dung đổi → retry do mất mạng không tạo đánh giá trùng.
+  const keys = useRef<Record<string, string>>({});
 
-  const loadDetail = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!accessToken || !orderId) {
       setError("Thiếu thông tin đơn thuê hoặc phiên đăng nhập.");
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(undefined);
     try {
-      const result = await rentalApi.getOrder(orderId, accessToken);
-      if (result.order.status !== "COMPLETED" || result.order.financialStatus !== "SETTLED") {
-        setError("Đơn chưa hoàn tất trả đồ và đối soát nên chưa thể đánh giá.");
-        return;
-      }
-      setDetail(result);
-      setDrafts(Object.fromEntries(
-        result.items.flatMap((item) => {
-          const productId = resolvedProductId(item);
-          return productId ? [[productId, { rating: 5, comment: "" } satisfies ReviewDraft] as const] : [];
-        }),
-      ));
+      const result = await rentalReviewApi.getReviewableItems(orderId, accessToken);
+      const list = result.items ?? [];
+      setItems(list);
+      setDrafts((current) =>
+        Object.fromEntries(list.filter((item) => item.canReview).map((item) => [item.productId, current[item.productId] ?? { rating: 5, comment: "" }])),
+      );
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Không tải được đơn thuê.");
+      setError(requestError instanceof Error ? requestError.message : "Không tải được sản phẩm cần đánh giá.");
     } finally {
       setLoading(false);
     }
   }, [accessToken, orderId]);
 
   useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
-
-  const uniqueItems = useMemo(() => {
-    const byProduct = new Map<string, RentalOrderLine>();
-    detail?.items.forEach((item) => {
-      const productId = resolvedProductId(item);
-      if (productId && !byProduct.has(productId)) {
-        byProduct.set(productId, { ...item, productId });
-      }
-    });
-    return [...byProduct.values()];
-  }, [detail]);
+    void load();
+  }, [load]);
 
   function updateDraft(productId: string, patch: Partial<ReviewDraft>) {
+    delete keys.current[productId];
     setDrafts((current) => ({
       ...current,
       [productId]: { ...(current[productId] ?? { rating: 5, comment: "" }), ...patch },
     }));
   }
 
+  const pending = items.filter((item) => item.canReview);
+
   async function submit() {
-    if (!accessToken || !orderId || !detail) return;
-
-    const reviews: CreateRentalProductReviewInput[] = uniqueItems.map((item) => ({
-      productId: item.productId,
-      rating: drafts[item.productId]?.rating ?? 5,
-      comment: drafts[item.productId]?.comment.trim() || undefined,
-    }));
-
+    if (!accessToken || !orderId || pending.length === 0) return;
     setSubmitting(true);
-    try {
-      await rentalReviewApi.createMany(orderId, reviews, accessToken);
-      Alert.alert("Đã gửi đánh giá", "Cảm ơn bạn đã chia sẻ trải nghiệm về thiết bị.", [
-        { text: "Xong", onPress: () => router.back() },
-      ]);
-    } catch (requestError) {
+    const results = await Promise.allSettled(
+      pending.map((item) => {
+        const draft = drafts[item.productId] ?? { rating: 5, comment: "" };
+        keys.current[item.productId] ??= newKey(orderId, item.productId);
+        return rentalReviewApi.createOne(
+          orderId,
+          { productId: item.productId, rating: draft.rating, comment: draft.comment.trim() || undefined },
+          keys.current[item.productId],
+          accessToken,
+        );
+      }),
+    );
+    setSubmitting(false);
+    const failed = results
+      .map((result, index) => ({ result, item: pending[index] }))
+      .filter((entry) => entry.result.status === "rejected");
+    if (failed.length === 0) keys.current = {};
+    await load();
+    if (failed.length === 0) {
+      Alert.alert("Đã gửi đánh giá", "Cảm ơn bạn đã chia sẻ trải nghiệm về thiết bị.", [{ text: "Xong", onPress: () => router.back() }]);
+    } else {
+      const reason = failed[0].result as PromiseRejectedResult;
       Alert.alert(
-        "Chưa gửi được đánh giá",
-        requestError instanceof Error ? requestError.message : "Vui lòng thử lại.",
+        "Chưa gửi được hết",
+        `${failed.length}/${pending.length} sản phẩm chưa gửi được: ${failed.map((entry) => entry.item.product.name).join(", ")}. ${
+          reason.reason instanceof Error ? reason.reason.message : ""
+        } Bấm gửi lại để thử tiếp.`,
       );
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -132,74 +129,90 @@ export default function RentalReviewDetailScreen() {
         </View>
       </View>
 
-      {loading ? (
-        <TrekkingLoader
-          label="Đang mở hành trình thiết bị"
-          hint="TrekGo đang tải các món đồ đã hoàn tất để bạn chia sẻ trải nghiệm."
-        />
+      {loading && items.length === 0 ? (
+        <TrekkingLoader label="Đang mở hành trình thiết bị" hint="TrekGo đang tải các món đồ bạn có thể đánh giá." />
       ) : error ? (
         <View style={styles.errorWrap}>
           <Ionicons name="lock-closed-outline" size={36} color={Colors.warningDeep} />
-          <Text style={styles.errorTitle}>Chưa thể đánh giá</Text>
+          <Text style={styles.errorTitle}>Chưa tải được</Text>
           <Text style={styles.stateDescription}>{error}</Text>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => router.back()}>
-            <Text style={styles.secondaryButtonText}>Quay lại</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => void load()}>
+            <Text style={styles.secondaryButtonText}>Thử lại</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <KeyboardAvoidingView style={styles.flexOne} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <View style={styles.summaryCard}>
-              <Ionicons name="checkmark-circle" size={24} color={Colors.primaryDark} />
+              <Ionicons name={pending.length ? "create-outline" : "checkmark-circle"} size={24} color={Colors.primaryDark} />
               <View style={styles.flexOne}>
-                <Text style={styles.summaryTitle}>Đơn đã hoàn tất đối soát</Text>
-                <Text style={styles.summaryText}>{detail?.order.trip?.title || "Chuyến đi của bạn"}</Text>
+                <Text style={styles.summaryTitle}>
+                  {pending.length ? `${pending.length} sản phẩm chờ bạn đánh giá` : "Không còn sản phẩm cần đánh giá"}
+                </Text>
+                <Text style={styles.summaryText}>Đánh giá chỉ dành cho món bạn đã thực nhận, sau khi đơn hoàn tất và quyết toán cọc.</Text>
               </View>
             </View>
 
-            {uniqueItems.map((item) => {
+            {items.map((item) => {
               const draft = drafts[item.productId] ?? { rating: 5, comment: "" };
               return (
                 <View key={item.productId} style={styles.reviewCard}>
-                  <Text style={styles.productSku}>{item.sku || "THIẾT BỊ THUÊ"}</Text>
-                  <Text style={styles.productName}>{item.name || item.product?.name || "Thiết bị trekking"}</Text>
-                  <Text style={styles.ratingLabel}>Mức độ hài lòng</Text>
-                  <View style={styles.starRow}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <TouchableOpacity key={star} onPress={() => updateDraft(item.productId, { rating: star })}>
-                        <Ionicons
-                          name={star <= draft.rating ? "star" : "star-outline"}
-                          size={31}
-                          color={star <= draft.rating ? "#F4A261" : Colors.surfaceContainerHighest}
-                        />
-                      </TouchableOpacity>
-                    ))}
-                    <Text style={styles.ratingValue}>{draft.rating}/5</Text>
-                  </View>
-                  <TextInput
-                    value={draft.comment}
-                    onChangeText={(comment) => updateDraft(item.productId, { comment })}
-                    placeholder="Thiết bị sạch không, sử dụng có ổn định không?..."
-                    placeholderTextColor={Colors.onSurfaceMuted}
-                    multiline
-                    maxLength={500}
-                    style={styles.commentInput}
-                  />
-                  <Text style={styles.counter}>{draft.comment.length}/500</Text>
+                  <Text style={styles.productSku}>{item.product.sku || "THIẾT BỊ THUÊ"}</Text>
+                  <Text style={styles.productName}>{item.product.name || "Thiết bị trekking"}</Text>
+                  {item.canReview ? (
+                    <>
+                      <Text style={styles.ratingLabel}>Mức độ hài lòng</Text>
+                      <View style={styles.starRow}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <TouchableOpacity key={star} onPress={() => updateDraft(item.productId, { rating: star })}>
+                            <Ionicons
+                              name={star <= draft.rating ? "star" : "star-outline"}
+                              size={31}
+                              color={star <= draft.rating ? "#F4A261" : Colors.surfaceContainerHighest}
+                            />
+                          </TouchableOpacity>
+                        ))}
+                        <Text style={styles.ratingValue}>{draft.rating}/5</Text>
+                      </View>
+                      <TextInput
+                        value={draft.comment}
+                        onChangeText={(comment) => updateDraft(item.productId, { comment })}
+                        placeholder="Thiết bị sạch không, sử dụng có ổn định không?..."
+                        placeholderTextColor={Colors.onSurfaceMuted}
+                        multiline
+                        maxLength={2000}
+                        style={styles.commentInput}
+                      />
+                      <Text style={styles.counter}>{draft.comment.length}/2000</Text>
+                    </>
+                  ) : item.isReviewed ? (
+                    <View style={styles.doneRow}>
+                      <Ionicons name="checkmark-circle" size={18} color={Colors.primaryDark} />
+                      <Text style={styles.doneText}>Đã đánh giá {item.rating ?? ""}/5 sao</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.ineligibleText}>
+                      {REVIEW_INELIGIBLE_LABELS[item.ineligibleReason ?? ""] ?? "Sản phẩm chưa đủ điều kiện đánh giá."}
+                    </Text>
+                  )}
                 </View>
               );
             })}
 
-            <TouchableOpacity disabled={submitting} style={styles.submitButton} onPress={() => void submit()}>
-              {submitting ? (
-                <ActivityIndicator color={Colors.onPrimary} />
-              ) : (
-                <>
-                  <Ionicons name="send" size={18} color={Colors.onPrimary} />
-                  <Text style={styles.submitButtonText}>Gửi đánh giá</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {pending.length ? (
+              <TouchableOpacity disabled={submitting} style={[styles.submitButton, submitting && styles.disabled]} onPress={() => void submit()}>
+                {submitting ? (
+                  <ActivityIndicator color={Colors.onPrimary} />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={18} color={Colors.onPrimary} />
+                    <Text style={styles.submitButtonText}>Gửi {pending.length} đánh giá</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.noteText}>Cảm ơn bạn! Đánh giá giúp các trekker khác chọn thiết bị phù hợp.</Text>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -234,4 +247,9 @@ const styles = StyleSheet.create({
   counter: { marginTop: 5, alignSelf: "flex-end", color: Colors.onSurfaceMuted, fontSize: 9 },
   submitButton: { minHeight: 50, marginTop: 5, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
   submitButtonText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "800" },
+  disabled: { opacity: 0.55 },
+  doneRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 },
+  doneText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "700" },
+  ineligibleText: { marginTop: 10, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 17 },
+  noteText: { color: Colors.onSurfaceVariant, fontSize: 11, lineHeight: 16, textAlign: "center" },
 });
