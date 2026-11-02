@@ -93,7 +93,9 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
   }
 
   private async resolveMediaMap(mediaIds: string[]): Promise<Map<string, RentalProductImageView>> {
-    const uniqueIds = [...new Set(mediaIds)];
+    // Older catalog data and local demo seeds can contain direct HTTPS image URLs.
+    // PostgreSQL media IDs are UUIDs, so URLs must not be passed to that query.
+    const uniqueIds = [...new Set(mediaIds.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))];
     if (uniqueIds.length === 0 || typeof this.prisma.mediaAsset?.findMany !== 'function') {
       return new Map();
     }
@@ -258,7 +260,9 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
   ): RentalProductView {
     const imageMediaIds = this.extractMediaIds(product.images);
     const images = imageMediaIds
-      .map((id) => mediaById.get(id))
+      .map((id) => /^https:\/\//i.test(id)
+        ? { mediaId: id, url: id, thumbnailUrl: id, cardUrl: id, detailUrl: id, mimeType: null, width: null, height: null }
+        : mediaById.get(id))
       .filter((item): item is RentalProductImageView => Boolean(item));
 
     // Dữ liệu cũ có thể không phải VND nguyên; không để một dòng lỗi làm hỏng API catalog.
