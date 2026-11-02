@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
+import { ProductReviews } from "@/features/rentals/components/ProductReviews";
 import { getRentalProductDetail } from "@/features/rentals/services/rental.api";
 import type { RentalProductDetailData } from "@/features/rentals/types/rental";
 
@@ -516,6 +517,8 @@ export function RentalProductDetailPage({
             </div>
           </section>
         </div>
+
+        <ProductReviews productId={product.id} />
       </main>
     </div>
   );

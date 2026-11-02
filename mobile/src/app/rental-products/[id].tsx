@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { rentalApi } from "@/features/rentals/api";
+import { rentalReviewApi, type ProductReviewList } from "@/features/rentals/review-api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
 import {
   calculateProductDeposit,
@@ -272,6 +273,8 @@ export default function RentalProductDetailScreen() {
             </View>
           </View>
         )}
+
+        <ProductReviewsSection productId={product.id} />
 
         <View style={styles.sectionCard}>
           <View style={styles.quantityHeader}>
@@ -730,4 +733,122 @@ const styles = StyleSheet.create({
   },
   addButtonSuccess: { backgroundColor: Colors.secondary },
   addButtonText: { color: Colors.onPrimaryDark, fontSize: 13, fontWeight: "900" },
+});
+
+
+/** Đánh giá công khai của người đã thực sự thuê (GET /rental-products/:id/reviews). */
+function ProductReviewsSection({ productId }: { productId: string }) {
+  const [data, setData] = useState<ProductReviewList | null>(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+    rentalReviewApi
+      .listProductReviews(productId, { page, pageSize: 5 })
+      .then((result) => {
+        if (!active) return;
+        setData((current) => (page > 1 && current ? { ...result, reviews: [...current.reviews, ...result.reviews] } : result));
+      })
+      .catch(() => active && setFailed(true))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [productId, page]);
+
+  const summary = data?.summary;
+  const total = summary?.totalReviews ?? 0;
+
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>Đánh giá từ người đã thuê</Text>
+      {loading && !data ? (
+        <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primaryDark} />
+      ) : failed && !data ? (
+        <Text style={reviewStyles.muted}>Chưa tải được đánh giá.</Text>
+      ) : total === 0 ? (
+        <Text style={reviewStyles.muted}>Chưa có đánh giá nào cho thiết bị này.</Text>
+      ) : (
+        <>
+          <View style={reviewStyles.summaryRow}>
+            <View style={reviewStyles.scoreBox}>
+              <Text style={reviewStyles.score}>{(summary?.averageRating ?? 0).toFixed(1)}</Text>
+              <Stars value={summary?.averageRating ?? 0} size={13} />
+              <Text style={reviewStyles.muted}>{total} đánh giá</Text>
+            </View>
+            <View style={reviewStyles.bars}>
+              {(["5", "4", "3", "2", "1"] as const).map((star) => {
+                const count = summary?.ratingBreakdown?.[star] ?? 0;
+                return (
+                  <View key={star} style={reviewStyles.barRow}>
+                    <Text style={reviewStyles.barLabel}>{star}★</Text>
+                    <View style={reviewStyles.barTrack}>
+                      <View style={[reviewStyles.barFill, { width: `${total ? (count / total) * 100 : 0}%` }]} />
+                    </View>
+                    <Text style={reviewStyles.barCount}>{count}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+          {data?.reviews.map((review) => (
+            <View key={review.id} style={reviewStyles.review}>
+              <View style={reviewStyles.reviewHead}>
+                <Text style={reviewStyles.reviewer}>{review.userName}</Text>
+                <Stars value={review.rating} size={12} />
+              </View>
+              <Text style={reviewStyles.verified}>
+                ✓ Đã thuê thật · {new Date(review.createdAt).toLocaleDateString("vi-VN")}
+              </Text>
+              {review.comment ? <Text style={reviewStyles.comment}>{review.comment}</Text> : null}
+            </View>
+          ))}
+          {data && data.pagination.page < data.pagination.totalPages ? (
+            <TouchableOpacity disabled={loading} onPress={() => setPage((current) => current + 1)} style={reviewStyles.more}>
+              <Text style={reviewStyles.moreText}>{loading ? "Đang tải..." : "Xem thêm đánh giá"}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+function Stars({ value, size }: { value: number; size: number }) {
+  return (
+    <View style={{ flexDirection: "row", gap: 1 }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Ionicons
+          key={star}
+          name={value >= star ? "star" : value >= star - 0.5 ? "star-half" : "star-outline"}
+          size={size}
+          color="#F4A261"
+        />
+      ))}
+    </View>
+  );
+}
+
+const reviewStyles = StyleSheet.create({
+  muted: { marginTop: 8, color: Colors.onSurfaceVariant, fontSize: 12 },
+  summaryRow: { marginTop: 12, flexDirection: "row", gap: 16, alignItems: "center" },
+  scoreBox: { alignItems: "center", gap: 3, minWidth: 80 },
+  score: { color: Colors.onSurface, fontSize: 30, fontWeight: "800" },
+  bars: { flex: 1, gap: 4 },
+  barRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  barLabel: { width: 24, color: Colors.onSurfaceVariant, fontSize: 11 },
+  barTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: Colors.surfaceContainer, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: 3, backgroundColor: "#F4A261" },
+  barCount: { width: 22, textAlign: "right", color: Colors.onSurfaceVariant, fontSize: 11 },
+  review: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer, gap: 3 },
+  reviewHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  reviewer: { flex: 1, color: Colors.onSurface, fontSize: 13, fontWeight: "700" },
+  verified: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
+  comment: { marginTop: 3, color: Colors.onSurface, fontSize: 12, lineHeight: 18 },
+  more: { marginTop: 12, paddingVertical: 10, alignItems: "center", borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.surfaceContainerHighest },
+  moreText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "700" },
 });
