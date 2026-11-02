@@ -458,6 +458,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e8ebe6",
     marginBottom: 16,
+    overflow: "hidden",
     ...Shadows.card,
   },
   cardHeader: {
@@ -646,25 +647,31 @@ const styles = StyleSheet.create({
   },
   summaryBox: {
     backgroundColor: "#f5f4ee",
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 12,
-    gap: 6,
+    gap: 8,
     marginBottom: 12,
+    overflow: "hidden",
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 8,
   },
   summaryLabel: {
+    flex: 1,
     fontSize: 11,
     color: "#454745",
     fontWeight: "600",
+    lineHeight: 16,
   },
   summaryVal: {
     fontSize: 12,
     fontWeight: "800",
     color: "#0e0f0c",
+    textAlign: "right",
+    flexShrink: 0,
   },
   saveContainer: {
     marginTop: 4,
