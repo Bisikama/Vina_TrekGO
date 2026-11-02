@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useAuthStore } from "@/features/auth";
 import { apiClient } from "@/lib/axios";
+import { LandingRentalShowcase } from "@/features/rentals/components/LandingRentalShowcase";
 
 interface TripItemFromApi {
   id: string;
@@ -970,6 +971,11 @@ export default function PublicLandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          6b. ĐỒ CHO THUÊ — ai cũng xem được; chưa đăng nhập bấm vào sẽ được nhắc đăng nhập
+      ───────────────────────────────────────────────────────────── */}
+      <LandingRentalShowcase />
 
       {/* ─────────────────────────────────────────────────────────────
           7. APP DOWNLOAD BANNER
