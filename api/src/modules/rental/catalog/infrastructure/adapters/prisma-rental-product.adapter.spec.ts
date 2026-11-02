@@ -123,6 +123,15 @@ describe('PrismaRentalProductAdapter — Media Integration & Catalog Lifecycle',
   });
 
   describe('Reading & Resolving Product Media (listActiveProducts / getProductById)', () => {
+    it('returns seed image URLs without querying them as media UUIDs', async () => {
+      const url = 'https://example.com/tent.jpg';
+      mockPrisma.rentalProduct.findUnique.mockResolvedValue(makeRawProduct({ images: [url, MEDIA_ID_1] }));
+      mockPrisma.mediaAsset.findMany.mockResolvedValue([makeReadyMediaRow(MEDIA_ID_1)]);
+      const view = await adapter.getProductById('prod-1');
+      expect(mockPrisma.mediaAsset.findMany.mock.calls[0][0].where.id.in).toEqual([MEDIA_ID_1]);
+      expect(view!.images![0]).toMatchObject({ url, cardUrl: url });
+      expect(view!.images![1].mediaId).toBe(MEDIA_ID_1);
+    });
     it.each([
       ['fixed', { depositPolicyType: 'FIXED', depositValue: makeDecimal(400000), replacementValue: makeDecimal(2000000) }, 400000, 20],
       ['percentage rounded to VND', { depositPolicyType: 'PERCENT_REPLACEMENT_VALUE', depositValue: makeDecimal(33.33), replacementValue: makeDecimal(10) }, 3, 30],
