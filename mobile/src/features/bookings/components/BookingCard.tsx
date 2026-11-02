@@ -49,6 +49,18 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
   const statusLabel = BOOKING_STATUS_LABELS[status] || status;
 
   function renderStatusBadge() {
+    const endAt = trip?.endAt ? new Date(trip.endAt) : null;
+    const isPast = endAt && !isNaN(endAt.getTime()) && endAt < new Date();
+    const isTripCompleted = (trip?.status || "").toUpperCase() === "COMPLETED" || Boolean(isPast);
+    if (isTripCompleted && (status === "CONFIRMED" || status === "CHECKED_IN" || status === "COMPLETED")) {
+      return (
+        <View style={[styles.badge, { backgroundColor: "#DCFCE7" }]}>
+          <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
+          <Text style={[styles.badgeText, { color: "#16A34A" }]}>Đã hoàn thành</Text>
+        </View>
+      );
+    }
+
     let bg = Colors.surfaceContainerLow;
     let fg = Colors.onSurfaceVariant;
     let icon: keyof typeof Ionicons.glyphMap = "time-outline";
