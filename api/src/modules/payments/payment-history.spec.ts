@@ -987,3 +987,254 @@ describe('Payment History & User Transactions APIs', () => {
   })
 })
 
+
+import { AdminCashflowController } from './admin-cashflow.controller'
+
+describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
+  let app: INestApplication
+  let prismaMock: {
+    payment: { findUnique: jest.Mock }
+    $queryRaw: jest.Mock
+  }
+
+  const adminId = '99999999-9999-4999-a999-999999999999'
+  const customerId = '11111111-1111-4111-a111-111111111111'
+  const paymentId = 'dd950c38-90e2-4d8c-a644-758a5d14130e'
+
+  beforeEach(async () => {
+    prismaMock = {
+      payment: { findUnique: jest.fn() },
+      $queryRaw: jest.fn(),
+    }
+
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      controllers: [AdminCashflowController],
+      providers: [
+        PaymentHistoryService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: RefundsService, useValue: {} },
+        { provide: PaymentRecoveryService, useValue: {} },
+        { provide: PaymentsService, useValue: {} },
+        { provide: PaymentsPort, useClass: SharedPaymentsPort },
+      ],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.setGlobalPrefix('api/v1')
+    app.useGlobalFilters(new GlobalErrorFilter())
+    app.use((req: any, _res: any, next: any) => {
+      if (req.headers.authorization) {
+        req[REQUEST_USER_KEY] = { id: adminId, role: 'ADMIN' }
+      }
+      next()
+    })
+
+    await app.init()
+  })
+
+  afterEach(async () => {
+    await app.close()
+  })
+
+  it('22. GET /api/v1/admin/transactions trả về danh sách giao dịch toàn hệ thống kèm thông tin khách hàng và đối soát', async () => {
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: paymentId,
+          kind: 'PAYMENT',
+          source: 'BOOKING',
+          sourceId: '753d38ba-48ae-44b4-a8bf-37d9f0a6203c',
+          paymentId,
+          refundId: null,
+          invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+          userId: customerId,
+          userFullName: 'Nguyễn Văn A',
+          userEmail: 'nguyenvana@example.com',
+          amount: '2250000.00',
+          currency: 'VND',
+          status: 'SUCCEEDED',
+          financialEffect: 'DEBIT',
+          paymentGateway: 'vnpay',
+          paymentMethod: 'REDIRECT',
+          transactionRef: '15721162',
+          reconcileStatus: 'RESOLVED',
+          reconciliationRequired: false,
+          createdAt: new Date('2026-10-31T09:20:00.000Z'),
+          completedAt: new Date('2026-10-31T09:24:42.000Z'),
+          invoiceNo: 'INV-BK-20261031-001',
+          revisionNo: 1,
+          refundPurpose: null,
+          executionMode: null,
+          confirmationSource: null,
+          isExtension: false,
+        },
+      ])
+      .mockResolvedValueOnce([{ total: 1 }])
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?source=BOOKING&gateway=vnpay&search=INV-BK')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body.items).toHaveLength(1)
+    expect(res.body.items[0]).toMatchObject({
+      id: paymentId,
+      kind: 'PAYMENT',
+      source: 'BOOKING',
+      invoiceNo: 'INV-BK-20261031-001',
+      user: {
+        id: customerId,
+        fullName: 'Nguyễn Văn A',
+        email: 'nguyenvana@example.com',
+      },
+      amount: '2250000.00',
+      financialEffect: 'DEBIT',
+      paymentGateway: 'vnpay',
+      transactionRef: '15721162',
+      reconcileStatus: 'RESOLVED',
+      reconciliationRequired: false,
+    })
+  })
+
+  it('23. GET /api/v1/admin/cashflow/summary tính toán đúng tổng thu, tổng chi, dòng tiền ròng và phân rã theo nguồn/cổng', async () => {
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          totalInflowAmount: '45000000',
+          totalInflowCount: 25,
+          totalOutflowAmount: '8500000',
+          totalOutflowCount: 8,
+          pendingInflowAmount: '3000000',
+          pendingInflowCount: 2,
+          pendingOutflowAmount: '1800000',
+          pendingOutflowCount: 1,
+          reconciliationRequiredCount: 2,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          bucket: 'BOOKING',
+          inflowAmount: '30000000',
+          inflowCount: 15,
+          outflowAmount: '3500000',
+          outflowCount: 3,
+        },
+        {
+          bucket: 'RENTAL',
+          inflowAmount: '15000000',
+          inflowCount: 10,
+          outflowAmount: '5000000',
+          outflowCount: 5,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          bucket: 'vnpay',
+          inflowAmount: '45000000',
+          inflowCount: 25,
+          outflowAmount: '8500000',
+          outflowCount: 8,
+        },
+      ])
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/cashflow/summary?from=2026-10-01T00:00:00.000Z&to=2026-10-31T23:59:59.999Z')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body.totals).toEqual({
+      totalInflowAmount: '45000000.00',
+      totalInflowCount: 25,
+      totalOutflowAmount: '8500000.00',
+      totalOutflowCount: 8,
+      netCashflowAmount: '36500000.00',
+      pendingInflowAmount: '3000000.00',
+      pendingInflowCount: 2,
+      pendingOutflowAmount: '1800000.00',
+      pendingOutflowCount: 1,
+      reconciliationRequiredCount: 2,
+    })
+    expect(res.body.bySource).toHaveLength(3)
+    expect(res.body.bySource[0]).toMatchObject({
+      source: 'BOOKING',
+      inflowAmount: '30000000.00',
+      outflowAmount: '3500000.00',
+      netAmount: '26500000.00',
+    })
+    expect(res.body.byGateway[0]).toMatchObject({
+      gateway: 'vnpay',
+      netAmount: '36500000.00',
+    })
+  })
+
+  it('24. GET /api/v1/admin/payments/:id trả chi tiết payment, đối soát và refunds liên quan mà không lộ secrets', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue({
+      id: paymentId,
+      invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+      amount: new Prisma.Decimal(2250000),
+      currency: 'VND',
+      status: 'SUCCEEDED',
+      paymentGateway: 'vnpay',
+      providerEnvironment: 'SANDBOX',
+      paymentMethod: 'REDIRECT',
+      transactionRef: '15721162',
+      merchantRequestRef: 'REQ-15721162',
+      idempotencyKey: 'TOP_SECRET_IDEMPOTENCY_KEY',
+      gatewayPayload: { secretHash: 'DONT_LEAK' },
+      reconcileStatus: 'RESOLVED',
+      retryCount: 0,
+      lastCheckedAt: new Date('2026-10-31T09:24:42.000Z'),
+      lastErrorCode: null,
+      createdAt: new Date('2026-10-31T09:20:00.000Z'),
+      paidAt: new Date('2026-10-31T09:24:42.000Z'),
+      invoice: {
+        id: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+        invoiceNo: 'INV-BK-20261031-001',
+        status: 'PARTIALLY_REFUNDED',
+        invoiceType: 'BOOKING',
+        bookingId: '753d38ba-48ae-44b4-a8bf-37d9f0a6203c',
+        rentalOrderId: null,
+        trailAccessId: null,
+        user: {
+          id: customerId,
+          fullName: 'Nguyễn Văn A',
+          email: 'nguyenvana@example.com',
+        },
+      },
+      application: {
+        status: 'APPLIED',
+        reasonCode: null,
+      },
+      allocations: [],
+      refundsViaPaymentId: [
+        {
+          id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
+          amount: new Prisma.Decimal(1800000),
+          currency: 'VND',
+          status: 'SUCCEEDED',
+          purpose: 'BOOKING_CANCELLATION',
+          reconcileStatus: 'RESOLVED',
+          executionMode: 'PROVIDER_API',
+          providerPayload: { sandboxSimulation: { status: 'SUCCEEDED' } },
+          refundTransactionRef: 'SIM-01E76D7F',
+          createdAt: new Date('2026-10-31T10:00:00.000Z'),
+          refundedAt: new Date('2026-10-31T10:05:00.000Z'),
+          manualRefund: null,
+        },
+      ],
+    })
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/admin/payments/${paymentId}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body.paymentId).toBe(paymentId)
+    expect(res.body.owner.email).toBe('nguyenvana@example.com')
+    expect(res.body.refunds).toHaveLength(1)
+    expect(res.body.refunds[0].confirmationSource).toBe('SANDBOX_SIMULATION')
+    const raw = JSON.stringify(res.body)
+    expect(raw).not.toContain('TOP_SECRET_IDEMPOTENCY_KEY')
+    expect(raw).not.toContain('DONT_LEAK')
+  })
+})

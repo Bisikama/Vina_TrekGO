@@ -15,6 +15,14 @@ import type {
   UserTransactionsQueryDto,
   UserTransactionsResponseDto,
 } from './dtos/user-transactions.dto'
+import type {
+  AdminCashflowSummaryQueryDto,
+  AdminCashflowSummaryResponseDto,
+  AdminPaymentDetailResponseDto,
+  AdminRefundDetailResponseDto,
+  AdminTransactionsQueryDto,
+  AdminTransactionsResponseDto,
+} from './dtos/admin-cashflow.dto'
 
 export abstract class PaymentsPort {
   abstract createRentalExtensionCheckout(
@@ -38,6 +46,18 @@ export abstract class PaymentsPort {
     actorUserId: string
     query: UserTransactionsQueryDto
   }): Promise<UserTransactionsResponseDto>
+  abstract getAdminTransactions(input: {
+    query: AdminTransactionsQueryDto
+  }): Promise<AdminTransactionsResponseDto>
+  abstract getAdminCashflowSummary(input: {
+    query: AdminCashflowSummaryQueryDto
+  }): Promise<AdminCashflowSummaryResponseDto>
+  abstract getAdminPaymentDetail(input: {
+    paymentId: string
+  }): Promise<AdminPaymentDetailResponseDto>
+  abstract getAdminRefundDetail(input: {
+    refundId: string
+  }): Promise<AdminRefundDetailResponseDto>
 }
 
 @Injectable()
@@ -84,5 +104,16 @@ export class SharedPaymentsPort extends PaymentsPort {
   }) {
     return this.history.getUserTransactions(input)
   }
+  getAdminTransactions(input: { query: AdminTransactionsQueryDto }) {
+    return this.history.getAdminTransactions(input)
+  }
+  getAdminCashflowSummary(input: { query: AdminCashflowSummaryQueryDto }) {
+    return this.history.getAdminCashflowSummary(input)
+  }
+  getAdminPaymentDetail(input: { paymentId: string }) {
+    return this.history.getAdminPaymentDetail(input)
+  }
+  getAdminRefundDetail(input: { refundId: string }) {
+    return this.history.getAdminRefundDetail(input)
+  }
 }
-
