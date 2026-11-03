@@ -47,6 +47,8 @@ export type RentalOrderDetail = {
   pickupPoint: null | { id: string; name: string; address: string };
   returnPoint: null | { id: string; name: string; address: string };
   allowedActions: string[];
+  /** Mốc thời gian thật do API trả: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
+  timeline?: Array<{ type: string; at: string }>;
 };
 
 export type RentalDepositItem = {

@@ -177,7 +177,7 @@ export default function RentalProductDetailScreen() {
                   product.grade === "GOOD_USED" && styles.gradeBadgeUsed,
                 ]}
               >
-                {product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
+                {product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
               </Text>
             ) : null}
           </View>
@@ -235,6 +235,14 @@ export default function RentalProductDetailScreen() {
               {product.dailyPrice.toLocaleString("vi-VN")}đ
               <Text style={styles.perDay}> / ngày</Text>
             </Text>
+            {product.replacementValue > 0 ? (
+              <Text style={styles.originalPriceLabel}>
+                Giá gốc{" "}
+                <Text style={styles.originalPrice}>
+                  {product.replacementValue.toLocaleString("vi-VN")}đ
+                </Text>
+              </Text>
+            ) : null}
           </View>
           <View style={styles.depositBox}>
             <Text style={styles.depositLabel}>Cọc dự kiến / món</Text>
@@ -604,6 +612,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   perDay: { color: Colors.onSurfaceVariant, fontSize: 12, fontWeight: "500" },
+  originalPriceLabel: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 11 },
+  originalPrice: { textDecorationLine: "line-through", opacity: 0.8 },
   depositBox: { alignItems: "flex-end" },
   depositLabel: { color: Colors.onSurfaceVariant, fontSize: 10 },
   depositValue: {

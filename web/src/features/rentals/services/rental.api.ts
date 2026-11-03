@@ -262,6 +262,42 @@ async function resolveProductImages(
     : product;
 }
 
+// GET /api/v1/weather/trips/{tripId} (RC-API-501): thời tiết theo ngày khởi hành của chuyến.
+export type TripWeatherDay = {
+  date: string;
+  condition: string | null;
+  temperatureMaxC: number | null;
+  temperatureMinC: number | null;
+  rainProbabilityPercent: number | null;
+};
+
+export type TripWeather = {
+  tripId: string;
+  destinationName: string;
+  startDate: string;
+  endDate: string;
+  durationDays: number;
+  isFromCache: boolean;
+  snapshot: {
+    observedAt: string;
+    temperatureC: number | null;
+    humidityPercent: number | null;
+    rainProbabilityPercent: number | null;
+    weatherCondition: string | null;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH" | "SEVERE" | "UNKNOWN" | string;
+    riskSummary: string | null;
+  };
+  forecast: TripWeatherDay[];
+};
+
+export async function getTripWeather(tripId: string, signal?: AbortSignal) {
+  const response = await apiClient.get<unknown>(
+    `/api/v1/weather/trips/${encodeURIComponent(tripId)}`,
+    { signal },
+  );
+  return unwrapApiData<TripWeather>(response.data);
+}
+
 export function getRentalApiErrorCode(error: unknown) {
   if (!axios.isAxiosError(error)) return null;
 
@@ -641,6 +677,23 @@ export async function createRentalPayment(
   }
 }
 
+// Tải đủ mọi trang sản phẩm: hai hạng (Như mới / Sử dụng tốt) của cùng một món
+// là hai sản phẩm riêng, phải có cả hai trong danh sách thì thẻ mới gộp và cho chuyển qua lại.
+async function getAllRentalProducts(signal?: AbortSignal) {
+  const pageSize = 100;
+  const first = await getRentalProducts({ page: 1, pageSize, signal });
+  const items = [...first.items];
+  const totalPages = Math.min(first.pagination?.totalPages ?? 1, 10);
+  for (let page = 2; page <= totalPages; page += 1) {
+    const next = await getRentalProducts({ page, pageSize, signal });
+    items.push(...next.items);
+  }
+  return {
+    items,
+    pagination: { ...first.pagination, page: 1, pageSize: items.length || pageSize, totalPages: 1 },
+  };
+}
+
 export async function getRentalCatalog(
   bookingId: string,
   signal?: AbortSignal,
@@ -649,11 +702,7 @@ export async function getRentalCatalog(
     await Promise.all([
       getRentalEligibility(bookingId, signal),
       getRentalCategories(signal),
-      getRentalProducts({
-        page: 1,
-        pageSize: 24,
-        signal,
-      }),
+      getAllRentalProducts(signal),
     ]);
 
   if (!eligibility.eligible) {
@@ -705,6 +754,8 @@ export async function getRentalCatalog(
       };
     }),
     pagination: productResult.pagination,
+    tripSummary: recommendationResult.tripSummary ?? null,
+    recommendationsGeneratedAt: recommendationResult.generatedAt ?? null,
   };
 }
 

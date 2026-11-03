@@ -21,7 +21,7 @@ import type {
 const PAGE_SIZE = 50;
 const MAX_PAGES = 6;
 const INITIAL_VISIBLE = 8;
-const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Sử dụng tốt" } as const;
+const GRADE_LABELS = { LIKE_NEW: "Như mới", GOOD_USED: "Sử dụng tốt" } as const;
 const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
 const RENTALS_PATH = "/rentals";
 const LOGIN_PATH = "/public/login";
@@ -162,9 +162,16 @@ function ShowcaseCard({
         </p>
         <div className="mt-auto pt-4">
           <p className="text-[10px] font-semibold text-gray-400">Giá thuê từ</p>
-          <p className="mt-0.5 text-xl font-black text-[#17603F]">
-            {formatMoney(item.dailyPrice, item.currency)}
-            <span className="text-[11px] font-bold text-gray-400">/ngày</span>
+          <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xl font-black text-[#17603F]">
+            <span>
+              {formatMoney(item.dailyPrice, item.currency)}
+              <span className="text-[11px] font-bold text-gray-400">/ngày</span>
+            </span>
+            {(item.replacementValue ?? 0) > 0 && (
+              <span title="Giá gốc của món đồ" className="text-xs font-semibold text-gray-400 line-through opacity-80">
+                {formatMoney(item.replacementValue ?? 0, item.currency)}
+              </span>
+            )}
           </p>
           {typeof item.depositPerUnit === "number" && (
             <p className="mt-1 text-[11px] font-semibold text-gray-500">
@@ -349,7 +356,7 @@ export function LandingRentalShowcase() {
               </h2>
               <p className="mt-3 text-sm leading-6 text-white/75 sm:text-base">
                 Lều, balo, túi ngủ, giày leo núi… thuê theo đúng ngày của chuyến đi, nhận tại điểm hẹn và được
-                kiểm tra lại sau mỗi lần trả. Chọn bản Mới hoặc Sử dụng tốt tuỳ ngân sách.
+                kiểm tra lại sau mỗi lần trả. Chọn bản Như mới hoặc Sử dụng tốt tuỳ ngân sách.
               </p>
             </div>
             <div className="grid shrink-0 grid-cols-3 gap-3 text-center">
