@@ -22,6 +22,7 @@ import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebVi
 import { rentalApi } from "@/features/rentals/api";
 import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
 import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -767,10 +768,10 @@ export default function RentalOrderDetailScreen() {
                     ? stripGradeSuffix(item.name || item.product?.name || "Thiết bị thuê")
                     : item.name || item.product?.name || "Thiết bị thuê"}
                 </Text>
+                {item.product?.grade ? <GradeBadge grade={item.product.grade} style={styles.lineGrade} /> : null}
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
                   {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
-                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}` : ""}
                 </Text>
                 {typeof item.depositPerUnit === "number" && typeof item.depositAmount === "number" ? (
                   <Text style={styles.lineMeta}>
@@ -1226,6 +1227,7 @@ const styles = StyleSheet.create({
   lineIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
   lineImage: { width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainer },
   lineName: { color: Colors.onSurface, fontSize: 14, lineHeight: 19, fontWeight: "700" },
+  lineGrade: { marginTop: 4 },
   lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10 },
   lineAmount: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
   unitWrap: { marginTop: 12, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
