@@ -21,7 +21,7 @@ export class PaymentWebhooksService {
     if (!event) throw AppError.fromCode(E.PAYMENT_WEBHOOK_INVALID_SIGNATURE)
     const payloadHash =
       event.gateway === 'vnpay' ? paymentHash(JSON.parse(rawBody.toString('utf8')).vnp_SecureHash.toLowerCase()) :
-      event.gateway === 'momo' ? paymentHash(event) : createHash('sha256').update(rawBody).digest('hex')
+      ['momo', 'payos'].includes(event.gateway) ? paymentHash(event) : createHash('sha256').update(rawBody).digest('hex')
     try {
       await this.provider.observeVerifiedEvent(event)
       await this.db.$transaction(async (tx) => {

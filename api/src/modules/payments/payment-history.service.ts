@@ -33,6 +33,8 @@ interface RawTimelineRow {
   completedAt: Date | null
   invoiceNo: string | null
   revisionNo: number | null
+  executionMode: string | null
+  confirmationSource: string | null
   refundPurpose: string | null
   isExtension: boolean
 }
@@ -137,6 +139,7 @@ export class PaymentHistoryService {
             purpose: true,
             createdAt: true,
             refundedAt: true,
+            executionMode: true,
           },
         },
         invoice: {
@@ -171,6 +174,8 @@ export class PaymentHistoryService {
           amount: new Prisma.Decimal(refund.amount).toFixed(2),
           status: refund.status,
           purpose: refund.purpose,
+          executionMode: refund.executionMode,
+          confirmationSource: refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === 'SUCCEEDED' ? 'ADMIN_MANUAL' : null,
           createdAt: refund.createdAt.toISOString(),
           refundedAt: refund.refundedAt ? refund.refundedAt.toISOString() : null,
         })),
@@ -269,6 +274,8 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         NULL::text AS "refundPurpose",
+        NULL::text AS "executionMode",
+        NULL::text AS "confirmationSource",
         CASE
           WHEN i.invoice_type::text = 'RENTAL' AND (
             i.invoice_no LIKE 'RENTAL-EXT-%' OR
@@ -316,6 +323,8 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         r.purpose::text AS "refundPurpose",
+        r.execution_mode::text AS "executionMode",
+        CASE WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
         FALSE AS "isExtension"
       FROM refunds r
       JOIN payments p ON p.id = r.payment_id
@@ -396,6 +405,8 @@ export class PaymentHistoryService {
         currency: row.currency,
         status: row.status,
         financialEffect: row.financialEffect,
+        executionMode: row.executionMode ?? null,
+        confirmationSource: row.confirmationSource ?? null,
         description,
         paymentMethod: row.paymentMethod ?? null,
         createdAt: new Date(row.createdAt).toISOString(),

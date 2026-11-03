@@ -3366,6 +3366,7 @@ model InvoiceLine {
 }
 
 model Payment {
+  payosCheckout       PayosCheckout?
   allocations         PaymentAllocation[]
   /// Expand phase: null metadata is legacy/unverified, never implicitly MOCK or SANDBOX.
   providerEnvironment PaymentEnvironment?    @map("provider_environment")
@@ -3448,6 +3449,8 @@ model PaymentWebhookEvent {
 }
 
 model Refund {
+  executionMode       RefundExecutionMode @default(PROVIDER_API) @map("execution_mode")
+  manualRefund        ManualRefund?
   allocations         RefundAllocation[]
   /// Expand phase: new writers must supply verified scope and request identity.
   reasonCode          String?                @map("reason_code") @db.VarChar(80)
@@ -3513,6 +3516,73 @@ model Refund {
   @@index([bookingCancellationId])
   @@index([rentalOrderId])
   @@map("refunds")
+}
+
+enum RefundExecutionMode {
+  PROVIDER_API
+  MANUAL_BANK_TRANSFER
+  @@map("refund_execution_mode")
+}
+
+enum ManualRefundStatus {
+  AWAITING_RECIPIENT
+  READY
+  PROCESSING
+  NEEDS_REVIEW
+  COMPLETED
+  @@map("manual_refund_status")
+}
+
+model PayosCheckout {
+  paymentId       String @id @map("payment_id") @db.Uuid
+  payment         Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderCode       BigInt @unique @default(autoincrement()) @map("order_code")
+  paymentLinkId   String? @unique @map("payment_link_id") @db.VarChar(180)
+  requestSnapshot Json? @map("request_snapshot")
+  lastResponse    Json? @map("last_response")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@map("payos_checkouts")
+}
+
+model ManualRefund {
+  refundId            String @id @map("refund_id") @db.Uuid
+  refund              Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  status              ManualRefundStatus @default(AWAITING_RECIPIENT)
+  bankBin             String? @map("bank_bin") @db.VarChar(6)
+  accountNumber       String? @map("account_number") @db.VarChar(40)
+  accountHolderName   String? @map("account_holder_name") @db.VarChar(200)
+  ownershipConfirmedAt DateTime? @map("ownership_confirmed_at") @db.Timestamptz(6)
+  assignedAdminId     String? @map("assigned_admin_id") @db.Uuid
+  claimedAt           DateTime? @map("claimed_at") @db.Timestamptz(6)
+  sourceBankBin       String? @map("source_bank_bin") @db.VarChar(6)
+  sourceAccountNumber String? @map("source_account_number") @db.VarChar(40)
+  bankTransactionRef  String? @map("bank_transaction_ref") @db.VarChar(180)
+  transferredAt       DateTime? @map("transferred_at") @db.Timestamptz(6)
+  confirmedBy         String? @map("confirmed_by") @db.Uuid
+  evidenceMediaId     String? @map("evidence_media_id") @db.Uuid
+  note                String? @db.VarChar(500)
+  version             Int @default(1)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  actions             ManualRefundAction[]
+  @@unique([sourceBankBin, sourceAccountNumber, bankTransactionRef], map: "uq_manual_refund_bank_transfer")
+  @@index([status, createdAt])
+  @@index([assignedAdminId, status])
+  @@map("manual_refunds")
+}
+
+model ManualRefundAction {
+  id             String @id @default(uuid()) @db.Uuid
+  refundId       String @map("refund_id") @db.Uuid
+  manualRefund   ManualRefund @relation(fields: [refundId], references: [refundId], onDelete: Restrict)
+  actorId        String @map("actor_id") @db.Uuid
+  action         String @db.VarChar(30)
+  idempotencyKey String @unique @map("idempotency_key") @db.VarChar(200)
+  requestHash    String @map("request_hash") @db.Char(64)
+  result         Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([refundId, createdAt])
+  @@map("manual_refund_actions")
 }
 
 enum PaymentAllocationComponent {

@@ -1,3 +1,5 @@
+import { ManualRefundsService } from './manual-refunds.service'
+import { MANUAL_REFUND_DETAIL_SCHEMA } from './manual-refund.swagger'
 import { Body, Controller, Get, Headers, HttpCode, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
@@ -6,11 +8,9 @@ import { Auth } from '../../shared/decorators/auth.decorator'
 import { Roles } from '../../shared/decorators/roles.decorator'
 import { AuthType } from '../../shared/constants/auth.constant'
 import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
-import { AppError, PAYMENT_ERROR_CODES } from '../../shared/errors'
+import { AppError } from '../../shared/errors'
 import type { ActiveUserData } from '../../shared/types/user.type'
-import { PrismaService } from '../../shared/services/prisma.service'
 import { PaymentRecoveryService } from './payment-recovery.service'
-import { refundSummary } from './refunds.service'
 import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
 import {
   SandboxSimulateRefundBodySchema,
@@ -116,14 +116,15 @@ export class PaymentOperationsController {
   }
 
   @Post('payment-refunds/:refundId/sandbox-simulate-settlement')
+  @HttpCode(200)
   @ApiOperation({
-    summary: 'Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+    summary: 'Xác nhận hoàn tiền booking hoặc hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
     description:
       'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING hoặc không có API refund. ' +
       'API ghi nhận một kết quả provider SUCCEEDED giả lập qua Shared Payment; Rental chỉ cập nhật settlement bằng outbox worker. ' +
       'Không gọi API hoàn tiền thật và không chứng minh tiền đã về tài khoản.',
   })
-  @ApiParam({ name: 'refundId', type: String, format: 'uuid', description: 'UUID của lệnh hoàn cọc' })
+  @ApiParam({ name: 'refundId', type: String, format: 'uuid', description: 'UUID của lệnh hoàn tiền booking hoặc hoàn cọc' })
   @ApiHeader({
     name: 'idempotency-key',
     required: true,
@@ -167,8 +168,9 @@ export class PaymentOperationsController {
   }
 
   @Post('refunds/:refundId/sandbox-simulate-settlement')
+  @HttpCode(200)
   @ApiOperation({
-    summary: 'Alias: Xác nhận hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+    summary: 'Alias: Xác nhận hoàn tiền mô phỏng VNPay Sandbox (TEST ONLY)',
   })
   async simulateRefundAlias(
     @Param(new ZodValidationPipe(SandboxSimulateRefundParamSchema))
@@ -183,8 +185,8 @@ export class PaymentOperationsController {
 
   @Get('payment-refunds/:refundId/sandbox-simulation')
   @ApiOperation({
-    summary: 'Chi tiết bằng chứng mô phỏng hoàn cọc (TEST ONLY)',
-    description: 'Truy vấn thông tin provenance và trạng thái mô phỏng hoàn cọc của một refund.',
+    summary: 'Chi tiết bằng chứng mô phỏng hoàn tiền (TEST ONLY)',
+    description: 'Truy vấn nguồn gốc và trạng thái mô phỏng hoàn tiền của một refund.',
   })
   async getSimulation(
     @Param(new ZodValidationPipe(SandboxSimulateRefundParamSchema))
@@ -201,7 +203,7 @@ export class PaymentOperationsController {
 @ApiBearerAuth('bearer')
 @Auth([AuthType.Bearer])
 export class RefundsController {
-  constructor(private readonly db: PrismaService) {}
+  constructor(private readonly manualRefunds: ManualRefundsService) {}
 
   @Get(':id')
   @ApiOperation({
@@ -216,15 +218,11 @@ export class RefundsController {
     description: 'UUID của lệnh hoàn tiền',
     example: '550e8400-e29b-41d4-a716-446655440001',
   })
-  @ApiResponse({ status: 200, description: 'Thông tin tóm tắt lệnh hoàn tiền' })
+  @ApiResponse({ status: 200, schema: MANUAL_REFUND_DETAIL_SCHEMA, description: 'Refund detail; ADMIN_MANUAL is declared by admin, not verified by the payment provider' })
   @ApiResponse({ status: 401, description: 'Chưa xác thực' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy lệnh hoàn tiền' })
   async detail(@Param('id', new ZodValidationPipe(z.string().uuid())) id: string, @ActiveUser() actor: ActiveUserData) {
     if (!actor?.id) throw AppError.fromCode('UNAUTHENTICATED')
-    const refund = await this.db.refund.findFirst({
-      where: { id, ...(actor.role === 'ADMIN' ? {} : { payment: { invoice: { userId: actor.id } } }) },
-    })
-    if (!refund) throw AppError.fromCode(PAYMENT_ERROR_CODES.PAYMENT_NOT_FOUND)
-    return refundSummary(refund)
+    return this.manualRefunds.detail(id, actor)
   }
 }

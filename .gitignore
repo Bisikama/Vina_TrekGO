@@ -146,5 +146,6 @@ vite.config.ts.timestamp-*
 /handoffs
 /implementation
 /scripts
+CLAUDE.md
 
 GEAR_ADVISOR_PROGRESS.md

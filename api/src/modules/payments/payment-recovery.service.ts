@@ -59,6 +59,7 @@ export class PaymentRecoveryService {
       const ids = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
         SELECT id FROM ${table} WHERE (${scopes})
         ${id ? Prisma.sql`AND id = ${id}::uuid` : Prisma.empty}
+        ${kind === 'refund' ? Prisma.sql`AND execution_mode = 'PROVIDER_API' AND payment_gateway <> 'payos'` : Prisma.empty}
         AND (lease_until IS NULL OR lease_until <= clock_timestamp())
         AND ((reconcile_status IN ('SCHEDULED', 'RUNNING'))
           OR (status IN ('PENDING','PROCESSING') AND reconcile_status = 'IDLE')
@@ -369,6 +370,11 @@ export class PaymentRecoveryService {
         Prisma.sql`SELECT id FROM ${table} WHERE id = ${id}::uuid FOR UPDATE`,
       )
       if (!rows.length) throw AppError.fromCode(E.PAYMENT_NOT_FOUND)
+      if (kind === 'refund') {
+        const refund = await tx.refund.findUniqueOrThrow({ where: { id } })
+        if (refund.executionMode === 'MANUAL_BANK_TRANSFER' || refund.paymentGateway === 'payos')
+          throw AppError.fromCode('MANUAL_REFUND_INVALID_STATE')
+      }
       await tx.$executeRaw(Prisma.sql`UPDATE ${table} SET reconcile_status = 'SCHEDULED', next_retry_at = clock_timestamp(),
         version = version + 1, updated_at = clock_timestamp()
         WHERE id = ${id}::uuid AND (lease_until IS NULL OR lease_until <= clock_timestamp())`)
