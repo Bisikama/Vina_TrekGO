@@ -92,6 +92,8 @@ export function RentalWardrobePage() {
   const [aiProgress, setAiProgress] = useState<{ source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" } | null>(null);
   const [capabilities, setCapabilities] = useState<GearCapabilities | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<UserGearItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const aiRequestLock = useRef(false);
 
@@ -170,6 +172,21 @@ export function RentalWardrobePage() {
     }
   }
 
+  async function removePending() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteMyGear(pendingDelete.id);
+      const removedId = pendingDelete.id;
+      setItems((current) => current.filter((entry) => entry.id !== removedId));
+      setNotice(`Đã gỡ “${pendingDelete.name}” khỏi tủ đồ.`);
+      setPendingDelete(null);
+    } catch (reason) {
+      setPendingDelete(null);
+      setError(getRentalApiErrorMessage(reason, "Chưa xóa được món đồ."));
+    } finally { setDeleting(false); }
+  }
+
   return <main className="min-h-[700px] bg-[#f4f7fb] px-4 py-8 sm:px-6 lg:px-8">
     <section className="mx-auto max-w-7xl">
       <RentalPageHeader eyebrow="Chuẩn bị hành trang" title="Tủ đồ cá nhân" description="Quản lý trang bị thật của bạn, kiểm tra thông số và chuẩn bị chính xác cho từng chuyến đi." active="/rentals/wardrobe" />
@@ -221,11 +238,7 @@ export function RentalWardrobePage() {
       </div>
 
       {loading ? <State title="Đang mở tủ đồ..." description="TrekGo đang kiểm tra trang bị của bạn." /> : visibleItems.length === 0 ? <State title={items.length ? "Không có món phù hợp bộ lọc" : "Tủ đồ đang trống"} description={items.length ? "Thử chọn danh mục khác hoặc xóa từ khóa tìm kiếm." : "Thêm món đầu tiên: chụp nhãn, dán đường dẫn, chọn món có sẵn hoặc tự nhập."} /> :
-        <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleItems.map((item) => <GearCard key={item.id} item={item} onEdit={() => setEditor({ item })} onDelete={async () => {
-          if (!window.confirm(`Xóa hẳn “${item.name}”? Món đồ không thể khôi phục, nhưng lịch sử kiểm tra theo chuyến vẫn được giữ.`)) return;
-          try { await deleteMyGear(item.id); setItems((current) => current.filter((entry) => entry.id !== item.id)); }
-          catch (reason) { setError(getRentalApiErrorMessage(reason, "Chưa xóa được món đồ.")); }
-        }} />)}</div>}
+        <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleItems.map((item) => <GearCard key={item.id} item={item} onEdit={() => setEditor({ item })} onDelete={() => setPendingDelete(item)} />)}</div>}
 
       <TripReviewSection items={items} />
     </section>
@@ -235,6 +248,16 @@ export function RentalWardrobePage() {
       setCatalogOpen(false);
       setNotice(`Đã thêm “${saved.name}” từ danh mục đã duyệt.`);
     }} />}
+
+    {pendingDelete && <ConfirmDialog
+      title="Gỡ món đồ khỏi tủ?"
+      message={<>Món <b className="font-medium text-slate-900">{pendingDelete.name}</b> sẽ bị xoá và không khôi phục được. Lịch sử kiểm tra theo chuyến vẫn được giữ.</>}
+      confirmLabel="Gỡ bỏ"
+      tone="danger"
+      busy={deleting}
+      onCancel={() => { if (!deleting) setPendingDelete(null); }}
+      onConfirm={() => void removePending()}
+    />}
 
     {editor && <GearEditor context={editor} busy={busy} onClose={() => setEditor(null)} onSave={(input) => void save(input)} />}
     {linkOpen && <LinkDialog busy={busy} onClose={() => { if (!aiRequestLock.current) setLinkOpen(false); }} onSubmit={async (url) => {
@@ -359,6 +382,36 @@ function GearEditor({ context, busy, onClose, onSave }: { context: { item?: User
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="text-xs font-semibold text-slate-700">{label}<div className="mt-2">{children}</div></label>; }
 function LinkDialog({ busy, onClose, onSubmit }: { busy: boolean; onClose: () => void; onSubmit: (url: string) => void }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4"><form onSubmit={(event) => { event.preventDefault(); onSubmit(String(new FormData(event.currentTarget).get("url") ?? "")); }} className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><p className="text-[10px] font-bold uppercase tracking-wider text-[#27735a]">Đọc từ đường dẫn</p><h2 className="mt-1 text-xl font-bold">Nạp thông số từ sản phẩm</h2><p className="mt-2 text-sm text-slate-500">Dán một đường dẫn sản phẩm trekking. Bạn luôn được xem và sửa bản nháp trước khi lưu.</p><input name="url" type="url" required autoFocus className={`${inputClass} mt-5`} placeholder="https://..." /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Hủy</button><button disabled={busy} className="rounded-xl bg-[#123f32] px-5 py-2.5 text-sm font-bold text-white">{busy ? "Đang đọc..." : "Tạo bản nháp"}</button></div></form></div>; }
+function ConfirmDialog({ title, message, confirmLabel, tone = "default", busy, onCancel, onConfirm }: {
+  title: string;
+  message: React.ReactNode;
+  confirmLabel: string;
+  tone?: "default" | "danger";
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  const confirmClass = tone === "danger" ? "bg-red-600 hover:bg-red-700" : "bg-[#165c45] hover:bg-[#124b39]";
+  return <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+    <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <h3 id="confirm-dialog-title" className="text-lg font-semibold text-slate-900">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+      <div className="mt-6 flex justify-end gap-2">
+        <button type="button" autoFocus disabled={busy} onClick={onCancel} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">Huỷ</button>
+        <button type="button" disabled={busy} onClick={onConfirm} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 ${confirmClass}`}>
+          {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+          {busy ? "Đang xử lý..." : confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
 function DuplicateDialog({ data, busy, onBack, onConfirm }: { data: Record<string, unknown>; busy: boolean; onBack: () => void; onConfirm: () => void }) { const similar = data.similarItem as { name?: string } | undefined; const matched = Array.isArray(data.matchedFields) ? data.matchedFields.join(", ") : "các thông số kỹ thuật"; return <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4"><div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="bg-orange-50 px-6 py-5"><p className="text-[10px] font-bold uppercase tracking-wider text-orange-600">Có thể bị trùng</p><h3 className="mt-1 text-lg font-bold">Tủ đã có một món có thông số tương tự</h3></div><div className="p-6 text-sm text-slate-600"><p>Món tương tự: <b className="text-slate-950">{similar?.name ?? "Trang bị đã lưu"}</b></p><p className="mt-2">Thông số trùng: <b>{matched}</b></p><p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs">Đây chỉ là so sánh thông số, không khẳng định cùng một vật thật.</p></div><div className="flex justify-end gap-3 border-t p-4"><button onClick={onBack} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Quay lại chỉnh sửa</button><button disabled={busy} onClick={onConfirm} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-bold text-white">Vẫn lưu thêm</button></div></div></div>; }
 function State({ title, description }: { title: string; description: string }) { return <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><p className="mt-4 font-bold text-slate-900">{title}</p><p className="mt-2 text-sm text-slate-500">{description}</p></div>; }
 function formatAttribute(value: unknown, unit: string) { if (value === true) return "Có"; if (value === false) return "Không"; if (value === null || value === undefined || value === "") return "Chưa biết"; if (unit === "coverage") return value === "FULL_BODY" ? "Toàn thân" : "Thân trên"; return `${String(value)}${unit}`; }
@@ -494,6 +547,7 @@ function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (it
   const [selected, setSelected] = useState<GearCatalogEntry | null>(null);
   const [condition, setCondition] = useState<GearCondition>("good");
   const [adding, setAdding] = useState(false);
+  const [duplicateDetails, setDuplicateDetails] = useState<Record<string, unknown> | null>(null);
 
   const search = useCallback(async (cursor?: string) => {
     setLoading(true); setError(null);
@@ -518,8 +572,7 @@ function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (it
     } catch (reason) {
       const issue = issueOf(reason);
       if (issue.code === "GEAR_ITEM_POSSIBLE_DUPLICATE") {
-        const similar = (issue.details.similarItem as { name?: string } | undefined)?.name ?? "một món đã lưu";
-        if (window.confirm(`Tủ đã có món tương tự (“${similar}”). Đây chỉ là so sánh thông số. Vẫn thêm?`)) await add(true);
+        setDuplicateDetails(issue.details);
       } else setError(getRentalApiErrorMessage(reason, "Chưa thêm được món đồ."));
     } finally { setAdding(false); }
   }
@@ -527,6 +580,7 @@ function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (it
   const fieldsOf = (entry: GearCatalogEntry) => attributeConfig[entry.category].filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
 
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4">
+    {duplicateDetails && <DuplicateDialog data={duplicateDetails} busy={adding} onBack={() => setDuplicateDetails(null)} onConfirm={() => { setDuplicateDetails(null); void add(true); }} />}
     <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
       <div className="flex items-start justify-between gap-3 border-b p-5">
         <div><p className="text-[10px] font-bold uppercase tracking-wider text-[#27735a]">Danh mục đã duyệt</p><h2 className="mt-1 text-xl font-bold">{selected ? "Thêm vào tủ đồ" : "Tìm sản phẩm"}</h2></div>
