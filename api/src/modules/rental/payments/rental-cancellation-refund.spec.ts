@@ -48,6 +48,17 @@ function fixture() {
 }
 
 describe('Hủy Rental theo lifecycle trước bàn giao', () => {
+  it('queues a manual payOS refund while preserving the approved rental fee/deposit allocations', async () => {
+    const { tx, input } = fixture()
+    const original = await tx.payment.findUniqueOrThrow()
+    tx.payment.findUniqueOrThrow.mockResolvedValue({ ...original, paymentGateway: 'payos', providerEnvironment: 'PRODUCTION' })
+    expect(await reserveLifecycleRentalRefundWithTx(tx, input)).toEqual({ financialStatus: 'REFUND_PENDING', reviewReason: null })
+    expect(tx.refund.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      executionMode: 'MANUAL_BANK_TRANSFER', reconcileStatus: 'IDLE', nextRetryAt: null, manualRefund: { create: {} },
+      amount: decimal(150), allocations: { create: [{ paymentAllocationId: 'deposit-1', amount: decimal(50) }, { paymentAllocationId: 'fee-1', amount: decimal(100) }] },
+    }) }))
+  })
+
   it('Trip do hệ thống hủy: đặt hoàn 100% phí và cọc, chờ xác nhận cổng', async () => {
     const { tx, input } = fixture()
     expect(await reserveLifecycleRentalRefundWithTx(tx, input)).toEqual({

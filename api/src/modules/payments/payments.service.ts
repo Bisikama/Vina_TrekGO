@@ -31,7 +31,7 @@ export type CheckoutCommand = {
   actorUserId: string
   idempotencyKey: string
   paymentMethod: PaymentMethod
-  gateway?: 'momo' | 'vnpay'
+  gateway?: 'momo' | 'vnpay' | 'payos'
   clientIp?: string
 }
 export type InvoiceCheckoutCommand = Omit<CheckoutCommand, 'bookingId'> & { invoiceId: string }
@@ -72,11 +72,12 @@ export class PaymentsService {
 
   paymentOptions() {
     const gateways = this.provider.scopes
-      .filter((scope) => ['momo', 'vnpay'].includes(scope.gateway))
+      .filter((scope) => ['momo', 'vnpay', 'payos'].includes(scope.gateway))
       .map((scope) => ({
         gateway: scope.gateway,
         environment: scope.environment,
         methods: ['QR', 'REDIRECT'] as PaymentMethod[],
+        ...(scope.gateway === 'payos' ? { refundMode: 'MANUAL_BANK_TRANSFER' } : {}),
       }))
 
     return {

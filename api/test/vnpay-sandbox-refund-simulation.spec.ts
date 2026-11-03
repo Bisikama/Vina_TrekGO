@@ -500,7 +500,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
 
   describe('fail-closed eligibility', () => {
     it.each([
-      ['non-deposit purpose', { refund: { purpose: 'BOOKING_CANCELLATION' } }, P.SANDBOX_SIMULATION_INVALID_REFUND],
+      ['unsupported purpose', { refund: { purpose: 'TECHNICAL_REVERSAL' } }, P.SANDBOX_SIMULATION_INVALID_REFUND],
       ['non-VNPay gateway', { refund: { paymentGateway: 'momo' } }, P.SANDBOX_SIMULATION_INVALID_REFUND],
       ['missing VNPay response', { refund: { providerPayload: {} } }, P.SANDBOX_SIMULATION_INVALID_REFUND],
       [

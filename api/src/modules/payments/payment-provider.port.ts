@@ -55,6 +55,7 @@ export abstract class PaymentProvider {
   forGateway(gateway: string): PaymentProvider | undefined {
     return gateway === this.scope.gateway ? this : undefined
   }
+  isConnectionProbe(_raw: Buffer): Promise<boolean> { return Promise.resolve(false) }
   abstract createPayment(input: ProviderPaymentInput): Promise<ProviderResult>
   abstract queryPayment(input: ProviderScope & { merchantRequestRef: string }): Promise<ProviderFinancialResult>
   abstract refund(input: ProviderRefundInput): Promise<ProviderFinancialResult>

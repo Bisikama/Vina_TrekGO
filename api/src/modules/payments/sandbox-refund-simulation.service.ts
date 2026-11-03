@@ -17,8 +17,10 @@ type PreparedSimulation = {
   simulationId: string
   event: VerifiedRefundEvent
   refundId: string
-  rentalOrderId: string
-  depositSettlementId: string
+  rentalOrderId: string | null
+  depositSettlementId: string | null
+  bookingId?: string
+  bookingCancellationId?: string
   amount: string
   currency: string
   actorUserId: string
@@ -37,7 +39,7 @@ export class SandboxRefundSimulationService {
    * explicitly enabled, hostname-pinned demo environment.
    */
   assertEnvironmentSafe(): void {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' || process.env.PAYOS_ENABLED === 'true') {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
         message: 'Sandbox simulation is strictly forbidden in production environment',
       })
@@ -182,7 +184,8 @@ export class SandboxRefundSimulationService {
       const refund = await tx.refund.findUniqueOrThrow({
         where: { id: input.refundId },
         include: {
-          payment: { include: { invoice: true } },
+          payment: { include: { invoice: true, application: true } },
+          bookingCancellation: { include: { booking: true } },
           depositSettlement: true,
           depositSettlementItem: true,
           depositRefundItems: { include: { item: true } },
@@ -191,25 +194,53 @@ export class SandboxRefundSimulationService {
       })
 
       const settlementOrderId = refund.depositSettlement?.orderId ?? null
-      if (!settlementOrderId || !refund.depositSettlementId) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Deposit refund is not linked to a valid settlement and rental order',
-        })
-      }
-      if (refund.rentalOrderId && refund.rentalOrderId !== settlementOrderId) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Refund rental order does not match its deposit settlement',
-        })
-      }
-      if (refund.payment.invoice.rentalOrderId !== settlementOrderId) {
-        throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
-          message: 'Refund source payment belongs to a different rental order',
-        })
-      }
-      if (refund.purpose !== 'DEPOSIT') {
-        throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
-          message: 'Only DEPOSIT refunds can be simulated by this operation',
-        })
+      const isBookingCancellation = refund.purpose === 'BOOKING_CANCELLATION'
+      if (isBookingCancellation) {
+        const cancellation = refund.bookingCancellation
+        if (
+          !cancellation ||
+          cancellation.booking.status !== 'CANCELLED' ||
+          refund.payment.invoice.invoiceType !== 'BOOKING' ||
+          refund.payment.invoice.bookingId !== cancellation.bookingId ||
+          refund.payment.invoice.userId !== cancellation.booking.userId ||
+          refund.businessActionId !== `booking-cancellation:${cancellation.id}` ||
+          refund.amount.lte(0) ||
+          refund.amount.gt(cancellation.refundableAmount) ||
+          refund.amount.gt(refund.payment.amount) ||
+          refund.requestHashVersion !== 1 ||
+          refund.payment.application?.status !== 'APPLIED' ||
+          refund.payment.status !== 'SUCCEEDED' ||
+          refund.currency !== 'VND' ||
+          refund.payment.currency !== refund.currency ||
+          !refund.merchantAccountKey ||
+          !refund.merchantRefundRef ||
+          !refund.payment.merchantRequestRef ||
+          refund.payment.paymentGateway !== refund.paymentGateway ||
+          refund.payment.providerEnvironment !== refund.providerEnvironment ||
+          refund.payment.merchantAccountKey !== refund.merchantAccountKey
+        )
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      } else {
+        if (!settlementOrderId || !refund.depositSettlementId) {
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+            message: 'Deposit refund is not linked to a valid settlement and rental order',
+          })
+        }
+        if (refund.rentalOrderId && refund.rentalOrderId !== settlementOrderId) {
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+            message: 'Refund rental order does not match its deposit settlement',
+          })
+        }
+        if (refund.payment.invoice.rentalOrderId !== settlementOrderId) {
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
+            message: 'Refund source payment belongs to a different rental order',
+          })
+        }
+        if (refund.purpose !== 'DEPOSIT') {
+          throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
+            message: 'Only DEPOSIT refunds can be simulated by this operation',
+          })
+        }
       }
       if (refund.paymentGateway !== 'vnpay' || refund.providerEnvironment !== 'SANDBOX') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
@@ -219,8 +250,7 @@ export class SandboxRefundSimulationService {
 
       const providerPayload = refund.providerPayload as Prisma.JsonObject | null
       const existingSimulation = providerPayload?.sandboxSimulation as Record<string, unknown> | undefined
-      const isSimulationCommitted =
-        refund.status === 'SUCCEEDED' && existingSimulation?.status === 'SUCCEEDED'
+      const isSimulationCommitted = refund.status === 'SUCCEEDED' && existingSimulation?.status === 'SUCCEEDED'
       if (existingSimulation) {
         if (isSimulationCommitted) {
           if (existingSimulation.requestHash !== requestHash) {
@@ -246,12 +276,23 @@ export class SandboxRefundSimulationService {
         })
       }
 
-      this.assertAllocations(refund, settlementOrderId)
+      if (!isBookingCancellation) this.assertAllocations(refund, settlementOrderId!)
 
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+      if (isBookingCancellation && refund.leaseUntil && refund.leaseUntil > now) {
+        throw AppError.fromCode('VERSION_CONFLICT', { message: 'Refund reconciliation is currently running' })
+      }
       const simulationId = paymentHash(['ADMIN_SANDBOX_SIMULATION', refund.id, 'v1'])
       const providerEventId = `sandbox-refund-simulation:${refund.id}:succeeded:v1`
       const vnpayResponse = providerPayload?.vnpayResponse as Record<string, unknown> | undefined
+      const providerConfirmation = isBookingCancellation
+        ? vnpayResponse?.vnp_ResponseCode === '00' &&
+          ['05', '06'].includes(String(vnpayResponse?.vnp_TransactionStatus))
+          ? 'PROCESSING_RESPONSE'
+          : 'UNCONFIRMED_DEMO'
+        : refund.status === 'PENDING'
+          ? 'UNCONFIRMED_DEMO'
+          : 'PROCESSING_RESPONSE'
       const vnpayTransactionNo =
         typeof vnpayResponse?.vnp_TransactionNo === 'string' && vnpayResponse.vnp_TransactionNo.trim().length > 0
           ? vnpayResponse.vnp_TransactionNo.trim()
@@ -302,8 +343,14 @@ export class SandboxRefundSimulationService {
                 testEvidenceRef: input.body.testEvidenceRef ?? null,
                 origin: 'ADMIN_SANDBOX_SIMULATION',
                 environment: 'SANDBOX',
+                ...(isBookingCancellation
+                  ? {
+                      bookingId: refund.bookingCancellation!.bookingId,
+                      bookingCancellationId: refund.bookingCancellation!.id,
+                    }
+                  : {}),
                 status: 'REQUESTED',
-                providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
+                providerConfirmation,
                 warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
             },
@@ -325,7 +372,7 @@ export class SandboxRefundSimulationService {
                 paymentId: refund.paymentId,
                 environment: 'SANDBOX',
                 origin: 'ADMIN_SANDBOX_SIMULATION',
-                providerConfirmation: refund.status === 'PENDING' ? 'UNCONFIRMED_DEMO' : 'PROCESSING_RESPONSE',
+                providerConfirmation,
                 warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
             },
@@ -339,6 +386,12 @@ export class SandboxRefundSimulationService {
         refundId: refund.id,
         rentalOrderId: settlementOrderId,
         depositSettlementId: refund.depositSettlementId,
+        ...(isBookingCancellation
+          ? {
+              bookingId: refund.bookingCancellation!.bookingId,
+              bookingCancellationId: refund.bookingCancellation!.id,
+            }
+          : {}),
         amount: refund.amount.toFixed(0),
         currency: refund.currency,
         actorUserId: input.actorUserId,
@@ -381,7 +434,10 @@ export class SandboxRefundSimulationService {
     try {
       return await this.db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${prepared.refundId}::uuid FOR UPDATE`
-        const refund = await tx.refund.findUniqueOrThrow({ where: { id: prepared.refundId } })
+        const refund = await tx.refund.findUniqueOrThrow({
+          where: { id: prepared.refundId },
+          include: { payment: { include: { invoice: true } } },
+        })
         if (refund.status !== 'SUCCEEDED' || !refund.refundedAt) {
           throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
             message: 'Shared Payment did not accept the simulated provider success event',
@@ -404,10 +460,15 @@ export class SandboxRefundSimulationService {
           return existingIdempotency.responseBody as unknown as SandboxSimulateRefundResponseDto
         }
 
-        const order = await tx.rentalOrder.findUniqueOrThrow({
-          where: { id: prepared.rentalOrderId },
-          select: { status: true, financialStatus: true },
-        })
+        const order = prepared.bookingId
+          ? await tx.booking.findUniqueOrThrow({
+              where: { id: prepared.bookingId },
+              select: { status: true },
+            })
+          : await tx.rentalOrder.findUniqueOrThrow({
+              where: { id: prepared.rentalOrderId! },
+              select: { status: true, financialStatus: true },
+            })
         const successOutbox = await tx.paymentOutboxEvent.findUnique({
           where: { deduplicationKey: `refund:${refund.id}:succeeded:v1` },
           select: {
@@ -452,20 +513,29 @@ export class SandboxRefundSimulationService {
           simulatedAmount: prepared.amount,
           currency: prepared.currency,
           orderStatus: order.status,
-          financialStatus: order.financialStatus,
+          ...(prepared.bookingId
+            ? {
+                bookingId: prepared.bookingId,
+                bookingCancellationId: prepared.bookingCancellationId,
+              }
+            : {}),
+          financialStatus: prepared.bookingId
+            ? refund.payment.invoice.status
+            : (order as { financialStatus: string }).financialStatus,
           completionMode: 'SANDBOX_SIMULATED',
           settlementMode: 'SANDBOX_SIMULATED',
           // PROCESSED is transport state. The Rental consumer receipt is the
           // projection-scoped fact proving that the worker transaction committed.
-          settlementProcessingStatus: successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
+          settlementProcessingStatus: prepared.bookingId || successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
           simulatedAt: refund.refundedAt.toISOString(),
           actorAdminId: prepared.actorUserId,
           reason: prepared.reason,
           warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
           notices: {
             userNotice: 'Sandbox provider result simulated successfully; no real bank transfer occurred.',
-            adminNotice:
-              'Shared Payment recorded SUCCEEDED. Rental settlement remains asynchronous through the outbox worker.',
+            adminNotice: prepared.bookingId
+              ? 'Shared Payment recorded a simulated booking refund and updated the invoice; no real transfer occurred.'
+              : 'Shared Payment recorded SUCCEEDED. Rental settlement remains asynchronous through the outbox worker.',
           },
         }
 
