@@ -1247,7 +1247,11 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       .expect(200)
     expect(resBoth.body.appliedFilters).toEqual({
       gateway: 'BOTH',
-      allowedGateways: ['vnpay', 'payos'],
+      gatewaysIncluded: ['vnpay', 'payos'],
+      source: null,
+      kind: null,
+      category: null,
+      status: null,
     })
 
     // 2. Chỉ lọc riêng PayOS (gateway=payos)
@@ -1258,7 +1262,11 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       .expect(200)
     expect(resPayos.body.appliedFilters).toEqual({
       gateway: 'payos',
-      allowedGateways: ['payos'],
+      gatewaysIncluded: ['payos'],
+      source: null,
+      kind: null,
+      category: null,
+      status: null,
     })
 
     // 3. Chỉ lọc riêng VNPay (gateway=vnpay)
@@ -1269,7 +1277,11 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       .expect(200)
     expect(resVnpay.body.appliedFilters).toEqual({
       gateway: 'vnpay',
-      allowedGateways: ['vnpay'],
+      gatewaysIncluded: ['vnpay'],
+      source: null,
+      kind: null,
+      category: null,
+      status: null,
     })
 
     // 4. Từ chối cổng giả lập mock và momo
@@ -1313,12 +1325,11 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
           completedAt: null,
           invoiceNo: 'INV-RT-20261031-002',
           revisionNo: 1,
-          refundPurpose: 'RENTAL_DEPOSIT_RETURN',
+          refundPurpose: 'DEPOSIT',
           executionMode: 'MANUAL_BANK_TRANSFER',
           confirmationSource: 'MANUAL_PROOF',
-          manualRefundStatus: 'PENDING_PROOF',
+          manualRefundStatus: 'PENDING',
           isExtension: false,
-          category: 'DEPOSIT_REFUND',
           serviceFeeAmount: '0',
           rentalFeeAmount: '0',
           depositAmount: '900000',
@@ -1339,7 +1350,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       category: 'DEPOSIT_REFUND',
       paymentGateway: 'payos',
       payosOrderCode: '1730366400',
-      manualRefundStatus: 'PENDING_PROOF',
+      manualRefundStatus: 'PENDING',
       canSimulateSandbox: false,
       breakdown: {
         serviceFeeAmount: '0.00',
@@ -1388,7 +1399,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
 
     expect(res.body.appliedFilters).toEqual({
       gateway: 'BOTH',
-      allowedGateways: ['vnpay', 'payos'],
+      gatewaysIncluded: ['vnpay', 'payos'],
       source: null,
     })
     expect(res.body.totals).toMatchObject({
@@ -1413,81 +1424,79 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
         id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
         paymentId,
         invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+        rentalOrderId: '88888888-8888-4888-a888-888888888888',
+        trailAccessId: null,
         amount: new Prisma.Decimal(900000),
         currency: 'VND',
         status: 'PENDING',
-        purpose: 'RENTAL_DEPOSIT_RETURN',
+        purpose: 'DEPOSIT',
         reason: 'Hoàn cọc sau khi khấu trừ hư hỏng nhẹ',
+        reasonCode: 'DAMAGED_GEAR',
+        paymentGateway: 'payos',
         providerEnvironment: 'PRODUCTION',
         executionMode: 'MANUAL_BANK_TRANSFER',
         providerPayload: null,
         refundTransactionRef: null,
+        merchantRefundRef: 'REF-01E76D7F',
         reconcileStatus: 'IDLE',
         retryCount: 0,
         lastCheckedAt: null,
         lastErrorCode: null,
         createdAt: new Date('2026-10-31T10:00:00.000Z'),
         refundedAt: null,
-        paymentViaPaymentId: {
+        depositSettlement: {
+          totalDeposit: new Prisma.Decimal(1000000),
+          totalDeduction: new Prisma.Decimal(100000),
+        },
+        depositSettlementItem: null,
+        payment: {
           id: paymentId,
           amount: new Prisma.Decimal(1500000),
           status: 'SUCCEEDED',
           paymentGateway: 'payos',
+          paymentMethod: 'QR',
           providerEnvironment: 'PRODUCTION',
           transactionRef: 'PAYOS-TX-01',
           paidAt: new Date('2026-10-30T08:00:00.000Z'),
           payosCheckout: {
             orderCode: BigInt(1730366400),
           },
-          allocations: [
-            {
-              id: 'alloc-pay-1',
-              rentalOrderLineId: 'line-1',
-              component: 'RENTAL_FEE',
-              amount: new Prisma.Decimal(500000),
+          invoice: {
+            id: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+            invoiceNo: 'INV-RT-20261031-002',
+            status: 'PAID',
+            invoiceType: 'RENTAL',
+            bookingId: null,
+            rentalOrderId: '88888888-8888-4888-a888-888888888888',
+            trailAccessId: null,
+            user: {
+              id: customerId,
+              fullName: 'Nguyễn Văn A',
+              email: 'nguyenvana@example.com',
             },
-            {
-              id: 'alloc-pay-2',
-              rentalOrderLineId: 'line-1',
-              component: 'RENTAL_DEPOSIT',
-              amount: new Prisma.Decimal(1000000),
-            },
-          ],
-        },
-        invoice: {
-          id: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
-          invoiceNo: 'INV-RT-20261031-002',
-          status: 'PAID',
-          invoiceType: 'RENTAL',
-          bookingId: null,
-          rentalOrderId: '88888888-8888-4888-a888-888888888888',
-          trailAccessId: null,
-          user: {
-            id: customerId,
-            fullName: 'Nguyễn Văn A',
-            email: 'nguyenvana@example.com',
           },
         },
         allocations: [
           {
             id: 'alloc-ref-1',
-            rentalOrderLineId: 'line-1',
-            component: 'RENTAL_DEPOSIT',
+            paymentAllocationId: 'alloc-pay-2',
+            paymentAllocation: { component: 'RENTAL_DEPOSIT' },
             amount: new Prisma.Decimal(900000),
           },
         ],
         manualRefund: {
-          status: 'PENDING_PROOF',
-          beneficiaryBankCode: 'MB',
-          beneficiaryBankName: 'MB Bank',
-          beneficiaryAccountNumber: '0123456789',
-          beneficiaryAccountHolderName: 'NGUYEN VAN A',
-          transferReference: null,
+          status: 'AWAITING_TRANSFER',
+          version: 1,
+          assignedAdminId: adminId,
+          claimedAt: new Date('2026-10-31T10:01:00.000Z'),
+          bankBin: '970422',
+          accountNumber: '0123456789',
+          accountHolderName: 'NGUYEN VAN A',
+          ownershipConfirmedAt: new Date('2026-10-31T10:00:30.000Z'),
+          bankTransactionRef: null,
           transferredAt: null,
-          confirmedById: null,
-          confirmedAt: null,
+          confirmedBy: null,
           evidenceMediaId: null,
-          evidenceMedia: null,
           note: 'Chờ kế toán chuyển khoản',
         },
       }),
@@ -1500,14 +1509,14 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
 
     expect(res.body).toMatchObject({
       refundId: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
-      category: 'DEPOSIT_REFUND',
+      purpose: 'DEPOSIT',
       paymentGateway: 'payos',
       executionMode: 'MANUAL_BANK_TRANSFER',
       canSimulateSandbox: false,
       breakdown: {
         serviceFeeAmount: '0.00',
         rentalFeeAmount: '0.00',
-        depositAmount: '900000.00',
+        depositAmount: '1000000.00',
         deductionAmount: '100000.00',
         isExtension: false,
       },
@@ -1516,7 +1525,9 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
         payosOrderCode: '1730366400',
       },
     })
-    expect(res.body.manualRefund.vietQrImageUrl).toContain('https://img.vietqr.io/image/MB-0123456789-compact2.png')
-    expect(res.body.manualRefund.vietQrImageUrl).toContain('amount=900000')
+    expect(res.body.manualRefund.recipient.vietQrImageUrl).toContain(
+      'https://img.vietqr.io/image/970422-0123456789-compact2.png',
+    )
+    expect(res.body.manualRefund.recipient.vietQrImageUrl).toContain('amount=900000')
   })
 })
