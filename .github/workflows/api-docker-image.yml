@@ -1,0 +1,86 @@
+# =============================================================================
+# Build & Push Docker image - TrekGO API
+# Chay khi: push code vao nhanh deploy/docker VA co file trong api/ thay doi.
+# Ket qua: image <DOCKERHUB_USERNAME>/trekgo-api tren Docker Hub.
+#
+# Chi build thu muc api/ (Dockerfile + build context = ./api).
+# web/ va mobile/ KHONG nam trong image, sua chung cung khong kich hoat workflow.
+#
+# Secrets can co (Settings > Secrets and variables > Actions):
+#   - DOCKERHUB_USERNAME : ten tai khoan Docker Hub
+#   - DOCKERHUB_TOKEN (hoac DOCKERHUB_PASSWORD): Access Token, tao o
+#                          hub.docker.com > Account settings > Personal access tokens
+#                          (quyen Read & Write)
+#   - TREKGO_ENV         : chua dung o workflow nay (de danh cho buoc deploy VPS)
+# =============================================================================
+
+name: Docker Image - TrekGO API
+
+on:
+  push:
+    branches:
+      - deploy/docker
+    # Chi chay khi co thay doi trong api/ (hoac chinh file workflow nay)
+    paths:
+      - "api/**"
+      - ".github/workflows/api-docker-image.yml"
+  # Cho phep bam "Run workflow" bang tay tren tab Actions
+  workflow_dispatch:
+
+# Push nhieu commit lien tiep → huy lan build cu, chi giu lan moi nhat
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    name: "Build & Push api image"
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Clone code
+      - name: "Step 1 - Checkout source code"
+        uses: actions/checkout@v4
+
+      # Step 2: QEMU de build duoc image arm64 (Mac chip M) tren may ao amd64
+      - name: "Step 2 - Setup QEMU"
+        uses: docker/setup-qemu-action@v3
+
+      # Step 3: Buildx - bo build ho tro multi-platform + cache
+      - name: "Step 3 - Setup Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+
+      # Step 4: Dang nhap Docker Hub bang token (khong dung mat khau)
+      - name: "Step 4 - Login Docker Hub"
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Uu tien DOCKERHUB_TOKEN, khong co thi dung DOCKERHUB_PASSWORD
+          password: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKERHUB_PASSWORD }}
+
+      # Step 5: Tao ten tag cho image
+      #   - latest      : ban moi nhat
+      #   - sha-xxxxxxx : gan voi commit, dung de quay lai ban cu khi ban moi loi
+      - name: "Step 5 - Generate image tags"
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/trekgo-api
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      # Step 6: Build tu thu muc api/ va push len Docker Hub
+      # cache-from/to: type=gha → luu cache layer tren GitHub, lan sau build nhanh hon
+      # (vi du chi sua code ma khong doi package.json thi khong phai npm ci lai)
+      - name: "Step 6 - Build & Push"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          file: ./api/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
