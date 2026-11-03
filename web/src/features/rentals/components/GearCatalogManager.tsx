@@ -14,7 +14,7 @@ import {
 } from "@/features/rentals/services/gear.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
 
-// Danh mục sản phẩm cá nhân (Gear phase 2).
+// Danh mục đồ cá nhân đã kiểm duyệt (staff tạo, admin duyệt).
 // Staff kho / Admin tạo + sửa bản nháp; chỉ Admin công bố (verify) và thu hồi (revoke).
 // Mỗi thông số có giá trị BẮT BUỘC kèm nguồn minh chứng (evidence) cùng key.
 
@@ -179,8 +179,8 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
       <section className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#27735a]">Gear · Danh mục sản phẩm cá nhân</p>
-            <h1 className="mt-1 text-3xl font-black text-slate-950">Hồ sơ sản phẩm đã kiểm duyệt</h1>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#27735a]">Danh mục đồ cá nhân</p>
+            <h1 className="mt-1 text-3xl font-bold text-slate-950">{isAdmin ? "Duyệt đồ cá nhân" : "Đồ cá nhân đã kiểm duyệt"}</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
               {isAdmin
                 ? "Tạo/sửa bản nháp, duyệt để công bố cho khách, hoặc thu hồi hồ sơ sai. Hồ sơ đã duyệt không sửa trực tiếp."
@@ -188,8 +188,8 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
             </p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => void load()} disabled={loading || busy} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50">↻ Làm mới</button>
-            <button onClick={() => { setForm(emptyForm()); setError(null); }} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-black text-white">＋ Tạo bản nháp</button>
+            <button onClick={() => void load()} disabled={loading || busy} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold disabled:opacity-50">↻ Làm mới</button>
+            <button onClick={() => { setForm(emptyForm()); setError(null); }} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-bold text-white">＋ Tạo bản nháp</button>
           </div>
         </div>
 
@@ -199,7 +199,7 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
         {isAdmin && (
           <div className="mt-6 flex gap-2">
             {(["drafts", "verified"] as const).map((key) => (
-              <button key={key} onClick={() => setTab(key)} className={`rounded-full px-4 py-2 text-sm font-bold ${tab === key ? "bg-[#123f32] text-white" : "border border-slate-200 bg-white text-slate-700"}`}>
+              <button key={key} onClick={() => setTab(key)} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab === key ? "bg-[#123f32] text-white" : "border border-slate-200 bg-white text-slate-700"}`}>
                 {key === "drafts" ? `Chờ duyệt (${drafts.length})` : `Đã công bố (${verified.length})`}
               </button>
             ))}
@@ -218,11 +218,11 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
               <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">{categoryLabel(entry.category)}</p>
-                    <h3 className="mt-1 text-lg font-black text-slate-950">{entry.name}</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#27735a]">{categoryLabel(entry.category)}</p>
+                    <h3 className="mt-1 text-lg font-bold text-slate-950">{entry.name}</h3>
                     <p className="text-xs text-slate-500">{entry.brand || "Chưa ghi thương hiệu"} · phiên bản {entry.version}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${tab === "drafts" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${tab === "drafts" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
                     {tab === "drafts" ? "Bản nháp" : "Đã công bố"}
                   </span>
                 </div>
@@ -238,13 +238,13 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
                 </ul>
                 <div className="mt-4 flex flex-wrap justify-end gap-2">
                   {tab === "drafts" && (
-                    <button disabled={busy} onClick={() => { setForm(formFromEntry(entry)); setError(null); }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">Sửa</button>
+                    <button disabled={busy} onClick={() => { setForm(formFromEntry(entry)); setError(null); }} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold disabled:opacity-50">Sửa</button>
                   )}
                   {isAdmin && tab === "drafts" && (
-                    <button disabled={busy} onClick={() => void act(entry, "verify")} className="rounded-xl bg-[#123f32] px-3 py-2 text-xs font-black text-white disabled:opacity-50">Duyệt & công bố</button>
+                    <button disabled={busy} onClick={() => void act(entry, "verify")} className="rounded-xl bg-[#123f32] px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Duyệt & công bố</button>
                   )}
                   {isAdmin && tab === "verified" && (
-                    <button disabled={busy} onClick={() => void act(entry, "revoke")} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 disabled:opacity-50">Thu hồi</button>
+                    <button disabled={busy} onClick={() => void act(entry, "revoke")} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">Thu hồi</button>
                   )}
                 </div>
               </article>
@@ -257,24 +257,24 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="border-b p-5">
-              <p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">{form.id ? "Sửa bản nháp" : "Bản nháp mới"}</p>
-              <h2 className="mt-1 text-xl font-black">Hồ sơ sản phẩm</h2>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#27735a]">{form.id ? "Sửa bản nháp" : "Bản nháp mới"}</p>
+              <h2 className="mt-1 text-xl font-bold">Hồ sơ sản phẩm</h2>
               <p className="mt-1 text-xs text-slate-500">Mỗi thông số có giá trị phải kèm nguồn minh chứng (tài liệu nhà sản xuất, trang web chính hãng...). Để trống thông số nếu không có nguồn.</p>
             </div>
             <div className="space-y-4 overflow-y-auto p-5">
               {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-bold text-slate-700">Tên sản phẩm<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={`${inputClass} mt-1.5`} /></label>
-                <label className="text-xs font-bold text-slate-700">Thương hiệu<input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} className={`${inputClass} mt-1.5`} /></label>
+                <label className="text-xs font-semibold text-slate-700">Tên sản phẩm<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={`${inputClass} mt-1.5`} /></label>
+                <label className="text-xs font-semibold text-slate-700">Thương hiệu<input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} className={`${inputClass} mt-1.5`} /></label>
               </div>
-              <label className="block text-xs font-bold text-slate-700">Loại đồ
+              <label className="block text-xs font-semibold text-slate-700">Loại đồ
                 <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as GearCategory, values: {}, evidence: {} })} className={`${inputClass} mt-1.5`}>
                   {CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               {ATTRIBUTES[form.category].map(([key, label, unit]) => (
                 <div key={key} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[180px_1fr]">
-                  <label className="text-xs font-bold text-slate-700">
+                  <label className="text-xs font-semibold text-slate-700">
                     {label}{unit !== "bool" && unit !== "coverage" ? ` (${unit})` : ""}
                     {unit === "bool" ? (
                       <select value={form.values[key] ?? ""} onChange={(event) => setForm({ ...form, values: { ...form.values, [key]: event.target.value } })} className={`${inputClass} mt-1.5`}>
@@ -288,7 +288,7 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
                       <input inputMode="decimal" value={form.values[key] ?? ""} onChange={(event) => setForm({ ...form, values: { ...form.values, [key]: event.target.value } })} className={`${inputClass} mt-1.5`} placeholder="Không ghi" />
                     )}
                   </label>
-                  <label className="text-xs font-bold text-slate-700">Nguồn minh chứng
+                  <label className="text-xs font-semibold text-slate-700">Nguồn minh chứng
                     <input
                       value={form.evidence[key] ?? ""}
                       disabled={!(form.values[key] ?? "").trim()}
@@ -301,8 +301,8 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
               ))}
             </div>
             <div className="flex justify-end gap-3 border-t p-4">
-              <button onClick={() => { setForm(null); setError(null); }} className="rounded-xl border px-4 py-2.5 text-sm font-bold">Huỷ</button>
-              <button disabled={busy} onClick={() => void save()} className="rounded-xl bg-[#123f32] px-5 py-2.5 text-sm font-black text-white disabled:opacity-60">{busy ? "Đang lưu..." : "Lưu bản nháp"}</button>
+              <button onClick={() => { setForm(null); setError(null); }} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Huỷ</button>
+              <button disabled={busy} onClick={() => void save()} className="rounded-xl bg-[#123f32] px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60">{busy ? "Đang lưu..." : "Lưu bản nháp"}</button>
             </div>
           </div>
         </div>

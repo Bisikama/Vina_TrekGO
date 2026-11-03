@@ -37,7 +37,7 @@ const navigation = [
   },
   {
     href: "/staff/gear-catalog",
-    label: "Hồ sơ sản phẩm Gear",
+    label: "Danh mục đồ cá nhân",
     icon: "badge",
   },
   {
