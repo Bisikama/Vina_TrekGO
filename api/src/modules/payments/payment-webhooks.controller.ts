@@ -16,6 +16,18 @@ export class PaymentWebhooksController {
     private readonly provider: PaymentProvider,
   ) {}
 
+  @Post('payos')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'payOS production webhook', description: 'Verifies signed data and durably persists inbox before acknowledgement; return/cancel URLs never settle payments.' })
+  @ApiResponse({ status: 200, description: 'Durable intake or signed connection probe accepted' })
+  async receivePayos(@Req() request: RawBodyRequest<Request>) {
+    const provider = this.provider.forGateway('payos')
+    if (!provider || !request.rawBody || request.rawBody.length > 16384) throw AppError.fromCode('PAYMENT_WEBHOOK_INVALID_SIGNATURE')
+    if (await provider.isConnectionProbe(request.rawBody)) return { received: true, probe: true }
+    await this.webhooks.receive(request.rawBody, {}, 'payos')
+    return { received: true }
+  }
+
   @Post('momo')
   @HttpCode(204)
   @ApiOperation({

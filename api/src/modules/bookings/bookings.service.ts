@@ -397,6 +397,8 @@ export class BookingsService {
           refundId: r.id,
           paymentId: p.id,
           purpose: r.purpose,
+          executionMode: r.executionMode,
+          confirmationSource: r.executionMode === 'MANUAL_BANK_TRANSFER' && r.status === 'SUCCEEDED' ? 'ADMIN_MANUAL' : null,
           reasonCode: r.reasonCode,
           amount: r.amount.toFixed(),
           currency: r.currency,

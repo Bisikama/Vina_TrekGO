@@ -1,3 +1,7 @@
+import { PayosOperationsController } from './payos-operations.controller'
+import { PayosPaymentProvider } from './payos-payment.provider'
+import { ManualRefundsService } from './manual-refunds.service'
+import { ManualRefundsController, AdminManualRefundsController } from './manual-refunds.controller'
 import { Module } from '@nestjs/common'
 import { TripCancellationService } from '../bookings/trip-cancellation.service'
 import { AdminTripCancellationController, LeaderTripCancellationController } from '../bookings/trip-cancellation.controller'
@@ -51,9 +55,13 @@ import { UserTransactionsController } from './user-transactions.controller'
     RentalPaymentsController,
     RentalExtensionPaymentsController,
     UserTransactionsController,
+    PayosOperationsController,
+    ManualRefundsController,
+    AdminManualRefundsController,
   ],
   providers: [
     TripCancellationService,
+    ManualRefundsService,
     RefundsService,
     SandboxRefundSimulationService,
     RentalRefundsService,
@@ -78,12 +86,13 @@ import { UserTransactionsController } from './user-transactions.controller'
         const extra = gateway === 'mock' && process.env.PAYMENT_PROVIDER_ENVIRONMENT === 'MOCK'
           ? '' : process.env.PAYMENT_ENABLED_PROVIDERS ?? ''
         const gateways = [...new Set([gateway, ...extra.split(',').map((v) => v.trim()).filter(Boolean)])]
-        const providers = gateways.map((name) => {
+        const providers: PaymentProvider[] = gateways.map((name) => {
           if (name === 'mock') return new MockPaymentProvider(db)
           if (name === 'momo') return new MomoPaymentProvider(db)
           if (name === 'vnpay') return new VnpayPaymentProvider(db)
           throw new Error('Unsupported payment provider')
         })
+        if (process.env.PAYOS_ENABLED === 'true') providers.push(new PayosPaymentProvider(db))
         return new PaymentProviderRouter(providers, gateway)
       },
     },

@@ -20,6 +20,9 @@ import {
   RentalPickupCode,
   RentalProduct,
   RentalQuote,
+  RentalRecommendation,
+  RentalTripSummary,
+  TripWeather,
   RentalReturnObservationResult,
   RentalReturnReceipt,
   RentalReturnScanResult,
@@ -281,6 +284,33 @@ export const rentalApi = {
 
   async getProduct(productId: string) {
     return getResolvedProduct(productId);
+  },
+
+  async getTripWeather(tripId: string, accessToken: string) {
+    const response = await apiRequest<Envelope<TripWeather>>(
+      `/api/v1/weather/trips/${encodeURIComponent(tripId)}`,
+      { method: "GET", accessToken },
+    );
+    return unwrap(response);
+  },
+
+  async getRecommendations(
+    tripId: string,
+    accessToken: string,
+    input?: { categoryId?: string; limit?: number },
+  ) {
+    const query = queryString({ limit: input?.limit ?? 50, categoryId: input?.categoryId });
+    const response = await apiRequest<
+      Envelope<{
+        recommendations: RentalRecommendation[];
+        generatedAt?: string;
+        tripSummary?: RentalTripSummary | null;
+      }>
+    >(`/api/v1/trips/${encodeURIComponent(tripId)}/rental-recommendations?${query}`, {
+      method: "GET",
+      accessToken,
+    });
+    return unwrap(response);
   },
 
   async listTripOptions(accessToken: string) {

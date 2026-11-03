@@ -16,7 +16,7 @@ import {
   PAYMENT_PENDING_RESPONSE_SCHEMA,
 } from './payment-swagger.schemas'
 
-const bodySchema = z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()
+const bodySchema = z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay', 'payos']).optional() }).strict()
 const keySchema = z
   .string()
   .min(1)
@@ -67,7 +67,7 @@ export class PaymentsController {
         },
         gateway: {
           type: 'string',
-          enum: ['momo', 'vnpay'],
+          enum: ['momo', 'vnpay', 'payos'],
           description: 'Cổng thanh toán; bỏ trống để dùng cổng mặc định',
           example: 'vnpay',
         },
@@ -96,7 +96,7 @@ export class PaymentsController {
   async create(
     @Param('id', new ZodValidationPipe(z.string().uuid())) bookingId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(bodySchema)) body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
+    @Body(new ZodValidationPipe(bodySchema)) body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' | 'payos' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
@@ -122,7 +122,7 @@ export class PaymentOptionsController {
     description: `
 Dùng API này trước khi hiển thị lựa chọn thanh toán.
 
-- defaultGateway: cổng mặc định; có thể là null nếu không có cổng MoMo/VNPay mặc định.
+- defaultGateway: cổng mặc định được công bố; null khi cổng mặc định là mock.
 - gateways: các cổng hiện được backend cấu hình, môi trường chạy và phương thức hỗ trợ.
 - FE không nên hard-code gateway đang bật.
 `,

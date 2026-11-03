@@ -614,6 +614,120 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
     const cancellation = await db.bookingCancellation.findFirstOrThrow({ where: { bookingId: a.id } })
     expect(cancellation.refundableAmount.toFixed()).toBe('250000')
   })
+  it.each([0, 80, 100])(
+    'persists %i%% booking cancellation refund evidence in sandbox without a transfer',
+    async (percent) => {
+      const originalEnv = { ...process.env }
+      try {
+        Object.assign(process.env, {
+          NODE_ENV: 'test',
+          DATABASE_URL: url,
+          PAYMENT_PROVIDER_ENVIRONMENT: 'SANDBOX',
+          PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED: 'true',
+        })
+        const booking = (await create().expect(201)).body
+        await db.booking.update({
+          where: { id: booking.id },
+          data: {
+            policySnapshot: {
+              cancellationRules: { version: 1, tiers: [{ minHoursBeforeStart: 0, refundPercent: percent }] },
+            },
+          },
+        })
+        const payment = (await pay(booking.id).expect(201)).body
+        const event = await financialResult(payment.paymentId)
+        await consumer.consume(event!.id)
+        // Fixture uses the signed mock collection above, then supplies the sandbox
+        // scope. Real VNPay signature handling is covered by vnpay-payments.spec.ts.
+        await db.payment.update({
+          where: { id: payment.paymentId },
+          data: {
+            paymentGateway: 'vnpay',
+            providerEnvironment: 'SANDBOX',
+            merchantAccountKey: 'CF02_TEST',
+          },
+        })
+        await cancel(booking.id, 'sandbox-cancel').expect(202)
+        await cancel(booking.id, 'sandbox-cancel').expect(202)
+        const cancellation = await db.bookingCancellation.findFirstOrThrow({ where: { bookingId: booking.id } })
+        const refund = await cancellations.dispatch(cancellation.id)
+        if (percent === 0) {
+          expect(refund).toBeNull()
+          expect(cancellation.refundableAmount.toFixed()).toBe('0')
+          expect(await db.refund.count({ where: { bookingCancellationId: cancellation.id } })).toBe(0)
+          expect((await db.invoice.findUniqueOrThrow({ where: { id: payment.invoiceId } })).status).toBe('PAID')
+          expect((await detail(booking.id).expect(200)).body.status).toBe('CANCELLED')
+          return
+        }
+        expect((await cancellations.dispatch(cancellation.id))!.refundId).toBe(refund!.refundId)
+        await db.refund.update({
+          where: { id: refund!.refundId },
+          data: {
+            status: 'PROCESSING',
+            reconcileStatus: 'NEEDS_REVIEW',
+            lastErrorCode: 'RECOVERY_UNKNOWN',
+            nextRetryAt: null,
+          },
+        })
+        const endpoint = `/api/v1/admin/payment-refunds/${refund!.refundId}/sandbox-simulate-settlement`
+        const body = {
+          reason: 'CF02 sandbox cancellation evidence test',
+          acknowledgeSandboxSimulation: true,
+          expectedProviderStatus: 'PROCESSING',
+        }
+        const simulate = (actor = otherId, input = body) =>
+          request(app.getHttpServer())
+            .post(endpoint)
+            .set('Authorization', `Bearer ${actor}`)
+            .set('Idempotency-Key', 'sandbox-refund-evidence')
+            .send(input)
+        await simulate(userId).expect(403)
+        await asAdmin()
+        const approvedAmount = String((125000 * percent) / 100)
+        await db.refund.update({ where: { id: refund!.refundId }, data: { amount: 999999 } })
+        const invalid = await simulate().expect(422)
+        expect(invalid.body.error.code).toBe('REFUND_SOURCE_INVALID')
+        expect(invalid.body.meta.requestId).toBeTruthy()
+        await db.refund.update({ where: { id: refund!.refundId }, data: { amount: approvedAmount } })
+        const response = (await simulate().expect(200)).body.data
+        expect(response).toMatchObject({
+          bookingId: booking.id,
+          bookingCancellationId: cancellation.id,
+          simulatedAmount: String((125000 * percent) / 100),
+          simulationStatus: 'SIMULATED',
+          financialStatus: percent === 100 ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+          warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
+          settlementProcessingStatus: 'APPLIED',
+        })
+        expect((await simulate().expect(200)).body.data).toEqual(response)
+        const conflict = await simulate(otherId, { ...body, reason: 'Changed simulation reason' }).expect(409)
+        expect(conflict.body.error.code).toBe('IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD')
+        expect(conflict.body.meta.requestId).toBeTruthy()
+        const stored = await db.refund.findUniqueOrThrow({ where: { id: refund!.refundId } })
+        expect(stored).toMatchObject({ status: 'SUCCEEDED', reconcileStatus: 'RESOLVED', refundedAt: expect.any(Date) })
+        expect(stored.providerPayload).toMatchObject({
+          sandboxSimulation: {
+            origin: 'ADMIN_SANDBOX_SIMULATION',
+            status: 'SUCCEEDED',
+            actorAdminId: otherId,
+          },
+        })
+        expect(await db.refund.count({ where: { bookingCancellationId: cancellation.id } })).toBe(1)
+        expect(
+          await db.paymentOutboxEvent.count({ where: { aggregateId: stored.id, eventType: 'REFUND_SUCCEEDED' } }),
+        ).toBe(1)
+        expect(
+          await db.auditLog.count({
+            where: { entityId: stored.id, action: 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED' },
+          }),
+        ).toBe(1)
+        expect((await db.payment.findUniqueOrThrow({ where: { id: payment.paymentId } })).status).toBe('SUCCEEDED')
+        expect((await detail(booking.id).expect(200)).body.status).toBe('CANCELLED')
+      } finally {
+        process.env = originalEnv
+      }
+    },
+  )
   it.each(['expire', 'cancel'] as const)(
     'late collection after %s never resurrects a hold and requests reversal',
     async (action) => {

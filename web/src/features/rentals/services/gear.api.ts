@@ -49,6 +49,57 @@ export type GearExtractionDraft = {
   extractionFieldProvenance?: Record<string, GearFieldProvenanceStatus> | null;
   version: number; expiresAt: string;
 };
+/** Hồ sơ sản phẩm trong danh mục cá nhân (Gear phase 2). `evidence` = nguồn minh chứng cho từng thông số. */
+export type GearCatalogState = "DRAFT" | "VERIFIED" | "REVOKED";
+export type GearCatalogEntry = {
+  id: string; name: string; brand: string | null; category: GearCategory;
+  attributes: Record<string, unknown>; evidence: Record<string, string>;
+  version: number; reviewedAt?: string | null; state?: GearCatalogState; createdAt?: string;
+};
+export type GearCatalogDraftInput = {
+  name: string; brand?: string | null; category: GearCategory;
+  attributes: Record<string, unknown>; evidence: Record<string, string>;
+};
+
+/** Khách: tìm sản phẩm đã duyệt. Đổi bộ lọc thì bắt đầu lại, không dùng cursor cũ. */
+export async function searchGearCatalog(query: { q?: string; category?: GearCategory; cursor?: string; limit?: number }) {
+  const response = await apiClient.get<Envelope<{ items: GearCatalogEntry[]; nextCursor: string | null }>>(
+    "/api/v1/gear/personal-catalog",
+    { params: { q: query.q?.trim() || undefined, category: query.category, cursor: query.cursor, limit: query.limit ?? 20 } },
+  );
+  return unwrap(response.data);
+}
+/** Khách: tạo bản sao trong tủ đồ từ hồ sơ đã duyệt (có cảnh báo trùng như tạo tay). */
+export async function addGearFromCatalog(catalogId: string, input: { condition: GearCondition; acknowledgeDuplicate?: boolean }) {
+  const response = await apiClient.post<Envelope<UserGearItem>>(
+    `/api/v1/gear/personal-catalog/${encodeURIComponent(catalogId)}/items`, input,
+  );
+  return resolvePhoto(unwrap(response.data));
+}
+/** Staff kho / Admin: bản nháp chờ duyệt (tối đa 50). */
+export async function listGearCatalogDrafts() {
+  const response = await apiClient.get<Envelope<GearCatalogEntry[]>>("/api/v1/staff/gear/personal-catalog/drafts");
+  const data = unwrap(response.data);
+  return Array.isArray(data) ? data : ((data as unknown as { items?: GearCatalogEntry[] })?.items ?? []);
+}
+export async function createGearCatalogDraft(input: GearCatalogDraftInput) {
+  const response = await apiClient.post<Envelope<GearCatalogEntry>>("/api/v1/staff/gear/personal-catalog", input);
+  return unwrap(response.data);
+}
+export async function updateGearCatalogDraft(id: string, input: GearCatalogDraftInput & { expectedVersion: number }) {
+  const response = await apiClient.put<Envelope<GearCatalogEntry>>(`/api/v1/staff/gear/personal-catalog/${encodeURIComponent(id)}`, input);
+  return unwrap(response.data);
+}
+/** Admin: công bố / thu hồi. Hồ sơ đã duyệt không sửa trực tiếp. */
+export async function verifyGearCatalog(id: string, expectedVersion: number) {
+  const response = await apiClient.post<Envelope<GearCatalogEntry>>(`/api/v1/admin/gear/personal-catalog/${encodeURIComponent(id)}/verify`, { expectedVersion });
+  return unwrap(response.data);
+}
+export async function revokeGearCatalog(id: string, expectedVersion: number) {
+  const response = await apiClient.post<Envelope<GearCatalogEntry>>(`/api/v1/admin/gear/personal-catalog/${encodeURIComponent(id)}/revoke`, { expectedVersion });
+  return unwrap(response.data);
+}
+
 export type GearCapabilityStatus = { enabled: boolean; configured: boolean; messageVi: string };
 export type GearCapabilities = {
   aiProvider: string | null;

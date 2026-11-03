@@ -37,6 +37,8 @@ export const RentalOrderPaymentHistoryQuerySchema = z
 export type RentalOrderPaymentHistoryQueryDto = z.infer<typeof RentalOrderPaymentHistoryQuerySchema>
 
 export interface RentalOrderPaymentRefundItemDto {
+  executionMode?: string | null
+  confirmationSource?: string | null
   refundId: string
   amount: string
   status: RefundStatus
