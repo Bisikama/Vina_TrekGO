@@ -145,6 +145,26 @@ export interface ChangeMaintenancePortResult {
   maintenance: MaintenanceRecordView;
 }
 
+export interface DowngradeUnitGradePayload {
+  unitId: string;
+  expectedVersion: number;
+  actorId: string;
+  idempotencyKey: string;
+  reason: string;
+  note?: string;
+  evidenceIds?: string[];
+}
+
+export interface DowngradeUnitGradeResult {
+  unit: EquipmentUnitView;
+  gradeReview: {
+    id: string;
+    decision: 'DOWNGRADE';
+    fromProductId: string;
+    toProductId: string;
+    shortageOrderIds: string[];
+  };
+}
 
 export interface EquipmentUnitPort {
   listUnits(params: ListEquipmentUnitsParams): Promise<{ items: EquipmentUnitView[]; total: number; counts: EquipmentUnitCounts }>;
@@ -157,4 +177,5 @@ export interface EquipmentUnitPort {
   getHistory(id: string): Promise<EquipmentUnitHistoryEvent[]>;
   startMaintenance(payload: StartMaintenancePayload): Promise<ChangeMaintenancePortResult>;
   completeMaintenance(payload: CompleteMaintenancePayload): Promise<ChangeMaintenancePortResult>;
+  downgradeGrade(payload: DowngradeUnitGradePayload): Promise<DowngradeUnitGradeResult>;
 }

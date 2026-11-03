@@ -68,7 +68,7 @@ export function LeaderTripSuccessView({
 
         {Boolean(onGoToDashboard) && (
           <TouchableOpacity style={styles.secondaryBtn} onPress={onGoToDashboard} activeOpacity={0.85}>
-            <Ionicons name="grid-outline" size={17} color="#125238" />
+            <Ionicons name="grid-outline" size={17} color="#0e0f0c" />
             <Text style={styles.secondaryBtnText}>VỀ DASHBOARD CHỈ HUY</Text>
           </TouchableOpacity>
         )}
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   successCard: {
     alignSelf: "stretch",
     backgroundColor: "#fff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 17,
     marginTop: 24,
     ...Shadows.card,
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primaryDark,
     padding: 14,
-    borderRadius: Radius.md,
+    borderRadius: 20,
     ...Shadows.card,
   },
   primaryText: {
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.primaryDark,
     padding: 13,
-    borderRadius: Radius.md,
+    borderRadius: 20,
   },
   secondaryBtnText: {
     color: Colors.primaryDark,

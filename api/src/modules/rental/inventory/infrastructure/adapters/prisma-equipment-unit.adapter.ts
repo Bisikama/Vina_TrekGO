@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/shared/services/prisma.service';
-import { AppError, RENTAL_ERROR_CODES } from '../../../../../shared/errors';
-import { Prisma, EquipmentUnitStatus, EquipmentCondition, MaintenanceStatus } from '@prisma/client';
+import { AppError, RENTAL_ERROR_CODES, RENTAL_ORDERING_ERROR_CODES } from '../../../../../shared/errors';
+import { Prisma, EquipmentUnitStatus, EquipmentCondition, MaintenanceStatus, RentalUnitAssignmentStatus } from '@prisma/client';
+import { assertGradeDecision } from '../../application/services/equipment-grade.rules';
+import { applyGradeDecision } from '../equipment-grade-transfer';
 import {
   EquipmentUnitPort,
   EquipmentUnitView,
@@ -16,7 +19,18 @@ import {
   StartMaintenancePayload,
   CompleteMaintenancePayload,
   ChangeMaintenancePortResult,
+  DowngradeUnitGradePayload,
+  DowngradeUnitGradeResult,
 } from '../../application/ports/equipment-unit.port';
+
+const DOWNGRADE_SCOPE = 'RB-INV:equipment-unit-grade-downgrade';
+/** Assignment còn mở: unit đang thuộc về một đơn, chưa được đưa về kho xong. */
+const OPEN_ASSIGNMENT_STATUSES: RentalUnitAssignmentStatus[] = [
+  RentalUnitAssignmentStatus.ASSIGNED,
+  RentalUnitAssignmentStatus.PACKED,
+  RentalUnitAssignmentStatus.HANDED_OVER,
+  RentalUnitAssignmentStatus.RETURNED,
+];
 
 const explicitSelect = {
   id: true,
@@ -488,6 +502,151 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
         });
       }
       this.handlePrismaError(error);
+    }
+  }
+
+  /**
+   * Hạ hạng một món đang nằm trong kho (kiểm kho định kỳ, món sửa xong).
+   * Món vừa trả về đi qua markUnitReady; ở đây chỉ nhận món AVAILABLE không gắn với đơn nào.
+   * Thứ tự khoá: unit → nhóm sản phẩm (trong applyGradeDecision) → đơn bị thiếu hàng.
+   */
+  async downgradeGrade(payload: DowngradeUnitGradePayload): Promise<DowngradeUnitGradeResult> {
+    const decision = {
+      decision: 'DOWNGRADE' as const,
+      reason: payload.reason,
+      note: payload.note,
+      evidenceIds: payload.evidenceIds,
+    };
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          unitId: payload.unitId,
+          expectedVersion: payload.expectedVersion,
+          reason: decision.reason,
+          note: decision.note ?? null,
+          evidenceIds: decision.evidenceIds ?? [],
+        }),
+      )
+      .digest('hex');
+    const idemWhere = {
+      scope_userId_idempotencyKey: {
+        scope: DOWNGRADE_SCOPE,
+        userId: payload.actorId,
+        idempotencyKey: payload.idempotencyKey,
+      },
+    };
+
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const cached = await tx.idempotencyRecord.findUnique({ where: idemWhere });
+          if (cached) {
+            if (cached.requestHash !== requestHash)
+              throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.IDEMPOTENCY_KEY_REUSED);
+            if (cached.responseBody) return cached.responseBody as unknown as DowngradeUnitGradeResult;
+            throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.OPERATION_CONFLICT);
+          }
+          await tx.idempotencyRecord.create({
+            data: { scope: DOWNGRADE_SCOPE, userId: payload.actorId, idempotencyKey: payload.idempotencyKey, requestHash },
+          });
+
+          await tx.$queryRaw`SELECT id FROM equipment_units WHERE id = ${payload.unitId}::uuid FOR UPDATE`;
+          const unit = await tx.equipmentUnit.findUnique({
+            where: { id: payload.unitId },
+            select: {
+              id: true,
+              status: true,
+              version: true,
+              productId: true,
+              product: { select: { id: true, gradeGroupId: true, grade: true } },
+            },
+          });
+          if (!unit) {
+            throw AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_FOUND, { details: { id: payload.unitId } });
+          }
+          if (unit.version !== payload.expectedVersion) {
+            throw AppError.fromCode(RENTAL_ERROR_CODES.VERSION_CONFLICT, {
+              details: { id: unit.id, expectedVersion: payload.expectedVersion, currentVersion: unit.version },
+            });
+          }
+          if (unit.status !== EquipmentUnitStatus.AVAILABLE) {
+            throw AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_REGRADABLE, {
+              details: { id: unit.id, reason: 'STATUS_NOT_AVAILABLE', status: unit.status },
+            });
+          }
+          const [openAssignment, commitment] = await Promise.all([
+            tx.rentalUnitAssignment.findFirst({
+              where: { equipmentUnitId: unit.id, status: { in: OPEN_ASSIGNMENT_STATUSES } },
+              select: { id: true, status: true },
+            }),
+            tx.rentalReadinessCommitment.findUnique({ where: { unitId: unit.id }, select: { id: true } }),
+          ]);
+          if (openAssignment) {
+            throw AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_REGRADABLE, {
+              details: { id: unit.id, reason: 'OPEN_ASSIGNMENT', assignmentId: openAssignment.id },
+            });
+          }
+          // Commitment không có productId: chuyển unit sang sản phẩm khác sẽ mang cam kết theo sai sản phẩm.
+          if (commitment) {
+            throw AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_REGRADABLE, {
+              details: { id: unit.id, reason: 'READINESS_COMMITMENT', commitmentId: commitment.id },
+            });
+          }
+
+          // Sản phẩm thường → NOT_APPLICABLE; món GOOD_USED → DOWNGRADE_NOT_ALLOWED.
+          assertGradeDecision(unit.product, decision, { required: true });
+
+          const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+          const result = await applyGradeDecision(tx, {
+            unitId: unit.id,
+            product: unit.product,
+            decision,
+            actorId: payload.actorId,
+            now,
+          });
+
+          await tx.auditLog.create({
+            data: {
+              userId: payload.actorId,
+              action: 'EQUIPMENT_UNIT_GRADE_DOWNGRADED',
+              entityType: 'EquipmentUnit',
+              entityId: unit.id,
+              oldValues: { productId: unit.productId, version: unit.version },
+              newValues: { productId: result.toProductId, version: result.unitVersion, gradeReviewId: result.reviewId },
+              requestId: payload.idempotencyKey,
+            },
+          });
+
+          const updated = await tx.equipmentUnit.findUniqueOrThrow({
+            where: { id: unit.id },
+            select: this.getExplicitSelect(),
+          });
+          const response: DowngradeUnitGradeResult = {
+            unit: this.mapToView(updated),
+            gradeReview: {
+              id: result.reviewId,
+              decision: 'DOWNGRADE',
+              fromProductId: result.fromProductId,
+              toProductId: result.toProductId!,
+              shortageOrderIds: result.shortage.orderIds,
+            },
+          };
+          await tx.idempotencyRecord.update({
+            where: idemWhere,
+            data: {
+              responseStatus: 200,
+              responseBody: JSON.parse(JSON.stringify(response)) as Prisma.InputJsonValue,
+              completedAt: now,
+            },
+          });
+          return response;
+        },
+        { maxWait: 10_000, timeout: 30_000 },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.OPERATION_CONFLICT);
+      throw error;
     }
   }
 }

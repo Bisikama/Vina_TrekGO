@@ -25,6 +25,8 @@ import { usePrivateTripDetail } from "../hooks/usePrivateTripDetail";
 import { usePrivateTripMembers } from "../hooks/usePrivateTripMembers";
 import { useTripInvitation } from "../hooks/useTripInvitation";
 
+import { TripShareButton } from "@/features/trip-gps";
+
 export interface PrivateTripDetailScreenProps {
   tripId?: string;
   isHost?: boolean;
@@ -292,6 +294,8 @@ export function PrivateTripDetailScreen({
             void refetchMembers();
           }}
         />
+
+        <TripShareButton tripId={tripId} style={{ marginTop: 12 }} />
 
         {/* Primary Action Buttons */}
         {!isCancelled ? (

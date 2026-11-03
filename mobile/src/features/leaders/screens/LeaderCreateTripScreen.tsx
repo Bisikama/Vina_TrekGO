@@ -627,7 +627,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
     } else if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace("/(tabs)" as any);
+      router.replace("/field-operations" as any);
     }
   }, [onNavigateTab, router]);
 
@@ -675,7 +675,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
           form={form}
           selectedDestination={selectedDestination}
           onViewTripDetail={() =>
-            router.replace({
+            (onNavigateTab ? (setPublishedTrip(null), setStep("form"), onNavigateTab("trips"), router.push) : router.replace)({
               pathname: "/field-operations/leader-trip-detail" as any,
               params: { id: publishedTrip.id, tripId: publishedTrip.id },
             })

@@ -284,6 +284,9 @@ export interface ActualRouteResponse {
   gapConnections: GapConnectionDto[];
   checkpointProgress: CheckpointProgressDto;
   sourceSessionIds: UUID[];
+  /** Optional so older servers without these fields still parse. */
+  startedAt?: ISODateTime | null;
+  movingDurationSeconds?: number | null;
   uploadDeadline: ISODateTime | null;
 }
 

@@ -96,7 +96,7 @@ function getStatusBadge(status: string, registrationOpenAt?: string | null) {
     case "DRAFT":
       return { label: "Bản nháp", bg: "#f1f5f9", color: "#475569" };
     case "OPEN":
-      return { label: "Đang mở đăng ký", bg: "#dcfce7", color: "#166534" };
+      return { label: "Đang mở đăng ký", bg: "#e2f6d5", color: "#054d28" };
     case "FULL":
       return { label: "Đã đủ chỗ", bg: "#e0f2fe", color: "#0369a1" };
     case "IN_PROGRESS":
@@ -117,7 +117,7 @@ function getBookingStatusStyle(status: string) {
     case "CONFIRMED":
     case "CHECKED_IN":
     case "COMPLETED":
-      return { backgroundColor: "#dcfce7", borderColor: "#86efac" };
+      return { backgroundColor: "#e2f6d5", borderColor: "#86efac" };
     case "PARTIAL_CHECKIN":
       return { backgroundColor: "#fef9c3", borderColor: "#fde047" };
     case "NO_SHOW":
@@ -130,7 +130,7 @@ function getBookingStatusStyle(status: string) {
 function getCheckinStatusStyle(status: CheckInStatus) {
   switch (status) {
     case "CHECKED_IN":
-      return { backgroundColor: "#dcfce7", borderColor: "#86efac" };
+      return { backgroundColor: "#e2f6d5", borderColor: "#86efac" };
     case "NO_SHOW":
       return { backgroundColor: "#fee2e2", borderColor: "#fca5a5" };
     case "NOT_CHECKED_IN":
@@ -142,7 +142,7 @@ function getCheckinStatusStyle(status: CheckInStatus) {
 function getCheckinStatusTextStyle(status: CheckInStatus) {
   switch (status) {
     case "CHECKED_IN":
-      return { color: "#166534" };
+      return { color: "#054d28" };
     case "NO_SHOW":
       return { color: "#ba1a1a" };
     case "NOT_CHECKED_IN":
@@ -341,7 +341,7 @@ export function LeaderTripDetailScreen() {
         edges={["top", "bottom", "left", "right"]}
       >
         <View style={styles.centerLoading}>
-          <ActivityIndicator size="large" color="#125238" />
+          <ActivityIndicator size="large" color="#0e0f0c" />
           <Text style={styles.loadingText}>Đang tải chi tiết chuyến đi...</Text>
         </View>
       </SafeAreaView>
@@ -364,7 +364,10 @@ export function LeaderTripDetailScreen() {
           <Ionicons name="alert-circle-outline" size={48} color="#ba1a1a" />
           <Text style={styles.errorTitle}>Lỗi tải chuyến đi</Text>
           <Text style={styles.errorText}>{error || "Chuyến đi không tồn tại."}</Text>
-          <TouchableOpacity style={styles.primaryActionBtn} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.primaryActionBtn}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/field-operations" as any))}
+          >
             <Text style={styles.primaryActionBtnText}>Quay lại danh sách</Text>
           </TouchableOpacity>
         </View>
@@ -399,13 +402,13 @@ export function LeaderTripDetailScreen() {
         <View style={styles.breadcrumbRow}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/field-operations" as any))}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={20} color={Colors.ink} />
           </TouchableOpacity>
           <Text style={styles.breadcrumbText} numberOfLines={1}>
-            Quản lý dẫn đoàn &gt; Chuyến đi của tôi &gt; {trip.id}
+            Quản lý dẫn đoàn &gt; Chuyến đi của tôi &gt; {trip.title}
           </Text>
         </View>
 
@@ -427,17 +430,17 @@ export function LeaderTripDetailScreen() {
             {trip.title}
           </Text>
           <Text style={styles.tripMeta} numberOfLines={1}>
-            {formatVnDate(trip.startAt)} - {formatVnDate(trip.endAt)} · Mã tour: #{trip.id}
+            {formatVnDate(trip.startAt)} - {formatVnDate(trip.endAt)}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 4, flexWrap: "wrap" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Ionicons name="person-outline" size={13} color="#166534" />
+              <Ionicons name="person-outline" size={13} color="#054d28" />
               <Text style={{ fontSize: 12, color: "#4b5563", fontWeight: "600" }}>
                 {authUser?.fullName || (authUser as any)?.name || (user as any)?.fullName || (user as any)?.name || (trip as any)?.leader?.fullName || "Leader"}
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Ionicons name="location-outline" size={13} color="#166534" />
+              <Ionicons name="location-outline" size={13} color="#054d28" />
               <Text style={{ fontSize: 12, color: "#4b5563", fontWeight: "600" }}>
                 {pickupDisplayName}
               </Text>
@@ -507,7 +510,7 @@ export function LeaderTripDetailScreen() {
             }
             activeOpacity={0.8}
           >
-            <Ionicons name="qr-code-outline" size={15} color="#166534" />
+            <Ionicons name="qr-code-outline" size={15} color="#054d28" />
             <Text style={styles.toolBtnCheckInText}>Điểm danh QR</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -519,7 +522,7 @@ export function LeaderTripDetailScreen() {
           { paddingBottom: Math.max(40, insets.bottom + 28) },
         ]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#125238"]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#0e0f0c"]} />
         }
       >
         {/* MỤC 1 · KẾ HOẠCH & QUY SỐ ĐĂNG KÝ */}
@@ -648,7 +651,7 @@ export function LeaderTripDetailScreen() {
             {/* Card 3: CHECK-IN THỰC ĐỊA */}
             <View style={styles.metricCard}>
               <Text style={styles.metricLabel}>CHECK-IN THỰC ĐỊA</Text>
-              <Text style={[styles.metricValue, { color: "#166534" }]}>
+              <Text style={[styles.metricValue, { color: "#054d28" }]}>
                 {checkedInCount} <Text style={styles.metricValueSub}>/ {totalParticipants}</Text>
               </Text>
               <Text style={styles.metricSub}>
@@ -884,12 +887,12 @@ export function LeaderTripDetailScreen() {
                         onPress={() => handleCheckInParticipant(item.id, "CHECKED_IN")}
                         disabled={isPerformingCheckin}
                       >
-                        <Ionicons name="checkmark-circle-outline" size={15} color="#166534" />
+                        <Ionicons name="checkmark-circle-outline" size={15} color="#054d28" />
                         <Text style={styles.pActionBtnCheckinText}>Điểm danh có mặt</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.pActionBtnDone}>
-                        <Ionicons name="checkmark-done" size={15} color="#166534" />
+                        <Ionicons name="checkmark-done" size={15} color="#054d28" />
                         <Text style={styles.pActionBtnDoneText}>Đã điểm danh</Text>
                       </View>
                     )}
@@ -915,7 +918,7 @@ export function LeaderTripDetailScreen() {
         <View style={styles.webSectionCard}>
           <View style={styles.sectionCardHeader}>
             <View style={styles.sectionTitleRow}>
-              <Ionicons name="trail-sign-outline" size={18} color="#125238" />
+              <Ionicons name="trail-sign-outline" size={18} color="#0e0f0c" />
               <Text style={styles.sectionTitle} numberOfLines={1}>Cung đường thẩm định</Text>
             </View>
             <View style={styles.sectionHeaderBadge}>
@@ -926,7 +929,7 @@ export function LeaderTripDetailScreen() {
           <View style={styles.trailCardDetail}>
             <View style={styles.trailTitleRow}>
               <View style={styles.trailIconCircle}>
-                <Ionicons name="trail-sign" size={20} color="#125238" />
+                <Ionicons name="trail-sign" size={20} color="#0e0f0c" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.trailDetailName}>{trailName}</Text>
@@ -965,7 +968,7 @@ export function LeaderTripDetailScreen() {
         <View style={styles.webSectionCard}>
           <View style={styles.sectionCardHeader}>
             <View style={styles.sectionTitleRow}>
-              <Ionicons name="flag-outline" size={18} color="#125238" />
+              <Ionicons name="flag-outline" size={18} color="#0e0f0c" />
               <Text style={styles.sectionTitle} numberOfLines={1}>Trạm dừng & Checkpoints</Text>
             </View>
             <View style={styles.sectionHeaderBadge}>
@@ -990,7 +993,7 @@ export function LeaderTripDetailScreen() {
                       <View style={styles.cpPillRow}>
                         {cp.isRequired !== false && (
                           <View style={styles.cpRequiredPill}>
-                            <Ionicons name="shield-checkmark" size={10} color="#125238" />
+                            <Ionicons name="shield-checkmark" size={10} color="#0e0f0c" />
                             <Text style={styles.cpRequiredPillText}>Bắt buộc</Text>
                           </View>
                         )}
@@ -1016,25 +1019,103 @@ export function LeaderTripDetailScreen() {
         <View style={styles.webSectionCard}>
           <View style={styles.sectionCardHeader}>
             <View style={styles.sectionTitleRow}>
-              <Ionicons name="receipt-outline" size={18} color="#125238" />
+              <Ionicons name="receipt-outline" size={18} color="#0e0f0c" />
               <Text style={styles.sectionTitle}>GIẢI THÍCH CƠ CẤU GIÁ VÉ</Text>
             </View>
           </View>
 
           <View style={styles.pricingCard}>
             <View style={styles.pricingHeader}>
-              <Ionicons name="pricetag-outline" size={16} color="#125238" />
+              <Ionicons name="pricetag-outline" size={16} color="#0e0f0c" />
               <Text style={styles.pricingTitle}>
                 Giá niêm yết: {Number(trip.price || trip.pricePerPax || 0).toLocaleString("vi-VN")} đ /
                 người
               </Text>
             </View>
             <Text style={styles.priceExplLabel}>Cơ sở tính giá & Giải trình cấu trúc chi phí:</Text>
-            <View style={styles.priceExplContentBox}>
-              <Text style={styles.priceExplText}>
-                {trip.priceExplanation || "Chưa có nội dung giải trình chi tiết."}
-              </Text>
-            </View>
+            {(() => {
+              const raw = trip.priceExplanation;
+              if (!raw) {
+                return (
+                  <View style={styles.priceExplEmpty}>
+                    <Text style={styles.priceExplEmptyText}>Chưa có nội dung giải trình chi tiết.</Text>
+                  </View>
+                );
+              }
+
+              const formatMoney = (valStr: string) => {
+                return valStr.replace(/(\d+)\s*VND/gi, (_, num) => {
+                  return `${Number(num).toLocaleString("vi-VN")} đ`;
+                });
+              };
+
+              const rawItems = raw.split("|").map((s) => s.trim()).filter(Boolean);
+              if (rawItems.length > 1) {
+                const parsed = rawItems.map((item) => {
+                  const clean = item.replace(/^\[.*?\]\s*/, "");
+                  const colonIdx = clean.indexOf(":");
+                  let label = colonIdx > 0 ? clean.slice(0, colonIdx).trim() : "";
+                  let value = colonIdx > 0 ? clean.slice(colonIdx + 1).trim() : clean;
+
+                  value = formatMoney(value);
+
+                  let subInfo: string | null = null;
+                  if (value.includes(" + ")) {
+                    const plusParts = value.split(" + ");
+                    value = plusParts[0].trim();
+                    subInfo = `+ ${plusParts.slice(1).join(" + ").trim()}`;
+                  }
+
+                  const isProfit = /lợi nhuận/i.test(label);
+                  return { label, value, subInfo, isProfit };
+                });
+
+                return (
+                  <View style={styles.breakdownCard}>
+                    {parsed.map((item, index) => {
+                      if (item.isProfit) {
+                        return (
+                          <View key={index} style={styles.profitHighlightBox}>
+                            <View style={styles.profitHeaderRow}>
+                              <Ionicons name="trending-up" size={16} color="#054d28" />
+                              <Text style={styles.profitLabel}>{item.label}</Text>
+                            </View>
+                            <Text style={styles.profitValue}>{item.value}</Text>
+                          </View>
+                        );
+                      }
+
+                      return (
+                        <View
+                          key={index}
+                          style={[
+                            styles.breakdownRow,
+                            index > 0 && styles.breakdownRowBorder,
+                          ]}
+                        >
+                          <View style={styles.breakdownLeftCol}>
+                            <View style={styles.breakdownTitleRow}>
+                              <View style={styles.breakdownDot} />
+                              <Text style={styles.breakdownLabel}>{item.label}</Text>
+                            </View>
+                            {item.subInfo ? (
+                              <Text style={styles.breakdownSubInfo}>{item.subInfo}</Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.breakdownValue}>{item.value}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              }
+
+              return (
+                <View style={styles.priceExplContentBox}>
+                  <Text style={styles.priceExplText}>{raw}</Text>
+                </View>
+              );
+            })()}
           </View>
         </View>
 
@@ -1042,7 +1123,7 @@ export function LeaderTripDetailScreen() {
         <View style={styles.webSectionCard}>
           <View style={styles.sectionCardHeader}>
             <View style={styles.sectionTitleRow}>
-              <Ionicons name="shield-checkmark-outline" size={18} color="#125238" />
+              <Ionicons name="shield-checkmark-outline" size={18} color="#0e0f0c" />
               <Text style={styles.sectionTitle}>ĐỘI NGŨ DẪN ĐƯỜNG & AN TOÀN VFRS</Text>
             </View>
           </View>
@@ -1079,8 +1160,8 @@ export function LeaderTripDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Ionicons name="receipt" size={24} color="#125238" />
-              <Text style={[styles.modalTitle, { color: "#125238" }]}>
+              <Ionicons name="receipt" size={24} color="#0e0f0c" />
+              <Text style={[styles.modalTitle, { color: "#0e0f0c" }]}>
                 Hồ sơ quyết toán chuyến đi
               </Text>
             </View>
@@ -1132,7 +1213,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   primaryActionBtn: {
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: Radius.sm,
@@ -1264,7 +1345,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: Radius.sm,
@@ -1278,7 +1359,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     borderWidth: 1,
     borderColor: "#86efac",
     paddingHorizontal: 12,
@@ -1288,7 +1369,7 @@ const styles = StyleSheet.create({
   toolBtnCheckInText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: "#166534",
+    color: "#054d28",
   },
 
   // Web Section Card Base
@@ -1487,7 +1568,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   rosterTabActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
   },
   rosterTabText: {
     fontSize: 12,
@@ -1643,7 +1724,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     borderWidth: 1,
     borderColor: "#86efac",
     paddingHorizontal: 10,
@@ -1653,7 +1734,7 @@ const styles = StyleSheet.create({
   pActionBtnCheckinText: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: "#166534",
+    color: "#054d28",
   },
   pActionBtnDone: {
     flexDirection: "row",
@@ -1665,7 +1746,7 @@ const styles = StyleSheet.create({
   pActionBtnDoneText: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: "#166534",
+    color: "#054d28",
   },
   pActionBtnNoShow: {
     flexDirection: "row",
@@ -1703,12 +1784,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 13,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
     textTransform: "uppercase",
   },
   sectionHeaderBadge: {
     flexShrink: 0,
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1716,7 +1797,7 @@ const styles = StyleSheet.create({
   sectionHeaderBadgeText: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#166534",
+    color: "#054d28",
   },
   trailCardDetail: {
     gap: 12,
@@ -1781,7 +1862,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#125238",
+    backgroundColor: "#0e0f0c",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1815,7 +1896,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#e2f6d5",
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
@@ -1823,7 +1904,7 @@ const styles = StyleSheet.create({
   cpRequiredPillText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#166534",
+    color: "#054d28",
   },
   cpEnabledPill: {
     backgroundColor: "#e0f2fe",
@@ -1856,13 +1937,109 @@ const styles = StyleSheet.create({
   pricingTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   priceExplLabel: {
     fontSize: 11.5,
     fontWeight: "600",
     color: "#475569",
     marginTop: 2,
+  },
+  breakdownCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: Radius.md,
+    padding: 12,
+    marginTop: 6,
+  },
+  breakdownRow: {
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  breakdownRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  breakdownLeftCol: {
+    flex: 1,
+    paddingRight: 6,
+  },
+  breakdownTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  breakdownDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#94a3b8",
+  },
+  breakdownLabel: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#475569",
+    flexShrink: 1,
+  },
+  breakdownSubInfo: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginTop: 3,
+    marginLeft: 13,
+  },
+  breakdownValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+    textAlign: "right",
+    flexShrink: 0,
+  },
+  profitHighlightBox: {
+    backgroundColor: "#e2f6d5",
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: "#86efac",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  profitHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  profitLabel: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#054d28",
+  },
+  profitValue: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: "#054d28",
+    textAlign: "right",
+  },
+  priceExplEmpty: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 4,
+  },
+  priceExplEmptyText: {
+    fontSize: 12,
+    color: "#94a3b8",
+    fontStyle: "italic",
   },
   priceExplContentBox: {
     backgroundColor: "#ffffff",

@@ -107,14 +107,37 @@ function key(prefix: string, entityId: string, version: number) {
   return `${prefix}-${entityId}-${version}-${Date.now()}`;
 }
 
+/** Lý do chi tiết (`error.details.reason`) mà backend gửi kèm các mã lỗi chung như INVALID_RETURN_STATE. */
+const returnReasonMessages: Record<string, string> = {
+  USER_48H_REVIEW_WINDOW_NOT_CLOSED: "Chưa hết thời hạn khách phản hồi khoản trừ (48 giờ kể từ khi công bố chứng cứ).",
+  USER_DISPUTE_MUST_BE_RESOLVED: "Khách đang khiếu nại khoản trừ; cần xử lý xong khiếu nại trước khi quyết toán.",
+  EVIDENCE_ACCESS_INTERRUPTED: "Khách đang không xem được chứng cứ; thời hạn phản hồi tạm dừng tới khi khôi phục.",
+  EVIDENCE_NOT_ACCESSIBLE: "Chứng cứ chưa được công bố cho khách.",
+  SETTLEMENT_ALREADY_STARTED: "Khoản cọc này đã vào quyết toán.",
+  NO_APPROVED_DEDUCTION: "Chưa có khoản trừ được duyệt.",
+  DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER: "Thất lạc trong khâu giao nhận nội bộ, không được trừ vào cọc của khách.",
+  INSPECTION_TASK_NOT_PENDING: "Nhiệm vụ kiểm định không còn ở trạng thái chờ.",
+};
+
 export function getStaffReturnErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as
-      | { message?: string; error?: { message?: string; code?: string } }
+      | { message?: string; error?: { message?: string; code?: string; details?: { reason?: unknown } } }
       | undefined;
-    return data?.error?.message || data?.message || error.message;
+    const base = data?.error?.message || data?.message || error.message;
+    const reason = data?.error?.details?.reason;
+    if (typeof reason === "string" && reason) {
+      return `${base} — ${returnReasonMessages[reason] ?? reason}`;
+    }
+    return base;
   }
   return error instanceof Error ? error.message : "Không thể xử lý yêu cầu hoàn trả.";
+}
+
+export function getStaffReturnErrorCode(error: unknown) {
+  if (!axios.isAxiosError(error)) return null;
+  const data = error.response?.data as { error?: { code?: string } } | undefined;
+  return data?.error?.code ?? null;
 }
 
 export async function listStaffReturns(status?: ReturnQueueStatus, signal?: AbortSignal) {
@@ -218,17 +241,36 @@ export async function finalizeNormalReturnUnits(
   return unwrap(response.data);
 }
 
+export type GradeDecisionInput =
+  | { decision: "KEEP" }
+  | { decision: "DOWNGRADE"; reason: string; note?: string; evidenceIds?: string[] };
+
+export type MarkReturnedUnitReadyResult = {
+  unit?: { id: string; productId?: string; status?: string; version?: number };
+  readyAt?: string;
+  gradeReview: {
+    id: string;
+    decision: "KEEP" | "DOWNGRADE";
+    fromProductId: string;
+    toProductId: string | null;
+    shortageOrderIds: string[];
+  } | null;
+};
+
 export async function markReturnedUnitReady(input: {
   unitId: string;
   inspectionId: string;
   expectedVersion: number;
+  /** Bắt buộc với sản phẩm có hạng; không gửi với sản phẩm thường. */
+  gradeDecision?: GradeDecisionInput;
 }) {
-  const response = await apiClient.post<Envelope<unknown>>(
+  const response = await apiClient.post<Envelope<MarkReturnedUnitReadyResult>>(
     `/api/v1/staff/equipment-units/${encodeURIComponent(input.unitId)}/ready`,
     {
       inspectionId: input.inspectionId,
       accessoriesChecked: true,
       expectedVersion: input.expectedVersion,
+      ...(input.gradeDecision ? { gradeDecision: input.gradeDecision } : {}),
     },
     {
       headers: {

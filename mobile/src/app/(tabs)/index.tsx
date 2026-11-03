@@ -3,8 +3,14 @@ import { TripPrepModal } from "@/components/TripPrepModal";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
+import { useMyBookings } from "@/features/bookings/hooks/useMyBookings";
 import { useLeaderTrips } from "@/features/leaders/hooks";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  getPublicTrips,
+  type PublicTrip,
+} from "@/features/trips/services/public-trips.api";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -21,6 +27,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
+
+const SCENIC_IMAGES = [
+  "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=600&q=80",
+];
 
 function formatTripDates(startAt?: string, endAt?: string) {
   if (!startAt) return "Lịch chưa cập nhật";
@@ -53,21 +66,60 @@ export default function HomeScreen() {
     fetchMyTrips,
   } = useLeaderTrips(accessToken);
 
+  // Real backend API for trekker bookings & public trips
+  const { bookings, refetch: fetchBookings } = useMyBookings();
+  const [publicTrips, setPublicTrips] = useState<PublicTrip[]>([]);
+  const [loadingPublicTrips, setLoadingPublicTrips] = useState(false);
+
+  const fetchFeaturedTrips = useCallback(async () => {
+    setLoadingPublicTrips(true);
+    try {
+      const res = await getPublicTrips({ pageSize: 6 });
+      setPublicTrips(res.items || []);
+    } catch {
+      setPublicTrips([]);
+    } finally {
+      setLoadingPublicTrips(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isLeader && accessToken) {
       void fetchMyTrips();
+    } else if (!isLeader) {
+      void fetchFeaturedTrips();
     }
-  }, [isLeader, accessToken, fetchMyTrips]);
+  }, [isLeader, accessToken, fetchMyTrips, fetchFeaturedTrips]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (isLeader && accessToken) {
       await fetchMyTrips();
+    } else {
+      await Promise.allSettled([fetchBookings(), fetchFeaturedTrips()]);
     }
     setRefreshing(false);
-  }, [isLeader, accessToken, fetchMyTrips]);
+  }, [isLeader, accessToken, fetchMyTrips, fetchBookings, fetchFeaturedTrips]);
 
   const activeLeaderTrip = leaderTrips.length > 0 ? leaderTrips[0] : null;
+
+  const activeBooking =
+    bookings.find(
+      (b) =>
+        b.status === "CONFIRMED" ||
+        b.status === "CHECKED_IN" ||
+        b.status === "PENDING_PAYMENT",
+    ) || (bookings.length > 0 ? bookings[0] : null);
+
+  const daysText = activeBooking?.trip?.startAt
+    ? (() => {
+        const diff = new Date(activeBooking.trip.startAt).getTime() - Date.now();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (days < 0) return "ĐÃ DIỄN RA";
+        if (days === 0) return "HÔM NAY";
+        return `BẮT ĐẦU TRONG ${days} NGÀY`;
+      })()
+    : "SẮP KHỞI HÀNH";
 
   const checkedInCount = fieldWorkflow.leaderAttendance.filter(
     (member: { memberName: string; status: string }) =>
@@ -609,15 +661,20 @@ export default function HomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primaryDark}
+          />
+        }
       >
         {/* 1. GREETING & WEATHER STATUS BANNER */}
         <View style={styles.greetingSection}>
           <View style={styles.statusChipsRow}>
             <View style={styles.weatherChip}>
               <Ionicons name="partly-sunny" size={14} color="#725c00" />
-              <Text style={styles.weatherChipText}>
-                Lâm Đồng · 22°C Nắng nhẹ
-              </Text>
+              <Text style={styles.weatherChipText}>Thời tiết thuận lợi</Text>
             </View>
 
             <View style={styles.gpsChip}>
@@ -626,182 +683,221 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.greetingTitle}>Xin chào, {user.name}!</Text>
+          <Text style={styles.greetingTitle}>Xin chào, {authUser?.name || user.name}!</Text>
           <Text style={styles.greetingSubtitle}>
             Sẵn sàng cho hành trình trekking tiếp theo cùng TrekGo?
           </Text>
         </View>
 
         {/* 2. UPCOMING TRIP HERO CARD */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroImageContainer}>
-            <Image
-              source={{
-                uri: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
-              }}
-              style={styles.heroImage}
-            />
-            <View style={styles.imageOverlay} />
-
-            <View style={styles.countdownBadge}>
-              <Ionicons
-                name="time"
-                size={13}
-                color={Colors.onPrimaryContainer}
+        {activeBooking ? (
+          <View style={styles.heroCard}>
+            <View style={styles.heroImageContainer}>
+              <Image
+                source={{
+                  uri: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
+                }}
+                style={styles.heroImage}
               />
-              <Text style={styles.countdownText}>BẮT ĐẦU TRONG 11 NGÀY</Text>
+              <View style={styles.imageOverlay} />
+
+              <View style={styles.countdownBadge}>
+                <Ionicons
+                  name="time"
+                  size={13}
+                  color={Colors.onPrimaryContainer}
+                />
+                <Text style={styles.countdownText}>{daysText}</Text>
+              </View>
+
+              <View style={styles.bookingBadge}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={13}
+                  color={Colors.primary}
+                />
+                <Text style={styles.bookingText}>
+                  #BK-{activeBooking.id.slice(0, 6).toUpperCase()}
+                </Text>
+              </View>
+
+              <View style={styles.heroTitles}>
+                <Text style={styles.trailCategory}>
+                  {activeBooking.status === "CONFIRMED"
+                    ? "Chuyến đi đã xác nhận"
+                    : activeBooking.status === "CHECKED_IN"
+                      ? "Đang tham gia chuyến đi"
+                      : "Chờ xác nhận thanh toán"}
+                </Text>
+                <Text style={styles.trailName} numberOfLines={2}>
+                  {activeBooking.trip?.title}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.bookingBadge}>
-              <Ionicons
-                name="shield-checkmark"
-                size={13}
-                color={Colors.primary}
-              />
-              <Text style={styles.bookingText}>
-                {activeTrip.bookingCode || "#BK-8842"}
-              </Text>
-            </View>
+            <View style={styles.heroBody}>
+              <View style={styles.telemetryGrid}>
+                <View style={styles.telemetryTile}>
+                  <View style={styles.telemetryHeader}>
+                    <Ionicons
+                      name="people"
+                      size={12}
+                      color={Colors.primaryDark}
+                    />
+                    <Text style={styles.telemetryLabel}>Số lượng</Text>
+                  </View>
+                  <Text style={styles.telemetryValue}>
+                    {activeBooking.participantCount}
+                    <Text style={styles.telemetryUnit}> người</Text>
+                  </Text>
+                </View>
 
-            <View style={styles.heroTitles}>
-              <Text style={styles.trailCategory}>Cung đường huyền thoại</Text>
-              <Text style={styles.trailName}>{activeTrip.name}</Text>
-            </View>
-          </View>
+                <View style={styles.telemetryTile}>
+                  <View style={styles.telemetryHeader}>
+                    <Ionicons name="cash-outline" size={12} color="#725c00" />
+                    <Text style={styles.telemetryLabel}>Tổng tiền</Text>
+                  </View>
+                  <Text style={styles.telemetryValue}>
+                    {Number(activeBooking.totalAmount).toLocaleString("vi-VN")}
+                    <Text style={styles.telemetryUnit}>đ</Text>
+                  </Text>
+                </View>
 
-          <View style={styles.heroBody}>
-            <View style={styles.telemetryGrid}>
-              <View style={styles.telemetryTile}>
-                <View style={styles.telemetryHeader}>
+                <View style={styles.telemetryTile}>
+                  <View style={styles.telemetryHeader}>
+                    <Ionicons name="checkmark-circle" size={12} color={Colors.primaryDark} />
+                    <Text style={styles.telemetryLabel}>Trạng thái</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.telemetryValue,
+                      { color: Colors.primaryDark, fontSize: 13 },
+                    ]}
+                  >
+                    {activeBooking.status === "CONFIRMED"
+                      ? "Xác nhận"
+                      : activeBooking.status === "CHECKED_IN"
+                        ? "Check-in"
+                        : "Chờ"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.progressContainer}>
+                <View style={styles.progressHeader}>
+                  <View style={styles.dateRow}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={14}
+                      color={Colors.secondary}
+                    />
+                    <Text style={styles.dateText}>
+                      {formatTripDates(
+                        activeBooking.trip?.startAt,
+                        activeBooking.trip?.endAt,
+                      )}
+                    </Text>
+                  </View>
+                  <Text style={styles.slotsText}>
+                    {activeBooking.participantCount} chỗ đã đặt
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.heroActionsRow}>
+                <TouchableOpacity
+                  style={styles.detailsBtn}
+                  onPress={() =>
+                    router.push(`/trips/${activeBooking.trip?.id}` as any)
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.detailsBtnText}>Chi tiết chuyến đi</Text>
                   <Ionicons
-                    name="git-commit"
-                    size={12}
+                    name="arrow-forward"
+                    size={16}
+                    color={Colors.onPrimary}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.navLiveBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/navigation",
+                      params: {
+                        tripId: activeBooking.trip?.id,
+                        tripTitle: activeBooking.trip?.title,
+                        tripType: "PUBLIC",
+                      },
+                    })
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="navigate"
+                    size={16}
                     color={Colors.primaryDark}
                   />
-                  <Text style={styles.telemetryLabel}>Cự ly</Text>
-                </View>
-                <Text style={styles.telemetryValue}>
-                  14.5<Text style={styles.telemetryUnit}>km</Text>
-                </Text>
+                  <Text style={styles.navLiveBtnText}>Vào GPS</Text>
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.telemetryTile}>
-                <View style={styles.telemetryHeader}>
-                  <Ionicons name="trending-up" size={12} color="#725c00" />
-                  <Text style={styles.telemetryLabel}>Độ cao</Text>
-                </View>
-                <Text style={styles.telemetryValue}>
-                  +850<Text style={styles.telemetryUnit}>m</Text>
-                </Text>
-              </View>
-
-              <View style={styles.telemetryTile}>
-                <View style={styles.telemetryHeader}>
-                  <Ionicons name="speedometer" size={12} color="#ba1a1a" />
-                  <Text style={styles.telemetryLabel}>Độ khó</Text>
-                </View>
-                <Text style={[styles.telemetryValue, { color: "#ba1a1a" }]}>
-                  Khó
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.progressContainer}>
-              <View style={styles.progressHeader}>
-                <View style={styles.dateRow}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={14}
-                    color={Colors.secondary}
-                  />
-                  <Text style={styles.dateText}>{activeTrip.startDate}</Text>
-                </View>
-                <Text style={styles.slotsText}>
-                  Đã chốt {activeTrip.enrolledCount}/{activeTrip.capacity} thành
-                  viên
-                </Text>
-              </View>
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${(activeTrip.enrolledCount / activeTrip.capacity) * 100}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.heroActionsRow}>
-              <TouchableOpacity
-                style={styles.detailsBtn}
-                onPress={() => setTripPrepVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.detailsBtnText}>Chi tiết chuyến đi</Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={16}
-                  color={Colors.onPrimary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.navLiveBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: "/navigation",
-                    params: {
-                      tripId: activeTrip?.id,
-                      tripTitle: activeTrip?.name,
-                      tripType: "PUBLIC",
-                    },
-                  })
-                }
-                activeOpacity={0.85}
-              >
-                <Ionicons
-                  name="navigate"
-                  size={16}
-                  color={Colors.primaryDark}
-                />
-                <Text style={styles.navLiveBtnText}>Vào GPS</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.emptyBookingCard}>
+            <View style={styles.emptyBookingIconBox}>
+              <Ionicons
+                name="trail-sign-outline"
+                size={30}
+                color={Colors.onPrimaryContainer}
+              />
+            </View>
+            <Text style={styles.emptyBookingTitle}>Chưa có chuyến đi sắp tới</Text>
+            <Text style={styles.emptyBookingSub}>
+              Bạn chưa đăng ký chuyến đi nào. Hãy khám phá các tour trekking thực tế được dẫn dắt bởi Leader bản địa!
+            </Text>
+            <TouchableOpacity
+              style={styles.exploreTripsBtn}
+              onPress={() =>
+                router.push("/(tabs)/trips?tab=PUBLIC_TRIPS" as Href)
+              }
+              activeOpacity={0.85}
+            >
+              <Ionicons name="compass" size={16} color="#ffffff" />
+              <Text style={styles.exploreTripsBtnText}>Khám phá tour trekking</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* 3. QUICK ACTION SHORTCUTS (4 Items Rounded Icon Buttons) */}
+        {/* 3. QUICK ACTION SHORTCUTS (4 Items in Signature Wise Lime Green) */}
         <View style={styles.shortcutsRow}>
           <TouchableOpacity
             style={styles.shortcutItem}
             onPress={() => router.push("/(tabs)/explore")}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.shortcutIconBox,
-                { backgroundColor: Colors.primaryContainer },
-              ]}
-            >
-              <Ionicons name="compass" size={24} color={Colors.onPrimary} />
+            <View style={styles.shortcutIconBox}>
+              <MaterialCommunityIcons
+                name="compass-rose"
+                size={27}
+                color={Colors.onPrimary}
+              />
             </View>
             <Text style={styles.shortcutLabel}>Khám phá Trails</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.shortcutItem}
-              onPress={() => router.push("/(tabs)/trips?tab=PUBLIC_TRIPS" as Href)}
+            onPress={() => router.push("/(tabs)/trips?tab=PUBLIC_TRIPS" as Href)}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.shortcutIconBox,
-                { backgroundColor: Colors.secondaryContainer },
-              ]}
-            >
-              <Ionicons name="flag" size={24} color="#0c2000" />
+            <View style={styles.shortcutIconBox}>
+              <Ionicons
+                name="flag"
+                size={26}
+                color={Colors.onPrimary}
+              />
             </View>
             <Text style={styles.shortcutLabel}>Public Tours</Text>
           </TouchableOpacity>
@@ -816,13 +912,12 @@ export default function HomeScreen() {
             }
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.shortcutIconBox,
-                { backgroundColor: Colors.tertiaryFixed },
-              ]}
-            >
-              <Ionicons name="people" size={24} color="#564500" />
+            <View style={styles.shortcutIconBox}>
+              <Ionicons
+                name="people"
+                size={26}
+                color={Colors.onPrimary}
+              />
             </View>
             <Text style={styles.shortcutLabel}>Tạo Private Trip</Text>
           </TouchableOpacity>
@@ -832,13 +927,12 @@ export default function HomeScreen() {
             onPress={() => router.push("/(tabs)/rental")}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.shortcutIconBox,
-                { backgroundColor: Colors.surfaceContainerHighest },
-              ]}
-            >
-              <Ionicons name="basket" size={24} color={Colors.onSurface} />
+            <View style={styles.shortcutIconBox}>
+              <Ionicons
+                name="basket"
+                size={26}
+                color={Colors.onPrimary}
+              />
             </View>
             <Text style={styles.shortcutLabel}>Thuê đồ Trek</Text>
           </TouchableOpacity>
@@ -863,59 +957,77 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.trailScroll}
           >
-            {trails.map((trail) => (
-              <TouchableOpacity
-                key={trail.id}
-                style={styles.trailCard}
-                onPress={() => router.push("/(tabs)/explore")}
-                activeOpacity={0.85}
-              >
-                <View style={styles.trailImageWrapper}>
-                  <Image
-                    source={{ uri: trail.imageUrl }}
-                    style={styles.trailCardImage}
-                  />
-                  <View style={styles.priceTag}>
-                    <Ionicons
-                      name={
-                        trail.isUnlocked ? "checkmark-circle" : "lock-closed"
-                      }
-                      size={11}
-                      color="#fed018"
-                    />
-                    <Text style={styles.priceTagText}>
-                      {trail.isUnlocked
-                        ? "Đã sở hữu"
-                        : `${trail.price.toLocaleString("vi-VN")}đ`}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.trailCardBody}>
-                  <Text style={styles.trailCardTitle} numberOfLines={1}>
-                    {trail.name}
-                  </Text>
-                  <Text style={styles.trailCardRegion}>{trail.region}</Text>
-                  <View style={styles.trailMetaRow}>
-                    <Text style={styles.trailMetaItem}>
-                      {trail.distanceKm} km
-                    </Text>
-                    <Text style={styles.trailMetaDivider}>•</Text>
-                    <Text style={styles.trailMetaItem}>
-                      +{trail.elevationGainM}m
-                    </Text>
-                    <Text style={styles.trailMetaDivider}>•</Text>
-                    <Text
-                      style={[
-                        styles.trailMetaItem,
-                        { color: Colors.primaryDark, fontWeight: "700" },
-                      ]}
-                    >
-                      {trail.difficulty}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {loadingPublicTrips ? (
+              <View style={styles.feedLoadingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.feedLoadingText}>Đang tải chuyến đi...</Text>
+              </View>
+            ) : publicTrips.length === 0 ? (
+              <View style={styles.emptyFeedBox}>
+                <Text style={styles.emptyFeedText}>Chưa có chuyến đi nào mở đặt chỗ</Text>
+              </View>
+            ) : (
+              publicTrips.map((trip, idx) => {
+                const imageUrl = SCENIC_IMAGES[idx % SCENIC_IMAGES.length];
+                const route = trip.routes?.[0];
+                const priceFormatted = Number(trip.pricePerPax).toLocaleString("vi-VN");
+                return (
+                  <TouchableOpacity
+                    key={trip.id}
+                    style={styles.trailCard}
+                    onPress={() => router.push(`/trips/${trip.id}` as any)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.trailImageWrapper}>
+                      <Image
+                        source={{ uri: imageUrl }}
+                        style={styles.trailCardImage}
+                      />
+                      <View style={styles.priceTag}>
+                        <Ionicons
+                          name="pricetag-outline"
+                          size={11}
+                          color="#fed018"
+                        />
+                        <Text style={styles.priceTagText}>
+                          {priceFormatted}đ
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.trailCardBody}>
+                      <Text style={styles.trailCardTitle} numberOfLines={1}>
+                        {trip.title}
+                      </Text>
+                      <Text style={styles.trailCardRegion}>
+                        {trip.destination?.name || "Việt Nam"}
+                      </Text>
+                      <View style={styles.trailMetaRow}>
+                        {route?.snapshotDistanceKm ? (
+                          <>
+                            <Text style={styles.trailMetaItem}>
+                              {route.snapshotDistanceKm} km
+                            </Text>
+                            <Text style={styles.trailMetaDivider}>•</Text>
+                          </>
+                        ) : null}
+                        <Text
+                          style={[
+                            styles.trailMetaItem,
+                            { color: Colors.primaryDark, fontWeight: "700" },
+                          ]}
+                        >
+                          {route?.snapshotDifficulty || "Trung bình"}
+                        </Text>
+                        <Text style={styles.trailMetaDivider}>•</Text>
+                        <Text style={styles.trailMetaItem}>
+                          Còn {trip.remainingSlots}/{trip.capacity} chỗ
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </ScrollView>
         </View>
 
@@ -928,9 +1040,8 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Text style={styles.advisoryText}>
-            Khu vực đồi lính Tà Năng có gió giật mạnh về chiều tối (14-25 km/h).
-            Luôn sạc đầy pin dự phòng và giữ liên lạc kênh bộ đàm VHF cùng
-            Leader.
+            Luôn kiểm tra dự báo thời tiết trước ngày khởi hành, chuẩn bị đủ nước,
+            dụng cụ sơ cứu cơ bản, pin dự phòng và tuân thủ các quy tắc an toàn cùng hướng dẫn viên.
           </Text>
         </View>
       </ScrollView>
@@ -1137,14 +1248,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#8cd867",
+    backgroundColor: "#9fe870",
     paddingVertical: 12,
-    borderRadius: Radius.md,
+    borderRadius: Radius.xl,
   },
   leaderPrimaryBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#0c2000",
+    color: "#0e0f0c",
   },
   leaderSecondaryBtn: {
     flex: 1,
@@ -1603,21 +1714,22 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
   },
 
-  // ── Shortcuts Row ──────────────────────────────────────────────────────────
+  // ── Shortcuts Row (Youthful & Dynamic Gradient Badges) ────────────────────
   shortcutsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    marginBottom: 24,
+    marginBottom: 26,
   },
   shortcutItem: {
     alignItems: "center",
     width: (width - 32 - 36) / 4,
   },
   shortcutIconBox: {
-    width: 54,
-    height: 54,
+    width: 58,
+    height: 58,
     borderRadius: Radius.lg,
+    backgroundColor: Colors.primary, // #9fe870 - Wise signature lime green from Image 2
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -1626,8 +1738,9 @@ const styles = StyleSheet.create({
   shortcutLabel: {
     fontSize: 11,
     fontWeight: "700",
-    color: Colors.onSurface,
+    color: "#0e0f0c", // Wise ink
     textAlign: "center",
+    lineHeight: 14,
   },
 
   // ── Featured Section ───────────────────────────────────────────────────────
@@ -1744,5 +1857,74 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#4a3b1c",
     lineHeight: 16,
+  },
+  // ── New Trekker Empty & Live Feed Styles ────────────────────────────────────
+  emptyBookingCard: {
+    marginHorizontal: 16,
+    backgroundColor: Colors.surfaceContainerLowest,
+    borderRadius: Radius.xl,
+    padding: 24,
+    alignItems: "center",
+    marginBottom: 20,
+    ...Shadows.card,
+  },
+  emptyBookingIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryContainer,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyBookingTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Colors.onSurface,
+    marginBottom: 6,
+  },
+  emptyBookingSub: {
+    fontSize: 12,
+    color: Colors.onSurfaceVariant,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  exploreTripsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.primaryDark,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: Radius.full,
+    ...Shadows.card,
+  },
+  exploreTripsBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  feedLoadingBox: {
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  feedLoadingText: {
+    fontSize: 12,
+    color: Colors.onSurfaceVariant,
+  },
+  emptyFeedBox: {
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyFeedText: {
+    fontSize: 12,
+    color: Colors.onSurfaceVariant,
   },
 });

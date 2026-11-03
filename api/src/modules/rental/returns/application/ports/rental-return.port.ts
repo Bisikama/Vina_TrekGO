@@ -135,6 +135,12 @@ export interface MarkUnitReadyCommand {
   inspectionId?: string;
   accessoriesChecked: boolean;
   expectedVersion: number;
+  gradeDecision?: {
+    decision: 'KEEP' | 'DOWNGRADE';
+    reason?: string;
+    note?: string;
+    evidenceIds?: string[];
+  };
   idempotencyKey: string;
   now: Date;
 }

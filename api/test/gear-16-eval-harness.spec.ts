@@ -111,6 +111,52 @@ describe('Gear Advisor V3.1.5 — Phase 16 Evaluation Harness & Benchmarks', () 
       expect(result.summary.searchStatus).toBe('OPTIMAL_WITHIN_SEARCH_SCOPE');
     });
 
+    it('keeps depositAmount equal to deposit when one product covers two needs', () => {
+      const candidates = new Map<string, any[]>([
+        [
+          'JACKET',
+          [
+            {
+              id: 'prod_shared',
+              name: 'Shared Jacket',
+              category: 'JACKET',
+              dailyPrice: 10,
+              rentalFee: 20,
+              deposit: 300,
+              availableCount: 2,
+              weight_g: 500,
+              attributes: { waterproof_mm: 5000 },
+            },
+          ],
+        ],
+      ]);
+      const need = (requirementId: string) => ({
+        requirementId,
+        category: 'JACKET',
+        priority: 'REQUIRED',
+        quantity: 1,
+        constraints: [],
+      });
+
+      const result = solveDeterministicPlannerOption(
+        {
+          ownedAssignments: [],
+          uncoveredNeeds: [need('req_jkt_a'), need('req_jkt_b')] as any,
+          candidatesPerCategory: candidates,
+        },
+        'MIN_RENTAL_FEE',
+      );
+
+      expect(result.rentalLines).toHaveLength(1);
+      expect(result.rentalLines[0]).toMatchObject({
+        productId: 'prod_shared',
+        quantity: 2,
+        deposit: 600,
+        depositAmount: 600,
+        depositPerUnit: 300,
+      });
+    });
+
     it('proves chosen solution with unknown weight cannot claim weight optimal (returns BOUNDED_RECOMMENDATION)', () => {
 
       const candidates = new Map<string, any[]>([

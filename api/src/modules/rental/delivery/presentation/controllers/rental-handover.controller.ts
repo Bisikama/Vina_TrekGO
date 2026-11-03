@@ -166,7 +166,7 @@ export class RentalHandoverController {
     summary: 'RB-API-409 — Xem trước package và tình trạng trước giao hàng',
     description:
       'Khách hàng xem trước thông tin package sẽ nhận, bao gồm danh sách thiết bị, ' +
-      'condition-before snapshots, và phụ kiện kèm theo. ' +
+      'condition-before snapshots, và phụ kiện kèm theo. Mỗi món có product { id, name, grade }. ' +
       'API chỉ đọc, không thay đổi dữ liệu.',
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID đơn hàng thuê', example: '550e8400-e29b-41d4-a716-446655440000' })

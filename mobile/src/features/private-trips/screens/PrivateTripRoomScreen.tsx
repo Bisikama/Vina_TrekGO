@@ -1,5 +1,6 @@
 import { Colors, Radius } from "@/constants/theme";
 import { TripGpsButton } from "@/components/trip/TripGpsButton";
+import { TripShareButton } from "@/features/trip-gps";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -328,6 +329,8 @@ export function PrivateTripRoomScreen({
             />
           </View>
         )}
+
+        <TripShareButton tripId={tripId} style={{ marginBottom: 16 }} />
 
         {/* Member List */}
         <TripRoomMemberList

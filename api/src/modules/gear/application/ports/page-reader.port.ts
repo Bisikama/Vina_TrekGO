@@ -10,6 +10,7 @@ export interface PageReadResult {
 }
 
 export interface PageReaderPort {
+  isConfigured?(): boolean;
   readPage(url: string): Promise<PageReadResult>;
 }
 

@@ -25,6 +25,45 @@ import type {
 import { toWireUserGearItem } from './user-gear.controller';
 import { ApiErrorResponse } from '../../../../shared/swagger/api-error-response.helper';
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes';
+import { toManualEntryView } from '../../application/services/gear-capabilities';
+import { extractionFieldProvenance } from '../../domain/gear-extraction-schema';
+
+const EXTRACTION_PROVENANCE_SCHEMA = {
+  type: 'array' as const,
+  nullable: true,
+  description: 'Trạng thái từng trường trong bản nháp trích xuất; không khẳng định nguồn giá trị người dùng đã chỉnh sửa. null khi chưa biết hoặc đổi danh mục.',
+  items: { type: 'object' as const, properties: {
+    field: { type: 'string' as const, example: 'waterproof_mm' },
+    extractionStatus: { type: 'string' as const, enum: ['FOUND', 'MISSING'], example: 'MISSING' },
+  } },
+};
+
+const MANUAL_ENTRY_SCHEMA = {
+  type: 'object',
+  nullable: true,
+  description:
+    'null khi thông số do AI điền (hoặc lấy từ cache). Khác null khi AI không dùng được: bản nháp vẫn READY nhưng extractedData không có thông số — người dùng nhập tay rồi gọi confirm như bình thường (món đồ được lưu với source = MANUAL).',
+  properties: {
+    required: { type: 'boolean', example: true },
+    reasonCode: {
+      type: 'string',
+      enum: [
+        'AI_DISABLED',
+        'AI_NOT_CONFIGURED',
+        'AI_TIMEOUT',
+        'AI_REFUSED',
+        'AI_RATE_LIMITED',
+        'AI_SCHEMA_MISMATCH',
+        'AI_FAILED',
+        'LINK_READER_DISABLED',
+        'LINK_READER_NOT_CONFIGURED',
+        'LINK_FETCH_FAILED',
+        'DAILY_QUOTA_EXCEEDED',
+      ],
+    },
+    messageVi: { type: 'string', example: 'Tiện ích đọc thông số tự động chưa được cấu hình. Vui lòng nhập thông số món đồ bằng tay.' },
+  },
+};
 
 @ApiTags('Gear - Extractions (Trích xuất thông số đồ bằng AI)')
 @ApiBearerAuth('bearer')
@@ -38,10 +77,15 @@ export class GearExtractionController {
   @ApiOperation({
     summary: 'Khởi tạo trích xuất thông số trang bị (từ Ảnh tag/mác hoặc Link Web)',
     description: `
-Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt độ, chất liệu, dung tích...) bằng **Gemini Vision** hoặc bộ đọc trang web **Firecrawl**.
+Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt độ, chất liệu, dung tích...) bằng **Gemini Vision** hoặc bộ đọc trang web **Firecrawl**. AI là **tuỳ chọn**.
+
+**Khi AI không dùng được** (tiện ích tắt, chưa cấu hình, hết giờ, bị từ chối/giới hạn, không đọc được trang, hết lượt trong ngày):
+endpoint **không trả lỗi** mà vẫn trả 201 với bản nháp \`READY\` không có thông số và \`manualEntry.required = true\` kèm \`reasonCode\`, \`messageVi\`.
+Người dùng nhập tay rồi gọi confirm như bình thường; bản nháp nhập tay **không tính lượt**. Xem trước trạng thái qua \`GET /api/v1/gear/capabilities\`.
+Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc người dùng, sai định dạng, quá dung lượng) và xung đột đồng thời vẫn trả lỗi như cũ.
 
 **Hạn ngạch & Giới hạn:**
-- Mỗi người dùng có **20 lượt trích xuất/ngày** (tính theo múi giờ \`Asia/Saigon\`).
+- Mỗi người dùng có **20 lượt trích xuất bằng AI/ngày** (tính theo múi giờ \`Asia/Saigon\`); hết lượt thì nhận bản nháp nhập tay.
 - Bản nháp trích xuất có thời hạn hiệu lực **24 giờ**.
 
 **Định dạng dữ liệu hỗ trợ (Payload Formats):**
@@ -161,11 +205,14 @@ Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt đ
   })
   @ApiResponse({
     status: 201,
-    description: 'Bản nháp trích xuất được tạo thành công kèm thông số kỹ thuật (status = READY)',
+    description:
+      'Bản nháp trích xuất (status = READY): kèm thông số do AI điền, hoặc bản nháp "cần nhập tay" khi AI không dùng được (manualEntry khác null)',
     schema: {
       type: 'object',
       properties: {
         id: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440199' },
+        manualEntry: MANUAL_ENTRY_SCHEMA,
+        extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA,
         sourceType: { type: 'string', example: 'LINK' },
         status: { type: 'string', example: 'READY' },
         extractedData: {
@@ -187,9 +234,7 @@ Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt đ
   })
   @ApiErrorResponse(400, 'Dữ liệu không hợp lệ', 'VALIDATION_ERROR', 'URL không hợp lệ hoặc thiếu uploadId')
   @ApiErrorResponse(401, 'Chưa đăng nhập', 'UNAUTHORIZED', 'Token không hợp lệ hoặc đã hết hạn')
-  @ApiErrorResponse(409, 'Hết lượt trích xuất trong ngày', GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, 'Đã đạt giới hạn 20 lượt trích xuất/ngày')
-  @ApiErrorResponse(502, 'Dịch vụ AI từ chối', GEAR_ERROR_CODES.GEAR_AI_REFUSED, 'Khóa API AI không hợp lệ hoặc dịch vụ AI từ chối xử lý')
-  @ApiErrorResponse(503, 'Trình đọc web không khả dụng', GEAR_ERROR_CODES.GEAR_PAGE_READER_UNAVAILABLE, 'Dịch vụ trích xuất web tạm thời không khả dụng')
+  @ApiErrorResponse(409, 'Đang có yêu cầu trích xuất khác', GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT, 'Cùng nguồn đang được xử lý, thử lại sau giây lát')
   async createExtraction(
     @ActiveUser('id') userId: string,
     @Body(new ZodValidationPipe(createExtractionSchema)) body: CreateExtractionDto,
@@ -202,6 +247,8 @@ Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt đ
       sourceHash: draft.sourceHash,
       status: draft.status,
       extractedData: draft.extractedData,
+      manualEntry: toManualEntryView(draft.extractedData),
+      extractionFieldProvenance: extractionFieldProvenance(draft.extractedData),
       version: draft.version,
       expiresAt: draft.expiresAt,
       createdAt: draft.createdAt,
@@ -211,7 +258,7 @@ Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt đ
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết bản nháp trích xuất' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'ID của bản nháp trích xuất', example: '550e8400-e29b-41d4-a716-446655440199' })
-  @ApiResponse({ status: 200, description: 'Thông tin chi tiết bản nháp trích xuất' })
+  @ApiResponse({ status: 200, description: 'Thông tin chi tiết bản nháp trích xuất', schema: { type: 'object', properties: { extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA } } })
   @ApiErrorResponse(404, 'Không tìm thấy', GEAR_ERROR_CODES.GEAR_EXTRACTION_DRAFT_NOT_FOUND, 'Bản nháp trích xuất không tồn tại hoặc đã hết hạn')
   async getDraft(
     @ActiveUser('id') userId: string,
@@ -225,6 +272,8 @@ Trích xuất tự động thông số kỹ thuật (chống nước, nhiệt đ
       sourceHash: draft.sourceHash,
       status: draft.status,
       extractedData: draft.extractedData,
+      manualEntry: toManualEntryView(draft.extractedData),
+      extractionFieldProvenance: extractionFieldProvenance(draft.extractedData),
       confirmedItemId: draft.confirmedItemId,
       version: draft.version,
       expiresAt: draft.expiresAt,
@@ -300,6 +349,7 @@ Người dùng kiểm tra thông số AI đã trích xuất, chỉnh sửa thôn
   @ApiResponse({
     status: 200,
     description: 'Xác nhận thành công, trả về thông tin món đồ đã lưu vào tủ đồ',
+    schema: { type: 'object', properties: { item: { type: 'object' }, replayed: { type: 'boolean' }, extractionFieldProvenance: EXTRACTION_PROVENANCE_SCHEMA } },
   })
   @ApiErrorResponse(404, 'Không tìm thấy bản nháp', GEAR_ERROR_CODES.GEAR_EXTRACTION_DRAFT_NOT_FOUND, 'Bản nháp không tồn tại hoặc đã hết hạn')
   @ApiErrorResponse(409, 'Tủ đồ đã đầy', GEAR_ERROR_CODES.GEAR_ITEM_LIMIT_EXCEEDED, 'Tủ đồ đã đạt giới hạn tối đa 50 món')
@@ -313,6 +363,7 @@ Người dùng kiểm tra thông số AI đã trích xuất, chỉnh sửa thôn
     return {
       item: toWireUserGearItem(res.item),
       replayed: res.replayed,
+      extractionFieldProvenance: res.extractionFieldProvenance,
     };
   }
 }

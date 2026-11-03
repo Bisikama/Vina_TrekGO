@@ -756,7 +756,7 @@ function MemberRow({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.surface },
+  safe: { flex: 1, backgroundColor: '#e8ebe6' },
   centerBox: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
   loadingText: { marginTop: 12, color: Colors.onSurfaceVariant, fontSize: 13 },
   header: {
@@ -997,8 +997,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 13,
     borderRadius: Radius.full,
-    backgroundColor: Colors.inkDeep,
+    backgroundColor: '#9fe870',
   },
   finishBtnDisabled: { backgroundColor: "#aab3a5" },
-  finishBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  finishBtnText: { color: "#0e0f0c", fontSize: 14, fontWeight: "700" },
 });

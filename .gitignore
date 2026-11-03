@@ -147,3 +147,5 @@ vite.config.ts.timestamp-*
 /implementation
 /scripts
 CLAUDE.md
+
+GEAR_ADVISOR_PROGRESS.md

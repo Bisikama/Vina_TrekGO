@@ -64,12 +64,12 @@ export function LeaderActiveTripCard({
           onPress={() => onNavigateNext(nextStep.route)}
           activeOpacity={0.86}
         >
-          <Ionicons name={nextStep.icon} size={21} color="#fff" />
+          <Ionicons name={nextStep.icon} size={21} color="#0e0f0c" />
           <View style={styles.commandButtonCopy}>
             <Text style={styles.commandButtonLabel}>{nextStep.label}</Text>
             <Text style={styles.commandButtonDetail}>{nextStep.detail}</Text>
           </View>
-          <Ionicons name="arrow-forward" size={20} color="#fff" />
+          <Ionicons name="arrow-forward" size={20} color="#0e0f0c" />
         </TouchableOpacity>
       </View>
     );
@@ -78,7 +78,7 @@ export function LeaderActiveTripCard({
   if (loading) {
     return (
       <View style={[styles.commandCard, styles.centered]}>
-        <ActivityIndicator size="small" color="#fff" />
+        <ActivityIndicator size="small" color="#0e0f0c" />
         <Text style={styles.loadingText}>Đang tải thông tin chuyến đi từ hệ thống...</Text>
       </View>
     );
@@ -100,12 +100,12 @@ export function LeaderActiveTripCard({
         onPress={onCreateTrip}
         activeOpacity={0.86}
       >
-        <Ionicons name="add-circle-outline" size={21} color="#fff" />
+        <Ionicons name="add-circle-outline" size={21} color="#0e0f0c" />
         <View style={styles.commandButtonCopy}>
           <Text style={styles.commandButtonLabel}>Tạo Public Trip mới</Text>
           <Text style={styles.commandButtonDetail}>Chọn điểm đến, checkpoint và mở bán</Text>
         </View>
-        <Ionicons name="arrow-forward" size={20} color="#fff" />
+        <Ionicons name="arrow-forward" size={20} color="#0e0f0c" />
       </TouchableOpacity>
     </View>
   );
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tripCode: {
-    color: "#8cd867",
+    color: "#9fe870",
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
@@ -179,21 +179,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#9fe870",
     padding: 14,
-    borderRadius: Radius.md,
+    borderRadius: 24,
     marginTop: 18,
   },
   commandButtonCopy: {
     flex: 1,
   },
   commandButtonLabel: {
-    color: "#fff",
+    color: "#0e0f0c",
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   commandButtonDetail: {
-    color: "#d0dfcc",
+    color: "#454745",
     fontSize: 11,
     marginTop: 2,
   },

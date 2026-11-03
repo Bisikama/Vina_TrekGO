@@ -229,7 +229,7 @@ export function LeaderTripFormStep({
           </View>
         </View>
         <View style={styles.badgeVfrs}>
-          <Ionicons name="shield-checkmark" size={14} color="#125238" />
+          <Ionicons name="shield-checkmark" size={14} color="#0e0f0c" />
           <Text style={styles.badgeVfrsText}>VFRS-L2</Text>
         </View>
       </View>
@@ -261,7 +261,7 @@ export function LeaderTripFormStep({
             <Text style={styles.errorText}>{submitError}</Text>
             {onRetryLoadMeta && (
               <TouchableOpacity style={styles.retryBtn} onPress={onRetryLoadMeta}>
-                <Ionicons name="reload" size={14} color="#125238" />
+                <Ionicons name="reload" size={14} color="#0e0f0c" />
                 <Text style={styles.retryBtnText}>Thử lại tải dữ liệu</Text>
               </TouchableOpacity>
             )}
@@ -272,7 +272,7 @@ export function LeaderTripFormStep({
       {/* 1. CARD: THÔNG TIN CHUNG */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Ionicons name="information-circle" size={20} color="#125238" />
+          <Ionicons name="information-circle" size={20} color="#0e0f0c" />
           <Text style={styles.cardTitle}>1. THÔNG TIN CHUNG</Text>
         </View>
 
@@ -296,7 +296,7 @@ export function LeaderTripFormStep({
         <View style={styles.inputGroup}>
           <Text style={styles.inputLabel}>Loại hình chuyến đi</Text>
           <View style={styles.tripTypeBox}>
-            <Ionicons name="radio-button-on" size={18} color="#125238" />
+            <Ionicons name="radio-button-on" size={18} color="#0e0f0c" />
             <View style={{ flex: 1 }}>
               <Text style={styles.tripTypeTitle}>Chuyến đi Công khai (PUBLIC)</Text>
               <Text style={styles.tripTypeSub}>
@@ -313,7 +313,7 @@ export function LeaderTripFormStep({
       {/* 2. CARD: THỜI GIAN & ĐIỂM TẬP KẾT ĐOÀN */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Ionicons name="calendar" size={20} color="#125238" />
+          <Ionicons name="calendar" size={20} color="#0e0f0c" />
           <Text style={styles.cardTitle}>2. THỜI GIAN & ĐIỂM TẬP KẾT ĐOÀN</Text>
         </View>
 
@@ -325,7 +325,7 @@ export function LeaderTripFormStep({
             </Text>
             {durationInfo && (
               <View style={styles.durationPill}>
-                <Ionicons name="time-outline" size={12} color="#125238" />
+                <Ionicons name="time-outline" size={12} color="#0e0f0c" />
                 <Text style={styles.durationPillText} numberOfLines={1}>
                   {durationInfo.nights === 0 ? "1 Ngày" : `${durationInfo.days}N${durationInfo.nights}Đ`}
                 </Text>
@@ -345,7 +345,7 @@ export function LeaderTripFormStep({
                 }}
                 activeOpacity={0.7}
               >
-                <Ionicons name="flash-outline" size={13} color="#125238" />
+                <Ionicons name="flash-outline" size={13} color="#0e0f0c" />
                 <Text style={styles.presetChipText}>{preset.label}</Text>
                 <Text style={styles.presetDurationBadge}>{preset.durationLabel}</Text>
               </TouchableOpacity>
@@ -367,7 +367,7 @@ export function LeaderTripFormStep({
                 activeOpacity={0.75}
               >
                 <View style={styles.dateCardInputRow}>
-                  <Ionicons name="calendar-outline" size={18} color="#125238" />
+                  <Ionicons name="calendar-outline" size={18} color="#0e0f0c" />
                   <Text
                     style={[
                       styles.dateValueText,
@@ -408,7 +408,7 @@ export function LeaderTripFormStep({
                 activeOpacity={0.75}
               >
                 <View style={styles.dateCardInputRow}>
-                  <Ionicons name="flag-outline" size={18} color="#125238" />
+                  <Ionicons name="flag-outline" size={18} color="#0e0f0c" />
                   <Text
                     style={[
                       styles.dateValueText,
@@ -443,7 +443,7 @@ export function LeaderTripFormStep({
             </View>
             <View style={styles.timeRow}>
               <View style={styles.timeInputBox}>
-                <Ionicons name="time-outline" size={17} color="#125238" />
+                <Ionicons name="time-outline" size={17} color="#0e0f0c" />
                 <TextInput
                   value={form.departureTime || "05:30"}
                   onChangeText={(val) => onUpdateField("departureTime", val)}
@@ -487,7 +487,7 @@ export function LeaderTripFormStep({
           {/* Booking Gate Configuration (Mở & Đóng Form Đăng ký) */}
           <View style={styles.bookingGateCard}>
             <View style={styles.bookingGateHeader}>
-              <Ionicons name="timer-outline" size={18} color="#125238" />
+              <Ionicons name="timer-outline" size={18} color="#0e0f0c" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.bookingGateTitle}>
                   Thời gian Mở & Đóng Form Đăng Ký (Booking Gate)
@@ -530,7 +530,7 @@ export function LeaderTripFormStep({
                   onPress={() => setDatePickerTarget("regOpen")}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="calendar-outline" size={16} color="#125238" />
+                  <Ionicons name="calendar-outline" size={16} color="#0e0f0c" />
                   <Text
                     style={[
                       styles.gateInputText,
@@ -618,7 +618,7 @@ export function LeaderTripFormStep({
               <View style={styles.gateInputCol}>
                 <Text style={styles.gateInputLabel}>Hạn chót đóng form đăng ký *</Text>
                 <View style={[styles.gateInputBox, styles.gateInputBoxLocked]}>
-                  <Ionicons name="hourglass-outline" size={16} color="#125238" />
+                  <Ionicons name="hourglass-outline" size={16} color="#0e0f0c" />
                   <Text style={styles.gateDeadlineText} numberOfLines={1}>
                     {form.registrationDeadlineAt || calculatedDeadline}
                   </Text>
@@ -642,25 +642,25 @@ export function LeaderTripFormStep({
           {/* Quy tắc 3 Điều kiện Mở/Đóng Đăng ký */}
           <View style={styles.rulesCard}>
             <View style={styles.rulesCardHeader}>
-              <Ionicons name="checkmark-done-circle-outline" size={18} color="#125238" />
+              <Ionicons name="checkmark-done-circle-outline" size={18} color="#0e0f0c" />
               <Text style={styles.rulesCardTitle}>Quy tắc 3 Điều kiện Mở/Đóng Đăng Ký</Text>
             </View>
             <View style={styles.ruleItemRow}>
-              <Ionicons name="checkmark" size={14} color="#125238" style={{ marginTop: 2 }} />
+              <Ionicons name="checkmark" size={14} color="#0e0f0c" style={{ marginTop: 2 }} />
               <Text style={styles.ruleItemText}>
                 <Text style={{ fontWeight: "700" }}>Hạn chót đăng ký: </Text>
                 Tự động đóng form trước giờ khởi hành {form.bookingGateDays || 2} ngày (có thể chỉnh tối đa sát nhất trước 1 ngày).
               </Text>
             </View>
             <View style={styles.ruleItemRow}>
-              <Ionicons name="checkmark" size={14} color="#125238" style={{ marginTop: 2 }} />
+              <Ionicons name="checkmark" size={14} color="#0e0f0c" style={{ marginTop: 2 }} />
               <Text style={styles.ruleItemText}>
                 <Text style={{ fontWeight: "700" }}>Bảo vệ giữ chỗ: </Text>
                 Khách đã vào form giữ chỗ trước giờ đóng sổ vẫn được hoàn tất thanh toán trong thời gian giữ chỗ (15 phút).
               </Text>
             </View>
             <View style={styles.ruleItemRow}>
-              <Ionicons name="checkmark" size={14} color="#125238" style={{ marginTop: 2 }} />
+              <Ionicons name="checkmark" size={14} color="#0e0f0c" style={{ marginTop: 2 }} />
               <Text style={styles.ruleItemText}>
                 <Text style={{ fontWeight: "700" }}>Sức chứa tối đa: </Text>
                 Đủ số người tối đa (maxPax) hệ thống sẽ tự động chuyển trạng thái Đủ chỗ (FULL).
@@ -678,7 +678,7 @@ export function LeaderTripFormStep({
           <Text style={styles.inputLabel}>Điểm đến (Destination) *</Text>
           {isLoadingMeta ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color="#125238" />
+              <ActivityIndicator size="small" color="#0e0f0c" />
               <Text style={styles.muted}>Đang đồng bộ danh mục điểm đến từ máy chủ...</Text>
             </View>
           ) : destinations.length === 0 ? (
@@ -731,7 +731,7 @@ export function LeaderTripFormStep({
                 <Ionicons
                   name={destDropdownOpen ? "chevron-up" : "chevron-down"}
                   size={20}
-                  color="#125238"
+                  color="#0e0f0c"
                 />
               </TouchableOpacity>
 
@@ -773,7 +773,7 @@ export function LeaderTripFormStep({
                           </View>
                         </View>
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={18} color="#125238" />
+                          <Ionicons name="checkmark-circle" size={18} color="#0e0f0c" />
                         )}
                       </TouchableOpacity>
                     );
@@ -849,7 +849,7 @@ export function LeaderTripFormStep({
                 <Ionicons
                   name={pickupDropdownOpen ? "chevron-up" : "chevron-down"}
                   size={20}
-                  color="#125238"
+                  color="#0e0f0c"
                 />
               </TouchableOpacity>
 
@@ -886,7 +886,7 @@ export function LeaderTripFormStep({
                           </Text>
                         </View>
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={18} color="#125238" />
+                          <Ionicons name="checkmark-circle" size={18} color="#0e0f0c" />
                         )}
                       </TouchableOpacity>
                     );
@@ -902,7 +902,7 @@ export function LeaderTripFormStep({
       {/* 3. CARD: QUY MÔ ĐOÀN & GIÁ VÉ ƯỚC TÍNH */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Ionicons name="cash" size={20} color="#125238" />
+          <Ionicons name="cash" size={20} color="#0e0f0c" />
           <Text style={styles.cardTitle}>3. QUY MÔ ĐOÀN & GIÁ VÉ ƯỚC TÍNH</Text>
         </View>
 
@@ -1081,13 +1081,13 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   headerTitle: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 16,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.8,
@@ -1096,7 +1096,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 8,
@@ -1108,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     ...Shadows.card,
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1138,7 +1138,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   progressStepText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.6,
@@ -1156,14 +1156,14 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     borderRadius: 3,
   },
   errorBox: {
     flexDirection: "row",
     gap: 12,
     backgroundColor: "#ffdad6",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     borderWidth: 1,
@@ -1195,13 +1195,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   retryBtnText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 16,
     ...Shadows.card,
@@ -1216,7 +1216,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   cardTitle: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
@@ -1266,10 +1266,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dropdownIconCircleSelected: {
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
   },
   dropdownSelectedText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1310,12 +1310,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dropdownMenuItemText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "600",
   },
   dropdownMenuItemTextSelected: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontWeight: "800",
   },
   dropdownMenuItemSubText: {
@@ -1363,15 +1363,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   destIconBoxSelected: {
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
   },
   destName: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 14,
     fontWeight: "700",
   },
   destNameSelected: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontWeight: "800",
   },
   destMeta: {
@@ -1385,7 +1385,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "700",
     textAlign: "center",
@@ -1414,13 +1414,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   checkpointSectionTitle: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
   checkpointCountBadge: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
   },
@@ -1454,7 +1454,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpPillSelected: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
   },
   cpPillText: {
     color: "#ffffff",
@@ -1467,7 +1467,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   cpNameSelected: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontWeight: "800",
   },
   cpCoords: {
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
     borderColor: "#dee9fc",
   },
   cpDefaultBadgeActive: {
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     borderColor: "#74d99f",
   },
   cpDefaultBadgeText: {
@@ -1517,7 +1517,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   map3DTitle: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
@@ -1526,7 +1526,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1537,7 +1537,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   map3DContainer: {
-    borderRadius: Radius.md,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#141d13",
     borderWidth: 1,
@@ -1565,7 +1565,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   inputLabel: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 6,
@@ -1575,7 +1575,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "500",
     borderWidth: 1,
@@ -1605,7 +1605,7 @@ const styles = StyleSheet.create({
     borderColor: "#125238",
   },
   tripTypeTitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -1615,7 +1615,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tripTypeBadge: {
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1647,7 +1647,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -1675,13 +1675,13 @@ const styles = StyleSheet.create({
     borderColor: "#dee9fc",
   },
   presetChipText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "700",
   },
   presetDurationBadge: {
     backgroundColor: "#e6eeff",
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 9,
     fontWeight: "800",
     paddingHorizontal: 4,
@@ -1728,7 +1728,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 14 * 1.5,
     fontWeight: "700",
-    color: "#121c2a",
+    color: "#0e0f0c",
     flex: 1,
   },
   datePlaceholderText: {
@@ -1737,7 +1737,7 @@ const styles = StyleSheet.create({
   },
   dayOfWeekText: {
     fontFamily: "Roboto",
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     lineHeight: 10 * 1.5,
     fontWeight: "600",
@@ -1775,12 +1775,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   pickupText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "600",
   },
   pickupTextSelected: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontWeight: "800",
   },
   slotHeader: {
@@ -1789,7 +1789,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   slotCapTag: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "800",
   },
@@ -1811,13 +1811,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepperBtnPlus: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
   },
   stepperDisplay: {
     alignItems: "center",
   },
   stepperValue: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 22,
     fontWeight: "900",
   },
@@ -1843,7 +1843,7 @@ const styles = StyleSheet.create({
   },
   priceInput: {
     flex: 1,
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 17,
     fontWeight: "800",
     padding: 0,
@@ -1854,7 +1854,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   priceFormatted: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "700",
     marginTop: 4,
@@ -1864,7 +1864,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingVertical: 15,
     borderRadius: Radius.sm,
     marginTop: 10,
@@ -1899,7 +1899,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   timePeriodBadge: {
-    backgroundColor: "#b1f0cd",
+    backgroundColor: "#c5edab",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.pill,
@@ -1929,11 +1929,11 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   regOpenChipActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     borderColor: "#125238",
   },
   regOpenChipText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 10,
     fontWeight: "700",
   },
@@ -1953,7 +1953,7 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   timeInputText: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 14,
     fontWeight: "800",
     padding: 0,
@@ -1973,17 +1973,17 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   timeChipActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     borderColor: "#125238",
   },
   timeChipText: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "600",
   },
   timeChipTextActive: {
-    color: "#ffffff",
-    fontWeight: "800",
+    color: "#0e0f0c",
+    fontWeight: "700",
   },
   bookingGateCard: {
     marginTop: 14,
@@ -2000,7 +2000,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   bookingGateTitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -2027,7 +2027,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   gatePresetBtnActive: {
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     borderColor: "#125238",
   },
   gatePresetBtnText: {
@@ -2037,8 +2037,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   gatePresetBtnTextActive: {
-    color: "#ffffff",
-    fontWeight: "800",
+    color: "#0e0f0c",
+    fontWeight: "700",
   },
   gateInputsGrid: {
     gap: 10,
@@ -2047,7 +2047,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   gateInputLabel: {
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 11,
     fontWeight: "700",
     marginBottom: 4,
@@ -2069,14 +2069,14 @@ const styles = StyleSheet.create({
   },
   gateInputText: {
     flex: 1,
-    color: "#121c2a",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "600",
     padding: 0,
   },
   gateDeadlineText: {
     flex: 1,
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -2117,7 +2117,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rulesCardTitle: {
-    color: "#125238",
+    color: "#0e0f0c",
     fontSize: 12,
     fontWeight: "800",
   },

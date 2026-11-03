@@ -23,7 +23,30 @@ export function useMyBookings(initialStatus?: BookingStatus | string) {
         pageSize,
         ...(status ? { status } : {}),
       });
-      setBookings(res.items || []);
+      const rawItems = res.items || [];
+      // Tải chi tiết cho các booking active/checked-in để lấy trip.status thực tế từ backend
+      const enrichedItems = await Promise.all(
+        rawItems.map(async (b) => {
+          if (["CONFIRMED", "CHECKED_IN", "PARTIAL_CHECKIN"].includes(b.status)) {
+            try {
+              const detail = await bookingApiService.getBookingDetail(b.id);
+              if (detail?.trip?.status) {
+                return {
+                  ...b,
+                  trip: {
+                    ...b.trip,
+                    status: detail.trip.status,
+                  },
+                };
+              }
+            } catch {
+              // giữ nguyên tóm tắt nếu không tải được chi tiết
+            }
+          }
+          return b;
+        }),
+      );
+      setBookings(enrichedItems);
       setTotal(res.total || 0);
     } catch (err: unknown) {
       const errInfo = getBookingErrorMessage(

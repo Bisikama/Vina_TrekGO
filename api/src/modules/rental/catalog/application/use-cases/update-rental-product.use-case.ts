@@ -26,6 +26,8 @@ export class UpdateRentalProductUseCase {
       }
     }
 
+    // Quyền với cọc/giá trị thay thế, cọc FIXED cho sản phẩm có hạng, thứ tự giá giữa hai hạng và đồng bộ
+    // replacementValue trong nhóm cần giá trị hiện tại dưới khoá dòng, nên adapter kiểm trong transaction.
     return this.rentalProductPort.updateProduct(params);
   }
 }

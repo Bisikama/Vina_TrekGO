@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radius, Shadows } from '@/constants/theme';
 import { MapLibre3DView, MapLibre3DViewRef, MapCheckpoint, MapCoordinate, MapGroupMember } from '@/components/map/MapLibre3DView';
 import { TrekGoLogo } from '@/components/TrekGoLogo';
+import { LoadingState } from '@/components/ui';
 import {
   TripGpsCheckpointSheet,
   TripGpsResultModal,
@@ -23,6 +24,8 @@ import {
   TripCheckpointDto,
 } from '@/features/trip-gps';
 import { distanceMeters } from '@/utils/gpsProcessor';
+
+const MAP_START_TIMEOUT_MS = 10_000;
 
 export default function NavigationScreen() {
   const router = useRouter();
@@ -148,6 +151,23 @@ export default function NavigationScreen() {
     }
     return null;
   }, [currentLocation, myMemberState, plannedRouteCoords]);
+
+  // Chỉ tạo map khi biết vị trí mở đầu, để không tải tile của vị trí mặc định ngoài gói bản đồ.
+  // Vị trí được chốt một lần vì WebView không nhận lại center ban đầu.
+  const [mapStart, setMapStart] = useState<{ center?: [number, number] } | null>(null);
+  const tripDataSettled = !loading && (Boolean(context) || Boolean(error));
+  if (!mapStart) {
+    if (mapCurrentPosition) {
+      setMapStart({ center: [mapCurrentPosition.longitude, mapCurrentPosition.latitude] });
+    } else if (tripDataSettled) {
+      setMapStart({});
+    }
+  }
+  useEffect(() => {
+    if (mapStart) return;
+    const timer = setTimeout(() => setMapStart({}), MAP_START_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [mapStart]);
 
   // Helper tính khoảng cách từ vị trí người dùng tới toạ độ đích
   const getDistanceToUser = useCallback(
@@ -399,8 +419,12 @@ export default function NavigationScreen() {
 
       {/* 2. MAP AREA (Chiếm 2/3 không gian màn hình, tối đa tầm nhìn như Personal Trail) */}
       <View style={styles.mapArea}>
+        {!mapStart ? (
+          <LoadingState label="Đang lấy thông tin cung đường..." />
+        ) : (
         <MapLibre3DView
           ref={mapRef}
+          center={mapStart.center}
           is3D={is3DMode}
           pitch={is3DMode ? 60 : 0}
           dragRotate={true}
@@ -419,6 +443,7 @@ export default function NavigationScreen() {
           onCheckpointPress={handleCheckpointPress}
           onMemberPress={handleMemberPress}
         />
+        )}
 
         {/* Floating Map Controls — Clean single layer, no overlapping */}
         <View style={styles.mapFloatingControls}>
@@ -808,6 +833,7 @@ export default function NavigationScreen() {
 
       {/* Trip Result Summary Modal */}
       <TripGpsResultModal
+        tripId={effectiveTripId}
         visible={resultModalVisible}
         actualRoute={actualRoute}
         liveRouteCoords={summaryRouteCoords}

@@ -22,7 +22,7 @@ export const Colors = {
   border: "#E5E7EB",
 
   /** Canopy Forest Green — nút chính, trạng thái active */
-  primary: "#2F6B4F",
+  primary: "#9fe870",
   /** Deep Forest — tiêu đề nhấn mạnh, giá tiền, số liệu nổi bật */
   primaryDeep: "#125238",
   /** Deep Pine — trạng thái pressed */

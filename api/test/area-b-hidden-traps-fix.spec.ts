@@ -7,7 +7,7 @@ jest.mock('@nestjs/schedule', () => ({
 
 import { BadRequestException, ExecutionContext, ParseUUIDPipe } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
-import { DamageDeductionType, DamageSeverity } from '@prisma/client'
+import { DamageDeductionType, DamageSeverity, Prisma } from '@prisma/client'
 import { AuthType, REQUEST_USER_KEY } from 'src/shared/constants/auth.constant'
 import { UserRole } from 'src/shared/constants/enum.constant'
 import { AppError, RENTAL_ERROR_CODES } from 'src/shared/errors'
@@ -212,6 +212,24 @@ describe('AREA_B_HIDDEN_TRAPS_FIX: Verification Suite (Mục 0 - 7)', () => {
   // MỤC 2: requiresDeepInspectionAfterReturn in DTOs, Port & Adapter
   // =========================================================================
   describe('MỤC 2: requiresDeepInspectionAfterReturn in Create/Update Product', () => {
+    // Adapter ghi trong transaction (khoá dòng, lấy giờ DB, ghi lịch sử giá): bổ sung các phần đó cho mock tối giản.
+    const withTxSupport = (mock: any) => {
+      mock.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(mock))
+      mock.$queryRaw = jest.fn((strings: TemplateStringsArray) =>
+        Promise.resolve(
+          strings.join('?').includes('clock_timestamp')
+            ? [{ now: new Date('2026-10-30T00:00:00Z') }]
+            : [{ grade_group_id: null }],
+        ),
+      )
+      mock.rentalProductPriceHistory = {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn().mockResolvedValue({}),
+      }
+      return mock
+    }
+    const admin = { actorUserId: 'admin-1', actorRole: 'ADMIN' }
+
     it('CreateRentalProductSchema accepts and validates requiresDeepInspectionAfterReturn', () => {
       const validWithDeep = CreateRentalProductSchema.parse({
         categoryId: dummyCategoryId,
@@ -268,8 +286,9 @@ describe('AREA_B_HIDDEN_TRAPS_FIX: Verification Suite (Mục 0 - 7)', () => {
         mediaAsset: { findMany: jest.fn().mockResolvedValue([]) },
       } as any
 
-      const adapter = new PrismaRentalProductAdapter(mockPrisma)
+      const adapter = new PrismaRentalProductAdapter(withTxSupport(mockPrisma))
       const result = await adapter.createProduct({
+        ...admin,
         categoryId: dummyCategoryId,
         sku: 'TEST-DEEP-TRUE',
         name: 'Sản phẩm kiểm tra sâu',
@@ -307,8 +326,9 @@ describe('AREA_B_HIDDEN_TRAPS_FIX: Verification Suite (Mục 0 - 7)', () => {
         mediaAsset: { findMany: jest.fn().mockResolvedValue([]) },
       } as any
 
-      const adapter = new PrismaRentalProductAdapter(mockPrisma)
+      const adapter = new PrismaRentalProductAdapter(withTxSupport(mockPrisma))
       const result = await adapter.createProduct({
+        ...admin,
         categoryId: dummyCategoryId,
         sku: 'TEST-DEEP-FALSE',
         name: 'Sản phẩm không kiểm tra sâu',
@@ -324,35 +344,41 @@ describe('AREA_B_HIDDEN_TRAPS_FIX: Verification Suite (Mục 0 - 7)', () => {
 
     it('PrismaRentalProductAdapter updates requiresDeepReturnInspection on updateProduct', async () => {
       let updatePayload: any = null
+      const productRow = {
+        id: dummyActiveProductId,
+        sku: 'TEST-DEEP-UPD',
+        name: 'Sản phẩm cập nhật',
+        dailyPrice: new Prisma.Decimal(100000),
+        replacementValue: new Prisma.Decimal(1500000),
+        depositValue: new Prisma.Decimal(500000),
+        depositPolicyType: 'FIXED',
+        currency: 'VND',
+        status: 'ACTIVE',
+        category: { id: dummyCategoryId, name: 'Lều', status: 'ACTIVE' },
+        images: [],
+        specifications: {},
+        recommendationTags: [],
+        gradeGroupId: null,
+        grade: null,
+      }
       const mockPrisma = {
         rentalProduct: {
           updateMany: jest.fn().mockImplementation(({ data }) => {
             updatePayload = data
             return { count: 1 }
           }),
-          findUnique: jest.fn().mockResolvedValue({
-            id: dummyActiveProductId,
-            sku: 'TEST-DEEP-UPD',
-            name: 'Sản phẩm cập nhật',
-            dailyPrice: { toNumber: () => 100000 },
-            replacementValue: { toNumber: () => 1500000 },
-            depositValue: { toNumber: () => 500000 },
-            depositPolicyType: 'FIXED',
-            currency: 'VND',
-            status: 'ACTIVE',
-            version: 2,
-            category: { id: dummyCategoryId, name: 'Lều', status: 'ACTIVE' },
-            images: [],
-            specifications: {},
-            recommendationTags: [],
-            requiresDeepReturnInspection: true,
-          }),
+          // Lần đọc đầu (dưới khoá) là bản ghi trước khi sửa: version 1. Các lần sau là bản đã sửa: version 2.
+          findUnique: jest
+            .fn()
+            .mockResolvedValueOnce({ ...productRow, version: 1, requiresDeepReturnInspection: false })
+            .mockResolvedValue({ ...productRow, version: 2, requiresDeepReturnInspection: true }),
         },
         mediaAsset: { findMany: jest.fn().mockResolvedValue([]) },
       } as any
 
-      const adapter = new PrismaRentalProductAdapter(mockPrisma)
+      const adapter = new PrismaRentalProductAdapter(withTxSupport(mockPrisma))
       const result = await adapter.updateProduct({
+        ...admin,
         id: dummyActiveProductId,
         expectedVersion: 1,
         requiresDeepInspectionAfterReturn: true,
@@ -367,11 +393,14 @@ describe('AREA_B_HIDDEN_TRAPS_FIX: Verification Suite (Mục 0 - 7)', () => {
   // MỤC 3: Swagger POST /api/v1/staff/rental-products reflects ACTIVE
   // =========================================================================
   describe('MỤC 3: Swagger documentation for staff product creation status', () => {
-    it('documents that products are initialized as ACTIVE upon creation', () => {
+    // Trước đây sản phẩm tạo ra luôn ACTIVE. Từ tính năng thuê theo hạng, trạng thái ban đầu theo người tạo
+    // (Policy: "ADMIN duyệt giá trước khi active catalog"): ADMIN tạo -> ACTIVE, STAFF_INVENTORY tạo -> INACTIVE.
+    it('documents the initial status per creator role (ADMIN -> ACTIVE, STAFF_INVENTORY -> INACTIVE)', () => {
       const apiOpMetadata = Reflect.getMetadata('swagger/apiOperation', StaffRentalProductController.prototype.createProduct)
-      expect(apiOpMetadata?.description).toBeDefined()
-      expect(apiOpMetadata?.description).toContain('ACTIVE')
-      expect(apiOpMetadata?.description).not.toContain('Khởi tạo mặc định ở trạng thái INACTIVE')
+      const description: string = apiOpMetadata?.description ?? ''
+      expect(description).toMatch(/ADMIN tạo:[^\n]*ACTIVE/)
+      expect(description).toMatch(/STAFF_INVENTORY tạo:[^\n]*\n?[^\n]*INACTIVE/)
+      expect(description).not.toContain('Khởi tạo mặc định ở trạng thái INACTIVE')
     })
   })
 

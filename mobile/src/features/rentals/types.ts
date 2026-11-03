@@ -27,6 +27,13 @@ export type RentalProduct = {
   depositPolicy: RentalDepositPolicy;
   currency: string;
   replacementValue: number;
+  /** Tiền cọc mỗi món do server tính theo quy tắc báo giá; null nếu dữ liệu cũ không tính được. */
+  depositPerUnit?: number | null;
+  /** Tỷ lệ cọc / giá trị thay thế do server tính; chỉ để hiển thị, không dùng tính tiền. */
+  depositExplanation?: { percentageOfReplacementValue: number | null; formula?: string | null } | null;
+  /** Hạng sản phẩm; sản phẩm thường là null. */
+  grade?: "LIKE_NEW" | "GOOD_USED" | null;
+  gradeGroupId?: string | null;
   status: string;
   version: number;
   imageMediaIds: string[];
@@ -81,6 +88,13 @@ export type RentalQuoteItem = {
   feeAmount: number;
   depositPerUnit: number;
   depositAmount: number;
+  replacementValue?: number | null;
+  depositExplanation?: RentalDepositExplanationInfo | null;
+};
+
+export type RentalDepositExplanationInfo = {
+  percentageOfReplacementValue: number | null;
+  formula?: string | null;
 };
 
 export type RentalQuote = {
@@ -195,12 +209,16 @@ export type RentalOrderLine = {
   dailyPrice?: number;
   feeAmount?: number;
   depositAmount?: number;
+  depositPerUnit?: number;
+  replacementValue?: number | null;
+  depositExplanation?: RentalDepositExplanationInfo | null;
   imageUrl?: string;
   product?: {
     id?: string;
     name?: string;
     sku?: string;
     imageUrl?: string;
+    grade?: "LIKE_NEW" | "GOOD_USED" | null;
   } | null;
 };
 
@@ -428,6 +446,18 @@ export type RentalDepositItem = {
   heldReason?: string | null;
   deduction?: number | null;
   reason?: string | null;
+  /** Khiếu nại khoản trừ (web/docs/RENTAL_DEPOSIT_DISPUTE_FRONTEND_HANDOFF.md). */
+  assessmentId?: string | null;
+  exceptionCaseId?: string | null;
+  reviewCaseId?: string | null;
+  evidenceAccessibleAt?: string | null;
+  evidenceAccessBlockedAt?: string | null;
+  evidenceAccessCustomerConfirmationRequired?: boolean;
+  reviewWindowEndsAt?: string | null;
+  reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
+  canSubmitReview?: boolean;
+  cannotSubmitReviewReason?: string | null;
+  approvedDeduction?: number | null;
 };
 
 export type RentalDepositStatus = {
@@ -459,6 +489,11 @@ export type RentalCancellationResult = {
 };
 
 export function calculateProductDeposit(product: RentalProduct) {
+  // Ưu tiên số server đã tính; chỉ dùng cách tính cũ cho dữ liệu chưa có depositPerUnit.
+  if (typeof product.depositPerUnit === "number") {
+    return product.depositPerUnit;
+  }
+
   if (typeof product.depositPolicy.amount === "number") {
     return product.depositPolicy.amount;
   }

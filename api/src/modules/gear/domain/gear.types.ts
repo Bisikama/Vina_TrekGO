@@ -53,6 +53,7 @@ export interface UserGearItemDomain {
   brand: string | null
   condition: GearCondition
   attributes: Record<string, unknown>
+  attributeProvenance?: Record<string, unknown> | null
   photoRef: string | null
   source: GearItemSource
   version: number

@@ -191,12 +191,32 @@ export class StaffReturnController {
         inspectionId: { type: 'string', format: 'uuid', description: 'UUID bản kiểm tra liên quan (tùy chọn)' },
         accessoriesChecked: { type: 'boolean', description: 'Đã kiểm tra phụ kiện đầy đủ chưa?', example: true },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại', example: 7 },
+        gradeDecision: {
+          type: 'object',
+          description:
+            'Bắt buộc khi thiết bị thuộc sản phẩm có hạng (grade); không gửi với sản phẩm thường. ' +
+            'KEEP = giữ hạng. DOWNGRADE = chuyển thiết bị sang sản phẩm "Đã sử dụng tốt" cùng nhóm (chỉ từ "Rất mới"), bắt buộc reason. ' +
+            'Nếu hạ hạng làm thiếu hàng cho đơn đã đặt chưa bàn giao: đơn không đổi, được đánh dấu ACTION_REQUIRED để nhân viên xử lý.',
+          required: ['decision'],
+          properties: {
+            decision: { type: 'string', enum: ['KEEP', 'DOWNGRADE'], example: 'KEEP' },
+            reason: { type: 'string', minLength: 3, maxLength: 1000, description: 'Lý do (bắt buộc khi DOWNGRADE)' },
+            note: { type: 'string', maxLength: 3000 },
+            evidenceIds: { type: 'array', maxItems: 10, items: { type: 'string', format: 'uuid' }, description: 'UUID ảnh bằng chứng' },
+          },
+        },
       },
+      example: { accessoriesChecked: true, expectedVersion: 7, gradeDecision: { decision: 'KEEP' } },
     },
   })
-  @ApiResponse({ status: 200, description: 'Thiết bị đã được đánh dấu AVAILABLE' })
+  @ApiResponse({ status: 200, description: 'Thiết bị đã được đánh dấu AVAILABLE; trả thêm gradeReview (null với sản phẩm thường)' })
   @ApiResponse({ status: 409, description: 'Xung đột phiên bản' })
-  @ApiResponse({ status: 422, description: 'Thiết bị không ở trạng thái hợp lệ để đánh dấu AVAILABLE' })
+  @ApiResponse({
+    status: 422,
+    description:
+      'Thiết bị không ở trạng thái hợp lệ để đánh dấu AVAILABLE; RENTAL_GRADE_DECISION_REQUIRED; RENTAL_GRADE_DECISION_NOT_APPLICABLE; ' +
+      'RENTAL_GRADE_DOWNGRADE_NOT_ALLOWED; RENTAL_GRADE_TARGET_NOT_FOUND',
+  })
   async ready(@Param(new ZodValidationPipe(EquipmentUnitIdParamSchema)) params: EquipmentUnitIdParamDto, @Body(new ZodValidationPipe(MarkUnitReadyBodySchema)) body: MarkUnitReadyBodyDto, @Headers('idempotency-key') rawKey: string | undefined, @ActiveUser('id') actorUserId: string) {
     return this.readyUseCase.execute({ actorUserId, unitId: params.id, ...body, idempotencyKey: requireKey(rawKey), now: new Date() });
   }

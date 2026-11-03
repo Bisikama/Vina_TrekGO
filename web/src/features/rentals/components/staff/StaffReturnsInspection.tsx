@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { listStaffRentalProducts } from "@/features/rentals/services/staff-products.api";
 import {
   finalizeNormalReturnUnits,
   getStaffReturn,
+  getStaffReturnErrorCode,
   getStaffReturnErrorMessage,
   listDamageAssessmentRules,
   listStaffReturns,
@@ -17,6 +19,7 @@ import {
   type StaffReturnDetail,
   type StaffReturnSummary,
 } from "@/features/rentals/services/staff-returns.api";
+import type { RentalGrade } from "@/features/rentals/types/rental";
 
 type Draft = {
   condition: FinalInspectionInput["condition"];
@@ -43,6 +46,13 @@ const statusLabel: Record<string, string> = {
   RETURNED: "Đang chuyển về kho",
 };
 
+type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
+
+const GRADE_LABELS: Record<RentalGrade, string> = {
+  LIKE_NEW: "Mới",
+  GOOD_USED: "Sử dụng tốt",
+};
+
 const splitIds = (value: string) =>
   value
     .split(/[\s,]+/)
@@ -62,6 +72,31 @@ export function StaffReturnsInspection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  // Sản phẩm có hạng bắt buộc gửi gradeDecision khi đưa thiết bị về AVAILABLE (RB-API-611).
+  const [productGrades, setProductGrades] = useState<Record<string, RentalGrade>>({});
+  const [gradeRequiredUnits, setGradeRequiredUnits] = useState<string[]>([]);
+  const [gradeDrafts, setGradeDrafts] = useState<Record<string, GradeDraft>>({});
+
+  useEffect(() => {
+    let active = true;
+    // Đọc hạng của sản phẩm để biết thiết bị nào cần phân hạng. Lỗi thì vẫn còn đường dự phòng:
+    // server trả RENTAL_GRADE_DECISION_REQUIRED và màn hình mở ô phân hạng cho thiết bị đó.
+    async function loadGrades() {
+      const grades: Record<string, RentalGrade> = {};
+      for (let page = 1; page <= 10; page += 1) {
+        const result = await listStaffRentalProducts({ page, pageSize: 20 });
+        result.items.forEach((product) => {
+          if (product.grade === "LIKE_NEW" || product.grade === "GOOD_USED") grades[product.id] = product.grade;
+        });
+        if (page >= result.pagination.totalPages) break;
+      }
+      return grades;
+    }
+    loadGrades()
+      .then((grades) => { if (active) setProductGrades(grades); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const loadList = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -157,20 +192,59 @@ export function StaffReturnsInspection() {
   ) ?? [];
   const receiptShortageCount = pendingReceiptUnits.length - receiptSelections.length;
 
-  async function run(action: () => Promise<void>, success: string) {
+  async function run(action: () => Promise<void>, success: string | (() => string)) {
     if (!detail || busy) return;
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
       await action();
-      setNotice(success);
+      setNotice(typeof success === "function" ? success() : success);
       await Promise.all([loadList(), loadDetail(detail.id)]);
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function markUnitReady(input: {
+    unitId: string;
+    assetCode: string;
+    inspectionId: string;
+    expectedVersion: number;
+    needsGrade: boolean;
+  }) {
+    let shortageCount = 0;
+    let downgraded = false;
+    await run(async () => {
+      const draft: GradeDraft = gradeDrafts[input.unitId] ?? { decision: "KEEP", reason: "" };
+      try {
+        const result = await markReturnedUnitReady({
+          unitId: input.unitId,
+          inspectionId: input.inspectionId,
+          expectedVersion: input.expectedVersion,
+          gradeDecision: input.needsGrade
+            ? draft.decision === "DOWNGRADE"
+              ? { decision: "DOWNGRADE", reason: draft.reason.trim() }
+              : { decision: "KEEP" }
+            : undefined,
+        });
+        shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
+        downgraded = result?.gradeReview?.decision === "DOWNGRADE";
+      } catch (requestError) {
+        if (getStaffReturnErrorCode(requestError) === "RENTAL_GRADE_DECISION_REQUIRED") {
+          setGradeRequiredUnits((current) => (current.includes(input.unitId) ? current : [...current, input.unitId]));
+          throw new Error(`${input.assetCode} thuộc sản phẩm có hạng. Hãy chọn giữ hạng hoặc hạ hạng rồi bấm lại.`);
+        }
+        throw requestError;
+      }
+    }, () =>
+      `${input.assetCode} đã AVAILABLE${downgraded ? " và chuyển sang hạng Sử dụng tốt" : ""}.` +
+      (shortageCount > 0
+        ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn đã đặt; các đơn này đã được đánh dấu cần xử lý.`
+        : ""),
+    );
   }
 
   async function inspectPendingUnits() {
@@ -351,6 +425,10 @@ export function StaffReturnsInspection() {
                   const inspection = inspectionByUnit.get(received.unitId);
                   const draft = drafts[received.unitId] ?? { condition: "GOOD", notes: "", ruleId: "", evidenceIds: "" };
                   const productRules = rules.filter((rule) => rule.productId === unit?.productId);
+                  const grade = unit ? productGrades[unit.productId] ?? null : null;
+                  const needsGrade = Boolean(grade) || gradeRequiredUnits.includes(received.unitId);
+                  const gradeDraft: GradeDraft = gradeDrafts[received.unitId] ?? { decision: "KEEP", reason: "" };
+                  const downgradeReasonMissing = gradeDraft.decision === "DOWNGRADE" && gradeDraft.reason.trim().length < 3;
                   return (
                     <article key={received.unitId} className="rounded-xl border bg-white p-5 shadow-sm">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -395,14 +473,60 @@ export function StaffReturnsInspection() {
                           />
                         </div>
                       ) : inspection.final.outcome === "NORMAL" && unit?.unitStatus === "CLEANING" ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void run(() => markReturnedUnitReady({ unitId: received.unitId, inspectionId: inspection.final!.id, expectedVersion: unit.unitVersion }).then(() => undefined), `${received.assetCode} đã AVAILABLE.`)}
-                          className="mt-4 rounded-lg bg-[#125238] px-4 py-2 text-xs font-black text-white disabled:opacity-50"
-                        >
-                          Đã vệ sinh & đủ phụ kiện — đưa về AVAILABLE
-                        </button>
+                        <div className="mt-4 space-y-3">
+                          {needsGrade ? (
+                            <div className="rounded-lg border border-slate-200 p-3">
+                              <p className="text-xs font-black text-slate-700">
+                                Phân hạng sau khi trả{grade ? ` · hiện tại: ${GRADE_LABELS[grade]}` : ""}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-4 text-xs">
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="radio"
+                                    name={`grade-${received.unitId}`}
+                                    checked={gradeDraft.decision === "KEEP"}
+                                    onChange={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, decision: "KEEP" } }))}
+                                  />
+                                  Giữ hạng
+                                </label>
+                                {grade !== "GOOD_USED" ? (
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`grade-${received.unitId}`}
+                                      checked={gradeDraft.decision === "DOWNGRADE"}
+                                      onChange={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, decision: "DOWNGRADE" } }))}
+                                    />
+                                    Hạ xuống &quot;Sử dụng tốt&quot;
+                                  </label>
+                                ) : null}
+                              </div>
+                              {gradeDraft.decision === "DOWNGRADE" ? (
+                                <textarea
+                                  value={gradeDraft.reason}
+                                  onChange={(event) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, reason: event.target.value } }))}
+                                  placeholder="Lý do hạ hạng (bắt buộc, tối thiểu 3 ký tự)"
+                                  className="mt-2 min-h-16 w-full rounded-lg border border-slate-200 p-3 text-xs"
+                                />
+                              ) : null}
+                              <p className="mt-2 text-[11px] text-slate-500">Phân hạng chỉ đổi sản phẩm của thiết bị, không ảnh hưởng tiền cọc của khách vừa trả.</p>
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={busy || (needsGrade && downgradeReasonMissing)}
+                            onClick={() => void markUnitReady({
+                              unitId: received.unitId,
+                              assetCode: received.assetCode,
+                              inspectionId: inspection.final!.id,
+                              expectedVersion: unit.unitVersion,
+                              needsGrade,
+                            })}
+                            className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-black text-white disabled:opacity-50"
+                          >
+                            Đã vệ sinh & đủ phụ kiện — đưa về AVAILABLE
+                          </button>
+                        </div>
                       ) : (
                         <p className="mt-4 rounded-lg bg-orange-50 p-3 text-xs text-orange-800">Thiết bị có vấn đề đang chờ Admin xử lý ngoại lệ và quyết toán.</p>
                       )}

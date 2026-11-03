@@ -4,6 +4,38 @@ import { AppError } from '../../../../shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
 import { TripContextFactData, TripContextReadPort } from '../../application/ports/trip-context-read.port'
 
+/** Tên gọi khác → khoá trong bảng khí hậu ước tính (`CLIMATE_ESTIMATE_REGISTRY`). */
+const CLIMATE_DESTINATION_ALIASES: Array<{ key: string; aliases: string[] }> = [
+  { key: 'fansipan', aliases: ['fansipan', 'phan xi păng', 'phan xi pang', 'phanxipang'] },
+  { key: 'ta nang', aliases: ['ta nang', 'tà năng'] },
+  { key: 'bidoup', aliases: ['bidoup'] },
+]
+
+/**
+ * Tên điểm đến dùng để tra khí hậu: khớp tên gọi khác thì trả khoá chuẩn; không khớp thì trả tên đã chuẩn hoá;
+ * không có tên thì `undefined` (trước đây rơi về 'bidoup', gợi ý sai khí hậu cho chuyến không liên quan).
+ */
+export function resolveClimateDestination(rawName: string | null | undefined): string | undefined {
+  const norm = (rawName ?? '').trim().toLowerCase()
+  if (!norm) return undefined
+  const match = CLIMATE_DESTINATION_ALIASES.find((d) => d.aliases.some((a) => norm.includes(a)))
+  return match ? match.key : norm
+}
+
+/** Toạ độ đại diện: tâm điểm đến, nếu thiếu thì checkpoint có sequence nhỏ nhất. Không đoán toạ độ mặc định. */
+export function resolveTripCoordinates(trip: any): { lat: number; lng: number } | null {
+  const toNum = (v: unknown) => (v === null || v === undefined ? NaN : Number(v))
+  const centerLat = toNum(trip?.destination?.centerLat)
+  const centerLng = toNum(trip?.destination?.centerLng)
+  if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) return { lat: centerLat, lng: centerLng }
+
+  const first = trip?.tripCheckpointsViaTripId?.[0]
+  const lat = toNum(first?.latitude)
+  const lng = toNum(first?.longitude)
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+  return null
+}
+
 @Injectable()
 export class PrismaTripContextReadAdapter implements TripContextReadPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -83,12 +115,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
 
     let destName = trip.destination?.name || trip.title || plan?.snapshotName || ''
     if ((trip).destinationName) destName = (trip).destinationName
-    const norm = destName.toLowerCase()
-    let destination = 'bidoup'
-    if (norm.includes('fansipan')) destination = 'fansipan'
-    else if (norm.includes('ta nang') || norm.includes('tà năng')) destination = 'ta nang'
-    else if (norm.includes('bidoup')) destination = 'bidoup'
-    else if (destName.trim()) destination = destName.trim().toLowerCase()
+    const destination = resolveClimateDestination(destName)
 
     const sourceReferences = {
       tripId: trip.id,
@@ -127,6 +154,13 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
           include: {
             systemTrail: true,
           },
+        },
+        // Chỉ lấy toạ độ (để gợi ý dự báo thời tiết); tên điểm đến vẫn tra như trước.
+        destination: { select: { centerLat: true, centerLng: true } },
+        tripCheckpointsViaTripId: {
+          take: 1,
+          orderBy: { sequence: 'asc' },
+          select: { latitude: true, longitude: true },
         },
       },
     })
@@ -176,6 +210,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       difficulty: facts.difficulty,
       terrain: facts.terrain,
       destination: facts.destination,
+      coordinates: resolveTripCoordinates(trip),
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
     }

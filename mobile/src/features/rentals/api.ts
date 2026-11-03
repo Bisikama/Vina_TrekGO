@@ -175,18 +175,28 @@ async function resolveProductImage(
   product: RentalProduct,
   variant: "CATALOG_CARD" | "CATALOG_DETAIL",
 ) {
-  if (!product.imageMediaIds.length) return product;
+  const refs = product.imageMediaIds ?? [];
+  if (!refs.length) return product;
+
+  // Giống web: giá trị là link http(s) thì dùng thẳng; còn lại là media id cần lấy link giao ảnh.
+  const isDirectUrl = (value: string) => /^https?:\/\//i.test(value);
+  const directUrls = refs.filter(isDirectUrl);
+  const mediaIds = refs.filter((value) => !isDirectUrl(value));
 
   const deliveries = await Promise.allSettled(
-    product.imageMediaIds.map((mediaId) =>
+    mediaIds.map((mediaId) =>
       apiRequest<Envelope<MediaDelivery>>(
-        `/api/v1/media/${mediaId}/delivery?variant=${variant}&format=AUTO`,
+        `/api/v1/media/${encodeURIComponent(mediaId)}/delivery?variant=${variant}&format=AUTO`,
       ),
     ),
   );
-  const imageUrls = deliveries.flatMap((delivery) =>
-    delivery.status === "fulfilled" ? [unwrap(delivery.value).url] : [],
-  );
+  const imageUrls = [
+    ...directUrls,
+    ...deliveries.flatMap((delivery) => {
+      const url = delivery.status === "fulfilled" ? unwrap(delivery.value)?.url : undefined;
+      return url ? [url] : [];
+    }),
+  ];
 
   return imageUrls.length
     ? { ...product, imageUrl: imageUrls[0], imageUrls }

@@ -302,6 +302,21 @@ enum DepositPolicyType {
   @@map("deposit_policy_type")
 }
 
+/// Hạng bán của một RentalProduct. Mỗi hạng là một sản phẩm riêng, nối nhau bằng gradeGroupId.
+enum RentalGrade {
+  LIKE_NEW
+  GOOD_USED
+
+  @@map("rental_grade")
+}
+
+enum EquipmentGradeDecision {
+  KEEP
+  DOWNGRADE
+
+  @@map("equipment_grade_decision")
+}
+
 enum EquipmentUnitStatus {
   AVAILABLE
   PICKED
@@ -912,6 +927,7 @@ model User {
   depositSettlementsViaSettledBy         DepositSettlement[]            @relation("R_DepositSettlement_settled_by")
   depositSettlementItemsViaApprovedBy    DepositSettlementItem[]        @relation("R_DepositSettlementItem_approved_by")
   maintenanceRecordsViaStaffId           MaintenanceRecord[]            @relation("R_MaintenanceRecord_staff_id")
+  equipmentGradeReviewsViaActorId        EquipmentGradeReview[]         @relation("R_EquipmentGradeReview_actor_id")
   custodyEventsViaFromUserId             CustodyEvent[]                 @relation("R_CustodyEvent_from_user_id")
   custodyEventsViaToUserId               CustodyEvent[]                 @relation("R_CustodyEvent_to_user_id")
   custodyEventsViaPerformedBy            CustodyEvent[]                 @relation("R_CustodyEvent_performed_by")
@@ -1896,6 +1912,34 @@ model BookingNotificationReceipt {
   @@map("booking_notification_receipts")
 }
 
+model RentalNotificationReceipt {
+  eventId       String            @map("event_id") @db.Uuid
+  consumer      String            @db.VarChar(100)
+  completedAt   DateTime?         @map("completed_at") @db.Timestamptz(6)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?           @map("last_error") @db.VarChar(100)
+  event         RentalOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, consumer])
+  @@index([consumer, completedAt, nextAttemptAt], map: "rental_notification_retry_idx")
+  @@map("rental_notification_receipts")
+}
+
+model PaymentNotificationReceipt {
+  eventId       String            @map("event_id") @db.Uuid
+  consumer      String            @db.VarChar(100)
+  completedAt   DateTime?         @map("completed_at") @db.Timestamptz(6)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError     String?           @map("last_error") @db.VarChar(100)
+  event         PaymentOutboxEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, consumer])
+  @@index([consumer, completedAt, nextAttemptAt], map: "payment_notification_retry_idx")
+  @@map("payment_notification_receipts")
+}
+
 model BookingOutboxEvent {
   cancellationDeliveries CancellationDelivery[]
   notificationReceipts BookingNotificationReceipt[]
@@ -1982,12 +2026,20 @@ model RentalProduct {
   recommendationTags           Json?               @map("recommendation_tags")
   requiredAccessories          Json?               @map("required_accessories")
   requiresDeepReturnInspection Boolean             @default(false) @map("requires_deep_return_inspection")
+  /// Nhóm các sản phẩm cùng loại khác hạng. NULL = sản phẩm thường (không có hạng).
+  /// DB: CHECK gradeGroupId và grade cùng NULL hoặc cùng có giá trị;
+  /// partial unique (grade_group_id, grade) WHERE grade_group_id IS NOT NULL (raw SQL trong migration).
+  gradeGroupId                 String?             @map("grade_group_id") @db.Uuid
+  grade                        RentalGrade?
   status                       RentalProductStatus @default(ACTIVE)
   version                      Int                 @default(1)
   createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                    DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   category RentalCategory @relation("R_RentalProduct_category_id", fields: [categoryId], references: [id])
+
+  gradeReviewsViaFromProductId EquipmentGradeReview[] @relation("R_EquipmentGradeReview_from_product_id")
+  gradeReviewsViaToProductId   EquipmentGradeReview[] @relation("R_EquipmentGradeReview_to_product_id")
 
   equipmentUnitsViaProductId             EquipmentUnit[]             @relation("R_EquipmentUnit_product_id")
   rentalProductPriceHistorysViaProductId RentalProductPriceHistory[] @relation("R_RentalProductPriceHistory_product_id")
@@ -2000,6 +2052,7 @@ model RentalProduct {
 
   @@index([categoryId, status])
   @@index([name])
+  @@index([gradeGroupId])
   @@map("rental_products")
 }
 
@@ -2065,11 +2118,40 @@ model EquipmentUnit {
   custodyEventsViaUnitId                  CustodyEvent[]              @relation("R_CustodyEvent_unit_id")
   returnInspectionTasks                   ReturnInspectionTask[]      @relation("R_ReturnInspectionTask_unit")
   readinessCommitmentsViaUnitId           RentalReadinessCommitment[] @relation("R_RentalReadinessCommitment_unit")
+  gradeReviewsViaUnitId                   EquipmentGradeReview[]      @relation("R_EquipmentGradeReview_unit_id")
 
   @@index([productId, status, condition])
   @@index([currentInventoryLocationId, status])
   @@index([status, expectedReadyAt])
   @@map("equipment_units")
+}
+
+/// Mỗi lần phân hạng một món: KEEP (giữ hạng) hoặc DOWNGRADE (chuyển sang sản phẩm hạng thấp cùng nhóm).
+/// assignmentId có giá trị khi phân hạng ở bước đưa món trả về kho (markUnitReady); mỗi lượt trả tối đa một bản ghi.
+/// DB: CHECK KEEP thì không có toProductId/toGrade; DOWNGRADE thì bắt buộc toProductId, toGrade và reason.
+model EquipmentGradeReview {
+  id            String                 @id @default(uuid()) @db.Uuid
+  unitId        String                 @map("unit_id") @db.Uuid
+  assignmentId  String?                @unique @map("assignment_id") @db.Uuid
+  decision      EquipmentGradeDecision
+  fromProductId String                 @map("from_product_id") @db.Uuid
+  toProductId   String?                @map("to_product_id") @db.Uuid
+  fromGrade     RentalGrade            @map("from_grade")
+  toGrade       RentalGrade?           @map("to_grade")
+  reason        String?
+  note          String?
+  evidenceIds   Json?                  @map("evidence_ids")
+  actorId       String                 @map("actor_id") @db.Uuid
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  unit        EquipmentUnit         @relation("R_EquipmentGradeReview_unit_id", fields: [unitId], references: [id])
+  assignment  RentalUnitAssignment? @relation("R_EquipmentGradeReview_assignment_id", fields: [assignmentId], references: [id])
+  fromProduct RentalProduct         @relation("R_EquipmentGradeReview_from_product_id", fields: [fromProductId], references: [id])
+  toProduct   RentalProduct?        @relation("R_EquipmentGradeReview_to_product_id", fields: [toProductId], references: [id], onDelete: Restrict)
+  actor       User                  @relation("R_EquipmentGradeReview_actor_id", fields: [actorId], references: [id])
+
+  @@index([unitId, createdAt])
+  @@map("equipment_grade_reviews")
 }
 
 /// Versioned rental business policy. Quotes/orders persist policy snapshot so later rule changes never rewrite historical financial decisions.
@@ -2395,6 +2477,7 @@ model RentalUnitAssignment {
   rentalExceptionCasesViaAssignmentId  RentalExceptionCase[]  @relation("R_RentalExceptionCase_assignment_id")
   depositSettlementItemViaAssignmentId DepositSettlementItem? @relation("R_DepositSettlementItem_assignment_id")
   returnInspectionTask                 ReturnInspectionTask?  @relation("R_ReturnInspectionTask_assignment")
+  gradeReviewViaAssignmentId           EquipmentGradeReview?  @relation("R_EquipmentGradeReview_assignment_id")
 
   @@index([orderLineId, status])
   @@index([equipmentUnitId, status])
@@ -2664,6 +2747,8 @@ model RentalExceptionCase {
   adminReviewStatus      String                    @default("PENDING") @map("admin_review_status") @db.VarChar(32)
   adminSlaBreachedAt     DateTime?                 @map("admin_sla_breached_at") @db.Timestamptz(6)
   evidenceAccessibleAt   DateTime?                 @map("evidence_accessible_at") @db.Timestamptz(6)
+  evidenceAccessBlockedAt DateTime?                @map("evidence_access_blocked_at") @db.Timestamptz(6)
+  evidenceAccessCustomerConfirmationRequired Boolean @default(false) @map("evidence_access_customer_confirmation_required")
   evidenceCompleteAt     DateTime?                 @map("evidence_complete_at") @db.Timestamptz(6)
   evidencePublishedAt    DateTime?                 @map("evidence_published_at") @db.Timestamptz(6)
   inAppNoticePublishedAt DateTime?                 @map("in_app_notice_published_at") @db.Timestamptz(6)
@@ -2852,6 +2937,7 @@ model CustodyEvent {
 }
 
 model RentalOutboxEvent {
+  notificationReceipts RentalNotificationReceipt[]
   id               String      @id @default(uuid()) @db.Uuid
   deduplicationKey String      @unique @map("deduplication_key") @db.VarChar(220)
   eventType        String      @map("event_type") @db.VarChar(140)
@@ -3536,9 +3622,11 @@ model PaymentOutboxEvent {
   publishedAt      DateTime?                @map("published_at") @db.Timestamptz(6)
   processedAt      DateTime?                @map("processed_at") @db.Timestamptz(6)
   receipts         PaymentConsumerReceipt[]
+  notificationReceipts PaymentNotificationReceipt[]
 
   @@index([status, nextRetryAt])
   @@index([aggregateType, aggregateId, createdAt])
+  @@index([eventType, createdAt])
   @@map("payment_outbox_events")
 }
 
@@ -4194,6 +4282,7 @@ model UserGearItem {
   brand      String?        @db.VarChar(100)
   condition  GearCondition  @default(GOOD) @map("condition")
   attributes Json           @default("{}") @map("attributes")
+  attributeProvenance Json?  @map("attribute_provenance")
   photoRef   String?        @map("photo_ref") @db.Uuid
   photo      MediaAsset?    @relation("R_UserGearItem_photo_ref", fields: [photoRef], references: [id], onDelete: SetNull)
   source     GearItemSource @default(MANUAL) @map("source")
@@ -4307,10 +4396,42 @@ model GearPlan {
   updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   revisions GearPlanRevision[]
+  preparationSelections GearPlanPreparationSelection?
 
   @@index([userId], map: "gear_plan_user_idx")
   @@index([tripId], map: "gear_plan_trip_idx")
   @@map("gear_plans")
+}
+
+model GearPlanPreparationSelection {
+  planId    String   @id @map("plan_id") @db.Uuid
+  plan      GearPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  choices   Json     @default("[]")
+  version   Int      @default(1)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("gear_plan_preparation_selections")
+}
+
+model GearPersonalCatalogItem {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(200)
+  brand       String?      @db.VarChar(100)
+  category    GearCategory
+  attributes  Json
+  evidence    Json
+  state       String       @default("DRAFT") @db.VarChar(16)
+  version     Int          @default(1)
+  createdBy   String       @map("created_by") @db.Uuid
+  reviewedBy  String?      @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  revokedBy   String?      @map("revoked_by") @db.Uuid
+  revokedAt   DateTime?    @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([state, category], map: "gear_personal_catalog_state_category_idx")
+  @@map("gear_personal_catalog_items")
 }
 
 model GearPlanRevision {

@@ -51,7 +51,11 @@ describe('Rental Swagger requests and responses', () => {
       const quoteExample = bodyExample('/api/v1/rentals/quote', 'post')?.example;
       expect(RentalQuoteBodySchema.safeParse(quoteExample).success).toBe(true);
       expect(FinalizeReturnReceiptBodySchema.safeParse(bodyExample('/api/v1/rental-orders/{id}/return-receipts', 'post')?.example).success).toBe(true);
-      expect(bodyExample('/api/v1/staff/rental-products', 'post')?.required).toContain('depositPolicy');
+      // depositPolicy/replacementValue chỉ bắt buộc khi ADMIN tạo (STAFF_INVENTORY không được gửi), nên không nằm
+      // trong `required` của schema; ví dụ trong Swagger (vai ADMIN) vẫn phải có depositPolicy.
+      const createBody = bodyExample('/api/v1/staff/rental-products', 'post');
+      expect(createBody?.required).not.toContain('depositPolicy');
+      expect(createBody?.example).toHaveProperty('depositPolicy');
 
       for (const route of ['/api/v1/rental-categories', '/api/v1/rental-products', '/api/v1/staff/rental-products', '/api/v1/staff/equipment-units']) {
         const response = operation(route, 'get')?.responses?.['200'] as {

@@ -141,6 +141,17 @@ describe('RentalProduct Use Cases', () => {
       currency: 'VND',
       replacementValue: 100000,
       depositPolicy: { type: 'FIXED', amount: 50000 },
+      actorUserId: 'admin-1',
+      actorRole: 'ADMIN',
+    };
+    const staffParams = {
+      categoryId: 'cat1',
+      sku: 'SKU-03',
+      name: 'Staff Product',
+      dailyPrice: 10000,
+      currency: 'VND',
+      actorUserId: 'staff-1',
+      actorRole: 'STAFF_INVENTORY',
     };
 
     beforeEach(() => {
@@ -171,18 +182,54 @@ describe('RentalProduct Use Cases', () => {
         code: RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY
       });
     });
+
+    it('should require deposit policy when ADMIN creates', async () => {
+      const { depositPolicy: _omit, ...withoutDeposit } = validParams;
+      await expect(createProduct.execute(withoutDeposit)).rejects.toMatchObject({
+        code: RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY,
+      });
+      expect(mockPort.createProduct).not.toHaveBeenCalled();
+    });
+
+    it('should let STAFF_INVENTORY create without deposit and replacement value', async () => {
+      mockPort.createProduct.mockResolvedValue({ ...mockProductView, status: 'INACTIVE' });
+      await createProduct.execute(staffParams);
+      expect(mockPort.createProduct).toHaveBeenCalledWith(staffParams);
+    });
+
+    it('should forbid STAFF_INVENTORY from setting deposit or replacement value', async () => {
+      await expect(
+        createProduct.execute({ ...staffParams, replacementValue: 100000, depositPolicy: { type: 'FIXED', amount: 50000 } }),
+      ).rejects.toMatchObject({
+        code: RENTAL_ERROR_CODES.RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY,
+        details: { fields: ['replacementValue', 'depositPolicy'] },
+      });
+      expect(mockPort.createProduct).not.toHaveBeenCalled();
+    });
+
+    it('should require FIXED deposit for a graded product', async () => {
+      await expect(
+        createProduct.execute({
+          ...validParams,
+          grade: 'LIKE_NEW',
+          depositPolicy: { type: 'PERCENT_REPLACEMENT_VALUE', percentage: 30 },
+        }),
+      ).rejects.toMatchObject({ code: RENTAL_ERROR_CODES.RENTAL_GRADE_DEPOSIT_MUST_BE_FIXED });
+      expect(mockPort.createProduct).not.toHaveBeenCalled();
+    });
   });
 
   describe('Update Product', () => {
+    const actor = { actorUserId: 'staff-1', actorRole: 'STAFF_INVENTORY' };
     it('should update product successfully', async () => {
       mockPort.updateProduct.mockResolvedValue({ ...mockProductView, name: 'Updated' });
-      const result = await updateProduct.execute({ id: '123', expectedVersion: 1, name: 'Updated' });
-      expect(mockPort.updateProduct).toHaveBeenCalledWith({ id: '123', expectedVersion: 1, name: 'Updated' });
+      const result = await updateProduct.execute({ ...actor, id: '123', expectedVersion: 1, name: 'Updated' });
+      expect(mockPort.updateProduct).toHaveBeenCalledWith({ ...actor, id: '123', expectedVersion: 1, name: 'Updated' });
       expect(result.name).toBe('Updated');
     });
 
     it('should reject invalid daily price on update', async () => {
-      await expect(updateProduct.execute({ id: '123', expectedVersion: 1, dailyPrice: -5 })).rejects.toMatchObject({
+      await expect(updateProduct.execute({ ...actor, id: '123', expectedVersion: 1, dailyPrice: -5 })).rejects.toMatchObject({
         code: RENTAL_ERROR_CODES.INVALID_DAILY_PRICE
       });
     });

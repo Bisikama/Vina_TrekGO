@@ -12,6 +12,7 @@ import { ApprovedClaim, buildApprovedClaims, renderNarrativeFromClaims } from '.
 import { GEAR_EXTRACTION_PROMPT, GEAR_ADVISOR_PROMPT } from '../prompts/prompt-assets'
 import { AppError } from '../../../../shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
+import { readGearRuntimeConfig } from '../../application/services/gear-capabilities'
 
 @Injectable()
 export class GeminiGearAiAdapter implements GearAiPort {
@@ -24,15 +25,26 @@ export class GeminiGearAiAdapter implements GearAiPort {
   private readonly maxRetries: number
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || null
-    this.modelExtraction = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-2.5-flash'
-    this.modelAdvisor = process.env.GEMINI_MODEL_ADVISOR || 'gemini-2.5-flash'
-    this.timeoutMs = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10)
-    this.maxRetries = parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10)
+    const rawKey = process.env.GEMINI_API_KEY?.trim() || null
+    this.apiKey = rawKey && rawKey.length > 0 ? rawKey : null
+    const runtime = readGearRuntimeConfig()
+    this.modelExtraction = runtime.geminiModelExtraction
+    this.modelAdvisor = runtime.geminiModelAdvisor
+    this.timeoutMs = runtime.geminiTimeoutMs
+    this.maxRetries = runtime.geminiMaxRetries
 
     if (this.apiKey) {
-      this.aiClient = new GoogleGenAI({ apiKey: this.apiKey })
+      try {
+        this.aiClient = new GoogleGenAI({ apiKey: this.apiKey })
+      } catch (err: any) {
+        this.logger.warn(`Failed to initialize GoogleGenAI client: ${err?.message}`)
+        this.aiClient = null
+      }
     }
+  }
+
+  isConfigured(): boolean {
+    return Boolean(this.apiKey && this.aiClient)
   }
 
   async extractGear(request: GearExtractionAiRequest): Promise<GearExtractionAiResult> {
@@ -87,10 +99,14 @@ export class GeminiGearAiAdapter implements GearAiPort {
       }
       const attemptTimeoutMs = Math.min(this.timeoutMs, totalDeadline - now)
       let timerHandle: any
+      const abortController = new AbortController()
 
       try {
         const timeoutPromise = new Promise<never>((_, reject) => {
-          timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), attemptTimeoutMs)
+          timerHandle = setTimeout(() => {
+            abortController.abort(new Error('GEMINI_TIMEOUT'))
+            reject(new Error('GEMINI_TIMEOUT'))
+          }, attemptTimeoutMs)
         })
 
         const response = await Promise.race([
@@ -105,6 +121,7 @@ export class GeminiGearAiAdapter implements GearAiPort {
             config: {
               responseMimeType: 'application/json',
               temperature: 0.1,
+              abortSignal: abortController.signal,
             },
           }),
           timeoutPromise,
@@ -195,8 +212,9 @@ export class GeminiGearAiAdapter implements GearAiPort {
           err.statusCode === 429 ||
           err.message?.includes('429') ||
           err.message?.includes('RESOURCE_EXHAUSTED')
+        // Giới hạn của nhà cung cấp AI — khác quota ngày của người dùng (GEAR_EXTRACTION_QUOTA_EXCEEDED).
         if (isQuotaError && attempt >= this.maxRetries) {
-          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
+          throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_RATE_LIMITED, {
             message: 'Dịch vụ AI vượt quá hạn mức yêu cầu, vui lòng thử lại sau',
           })
         }
@@ -217,7 +235,7 @@ export class GeminiGearAiAdapter implements GearAiPort {
       lastError?.message?.includes('429') ||
       lastError?.message?.includes('RESOURCE_EXHAUSTED')
     ) {
-      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
+      throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_RATE_LIMITED, {
         message: 'Dịch vụ AI vượt quá hạn mức yêu cầu, vui lòng thử lại sau',
       })
     }
@@ -272,8 +290,12 @@ export class GeminiGearAiAdapter implements GearAiPort {
       }
 
       let timerHandle: any
+      const abortController = new AbortController()
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timerHandle = setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), this.timeoutMs)
+        timerHandle = setTimeout(() => {
+          abortController.abort(new Error('GEMINI_TIMEOUT'))
+          reject(new Error('GEMINI_TIMEOUT'))
+        }, this.timeoutMs)
       })
 
       let response: any
@@ -294,6 +316,7 @@ export class GeminiGearAiAdapter implements GearAiPort {
             config: {
               responseMimeType: 'application/json',
               temperature: 0.2,
+              abortSignal: abortController.signal,
             },
           }),
           timeoutPromise,
@@ -392,8 +415,9 @@ export class GeminiGearAiAdapter implements GearAiPort {
       narrativeVi = renderResult.narrativeVi
       factRefs = renderResult.factRefs
     } else {
+      // Service truyền thẳng summary của coverage; vẫn nhận dạng { summary } cho tương thích.
       const coverage = request.coverage as any
-      const summary = coverage?.summary || {}
+      const summary = coverage?.summary || coverage || {}
       const missingCount = summary.unresolvedCount || 0
       if (summary.isFullyCovered) {
         narrativeVi += ' Bạn đã có đầy đủ các trang bị bắt buộc cho chuyến đi.'
@@ -409,7 +433,8 @@ export class GeminiGearAiAdapter implements GearAiPort {
       }
     }
 
-    const actionRefs = (request.coverage as any)?.summary?.isFullyCovered ? ['READY_FOR_TRIP'] : ['RENT_MISSING_GEAR']
+    const coverageSummary = (request.coverage as any)?.summary || (request.coverage as any) || {}
+    const actionRefs = coverageSummary.isFullyCovered ? ['READY_FOR_TRIP'] : ['RENT_MISSING_GEAR']
 
     const disclaimerVi =
       'Tư vấn dựa trên bộ quy chuẩn an toàn TrekGo (chế độ dự phòng). Vui lòng kiểm tra kỹ độ bền và thông số trang bị trước khi khởi hành.'

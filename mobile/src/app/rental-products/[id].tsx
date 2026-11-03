@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { rentalApi } from "@/features/rentals/api";
+import { rentalReviewApi, type ProductReviewList } from "@/features/rentals/review-api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
 import {
   calculateProductDeposit,
@@ -129,8 +130,14 @@ export default function RentalProductDetailScreen() {
   }
 
   const deposit = calculateProductDeposit(product);
-  const dailySubtotal = product.dailyPrice * quantity;
-  const depositSubtotal = deposit * quantity;
+  // Chưa chọn số lượng thì hiện giá cho 1 món thay vì 0đ.
+  const summaryQuantity = Math.max(quantity, 1);
+  const dailySubtotal = product.dailyPrice * summaryQuantity;
+  const depositSubtotal = deposit * summaryQuantity;
+  const depositPercentage =
+    typeof product.depositPerUnit === "number"
+      ? product.depositExplanation?.percentageOfReplacementValue ?? null
+      : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -157,8 +164,22 @@ export default function RentalProductDetailScreen() {
           )}
           <View style={styles.heroBottom}>
             <Text style={styles.category}>{product.category.name}</Text>
-            <Text style={styles.productName}>{product.name}</Text>
+            <Text style={styles.productName}>
+              {product.grade
+                ? product.name.replace(/\s*[-–—:]\s*(rất mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim()
+                : product.name}
+            </Text>
             {product.sku ? <Text style={styles.sku}>SKU: {product.sku}</Text> : null}
+            {product.grade ? (
+              <Text
+                style={[
+                  styles.gradeBadge,
+                  product.grade === "GOOD_USED" && styles.gradeBadgeUsed,
+                ]}
+              >
+                {product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
+              </Text>
+            ) : null}
           </View>
           {(product.imageUrls?.length ?? 0) > 1 && (
             <View style={styles.galleryCounter}>
@@ -220,6 +241,11 @@ export default function RentalProductDetailScreen() {
             <Text style={styles.depositValue}>
               {deposit.toLocaleString("vi-VN")}đ
             </Text>
+            {depositPercentage !== null ? (
+              <Text style={styles.depositRatio}>
+                ≈ {depositPercentage.toLocaleString("vi-VN")}% giá trị thay thế
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -247,6 +273,8 @@ export default function RentalProductDetailScreen() {
             </View>
           </View>
         )}
+
+        <ProductReviewsSection productId={product.id} />
 
         <View style={styles.sectionCard}>
           <View style={styles.quantityHeader}>
@@ -286,11 +314,11 @@ export default function RentalProductDetailScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Giá tham khảo</Text>
           <SummaryRow
-            label="Phí thuê mỗi ngày"
+            label={quantity > 0 ? `Phí thuê mỗi ngày (${quantity} món)` : "Phí thuê mỗi ngày (1 món)"}
             value={`${dailySubtotal.toLocaleString("vi-VN")}đ`}
           />
           <SummaryRow
-            label="Tổng tiền cọc dự kiến"
+            label={quantity > 0 ? `Tổng tiền cọc dự kiến (${quantity} món)` : "Tiền cọc dự kiến (1 món)"}
             value={`${depositSubtotal.toLocaleString("vi-VN")}đ`}
           />
           <View style={styles.notice}>
@@ -584,6 +612,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
   },
+  depositRatio: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
+  gradeBadgeUsed: { backgroundColor: "#FFF6E0", color: "#8A5A00" },
+  gradeBadge: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    color: Colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "800",
+  },
   sectionCard: {
     padding: 16,
     borderRadius: Radius.lg,
@@ -691,4 +733,122 @@ const styles = StyleSheet.create({
   },
   addButtonSuccess: { backgroundColor: Colors.secondary },
   addButtonText: { color: Colors.onPrimaryDark, fontSize: 13, fontWeight: "900" },
+});
+
+
+/** Đánh giá công khai của người đã thực sự thuê (GET /rental-products/:id/reviews). */
+function ProductReviewsSection({ productId }: { productId: string }) {
+  const [data, setData] = useState<ProductReviewList | null>(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+    rentalReviewApi
+      .listProductReviews(productId, { page, pageSize: 5 })
+      .then((result) => {
+        if (!active) return;
+        setData((current) => (page > 1 && current ? { ...result, reviews: [...current.reviews, ...result.reviews] } : result));
+      })
+      .catch(() => active && setFailed(true))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [productId, page]);
+
+  const summary = data?.summary;
+  const total = summary?.totalReviews ?? 0;
+
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>Đánh giá từ người đã thuê</Text>
+      {loading && !data ? (
+        <ActivityIndicator style={{ marginTop: 12 }} color={Colors.primaryDark} />
+      ) : failed && !data ? (
+        <Text style={reviewStyles.muted}>Chưa tải được đánh giá.</Text>
+      ) : total === 0 ? (
+        <Text style={reviewStyles.muted}>Chưa có đánh giá nào cho thiết bị này.</Text>
+      ) : (
+        <>
+          <View style={reviewStyles.summaryRow}>
+            <View style={reviewStyles.scoreBox}>
+              <Text style={reviewStyles.score}>{(summary?.averageRating ?? 0).toFixed(1)}</Text>
+              <Stars value={summary?.averageRating ?? 0} size={13} />
+              <Text style={reviewStyles.muted}>{total} đánh giá</Text>
+            </View>
+            <View style={reviewStyles.bars}>
+              {(["5", "4", "3", "2", "1"] as const).map((star) => {
+                const count = summary?.ratingBreakdown?.[star] ?? 0;
+                return (
+                  <View key={star} style={reviewStyles.barRow}>
+                    <Text style={reviewStyles.barLabel}>{star}★</Text>
+                    <View style={reviewStyles.barTrack}>
+                      <View style={[reviewStyles.barFill, { width: `${total ? (count / total) * 100 : 0}%` }]} />
+                    </View>
+                    <Text style={reviewStyles.barCount}>{count}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+          {data?.reviews.map((review) => (
+            <View key={review.id} style={reviewStyles.review}>
+              <View style={reviewStyles.reviewHead}>
+                <Text style={reviewStyles.reviewer}>{review.userName}</Text>
+                <Stars value={review.rating} size={12} />
+              </View>
+              <Text style={reviewStyles.verified}>
+                ✓ Đã thuê thật · {new Date(review.createdAt).toLocaleDateString("vi-VN")}
+              </Text>
+              {review.comment ? <Text style={reviewStyles.comment}>{review.comment}</Text> : null}
+            </View>
+          ))}
+          {data && data.pagination.page < data.pagination.totalPages ? (
+            <TouchableOpacity disabled={loading} onPress={() => setPage((current) => current + 1)} style={reviewStyles.more}>
+              <Text style={reviewStyles.moreText}>{loading ? "Đang tải..." : "Xem thêm đánh giá"}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+function Stars({ value, size }: { value: number; size: number }) {
+  return (
+    <View style={{ flexDirection: "row", gap: 1 }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Ionicons
+          key={star}
+          name={value >= star ? "star" : value >= star - 0.5 ? "star-half" : "star-outline"}
+          size={size}
+          color="#F4A261"
+        />
+      ))}
+    </View>
+  );
+}
+
+const reviewStyles = StyleSheet.create({
+  muted: { marginTop: 8, color: Colors.onSurfaceVariant, fontSize: 12 },
+  summaryRow: { marginTop: 12, flexDirection: "row", gap: 16, alignItems: "center" },
+  scoreBox: { alignItems: "center", gap: 3, minWidth: 80 },
+  score: { color: Colors.onSurface, fontSize: 30, fontWeight: "800" },
+  bars: { flex: 1, gap: 4 },
+  barRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  barLabel: { width: 24, color: Colors.onSurfaceVariant, fontSize: 11 },
+  barTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: Colors.surfaceContainer, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: 3, backgroundColor: "#F4A261" },
+  barCount: { width: 22, textAlign: "right", color: Colors.onSurfaceVariant, fontSize: 11 },
+  review: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer, gap: 3 },
+  reviewHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  reviewer: { flex: 1, color: Colors.onSurface, fontSize: 13, fontWeight: "700" },
+  verified: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
+  comment: { marginTop: 3, color: Colors.onSurface, fontSize: 12, lineHeight: 18 },
+  more: { marginTop: 12, paddingVertical: 10, alignItems: "center", borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.surfaceContainerHighest },
+  moreText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "700" },
 });

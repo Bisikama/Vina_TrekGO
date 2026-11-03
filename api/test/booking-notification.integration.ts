@@ -94,11 +94,14 @@ suite('M8 real PostgreSQL/Mongo notification delivery', () => {
         e = await event(type, p)
       await worker.processBookingEvents()
       const docs = await model.find({ 'metadata.outboxEventId': e.id }).lean()
-      const audience = type.endsWith('INVITED')
-        ? [p.recipientUserId]
-        : type === 'PUBLIC_PARTICIPANT_CLAIMED'
-          ? [p.buyerUserId, p.recipientUserId]
-          : [p.userId]
+      // PRIVATE_TRIP_CANCELLED/UPDATED báo thành viên ACTIVE của Trip; tripId ngẫu nhiên nên không có ai.
+      const audience = ['PRIVATE_TRIP_CANCELLED', 'PRIVATE_TRIP_UPDATED'].includes(type)
+        ? []
+        : type.endsWith('INVITED')
+          ? [p.recipientUserId]
+          : type === 'PUBLIC_PARTICIPANT_CLAIMED'
+            ? [p.buyerUserId, p.recipientUserId]
+            : [p.userId]
       expect(docs.map((d) => d.userId).sort()).toEqual(audience.sort())
       for (const secret of ['SECRET_EMAIL', 'SECRET_QR', 'SECRET_PAYMENT', p.hostUserId])
         expect(JSON.stringify(docs)).not.toContain(secret)

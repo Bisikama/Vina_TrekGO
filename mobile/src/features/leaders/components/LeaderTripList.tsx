@@ -44,7 +44,7 @@ function getStatusBadge(status: string) {
     case "DRAFT":
       return { label: "Bản nháp", bg: "#f1f5f9", color: "#475569" };
     case "OPEN":
-      return { label: "Đang mở bán", bg: "#dcfce7", color: "#166534" };
+      return { label: "Đang mở bán", bg: "#dcfce7", color: "#0e0f0c" };
     case "FULL":
       return { label: "Đã đủ chỗ", bg: "#e0f2fe", color: "#0369a1" };
     case "IN_PROGRESS":
@@ -364,14 +364,14 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
     ...Shadows.card,
     gap: 8,
   },
@@ -426,13 +426,13 @@ const styles = StyleSheet.create({
   },
   trailIcon: {
     fontSize: 12,
-    color: "#125238",
+    color: "#0e0f0c",
     fontWeight: "900",
   },
   trailName: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#125238",
+    color: "#0e0f0c",
     flex: 1,
   },
   infoRow: {
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   revenueValue: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#125238",
+    color: "#0e0f0c",
   },
   footerActions: {
     flexDirection: "row",
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#125238",
+    backgroundColor: "#9fe870",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 6,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     backgroundColor: "#ffffff",
-    borderRadius: Radius.lg,
+    borderRadius: 24,
     padding: 20,
     gap: 12,
     ...Shadows.card,
@@ -576,8 +576,8 @@ const styles = StyleSheet.create({
   },
   reasonInput: {
     borderWidth: 1,
-    borderColor: "#e1e9e2",
-    borderRadius: Radius.md,
+    borderColor: "#d6dbd2",
+    borderRadius: 20,
     padding: 10,
     fontSize: 12,
     color: "#121c2a",
@@ -594,9 +594,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     alignItems: "center",
-    borderRadius: Radius.md,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#e1e9e2",
+    borderColor: "#d6dbd2",
   },
   modalCancelBtnText: {
     fontSize: 12,
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#ba1a1a",
     paddingVertical: 10,
-    borderRadius: Radius.md,
+    borderRadius: 20,
   },
   modalSubmitBtnText: {
     fontSize: 12,

@@ -22,8 +22,8 @@ export const extractionEvidenceSchema = z.object({
   id: z.string(),
   fieldPath: z.string(),
   originalText: z.string(),
-  sourceLocator: z.string().optional(),
-  unit: z.string().optional(),
+  sourceLocator: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
+  unit: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
 });
 
 export const gearExtractionWireSchema = z.object({
@@ -48,6 +48,20 @@ export interface DomainExtractionResult {
   warnings: string[];
   fieldsUnknown: string[];
   needsConfirmation: boolean;
+}
+
+/** Describes what the draft contained, not the provenance of user edits made during confirmation. */
+export function extractionFieldProvenance(data: unknown, categoryOverride?: GearCategory) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const draft = data as Record<string, unknown>;
+  const category = typeof draft.category === 'string' ? draft.category.toUpperCase() : null;
+  if (!category || !ALL_GEAR_CATEGORIES.includes(category) || (categoryOverride && categoryOverride !== category)) return null;
+  const attrs = draft.attributes && typeof draft.attributes === 'object' && !Array.isArray(draft.attributes)
+    ? draft.attributes as Record<string, unknown> : {};
+  return CANONICAL_CATEGORY_FIELD_KEYS[category as GearCategory].map((field) => ({
+    field,
+    extractionStatus: attrs[field] === null || attrs[field] === undefined ? 'MISSING' : 'FOUND',
+  }));
 }
 
 export function normalizeExtractionResult(raw: unknown): DomainExtractionResult {

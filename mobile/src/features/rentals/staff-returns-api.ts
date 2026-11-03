@@ -223,18 +223,28 @@ export const staffReturnsApi = {
   },
 
   async markReady(
-    input: { unitId: string; inspectionId: string; expectedVersion: number },
+    input: {
+      unitId: string;
+      inspectionId: string;
+      expectedVersion: number;
+      /** Bắt buộc với sản phẩm có hạng; không gửi với sản phẩm thường. */
+      gradeDecision?: { decision: "KEEP" } | { decision: "DOWNGRADE"; reason: string };
+    },
     accessToken: string,
   ) {
-    return mutate(
+    return mutate<{
+      gradeReview: { decision: "KEEP" | "DOWNGRADE"; shortageOrderIds: string[] } | null;
+    }>(
       `/api/v1/staff/equipment-units/${encodeURIComponent(input.unitId)}/ready`,
-      "ready",
+      // Body khác (có/không gradeDecision) phải dùng khoá idempotency khác.
+      input.gradeDecision ? `ready-${input.gradeDecision.decision.toLowerCase()}` : "ready",
       input.unitId,
       input.expectedVersion,
       {
         inspectionId: input.inspectionId,
         accessoriesChecked: true,
         expectedVersion: input.expectedVersion,
+        ...(input.gradeDecision ? { gradeDecision: input.gradeDecision } : {}),
       },
       accessToken,
     );

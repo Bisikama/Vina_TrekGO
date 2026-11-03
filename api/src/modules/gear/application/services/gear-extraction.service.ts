@@ -24,9 +24,27 @@ import { PAGE_READER_PORT } from '../ports/page-reader.port'
 import type { PageReaderPort } from '../ports/page-reader.port'
 import { CreateExtractionDto, ConfirmExtractionDraftDto } from '../dtos/gear-extraction.dto'
 import { normalizeCreateAttributes } from '../dtos/user-gear.dto'
+import { extractionFieldProvenance } from '../../domain/gear-extraction-schema'
+import { confirmedExtractionProvenance } from '../../domain/attribute-provenance'
 import { findSimilarItems } from '../../domain/duplicate-detector'
 import { GEAR_EXTRACTION_PROMPT } from '../../infrastructure/prompts/prompt-assets'
 import { SafeLinkFetcher } from '../../infrastructure/adapters/safe-link-fetcher'
+import {
+  activeAiExtractionSettings,
+  buildManualEntryData,
+  GEAR_AI_LEASE_MARGIN_MS,
+  isAiConfigured,
+  isManualEntryData,
+  isPageReaderConfigured,
+  manualReasonFromErrorCode,
+  readGearFlags,
+  readGearRuntimeConfig,
+  type ManualEntryReasonCode,
+} from './gear-capabilities'
+import { normalizeProductLink } from '../../domain/product-link-normalizer'
+
+/** ownerScope của cache LINK dùng chung giữa mọi user (IMAGE vẫn theo user vì ảnh là dữ liệu riêng). */
+const SHARED_LINK_CACHE_SCOPE = 'shared:link'
 
 function getStartOfDaySaigon(): Date {
   const now = new Date()
@@ -34,6 +52,19 @@ function getStartOfDaySaigon(): Date {
   const saigonTime = new Date(now.getTime() + saigonOffsetMs)
   saigonTime.setUTCHours(0, 0, 0, 0)
   return new Date(saigonTime.getTime() - saigonOffsetMs)
+}
+
+/**
+ * Lượt trích xuất có tính vào quota ngày không: PENDING còn mới thì có; READY/CONFIRMED thì có,
+ * trừ cache hit và bản nháp "cần nhập tay" (không gọi AI nên không tốn lượt).
+ */
+function isChargedDraft(
+  d: { status: string; extractedData: unknown; createdAt?: Date },
+  staleThreshold: Date,
+): boolean {
+  if (d.status === 'PENDING') return !(d.createdAt && d.createdAt < staleThreshold)
+  const data = d.extractedData as Record<string, unknown> | null
+  return !data?._cacheHit && !isManualEntryData(data)
 }
 
 function canonicalStringify(obj: unknown): string {
@@ -80,10 +111,13 @@ export class GearExtractionService {
    * Cache-hits do NOT count toward this quota.
    */
   async checkDailyQuota(userId: string): Promise<void> {
-    const dailyLimit = parseInt(process.env.GEAR_EXTRACTION_DAILY_QUOTA || '20', 10)
+    const dailyLimit = readGearRuntimeConfig().dailyQuota
     const startOfDay = getStartOfDaySaigon()
 
     // Count attempts created today that were charged (not cache hits)
+    const PENDING_STALE_MS = 2 * 60 * 1000
+    const staleThreshold = new Date(Date.now() - PENDING_STALE_MS)
+
     const chargedDrafts = await this.prisma.gearExtractionDraft.findMany({
       where: {
         userId,
@@ -93,14 +127,11 @@ export class GearExtractionService {
       select: {
         status: true,
         extractedData: true,
+        createdAt: true,
       },
     })
 
-    const chargedCount = chargedDrafts.filter((d) => {
-      if (d.status === 'PENDING') return true
-      const data = d.extractedData as any
-      return !data?._cacheHit
-    }).length
+    const chargedCount = chargedDrafts.filter((d) => isChargedDraft(d, staleThreshold)).length
 
     if (chargedCount >= dailyLimit) {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
@@ -118,7 +149,7 @@ export class GearExtractionService {
     sourceHash: string,
     expiresAt: Date,
   ): Promise<GearExtractionDraftDomain> {
-    const dailyLimit = parseInt(process.env.GEAR_EXTRACTION_DAILY_QUOTA || '20', 10)
+    const dailyLimit = readGearRuntimeConfig().dailyQuota
     const startOfDay = getStartOfDaySaigon()
     const quotaLeaseKey = `gear:quota:${userId}:${startOfDay.toISOString().slice(0, 10)}`
     const quotaToken = randomUUID()
@@ -148,6 +179,23 @@ export class GearExtractionService {
           await tx.$executeRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`
         }
 
+        const PENDING_STALE_MS = 2 * 60 * 1000
+        const staleThreshold = new Date(Date.now() - PENDING_STALE_MS)
+
+        if (tx.gearExtractionDraft.updateMany) {
+          await tx.gearExtractionDraft.updateMany({
+            where: {
+              userId,
+              status: 'PENDING',
+              createdAt: { lt: staleThreshold },
+            },
+            data: {
+              status: 'FAILED',
+              extractedData: { _reclaimedReason: 'ABANDONED_PENDING_TIMEOUT' },
+            },
+          })
+        }
+
         const chargedDrafts = await tx.gearExtractionDraft.findMany({
           where: {
             userId,
@@ -157,14 +205,11 @@ export class GearExtractionService {
           select: {
             status: true,
             extractedData: true,
+            createdAt: true,
           },
         })
 
-        const chargedCount = chargedDrafts.filter((d) => {
-          if (d.status === 'PENDING') return true
-          const data = d.extractedData as any
-          return !data?._cacheHit
-        }).length
+        const chargedCount = chargedDrafts.filter((d) => isChargedDraft(d, staleThreshold)).length
 
         if (chargedCount >= dailyLimit) {
           throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
@@ -190,16 +235,22 @@ export class GearExtractionService {
   }
 
   async createExtraction(userId: string, dto: CreateExtractionDto): Promise<GearExtractionDraftDomain> {
+    const runtime = readGearRuntimeConfig()
     const promptVersion = GEAR_EXTRACTION_PROMPT.version
-    const modelVersion = process.env.GEMINI_MODEL_EXTRACTION || 'gemini-3.8-flash'
+    // Model và thời gian chờ theo nhà cung cấp đang chọn: cache không dùng lẫn giữa Gemini và OpenAI.
+    const aiSettings = activeAiExtractionSettings(runtime)
+    const modelVersion = aiSettings.model
     const schemaVersion = '3.1.5'
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+    const aiLeaseTtlMs = aiSettings.timeoutMs + GEAR_AI_LEASE_MARGIN_MS
+
+    const flags = readGearFlags()
 
     if (dto.source === 'IMAGE') {
       // 1. Mandatory Media Dependency Verification (B01 fail-closed)
       if (!this.mediaAssetPort || !this.mediaStoragePort) {
-        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_AI_UNAVAILABLE, {
-          message: 'Dịch vụ lưu trữ media chưa sẵn sàng để đọc hình ảnh',
+        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_MEDIA_UNAVAILABLE, {
+          message: 'Dịch vụ lưu trữ ảnh chưa sẵn sàng để đọc hình ảnh',
         })
       }
 
@@ -239,6 +290,23 @@ export class GearExtractionService {
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PHOTO_LIMIT_EXCEEDED, {
           message: 'Kích thước ảnh không hợp lệ hoặc vượt quá giới hạn 5MB',
         })
+      }
+
+      // AI không dùng được → bản nháp nhập tay ngay, không tải/resize ảnh và không tốn quota.
+      const imageManualReason: ManualEntryReasonCode | null = !flags.imageExtractionEnabled
+        ? 'AI_DISABLED'
+        : !isAiConfigured(this.gearAiPort)
+          ? 'AI_NOT_CONFIGURED'
+          : null
+      if (imageManualReason) {
+        return this.createManualDraft(
+          userId,
+          'IMAGE',
+          createHash('sha256').update(`manual:${dto.uploadId}`).digest('hex'),
+          expiresAt,
+          imageManualReason,
+          { uploadId: dto.uploadId },
+        )
       }
 
       // Stream actual bytes from storage with bounded byte reading
@@ -301,13 +369,18 @@ export class GearExtractionService {
         )
       }
 
-      // 3. Atomic Quota reservation and PENDING draft creation
-      const draft = await this.checkAndReserveQuota(userId, 'IMAGE', contentHash, expiresAt)
+      // 3. Atomic Quota reservation and PENDING draft creation (hết quota ngày → nhập tay)
+      const draft = await this.reserveQuotaOrNull(userId, 'IMAGE', contentHash, expiresAt)
+      if (!draft) {
+        return this.createManualDraft(userId, 'IMAGE', contentHash, expiresAt, 'DAILY_QUOTA_EXCEEDED', {
+          uploadId: dto.uploadId,
+        })
+      }
 
       // 4. Concurrency Lease (B04: acquire:false prevents provider call)
       const resourceKey = `gear:lease:${userId}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
       const ownerToken = randomUUID()
-      const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, 30000)
+      const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, aiLeaseTtlMs)
 
       if (!lease.acquired) {
         // Recheck cache in case concurrent worker published
@@ -326,21 +399,30 @@ export class GearExtractionService {
             draft.version,
           )
         }
+        // Refund/release quota reservation by marking draft as FAILED
+        await this.draftRepo.updateExtractedData(draft.id, {}, 'FAILED', draft.version).catch(() => {})
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT, {
           message: 'Tác vụ trích xuất ảnh đang được xử lý, vui lòng thử lại sau giây lát',
         })
       }
 
       try {
-        const aiResult = await this.gearAiPort.extractGear({
-          sourceType: 'IMAGE',
-          imageBase64: imageBuffer.toString('base64'),
-          imageBuffer,
-          mimeType: asset.mimeType,
-        })
+        let aiResult: Awaited<ReturnType<GearAiPort['extractGear']>>
+        try {
+          aiResult = await this.gearAiPort.extractGear({
+            sourceType: 'IMAGE',
+            imageBase64: imageBuffer.toString('base64'),
+            imageBuffer,
+            mimeType: asset.mimeType,
+          })
+        } catch (err: any) {
+          // AI lỗi/hết giờ/bị giới hạn → bản nháp nhập tay; bản nháp nhập tay không tính quota nên lượt được hoàn.
+          this.logger.warn(`Image extraction fell back to manual entry: ${err?.code ?? err?.message}`)
+          return this.convertToManualDraft(draft, manualReasonFromErrorCode(err?.code), { uploadId: dto.uploadId })
+        }
 
-        // Publish cache with lease fencing
-        await this.cachePort.setCache(
+        // Ghi cache có kiểm khoá. Lỗi ghi cache không được làm mất kết quả AI đã có.
+        await this.publishCacheBestEffort(
           {
             ownerScope: userId,
             contentHash,
@@ -351,15 +433,11 @@ export class GearExtractionService {
             resultJson: aiResult.extraction as any,
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
           },
-          {
-            resourceKey,
-            ownerToken,
-            fencingToken: lease.fencingToken,
-          },
+          { resourceKey, ownerToken, fencingToken: lease.fencingToken },
         )
 
         // Update draft to READY with real metadata
-        const updated = await this.draftRepo.updateExtractedData(
+        return await this.draftRepo.updateExtractedData(
           draft.id,
           {
             ...aiResult.extraction,
@@ -368,34 +446,29 @@ export class GearExtractionService {
           'READY',
           draft.version,
         )
-
-        return updated
-      } catch (err: any) {
-        // Refund quota on failure by marking draft as FAILED
-        await this.draftRepo.updateExtractedData(draft.id, {}, 'FAILED', draft.version)
-        throw err
       } finally {
-        await this.leasePort.releaseLease(resourceKey, ownerToken, lease.fencingToken)
+        await this.releaseAiLease(resourceKey, ownerToken, lease.fencingToken)
       }
     } else {
       // LINK Source (B05: Firecrawl Cloud behind PageReaderPort + 2-Layer Cache)
-      if (!this.pageReaderPort) {
-        throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_PAGE_READER_UNAVAILABLE, {
-          message: 'Dịch vụ đọc link sản phẩm chưa được cấu hình. Vui lòng tải ảnh hoặc nhập bằng tay.',
+      // 1. Mandatory Public HTTPS & SSRF validation (B05) — lỗi đầu vào vẫn trả 400 kể cả khi tiện ích tắt
+      await this.safeLinkFetcher.validateAndResolveUrl(dto.url)
+
+      // Bỏ tham số theo dõi (utm_*, fbclid, gclid...) để cùng một trang dùng chung khoá cache.
+      const { displayUrl: normalizedUrl, cacheKeyUrl } = normalizeProductLink(dto.url)
+      const urlHash = createHash('sha256').update(`url:${cacheKeyUrl}`).digest('hex')
+      // Nội dung trang công khai không phụ thuộc người dán link → cache LINK dùng chung; quota vẫn tính theo user.
+      const linkCacheScope = SHARED_LINK_CACHE_SCOPE
+
+      if (!flags.linkExtractionEnabled) {
+        return this.createManualDraft(userId, 'LINK', urlHash, expiresAt, 'LINK_READER_DISABLED', {
+          url: normalizedUrl,
         })
       }
 
-      // 1. Mandatory Public HTTPS & SSRF validation (B05)
-      await this.safeLinkFetcher.validateAndResolveUrl(dto.url)
-
-      // Normalize URL: lowercase protocol and host, preserve path & query case
-      const parsedUrl = new URL(dto.url.trim())
-      const normalizedUrl = `${parsedUrl.protocol}//${parsedUrl.host.toLowerCase()}${parsedUrl.pathname}${parsedUrl.search}`
-      const urlHash = createHash('sha256').update(`url:${normalizedUrl}`).digest('hex')
-
       // Layer 1 URL Cache Check (if !forceRefresh)
       if (!dto.forceRefresh) {
-        const cachedUrl = await this.cachePort.getCache(userId, urlHash, promptVersion, modelVersion, schemaVersion)
+        const cachedUrl = await this.cachePort.getCache(linkCacheScope, urlHash, promptVersion, modelVersion, schemaVersion)
         if (cachedUrl && cachedUrl.status === 'SUCCESS') {
           const draft = await this.draftRepo.createDraft({
             userId,
@@ -412,14 +485,49 @@ export class GearExtractionService {
         }
       }
 
-      // Read page via PageReaderPort (Firecrawl Cloud)
-      const pageResult = await this.pageReaderPort.readPage(dto.url)
+      // Kiểm cấu hình TRƯỚC khi gọi Firecrawl: thiếu thì nhập tay (cache hit ở trên vẫn dùng được).
+      const linkManualReason: ManualEntryReasonCode | null =
+        !this.pageReaderPort || !isPageReaderConfigured(this.pageReaderPort)
+          ? 'LINK_READER_NOT_CONFIGURED'
+          : !isAiConfigured(this.gearAiPort)
+            ? 'AI_NOT_CONFIGURED'
+            : null
+      if (linkManualReason || !this.pageReaderPort) {
+        return this.createManualDraft(
+          userId,
+          'LINK',
+          urlHash,
+          expiresAt,
+          linkManualReason ?? 'LINK_READER_NOT_CONFIGURED',
+          {
+            url: normalizedUrl,
+          },
+        )
+      }
+
+      // Read page via PageReaderPort (Firecrawl Cloud). Lỗi đọc trang/thiếu cấu hình → nhập tay;
+      // lỗi khác (ví dụ URL chuyển hướng tới địa chỉ bị chặn) vẫn trả lỗi.
+      let pageResult: Awaited<ReturnType<PageReaderPort['readPage']>>
+      try {
+        pageResult = await this.pageReaderPort.readPage(dto.url)
+      } catch (err: any) {
+        if (
+          err?.code === GEAR_ERROR_CODES.GEAR_PAGE_FETCH_FAILED ||
+          err?.code === GEAR_ERROR_CODES.GEAR_PAGE_READER_UNAVAILABLE
+        ) {
+          this.logger.warn(`Link extraction fell back to manual entry: ${err.code}`)
+          return this.createManualDraft(userId, 'LINK', urlHash, expiresAt, manualReasonFromErrorCode(err.code), {
+            url: normalizedUrl,
+          })
+        }
+        throw err
+      }
       const contentHash = pageResult.contentHash
 
       // Layer 2 Content Cache Check (always check Layer 2 on forceRefresh unless bypassContentCache is true - MASTER 5 & B06)
       if (!dto.bypassContentCache) {
         const cachedContent = await this.cachePort.getCache(
-          userId,
+          linkCacheScope,
           contentHash,
           promptVersion,
           modelVersion,
@@ -429,7 +537,7 @@ export class GearExtractionService {
         if (cachedContent && cachedContent.status === 'SUCCESS') {
           // Also update/refresh Layer 1 URL cache
           await this.cachePort.setCache({
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
@@ -460,25 +568,63 @@ export class GearExtractionService {
         }
       }
 
-      // Atomic quota check and PENDING draft creation
-      const draft = await this.checkAndReserveQuota(userId, 'LINK', contentHash, expiresAt)
+      // Atomic quota check and PENDING draft creation (hết quota ngày → nhập tay)
+      const draft = await this.reserveQuotaOrNull(userId, 'LINK', contentHash, expiresAt)
+      if (!draft) {
+        return this.createManualDraft(userId, 'LINK', contentHash, expiresAt, 'DAILY_QUOTA_EXCEEDED', {
+          url: normalizedUrl,
+        })
+      }
 
       // Concurrency lease for extraction
-      const resourceKey = `gear:lease:${userId}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
+      const resourceKey = `gear:lease:${linkCacheScope}:${contentHash}:${promptVersion}:${modelVersion}:${schemaVersion}`
       const ownerToken = randomUUID()
-      const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, 30000)
+      const lease = await this.leasePort.acquireLease(resourceKey, ownerToken, aiLeaseTtlMs)
 
       if (!lease.acquired) {
+        // Tiến trình khác có thể vừa ghi xong cache nội dung → dùng luôn, giống nhánh IMAGE.
+        const recheckCache = await this.cachePort.getCache(
+          linkCacheScope,
+          contentHash,
+          promptVersion,
+          modelVersion,
+          schemaVersion,
+        )
+        if (recheckCache && recheckCache.status === 'SUCCESS') {
+          return this.draftRepo.updateExtractedData(
+            draft.id,
+            {
+              ...recheckCache.resultJson,
+              _cacheHit: true,
+              url: normalizedUrl,
+              readAt: pageResult.readAt,
+              title: pageResult.title,
+            },
+            'READY',
+            draft.version,
+          )
+        }
+        // Refund/release quota reservation by marking draft as FAILED
+        await this.draftRepo.updateExtractedData(draft.id, {}, 'FAILED', draft.version).catch(() => {})
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_CONCURRENCY_CONFLICT, {
           message: 'Tác vụ trích xuất nội dung liên kết đang được xử lý bởi tiến trình khác',
         })
       }
 
       try {
-        const aiResult = await this.gearAiPort.extractGear({
-          sourceType: 'LINK',
-          textContent: pageResult.markdown,
-        })
+        let aiResult: Awaited<ReturnType<GearAiPort['extractGear']>>
+        try {
+          aiResult = await this.gearAiPort.extractGear({
+            sourceType: 'LINK',
+            textContent: pageResult.markdown,
+          })
+        } catch (err: any) {
+          this.logger.warn(`Link extraction fell back to manual entry: ${err?.code ?? err?.message}`)
+          return this.convertToManualDraft(draft, manualReasonFromErrorCode(err?.code), {
+            url: normalizedUrl,
+            title: pageResult.title,
+          })
+        }
 
         const extractionWithMeta = {
           ...aiResult.extraction,
@@ -487,11 +633,12 @@ export class GearExtractionService {
           title: pageResult.title,
           metadata: aiResult.metadata,
         }
+        const leaseValidation = { resourceKey, ownerToken, fencingToken: lease.fencingToken }
 
-        // Publish to Layer 2 content cache with lease fencing
-        await this.cachePort.setCache(
+        // Layer 2 (nội dung) rồi Layer 1 (URL). Lỗi ghi cache không được làm mất kết quả AI đã có.
+        await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash,
             promptVersion,
             modelVersion,
@@ -500,17 +647,11 @@ export class GearExtractionService {
             resultJson: extractionWithMeta,
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
-          {
-            resourceKey,
-            ownerToken,
-            fencingToken: lease.fencingToken,
-          },
+          leaseValidation,
         )
-
-        // Also publish Layer 1 URL cache with lease fencing
-        await this.cachePort.setCache(
+        await this.publishCacheBestEffort(
           {
-            ownerScope: userId,
+            ownerScope: linkCacheScope,
             contentHash: urlHash,
             promptVersion,
             modelVersion,
@@ -519,23 +660,98 @@ export class GearExtractionService {
             resultJson: extractionWithMeta,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },
-          {
-            resourceKey,
-            ownerToken,
-            fencingToken: lease.fencingToken,
-          },
+          leaseValidation,
         )
 
-        const updated = await this.draftRepo.updateExtractedData(draft.id, extractionWithMeta, 'READY', draft.version)
-
-        return updated
-      } catch (err: any) {
-        await this.draftRepo.updateExtractedData(draft.id, {}, 'FAILED', draft.version)
-        throw err
+        return await this.draftRepo.updateExtractedData(draft.id, extractionWithMeta, 'READY', draft.version)
       } finally {
-        await this.leasePort.releaseLease(resourceKey, ownerToken, lease.fencingToken)
+        await this.releaseAiLease(resourceKey, ownerToken, lease.fencingToken)
       }
     }
+  }
+
+  /**
+   * Nhả khoá AI trong finally. Lỗi nhả khoá (ví dụ DB lỗi) chỉ ghi log: nếu ném ra, finally sẽ thay kết quả
+   * READY đã ghi vào DB bằng lỗi 5xx. Khoá không nhả được sẽ tự hết hạn theo TTL.
+   */
+  private async releaseAiLease(resourceKey: string, ownerToken: string, fencingToken: number): Promise<void> {
+    try {
+      await this.leasePort.releaseLease(resourceKey, ownerToken, fencingToken)
+    } catch (err: any) {
+      this.logger.warn(`Failed to release gear AI lease ${resourceKey}: ${err?.code ?? err?.message}`)
+    }
+  }
+
+  /** Ghi cache kết quả AI; lỗi (ví dụ khoá đã hết hạn) chỉ ghi log, vì draft vẫn nhận kết quả AI. */
+  private async publishCacheBestEffort(
+    data: Parameters<GearExtractionCachePort['setCache']>[0],
+    leaseValidation: Parameters<GearExtractionCachePort['setCache']>[1],
+  ): Promise<void> {
+    try {
+      await this.cachePort.setCache(data, leaseValidation)
+    } catch (err: any) {
+      this.logger.warn(`Skipped publishing gear extraction cache: ${err?.code ?? err?.message}`)
+    }
+  }
+
+  /**
+   * Bản nháp nhập tay không tính quota ngày, nên giới hạn riêng theo giờ để chặn tạo row vô hạn.
+   * Giới hạn mềm (không khoá): gọi đồng thời có thể vượt vài bản, chấp nhận được vì không liên quan tiền.
+   */
+  private async assertManualDraftRateLimit(userId: string): Promise<void> {
+    const limit = readGearRuntimeConfig().manualDraftHourlyLimit
+    const windowMs = 60 * 60 * 1000
+    const windowStart = new Date(Date.now() - windowMs)
+
+    const recent = await this.prisma.gearExtractionDraft.findMany({
+      where: { userId, createdAt: { gte: windowStart }, status: { in: ['READY', 'CONFIRMED'] } },
+      select: { extractedData: true, createdAt: true },
+    })
+    const manual = recent.filter((d) => isManualEntryData(d.extractedData))
+    if (manual.length < limit) return
+
+    const oldest = manual.reduce((min, d) => (d.createdAt < min ? d.createdAt : min), manual[0].createdAt)
+    const retryAfterSeconds = Math.max(1, Math.ceil((oldest.getTime() + windowMs - Date.now()) / 1000))
+    throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_MANUAL_DRAFT_RATE_LIMITED, {
+      details: { limit, windowSeconds: windowMs / 1000, retryAfterSeconds },
+    })
+  }
+
+  /** Giữ quota ngày; hết quota thì trả null để caller tạo bản nháp nhập tay thay vì báo lỗi. */
+  private async reserveQuotaOrNull(
+    userId: string,
+    sourceType: 'IMAGE' | 'LINK',
+    sourceHash: string,
+    expiresAt: Date,
+  ): Promise<GearExtractionDraftDomain | null> {
+    try {
+      return await this.checkAndReserveQuota(userId, sourceType, sourceHash, expiresAt)
+    } catch (err: any) {
+      if (err instanceof AppError && err.code === GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED) return null
+      throw err
+    }
+  }
+
+  /** Bản nháp READY không có thông số: FE mở form trống để người dùng nhập tay. Không tính quota. */
+  private async createManualDraft(
+    userId: string,
+    sourceType: 'IMAGE' | 'LINK',
+    sourceHash: string,
+    expiresAt: Date,
+    reasonCode: ManualEntryReasonCode,
+    extra: Record<string, unknown> = {},
+  ): Promise<GearExtractionDraftDomain> {
+    await this.assertManualDraftRateLimit(userId)
+    const draft = await this.draftRepo.createDraft({ userId, sourceType, sourceHash, expiresAt })
+    return this.convertToManualDraft(draft, reasonCode, extra)
+  }
+
+  private convertToManualDraft(
+    draft: GearExtractionDraftDomain,
+    reasonCode: ManualEntryReasonCode,
+    extra: Record<string, unknown> = {},
+  ): Promise<GearExtractionDraftDomain> {
+    return this.draftRepo.updateExtractedData(draft.id, buildManualEntryData(reasonCode, extra), 'READY', draft.version)
   }
 
   async getDraft(draftId: string, userId: string): Promise<GearExtractionDraftDomain> {
@@ -556,7 +772,7 @@ export class GearExtractionService {
     draftId: string,
     userId: string,
     dto: ConfirmExtractionDraftDto,
-  ): Promise<{ item: UserGearItemDomain; replayed: boolean }> {
+  ): Promise<{ item: UserGearItemDomain; replayed: boolean; extractionFieldProvenance: ReturnType<typeof extractionFieldProvenance> }> {
     const payloadHash = createHash('sha256').update(canonicalStringify(dto.item)).digest('hex')
 
     return this.prisma.$transaction(async (tx) => {
@@ -614,6 +830,7 @@ export class GearExtractionService {
             brand: existingItem.brand,
             condition: existingItem.condition as any,
             attributes: (existingItem.attributes as Record<string, unknown>) || {},
+            attributeProvenance: (existingItem.attributeProvenance as Record<string, unknown>) ?? null,
             photoRef: existingItem.photoRef,
             source: existingItem.source as any,
             version: existingItem.version,
@@ -628,6 +845,7 @@ export class GearExtractionService {
             })),
           },
           replayed: true,
+          extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, existingItem.category),
         }
       }
 
@@ -749,7 +967,12 @@ export class GearExtractionService {
       }
 
       // 8. Insert UserGearItem within transaction
-      const itemSource: GearItemSource = draft.sourceType === 'IMAGE' ? 'AI_IMAGE' : 'AI_LINK'
+      // Bản nháp nhập tay: thông số do người dùng nhập, không phải AI → item MANUAL.
+      const itemSource: GearItemSource = isManualEntryData(draft.extractedData)
+        ? 'MANUAL'
+        : draft.sourceType === 'IMAGE'
+          ? 'AI_IMAGE'
+          : 'AI_LINK'
       const createdItem = await tx.userGearItem.create({
         data: {
           userId,
@@ -758,6 +981,7 @@ export class GearExtractionService {
           brand: dto.item.brand ?? null,
           condition: dto.item.condition as any,
           attributes: normalizedAttrs as any,
+          attributeProvenance: confirmedExtractionProvenance(normalizedAttrs, draft.extractedData, dto.item.category, itemSource, draftId) as any,
           photoRef: coverPhotoRef,
           source: itemSource as any,
           version: 1,
@@ -822,6 +1046,7 @@ export class GearExtractionService {
           brand: createdItem.brand,
           condition: createdItem.condition as any,
           attributes: normalizedAttrs,
+          attributeProvenance: (createdItem.attributeProvenance as Record<string, unknown>) ?? null,
           photoRef: createdItem.photoRef,
           source: itemSource,
           version: createdItem.version,
@@ -830,6 +1055,7 @@ export class GearExtractionService {
           photos: photosCreated,
         },
         replayed: false,
+        extractionFieldProvenance: extractionFieldProvenance(draft.extractedData, createdItem.category),
       }
     })
   }

@@ -244,6 +244,8 @@ export const gpsActualResponseSchema = z
     ),
     checkpointProgress: gpsProgressSchema,
     sourceSessionIds: z.array(uuid),
+    startedAt: time.nullable(),
+    movingDurationSeconds: z.number().int().nonnegative().nullable(),
     uploadDeadline: time.nullable(),
   })
   .strict()

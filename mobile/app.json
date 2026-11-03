@@ -50,6 +50,13 @@
           "cameraPermission": "Cho phép TrekGo sử dụng máy ảnh để quét mã QR tham gia Private Trip và kiểm tra trang thiết bị."
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép TrekGo truy cập thư viện ảnh để lưu ảnh chuyến đi của bạn.",
+          "savePhotosPermission": "Cho phép TrekGo lưu ảnh chuyến đi vào thư viện ảnh của bạn."
+        }
+      ],
       "expo-font",
       "expo-image",
       "expo-status-bar",

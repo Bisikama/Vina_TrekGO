@@ -233,11 +233,11 @@ export function TrekkingPricingSimulator({
         <View style={styles.headerIcon}>
           <Ionicons name="receipt-outline" size={16} color={C.green} />
         </View>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-            <Text style={styles.title}>Trekking Pricing Simulator</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.title} numberOfLines={1}>Dự toán Giá vé Tour</Text>
             <View style={styles.liveBadge}>
-              <Text style={styles.liveBadgeText}>Mô phỏng thời gian thực</Text>
+              <Text style={styles.liveBadgeText}>Tính tự động</Text>
             </View>
           </View>
           <Text style={styles.headerMeta}>
@@ -256,7 +256,7 @@ export function TrekkingPricingSimulator({
       {/* Control 1: số khách */}
       <View style={styles.control}>
         <View style={styles.controlHead}>
-          <Text style={styles.controlLabel}>Số khách dự kiến thanh toán (targetPax)</Text>
+          <Text style={styles.controlLabel}>Số khách dự kiến tham gia</Text>
           <Text style={styles.controlValue}>
             {targetPax} người <Text style={styles.controlValueMute}>/ tối đa {safeMax}</Text>
           </Text>
@@ -278,7 +278,7 @@ export function TrekkingPricingSimulator({
       {/* Control 2: giá vé */}
       <View style={styles.control}>
         <View style={styles.controlHead}>
-          <Text style={styles.controlLabel}>Giá vé thu mỗi người (selectedPrice)</Text>
+          <Text style={styles.controlLabel}>Giá vé thu mỗi khách</Text>
           <View style={styles.priceInputWrap}>
             <TextInput
               style={styles.priceInput}
@@ -320,7 +320,7 @@ export function TrekkingPricingSimulator({
       {/* Control 3: tỷ lệ lãi mong muốn (Biên lợi nhuận ròng) */}
       <View style={styles.control}>
         <View style={styles.controlHead}>
-          <Text style={styles.controlLabel}>Biên lợi nhuận ròng mục tiêu (Lãi dự kiến)</Text>
+          <Text style={styles.controlLabel}>Biên lợi nhuận mục tiêu</Text>
           <Text style={styles.controlValue}>{targetProfitPct}% doanh thu</Text>
         </View>
         <View style={styles.stepRow}>
@@ -518,6 +518,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: C.border,
+    overflow: "hidden",
   },
   headerRow: {
     flexDirection: "row",
@@ -535,17 +536,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontSize: 15, fontWeight: "800", color: "#ffffff" },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 6,
+    flexWrap: "wrap",
+  },
+  title: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#ffffff",
+    flexShrink: 1,
+  },
   liveBadge: {
-    backgroundColor: "#163300",
+    backgroundColor: "#0d2b1d",
+    borderColor: "#10b981",
+    borderWidth: 0.5,
     borderRadius: Radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 2,
+    alignSelf: "flex-start",
   },
   liveBadgeText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: "700",
-    color: "#9fe870",
+    color: "#34d399",
   },
   headerMeta: { fontSize: 11, color: C.mute, lineHeight: 16 },
   headerMetaStrong: { color: "#ffffff", fontWeight: "700" },

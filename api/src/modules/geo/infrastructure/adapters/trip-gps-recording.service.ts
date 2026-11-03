@@ -17,7 +17,7 @@ import {
 import { freezeGpsPolicy, publicPolicy, FrozenGpsPolicy } from '../../application/gps-policy'
 import { RecordingState, recordingState } from '../../application/gps-recording-state'
 import { GpsTrackService } from '../../application/gps-track.service'
-import { assembleRoute, gapReason, meters, simplifyLiveRoute, TrackPoint } from '../../application/gps-geometry'
+import { assembleRoute, gapReason, meters, movingDurationSeconds, simplifyLiveRoute, TrackPoint } from '../../application/gps-geometry'
 import type {
   ActualRouteResponse,
   GpsContextResponse,
@@ -706,6 +706,14 @@ export class TripGpsRecordingService {
         gapConnections: meta?.gapConnections ?? [],
         checkpointProgress: await this.projection.progress(tx, tripId, userId),
         sourceSessionIds: meta?.sourceSessionIds ?? [],
+        startedAt: sessions.map((s) => s.startedAt.toISOString()).sort()[0] ?? null,
+        movingDurationSeconds: movingDurationSeconds(
+          sessions.map((s) => ({
+            startedAt: s.startedAt,
+            endedAt: s.endedAt,
+            intervals: recordingState(s)?.intervals,
+          })),
+        ),
         uploadDeadline:
           sessions
             .map((s) => s.uploadDeadline?.toISOString())

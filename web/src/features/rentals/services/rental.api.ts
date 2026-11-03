@@ -7,8 +7,10 @@ import type {
   RentalAvailability,
   RentalCatalogData,
   RentalCategory,
+  RentalDepositExplanation,
   RentalDepositPolicy,
   RentalEligibility,
+  RentalGrade,
   RentalPagination,
   RentalPaymentCheckoutResponse,
   RentalPaymentGateway,
@@ -61,6 +63,13 @@ type ApiRentalProduct = {
   depositPolicy: ApiDepositPolicy;
   currency?: string;
   replacementValue?: number | string;
+  depositPerUnit?: number | string | null;
+  depositExplanation?: {
+    percentageOfReplacementValue?: number | string | null;
+    formula?: string | null;
+  } | null;
+  grade?: string | null;
+  gradeGroupId?: string | null;
   status?: string;
   version?: number;
   imageMediaIds?: string[];
@@ -100,6 +109,37 @@ function toNumber(
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toNullableNumber(
+  value: number | string | null | undefined,
+): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mapDepositExplanation(
+  explanation: ApiRentalProduct["depositExplanation"],
+): RentalDepositExplanation | null {
+  if (!explanation) {
+    return null;
+  }
+
+  return {
+    percentageOfReplacementValue: toNullableNumber(
+      explanation.percentageOfReplacementValue,
+    ),
+    formula: explanation.formula ?? null,
+  };
+}
+
+function mapGrade(value: string | null | undefined): RentalGrade | null {
+  return value === "LIKE_NEW" || value === "GOOD_USED" ? value : null;
 }
 
 function mapCategory(
@@ -163,6 +203,12 @@ function mapProduct(
       product.replacementValue === undefined
         ? undefined
         : toNumber(product.replacementValue),
+    depositPerUnit: toNullableNumber(product.depositPerUnit),
+    depositExplanation: mapDepositExplanation(
+      product.depositExplanation,
+    ),
+    grade: mapGrade(product.grade),
+    gradeGroupId: product.gradeGroupId ?? null,
     status: product.status,
     version: product.version,
     imageMediaIds: [...(product.imageMediaIds ?? [])],

@@ -177,6 +177,8 @@ export class RentalOrderController {
 - User chỉ xem được đơn của mình.
 - Staff Inventory, Staff Delivery và Admin có thể xem mọi đơn.
 - Trả về đầy đủ: thông tin đơn, danh sách sản phẩm, reservation, payment, invoice.
+- \`items[].product\` có \`grade\` (LIKE_NEW | GOOD_USED | null) và \`gradeGroupId\`.
+- Sau khi kho pick: \`assignedUnits[]\` gồm \`assetCode\`, \`condition\`, \`assignmentStatus\`, \`physicalStatus\`, \`productName\`, \`grade\` (hạng khách đã thuê theo dòng đơn).
 `,
   })
   @ApiParam({

@@ -8,6 +8,7 @@ import {
 } from '../../application/ports/gear-ai.port';
 import { normalizeExtractionResult } from '../../domain/gear-extraction-schema';
 import { GEAR_EXTRACTION_PROMPT } from '../prompts/prompt-assets';
+import { readGearRuntimeConfig } from '../../application/services/gear-capabilities';
 
 @Injectable()
 export class OpenAiGearAiAdapter implements GearAiPort {
@@ -15,12 +16,20 @@ export class OpenAiGearAiAdapter implements GearAiPort {
 
   constructor() {}
 
+  /** Đọc lúc gọi (không chụp khi khởi động), giống các cấu hình gear khác. */
   private getConfig() {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    const model = process.env.OPENAI_MODEL_EXTRACTION?.trim() || 'gpt-4o-mini';
-    const timeoutMs = parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10);
-    const maxRetries = parseInt(process.env.OPENAI_MAX_RETRIES || '2', 10);
-    return { apiKey, model, timeoutMs, maxRetries };
+    const apiKey = process.env.OPENAI_API_KEY?.trim() || undefined;
+    const runtime = readGearRuntimeConfig();
+    return {
+      apiKey,
+      model: runtime.openaiModelExtraction,
+      timeoutMs: runtime.openaiTimeoutMs,
+      maxRetries: runtime.openaiMaxRetries,
+    };
+  }
+
+  isConfigured(): boolean {
+    return Boolean(this.getConfig().apiKey);
   }
 
   async extractGear(request: GearExtractionAiRequest): Promise<GearExtractionAiResult> {

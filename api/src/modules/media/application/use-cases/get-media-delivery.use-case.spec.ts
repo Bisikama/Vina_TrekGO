@@ -10,12 +10,14 @@ import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
 import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes';
 import envConfig from '../../../../shared/config';
+import { MEDIA_REFERENCE_PORT } from '../ports/media-reference.port';
 
 describe('GetMediaDeliveryUseCase', () => {
   let useCase: GetMediaDeliveryUseCase;
   let mockAssetPort: jest.Mocked<MediaAssetPort>;
   let mockStoragePort: jest.Mocked<MediaStoragePort>;
   let mockPolicyService: jest.Mocked<MediaPolicyService>;
+  let rentalAccess: jest.Mock;
 
   it('keeps certificate downloads restricted to active owner/admin, never rental staff or anonymous', async () => {
     mockAssetPort.findById.mockResolvedValue({ id: 'doc', ownerUserId: 'owner', scope: 'LEADER_CERTIFICATE',
@@ -39,6 +41,7 @@ describe('GetMediaDeliveryUseCase', () => {
   });
 
   beforeEach(async () => {
+    rentalAccess = jest.fn().mockResolvedValue(false);
     mockAssetPort = {
       findById: jest.fn(),
       findOwnedById: jest.fn(),
@@ -75,6 +78,7 @@ describe('GetMediaDeliveryUseCase', () => {
         { provide: MEDIA_ASSET_PORT, useValue: mockAssetPort },
         { provide: MEDIA_STORAGE_PORT, useValue: mockStoragePort },
         { provide: MediaPolicyService, useValue: mockPolicyService },
+        { provide: MEDIA_REFERENCE_PORT, useValue: { isPublishedRentalEvidenceForOwner: rentalAccess } },
       ],
     }).compile();
 
@@ -162,6 +166,17 @@ describe('GetMediaDeliveryUseCase', () => {
     const result = await useCase.execute({ mediaId: 'id1', variant: 'EVIDENCE_PREVIEW' }, mockUser('USER'));
     
     expect(result.url).toBe('https://signed-url');
+  });
+
+  it('allows the rental order owner to access evidence of an approved case', async () => {
+    mockAssetPort.findById.mockResolvedValue({ id: 'evidence', ownerUserId: 'staff', status: 'READY',
+      providerPublicId: 'p1', deliveryType: 'authenticated', scope: 'RETURN_EVIDENCE', resourceType: 'IMAGE' } as never);
+    mockPolicyService.getScopePolicy.mockReturnValue({ deliveryType: 'authenticated', allowedResourceTypes: ['IMAGE'], requiresProvenance: true });
+    mockStoragePort.createDeliveryUrl.mockResolvedValue({ url: 'https://signed-url' });
+    rentalAccess.mockResolvedValue(true);
+    expect(await useCase.execute({ mediaId: 'evidence', variant: 'EVIDENCE_PREVIEW' }, mockUser('USER')))
+      .toMatchObject({ url: 'https://signed-url' });
+    expect(rentalAccess).toHaveBeenCalledWith('evidence', 'u1');
   });
 
   it('throws FORBIDDEN if non-owner and non-staff accesses evidence', async () => {

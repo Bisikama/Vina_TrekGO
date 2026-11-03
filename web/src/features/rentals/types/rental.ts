@@ -62,6 +62,14 @@ export type RentalDepositPolicy = {
   percentage: number | null;
 };
 
+export type RentalGrade = "LIKE_NEW" | "GOOD_USED";
+
+/** Server tính sẵn: tỷ lệ tiền cọc mỗi món so với giá trị thay thế. Chỉ để hiển thị, không dùng tính tiền. */
+export type RentalDepositExplanation = {
+  percentageOfReplacementValue: number | null;
+  formula: string | null;
+};
+
 export type RentalRecommendation = {
   productId: string;
   score: number;
@@ -79,6 +87,12 @@ export type RentalProduct = {
   depositPolicy: RentalDepositPolicy;
   currency: string;
   replacementValue?: number;
+  /** Tiền cọc hiện tại của một món theo quy tắc báo giá; null nếu dữ liệu cũ không tính được. */
+  depositPerUnit?: number | null;
+  depositExplanation?: RentalDepositExplanation | null;
+  /** Hạng của sản phẩm; sản phẩm thường là null. */
+  grade?: RentalGrade | null;
+  gradeGroupId?: string | null;
   status?: string;
   version?: number;
   imageMediaIds?: string[];
@@ -158,6 +172,8 @@ export type RentalQuote = {
     feeAmount: number;
     depositPerUnit: number;
     depositAmount: number;
+    replacementValue?: number;
+    depositExplanation?: RentalDepositExplanation | null;
   }>;
   amounts: {
     feeAmount: number;
@@ -253,8 +269,9 @@ export type CreateStaffRentalProductInput = {
   description?: string | null;
   dailyPrice: number;
   currency: string;
-  replacementValue: number;
-  depositPolicy: {
+  /** Chỉ ADMIN gửi; STAFF_INVENTORY gửi sẽ bị 403 RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY. */
+  replacementValue?: number;
+  depositPolicy?: {
     type: RentalDepositPolicyType;
     amount?: number | null;
     percentage?: number | null;
@@ -263,6 +280,9 @@ export type CreateStaffRentalProductInput = {
   spec?: Record<string, unknown>;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
+  /** Chỉ ADMIN. Có grade, không gradeGroupId = mở nhóm hạng mới; có gradeGroupId = vào nhóm sẵn có. Hạng bắt buộc cọc FIXED. */
+  grade?: RentalGrade;
+  gradeGroupId?: string;
 };
 
 export type UpdateStaffRentalProductInput = {

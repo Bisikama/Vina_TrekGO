@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 import { UserRole, UserStatus } from '@prisma/client';
 
 import { GearPlanController } from '../src/modules/gear/presentation/controllers/gear-plan.controller';
+import { GearPhase2Controller } from '../src/modules/gear/presentation/controllers/gear-phase2.controller';
+import { GearPhase2Service } from '../src/modules/gear/application/services/gear-phase2.service';
 import { GearPlanService } from '../src/modules/gear/application/services/gear-plan.service';
 import { GearRuleService } from '../src/modules/gear/application/services/gear-rule.service';
 
@@ -25,11 +27,128 @@ import { GlobalErrorFilter } from '../src/shared/errors/global-error.filter';
 import { AppError } from '../src/shared/errors/app-error';
 import { GEAR_ERROR_CODES } from '../src/shared/errors/codes/gear.error-codes';
 import { COMMON_ERROR_CODES } from '../src/shared/errors/codes/common.error-codes';
+import { buildContextQuestions, buildGearGuidance, displayGuidanceForItem, withDisplayGuidance } from '../src/modules/gear/domain/gear-guidance';
+import { evaluateGearItem } from '../src/modules/gear/domain/pure-gear-engine';
+import { normalizeCreateAttributes, validateAttributesForCategory } from '../src/modules/gear/application/dtos/user-gear.dto';
+import { extractionFieldProvenance, normalizeExtractionResult } from '../src/modules/gear/domain/gear-extraction-schema';
 import {
   GearPlanDomain,
   GearPlanRevisionDomain,
   UserGearItemDomain,
 } from '../src/modules/gear/domain/gear.types';
+
+describe('Gear guidance projection', () => {
+  it('asks per selected item only for missing fields in unresolved matching requirements', () => {
+    const result = { coverage: { requirements: [
+      { requirementId: 'tent', category: 'TENT', remainingQuantity: 1, constraints: [
+        { id: 'places', field: 'sleeping_places' }, { id: 'flysheet', field: 'flysheet_waterproof_mm' },
+        { id: 'flysheet-2', field: 'flysheet_waterproof_mm' },
+      ] },
+      { requirementId: 'covered', category: 'TENT', remainingQuantity: 0, constraints: [{ id: 'floor', field: 'floor_waterproof_mm' }] },
+      { requirementId: 'other', category: 'BACKPACK', remainingQuantity: 1, constraints: [{ id: 'capacity', field: 'capacity_l' }] },
+    ] } };
+    const input = { items: [
+      { id: 'tent-1', name: 'Lều', category: 'TENT', attributes: { sleeping_places: 2, flysheet_waterproof_mm: null } },
+      { id: 'tent-2', category: 'TENT', attributes: { sleeping_places: 3, flysheet_waterproof_mm: 0 } },
+    ] };
+    const projected = buildContextQuestions(result, input);
+    expect(projected.items).toHaveLength(1);
+    expect(projected.items[0]).toMatchObject({ itemId: 'tent-1', nameAtEvaluation: 'Lều', questions: [
+      { field: 'flysheet_waterproof_mm', requirementId: 'tent', constraintIds: ['flysheet', 'flysheet-2'] },
+    ] });
+    expect(buildContextQuestions({}, input)).toEqual({ available: false, items: [] });
+  });
+  it('keeps missing numbers unknown and maps real verdicts without inventing values', () => {
+    const trip = { temp_min_c: 20, temp_max_c: 24, temp_min_night_c: 18, rain_prob_pct: 70, difficulty: 1, days: 1, terrain: [] };
+    const attributes = normalizeCreateAttributes('JACKET', {});
+    expect(attributes.waterproof_mm).toBeNull();
+    expect(() => normalizeCreateAttributes('JACKET', { waterproof_mm: true })).toThrow();
+    expect(() => validateAttributesForCategory('JACKET', { waterproof: true })).toThrow();
+    const evaluate = (condition: string, attrs: any) => evaluateGearItem({ id: 'a', category: 'JACKET', condition, attributes: attrs }, trip);
+    const blank = evaluate('GOOD', attributes);
+    expect(blank.verdict).toBe('NOT_SUITABLE');
+    expect(displayGuidanceForItem(blank)).toMatchObject({ state: 'NEEDS_INFO', actions: ['SUPPLEMENT_INFO'], missingAttributes: [{ key: 'waterproof_mm', type: 'number', unit: 'mm', requiredBy: ['R01'] }] });
+    expect(displayGuidanceForItem(evaluate('POOR', attributes)).state).toBe('NEEDS_PREPARATION');
+    const mixed = evaluateGearItem({ id: 'a', category: 'JACKET', condition: 'GOOD', attributes: { waterproof_mm: 1000 } }, { ...trip, temp_min_c: 10 });
+    expect(displayGuidanceForItem(mixed)).toMatchObject({ state: 'NEEDS_PREPARATION', actions: ['VIEW_RENTAL_OPTIONS', 'SELF_PREPARE'] });
+    expect(displayGuidanceForItem(mixed).missingAttributes).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'temp_rating_c' })]));
+    expect(displayGuidanceForItem(evaluate('GOOD', { ...attributes, waterproof_mm: 10000 })).state).toBe('READY');
+    expect(displayGuidanceForItem(null).state).toBe('NEEDS_INFO');
+    const footwear = evaluateGearItem({ id: 'b', category: 'FOOTWEAR', condition: 'GOOD', attributes: { waterproof: true } }, trip);
+    expect(footwear.traces.find((t) => t.ruleId === 'R07')?.outcome).toBe('false');
+    const backpack = evaluateGearItem({ id: 'c', category: 'BACKPACK', condition: 'GOOD', attributes: { capacity_l: 20, rain_cover: false, waterproof: true } }, trip);
+    expect(backpack.traces.find((t) => t.ruleId === 'R18')?.outcome).toBe('false');
+    const snapshot = { itemVerdicts: [{ itemId: 'a', verdict: blank.verdict }], coreCheck: { items: [blank] } };
+    expect((withDisplayGuidance(snapshot).itemVerdicts as any)[0].displayGuidance.state).toBe('NEEDS_INFO');
+    expect(snapshot.itemVerdicts[0]).not.toHaveProperty('displayGuidance');
+  });
+
+  it('reports extraction fields found or missing without changing missing values', () => {
+    const data = normalizeExtractionResult({ category: 'JACKET', attributes: { windproof: true }, evidence: [{ id: 'e1', fieldPath: 'windproof', originalText: 'windproof' }] });
+    expect(extractionFieldProvenance(data)).toEqual(expect.arrayContaining([
+      { field: 'windproof', extractionStatus: 'FOUND' }, { field: 'waterproof_mm', extractionStatus: 'MISSING' },
+    ]));
+    expect(data.attributes.waterproof_mm).toBeUndefined();
+    expect(extractionFieldProvenance(data, 'FOOTWEAR')).toBeNull();
+    expect(extractionFieldProvenance({ _manualEntry: true })).toBeNull();
+  });
+  it('asks only for applicable missing attributes and retains known violations', () => {
+    const item = {
+      itemId: 'item-1', category: 'JACKET', verdict: 'NOT_SUITABLE', reasons: ['Thiếu dữ liệu'],
+      traces: [
+        { ruleId: 'R01', outcome: 'skip', contextApplies: true, missingAttributes: ['waterproof_mm'] },
+        { ruleId: 'R02', outcome: 'skip', contextApplies: false, missingAttributes: ['temp_rating_c'] },
+      ],
+    };
+    const guidance = buildGearGuidance({ coreCheck: { items: [item] } });
+    expect(guidance.items[0].displayStatus).toBe('NEEDS_INFORMATION');
+    expect(guidance.items[0].questions).toEqual([
+      expect.objectContaining({ field: 'waterproof_mm', valueType: 'number', unit: 'mm', min: 0, isInteger: true, allowUnknown: true }),
+    ]);
+    const violation = { ...item, traces: [...item.traces, { ruleId: 'R24', outcome: 'true', contextApplies: true, missingAttributes: [] }] };
+    expect(buildGearGuidance({ coreCheck: { items: [violation] } }).items[0].displayStatus).toBe('NEEDS_ATTENTION');
+    expect(buildGearGuidance({ coreCheck: { items: [{ ...item, verdict: 'SUITABLE', traces: [] }] } }).items[0].displayStatus).toBe('SUITABLE');
+    expect(buildGearGuidance({}).available).toBe(false);
+  });
+
+  it('projects extended requirements without attributing missing fields to an item', () => {
+    const guidance = buildGearGuidance({
+      coreCheck: { items: [] },
+      coverage: { requirements: [{
+        requirementId: 'req_tent', category: 'TENT', priority: 'REQUIRED', status: 'UNKNOWN',
+        remainingQuantity: 1, assignedItemIds: [], recommendedAction: 'COMPLETE_ATTRIBUTES',
+        missingFields: ['sleeping_places', 'flysheet_waterproof_mm', 'sleeping_places'], warnings: [],
+      }] },
+    });
+    expect(guidance.requirements).toEqual([expect.objectContaining({
+      requirementId: 'req_tent', status: 'UNKNOWN', assignedItemIds: [],
+      questions: [
+        expect.objectContaining({ field: 'flysheet_waterproof_mm', unit: 'mm' }),
+        expect.objectContaining({ field: 'sleeping_places', unit: 'người' }),
+      ],
+    })]);
+  });
+
+  it('returns input constraints without inventing values for unknown fields', () => {
+    const guidance = buildGearGuidance({ coreCheck: { items: [] }, coverage: { requirements: [{
+      requirementId: 'req_footwear', category: 'FOOTWEAR', status: 'UNKNOWN', missingFields: ['grip_level'],
+    }] } });
+    expect(guidance.requirements![0].questions[0]).toEqual(expect.objectContaining({
+      field: 'grip_level', valueType: 'number', min: 1, max: 5, isInteger: true, allowUnknown: true,
+    }));
+    expect(guidance.requirements![0].questions[0]).not.toHaveProperty('value');
+  });
+
+  it('uses item names and versions from the input snapshot and tolerates missing historical fields', () => {
+    const result = { coreCheck: { items: [
+      { itemId: 'item-1', category: 'JACKET', verdict: 'SUITABLE', reasons: [], traces: [] },
+      { itemId: 'item-2', category: 'FOOTWEAR', verdict: 'SUITABLE', reasons: [], traces: [] },
+    ] } };
+    const guidance = buildGearGuidance(result, { items: [{ id: 'item-1', name: 'Áo cũ', version: 2 }] });
+    expect(guidance.items[0]).toMatchObject({ itemId: 'item-1', nameAtEvaluation: 'Áo cũ', versionAtEvaluation: 2 });
+    expect(guidance.items[1]).toMatchObject({ itemId: 'item-2', nameAtEvaluation: null, versionAtEvaluation: null });
+  });
+});
 
 describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', () => {
   let app: INestApplication;
@@ -310,8 +429,9 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [GearPlanController],
+      controllers: [GearPlanController, GearPhase2Controller],
       providers: [
+        { provide: GearPhase2Service, useValue: { putSelections: jest.fn(), createDraft: jest.fn(), verify: jest.fn(), revoke: jest.fn() } },
         GearPlanService,
         GearRuleService,
         { provide: GEAR_PLAN_REPOSITORY_PORT, useValue: mockPlanRepo },
@@ -347,6 +467,17 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
   });
 
   let createdPlanId: string;
+
+  it('requires authorization and staff/admin roles for catalog moderation', async () => {
+    await request(app.getHttpServer()).post('/api/v1/staff/gear/personal-catalog').send({}).expect(401);
+    await request(app.getHttpServer()).post('/api/v1/staff/gear/personal-catalog').set('Authorization', aliceToken).send({}).expect(403);
+    await request(app.getHttpServer()).post(`/api/v1/admin/gear/personal-catalog/${randomUUID()}/verify`).set('Authorization', aliceToken).send({ expectedVersion: 1 }).expect(403);
+  });
+
+  it('rejects duplicate categories in preparation selections at the HTTP boundary', async () => {
+    await request(app.getHttpServer()).put(`/api/v1/gear/plans/${randomUUID()}/preparation-selections`).set('Authorization', aliceToken)
+      .send({ expectedVersion: 0, choices: [{ category: 'JACKET', status: 'HAVE' }, { category: 'JACKET', status: 'CHECK_LATER' }] }).expect(400);
+  });
 
   describe('Route 1: GET /api/v1/gear/plans/prefill', () => {
     it('returns official trip facts, seasonal climate estimate, and baseline requirements', async () => {
@@ -547,6 +678,8 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
       expect(res.body.coverage).toBeDefined();
       expect(res.body.summary).toBeDefined();
       expect(res.body.checklist).toBeDefined();
+      expect(res.body.itemVerdicts[0].displayGuidance.state).toBeDefined();
+      expect(res.body.coreCheck.items[0].displayGuidance).toBeDefined();
 
       // Multi-item check: Alice owns both good and bad jackets.
       // Good jacket is selected to cover the requirement without forcing rental!
@@ -580,10 +713,39 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
         .expect(200);
 
       expect(res.body.coverage).toBeDefined();
+      expect(res.body.itemVerdicts[0].displayGuidance.state).toBeDefined();
     });
   });
 
   describe('Route 7: Revisions & Diff', () => {
+    it('returns guidance for the owner and denies another user', async () => {
+      const path = `/api/v1/gear/plans/${createdPlanId}/revisions/2/guidance`;
+      const res = await request(app.getHttpServer()).get(path).set('Authorization', aliceToken).expect(200);
+      expect(res.body.available).toBe(true);
+      expect(res.body.revision).toBe(2);
+      expect(res.body.contextQuestions).toMatchObject({ available: true });
+      expect(res.body).toMatchObject({ inputRevision: 2, evaluatedRevision: 2, isLatestEvaluation: true, isStale: false, needsReevaluation: false });
+      expect(res.body.items.length).toBeGreaterThan(0);
+      expect(res.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ nameAtEvaluation: 'Alice Pro Trek Jacket', versionAtEvaluation: 1 })]));
+      const denied = await request(app.getHttpServer()).get(path).set('Authorization', bobToken).expect(404);
+      expect(denied.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_PLAN_NOT_FOUND);
+    });
+    it('marks changed plan inputs for reevaluation and rejects a nonexistent revision', async () => {
+      const plan = plans.get(createdPlanId)!;
+      plan.inputRevision = 3;
+      try {
+        const res = await request(app.getHttpServer())
+          .get(`/api/v1/gear/plans/${createdPlanId}/revisions/2/guidance`)
+          .set('Authorization', aliceToken).expect(200);
+        expect(res.body).toMatchObject({ inputRevision: 3, evaluatedRevision: 2, needsReevaluation: true });
+        const missing = await request(app.getHttpServer())
+          .get(`/api/v1/gear/plans/${createdPlanId}/revisions/999/guidance`)
+          .set('Authorization', aliceToken).expect(404);
+        expect(missing.body.error.code).toBe(GEAR_ERROR_CODES.GEAR_REVISION_NOT_FOUND);
+      } finally {
+        plan.inputRevision = 2;
+      }
+    });
     it('lists evaluated revisions for the plan', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/gear/plans/${createdPlanId}/revisions`)
@@ -646,6 +808,7 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
         (i) => i.category === 'JACKET' && ((i.attributes as any)?.waterproof_mm ?? 0) >= 5000,
       )!;
       jacket.version = 2;
+      jacket.name = 'Áo đã đổi tên';
       jacket.attributes = { ...jacket.attributes, waterproof_mm: 20000 };
       userGearItems.set(jacket.id, jacket);
 
@@ -656,6 +819,10 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
         .expect(200);
 
       expect(planRes.body.isStale).toBe(true);
+      const staleGuidance = await request(app.getHttpServer())
+        .get(`/api/v1/gear/plans/${createdPlanId}/revisions/2/guidance`)
+        .set('Authorization', aliceToken).expect(200);
+      expect(staleGuidance.body).toMatchObject({ isLatestEvaluation: true, isStale: true, needsReevaluation: true });
 
       // Re-evaluate produces new revision 3
       await request(app.getHttpServer())
@@ -673,6 +840,11 @@ describe('Gear Advisor V3.1.5 — Phase 06 HTTP Pipeline (/api/v1/gear/plans)', 
         .expect(200);
 
       expect(updatedPlanRes.body.evaluatedRevision).toBe(3);
+      const oldGuidance = await request(app.getHttpServer())
+        .get(`/api/v1/gear/plans/${createdPlanId}/revisions/2/guidance`)
+        .set('Authorization', aliceToken).expect(200);
+      expect(oldGuidance.body).toMatchObject({ evaluatedRevision: 3, isLatestEvaluation: false });
+      expect(oldGuidance.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ itemId: jacket.id, nameAtEvaluation: 'Alice Pro Trek Jacket', versionAtEvaluation: 1 })]));
     });
 
     it('reflects stored true user checklist progress in evaluated checklist', async () => {

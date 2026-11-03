@@ -12,7 +12,7 @@ import { TripGpsRecordingService } from './infrastructure/adapters/trip-gps-reco
 import { TripGpsController } from './presentation/controllers/trip-gps.controller'
 import { gpsSampleSchema, gpsSamplesSchema } from './presentation/dtos/trip-gps.dto'
 import * as response from './presentation/dtos/trip-gps-response.schemas'
-import { assembleRoute, distanceToRoute, simplifyLiveRoute, TrackPoint } from './application/gps-geometry'
+import { assembleRoute, distanceToRoute, movingDurationSeconds, simplifyLiveRoute, TrackPoint } from './application/gps-geometry'
 import { GpsAccessService } from './application/gps-access.service'
 import { GpsProjectionService } from './application/gps-projection.service'
 import { GpsTrackService } from './application/gps-track.service'
@@ -76,6 +76,24 @@ describe('GPS geometry and strict request contract', () => {
     const simplified = simplifyLiveRoute(route)!
     for (const index of [0, 1, 2, 3, 4])
       expect(simplified.coordinates).toContainEqual(route.routeGeojson!.coordinates[index])
+  })
+  it('sums moving time across sessions, excluding pauses and unfinished recordings', () => {
+    const stopped = {
+      startedAt: new Date('2026-10-23T01:00:00.000Z'),
+      endedAt: new Date('2026-10-23T01:30:00.000Z'),
+      intervals: [
+        { start: '2026-10-23T01:00:00.000Z', end: '2026-10-23T01:10:00.000Z' },
+        { start: '2026-10-23T01:20:00.000Z', end: null },
+      ],
+    }
+    const legacy = {
+      startedAt: new Date('2026-10-23T02:00:00.000Z'),
+      endedAt: new Date('2026-10-23T02:05:00.000Z'),
+      intervals: undefined,
+    }
+    expect(movingDurationSeconds([stopped, legacy])).toBe(1500)
+    expect(movingDurationSeconds([])).toBeNull()
+    expect(movingDurationSeconds([{ ...stopped, endedAt: null }])).toBeNull()
   })
   it('measures distance to segments and handles unusable geometry', () => {
     expect(

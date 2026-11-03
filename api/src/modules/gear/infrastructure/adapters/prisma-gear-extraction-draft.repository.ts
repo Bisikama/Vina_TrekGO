@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { AppError } from '../../../../shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
+import { confirmedExtractionProvenance } from '../../domain/attribute-provenance'
 import {
   GearCategory,
   GearCondition,
@@ -171,6 +172,8 @@ export class PrismaGearExtractionDraftRepository implements GearExtractionDraftR
           brand: itemData.brand ?? null,
           condition: itemData.condition as any,
           attributes: (itemData.attributes ?? {}) as any,
+          attributeProvenance: confirmedExtractionProvenance(itemData.attributes ?? {}, draft.extractedData, itemData.category,
+            draft.sourceType === 'IMAGE' ? 'AI_IMAGE' : 'AI_LINK', draftId) as any,
           photoRef: itemData.photoRef ?? null,
           source: (draft.sourceType === 'IMAGE' ? 'AI_IMAGE' : 'AI_LINK') as any,
           version: 1,
@@ -232,6 +235,7 @@ export class PrismaGearExtractionDraftRepository implements GearExtractionDraftR
       brand: record.brand,
       condition: record.condition as GearCondition,
       attributes: (record.attributes as Record<string, unknown>) || {},
+      attributeProvenance: (record.attributeProvenance as Record<string, unknown>) ?? null,
       photoRef: record.photoRef,
       source: record.source as GearItemSource,
       version: record.version,
