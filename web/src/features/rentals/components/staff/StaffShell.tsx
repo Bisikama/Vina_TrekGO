@@ -36,6 +36,11 @@ const navigation = [
     icon: "return",
   },
   {
+    href: "/staff/gear-catalog",
+    label: "Hồ sơ sản phẩm Gear",
+    icon: "badge",
+  },
+  {
     href: "/staff/schedule",
     label: "Lịch phân ca & Điều phối",
     icon: "calendar",
@@ -61,6 +66,8 @@ function NavIcon({ type }: { type: string }) {
       "M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z",
     user:
       "M20 21a8 8 0 0 0-16 0m8-9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+    badge:
+      "M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Zm-3 9 2 2 4-4",
   };
 
   return (
