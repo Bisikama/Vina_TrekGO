@@ -8,6 +8,16 @@ export class PrismaMediaReferenceAdapter implements MediaReferencePort {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  async isPublishedRentalEvidenceForOwner(mediaId: string, userId: string): Promise<boolean> {
+    return (await this.prisma.rentalExceptionCase.count({
+      where: {
+        order: { userId }, status: 'RESOLVED',
+        OR: [{ resolution: { startsWith: 'APPROVE_DEDUCTION:' } }, { resolution: { startsWith: 'CONFIRM_LOST:' } }],
+        evidenceIds: { array_contains: [mediaId] },
+      },
+    })) > 0;
+  }
+
   async hasActiveReferences(mediaId: string): Promise<boolean> {
     try {
       if (await this.prisma.leaderCertificate.count({ where: { mediaAssetId: mediaId } })) return true;

@@ -1,0 +1,345 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="in_trip_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "error": "#ba1a1a", "surface-container": "#e6eeff", "inverse-primary": "#96d4b2", "surface-container-high": "#dee9fc", "on-error": "#ffffff", "surface-container-highest": "#d9e3f6", "tertiary-container": "#006c61", "outline-variant": "#c0c9c1", "primary-container": "#2f6b4f", "on-secondary": "#ffffff", "on-secondary-fixed": "#3c0700", "background": "#f8f9ff", "outline": "#707972", "on-primary-fixed": "#002113", "on-secondary-fixed-variant": "#83260e", "on-error-container": "#93000a", "tertiary-fixed-dim": "#6fd8c8", "inverse-surface": "#27313f", "surface-dim": "#d0dbed", "on-tertiary-fixed-variant": "#005048", "secondary-fixed-dim": "#ffb4a2", "surface": "#f8f9ff", "on-surface": "#121c2a", "surface-bright": "#f8f9ff", "on-primary": "#ffffff", "surface-container-lowest": "#ffffff", "on-tertiary-container": "#84eddd", "primary": "#125238", "on-surface-variant": "#404943", "on-tertiary-fixed": "#00201c", "inverse-on-surface": "#eaf1ff", "on-tertiary": "#ffffff", "tertiary-fixed": "#8cf5e4", "secondary-fixed": "#ffdad2", "secondary": "#a33d23", "primary-fixed": "#b1f0cd", "primary-fixed-dim": "#96d4b2", "error-container": "#ffdad6", "on-background": "#121c2a", "surface-tint": "#2d694d", "surface-container-low": "#eff4ff", "secondary-container": "#ff8162", "on-primary-fixed-variant": "#105137", "on-secondary-container": "#731a04", "tertiary": "#005249", "on-primary-container": "#aae9c6", "surface-variant": "#d9e3f6" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "space-xl": "1.5rem", "space-sm": "0.5rem", "space-lg": "1rem", "margin": "1rem", "space-md": "0.75rem", "gutter": "0.75rem", "space-xs": "0.25rem" }, fontFamily: { "body-md": ["Inter"], "body-lg": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"], "headline-xl": ["Inter"], "label-lg": ["Inter"], "body-sm": ["Inter"], "label-sm": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"] }, fontSize: { "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.06em", "fontWeight": "700" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-16 px-space-md flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><button aria-label="Quay lại" class="w-12 h-12 flex items-center justify-center rounded-xl bg-surface-container-low text-on-surface hover:bg-surface-container active:scale-95 transition-all" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Brand logo. - Primary color: #2f6b4f
+- Font: inter
+- Mode: light
+- Roundness: rounded-sm
+" class="h-7 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1WwM_OOpy3-vnmouAjzzwHjSR5G7secqjdE0ckPZPsmeNzt1Qv1WlHI_vQR3skLLjX6HNbaDdcG_JHaG7qiLvdtaYXEegFpMpzWpGmmiOCF6R5biAIjl_lp61PzYfgyouv92xRvbkCij5W47fLrm55k_w9JjQ0VN1uwzSfnxMjeoAOtVEdkFIUEZg1dllLUZff1NAE0P1c6d16Z6r8SVQoczZeC_oWfrAiuQ7jsmkiEykeCFFam7DTOTg"><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Cảnh Báo Lệch Tuyến Gps</h1><span class="font-label-sm text-label-sm text-tertiary flex items-center gap-1 font-mono"><span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>21°34'N 103°36'E</span></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><button aria-label="Báo cáo tọa độ khẩn cấp" class="min-h-[44px] px-space-sm rounded-xl bg-error-container text-on-error-container font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all"><span class="material-symbols-outlined text-[20px] text-error">near_me</span><span class="hidden sm:inline uppercase tracking-wider font-bold">SOS GPS</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-8">
+<!-- Satellite & Buffer Signal Ribbon (Tactical Sub-bar) -->
+<div class="px-space-md py-space-xs bg-surface-container-high flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm">
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<span class="font-bold tracking-wider text-primary truncate">GPS KHÓA CHÍNH XÁC: ±3.5M</span>
+<span class="hidden sm:inline text-outline">• 4 HỆ VỆ TINH</span>
+</div>
+<div class="flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded-full text-tertiary">
+<span class="material-symbols-outlined text-[14px]">save</span>
+<span>Đang đệm 48 điểm</span>
+</div>
+</div>
+<!-- URGENT: Tactile Route Deviation Callout Card (Trail Orange Accent) -->
+<section class="mx-space-md mt-space-md p-space-md bg-secondary text-on-secondary rounded-xl shadow-lg relative overflow-hidden">
+<div class="absolute -right-4 -bottom-6 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-[130px]">warning</span>
+</div>
+<div class="flex items-start gap-space-sm relative z-10">
+<div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">alt_route</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-1.5 py-0.5 rounded bg-on-secondary/20 text-on-secondary font-label-sm text-label-sm tracking-widest font-extrabold uppercase">Cảnh Báo Lệch Tuyến</span>
+<span class="text-secondary-fixed font-mono font-bold text-label-sm">LỆCH +180 M</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-secondary mt-1 leading-snug">
+          Bạn đang đi xa khỏi lối mòn an toàn
+        </h2>
+<p class="font-body-sm text-body-sm text-secondary-fixed mt-1.5 leading-relaxed">
+          Đoạn sườn bạn đang đi có độ dốc &gt;35° đổ về khe suối cạn trơn trượt, ngoài phạm vi bảo hộ của kiểm lâm VFRS.
+        </p>
+</div>
+</div>
+<!-- 3 Corrective Action Triggers (Tactile 48px+ targets for field gloves) -->
+<div class="mt-space-md flex flex-col gap-2 relative z-10">
+<!-- Action 1: Turn Back Heading Guidance -->
+<button class="w-full min-h-[48px] px-space-md rounded-lg bg-surface text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-md active:scale-[0.99] transition-transform">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[22px]">turn_left</span>
+<span>QUAY LẠI TUYẾN CHUẨN</span>
+</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-secondary font-mono font-bold text-label-sm">
+          Góc 145° Đ-Nam
+        </span>
+</button>
+<div class="grid grid-cols-2 gap-2">
+<!-- Action 2: Short-cut preview -->
+<button class="min-h-[48px] px-space-sm rounded-lg bg-secondary-container text-on-secondary-container font-label-sm text-label-sm flex items-center justify-center gap-1.5 text-center font-bold active:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">straighten</span>
+<span class="truncate">Đường cắt ngắn</span>
+</button>
+<!-- Action 3: Ping Leader -->
+<button class="min-h-[48px] px-space-sm rounded-lg bg-surface-container-highest text-on-surface font-label-sm text-label-sm flex items-center justify-center gap-1.5 text-center font-bold active:opacity-90 transition-opacity" id="btn-radio-leader">
+<span class="material-symbols-outlined text-primary text-[18px]">cell_tower</span>
+<span class="truncate">Bộ đàm Leader Nam</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Interactive Map Visualization of Route Deviation -->
+<section class="mx-space-md mt-space-md bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm flex flex-col">
+<div class="p-space-md flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">explore</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Bản Đồ Sai Lệch Địa Hình</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container text-tertiary font-mono">
+        Tỷ lệ 1:2000
+      </span>
+</div>
+<!-- Map Canvas with Tracklog Overlay -->
+<div class="relative w-full h-64 bg-surface-container-high overflow-hidden">
+<!-- Map Background Tile Representation -->
+<div class="w-full h-full bg-cover bg-center" data-location="Ta Xua, Son La, Vietnam" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB97Z05DiaC4bQtnh_GtZplKYsh72a_4TJIyR8Pn8JAV_mVgv_DTq-hxfMzbgh5Nog8x9WWlwBlDl8C31iBNh_Hac9ortIP4agZnhV6hH3D5yrrUr-QLBCuqrQVVqjvkG7_gq7-xxk9EDTTsYBCL1NB0IRom0Lh23Zi0qnw4BT7FtEJuqitqCBXRcBaItyA0VAWTVhZGeDB9DiyjzU9bqD3Ct_8RR2X-jjigjArZP2EijhgWQSZAgg2')"></div>
+<!-- Tactical SVG Elevation & Deviation Overlay -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" fill="none" viewBox="0 0 358 256">
+<!-- Contour Topo Lines -->
+<path d="M-10,40 Q100,20 200,60 T400,30" opacity="0.4" stroke="#707972" stroke-dasharray="3 3" stroke-width="0.8"></path>
+<path d="M-10,90 Q120,80 230,120 T400,80" opacity="0.4" stroke="#707972" stroke-dasharray="3 3" stroke-width="0.8"></path>
+<path d="M-10,140 Q110,150 210,170 T400,150" opacity="0.4" stroke="#707972" stroke-dasharray="3 3" stroke-width="0.8"></path>
+<path d="M-10,210 Q90,190 220,220 T400,200" opacity="0.4" stroke="#707972" stroke-dasharray="3 3" stroke-width="0.8"></path>
+<!-- Danger zone ravine shaded area -->
+<polygon fill="#a33d23" opacity="0.12" points="170,110 320,130 350,240 180,240"></polygon>
+<text fill="#a33d23" font-family="Inter" font-size="10" font-weight="700" opacity="0.8" x="240" y="215">HẺM DỐC NGUY HIỂM &gt;35°</text>
+<!-- Official Planned Safe Trail Tracklog (Forest Green Solid) -->
+<path d="M 20,230 C 60,180 110,150 145,115 S 220,55 330,30" opacity="0.95" stroke="#125238" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"></path>
+<path d="M 20,230 C 60,180 110,150 145,115 S 220,55 330,30" stroke="#b1f0cd" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<!-- Actual User Deviated GPS Track (Dotted Trail Orange into Valley) -->
+<path d="M 145,115 C 175,130 205,155 240,165" stroke="#a33d23" stroke-dasharray="6 5" stroke-linecap="round" stroke-width="3.5"></path>
+<!-- Deviation distance indicator line -->
+<line stroke="#a33d23" stroke-dasharray="3 3" stroke-width="1.5" x1="205" x2="240" y1="80" y2="165"></line>
+<!-- Waypoint Departure Branch Marker -->
+<circle cx="145" cy="115" fill="#125238" r="5" stroke="#ffffff" stroke-width="2"></circle>
+<!-- Target Safe Point along official trail -->
+<circle cx="205" cy="80" fill="#005249" r="4" stroke="#ffffff" stroke-width="1.5"></circle>
+<!-- Current User Actual GPS Position Pulse Dot -->
+<circle class="animate-ping" cx="240" cy="165" fill="#ff8162" opacity="0.35" r="14" style="transform-origin: 240px 165px;"></circle>
+<circle cx="240" cy="165" fill="#a33d23" r="7" stroke="#ffffff" stroke-width="2.5"></circle>
+</svg>
+<!-- Float Badge on Map -->
+<div class="absolute top-3 left-3 bg-surface/90 backdrop-blur-md px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Tuyến VFRS chuẩn</span>
+</div>
+<div class="absolute bottom-3 right-3 bg-secondary text-on-secondary px-3 py-1 rounded-lg shadow-md flex items-center gap-1.5 font-label-sm text-label-sm font-bold">
+<span class="material-symbols-outlined text-[16px]">navigation</span>
+<span>Lệch 180 m về thung lũng</span>
+</div>
+</div>
+</section>
+<!-- Live Trekking Metrics HUD (High-legibility Grid) -->
+<section class="mx-space-md mt-space-md">
+<div class="flex items-center justify-between mb-space-xs px-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">speed</span>
+        Chỉ Số Di Chuyển Thực Địa
+      </h3>
+<span class="font-label-sm text-label-sm text-outline">Cập nhật tức thời</span>
+</div>
+<!-- HUD Tiles: 2-column tactical readout -->
+<div class="grid grid-cols-2 gap-2">
+<!-- Time Elapsed -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-sm text-label-sm uppercase font-semibold">Thời Gian Ghi</span>
+<span class="material-symbols-outlined text-[18px]">timer</span>
+</div>
+<div class="mt-2">
+<span class="font-headline-lg text-headline-lg font-mono font-bold text-on-surface">04:18</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant ml-1">giờ:phút</span>
+</div>
+<span class="font-body-sm text-body-sm text-primary mt-1 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+          Liên tục từ 07:15
+        </span>
+</div>
+<!-- Distance Covered -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-sm text-label-sm uppercase font-semibold">Quãng Đường</span>
+<span class="material-symbols-outlined text-[18px]">route</span>
+</div>
+<div class="mt-2">
+<span class="font-headline-lg text-headline-lg font-mono font-bold text-on-surface">9.8</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant ml-1">km</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-2 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 65%;"></div>
+</div>
+</div>
+<!-- Speed: Current vs Avg -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-sm text-label-sm uppercase font-semibold">Tốc Độ Vận Động</span>
+<span class="material-symbols-outlined text-[18px]">directions_walk</span>
+</div>
+<div class="mt-2 flex items-baseline gap-1">
+<span class="font-headline-lg text-headline-lg font-mono font-bold text-on-surface">2.1</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">km/h</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+          Trung bình: <span class="font-mono font-semibold text-on-surface">2.6 km/h</span>
+</div>
+</div>
+<!-- Elevation & Ascent -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between text-outline">
+<span class="font-label-sm text-label-sm uppercase font-semibold">Độ Cao Hiện Tại</span>
+<span class="material-symbols-outlined text-[18px]">landscape</span>
+</div>
+<div class="mt-2 flex items-baseline gap-1">
+<span class="font-headline-lg text-headline-lg font-mono font-bold text-primary">1,085</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">m</span>
+</div>
+<div class="font-body-sm text-body-sm text-tertiary mt-1 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[16px]">north</span>
+          Tích lũy: <span class="font-mono font-bold">+640 m</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Infrastructure & Offline Telemetry Details -->
+<section class="mx-space-md mt-space-md p-space-md bg-surface-container-low rounded-xl">
+<div class="flex items-center justify-between border-none pb-2">
+<span class="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-tertiary">sensors</span>
+        Hạ Tầng Định Vị Thực Địa
+      </span>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">
+        ĐANG KHÓA
+      </span>
+</div>
+<div class="mt-2 flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant">
+<div class="flex items-center justify-between py-1 bg-surface rounded-lg px-space-sm">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">sync</span>
+          Đồng bộ máy chủ
+        </span>
+<span class="font-mono text-outline">12 phút trước</span>
+</div>
+<div class="flex items-center justify-between py-1 bg-surface rounded-lg px-space-sm">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">memory</span>
+          Bộ nhớ đệm tọa độ
+        </span>
+<span class="font-mono font-bold text-tertiary">48 điểm GPS an toàn</span>
+</div>
+<div class="flex items-center justify-between py-1 bg-surface rounded-lg px-space-sm">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">satellite_alt</span>
+          Chùm vệ tinh sẵn sàng
+        </span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">GPS • GLONASS • GALILEO • BDS</span>
+</div>
+</div>
+</section>
+<!-- Trekking Session Session Controls (Bottom Anchor) -->
+<section class="mx-space-md mt-space-lg flex flex-col gap-3">
+<!-- Pause Button -->
+<button class="w-full min-h-[48px] px-space-md rounded-xl bg-surface-container-high hover:bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm" id="btn-pause-session">
+<span class="material-symbols-outlined text-[20px] text-outline">pause_circle</span>
+<span>TẠM DỪNG THEO DÕI (NGHỈ TRƯA)</span>
+</button>
+<!-- Safe End-Session Button (Triggers Protection Confirmation) -->
+<button class="w-full min-h-[48px] px-space-md rounded-xl bg-surface-container-lowest text-secondary font-label-lg text-label-lg flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm" id="btn-end-session">
+<span class="material-symbols-outlined text-[20px]">flag</span>
+<span>KẾT THÚC HÀNH TRÌNH</span>
+</button>
+</section>
+<!-- Modal Safety Confirmation to Prevent Accidental Pocket Tap -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm hidden flex-col justify-end p-space-md pb-safe" id="safety-modal">
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-xl flex flex-col gap-space-md">
+<div class="flex items-start gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[28px]">lock_reset</span>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Xác nhận dừng hành trình?</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+            Tracklog hôm nay sẽ hoàn tất và lưu vào hồ sơ cá nhân. Tránh vô tình chạm màn hình khi đang di chuyển.
+          </p>
+</div>
+</div>
+<div class="flex flex-col gap-2 mt-2">
+<button class="w-full min-h-[48px] rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 active:scale-95 transition-transform" id="confirm-finish">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+<span>XÁC NHẬN KẾT THÚC VÀ ĐỒNG BỘ</span>
+</button>
+<button class="w-full min-h-[48px] rounded-lg bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center active:scale-95 transition-transform" id="cancel-finish">
+          TIẾP TỤC ĐI BỘ
+        </button>
+</div>
+</div>
+</div>
+<!-- Toast Notification Container for Quick Ping Feedback -->
+<div class="fixed top-20 inset-x-space-md z-50 pointer-events-none transform -translate-y-6 opacity-0 transition-all duration-300 flex justify-center" id="quick-toast">
+<div class="bg-inverse-surface text-inverse-on-surface px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 font-label-md text-label-md">
+<span class="material-symbols-outlined text-[18px] text-tertiary-fixed">sensors</span>
+<span id="toast-text">Đã phát tọa độ khẩn cấp tới Leader Nam</span>
+</div>
+</div>
+</div>
+<script>
+  (function initTrekTracker() {
+    const endBtn = document.getElementById('btn-end-session');
+    const modal = document.getElementById('safety-modal');
+    const cancelBtn = document.getElementById('cancel-finish');
+    const confirmBtn = document.getElementById('confirm-finish');
+    const radioBtn = document.getElementById('btn-radio-leader');
+    const pauseBtn = document.getElementById('btn-pause-session');
+    const toast = document.getElementById('quick-toast');
+    const toastText = document.getElementById('toast-text');
+
+    function showToast(message) {
+      if (!toast) return;
+      toastText.textContent = message;
+      toast.classList.remove('-translate-y-6', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        toast.classList.add('-translate-y-6', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3000);
+    }
+
+    if (endBtn && modal) {
+      endBtn.addEventListener('click', () => {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      });
+    }
+
+    if (cancelBtn && modal) {
+      cancelBtn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      });
+    }
+
+    if (confirmBtn && modal) {
+      confirmBtn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        showToast('Hành trình đã đóng gói. Đang truyền dữ liệu...');
+      });
+    }
+
+    if (radioBtn) {
+      radioBtn.addEventListener('click', () => {
+        showToast('Tọa độ (21°34\'N 103°36\'E) đã gửi tới bộ đàm Leader!');
+      });
+    }
+
+    let isPaused = false;
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', () => {
+        isPaused = !isPaused;
+        if (isPaused) {
+          pauseBtn.innerHTML = `
+            <span class="material-symbols-outlined text-[20px] text-primary">play_circle</span>
+            <span class="text-primary font-bold">TIẾP TỤC HÀNH TRÌNH (HẾT NGHỈ)</span>
+          `;
+          showToast('Đã tạm dừng tính quãng đường & thời gian.');
+        } else {
+          pauseBtn.innerHTML = `
+            <span class="material-symbols-outlined text-[20px] text-outline">pause_circle</span>
+            <span>TẠM DỪNG THEO DÕI (NGHỈ TRƯA)</span>
+          `;
+          showToast('Tiếp tục ghi nhận vết chân thực địa.');
+        }
+      });
+    }
+  })();
+</script></main></body></html>

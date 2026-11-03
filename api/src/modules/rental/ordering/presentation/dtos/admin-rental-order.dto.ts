@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RentalFinancialStatus, RentalOrderExceptionStatus, RentalOrderStatus } from '@prisma/client';
+import { SYSTEM_FAULT_REASON_CODES } from '../../application/ports/rental-system-fault-cancellation.port';
 
 export const ListAdminRentalOrdersQuerySchema = z.object({
   tripId: z.string().uuid().optional(),
@@ -18,4 +19,16 @@ export const AdminRentalOrderIdParamSchema = z.object({
 });
 
 export type AdminRentalOrderIdParamDto = z.infer<typeof AdminRentalOrderIdParamSchema>;
+
+export const SystemFaultCancellationBodySchema = z
+  .object({
+    reasonCode: z.enum(SYSTEM_FAULT_REASON_CODES),
+    note: z.string().trim().min(3).max(2000),
+    expectedVersion: z.number().int().positive(),
+  })
+  .strict();
+
+export type SystemFaultCancellationBodyDto = z.infer<typeof SystemFaultCancellationBodySchema>;
+
+export const AdminIdempotencyKeySchema = z.string().trim().min(8).max(200);
 

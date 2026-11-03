@@ -1,0 +1,52 @@
+{
+  "batch": "booking_demo",
+  "workersStopped": true,
+  "actors": {
+    "admin": "638f1835-d4ed-4db2-9c59-088d604f0d5b",
+    "leader": "0aacba36-28cd-4936-9f12-21a4891a2bc1",
+    "booker1": "17ee86df-b14e-422a-94d2-dae0a5f9765a",
+    "booker2": "8e084b89-fff3-4c94-903e-7676c4caa811",
+    "host": "2d9290b2-f60e-4c83-a46e-5ff67b4bb6f5",
+    "claimedMember": "856ead0e-3329-4205-aa9a-fba0c7b8f03a",
+    "invitedMember": "8e084b89-fff3-4c94-903e-7676c4caa811"
+  },
+  "routes": {
+    "PUBLIC_D7": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    },
+    "PUBLIC_D14": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    },
+    "PUBLIC_D21": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    },
+    "PUBLIC_D28": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    },
+    "PRIVATE_D10": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    },
+    "PRIVATE_D17": {
+      "destinationId": "eb103cb2-68f4-4253-9fa8-6a87fbac8770",
+      "systemTrailId": "7ac03598-48f3-45d3-b419-debefbf1573d",
+      "pickupPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555",
+      "returnPointId": "2d9266c1-eba2-4fe1-9dc9-5a84c680d555"
+    }
+  },
+  "replaceLegacyBatches": []
+}

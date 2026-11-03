@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { seedCategories } from './seeds/category.seed'
 import { seedInventoryLocations } from './seeds/inventory-location.seed'
@@ -7,8 +8,16 @@ import { seedDamageAssessmentRules } from './seeds/damage-assessment-rule.seed'
 import { seedRentalPolicy } from './seeds/rental-policy.seed'
 import { seedBookingPolicies } from './seeds/booking-policy.seed'
 import { seedGearRules } from './seeds/gear-rule.seed'
+import { seedGpsPolicy } from './seeds/gps-policy.seed'
 
-const prisma = new PrismaClient()
+const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: dbUrl,
+    },
+  },
+})
 
 async function main() {
   console.log('Start seeding database...')
@@ -21,6 +30,7 @@ async function main() {
   await seedRentalPolicy(prisma)
   await seedBookingPolicies(prisma)
   await seedGearRules(prisma)
+  await seedGpsPolicy(prisma)
 
   console.log('All seeding finished.')
 }

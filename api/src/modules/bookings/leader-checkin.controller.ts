@@ -46,7 +46,7 @@ export class LeaderCheckinController {
   @ApiQuery({
     name: 'search',
     required: false,
-    schema: { type: 'string', maxLength: 100 },
+    schema: { type: 'string', maxLength: 150 },
   })
   listParticipants(
     @ActiveUser() actor: { id: string },
@@ -88,7 +88,7 @@ export class LeaderCheckinController {
           properties: {
             participantId: { type: 'string', format: 'uuid' },
             method: { type: 'string', enum: ['MANUAL'], default: 'MANUAL' },
-            checkinStatus: { type: 'string', enum: ['CHECKED_IN', 'NO_SHOW'], default: 'CHECKED_IN' },
+            checkinStatus: { type: 'string', enum: ['CHECKED_IN', 'NO_SHOW', 'NOT_CHECKED_IN'], default: 'CHECKED_IN' },
           },
         },
       ],
@@ -122,7 +122,7 @@ export class LeaderCheckinController {
       type: 'object',
       additionalProperties: false,
       properties: {
-        checkinStatus: { type: 'string', enum: ['CHECKED_IN', 'NO_SHOW'], default: 'CHECKED_IN' },
+        checkinStatus: { type: 'string', enum: ['CHECKED_IN', 'NO_SHOW', 'NOT_CHECKED_IN'], default: 'CHECKED_IN' },
       },
     },
   })

@@ -129,6 +129,10 @@ export class TrailRecordingUseCase {
     }
 
     // 1. Fetch accepted GPS points
+    const endedAt = input.endedAt ? new Date(input.endedAt) : new Date()
+    if (endedAt.getTime() < recording.startedAt.getTime()) {
+      throw new AppError({ code: PersonalTrailErrorCode.INVALID_RECORDING_TIME })
+    }
     const points = await this.repo.getPointsByRecordingId(recordingId, true)
     if (!points || points.length < 2) {
       throw new AppError({
@@ -149,7 +153,6 @@ export class TrailRecordingUseCase {
     const elevationResult = await this.processElevationUseCase.execute(elevationInput)
 
     // 3. Complete recording and create PersonalTrail in transaction
-    const endedAt = input.endedAt ? new Date(input.endedAt) : new Date()
     const { recording: updatedRecording, personalTrail } = await this.repo.completeRecordingAndCreateTrail({
       recordingId,
       userId: user.id,
@@ -159,6 +162,7 @@ export class TrailRecordingUseCase {
       metrics: elevationResult.metrics,
       trailMetadata: input.trailMetadata,
       provisionalTelemetry: input.provisionalTelemetry,
+      checkpoints: input.checkpoints,
     })
 
     return {

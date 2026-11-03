@@ -1,0 +1,395 @@
+<!DOCTYPE html><html lang="vi" style="width: 390px; height: 2278px; overflow: hidden; position: relative;"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><title>Vina_TrekGo</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#ffb4a2", "on-tertiary-fixed-variant": "#005048", "inverse-on-surface": "#eaf1ff", "on-primary": "#ffffff", "surface-container-low": "#eff4ff", "secondary": "#a33d23", "inverse-surface": "#27313f", "tertiary": "#005249", "background": "#f8f9ff", "surface-dim": "#d0dbed", "on-primary-fixed-variant": "#105137", "tertiary-fixed": "#8cf5e4", "outline": "#707972", "on-tertiary-fixed": "#00201c", "surface-container-lowest": "#ffffff", "surface-bright": "#f8f9ff", "secondary-fixed": "#ffdad2", "surface-tint": "#2d694d", "secondary-container": "#ff8162", "surface-container": "#e6eeff", "tertiary-fixed-dim": "#6fd8c8", "tertiary-container": "#006c61", "primary": "#125238", "on-background": "#121c2a", "on-tertiary": "#ffffff", "on-error-container": "#93000a", "surface-container-highest": "#d9e3f6", "surface-container-high": "#dee9fc", "on-primary-fixed": "#002113", "surface-variant": "#d9e3f6", "on-error": "#ffffff", "on-secondary-fixed": "#3c0700", "error-container": "#ffdad6", "on-tertiary-container": "#84eddd", "outline-variant": "#c0c9c1", "on-secondary-container": "#731a04", "primary-fixed": "b1f0cd", "primary-container": "#2f6b4f", "surface": "#f8f9ff", "primary-fixed-dim": "#96d4b2", "error": "#ba1a1a", "on-surface": "#121c2a", "on-secondary": "#ffffff", "inverse-primary": "#96d4b2", "on-secondary-fixed-variant": "#83260e", "on-surface-variant": "#404943", "on-primary-container": "#aae9c6" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "margin": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-lg": "1rem", "space-xl": "1.5rem", "space-xs": "0.25rem", "gutter": "0.75rem" }, fontFamily: { "headline-xl": ["Inter"], "body-md": ["Inter"], "body-lg": ["Inter"], "body-sm": ["Inter"], "label-lg": ["Inter"], "label-md": ["Inter"], "headline-md": ["Inter"], "label-sm": ["Inter"], "headline-sm": ["Inter"], "headline-lg": ["Inter"] }, fontSize: { "headline-xl": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "800" }], "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0em", fontWeight: "400" }], "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0em", fontWeight: "500" }], "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "400" }], "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.02em", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.04em", fontWeight: "600" }], "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "700" }], "label-sm": ["10px", { lineHeight: "12px", letterSpacing: "0.06em", fontWeight: "700" }], "headline-sm": ["18px", { lineHeight: "24px", letterSpacing: "0em", fontWeight: "600" }], "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.015em", fontWeight: "700" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#f8f9ff;}body{overscroll-behavior-y:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Quay lại" class="w-11 h-11 -ml-2 flex items-center justify-center text-on-surface hover:text-primary transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Brand logo. - Primary color: #2f6b4f
+- Font: inter
+- Mode: light
+- Roundness: rounded-sm
+" class="h-7 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1WwM_OOpy3-vnmouAjzzwHjSR5G7secqjdE0ckPZPsmeNzt1Qv1WlHI_vQR3skLLjX6HNbaDdcG_JHaG7qiLvdtaYXEegFpMpzWpGmmiOCF6R5biAIjl_lp61PzYfgyouv92xRvbkCij5W47fLrm55k_w9JjQ0VN1uwzSfnxMjeoAOtVEdkFIUEZg1dllLUZff1NAE0P1c6d16Z6r8SVQoczZeC_oWfrAiuQ7jsmkiEykeCFFam7DTOTg"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate max-w-[200px]">Tạo Cung Đường Mới</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Thêm tùy chọn" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[24px]">more_vert</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 w-full bg-surface pt-16 px-margin pb-safe"><div class="flex flex-col w-full pb-32">
+<!-- Top Stepper & Operational Telemetry Pill -->
+<section class="flex flex-col gap-space-sm pt-2 mb-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">Quy trình cấp phép</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary/40"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Bước 2/4</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high text-tertiary">
+<span class="material-symbols-outlined text-[14px]">cloud_done</span>
+<span class="font-label-sm text-label-sm">Đã đồng bộ nháp GPS (16.2 km)</span>
+</div>
+</div>
+<!-- Stepper Bar -->
+<div class="grid grid-cols-4 gap-1.5 w-full">
+<div class="h-1.5 rounded-full bg-primary"></div>
+<div class="h-1.5 rounded-full bg-primary relative overflow-hidden">
+<div class="absolute inset-0 bg-primary-fixed-dim animate-pulse"></div>
+</div>
+<div class="h-1.5 rounded-full bg-surface-container-highest"></div>
+<div class="h-1.5 rounded-full bg-surface-container-highest"></div>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">Thông tin &amp; Quy cách Kỹ thuật</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kê khai dữ liệu thực địa để đồng bộ hệ thống cứu hộ VFRS và kiểm duyệt Leader.</p>
+</div>
+</section>
+<!-- FORM CONTAINER -->
+<form class="flex flex-col gap-space-lg" id="trail-form" onsubmit="event.preventDefault()">
+<!-- SECTION 1: Thông tin chung -->
+<fieldset class="flex flex-col gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<legend class="flex items-center gap-2 mb-space-xs font-label-lg text-label-lg text-primary">
+<span class="material-symbols-outlined text-[20px]">explore</span>
+        1. THÔNG TIN CHUNG
+      </legend>
+<!-- Tên cung đường -->
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between items-center">
+<label class="font-label-md text-label-md text-on-surface" for="trail-name">Tên cung đường <span class="text-secondary">*</span></label>
+<span class="font-label-sm text-label-sm text-outline">Bắt buộc</span>
+</div>
+<div class="relative">
+<input class="w-full h-12 px-3 bg-surface-container-low rounded-lg font-body-lg text-body-lg text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#2f6b4f] transition-all" id="trail-name" required="" type="text" value="Cung Trekking Đỉnh Lảo Thẩn săn mây Y Tý">
+</div>
+</div>
+<!-- Mô tả ngắn -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface" for="meta-desc">Mô tả tóm tắt thực địa</label>
+<textarea class="w-full p-3 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#2f6b4f] transition-all resize-none" id="meta-desc" rows="3">Hành trình đón hoàng hôn và biển mây bồng bềnh nóc nhà Y Tý, địa hình đồi trọc cỏ lau thoai thoải.</textarea>
+</div>
+<!-- Khu vực / Điểm đến -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface" for="region">Khu vực quản lý địa phương</label>
+<div class="relative">
+<select class="w-full h-12 px-3 pr-10 appearance-none bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#2f6b4f] transition-all" id="region">
+<option selected="">Bát Xát, Tỉnh Lào Cai</option>
+<option>Sa Pa, Tỉnh Lào Cai</option>
+<option>Trạm Tấu, Tỉnh Yên Bái</option>
+<option>Mường Tè, Tỉnh Lai Châu</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-3 top-3.5 text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+</div>
+<!-- Tọa độ Điểm xuất phát & Điểm kết thúc -->
+<div class="grid grid-cols-1 gap-space-sm pt-1">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1.5" for="start-point">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+            Điểm xuất phát (Trailhead)
+          </label>
+<div class="relative">
+<input class="w-full h-12 pl-10 pr-3 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#2f6b4f] transition-all" id="start-point" type="text" value="Bản Phìn Hồ (Độ cao 1.740m)">
+<span class="material-symbols-outlined absolute left-3 top-3.5 text-tertiary text-[20px]">trip_origin</span>
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface flex items-center gap-1.5" for="end-point">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+            Điểm kết thúc (Summit / Return)
+          </label>
+<div class="relative">
+<input class="w-full h-12 pl-10 pr-3 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#2f6b4f] transition-all" id="end-point" type="text" value="Đỉnh chóp Lảo Thẩn 2.860m (và quay lại Phìn Hồ)">
+<span class="material-symbols-outlined absolute left-3 top-3.5 text-secondary text-[20px]">location_on</span>
+</div>
+</div>
+</div>
+</fieldset>
+<!-- SECTION 2: Thông số kỹ thuật & Thể lực -->
+<fieldset class="flex flex-col gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<legend class="flex items-center gap-2 mb-space-xs font-label-lg text-label-lg text-primary">
+<span class="material-symbols-outlined text-[20px]">query_stats</span>
+        2. THÔNG SỐ KỸ THUẬT &amp; THỂ LỰC
+      </legend>
+<!-- Grid 2 Cột Thông Số GPX -->
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- Cự ly trích xuất GPX (Locked) -->
+<div class="flex flex-col justify-between p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">CỰ LY GPX</span>
+<span class="material-symbols-outlined text-[16px] text-outline">lock</span>
+</div>
+<div class="mt-2 flex items-baseline gap-1">
+<span class="font-headline-md text-headline-md text-primary font-bold">16.2</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">km</span>
+</div>
+<span class="mt-1 font-label-sm text-[10px] text-tertiary">Khóa từ tệp GPX gốc</span>
+</div>
+<!-- Độ cao tối đa -->
+<div class="flex flex-col justify-between p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">ĐỈNH CAO NHẤT</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">filter_hdr</span>
+</div>
+<div class="mt-2 flex items-baseline gap-1">
+<span class="font-headline-md text-headline-md text-on-surface font-bold">2.860</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">m</span>
+</div>
+<span class="mt-1 font-label-sm text-[10px] text-outline">Mốc tọa độ cột inox</span>
+</div>
+<!-- Chênh cao -->
+<div class="flex flex-col justify-between p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">CHÊNH CAO (GAIN)</span>
+<span class="material-symbols-outlined text-[16px] text-primary">trending_up</span>
+</div>
+<div class="mt-2 flex items-baseline gap-1">
+<span class="font-headline-md text-headline-md text-on-surface font-bold">+1.120</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">m</span>
+</div>
+<span class="mt-1 font-label-sm text-[10px] text-outline">Tổng độ cao leo dốc</span>
+</div>
+<!-- Thời gian ước tính -->
+<div class="flex flex-col justify-between p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">THỜI LƯỢNG TIÊU CHUẨN</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary">schedule</span>
+</div>
+<div class="mt-2 flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">2N1Đ</span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">~6-7h trek/ngày</span>
+</div>
+<span class="mt-1 font-label-sm text-[10px] text-outline">Nhịp độ cơ bản</span>
+</div>
+</div>
+<!-- Chọn Cấp độ khó (Tactical Segmented Selector) -->
+<div class="flex flex-col gap-2 pt-2">
+<label class="font-label-md text-label-md text-on-surface flex justify-between items-center">
+<span>Phân hạng độ khó địa hình (Trail Grade)</span>
+<span class="font-label-sm text-label-sm text-secondary font-bold">Cấp 3: Tiêu chuẩn</span>
+</label>
+<div aria-label="Cấp độ khó" class="grid grid-cols-5 gap-1 p-1 bg-surface-container rounded-lg" role="radiogroup">
+<button class="py-2.5 flex flex-col items-center rounded text-on-surface-variant hover:bg-surface-container-lowest transition-all" onclick="selectDifficulty(1, this)" type="button">
+<span class="font-label-sm text-[11px] font-bold">Cấp 1</span>
+<span class="text-[9px] opacity-75">Dễ</span>
+</button>
+<button class="py-2.5 flex flex-col items-center rounded text-on-surface-variant hover:bg-surface-container-lowest transition-all" onclick="selectDifficulty(2, this)" type="button">
+<span class="font-label-sm text-[11px] font-bold">Cấp 2</span>
+<span class="text-[9px] opacity-75">Nhẹ</span>
+</button>
+<button class="py-2.5 flex flex-col items-center rounded bg-primary text-on-primary shadow-sm transition-all" id="diff-3" onclick="selectDifficulty(3, this)" type="button">
+<span class="font-label-sm text-[11px] font-bold">Cấp 3</span>
+<span class="text-[9px] text-primary-fixed-dim">Vừa</span>
+</button>
+<button class="py-2.5 flex flex-col items-center rounded text-on-surface-variant hover:bg-surface-container-lowest transition-all" onclick="selectDifficulty(4, this)" type="button">
+<span class="font-label-sm text-[11px] font-bold">Cấp 4</span>
+<span class="text-[9px] opacity-75">Khó</span>
+</button>
+<button class="py-2.5 flex flex-col items-center rounded text-on-surface-variant hover:bg-surface-container-lowest transition-all" onclick="selectDifficulty(5, this)" type="button">
+<span class="font-label-sm text-[11px] font-bold">Cấp 5</span>
+<span class="text-[9px] opacity-75">Chuyên</span>
+</button>
+</div>
+<div class="flex items-start gap-2 p-3 bg-surface-container-low rounded-lg mt-1" id="diff-desc">
+<span class="material-symbols-outlined text-primary text-[18px] mt-0.5">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+            Phù hợp người có thể lực trung bình, thói quen vận động thường xuyên; khả năng trekking 5-6h liên tục, dốc đều, không có vực sâu kỹ thuật nguy hiểm.
+          </p>
+</div>
+</div>
+<!-- Mùa trekking lý tưởng (Chips Multi-select) -->
+<div class="flex flex-col gap-2 pt-1">
+<label class="font-label-md text-label-md text-on-surface">Thời điểm &amp; Mùa lý tưởng trong năm</label>
+<div class="flex flex-wrap gap-2" id="season-chips">
+<button class="season-chip active px-3 py-2 rounded-full font-label-md text-label-md bg-primary text-on-primary flex items-center gap-1.5 transition-all" onclick="toggleChip(this)" type="button">
+<span class="material-symbols-outlined text-[16px]">check</span>
+            Tháng 9 - 11 (Mùa lúa &amp; mây)
+          </button>
+<button class="season-chip active px-3 py-2 rounded-full font-label-md text-label-md bg-primary text-on-primary flex items-center gap-1.5 transition-all" onclick="toggleChip(this)" type="button">
+<span class="material-symbols-outlined text-[16px]">check</span>
+            Tháng 12 - 2 (Lạnh &amp; băng tuyết)
+          </button>
+<button class="season-chip px-3 py-2 rounded-full font-label-md text-label-md bg-surface-container text-on-surface flex items-center gap-1.5 transition-all" onclick="toggleChip(this)" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+            Tháng 3 - 5 (Hoa đỗ quyên)
+          </button>
+</div>
+</div>
+</fieldset>
+<!-- SECTION 3: Thư viện hình ảnh thực địa & Ảnh bìa -->
+<fieldset class="flex flex-col gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<legend class="flex items-center gap-2 mb-space-xs font-label-lg text-label-lg text-primary">
+<span class="material-symbols-outlined text-[20px]">photo_library</span>
+        3. THƯ VIỆN ẢNH THỰC ĐỊA &amp; ẢNH BÌA
+      </legend>
+<!-- Cover Image Preview -->
+<div class="flex flex-col gap-2">
+<span class="font-label-md text-label-md text-on-surface">Ảnh bìa hiển thị ứng dụng</span>
+<div class="relative w-full h-44 rounded-xl overflow-hidden shadow-sm">
+<img class="w-full h-full object-cover" data-alt="Epic golden sunset over the sea of clouds from Mount Lao Than summit, warm golden hour rays illuminating jagged mountain ridge with hikers walking with trekking poles in northern Vietnam, outdoor cinematic light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCURWEE_LIZUYkbkgdpNYwfQ4gWcKUQtoUsPd1UKD6cCakCBjhqbyyRrvWf3-cjFg6UgAkv-2RSBkjP-mUKCgUkBgq2sYCNX7AzS3j0Wz_uczPP6KFCo-FEWbMhSzfbFn26m2YXCgK9SEpzitBiyeZ7H345DzKb-FhhbQUnESGUsFo_OM1G58d21s1w0esRs4uA61y90hcl9Su6RROvXylgvvzysk-B8GcIbQ4tPPxPyrn6rv73agA3">
+<div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-transparent to-transparent"></div>
+<div class="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-on-primary">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span class="font-label-sm text-label-sm font-semibold tracking-wide uppercase">Cover Verified GPS</span>
+</div>
+<button class="h-9 px-3 rounded-lg bg-surface/90 backdrop-blur-md text-on-surface font-label-sm text-label-sm flex items-center gap-1.5 hover:bg-surface transition-all active:scale-95" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+              Thay đổi ảnh
+            </button>
+</div>
+</div>
+</div>
+<!-- Field Gallery Thumbnails -->
+<div class="flex flex-col gap-2 pt-2">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface">Ảnh khảo sát điểm chốt (4/10)</span>
+<span class="font-label-sm text-label-sm text-tertiary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">my_location</span>
+            Gắn thẻ Exif GPS
+          </span>
+</div>
+<div class="grid grid-cols-4 gap-2">
+<!-- Thumbnail 1: Cột mốc gió -->
+<div class="relative aspect-square rounded-lg overflow-hidden group">
+<img class="w-full h-full object-cover" data-alt="Weathered wooden trail marker post standing amidst tall mountain grassland in Lao Than with morning wind mist and GPS telemetry overlay badge" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCg19kUu6C6eQ2ze7FsWBjEdnknFPmYTLRU14aFI1pabNXy-neWh1PFm0HXKIuWk_9V8PAIT9E2II16R-BkCw78Uq1dTguhNKaUF7P8dnxJZiHzr9DpAZAiJMrGpiRKOMeDbCMCgQkoq-ARL5iEpviGOHuaH4sEkNTJ6vEu4UTnvWkUEfzlGIMwgDH4lyGY0GlFuJxS9-XyHSSfXEpfQTX_jQra7WE9_JxXa2Vg8YjmCldwVUBHhXHm">
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/70 px-1 py-0.5 text-center">
+<span class="font-label-sm text-[9px] text-on-primary block truncate">Cột gió</span>
+</div>
+</div>
+<!-- Thumbnail 2: Lán gỗ A Hờ -->
+<div class="relative aspect-square rounded-lg overflow-hidden group">
+<img class="w-full h-full object-cover" data-alt="Rustic alpine wooden shelter camp of A Ho resting on the slope of Lao Than mountain with blue sky and trekking backpacks outside" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCw9a1eMLSsd6uxjQOpG38pJoSvUiGbViZvEcbfnGbMUPMkkIuDzcP3GfZjxtj0Qec77P5fAcmLtIKptw-nk94Vb9-dpedO8JM1yuZCklBTkKBZX2NlVyI1KmuJcg0whl3rv0K4CGIgQ7X6b8AbS_eRmj_t2tgO2zTBHmnhnteYrnT06YnG-3tKqe6nHftDiiFN5fq4bBx1aqfmvaVM7ifuVTJKxAJNoQ-ig5TR1_EZdMhvJnfO8hrx">
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/70 px-1 py-0.5 text-center">
+<span class="font-label-sm text-[9px] text-on-primary block truncate">Lán A Hờ</span>
+</div>
+</div>
+<!-- Thumbnail 3: Mỏm đá câu cá -->
+<div class="relative aspect-square rounded-lg overflow-hidden group">
+<img class="w-full h-full object-cover" data-alt="Iconic fishing rock cliff extending into a vast white sea of fluffy clouds in Y Ty Lao Than, dramatic high altitude perspective" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEOmahrxaVO_z1nz5OneZnftRKQlnQXsd9yaA55nEGGfpKy_Nxz9bLmAEX2a7bVloRz1WuiEidb-MlFXCZEADHY3VgIrcOH-rgDRBIbhSA3vIamHvbDXZits0qM68-uJObzAs1tbKepS1TR0vsIczq_zNXodVBU4K8GLB7zIzNG--2MKFs4N9Ak5b_sLrxvhsPQdBKVEqSfIgZLntx9LFRlrqQg_z80G4mdkkM8pLMruzX7WUedEMo">
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/70 px-1 py-0.5 text-center">
+<span class="font-label-sm text-[9px] text-on-primary block truncate">Mỏm câu cá</span>
+</div>
+</div>
+<!-- Thumbnail 4: Đỉnh inox -->
+<div class="relative aspect-square rounded-lg overflow-hidden group">
+<img class="w-full h-full object-cover" data-alt="Triangular stainless steel metal landmark marker at the windy peak of Lao Than mountain 2860m against deep blue sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwEkgpsomOPBZ2WC_HK-8aKdBre0ORHnkSgTYYWZJpvO8WBd9g8bTdSyU5fmeh3BRr-vw9iwtWHc38vVSS2Xny3pvHL79FpcxZCO6UKG2KRfutY1n3OKe30JFK8s9Ib4gZReziHjD1uqDJelWwd59fn-o6l5ED9zJ4EL0do2PxF7v0FZHLy5xs0S3h-OVunc64AKJeIFYSbMS-7lH--IM_WB8M0gw6a4alzeUgDkhKSIEPke_6zeHM">
+<div class="absolute bottom-0 inset-x-0 bg-inverse-surface/70 px-1 py-0.5 text-center">
+<span class="font-label-sm text-[9px] text-on-primary block truncate">Chóp 2860m</span>
+</div>
+</div>
+</div>
+<!-- Add Image Button -->
+<button class="w-full h-12 mt-1 rounded-lg bg-surface-container flex items-center justify-center gap-2 text-primary hover:bg-surface-container-high transition-colors active:scale-[0.99]" type="button">
+<span class="material-symbols-outlined text-[20px]">add_a_photo</span>
+<span class="font-label-md text-label-md font-bold uppercase tracking-wider">+ Thêm ảnh GPS (Tối đa 10)</span>
+</button>
+<p class="font-body-sm text-[11px] text-on-surface-variant flex items-center gap-1.5 mt-0.5">
+<span class="material-symbols-outlined text-[15px] text-tertiary">verified_user</span>
+          Ảnh có thẻ GPS định vị được cộng điểm thẩm định hồ sơ Leader VFRS.
+        </p>
+</div>
+</fieldset>
+<!-- SECTION 4: Lưu ý an toàn & Thời tiết thực địa -->
+<fieldset class="flex flex-col gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm mb-6">
+<legend class="flex items-center gap-2 mb-space-xs font-label-lg text-label-lg text-secondary">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+        4. LƯU Ý AN TOÀN &amp; THỜI TIẾT THỰC ĐỊA
+      </legend>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface flex justify-between items-center" for="safety-notes">
+<span>Khuyến cáo an toàn cho thành viên</span>
+<span class="font-label-sm text-[10px] text-secondary font-semibold uppercase">Cảnh báo gió lốc</span>
+</label>
+<textarea class="w-full p-3 bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#ba1a1a] transition-all resize-none" id="safety-notes" rows="3">Gió giật mạnh cấp 6-7 vào sáng sớm tại mỏm câu cá. Cần chuẩn bị áo cản gió và gậy leo núi giảm chấn.</textarea>
+</div>
+<!-- Quick Safety Checkbox Tags -->
+<div class="flex flex-col gap-2 pt-1">
+<span class="font-label-sm text-label-sm text-outline font-semibold">TRANG BỊ BẮT BUỘC YÊU CẦU:</span>
+<div class="grid grid-cols-2 gap-2">
+<label class="flex items-center gap-2 p-2 rounded-lg bg-surface-container-low cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-0 accent-primary" type="checkbox">
+<span class="font-body-sm text-body-sm text-on-surface">Đèn pin đội đầu</span>
+</label>
+<label class="flex items-center gap-2 p-2 rounded-lg bg-surface-container-low cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-0 accent-primary" type="checkbox">
+<span class="font-body-sm text-body-sm text-on-surface">Găng tay bám đá</span>
+</label>
+<label class="flex items-center gap-2 p-2 rounded-lg bg-surface-container-low cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-0 accent-primary" type="checkbox">
+<span class="font-body-sm text-body-sm text-on-surface">Nước tối thiểu 2.5L</span>
+</label>
+<label class="flex items-center gap-2 p-2 rounded-lg bg-surface-container-low cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-0 accent-primary" type="checkbox">
+<span class="font-body-sm text-body-sm text-on-surface">Bộ sơ cứu cá nhân</span>
+</label>
+</div>
+</div>
+</fieldset>
+</form>
+<!-- STICKY BOTTOM ACTION BAR -->
+<aside class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-xl pb-safe shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-margin py-3">
+<div class="flex items-center gap-space-sm max-w-[390px] mx-auto w-full">
+<!-- Back to Step 1 Button -->
+<button aria-label="Quay lại Bước 1" class="h-12 px-4 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5 hover:bg-surface-container-high transition-colors active:scale-95 shrink-0" onclick="history.back()" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Bước 1</span>
+</button>
+<!-- Primary Next Step CTA -->
+<button class="flex-1 h-12 px-3 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:bg-primary transition-all active:scale-[0.98]" id="btn-next" type="button">
+<span class="truncate">Tiếp tục: Bước 3 - Checkpoints</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</aside>
+</div>
+<script>
+  // Micro-interaction logic for Difficulty Segmented Selector
+  const difficultyInfo = {
+    1: 'Địa hình bằng phẳng, đường mòn rõ nét, đi bộ dạo ngắm cảnh nhẹ nhàng, phù hợp mọi đối tượng.',
+    2: 'Dốc thoai thoải, độ dốc dưới 15 độ, yêu cầu đi bộ liên tục 3-4 giờ, thể lực mức cơ bản.',
+    3: 'Phù hợp người có thể lực trung bình, thói quen vận động thường xuyên; khả năng trekking 5-6h liên tục, dốc đều, không có vực sâu kỹ thuật nguy hiểm.',
+    4: 'Dốc gắt đá sỏi, có đoạn leo vách sử dụng dây bám, vượt sông suối, chịu đựng thời tiết khắc nghiệt trên 8 tiếng.',
+    5: 'Địa hình hiểm trở độ dốc đứng, cần thiết bị leo núi chuyên dụng (crampons, harness), sinh tồn qua đêm độc lập.'
+  };
+
+  function selectDifficulty(level, btnElement) {
+    const parent = btnElement.parentElement;
+    const buttons = parent.querySelectorAll('button');
+    
+    buttons.forEach(btn => {
+      btn.className = 'py-2.5 flex flex-col items-center rounded text-on-surface-variant hover:bg-surface-container-lowest transition-all';
+      const subtext = btn.querySelector('span:last-child');
+      if (subtext) subtext.className = 'text-[9px] opacity-75';
+    });
+
+    btnElement.className = 'py-2.5 flex flex-col items-center rounded bg-primary text-on-primary shadow-sm transition-all';
+    const subtext = btnElement.querySelector('span:last-child');
+    if (subtext) subtext.className = 'text-[9px] text-primary-fixed-dim';
+
+    const descBox = document.getElementById('diff-desc');
+    if (descBox) {
+      descBox.querySelector('p').textContent = difficultyInfo[level];
+    }
+  }
+
+  // Micro-interaction for Season Chips multi-select toggle
+  function toggleChip(button) {
+    const isSelected = button.classList.contains('active');
+    const icon = button.querySelector('.material-symbols-outlined');
+    
+    if (isSelected) {
+      button.classList.remove('active', 'bg-primary', 'text-on-primary');
+      button.classList.add('bg-surface-container', 'text-on-surface');
+      if (icon) icon.textContent = 'add';
+    } else {
+      button.classList.add('active', 'bg-primary', 'text-on-primary');
+      button.classList.remove('bg-surface-container', 'text-on-surface');
+      if (icon) icon.textContent = 'check';
+    }
+  }
+
+  // Success Feedback indicator on Next CTA click
+  document.getElementById('btn-next')?.addEventListener('click', function() {
+    this.classList.add('opacity-90');
+    const label = this.querySelector('span');
+    const originalText = label.textContent;
+    label.textContent = 'Đang lưu cấu hình...';
+    setTimeout(() => {
+      label.textContent = originalText;
+      this.classList.remove('opacity-90');
+    }, 600);
+  });
+</script></main></body></html>

@@ -115,6 +115,8 @@ export class CreateUploadIntentUseCase {
           return ['STAFF_INVENTORY', 'STAFF_DELIVERY'].includes(role);
         case 'EXCEPTION_EVIDENCE':
           return ['USER', 'LEADER', 'STAFF_INVENTORY', 'STAFF_DELIVERY', 'ADMIN'].includes(role);
+        case 'USER_GEAR':
+          return ['USER', 'LEADER', 'STAFF_INVENTORY', 'STAFF_DELIVERY', 'ADMIN'].includes(role);
         default:
           return false;
       }

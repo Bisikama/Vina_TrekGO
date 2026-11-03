@@ -1,7 +1,8 @@
-import { RentalCatalogPage } from "@/features/rentals/components/RentalCatalogPage";
+import { RentalEntryPage } from "@/features/rentals/components/RentalEntryPage";
 
 type RentalsPageProps = {
   searchParams: Promise<{
+    tripId?: string | string[];
     bookingId?: string | string[];
   }>;
 };
@@ -11,11 +12,16 @@ export default async function RentalsPage({
 }: RentalsPageProps) {
   const query = await searchParams;
 
-  const bookingId =
-    typeof query.bookingId === "string"
+  const legacyTripId =
+    typeof query.bookingId === "string" &&
+    query.bookingId !== "booking_001"
       ? query.bookingId
-      : process.env.NEXT_PUBLIC_DEMO_BOOKING_ID ??
-        "booking_001";
+      : undefined;
 
-  return <RentalCatalogPage bookingId={bookingId} />;
+  const tripId =
+    typeof query.tripId === "string"
+      ? query.tripId
+      : legacyTripId;
+
+  return <RentalEntryPage tripId={tripId} />;
 }

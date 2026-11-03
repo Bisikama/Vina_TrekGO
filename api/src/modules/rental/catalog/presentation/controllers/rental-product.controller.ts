@@ -25,6 +25,7 @@ export class RentalProductController {
 Lấy danh sách sản phẩm hiển thị cho người dùng cuối.
 - Chỉ hiển thị sản phẩm đang ACTIVE và danh mục (category) cũng phải đang ACTIVE.
 - Hỗ trợ tìm kiếm cơ bản và lọc theo category.
+- **Dùng để test với Gear Advisor & Rental Quotes:** Lấy id sản phẩm làm productId cho POST /api/v1/rentals/quote và cấu hình thông số kỹ thuật tại PUT /api/v1/staff/gear/product-profiles/{productId}.
 `
   })
   @ApiResponse({ 
@@ -58,7 +59,7 @@ Chi tiết thông tin sản phẩm dành cho khách hàng.
 `
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'RentalProduct UUID', example: '11111111-1111-4111-8111-111111111111' })
-  @ApiResponse({ status: 200, description: 'Thông tin chi tiết sản phẩm', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' }, name: { type: 'string' } } } })
+  @ApiResponse({ status: 200, description: 'Thông tin chi tiết sản phẩm', schema: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sku: { type: 'string' }, name: { type: 'string' }, depositPerUnit: { type: 'integer', nullable: true, example: 400000, description: 'Cọc mỗi món theo giá catalog; null nếu dữ liệu không hợp lệ.' }, replacementValue: { type: 'number', example: 2000000 }, depositExplanation: { type: 'object', properties: { percentageOfReplacementValue: { type: 'number', nullable: true, example: 20, description: 'Tỷ lệ cọc thực tế, làm tròn 2 chữ số; null nếu không tính được.' }, formula: { type: 'string', example: 'depositPerUnit / replacementValue * 100' } } } } } })
   @ApiErrorResponse(404, 'Không tìm thấy sản phẩm', 'RENTAL_PRODUCT_NOT_FOUND', 'Sản phẩm không tồn tại hoặc không hoạt động')
   @Get(':id')
   async getProduct(

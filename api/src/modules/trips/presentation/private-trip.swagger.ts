@@ -160,7 +160,6 @@ export const privateTripResponses = {
   invitation: z.object({
     inviteId: uuid,
     inviteCode: inviteCodeSchema,
-    inviteUrl: z.string().url(),
     expiresAt: time,
     status: z.literal('ACTIVE'),
     tripVersion: integer,
@@ -275,7 +274,7 @@ export const ApiPrivateCode = () =>
   ApiParam({
     name: 'code',
     required: true,
-    description: 'Dùng inviteCode từ CF03, không dùng inviteId hay toàn bộ inviteUrl.',
+    description: 'Dùng inviteCode (6 ký tự chữ và số) từ CF03, không dùng inviteId.',
     schema: z.toJSONSchema(inviteCodeSchema, { target: 'openapi-3.0' }) as SchemaObject,
   })
 export const ApiPrivatePage = (withStatus = true) =>

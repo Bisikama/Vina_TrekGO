@@ -73,6 +73,24 @@ export class PrivateMembershipController {
     return this.trips.join(a, code)
   }
 
+  @Get('me/private-trips')
+  @ApiPrivateResponse(
+    'List private trips where the current user is an active member',
+    'trips',
+    200,
+    'Authoritative TripMember ACTIVE source. Includes hosted trips and trips joined by invite code or QR.',
+  )
+  @Auth([AuthType.Bearer])
+  @ApiBearerAuth('bearer')
+  @Header('Cache-Control', 'no-store')
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', minimum: 1, maximum: 100000, default: 1 } })
+  @ApiQuery({ name: 'pageSize', required: false, schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } })
+  listMine(
+    @ActiveUser() a: Actor,
+    @Query(new ZodValidationPipe(memberPageSchema)) q: MemberPage,
+  ) {
+    return this.trips.listMine(a, q)
+  }
   @Get('private-trips/:id/room')
   @ApiPrivateId()
   @ApiPrivateResponse(

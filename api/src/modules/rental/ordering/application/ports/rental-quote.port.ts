@@ -15,7 +15,9 @@ export interface CreateRentalQuoteRecord {
   userId: string;
   tripId: string;
   bookingId: string | null;
+  membershipKind?: string | null;
   membershipRef: string;
+  membershipSourceVersion?: number | null;
   membershipSnapshot: Record<string, unknown>;
   pickupPointId: string;
   returnPointId: string;

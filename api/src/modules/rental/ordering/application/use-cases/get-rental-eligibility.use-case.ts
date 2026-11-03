@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { PrismaService } from 'src/shared/services/prisma.service';
 import { AppError } from 'src/shared/errors/app-error';
 import { RENTAL_ORDERING_ERROR_CODES } from 'src/shared/errors/codes/rental-ordering.error-codes';
 import {
@@ -18,6 +19,8 @@ export class GetRentalEligibilityUseCase {
   constructor(
     @Inject(RENTAL_CONTEXT_PORT)
     private readonly contextPort: RentalContextPort,
+    @Optional()
+    private readonly prisma?: PrismaService,
   ) {}
 
   async execute(command: GetRentalEligibilityCommand) {
@@ -28,6 +31,40 @@ export class GetRentalEligibilityUseCase {
     const context = await this.contextPort.getByTripId(command.tripId, command.userId, now);
 
     if (!context) {
+      if (this.prisma) {
+        const trip = await this.prisma.trip.findUnique({
+          where: { id: command.tripId },
+          select: { id: true, title: true, status: true, startAt: true, endAt: true },
+        });
+        if (!trip) {
+          throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.TRIP_NOT_FOUND);
+        }
+        // Chuyến đi tồn tại nhưng user chưa có tư cách tham gia: trả 200 eligible=false theo FR
+        return {
+          tripId: trip.id,
+          membershipRef: null,
+          membershipStatus: 'NOT_MEMBER',
+          defaultRentalWindow: { startAt: trip.startAt, endAt: trip.endAt },
+          returnOptions: [],
+          eligible: false,
+          reason: RENTAL_ORDERING_ERROR_CODES.TRIP_MEMBERSHIP_NOT_FOUND,
+          recipientOptions: [],
+          trip: {
+            id: trip.id,
+            name: trip.title,
+            status: trip.status,
+            startAt: trip.startAt,
+            endAt: trip.endAt,
+            timezone: 'Asia/Ho_Chi_Minh',
+          },
+          pickup: null,
+          dropoff: null,
+          rentalCutoffAt: trip.startAt,
+          contextVersion: 1,
+          existingOpenOrderId: null,
+          allowedActions: [],
+        };
+      }
       throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.TRIP_MEMBERSHIP_NOT_FOUND);
     }
 
@@ -50,7 +87,7 @@ export class GetRentalEligibilityUseCase {
       defaultRentalWindow: { startAt: context.pickup.scheduledAt, endAt: context.dropoff.scheduledAt },
       returnOptions: context.returnOptions,
       eligible: decision.eligible,
-      reason: decision.reason,
+      reason: decision.reason ?? context.ineligibleReason,
       recipientOptions: decision.eligible
         ? context.recipientOptions.map((item) => ({
             id: item.memberId,

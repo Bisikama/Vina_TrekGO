@@ -42,6 +42,8 @@ export function TrekkingPricingSimulator({
 
   const priceNum = Number(selectedPrice) || 0;
   const maxSliderPrice = Math.max(5000000, priceNum * 1.5, 3000000);
+  const safeCapacity = Math.max(1, capacity);
+  const safeTargetPax = Math.min(Math.max(1, targetPax), safeCapacity);
 
   const summary = evaluation?.summary;
   const atTarget = summary?.atTargetPax;
@@ -101,23 +103,23 @@ export function TrekkingPricingSimulator({
               Số khách dự kiến thanh toán (targetPax)
             </span>
             <span className="text-sm font-extrabold text-emerald-400">
-              {targetPax} người / tối đa {capacity}
+              {safeTargetPax} người / tối đa {safeCapacity}
             </span>
           </div>
           <input
             type="range"
             min={1}
-            max={Math.max(1, capacity)}
+            max={safeCapacity}
             step={1}
             disabled={disabled}
-            value={targetPax}
+            value={safeTargetPax}
             onChange={(e) => onTargetPaxChange(Number(e.target.value))}
             className="w-full h-2 rounded-lg bg-slate-800 accent-emerald-500 cursor-pointer disabled:opacity-50"
           />
           <div className="flex justify-between text-[10px] text-slate-500 mt-1">
             <span>1 khách</span>
-            <span>Tối thiểu khởi hành: {minPax} khách</span>
-            <span>Tối đa: {capacity} khách</span>
+            <span>Tối thiểu khởi hành: {Math.min(minPax, safeCapacity)} khách</span>
+            <span>Tối đa: {safeCapacity} khách</span>
           </div>
         </div>
 
@@ -190,7 +192,7 @@ export function TrekkingPricingSimulator({
           {/* Card 1: Lợi nhuận tại targetPax */}
           <div className="rounded-xl bg-slate-900 border border-slate-800 p-3.5">
             <div className="text-[11px] font-medium text-slate-400">
-              Lợi nhuận tại {targetPax} khách
+              Lợi nhuận tại {safeTargetPax} khách
             </div>
             <div
               className={`text-lg font-black mt-1 ${
@@ -312,7 +314,7 @@ export function TrekkingPricingSimulator({
                       <tr
                         key={row.pax}
                         className={`transition-colors ${
-                          row.pax === targetPax
+                          row.pax === safeTargetPax
                             ? "bg-emerald-950/40 font-bold text-emerald-300"
                             : "hover:bg-slate-800/40 text-slate-300"
                         }`}

@@ -159,6 +159,22 @@ describe('B1 rental flow use cases', () => {
     expect(result.allowedActions).toEqual(['CREATE_RENTAL']);
   });
 
+  it('hides CREATE_RENTAL while a live pending-payment order exists', async () => {
+    const context = createContext();
+    context.existingOpenOrderId = 'pending-order-uuid';
+    contextPort.getByTripId.mockResolvedValue(context);
+    const useCase = new GetRentalEligibilityUseCase(contextPort);
+
+    const result = await useCase.execute({
+      tripId: context.trip.id,
+      userId: ownerUserId,
+      now,
+    });
+
+    expect(result.eligible).toBe(true);
+    expect(result.allowedActions).toEqual([]);
+  });
+
   it('RB-API-101: chặn User khác bằng FORBIDDEN', async () => {
     const useCase = new GetRentalEligibilityUseCase(contextPort);
 
@@ -215,6 +231,8 @@ describe('B1 rental flow use cases', () => {
       dailyPrice: 120000,
       feeAmount: 720000,
       depositPerUnit: 500000,
+      replacementValue: 2000000,
+      depositExplanation: { percentageOfReplacementValue: 25, formula: 'depositPerUnit / replacementValue * 100' },
       depositAmount: 1000000,
       availableCount: 3,
     });
@@ -227,6 +245,27 @@ describe('B1 rental flow use cases', () => {
         totalDeposit: '1000000.00',
         totalAmount: '1720000.00',
       }),
+    );
+  });
+
+  it('sản phẩm hạng Rất mới tính tiền như sản phẩm thường: 2 món, 100k/ngày, cọc 600k, 60 giờ', async () => {
+    // Hạng không đổi luồng thuê: giá/cọc lấy từ chính sản phẩm của hạng đó (60 giờ → 3 ngày theo CEIL_24H).
+    catalogPort.getProductsByIds.mockResolvedValue([
+      { ...createProduct(), name: 'Lều 3 người – Rất mới', dailyPrice: '100000.00', depositValue: '600000.00' },
+    ]);
+    const useCase = new CreateRentalQuoteUseCase(contextPort, catalogPort, availabilityPort, quotePort);
+
+    const result = await useCase.execute({
+      tripId: createContext().trip.id,
+      userId: ownerUserId,
+      items: [{ productId: createProduct().id, quantity: 2 }],
+      now,
+    });
+
+    expect(result.chargedDays).toBe(3);
+    expect(result.items[0]).toMatchObject({ feeAmount: 600000, depositPerUnit: 600000, depositAmount: 1200000 });
+    expect(quotePort.createQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ rentalFee: '600000.00', totalDeposit: '1200000.00', totalAmount: '1800000.00' }),
     );
   });
 

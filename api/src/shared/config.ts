@@ -115,6 +115,16 @@ const envConfigSchema = z
     // Secret HMAC-SHA256 (>= 32 bytes) để ký và xác thực webhook của cổng Mock
     PAYMENT_MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
 
+    // payOS production is independent of legacy sandbox environment.
+    PAYOS_ENABLED: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
+    PAYOS_CLIENT_ID: z.string().max(100).optional(),
+    PAYOS_API_KEY: z.string().optional(),
+    PAYOS_CHECKSUM_KEY: z.string().optional(),
+    PAYOS_RETURN_URL: z.string().optional(),
+    PAYOS_CANCEL_URL: z.string().optional(),
+    PAYOS_RECEIVING_BANK_BIN: z.string().optional(),
+    PAYOS_RECEIVING_ACCOUNT_NUMBER: z.string().optional(),
+
     // VNPay Sandbox Gateway
     VNPAY_SANDBOX_TMN_CODE: z
       .string()
@@ -125,6 +135,19 @@ const envConfigSchema = z
     VNPAY_SANDBOX_API_IP: z.string().min(1).optional(),
     // Sandbox Refund Simulation (TEST/DEMO only - strictly forbidden in production)
     PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
+    // Remote simulation remains opt-in and must be pinned to one dedicated
+    // demo database host. It is never a production payment capability.
+    PAYMENT_SANDBOX_REFUND_SIMULATION_REMOTE_DEMO_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((val) => val === 'true'),
+    PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOWED_DATABASE_HOST: z.string().trim().min(1).optional(),
+    // Some gateways' sandboxes do not expose a refund confirmation API. This
+    // permits an explicitly labelled demo settlement from a pristine PENDING refund.
+    PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND: z
       .enum(['true', 'false'])
       .default('false')
       .transform((val) => val === 'true'),
@@ -166,6 +189,52 @@ const envConfigSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((val) => val === 'true'),
+    // Nhắc ADMIN/STAFF_INVENTORY khi đơn vẫn thiếu hàng do hạ hạng và còn ít hơn số giờ này tới giờ nhận đồ.
+    GRADE_SHORTAGE_ALERT_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+
+    // AI GEAR ADVISOR (GEMINI & FIRECRAWL)
+    GEAR_AI_ADVICE_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('false')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+    GEAR_IMAGE_EXTRACTION_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('true')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+    GEAR_LINK_EXTRACTION_ENABLED: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .default('false')
+      .transform((val) => (typeof val === 'boolean' ? val : val === 'true')),
+
+    GEMINI_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
+    GEMINI_MODEL_EXTRACTION: z.string().default('gemini-2.5-flash'),
+    GEMINI_MODEL_ADVISOR: z.string().default('gemini-2.5-flash'),
+    GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    GEMINI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+
+    // Nhà cung cấp AI của Gear advisor. openai hiện chỉ hỗ trợ đọc thông số (ảnh/link); lời khuyên dùng bộ quy tắc.
+    GEAR_AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
+    OPENAI_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
+    OPENAI_MODEL_EXTRACTION: z.string().default('gpt-4o-mini'),
+    OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    OPENAI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+
+    FIRECRAWL_API_KEY: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim().length > 0 ? val.trim() : undefined)),
+    FIRECRAWL_API_URL: z.string().url().default('https://api.firecrawl.dev'),
+    FIRECRAWL_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+
+    GEAR_EXTRACTION_DAILY_QUOTA: z.coerce.number().int().positive().default(20),
+    // Giới hạn số bản nháp "cần nhập tay" mỗi user mỗi giờ (bản nháp này không tính quota ngày).
+    GEAR_MANUAL_DRAFT_HOURLY_LIMIT: z.coerce.number().int().positive().default(30),
 
     // TEST DATABASE OVERRIDES (OPTIONAL)
     CF01_TEST_DATABASE_URL: z.string().optional(),

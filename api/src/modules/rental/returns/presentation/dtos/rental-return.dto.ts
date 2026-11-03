@@ -54,7 +54,9 @@ export const ReturnInspectionBodySchema = z.union([ReturnObservationBodySchema, 
 })]);
 
 export const ReturnToInventoryLocationBodySchema = z.object({
-  unitIds: z.array(UUID).min(1).max(100),
+  unitIds: z.array(UUID).max(100),
+  missingInCustodyUnitIds: z.array(UUID).max(100).optional().default([]),
+  incidentNote: z.string().trim().min(3).max(2000).optional(),
   packageId: UUID.optional(),
   pendingTransferId: UUID.optional(),
   expectedVersion: z.number().int().min(1),
@@ -63,7 +65,8 @@ export const ReturnToInventoryLocationBodySchema = z.object({
 export const ReceiveReturnBodySchema = z.object({
   pendingTransferId: UUID,
   inventoryLocationId: UUID, // RB-API-604: must match the pending custody transfer destination.
-  scannedUnitIds: z.array(UUID).min(1).max(100),
+  scannedUnitIds: z.array(UUID).max(100),
+  incidentNote: z.string().trim().min(3).max(2000).optional(),
   expectedVersion: z.number().int().min(1),
 });
 
@@ -120,10 +123,24 @@ export const ResolveExceptionBodySchema = z.object({
   expectedVersion: z.number().int().min(1),
 });
 
+export const GradeDecisionSchema = z
+  .object({
+    decision: z.enum(['KEEP', 'DOWNGRADE']),
+    reason: z.string().trim().min(3).max(1000).optional(),
+    note: z.string().trim().max(3000).optional(),
+    evidenceIds: z.array(UUID).max(10).optional(),
+  })
+  .refine((body) => body.decision !== 'DOWNGRADE' || !!body.reason, {
+    message: 'reason is required when decision is DOWNGRADE',
+    path: ['reason'],
+  });
+
 export const MarkUnitReadyBodySchema = z.object({
   inspectionId: UUID.optional(),
   accessoriesChecked: z.boolean(),
   expectedVersion: z.number().int().min(1),
+  // Bắt buộc với thiết bị thuộc sản phẩm có hạng; không gửi với sản phẩm thường (kiểm ở adapter).
+  gradeDecision: GradeDecisionSchema.optional(),
 });
 
 export const ListExceptionsQuerySchema = z.object({

@@ -21,12 +21,11 @@ export const useResendOtp = () => {
       setData(response);
       return response;
     } catch (err: unknown) {
+      const responseData = err instanceof AxiosError ? err.response?.data : undefined;
       const message =
-        err instanceof AxiosError
-          ? err.response?.data?.message || err.message
-          : err instanceof Error
-            ? err.message
-            : "Không thể gửi lại mã OTP.";
+        responseData?.error?.message ||
+        responseData?.message ||
+        (err instanceof Error ? err.message : "Không thể gửi lại mã OTP.");
       setError(Array.isArray(message) ? message.join(", ") : message);
       return null;
     } finally {

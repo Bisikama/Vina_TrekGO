@@ -1,0 +1,396 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#f8f9ff;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "outline": "#707972", "secondary-fixed": "#ffdad2", "on-secondary": "#ffffff", "on-tertiary-container": "#84eddd", "primary-fixed": "#b1f0cd", "on-secondary-fixed": "#3c0700", "tertiary": "#005249", "surface-container-lowest": "#ffffff", "on-secondary-fixed-variant": "#83260e", "on-surface": "#121c2a", "on-primary-container": "#aae9c6", "inverse-primary": "#96d4b2", "error": "#ba1a1a", "secondary": "#a33d23", "primary": "#125238", "on-error-container": "#93000a", "surface-container": "#e6eeff", "surface-tint": "#2d694d", "on-primary": "#ffffff", "surface-variant": "#d9e3f6", "surface-container-low": "#eff4ff", "surface-bright": "#f8f9ff", "inverse-on-surface": "#eaf1ff", "tertiary-fixed-dim": "#6fd8c8", "outline-variant": "#c0c9c1", "surface": "#f8f9ff", "error-container": "#ffdad6", "on-tertiary-fixed-variant": "#005048", "inverse-surface": "#27313f", "surface-container-high": "#dee9fc", "background": "#f8f9ff", "on-primary-fixed-variant": "#105137", "on-secondary-container": "#731a04", "primary-container": "#2f6b4f", "secondary-fixed-dim": "#ffb4a2", "on-surface-variant": "#404943", "on-background": "#121c2a", "tertiary-container": "#006c61", "on-primary-fixed": "#002113", "on-error": "#ffffff", "primary-fixed-dim": "#96d4b2", "surface-dim": "#d0dbed", "on-tertiary-fixed": "#00201c", "on-tertiary": "#ffffff", "tertiary-fixed": "#8cf5e4", "secondary-container": "#ff8162", "surface-container-highest": "#d9e3f6" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "margin": "1rem", "gutter": "0.75rem", "space-md": "0.75rem", "space-xs": "0.25rem", "space-lg": "1rem", "space-xl": "1.5rem", "space-sm": "0.5rem" }, fontFamily: { "body-sm": ["Inter"], "label-md": ["Inter"], "label-sm": ["Inter"], "body-md": ["Inter"], "label-lg": ["Inter"], "headline-sm": ["Inter"], "body-lg": ["Inter"], "headline-md": ["Inter"], "headline-lg": ["Inter"], "headline-xl": ["Inter"] }, fontSize: { "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.06em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "500" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-sm flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs min-w-0"><button aria-label="Quay lại" class="w-11 h-11 flex items-center justify-center text-on-surface hover:text-primary transition-colors shrink-0" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Vina_TrekGo" class="h-7 w-auto object-contain shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1WwM_OOpy3-vnmouAjzzwHjSR5G7secqjdE0ckPZPsmeNzt1Qv1WlHI_vQR3skLLjX6HNbaDdcG_JHaG7qiLvdtaYXEegFpMpzWpGmmiOCF6R5biAIjl_lp61PzYfgyouv92xRvbkCij5W47fLrm55k_w9JjQ0VN1uwzSfnxMjeoAOtVEdkFIUEZg1dllLUZff1NAE0P1c6d16Z6r8SVQoczZeC_oWfrAiuQ7jsmkiEykeCFFam7DTOTg"><div class="flex flex-col min-w-0"><span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Leader Operation</span><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Mountain Leader / Báo Cáo Tổng Kết Hiện Trường</h1></div></div><div class="flex items-center gap-space-xs shrink-0"><button aria-label="Báo động khẩn cấp SOS" class="h-10 px- space-sm bg-error text-on-error rounded font-label-md text-label-md flex items-center gap-1 active:scale-95 transition-transform shadow-[0_1px_4px_rgba(186,26,26,0.25)]"><span class="material-symbols-outlined text-[18px]">e911_emergency</span><span class="tracking-wider">SOS</span></button><button aria-label="Thực hiện thao tác phụ" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">more_vert</span></button></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full">
+<!-- Status Banner & Hero Overview -->
+<div class="bg-primary text-on-primary px-margin py-space-lg">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded uppercase">Mã Tour: #TG-8924-VN</span>
+<span class="font-label-sm text-label-sm text-primary-fixed opacity-90 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history_toggle_off</span>
+        15:30 • 20/11/2024
+      </span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-primary tracking-tight mb-space-sm">Tổng Kết &amp; Nghiệm Thu Hiện Trường</h2>
+<div class="flex items-center gap-space-xs bg-surface-container-lowest/15 backdrop-blur-md px-space-sm py-2 rounded mb-space-md">
+<span class="material-symbols-outlined text-primary-fixed text-[20px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span class="font-label-md text-label-md text-surface-bright uppercase tracking-wide">Hoàn thành 100% lộ trình an toàn</span>
+</div>
+<!-- Quick Stat KPI Strip -->
+<div class="grid grid-cols-3 gap-space-xs bg-surface-container-lowest text-on-surface rounded p-space-sm shadow-sm">
+<div class="flex flex-col items-center text-center">
+<span class="font-headline-sm text-headline-sm text-primary font-bold">12/12</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Hạ sơn đủ</span>
+</div>
+<div class="flex flex-col items-center text-center bg-surface-container-low rounded py-0.5">
+<span class="font-headline-sm text-headline-sm text-primary font-bold">0</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tai nạn lớn</span>
+</div>
+<div class="flex flex-col items-center text-center">
+<span class="font-headline-sm text-headline-sm text-primary font-bold">100%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Thiết bị Hub</span>
+</div>
+</div>
+</div>
+<!-- Operational Body Container -->
+<div class="px-margin py-space-md space-y-space-md">
+<!-- Section 1: Headcount Report -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">groups_3</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">1. Báo Cáo Quân Số &amp; Hạ Sơn</h3>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-primary-fixed text-on-primary-fixed rounded font-bold">100% AN TOÀN</span>
+</div>
+<!-- Funnel Progress -->
+<div class="grid grid-cols-4 gap-1 text-center bg-surface-container-low p-2 rounded mb-space-sm">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Đăng ký</span>
+<span class="font-label-lg text-label-lg text-on-surface font-bold">12</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Xuất phát</span>
+<span class="font-label-lg text-label-lg text-on-surface font-bold">12</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-primary font-bold block">Chạm đỉnh</span>
+<span class="font-label-lg text-label-lg text-primary font-bold">12</span>
+</div>
+<div class="bg-primary text-on-primary rounded">
+<span class="font-label-sm text-label-sm text-primary-fixed block">Về Hub</span>
+<span class="font-label-lg text-label-lg text-on-primary font-bold">12</span>
+</div>
+</div>
+<!-- Special Notice Tile -->
+<div class="bg-secondary-fixed/50 text-on-secondary-fixed p-space-sm rounded mb-space-sm">
+<div class="flex items-start gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">medical_information</span>
+<div class="min-w-0">
+<span class="font-label-sm text-label-sm uppercase font-bold text-secondary block">Lưu tâm y tế nhẹ:</span>
+<p class="font-body-sm text-body-sm text-on-secondary-fixed-variant leading-tight">Thành viên <strong>Vũ Mai Linh</strong> bị giãn dây chằng nhẹ bàn chân tại dốc Km 8. Sơ cứu nẹp thun tại chỗ, hoàn thành chặng cuối dưới sự hộ tống sát sao của Porter trưởng.</p>
+</div>
+</div>
+</div>
+<!-- Electronic Signatures -->
+<div class="grid grid-cols-2 gap-space-xs pt-space-xs">
+<div class="bg-surface-container-low p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Leader chính:</span>
+<span class="font-label-md text-label-md text-on-surface block font-bold">Hoàng Văn Nam</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[12px]">draw</span> Đã ký điện tử
+          </span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Chốt đoàn (Sweep):</span>
+<span class="font-label-md text-label-md text-on-surface block font-bold">Lê Thanh Bình</span>
+<span class="font-label-sm text-label-sm text-primary flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[12px]">draw</span> Đã ký điện tử
+          </span>
+</div>
+</div>
+</section>
+<!-- Section 2: Actual Checkpoint Journal -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">timeline</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">2. Nhật Ký Trạm Dừng Thực Tế</h3>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">5/5 Trạm</span>
+</div>
+<div class="space-y-space-xs">
+<!-- Item 1 -->
+<div class="flex items-start gap-space-sm bg-surface-container-low p-space-xs rounded">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm shrink-0 mt-0.5">1</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Cổng Trạm Tôn (Xuất phát)</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">08:30 (Đúng giờ)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kế hoạch: 08:30 • Hoàn thành kiểm tra tư trang</p>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-start gap-space-sm bg-surface-container-low p-space-xs rounded">
+<span class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-label-sm text-label-sm shrink-0 mt-0.5">2</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Trạm Suối Lạnh (Ăn trưa)</span>
+<span class="font-label-sm text-label-sm text-secondary font-bold">11:45 (+15p)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kế hoạch: 11:30 • Nghỉ thêm do xử lý sơ cứu</p>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-space-sm bg-surface-container-low p-space-xs rounded">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm shrink-0 mt-0.5">3</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Lán Nghỉ 2.800m</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">16:50 (-10p)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kế hoạch: 17:00 • Nhận chỗ ngủ và trữ nước</p>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="flex items-start gap-space-sm bg-surface-container-low p-space-xs rounded">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm shrink-0 mt-0.5">4</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Chóp Đỉnh Fansipan 3.143m</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">09:15 N2 (-15p)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kế hoạch: 09:30 • Đón bình minh và gắn cờ</p>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="flex items-start gap-space-sm bg-surface-container-low p-space-xs rounded">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm shrink-0 mt-0.5">5</span>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Sín Chải (Bế mạc Hub)</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">14:20 N3 (+20p)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Bàn giao lên xe trung chuyển về Sa Pa Hub</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: GPS Tracking & Route Deviation -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">explore</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">3. Giám Sát GPS &amp; Sai Lệch</h3>
+</div>
+<span class="font-label-sm text-label-sm bg-tertiary text-on-tertiary px-2 py-0.5 rounded font-bold">99.2% KẾT NỐI</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm mb-space-sm">
+<div class="bg-surface-container-low p-space-sm rounded">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Tổng cự ly đi:</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">19.8 km</span>
+<span class="font-label-sm text-label-sm text-secondary block font-medium mt-0.5">Sai lệch: +400m</span>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Độ cao tích lũy:</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">+1,420 m</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant block mt-0.5">Độ dốc TB: 24%</span>
+</div>
+</div>
+<!-- Map Display Container -->
+<div class="w-full h-36 bg-cover bg-center rounded relative overflow-hidden shadow-inner flex items-end p-space-xs" data-location="Fansipan, Sa Pa, Lao Cai, Vietnam">
+<div class="bg-inverse-surface/85 text-inverse-on-surface px-space-xs py-1 rounded backdrop-blur-sm text-[11px] flex items-center justify-between w-full">
+<span class="">Km 6.1: Vòng tránh sạt lở (+400m)</span>
+<span class="text-tertiary-fixed font-bold">Chuẩn kiểm lâm</span>
+</div>
+</div>
+</section>
+<!-- Section 4: Safety & Medical Report -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">health_and_safety</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">4. Y Tế &amp; An Toàn Dã Ngoại</h3>
+</div>
+<span class="font-label-sm text-label-sm bg-secondary-fixed text-on-secondary-fixed px-2 py-0.5 rounded font-bold">WFA CẤP 1</span>
+</div>
+<div class="space-y-space-xs">
+<div class="bg-surface-container-low p-space-sm rounded">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Biên bản can thiệp #IR-8924-01</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">Hoàn tất xử lý</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Sơ cứu giãn dây chằng cổ chân độ 1. Sử dụng 01 cuộn băng thun co giãn y tế, chườm lạnh dã ngoại tức thì. Thành viên tự vận động ổn định.</p>
+</div>
+<div class="grid grid-cols-2 gap-space-xs">
+<div class="bg-surface-container-low p-space-xs rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">verified_user</span>
+<span class="font-label-sm text-label-sm text-on-surface">Không gọi SAR khẩn cấp</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">park</span>
+<span class="font-label-sm text-label-sm text-on-surface">Quy chế VQG: 100% tuân thủ</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 5: Equipment Recovery -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">inventory_2</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">5. Biên bản bàn giao thiết bị cho Staff Delivery</h3>
+</div>
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded font-bold">ĐỦ 100%</span>
+</div>
+<div class="space-y-space-xs font-body-sm text-body-sm">
+<!-- Team Asset -->
+<div class="bg-surface-container-low p-space-xs rounded flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">satellite_alt</span>
+<div class="min-w-0 truncate">
+<span class="font-label-md text-label-md text-on-surface block font-medium">Garmin InReach Mini 2</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">03/03 máy • Pin &gt; 65%</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">ĐÃ QUÉT KHO</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">radio</span>
+<div class="min-w-0 truncate">
+<span class="font-label-md text-label-md text-on-surface block font-medium">Bộ đàm VHF Motorola</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">04/04 bộ kèm tai nghe</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">ĐÃ QUÉT KHO</span>
+</div>
+<!-- Rented Asset -->
+<div class="bg-surface-container-low p-space-xs rounded flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">hiking</span>
+<div class="min-w-0 truncate">
+<span class="font-label-md text-label-md text-on-surface block font-medium">Gậy leo núi Black Diamond</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">12/12 đôi • Khớp khóa nguyên vẹn</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">ĐÃ QUÉT KHO</span>
+</div>
+<div class="bg-surface-container-low p-space-xs rounded flex items-center justify-between">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">camping</span>
+<div class="min-w-0 truncate">
+<span class="font-label-md text-label-md text-on-surface block font-medium">Lều 2 người Naturehike</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">06/06 bộ • Không rách, khô ráo</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">ĐÃ QUÉT KHO</span>
+</div>
+</div>
+</section>
+<!-- Section 6: Member Feedback Overview -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">rate_review</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">6. Đánh Giá Đoàn &amp; Phản Hồi</h3>
+</div>
+<div class="flex items-center gap-1 text-secondary font-bold font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+          4.95 / 5.0
+        </div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded">
+<div class="flex items-center gap-space-xs mb-space-xs">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm font-bold">TH</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface font-semibold block">Đặng Thái Hoàng</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Trekker cá nhân</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant italic">"Leader Nam và Chốt đoàn Bình cực kỳ chuẩn chỉnh, sơ cứu nhanh nhẹn và đồ ăn tại lán rất ấm cúng. Trải nghiệm Fansipan an tâm tuyệt đối!"</p>
+</div>
+<div class="mt-space-xs text-right">
+<span class="font-label-sm text-label-sm text-primary font-semibold">12/12 Thành viên hoàn tất khảo sát nhanh</span>
+</div>
+</section>
+<!-- Section 7: Photographic Evidence -->
+<section class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-center justify-between pb-space-xs mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">photo_library</span>
+<h3 class="font-label-lg text-label-lg text-on-surface uppercase">7. Ảnh Minh Chứng Nghiệm Thu</h3>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">4 Bắt buộc</span>
+</div>
+<!-- 4 Photo Grid -->
+<div class="grid grid-cols-2 gap-space-xs">
+<div class="relative rounded overflow-hidden aspect-[4/3] bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A triumphant group of 12 Vietnamese hikers in outdoor tactical gear holding a red flag with gold star at the Fansipan 3143m metal pyramid summit landmark, sunny clear sky with sea of clouds in Hoang Lien Son range, vibrant lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAL3cFTDs5MbAfBZhWTy-HBmPCFgeNIqjmkrIA1HGgcsA4nXGTClgbE7KD9bG95N9k-W4BWFOsWeN0Rm_QkYR6NRGnnrCoiQhKkgqZpSYWvpXzb5V-cCsgQM-XDHoHSCmvzV7HAMDOyr9GzrECTCO6t0mb79TZH1q8mC44nHiuZ686yo3ttjXHhPgtrYTbysNodNKVUhPcTUng4Y8zkwlmjzaLNvxocD2t5xGoqdyrovCv3f0LA9e_U">
+<div class="absolute inset-x-0 bottom-0 bg-inverse-surface/80 p-1">
+<span class="font-label-sm text-label-sm text-inverse-on-surface block text-center truncate">Đỉnh 3.143m (12 TV)</span>
+</div>
+</div>
+<div class="relative rounded overflow-hidden aspect-[4/3] bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Evening roll call headcount inside the 2800m mountain shelter on Mount Fansipan, hikers seated around wooden table with steaming hot tea and expedition backpacks organized neatly in background, warm interior light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaPT24rYYkxg7EnEvf9mtDfZrasivDQg8qrIMURzpR7fxkgyIdDKNgLvlxu-52mA9jbgPclrkmF1a0RaZnI2sBrxrduAS8VS--b429hJsPtiQtpjouHR7YPsHP9wXm1V3sqGRxRFX9CPMcMqV_wLhY4pLN5iSHO-X3jJ8uUI6BubXg0FnkAjeI13CbmkUI-QZjxPD6S60G2iMSqMUzCJuGApBt-tM04nF65pAz5Dl_orLL5SQepzNr">
+<div class="absolute inset-x-0 bottom-0 bg-inverse-surface/80 p-1">
+<span class="font-label-sm text-label-sm text-inverse-on-surface block text-center truncate">Điểm danh lán 2.800m</span>
+</div>
+</div>
+<div class="relative rounded overflow-hidden aspect-[4/3] bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Expedition mountain leader handing over signed ranger registration papers and trekking permits to a Vietnamese forestry ranger officer at Tram Ton checkpoint station, bright alpine daylight, professional atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBRblWPGwp47rQT0Uml7EJLAOYQzqdplpVebZiulf8NipWHc3ue2GEV9BSKBqE0qDqR-ePt0uaQ8fjh_IsxvmNAE649ltH_CnR1JwG-VHd4qw2EKSgz-RIs59wT4XTxxa1w_ghE-RR6huu2lFEK6trr23r5XuBPBNAhMP2MQ8TzCpAtukGE3dWK1yebwg_S-GKczEn7qT286iXM9qJyVHWGm41mbkMrcdBgybJlUJRSGy5LV1xdkuT">
+<div class="absolute inset-x-0 bottom-0 bg-inverse-surface/80 p-1">
+<span class="font-label-sm text-label-sm text-inverse-on-surface block text-center truncate">Biên bản Kiểm lâm</span>
+</div>
+</div>
+<div class="relative rounded overflow-hidden aspect-[4/3] bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Trekker equipment return area at Sa Pa Trekking Hub, orderly rows of trekking poles, satellite communicators, and camping tents being barcode scanned by logistics staff on warehouse rack, modern clean rugged outdoor depot." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJkZAuuJxQeA1K_75ZjOhuW534G96kJjRL_yZoCaVW_RKRlOhVwBGGMXJ-V8F06qjZzjatTr7BlYeo2TEB3_nYDlTgx-gyRH98yQmd6kgi9rVPef8p3zQd48g45qBfGTYPu3QPjvBEqWyk_rSD7g-iPTOoB3GS8xSjHP2zZJR8xHHVRcIxUtnMGrWukqDyFsastPUlsOt2tYSAet6xprmKSSNezODmGUr2_oj3qRy7nNV1XVmVTS2o">
+<div class="absolute inset-x-0 bottom-0 bg-inverse-surface/80 p-1">
+<span class="font-label-sm text-label-sm text-inverse-on-surface block text-center truncate">Bàn giao kho Sa Pa Hub</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Operational Secondary Actions -->
+<div class="grid grid-cols-3 gap-space-xs pt-space-xs">
+<button class="h-11 bg-surface-container-high text-on-surface rounded font-label-sm text-label-sm flex items-center justify-center gap-1 active:scale-95 transition-transform" onclick="alert('Đã lưu bản sao lưu nháp ngoại tuyến!')">
+<span class="material-symbols-outlined text-[16px]">save</span>
+<span class="">Lưu nháp</span>
+</button>
+<button class="h-11 bg-surface-container-high text-on-surface rounded font-label-sm text-label-sm flex items-center justify-center gap-1 active:scale-95 transition-transform" onclick="alert('Đang trích xuất file PDF báo cáo tour...')">
+<span class="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+<span class="">Xuất PDF</span>
+</button>
+<button class="h-11 bg-surface-container-high text-on-surface rounded font-label-sm text-label-sm flex items-center justify-center gap-1 active:scale-95 transition-transform" onclick="alert('Gửi lệnh in phiếu nghiệm thu hiện trường')">
+<span class="material-symbols-outlined text-[16px]">print</span>
+<span class="">In hồ sơ</span>
+</button>
+</div>
+<!-- Primary Final Action CTA -->
+<div class="pt-space-xs pb-space-lg">
+<button class="w-full min-h-[52px] bg-primary text-on-primary rounded font-label-lg text-label-lg flex items-center justify-center gap-2 uppercase tracking-wider shadow-md active:bg-primary-container transition-all" id="btn-submit-report" onclick="document.getElementById('modal-confirm-settlement').classList.remove('hidden')"><span class="material-symbols-outlined text-[20px]">send</span><span class="">GỬI BÁO CÁO TỔNG KẾT</span></button>
+<p class="font-label-sm text-label-sm text-on-surface-variant text-center mt-2">Dữ liệu hiện trường và biên bản bàn giao được chuyển tới bộ phận vận hành để đối soát trên Web.</p>
+</div>
+</div>
+<!-- Custom Confirmation Dialog Modal -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-xs hidden flex items-end sm:items-center justify-center p-margin" id="modal-confirm-settlement"><div class="bg-surface-container-lowest text-on-surface w-full max-w-sm rounded-xl p-space-lg shadow-2xl"><div class="flex items-center gap-space-xs text-primary mb-space-sm"><span class="material-symbols-outlined text-[26px]">task_alt</span><h4 class="font-headline-sm text-headline-sm text-on-surface font-bold">Xác Nhận Gửi Báo Cáo</h4></div><p class="font-body-md text-body-md text-on-surface-variant mb-space-md">Xác nhận gửi toàn bộ biên bản điểm danh <strong>12 thành viên</strong>, hình ảnh minh chứng và bàn giao thiết bị cho Staff Delivery để bộ phận vận hành đối soát trên hệ thống Web.</p><div class="flex items-center gap-space-xs"><button class="flex-1 h-12 bg-surface-container-high text-on-surface rounded font-label-md text-label-md active:scale-95 transition-transform" id="btn-cancel-modal" onclick="document.getElementById('modal-confirm-settlement').classList.add('hidden')">Kiểm tra lại</button><button class="flex-1 h-12 bg-primary text-on-primary rounded font-label-md text-label-md uppercase tracking-wider active:scale-95 transition-transform" id="btn-agree-modal" onclick="document.getElementById('modal-confirm-settlement').classList.add('hidden'); const btn = document.getElementById('btn-submit-report'); if(btn){ btn.innerHTML = '&lt;span class=&quot;material-symbols-outlined text-[20px]&quot;&gt;check_circle&lt;/span&gt; ĐÃ GỬI BÁO CÁO — CHỜ ĐỐI SOÁT'; btn.className = 'w-full min-h-[52px] bg-tertiary text-on-tertiary rounded font-label-lg text-label-lg flex items-center justify-center gap-2 uppercase tracking-wider shadow-md pointer-events-none'; }">Xác nhận gửi</button></div></div></div>
+<script>
+    (function() {
+      const openBtn = document.getElementById('btn-escrow-settle');
+      const modal = document.getElementById('modal-confirm-settlement');
+      const cancelBtn = document.getElementById('btn-cancel-modal');
+      const agreeBtn = document.getElementById('btn-agree-modal');
+
+      if (openBtn && modal && cancelBtn && agreeBtn) {
+        openBtn.addEventListener('click', () => {
+          modal.classList.remove('hidden');
+        });
+        cancelBtn.addEventListener('click', () => {
+          modal.classList.add('hidden');
+        });
+        agreeBtn.addEventListener('click', () => {
+          modal.classList.add('hidden');
+          openBtn.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span> ĐÃ CHUYỂN QUYẾT TOÁN ESCROW';
+          openBtn.classList.remove('bg-primary');
+          openBtn.classList.add('bg-tertiary', 'pointer-events-none');
+          alert('Thành công! Hồ sơ Tour #TG-8924-VN đã được bàn giao sang bộ phận Kế toán & Quản trị Escrow Vina_TrekGo.');
+        });
+      }
+    })();
+  </script>
+</div></main>
+
+
+
+</body></html>

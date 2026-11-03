@@ -71,9 +71,22 @@ jest_output.txt
 /docs/rental
 /docs/area-b
 
-/docs
+/docs/*
+!/docs/trip-gps.contract.ts
+!/docs/GPS_IN_TRIP.md
+!/docs/TRIP_GPS_OFFLINE_SYNC_V2.md
+!/docs/TRIP_GPS_V2_API_HANDOFF.md
+!/docs/NOTIFICATIONS_HANDOFF.md
 /handoffs/rental
 /handoffs
 
 /design
 /.invitation-test-pg
+/.invitation-test-mongo
+/scripts
+/prisma/seeds/data/*.local.json
+
+# Claude Code personal files
+CLAUDE.local.md
+CLAUDE.local.archive.md
+.claude/settings.local.json

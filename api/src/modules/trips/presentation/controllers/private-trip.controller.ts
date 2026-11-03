@@ -78,10 +78,10 @@ export class PrivateTripController {
   @Post('private-trips/:id/invitations')
   @ApiPrivateId()
   @ApiPrivateResponse(
-    'Host tạo hoặc đổi link mời',
+    'Host tạo hoặc đổi mã mời 6 ký tự',
     'invitation',
     201,
-    'Thu hồi link ACTIVE cũ. expiresAt tùy chọn, phải tương lai và trước startAt. Lưu tripVersion mới và dùng inviteCode cho CF04.',
+    'Thu hồi mã mời ACTIVE cũ. expiresAt tùy chọn, phải tương lai và trước startAt. Lưu tripVersion mới và dùng inviteCode (6 ký tự chữ và số) cho CF04.',
   )
   @Header('Cache-Control', 'no-store')
   @doc(privateInviteSchema)

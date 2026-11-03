@@ -1,0 +1,650 @@
+/* eslint-disable @next/next/no-img-element */
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+
+import { bookingApi } from "@/features/bookings/booking.api";
+import { getRentalApiErrorMessage, getRentalProduct } from "@/features/rentals/services/rental.api";
+import {
+  getMyRentalOrder,
+  getRentalDeposit,
+  type RentalDepositItem,
+  type RentalDepositStatus,
+  type RentalOrderDetail,
+} from "@/features/rentals/services/user-rental.api";
+import { privateTripsApi } from "@/features/trips/services/private-trips.api";
+
+import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
+
+import { RentalCancellation } from "./RentalCancellation";
+import { DeductionReviewPanel } from "./DeductionReviewPanel";
+
+type ProductVisual = { name: string; sku?: string; imageUrl?: string };
+
+// Tiến trình đơn thuê. Chỉ hiện giờ thật cho bước có mốc trong `timeline` của API;
+// bước nhận đồ / hạn trả chỉ hiện thời gian dự kiến theo chuyến đi.
+const ORDER_STEPS: Array<{ status: string; label: string; event?: string }> = [
+  { status: "PENDING_PAYMENT", label: "Đặt đơn", event: "ORDER_CREATED" },
+  { status: "PAID", label: "Đã thanh toán", event: "PAID" },
+  { status: "PREPARING", label: "Kho đang chuẩn bị" },
+  { status: "READY_FOR_HANDOVER", label: "Sẵn sàng bàn giao", event: "PACKED" },
+  { status: "ACTIVE", label: "Đang sử dụng", event: "HANDED_OVER" },
+  { status: "RETURN_PENDING", label: "Chờ thu hồi" },
+  { status: "RETURN_PROCESSING", label: "Đang xử lý trả", event: "RETURNED" },
+  { status: "COMPLETED", label: "Hoàn tất", event: "COMPLETED" },
+];
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  PENDING_PAYMENT: "Chờ thanh toán",
+  PAID: "Đã thanh toán",
+  PREPARING: "Kho đang chuẩn bị",
+  READY_FOR_HANDOVER: "Sẵn sàng bàn giao",
+  ACTIVE: "Đang sử dụng",
+  RETURN_PENDING: "Chờ thu hồi",
+  RETURN_PROCESSING: "Đang xử lý trả",
+  COMPLETED: "Hoàn tất",
+  CANCELLED: "Đã hủy",
+  EXPIRED: "Đã hết hạn",
+};
+
+// Tên sản phẩm có hạng thường kèm hậu tố ("– Rất mới"); nhãn hạng đã hiển thị riêng.
+function stripGradeSuffix(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .trim();
+}
+
+function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
+  const times = new Map((detail.timeline ?? []).map((event) => [event.type, event.at]));
+  const status = detail.order.status;
+  const current = ORDER_STEPS.findIndex((step) => step.status === status);
+  const cancelledAt = times.get("CANCELLED");
+
+  return (
+    <section className="mt-6 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-xl font-black text-gray-900">Tiến trình đơn thuê</h2>
+        <p className="text-xs font-semibold text-gray-400">Trạng thái do hệ thống và nhân viên cập nhật</p>
+      </div>
+      {status === "CANCELLED" || status === "EXPIRED" ? (
+        <p className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm font-semibold text-gray-600">
+          {ORDER_STATUS_LABELS[status]}
+          {cancelledAt ? ` lúc ${dateTime(cancelledAt)}` : ""}.
+        </p>
+      ) : (
+        <ol className="mt-5 grid gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
+          {ORDER_STEPS.map((step, index) => {
+            const complete = current >= index;
+            const active = current === index;
+            const at = step.event ? times.get(step.event) : undefined;
+            let note: { text: string; planned: boolean } | null = null;
+            if (complete && at) note = { text: dateTime(at), planned: false };
+            else if (!complete && step.status === "ACTIVE" && detail.trip?.rentalStartAt)
+              note = { text: `Dự kiến ${dateTime(detail.trip.rentalStartAt)}`, planned: true };
+            else if (!complete && step.status === "RETURN_PENDING" && detail.trip?.dueAt)
+              note = { text: `Hạn trả ${dateTime(detail.trip.dueAt)}`, planned: true };
+            return (
+              <li key={step.status} className="relative flex gap-3 sm:block">
+                <div className="flex items-center sm:mb-2">
+                  <span
+                    className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 text-xs font-black ${
+                      active
+                        ? "border-[#2F6B4F] bg-[#2F6B4F] text-white ring-4 ring-emerald-100"
+                        : complete
+                          ? "border-[#2F6B4F] bg-[#2F6B4F] text-white"
+                          : "border-gray-200 bg-white text-gray-400"
+                    }`}
+                  >
+                    {complete ? "✓" : index + 1}
+                  </span>
+                  {index < ORDER_STEPS.length - 1 && (
+                    <span
+                      className={`ml-2 hidden h-0.5 flex-1 sm:block ${current > index ? "bg-[#2F6B4F]" : "bg-gray-200"}`}
+                    />
+                  )}
+                </div>
+                <div className="min-w-0 sm:pr-2">
+                  <p className={`text-xs font-bold ${complete ? "text-gray-900" : "text-gray-400"}`}>{step.label}</p>
+                  {note && (
+                    <p className={`mt-0.5 text-[11px] leading-4 ${note.planned ? "italic text-gray-400" : "text-gray-500"}`}>
+                      {note.text}
+                    </p>
+                  )}
+                  {active && <p className="mt-0.5 text-[10px] font-bold text-[#2F6B4F]">Hiện tại</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+const depositStatusLabels: Record<string, string> = {
+  HELD: "Đang giữ để xử lý",
+  REVIEW_REQUIRED: "Đang chờ kiểm tra",
+  REFUND_PENDING: "Đang chờ hoàn cọc",
+  REFUND_FAILED: "Hoàn cọc cần hỗ trợ",
+  DEDUCTED: "Đã khấu trừ",
+  REFUNDED: "Đã hoàn cọc",
+  SETTLED: "Đã quyết toán",
+};
+
+const refundStatusLabels: Record<string, string> = {
+  PENDING: "Chờ cổng thanh toán",
+  PROCESSING: "Cổng thanh toán đang xử lý",
+  SUCCEEDED: "Đã hoàn tiền",
+  FAILED: "Hoàn tiền thất bại",
+};
+
+function labelOf(labels: Record<string, string>, value?: string | null) {
+  if (!value) return "Chưa phát sinh";
+  return labels[value] ?? value.replaceAll("_", " ").toLocaleLowerCase("vi-VN");
+}
+
+/** Mã lý do của backend → câu tiếng Việt. Mã lạ (chỉ chữ in hoa) thì ẩn để khách không thấy mã thô. */
+const depositReasonLabels: Record<string, string> = {
+  FINAL_PASS_AWAIT_GROUPED_REFUND: "Kiểm định đạt · chờ hoàn cọc",
+  INVENTORY_FINAL_PASS: "Kiểm định đạt · đang hoàn cọc",
+  DEDUCTION_REVIEW_REQUIRED: "Kiểm định ghi nhận hư hại",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
+  REFUND_REVIEW_REQUIRED: "Hoàn cọc đang được đối soát",
+  POLICY_OR_INVENTORY_REVIEW_REQUIRED: "Đang được kiểm tra thêm",
+  MISSING_PENDING_REVIEW: "Thiết bị chưa được nhận lại · đang xác minh",
+  LOST_CONFIRMED: "Đã xác nhận thất lạc",
+};
+
+function depositReasonText(reason?: string | null) {
+  if (!reason) return null;
+  if (depositReasonLabels[reason]) return depositReasonLabels[reason];
+  return /^[A-Z0-9_]+$/.test(reason) ? null : reason;
+}
+
+/** Nhãn trạng thái từng món: món đã duyệt trừ nhưng chưa quyết toán thì nói rõ đang ở giai đoạn nào. */
+function depositBadge(item: RentalDepositItem) {
+  const pendingDeduction =
+    (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
+  if (pendingDeduction) {
+    if (item.reviewStatus === "SUBMITTED") return { label: "Đang xử lý phản đối", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+    if (item.canSubmitReview) return { label: "Có khoản trừ · chờ hết hạn phản đối", tone: "border-red-200 bg-red-50 text-red-700" };
+    return { label: "Có khoản trừ · chờ quyết toán", tone: "border-red-200 bg-red-50 text-red-700" };
+  }
+  return { label: labelOf(depositStatusLabels, item.status), tone: depositTone(item) };
+}
+
+function depositTone(item: RentalDepositItem) {
+  if (item.refundStatus === "SUCCEEDED" || item.status === "REFUNDED") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+  if (item.refundStatus === "FAILED" || item.status === "REFUND_FAILED") {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+  if (item.status === "DEDUCTED") {
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
+  const [detail, setDetail] = useState<RentalOrderDetail | null>(null);
+  const [tripName, setTripName] = useState("Chuyến trekking của bạn");
+  const [visuals, setVisuals] = useState<Record<string, ProductVisual>>({});
+  const [deposit, setDeposit] = useState<RentalDepositStatus>();
+  const [depositError, setDepositError] = useState<string>();
+  const [depositLoading, setDepositLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadDeposit = useCallback(async () => {
+    setDepositLoading(true);
+    setDepositError(undefined);
+    try {
+      setDeposit(await getRentalDeposit(orderId));
+    } catch (reason) {
+      setDepositError(
+        getRentalApiErrorMessage(reason, "Không thể tải trạng thái quyết toán cọc."),
+      );
+    } finally {
+      setDepositLoading(false);
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    let active = true;
+    getMyRentalOrder(orderId)
+      .then(async (value) => {
+        if (!active) return;
+        setDetail(value);
+        const [bookings, privateTrips, productResults] = await Promise.all([
+          bookingApi.list(1, "").catch(() => null),
+          privateTripsApi.list().catch(() => []),
+          Promise.allSettled(
+            value.items.map((item) =>
+              getRentalProduct(item.product.id || item.productId || ""),
+            ),
+          ),
+        ]);
+        if (!active) return;
+        const booking = bookings?.items.find((item) => item.trip.id === value.order.tripId);
+        const privateTrip = privateTrips.find((item) => item.id === value.order.tripId);
+        setTripName(booking?.trip.title || privateTrip?.title || "Chuyến trekking của bạn");
+        setVisuals(
+          Object.fromEntries(
+            productResults.flatMap((result) =>
+              result.status === "fulfilled"
+                ? [[result.value.id, {
+                    name: result.value.name,
+                    sku: result.value.sku,
+                    imageUrl: result.value.imageUrls[0],
+                  }]]
+                : [],
+            ),
+          ),
+        );
+      })
+      .catch((reason) => {
+        if (active) {
+          setError(getRentalApiErrorMessage(reason, "Không thể tải chi tiết đơn thuê."));
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [orderId]);
+
+  useEffect(() => {
+    let active = true;
+    getRentalDeposit(orderId)
+      .then((value) => {
+        if (active) setDeposit(value);
+      })
+      .catch((reason) => {
+        if (active) {
+          setDepositError(
+            getRentalApiErrorMessage(reason, "Không thể tải trạng thái quyết toán cọc."),
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setDepositLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [orderId]);
+
+  return (
+    <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-10 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-5xl">
+        <RentalPageHeader
+          eyebrow={`Đơn #${shortCode(orderId)}`}
+          title={tripName}
+          description="Chi tiết thiết bị, thời gian giao nhận và tình trạng tài chính của đơn thuê."
+          active="/rentals/orders"
+        />
+
+        {loading ? (
+          <State text="Đang tải chi tiết đơn thuê..." />
+        ) : error || !detail ? (
+          <State text={error || "Không tìm thấy đơn thuê."} />
+        ) : (
+          <>
+            <RentalCancellation orderId={orderId} status={detail.order.status} onCancelled={async () => { setDetail(await getMyRentalOrder(orderId)); await loadDeposit(); }} />
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <Info label="Trạng thái" value={ORDER_STATUS_LABELS[detail.order.status] ?? detail.order.status.replaceAll("_", " ")} />
+              <Info
+                label="Tổng thanh toán"
+                value={money(detail.order.totalAmount, detail.order.currency)}
+              />
+              <Info label="Hạn trả thiết bị" value={dateTime(detail.order.dueAt)} />
+            </div>
+
+            <OrderProgress detail={detail} />
+
+            {detail.order.status === "PENDING_PAYMENT" ? (
+              <PaymentCountdown expiresAt={detail.order.paymentExpiresAt} />
+            ) : null}
+
+            <section className="mt-6">
+              <h2 className="text-xl font-black text-gray-900">Thiết bị trong đơn</h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {detail.items.map((item) => {
+                  const visual = visuals[item.product.id] || item.product;
+                  return (
+                    <article key={item.id} className="flex gap-4 rounded-2xl bg-white p-4 shadow-sm">
+                      {visual.imageUrl ? (
+                        <img
+                          src={visual.imageUrl}
+                          alt={visual.name}
+                          className="h-24 w-24 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-24 w-24 shrink-0 place-items-center rounded-xl bg-emerald-50 text-2xl">
+                          ⛺
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        {visual.sku ? (
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
+                            {visual.sku}
+                          </p>
+                        ) : null}
+                        <h3 className="mt-1 font-black text-gray-900">
+                          {item.product.grade ? stripGradeSuffix(visual.name) : visual.name}
+                        </h3>
+                        <p className="mt-2 text-xs text-gray-500">
+                          Số lượng: {item.quantity}
+                          {item.product.grade ? (
+                            <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              {item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="mt-1 text-sm font-extrabold text-gray-900">
+                          Phí thuê {money(item.feeAmount, detail.order.currency)}
+                        </p>
+                        {typeof item.depositPerUnit === "number" ? (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Cọc {money(item.depositPerUnit, detail.order.currency)}/món × {item.quantity} ={" "}
+                            <span className="font-bold text-gray-700">
+                              {money(item.depositAmount, detail.order.currency)}
+                            </span>
+                            {typeof item.depositExplanation?.percentageOfReplacementValue === "number" ? (
+                              <span className="text-gray-400">
+                                {" "}· ≈ {item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <Location title="Điểm nhận" point={detail.pickupPoint} />
+              <Location title="Điểm trả" point={detail.returnPoint} />
+            </div>
+
+            <DepositSettlementPanel
+              orderId={orderId}
+              deposit={deposit}
+              currency={detail.order.currency}
+              loading={depositLoading}
+              error={depositError}
+              onRetry={() => void loadDeposit()}
+            />
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {detail.order.status === "COMPLETED" &&
+              detail.order.financialStatus === "SETTLED" ? (
+                <Link
+                  href={`/rentals/reviews/${orderId}`}
+                  className="rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-extrabold text-white"
+                >
+                  Đánh giá thiết bị
+                </Link>
+              ) : (
+                <span className="cursor-not-allowed rounded-xl bg-gray-100 px-4 py-2.5 text-xs font-extrabold text-gray-400">
+                  Chỉ đánh giá sau khi hoàn tất trả đồ và quyết toán cọc
+                </span>
+              )}
+              <Link
+                href="/rentals/transactions"
+                className="rounded-xl border border-emerald-900/15 bg-white px-4 py-2.5 text-xs font-extrabold text-gray-700"
+              >
+                Xem giao dịch hoàn tiền
+              </Link>
+            </div>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function DepositSettlementPanel({
+  orderId,
+  deposit,
+  currency,
+  loading,
+  error,
+  onRetry,
+}: {
+  orderId: string;
+  deposit?: RentalDepositStatus;
+  currency: string;
+  loading: boolean;
+  error?: string;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="mt-6 overflow-hidden rounded-3xl border border-emerald-900/10 bg-white shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 bg-[#123f31] px-5 py-5 text-white sm:px-6">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200">
+            Tiền cọc thiết bị
+          </p>
+          <h2 className="mt-1 text-xl font-black">Quyết toán cọc</h2>
+          <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+            Quyết toán xác định khoản giữ, khấu trừ và phải hoàn. Hoàn tiền là bước riêng qua cổng thanh toán.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={loading}
+          className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+        >
+          {loading ? "Đang cập nhật..." : "Cập nhật trạng thái"}
+        </button>
+      </div>
+
+      {error ? (
+        <div className="m-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <span>{error}</span>
+          <button type="button" onClick={onRetry} className="font-bold underline">
+            Thử lại
+          </button>
+        </div>
+      ) : null}
+
+      {!error && loading && !deposit ? (
+        <div className="p-8 text-center text-sm font-semibold text-slate-500">
+          Đang đối chiếu trạng thái cọc từ hệ thống...
+        </div>
+      ) : null}
+
+      {!error && deposit ? (
+        <div className="p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <DepositAmount label="Đã thu" value={deposit.collectedAmount} currency={currency} />
+            <DepositAmount label="Đang giữ" value={deposit.heldAmount} currency={currency} />
+            <DepositAmount
+              label="Chờ hoàn"
+              value={deposit.refundPendingAmount}
+              currency={currency}
+              tone="amber"
+            />
+            <DepositAmount
+              label="Đã hoàn"
+              value={deposit.refundedAmount}
+              currency={currency}
+              tone="green"
+            />
+            <DepositAmount
+              label="Khấu trừ"
+              value={deposit.deductionAmount}
+              currency={currency}
+              tone="slate"
+            />
+          </div>
+
+          {(() => {
+            const pending = deposit.items
+              .filter((item) => (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status))
+              .reduce((sum, item) => sum + (item.approvedDeduction ?? 0), 0);
+            return pending > 0 ? (
+              <p className="mt-4 rounded-xl border border-red-100 bg-red-50/60 p-3 text-xs leading-5 text-red-800">
+                Có {money(pending, currency)} khoản trừ đã duyệt nhưng chưa quyết toán, nên chưa tính vào ô “Khấu trừ”. Số này chỉ được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
+              </p>
+            ) : null;
+          })()}
+
+          {deposit.refundPendingAmount > 0 ? (
+            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+              Khoản “Chờ hoàn” mới là yêu cầu đang xử lý. Chỉ khi cổng thanh toán trả trạng thái thành công, số tiền mới chuyển sang “Đã hoàn”.
+            </p>
+          ) : null}
+
+          {deposit.settlementMode === "SANDBOX_SIMULATED" ? (
+            <p className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs leading-5 text-violet-800">
+              {deposit.notice || "Đây là kết quả mô phỏng sandbox, không phải bằng chứng tiền thật đã về tài khoản."}
+            </p>
+          ) : null}
+
+          {deposit.items.length ? (
+            <div className="mt-5 space-y-3">
+              {deposit.items.map((item) => (
+                <div key={item.unitId}>
+                <article
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4"
+                >
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                      Thiết bị {item.assetCode || shortCode(item.unitId)}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      Cọc {money(item.depositAmount ?? item.amount ?? 0, currency)}
+                    </p>
+                    {depositReasonText(item.reason) ? (
+                      <p className="mt-1 text-xs text-slate-500">{depositReasonText(item.reason)}</p>
+                    ) : null}
+                  </div>
+                  <div className="text-right">
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositBadge(item).tone}`}>
+                      {depositBadge(item).label}
+                    </span>
+                    {item.refundStatus ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {labelOf(refundStatusLabels, item.refundStatus)}
+                        {item.refundAmount ? ` · ${money(item.refundAmount, currency)}` : ""}
+                      </p>
+                    ) : item.deduction ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Khấu trừ {money(item.deduction, currency)}
+                      </p>
+                    ) : null}
+                  </div>
+                </article>
+                <DeductionReviewPanel
+                  orderId={orderId}
+                  item={item}
+                  currency={currency}
+                  onChanged={onRetry}
+                />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+              Chưa phát sinh quyết toán theo thiết bị. Tiền cọc sẽ được theo dõi tại đây sau khi thiết bị được bàn giao và hoàn trả.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function DepositAmount({
+  label,
+  value,
+  currency,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  currency: string;
+  tone?: "default" | "amber" | "green" | "slate";
+}) {
+  const tones = {
+    default: "bg-emerald-50 text-emerald-950",
+    amber: "bg-amber-50 text-amber-950",
+    green: "bg-green-50 text-green-950",
+    slate: "bg-slate-100 text-slate-900",
+  };
+  return (
+    <div className={`rounded-2xl p-4 ${tones[tone]}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wide opacity-60">{label}</p>
+      <p className="mt-1 text-base font-black">{money(value, currency)}</p>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-2 font-extrabold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function Location({
+  title,
+  point,
+}: {
+  title: string;
+  point: RentalOrderDetail["pickupPoint"];
+}) {
+  return (
+    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+      <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">{title}</p>
+      <p className="mt-2 font-black text-gray-900">{point?.name || "Chưa cập nhật"}</p>
+      <p className="mt-1 text-sm text-gray-600">{point?.address}</p>
+    </div>
+  );
+}
+
+function State({ text }: { text: string }) {
+  return (
+    <div className="mt-6 rounded-2xl bg-white p-10 text-center text-sm font-semibold text-gray-500 shadow-sm">
+      {text}
+    </div>
+  );
+}
+
+function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState(0);
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  return (
+    <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800">
+        Thời gian giữ đơn
+      </p>
+      <p className="mt-2 text-2xl font-black text-amber-900">
+        {remaining > 0
+          ? `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+          : "Đã hết hạn"}
+      </p>
+      <p className="mt-1 text-xs text-amber-800">
+        Hoàn tất chuyển khoản trước khi đồng hồ kết thúc.
+      </p>
+    </div>
+  );
+}

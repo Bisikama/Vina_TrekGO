@@ -1,6 +1,10 @@
-import { DepositPolicyType, PrismaClient, RentalProductStatus } from '@prisma/client'
+import { DepositPolicyType, PrismaClient, RentalGrade, RentalProductStatus } from '@prisma/client'
+import { createHash } from 'node:crypto'
 
-interface RentalProductSeed {
+export interface RentalProductSeed {
+  /** Có cả hai = sản phẩm thuộc một nhóm hạng; không có = sản phẩm thường. */
+  gradeGroupId?: string
+  grade?: RentalGrade
   id?: string
   categorySlug: string
   sku: string
@@ -16,7 +20,41 @@ interface RentalProductSeed {
   requiresDeepReturnInspection: boolean
 }
 
-export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
+export const GRADE_GROUP_TENT_3P = '5d2f7c1a-3b4e-4f60-8a71-0c9e2b6d4a01'
+export const GRADE_GROUP_PACK_45L = '5d2f7c1a-3b4e-4f60-8a71-0c9e2b6d4a02'
+
+// Ảnh minh hoạ theo loại đồ, không khẳng định đây là ảnh của mẫu hoặc thông số cụ thể.
+// URL công khai giúp seed chạy trên các máy local mà không cần Cloudinary riêng.
+const IMAGE_BY_SKU_PREFIX: Record<string, string> = {
+  TENT: 'https://marmote.fr/cdn/shop/products/Tentesdesertfox_1.png?v=1659371645',
+  TARP: 'https://www.trail.co.uk/cdn/shop/files/TR0131-GY_3x4_TARP_SHELTER_POLED_25_AI_01-v2.jpg?v=1752653762&width=1600',
+  PACK: 'https://cdn.shopify.com/s/files/1/0563/8628/9833/products/79548_5743_pathway60_front34_1_1200x.jpg?v=1636642301',
+  SLEEP: 'https://cdn.media.amplience.net/i/frasersdev/40412805_o.jpg?v=20260416103058',
+  MAT: 'https://www.kingcamp.com/cdn/shop/products/SLEEPINGPADS_1_74c87e79-8860-4d89-b385-b459e7b9259c_1200x1200.jpg?v=1691477451',
+  SHOE: 'https://toreadgear.com/cdn/shop/files/TFAABL91762-K676-_1_1120x.png?v=1743663673',
+  POLE: 'https://www.driftersshop.co.za/cdn/shop/files/FirstAscentIncaTrekkingPoleTwinPack2_1600x.jpg?v=1710417533',
+  'RAIN-001': 'https://img.91app.com/webapi/imagesV3/Original/SalePage/11141022/0/638943208917670000?v=1',
+  'RAIN-002': 'https://mediahub.debenhams.com/m5055805342027_yellow_xl.jpeg',
+  'RAIN-003': 'https://shopping.c.yimg.jp/lib/arukikata-travel/24810193.jpg',
+  'LIGHT-001': 'https://marine-deals-io.freetls.fastly.net/media/catalog/product/2/2/220244_1_pc.jpg?dpr=2&filter=lanczos&fit=bounds&format=webp&height=500&width=500',
+  'LIGHT-002': 'https://www.torchdirect.co.uk/cdn/shop/files/Nitecore-LR40-LED-Lantern-Power-Bank-2.jpg?v=1689203293&width=1214',
+  POWER: 'https://geekles.net/images/uploads/2014/06/img60436664-640x640.jpg',
+  STOVE: 'https://kbmoutdoors.ca/cdn/shop/products/P321461_Micron_1_1024x1024_0515bfff-b832-43b9-bbe6-15dfa588defb.jpg?v=1624388914',
+  COOK: 'https://target.scene7.com/is/image/Target/GUEST_1a679a24-15f9-4771-adcb-18f4742551c0',
+  WATER: 'https://bachgold-outdoor.com/cdn/shop/files/Hero_Images_-_Grey_-_500ml_-_op_3.jpg?v=1759385003&width=3000',
+  NAV: 'https://venturehunting.com.au/cdn/shop/files/6417084121189_Suunto-A-30-Sh-Metric-Compass_1.jpg?v=1728958453',
+  TOOL: 'https://i5.walmartimages.com/asr/6f2294fa-6ee3-4093-8991-54a7a4524bce.4315c50c0c266ce228a2bd4f9890e3a6.jpeg',
+  GPS: 'https://bilder.frankonia.de/fsicache/server?effects=pad%28CC%2Cffff%29&height=1000&quality=40&source=products%2Fp2017735_d8.jpg&type=image&width=1000',
+}
+
+export function rentalSeedImage(sku: string): string {
+  const baseSku = sku.endsWith('-GU') ? sku.slice(0, -3) : sku
+  const url = IMAGE_BY_SKU_PREFIX[baseSku] ?? IMAGE_BY_SKU_PREFIX[sku] ?? IMAGE_BY_SKU_PREFIX[sku.split('-')[0]]
+  if (!url) throw new Error(`Missing illustrative image for rental product ${sku}`)
+  return url
+}
+
+const BASE_RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
   {
     id: 'aaaaaa11-1111-1111-1111-111111111111',
     categorySlug: 'leu-trai',
@@ -354,10 +392,136 @@ export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = [
     requiredAccessories: ['Dây đeo', 'Cáp sạc', 'Túi bảo vệ'],
     requiresDeepReturnInspection: true,
   },
+  // Cặp sản phẩm hai hạng (phần mở rộng ngoài Policy 1.5.2). Cùng replacementValue;
+  // hạng Rất mới có giá ngày và cọc cao hơn hẳn (cọc ~30% / ~20% giá trị thay thế).
+  {
+    gradeGroupId: GRADE_GROUP_TENT_3P,
+    grade: RentalGrade.LIKE_NEW,
+    categorySlug: 'leu-trai',
+    sku: 'TENT-G3-LN',
+    name: 'Lều trekking 3 người – Rất mới',
+    description: 'Lều hai lớp cho nhóm 2–3 người. Hạng Rất mới: vải và khung gần như mới, chưa có vết sửa.',
+    dailyPrice: 140_000,
+    replacementValue: 3_000_000,
+    depositValue: 900_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 3, weightKg: 3.2, waterproofMm: 3000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_TENT_3P,
+    grade: RentalGrade.GOOD_USED,
+    categorySlug: 'leu-trai',
+    sku: 'TENT-G3-GU',
+    name: 'Lều trekking 3 người – Đã sử dụng tốt',
+    description:
+      'Lều hai lớp cho nhóm 2–3 người. Hạng Đã sử dụng tốt: có dấu hiệu sử dụng nhưng chống mưa và khung đầy đủ. Rẻ hơn cả giá thuê mỗi ngày lẫn tiền cọc.',
+    dailyPrice: 100_000,
+    replacementValue: 3_000_000,
+    depositValue: 600_000,
+    usageGroup: 'SHELTER',
+    specifications: { capacity: 3, weightKg: 3.2, waterproofMm: 3000, layers: 2 },
+    recommendationTags: ['MULTI_DAY', 'RAIN_READY'],
+    requiredAccessories: ['Khung lều', 'Tấm phủ mưa', 'Cọc lều', 'Dây neo', 'Túi đựng'],
+    requiresDeepReturnInspection: true,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_PACK_45L,
+    grade: RentalGrade.LIKE_NEW,
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-G45-LN',
+    name: 'Balo trekking 45L – Rất mới',
+    description: 'Balo trợ lực 45L cho chuyến 2–3 ngày. Hạng Rất mới: khoá kéo, đai và vải gần như mới.',
+    dailyPrice: 90_000,
+    replacementValue: 2_000_000,
+    depositValue: 600_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 45, weightKg: 1.5, rainCoverIncluded: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
+  {
+    gradeGroupId: GRADE_GROUP_PACK_45L,
+    grade: RentalGrade.GOOD_USED,
+    categorySlug: 'balo-trekking',
+    sku: 'PACK-G45-GU',
+    name: 'Balo trekking 45L – Đã sử dụng tốt',
+    description:
+      'Balo trợ lực 45L cho chuyến 2–3 ngày. Hạng Đã sử dụng tốt: vải có dấu hiệu sử dụng, đai và khoá hoạt động tốt. Rẻ hơn cả giá thuê mỗi ngày lẫn tiền cọc.',
+    dailyPrice: 65_000,
+    replacementValue: 2_000_000,
+    depositValue: 400_000,
+    usageGroup: 'CARRY',
+    specifications: { capacityLiters: 45, weightKg: 1.5, rainCoverIncluded: true },
+    recommendationTags: ['MULTI_DAY', 'MODERATE_TRAIL', 'RAIN_READY'],
+    requiredAccessories: ['Áo trùm mưa balo'],
+    requiresDeepReturnInspection: false,
+  },
 ]
+
+/** Mỗi mẫu có một nhóm UUID ổn định giữa các lần chạy và các database local. */
+function seedGradeGroupId(sku: string): string {
+  const bytes = createHash('sha256').update(`vinatrekgo:rental-grade:${sku}`).digest().subarray(0, 16)
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+// Giữ nguyên SKU và ID cũ cho hạng LIKE_NEW để các quan hệ hiện có vẫn trỏ tới
+// sản phẩm đó. Hạng GOOD_USED là một SKU riêng cùng nhóm, với giá và cọc thấp hơn.
+export const RENTAL_PRODUCT_SEEDS: readonly RentalProductSeed[] = BASE_RENTAL_PRODUCT_SEEDS.flatMap((product) => {
+  if (product.gradeGroupId || product.grade) return [product]
+  const gradeGroupId = seedGradeGroupId(product.sku)
+  const { id: _originalId, ...usedProduct } = product
+  return [
+    {
+      ...product, gradeGroupId, grade: RentalGrade.LIKE_NEW,
+      name: `${product.name} – Rất mới`,
+      description: `${product.description} Hạng Rất mới.`,
+    },
+    {
+      ...usedProduct, gradeGroupId, grade: RentalGrade.GOOD_USED,
+      sku: `${product.sku}-GU`,
+      name: `${product.name} – Đã sử dụng tốt`,
+      description: `${product.description} Hạng Đã sử dụng tốt, có dấu hiệu sử dụng.`,
+      dailyPrice: Math.floor(product.dailyPrice * 0.75 / 1000) * 1000,
+      depositValue: Math.floor(product.depositValue * 2 / 3 / 1000) * 1000,
+    },
+  ]
+})
+
+/**
+ * Kiểm các nhóm hạng trong seed theo đúng quy tắc của Catalog, để seed sai dừng trước khi ghi DB:
+ * mỗi nhóm đúng một LIKE_NEW và một GOOD_USED, cùng danh mục, cùng replacementValue,
+ * LIKE_NEW có giá ngày và cọc lớn hơn hẳn GOOD_USED. Seed luôn dùng cọc FIXED.
+ */
+export function assertGradeSeedPairs(seeds: readonly RentalProductSeed[] = RENTAL_PRODUCT_SEEDS): void {
+  const groups = new Map<string, RentalProductSeed[]>()
+  for (const seed of seeds) {
+    if (!seed.gradeGroupId !== !seed.grade) throw new Error(`${seed.sku}: gradeGroupId và grade phải đi cùng nhau`)
+    if (seed.gradeGroupId) groups.set(seed.gradeGroupId, [...(groups.get(seed.gradeGroupId) ?? []), seed])
+  }
+  for (const [groupId, members] of groups) {
+    const likeNew = members.filter((m) => m.grade === RentalGrade.LIKE_NEW)
+    const goodUsed = members.filter((m) => m.grade === RentalGrade.GOOD_USED)
+    if (members.length !== 2 || likeNew.length !== 1 || goodUsed.length !== 1)
+      throw new Error(`Nhóm hạng ${groupId} phải có đúng một LIKE_NEW và một GOOD_USED`)
+    const [ln, gu] = [likeNew[0], goodUsed[0]]
+    if (ln.categorySlug !== gu.categorySlug) throw new Error(`Nhóm hạng ${groupId}: hai hạng khác danh mục`)
+    if (ln.replacementValue !== gu.replacementValue)
+      throw new Error(`Nhóm hạng ${groupId}: replacementValue hai hạng phải bằng nhau`)
+    if (!(ln.dailyPrice > gu.dailyPrice) || !(ln.depositValue > gu.depositValue))
+      throw new Error(`Nhóm hạng ${groupId}: LIKE_NEW phải có giá ngày và cọc lớn hơn hẳn GOOD_USED`)
+  }
+}
 
 export async function seedRentalProducts(prisma: PrismaClient) {
   console.log('Seeding Rental Products...')
+  assertGradeSeedPairs()
 
   const requiredSlugs = [...new Set(RENTAL_PRODUCT_SEEDS.map((product) => product.categorySlug))]
   const categories = await prisma.rentalCategory.findMany({
@@ -371,29 +535,51 @@ export async function seedRentalProducts(prisma: PrismaClient) {
     throw new Error(`Missing rental categories for product seed: ${missingSlugs.join(', ')}`)
   }
 
-  for (const product of RENTAL_PRODUCT_SEEDS) {
-    const { id, categorySlug, sku, ...data } = product
-    const categoryId = categoryIdBySlug.get(categorySlug)!
-    const persistedData = {
-      ...data,
-      categoryId,
-      currency: 'VND',
-      depositPolicyType: DepositPolicyType.FIXED,
-      images: [],
-      status: RentalProductStatus.ACTIVE,
-    }
+  // Fail before any writes if a seed product has no image.
+  for (const product of RENTAL_PRODUCT_SEEDS) rentalSeedImage(product.sku)
+  const configuredUrl = process.env.DIRECT_URL || process.env.DATABASE_URL
+  let localDatabase = false
+  try {
+    const host = new URL(configuredUrl ?? '').hostname.toLowerCase()
+    localDatabase = ['localhost', '127.0.0.1', '[::1]'].includes(host)
+  } catch { /* No automatic catalog replacement without a known local URL. */ }
 
-    await prisma.rentalProduct.upsert({
-      where: { sku },
-      update: persistedData,
-      create: {
-        ...(id ? { id } : {}),
-        sku,
-        ...persistedData,
-      },
-    })
-    console.log(`Upserted rental product: ${sku} - ${data.name}`)
-  }
+  await prisma.$transaction(async (tx) => {
+    if (localDatabase) {
+      const inactive = await tx.rentalProduct.updateMany({
+        where: { sku: { notIn: RENTAL_PRODUCT_SEEDS.map((product) => product.sku) }, status: { not: RentalProductStatus.INACTIVE } },
+        data: { status: RentalProductStatus.INACTIVE, version: { increment: 1 } },
+      })
+      console.log(`Marked ${inactive.count} non-seed local rental products INACTIVE.`)
+    } else {
+      console.log('Non-local or unknown database: skipping replacement of existing products.')
+    }
+    for (const product of RENTAL_PRODUCT_SEEDS) {
+      const { id, categorySlug, sku, gradeGroupId, grade, ...data } = product
+      const categoryId = categoryIdBySlug.get(categorySlug)!
+      const persistedData = {
+        ...data,
+        gradeGroupId: gradeGroupId ?? null,
+        grade: grade ?? null,
+        categoryId,
+        currency: 'VND',
+        depositPolicyType: DepositPolicyType.FIXED,
+        images: [rentalSeedImage(sku)],
+        status: RentalProductStatus.ACTIVE,
+      }
+
+      await tx.rentalProduct.upsert({
+        where: { sku },
+        update: { ...persistedData, version: { increment: 1 } },
+        create: {
+          ...(id ? { id } : {}),
+          sku,
+          ...persistedData,
+        },
+      })
+      console.log(`Upserted rental product: ${sku} - ${data.name}`)
+    }
+  }, { timeout: 60000 })
 
   console.log(`Seeded ${RENTAL_PRODUCT_SEEDS.length} ACTIVE rental products successfully.`)
 }

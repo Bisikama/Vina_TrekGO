@@ -15,8 +15,8 @@ export const SandboxSimulateRefundBodySchema = z
     acknowledgeSandboxSimulation: z.literal(true, {
       message: 'Bắt buộc xác nhận acknowledgeSandboxSimulation: true',
     }),
-    expectedProviderStatus: z.literal('PROCESSING', {
-      message: 'Chỉ được phép mô phỏng khi expectedProviderStatus là PROCESSING',
+    expectedProviderStatus: z.enum(['PROCESSING', 'PENDING'], {
+      message: 'expectedProviderStatus phải là PROCESSING hoặc PENDING',
     }),
     testEvidenceRef: z.string().trim().max(200).optional(),
   })
@@ -27,10 +27,12 @@ export type SandboxSimulateRefundBodyDto = z.infer<typeof SandboxSimulateRefundB
 export interface SandboxSimulateRefundResponseDto {
   simulationId: string
   refundId: string
-  rentalOrderId: string
-  depositSettlementId: string
+  rentalOrderId: string | null
+  depositSettlementId: string | null
+  bookingId?: string
+  bookingCancellationId?: string
   provider: 'VNPAY_SANDBOX'
-  providerRefundStatus: string
+  providerRefundStatus: 'SUCCEEDED'
   simulationStatus: 'SIMULATED'
   simulatedAmount: string
   currency: string
@@ -38,6 +40,7 @@ export interface SandboxSimulateRefundResponseDto {
   financialStatus: string
   completionMode: 'SANDBOX_SIMULATED' | 'STANDARD'
   settlementMode: 'SANDBOX_SIMULATED'
+  settlementProcessingStatus: 'PENDING' | 'APPLIED'
   simulatedAt: string
   actorAdminId: string
   reason: string
@@ -47,4 +50,3 @@ export interface SandboxSimulateRefundResponseDto {
     adminNotice: string
   }
 }
-

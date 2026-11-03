@@ -221,7 +221,13 @@ export function LeaderDashboard() {
                 COMPLETED: "Đã hoàn thành",
                 CANCELLED: "Đã hủy",
               };
-              const statusLabel = statusMap[trip.status] || trip.status;
+              const isNotOpenYet =
+                trip.status === "OPEN" &&
+                Boolean(trip.registrationOpenAt) &&
+                new Date(trip.registrationOpenAt!).getTime() > Date.now();
+              const statusLabel = isNotOpenYet
+                ? "Chưa tới thời gian mở form"
+                : statusMap[trip.status] || trip.status;
               const slotInfo = slotsMap[trip.id];
               const totalCap = trip.capacity || slotInfo?.capacity || 15;
               const rem =
@@ -281,19 +287,39 @@ export function LeaderDashboard() {
                   </div>
 
                   <div className="flex gap-2 sm:flex-col shrink-0">
-                    <Link
-                      href={`/leader/trips/${trip.id}`}
-                      className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white text-center hover:bg-[#0e3f2b] transition"
-                    >
-                      Quản lý đoàn
-                    </Link>
+                    {trip.status === "DRAFT" ? (
+                      <>
+                        <Link
+                          href={`/leader/create-trip?tripId=${trip.id}`}
+                          className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white text-center hover:bg-[#0e3f2b] transition"
+                        >
+                          Tiếp tục chỉnh nháp
+                        </Link>
 
-                    <Link
-                      href={`/leader/create-trip/review?tripId=${trip.id}`}
-                      className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-xs text-center font-semibold text-slate-700 hover:bg-slate-50 transition"
-                    >
-                      Lịch trình
-                    </Link>
+                        <Link
+                          href={`/leader/create-trip/review?tripId=${trip.id}`}
+                          className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-xs text-center font-semibold text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          Xem lại &amp; Xuất bản
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/leader/trips/${trip.id}`}
+                          className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white text-center hover:bg-[#0e3f2b] transition"
+                        >
+                          Quản lý đoàn
+                        </Link>
+
+                        <Link
+                          href={`/leader/create-trip/review?tripId=${trip.id}`}
+                          className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-xs text-center font-semibold text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          Lịch trình
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </article>
               );

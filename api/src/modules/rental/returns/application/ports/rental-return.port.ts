@@ -33,6 +33,9 @@ export interface ReturnToInventoryLocationCommand {
   actorUserId: string;
   deliveryTaskId: string;
   unitIds: string[];
+  /** Units accepted from the customer but lost while held by delivery staff. */
+  missingInCustodyUnitIds: string[];
+  incidentNote?: string;
   packageId?: string;
   pendingTransferId?: string;
   expectedVersion: number;
@@ -46,6 +49,8 @@ export interface ReceiveReturnCommand {
   pendingTransferId: string;
   inventoryLocationId: string;
   scannedUnitIds: string[];
+  /** Required when the warehouse acknowledges fewer units than the transfer declares. */
+  incidentNote?: string;
   expectedVersion: number;
   idempotencyKey: string;
   now: Date;
@@ -130,6 +135,12 @@ export interface MarkUnitReadyCommand {
   inspectionId?: string;
   accessoriesChecked: boolean;
   expectedVersion: number;
+  gradeDecision?: {
+    decision: 'KEEP' | 'DOWNGRADE';
+    reason?: string;
+    note?: string;
+    evidenceIds?: string[];
+  };
   idempotencyKey: string;
   now: Date;
 }

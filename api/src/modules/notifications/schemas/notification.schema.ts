@@ -3,57 +3,17 @@ import { HydratedDocument, Schema as MongooseSchema } from 'mongoose'
 
 export type NotificationDocument = HydratedDocument<Notification>
 
-export enum MongoNotificationStatus {
-  UNREAD = 'UNREAD',
-  READ = 'READ',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum NotificationType {
-  // 1. Payment & Refund
-  PAYMENT_SUCCESS = 'PAYMENT_SUCCESS',
-  PAYMENT_FAILED = 'PAYMENT_FAILED',
-  PAYMENT_REFUND = 'PAYMENT_REFUND',
-
-  // 2. Booking & Trips
-  BOOKING_CONFIRMED = 'BOOKING_CONFIRMED',
-  BOOKING_HOLD_EXPIRED = 'BOOKING_HOLD_EXPIRED',
-  BOOKING_CANCELLED = 'BOOKING_CANCELLED',
-  PRIVATE_TRIP_INVITE = 'PRIVATE_TRIP_INVITE',
-  TRIP_UPCOMING_REMINDER = 'TRIP_UPCOMING_REMINDER',
-
-  // 3. Rental (Thuê đồ)
-  RENTAL_ORDER_CONFIRMED = 'RENTAL_ORDER_CONFIRMED',
-  RENTAL_ORDER_CANCELLED = 'RENTAL_ORDER_CANCELLED',
-  RENTAL_READY_FOR_PICKUP = 'RENTAL_READY_FOR_PICKUP',
-  RENTAL_ORDER_REMINDER = 'RENTAL_ORDER_REMINDER',
-  RENTAL_ORDER_RETURNED = 'RENTAL_ORDER_RETURNED',
-  RENTAL_ORDER_RETURNED_LATE = 'RENTAL_ORDER_RETURNED_LATE',
-  RENTAL_DAMAGE_REPORTED = 'RENTAL_DAMAGE_REPORTED',
-  RENTAL_DEPOSIT_REFUNDED = 'RENTAL_DEPOSIT_REFUNDED',
-
-  // 4. GPS & Safety (An toàn)
-  TRIP_ALERT = 'TRIP_ALERT',
-  DEVIATION_WARNING = 'DEVIATION_WARNING',
-
-  // 5. System & Gamification
-  RANK_UPGRADE = 'RANK_UPGRADE',
-  SYSTEM_ANNOUNCEMENT = 'SYSTEM_ANNOUNCEMENT',
-}
-
-export enum ReferenceType {
-  BOOKING = 'BOOKING',
-  TRIP = 'TRIP',
-  RENTAL_ORDER = 'RENTAL_ORDER',
-  PAYMENT = 'PAYMENT',
-  SYSTEM = 'SYSTEM',
-}
+// Enum ở file thuần (không phụ thuộc @nestjs/mongoose) để projection và unit test dùng được.
+export { MongoNotificationStatus, NotificationType, ReferenceType } from './notification.enums'
+import { MongoNotificationStatus, NotificationType, ReferenceType } from './notification.enums'
 
 @Schema({
   collection: 'notifications',
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
 })
 export class Notification {
+  @Prop({ type: String, required: false })
+  deliveryKey?: string
   @Prop({ required: true, type: String })
   userId: string
 
@@ -100,4 +60,11 @@ NotificationSchema.index({ referenceType: 1, referenceId: 1 })
 
 // Index idempotency để worker kiểm tra sự kiện đã xử lý hay chưa
 NotificationSchema.index({ 'metadata.outboxEventId': 1 })
-
+NotificationSchema.index(
+  { deliveryKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { deliveryKey: { $type: 'string' } },
+    name: 'notification_delivery_key_unique',
+  },
+)

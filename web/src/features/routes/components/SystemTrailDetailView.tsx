@@ -5,12 +5,18 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { useStaticDataStore } from "@/lib/staticDataStore";
+import { apiClient } from "@/lib/axios";
 import {
   SystemTrail,
   purchaseTrail,
   getTrailPurchaseErrorMessage,
 } from "../services/system-trails.api";
 import { SystemTrailMap } from "./SystemTrailMap";
+import {
+  SurfaceCard,
+  DifficultyBadge,
+  Button,
+} from "@/components/ui";
 
 interface SystemTrailDetailViewProps {
   trail: SystemTrail;
@@ -19,6 +25,7 @@ interface SystemTrailDetailViewProps {
 export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
 
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"REDIRECT" | "QR">("REDIRECT");
@@ -32,16 +39,54 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const unlockedKey = `trail_unlocked:${trail.id}`;
-    if (localStorage.getItem(unlockedKey) === "true") {
+
+    // Nếu chưa đăng nhập, mặc định là chưa mở khóa
+    if (!accessToken || !user?.id) {
+      setIsUnlocked(false);
+      return;
+    }
+
+    // 1. Kiểm tra cache localStorage theo userId cụ thể
+    const userUnlockedKey = `trail_unlocked:${user.id}:${trail.id}`;
+    if (localStorage.getItem(userUnlockedKey) === "true") {
       setIsUnlocked(true);
     }
-  }, [trail.id]);
+
+    // 2. Đồng bộ quyền thực tế từ Backend API (/api/v1/me/trail-accesses)
+    let isCancelled = false;
+    apiClient
+      .get<any[]>("/api/v1/me/trail-accesses")
+      .then((res) => {
+        if (isCancelled) return;
+        const items = Array.isArray(res.data) ? res.data : [];
+        const hasAccess = items.some(
+          (a: any) =>
+            (a.systemTrailId === trail.id || a.systemTrail?.id === trail.id) &&
+            a.status !== "REVOKED"
+        );
+
+        if (hasAccess) {
+          setIsUnlocked(true);
+          localStorage.setItem(userUnlockedKey, "true");
+        } else {
+          // Nếu Backend báo chưa có quyền thì xóa cache cũ để tránh lưu sai
+          setIsUnlocked(false);
+          localStorage.removeItem(userUnlockedKey);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not sync trail access from server:", err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [trail.id, accessToken, user?.id]);
 
   const handleOpenPurchaseModal = () => {
     setPurchaseError(null);
     if (!accessToken) {
-      router.push("/login");
+      router.push("/public/login");
       return;
     }
     setIsPurchaseModalOpen(true);
@@ -52,8 +97,6 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
       setIsPurchasing(true);
       setPurchaseError(null);
 
-      // Giữ phiên thanh toán (idempotencyKey + paymentMethod + gateway) theo trail.id trong thời gian còn hiệu lực (15 phút)
-      // để tránh tạo Payment thứ 2 gây lỗi 409 PAYMENT_ATTEMPT_IN_PROGRESS
       const sessionKey = `trail-purchase-active:${trail.id}`;
       let activeKey = crypto.randomUUID();
       let activeMethod: "REDIRECT" | "QR" = paymentMethod;
@@ -119,8 +162,8 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
       }
 
       if (result?.accessStatus === "ACTIVE" || isFree) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`trail_unlocked:${trail.id}`, "true");
+        if (typeof window !== "undefined" && user?.id) {
+          localStorage.setItem(`trail_unlocked:${user.id}:${trail.id}`, "true");
           sessionStorage.removeItem(sessionKey);
         }
         useStaticDataStore.getState().clearStaticCache();
@@ -147,8 +190,8 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
         sessionStorage.removeItem(`trail-purchase-active:${trail.id}`);
       }
       if (parsed.code === "PAYMENT_INVALID_STATE") {
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`trail_unlocked:${trail.id}`, "true");
+        if (typeof window !== "undefined" && user?.id) {
+          localStorage.setItem(`trail_unlocked:${user.id}:${trail.id}`, "true");
         }
         useStaticDataStore.getState().clearStaticCache();
         void useStaticDataStore.getState().loadPrivateSources(true);
@@ -173,19 +216,20 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
         </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <button 
+            type="button"
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-white/80 hover:text-white mb-6 transition-colors"
+            className="flex items-center gap-2 text-white/80 hover:text-white mb-6 transition-colors cursor-pointer"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
             Quay lại
           </button>
           
           <div className="flex flex-col md:flex-row justify-between items-end gap-6">
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-bold uppercase tracking-wider">
-                  {trail.difficulty === "EASY" ? "Dễ" : trail.difficulty === "MEDIUM" ? "Trung bình" : trail.difficulty === "HARD" ? "Khó" : "Cực khó"}
-                </span>
+                <DifficultyBadge difficulty={trail.difficulty} />
                 <span className="text-[#A7F3D0] text-sm font-medium">{trail.destination?.name || trail.code}</span>
               </div>
               <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 leading-tight">
@@ -208,13 +252,15 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
                   Đã mở khóa lộ trình
                 </div>
               ) : (
-                <button 
+                <Button 
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
                   onClick={handleOpenPurchaseModal}
-                  className="w-full bg-white text-[#1B5E41] font-bold px-6 py-3.5 rounded-xl text-base transition-transform hover:scale-[1.02] active:scale-95 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  className="bg-white! text-[#1B5E41]! hover:bg-emerald-50! shadow-lg"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   {isFree ? "Nhận cung đường miễn phí" : "Mở khóa lộ trình (VNPAY)"}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -231,32 +277,36 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
               <span>{purchaseSuccessMsg}</span>
             </div>
             <button
+              type="button"
               onClick={() => setPurchaseSuccessMsg(null)}
-              className="text-xs font-bold text-emerald-700 hover:underline ml-4"
+              className="text-xs font-bold text-emerald-700 hover:underline ml-4 cursor-pointer"
             >
               Đóng
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-4 mb-12">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-[#1B5E41]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+        {/* 3 Metric Cards sử dụng SurfaceCard */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12">
+          <SurfaceCard className="flex flex-col items-center justify-center text-center p-6">
+            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3 text-[#1B5E41] font-bold">
+              KM
             </div>
             <span className="text-gray-500 text-sm mb-1">Khoảng cách</span>
             <span className="text-xl font-bold text-gray-900">{trail.distanceKm} km</span>
-          </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 11l7-7 7 7M5 19l7-7 7 7" /></svg>
+          </SurfaceCard>
+
+          <SurfaceCard className="flex flex-col items-center justify-center text-center p-6">
+            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-3 text-blue-600 font-bold">
+              M
             </div>
             <span className="text-gray-500 text-sm mb-1">Độ cao</span>
             <span className="text-xl font-bold text-gray-900">{trail.elevationGainM} m</span>
-          </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </SurfaceCard>
+
+          <SurfaceCard className="flex flex-col items-center justify-center text-center p-6">
+            <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-3 text-amber-600 font-bold">
+              H
             </div>
             <span className="text-gray-500 text-sm mb-1">Thời gian dự kiến</span>
             <span className="text-xl font-bold text-gray-900">
@@ -266,10 +316,10 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
                     : `${trail.estimatedDurationMinutes} phút`) 
                 : "Chưa cập nhật"}
             </span>
-          </div>
+          </SurfaceCard>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <SurfaceCard className="p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Mô tả cung đường & Bản đồ 3D</h2>
           <div className="prose max-w-none text-gray-600 mb-8">
             <p>
@@ -278,7 +328,7 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
           </div>
           
           <SystemTrailMap trail={trail} />
-        </div>
+        </SurfaceCard>
       </div>
 
       {/* Purchase Modal */}
@@ -397,27 +447,26 @@ export function SystemTrailDetailView({ trail }: SystemTrailDetailViewProps) {
             </div>
 
             <div className="p-6 pt-0 flex gap-3">
-              <button 
+              <Button 
+                variant="ghost"
                 onClick={() => setIsPurchaseModalOpen(false)}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl transition-colors hover:bg-gray-200 cursor-pointer"
+                className="flex-1"
               >
                 Đóng
-              </button>
-              <button 
+              </Button>
+              <Button 
+                variant="primary"
                 onClick={handleConfirmPurchase}
                 disabled={isPurchasing}
-                className={`flex-1 py-3 text-white font-bold rounded-xl transition-colors shadow-lg cursor-pointer ${
-                  isPurchasing
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#1B5E41] hover:bg-[#12402C] shadow-emerald-900/20"
-                }`}
+                loading={isPurchasing}
+                className="flex-1"
               >
                 {isPurchasing
                   ? "Đang chuyển VNPAY..."
                   : isFree
                   ? "Mở khóa miễn phí"
                   : "Thanh toán VNPAY"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

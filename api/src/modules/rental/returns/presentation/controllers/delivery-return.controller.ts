@@ -42,7 +42,9 @@ export class DeliveryReturnController {
       type: 'object',
       required: ['unitIds', 'expectedVersion'],
       properties: {
-        unitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 100, description: 'UUID các thiết bị cần chuyển về kho', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        unitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 100, description: 'UUID các thiết bị thực tế còn trong custody để chuyển về kho', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        missingInCustodyUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 100, description: 'Thiết bị đã nhận từ khách nhưng thất lạc khi Delivery đang giữ' },
+        incidentNote: { type: 'string', description: 'Mô tả bắt buộc khi có sai lệch custody' },
         packageId: { type: 'string', format: 'uuid', description: 'UUID package chứa thiết bị (tùy chọn)', example: '660e8400-e29b-41d4-a716-446655440002' },
         pendingTransferId: { type: 'string', format: 'uuid', description: 'UUID pending transfer đã tồn tại (tùy chọn)' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản task hiện tại', example: 3 },

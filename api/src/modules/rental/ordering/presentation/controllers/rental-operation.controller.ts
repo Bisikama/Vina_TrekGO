@@ -95,7 +95,7 @@ export class RentalOperationController {
   @Auth([AuthType.Bearer])
   @Roles(UserRole.USER, UserRole.LEADER)
   @ApiOperation({
-    summary: 'Tạo báo giá thuê thiết bị',
+    summary: 'Tạo báo giá thuê thiết bị (Quote) — Nhận payload từ Gear Advisor quote-intents',
     description: `
 **RB-API-103** — Tạo báo giá (Quote) cho việc thuê thiết bị.
 
@@ -103,6 +103,12 @@ export class RentalOperationController {
 - Quote chỉ lưu snapshot giá/policy/context tại thời điểm tạo, **KHÔNG giữ số lượng** và **KHÔNG gán EquipmentUnit** cụ thể.
 - Nếu request có sản phẩm trùng, server sẽ tự gộp số lượng.
 - Quote có thời hạn hiệu lực (thường 15 phút); hết hạn thì không thể dùng để tạo đơn.
+
+**KẾT NỐI VỚI GEAR ADVISOR & QUY TRÌNH TEST:**
+- Payload của endpoint này (tripId và mảng items) có thể được lấy tự động từ Kế hoạch trang bị: Sau khi tạo phương án ở POST /api/v1/gear/plans/{id}/options, gọi POST /api/v1/gear/plans/{id}/quote-intents để nhận trường prefillRentalQuote và dán trực tiếp vào body endpoint này.
+- Sau khi nhận kết quả chứa id của báo giá (quoteId), tiếp tục:
+  1. Liên kết báo giá vào Kế hoạch trang bị: POST /api/v1/gear/plans/{id}/quote-links.
+  2. Tạo đơn thuê chính thức: POST /api/v1/rental-orders với quoteId này và header Idempotency-Key.
 `,
   })
   @ApiBody({

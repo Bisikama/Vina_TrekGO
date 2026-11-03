@@ -779,7 +779,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         packageViaOrderId: {
           include: {
             packageItemsViaPackageId: {
-              include: { equipmentUnit: { include: { product: { select: { id: true, name: true } } } } },
+              include: { equipmentUnit: { include: { product: { select: { id: true, name: true, grade: true } } } } },
             },
           },
         },
@@ -802,7 +802,11 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         units: order.packageViaOrderId.packageItemsViaPackageId.map((item) => ({
           unitId: item.equipmentUnitId,
           assetCode: item.equipmentUnit.assetCode,
-          product: { id: item.equipmentUnit.product.id, name: item.equipmentUnit.product.name },
+          product: {
+            id: item.equipmentUnit.product.id,
+            name: item.equipmentUnit.product.name,
+            grade: item.equipmentUnit.product.grade,
+          },
           condition: item.equipmentUnit.condition,
         })),
       },
@@ -1045,6 +1049,11 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
 
 const deliveryTaskDetailInclude = {
   staff: { select: { id: true, fullName: true } },
+  custodyTransfersViaDeliveryTaskId: {
+    where: { status: CustodyTransferStatus.PENDING_RECEIPT },
+    orderBy: { requestedAt: 'desc' as const },
+    take: 1,
+  },
   servicePoint: { select: { id: true, name: true, address: true } },
   package: {
     include: {
@@ -1081,6 +1090,13 @@ function mapDeliveryTaskDetail(task: any): DeliveryTaskDetailResult {
       allowedActions: deliveryAllowedActions(task.status),
     },
     package: task.package ? { id: task.package.id, code: task.package.packageCode, status: task.package.status, version: task.package.version } : null,
+    custodyTransfer: task.custodyTransfersViaDeliveryTaskId[0]
+      ? {
+          id: task.custodyTransfersViaDeliveryTaskId[0].id,
+          status: task.custodyTransfersViaDeliveryTaskId[0].status,
+          requestedAt: task.custodyTransfersViaDeliveryTaskId[0].requestedAt.toISOString(),
+        }
+      : null,
     units: task.package?.packageItemsViaPackageId.map((item: any) => {
       const snapshot = snapshotsByUnit.get(item.equipmentUnitId);
       return {

@@ -61,7 +61,7 @@ F2: trên thẻ người tham gia của booking đã thanh toán, dùng actions 
 
 F3: dùng list recipient làm điểm vào trước khi có inbox hợp nhất M8. Preview hiển thị tên người trên vé và yêu cầu xác nhận rõ. Nếu không phải mình, decline IDENTITY_MISMATCH. Sau accept tải lại preview và GET /me/tickets/:participantId. Không điều hướng vào booking buyer. `participantStatus`, `bookingStatus`, `checkinStatus` hỗ trợ hiển thị lịch sử; không suy quyền từ ACCEPTED hoặc HTTP 200.
 
-`currentAccess.canNavigate/canRent/canCheckIn` vẫn false với reason INTEGRATION_NOT_VERIFIED theo M5, chờ M7/M9. Field này không phải kill switch đối với API Rental có sẵn. M6 chỉ ghi audit/outbox; delivery notification, inbox hợp nhất và tích hợp Rental/Check-in chưa thuộc mốc này.
+M7: `currentAccess.canNavigate` theo participant liên kết chính actor và trạng thái hiện tại; buyer preview không được nhận quyền của recipient. `canCheckIn` giữ baseline check-in hiện có; `canRent=false`, reason INTEGRATION_NOT_VERIFIED còn áp dụng cho Rental. Xem [contract M7](../public-participation/README.md). Field này không phải kill switch đối với API Rental có sẵn. M6 chỉ ghi audit/outbox; delivery notification và inbox hợp nhất thuộc M8, tích hợp liên domain thuộc M9.
 
 ## Idempotency, quota và lỗi
 

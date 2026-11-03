@@ -75,6 +75,8 @@ import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../shared/errors/codes/re
 import { AppError } from '../../../shared/errors';
 import { PrismaRentalReturnAdapter, tryCompleteOrder } from './infrastructure/adapters/prisma-rental-return.adapter';
 import { RentalOperationalEscalationScheduler } from './infrastructure/jobs/rental-operational-escalation.scheduler';
+import { RentalEvidenceReportController } from './presentation/controllers/rental-evidence-report.controller';
+import { RentalEvidenceAccessService } from './infrastructure/integration/rental-evidence-access.service';
 
 describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
   const dummyOrderId = '33333333-3333-4333-8333-333333333333';
@@ -84,6 +86,15 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
   const dummyExceptionId = '99999999-9999-4999-8999-999999999999';
   const dummyPaymentId = '44444444-4444-4444-8444-444444444444';
   const dummySettlementId = '77777777-7777-4777-8777-777777777777';
+  const depositRefundAllocation = (amount: number) => ({
+    amount: new Prisma.Decimal(amount),
+    paymentAllocation: {
+      paymentId: dummyPaymentId,
+      component: 'RENTAL_DEPOSIT',
+      amount: new Prisma.Decimal(amount),
+      rentalOrderLine: { orderId: dummyOrderId },
+    },
+  });
 
   describe('Part 1: REST Route Contracts RB-API-601..616, RBAC & Aliases', () => {
     let app: INestApplication;
@@ -92,6 +103,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       const moduleRef: TestingModule = await Test.createTestingModule({
         controllers: [
           RentalReturnController,
+          RentalEvidenceReportController,
           DeliveryReturnController,
           StaffReturnController,
           RentalReturnAdminController,
@@ -100,6 +112,10 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           RentalDocumentAdminController,
         ],
         providers: [
+          { provide: RentalEvidenceAccessService, useValue: {
+            report: jest.fn().mockResolvedValue({ status: 'ACCESS_INTERRUPTED' }),
+            acknowledge: jest.fn().mockResolvedValue({ status: 'AWAITING_VERIFICATION' }),
+          } },
           { provide: RentalDocumentService, useValue: {
             download: jest.fn().mockResolvedValue({ downloadUrl: 'https://private.example/signed',
               expiresAt: '2026-10-20T12:10:00Z', fileName: 'TG-DOC-1.pdf',
@@ -328,6 +344,20 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(res2.status).toBe(200);
     });
 
+    it('RB-API-603: accepts an all-missing delivery custody incident with no transfer units', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/delivery/tasks/${dummyTaskId}/return-to-inventory-location`)
+        .set('x-mock-role', UserRole.STAFF_DELIVERY)
+        .set('idempotency-key', 'key-transfer-custody-missing')
+        .send({
+          unitIds: [],
+          missingInCustodyUnitIds: [dummyUnitId],
+          incidentNote: 'Thất lạc sau khi đã nhận từ khách',
+          expectedVersion: 1,
+        });
+      expect(res.status).toBe(200);
+    });
+
     it('RB-API-604: POST /api/v1/staff/returns/:returnId/receive returns 200', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/staff/returns/${dummyTaskId}/receive`)
@@ -341,6 +371,21 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         });
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ACCEPTED');
+    });
+
+    it('RB-API-604: accepts zero physically received units when a custody incident is described', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/staff/returns/${dummyTaskId}/receive`)
+        .set('x-mock-role', UserRole.STAFF_INVENTORY)
+        .set('idempotency-key', 'key-recv-zero-custody')
+        .send({
+          pendingTransferId: '33333333-3333-4333-8333-333333333333',
+          inventoryLocationId: '44444444-4444-4444-8444-444444444444',
+          scannedUnitIds: [],
+          incidentNote: 'Kho mở kiện nhưng không có thiết bị',
+          expectedVersion: 1,
+        });
+      expect(res.status).toBe(200);
     });
 
     it('RB-API-605: POST /api/v1/staff/returns/:returnId/final-inspection returns 201', async () => {
@@ -401,6 +446,20 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       expect(res.status).toBe(201);
       expect(res.body.caseId).toBe(dummyExceptionId);
     });
+
+    it('accepts idempotent customer evidence outage reports and confirmations', async () => {
+      const path = `/api/v1/rental-orders/${dummyOrderId}/assessments/${dummyAssessmentId}`
+      const report = await request(app.getHttpServer()).post(`${path}/evidence-access-reports`)
+        .set('x-mock-role', UserRole.USER).set('idempotency-key', 'report-test-key')
+      expect(report.status).toBe(200)
+      expect(report.body.status).toBe('ACCESS_INTERRUPTED')
+      const confirm = await request(app.getHttpServer()).post(`${path}/evidence-access-confirmations`)
+        .set('x-mock-role', UserRole.USER).set('idempotency-key', 'confirm-test-key')
+      expect(confirm.status).toBe(200)
+      expect(confirm.body.status).toBe('AWAITING_VERIFICATION')
+      const missingKey = await request(app.getHttpServer()).post(`${path}/evidence-access-reports`).set('x-mock-role', UserRole.USER)
+      expect(missingKey.body.error.code).toBe(RR.IDEMPOTENCY_KEY_REQUIRED)
+    })
 
     it('RB-API-610: POST /api/v1/admin/rental-exceptions/:id/resolve returns 200', async () => {
       const res = await request(app.getHttpServer())
@@ -960,8 +1019,8 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         },
         depositSettlementItem: {
           findMany: jest.fn().mockResolvedValue([
-            { id: 'item-1', status: 'SETTLED' },
-            { id: 'item-2', status: 'SETTLED' },
+            { id: 'item-1', settlementId: dummySettlementId, status: 'SETTLED' },
+            { id: 'item-2', settlementId: dummySettlementId, status: 'SETTLED' },
           ]),
           update: jest.fn().mockResolvedValue({}),
         },
@@ -1024,6 +1083,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       mockTx.refund.findUniqueOrThrow.mockResolvedValue({
         id: 'ref-1',
         status: 'SUCCEEDED',
+        rentalOrderId: dummyOrderId,
         amount: new Prisma.Decimal(1000000),
         depositSettlementId: dummySettlementId,
         paymentId: dummyPaymentId,
@@ -1032,6 +1092,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           { depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) },
           { depositSettlementItemId: 'item-2', amount: new Prisma.Decimal(500000) },
         ],
+        allocations: [depositRefundAllocation(1000000)],
       });
       mockTx.payment.findUniqueOrThrow.mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-1' });
 
@@ -1090,15 +1151,21 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       mockTx.refund.findUniqueOrThrow.mockResolvedValue({
         id: 'ref-1',
         status: 'SUCCEEDED',
+        amount: new Prisma.Decimal(500000),
+        rentalOrderId: dummyOrderId,
         depositSettlementId: dummySettlementId,
         paymentId: dummyPaymentId,
         payment: { invoiceId: 'inv-1', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
         depositRefundItems: [{ depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) }],
+        allocations: [depositRefundAllocation(500000)],
       });
       mockTx.payment.findUniqueOrThrow.mockResolvedValue({ id: dummyPaymentId, invoiceId: 'inv-1' });
 
       // Receipt ALREADY exists!
       mockTx.paymentConsumerReceipt.findUnique.mockResolvedValue({ id: 'rec-1' });
+      mockTx.depositSettlementItem.findMany.mockResolvedValue([
+        { id: 'item-1', settlementId: dummySettlementId, status: 'SETTLED' },
+      ]);
 
       await worker.consume('event-1');
 
@@ -1326,10 +1393,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           findUniqueOrThrow: jest.fn().mockResolvedValue({
             id: 'ref-fail-1',
             status: 'FAILED',
+            amount: new Prisma.Decimal(500000),
+            rentalOrderId: dummyOrderId,
             depositSettlementId: dummySettlementId,
             paymentId: dummyPaymentId,
             payment: { invoiceId: 'inv-1', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
             depositRefundItems: [{ depositSettlementItemId: 'item-1', amount: new Prisma.Decimal(500000) }],
+            allocations: [depositRefundAllocation(500000)],
           }),
           aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
           count: jest.fn().mockResolvedValue(0),
@@ -1341,7 +1411,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(500000) } }),
         },
         depositSettlementItem: {
-          findMany: jest.fn().mockResolvedValue([{ id: 'item-1', status: 'REFUND_PENDING' }]),
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'item-1', settlementId: dummySettlementId, status: 'REFUND_PENDING' },
+          ]),
           update: jest.fn().mockResolvedValue({}),
         },
         depositSettlement: {
@@ -1787,10 +1859,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             findUniqueOrThrow: jest.fn().mockResolvedValue({
               id: 'ref-fail-recov',
               status: 'FAILED',
+              amount: new Prisma.Decimal(300000),
+              rentalOrderId: dummyOrderId,
               depositSettlementId: dummySettlementId,
               paymentId: dummyPaymentId,
               payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
               depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+              allocations: [depositRefundAllocation(300000)],
             }),
             aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(0) } }),
             count: jest.fn().mockResolvedValue(0),
@@ -1804,7 +1879,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           depositSettlementItem: {
             findMany: jest.fn().mockImplementation(({ where }: any) => {
               if (where?.id?.in) {
-                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_PENDING' }]);
+                return Promise.resolve([
+                  { id: 'item-recov-1', settlementId: dummySettlementId, status: 'REFUND_PENDING' },
+                ]);
               }
               return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
             }),
@@ -1905,10 +1982,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             findUniqueOrThrow: jest.fn().mockResolvedValue({
               id: 'ref-succ-recov',
               status: 'SUCCEEDED',
+              amount: new Prisma.Decimal(300000),
+              rentalOrderId: dummyOrderId,
               depositSettlementId: dummySettlementId,
               paymentId: dummyPaymentId,
               payment: { invoiceId: 'inv-recov', invoice: { rentalOrderId: dummyOrderId }, application: { status: 'APPLIED' } },
               depositRefundItems: [{ depositSettlementItemId: 'item-recov-1', amount: new Prisma.Decimal(300000) }],
+              allocations: [depositRefundAllocation(300000)],
             }),
             aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(300000) } }),
             count: jest.fn().mockResolvedValue(0),
@@ -1922,7 +2002,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           depositSettlementItem: {
             findMany: jest.fn().mockImplementation(({ where }: any) => {
               if (where?.id?.in) {
-                return Promise.resolve([{ id: 'item-recov-1', status: 'REFUND_FAILED' }]);
+                return Promise.resolve([
+                  { id: 'item-recov-1', settlementId: dummySettlementId, status: 'REFUND_FAILED' },
+                ]);
               }
               return Promise.resolve([{ id: 'item-recov-1', status: 'SETTLED' }]);
             }),
@@ -3207,5 +3289,180 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         .rejects.toMatchObject({ code: 'RENTAL_DOCUMENT_AUDIT_UNAVAILABLE' });
     });
   });
+
+  describe('Regression: return flow mutations must not regress settled state', () => {
+    const staffId = '55555555-5555-4555-8555-555555555555';
+    const assignmentId = '66666666-6666-4666-8666-666666666666';
+    const idempotency = () => ({
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+    });
+
+    function observationTx(taskStatus: DeliveryTaskStatus, receivedByInventory: boolean) {
+      return {
+        user: { findFirst: jest.fn().mockResolvedValue({ id: staffId, role: UserRole.STAFF_DELIVERY }) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        idempotencyRecord: idempotency(),
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: dummyOrderId,
+            version: 4,
+            status: RentalOrderStatus.RETURN_PROCESSING,
+            deliveryTasksViaOrderId: [
+              { id: dummyTaskId, taskType: DeliveryTaskType.RETURN, staffId, status: taskStatus },
+            ],
+            rentalOrderLinesViaOrderId: [
+              {
+                product: { requiresDeepReturnInspection: false },
+                rentalUnitAssignmentsViaOrderLineId: [
+                  {
+                    id: assignmentId,
+                    equipmentUnitId: dummyUnitId,
+                    status: RentalUnitAssignmentStatus.RETURNED,
+                    returnedAt: new Date('2026-10-20T00:00:00Z'),
+                  },
+                ],
+              },
+            ],
+          }),
+        },
+        custodyEvent: { findFirst: jest.fn().mockResolvedValue(receivedByInventory ? { id: 'custody-1' } : null) },
+        depositSettlementItem: { update: jest.fn(), updateMany: jest.fn() },
+        deliveryTask: { update: jest.fn() },
+      };
+    }
+
+    const observe = (adapter: PrismaRentalReturnAdapter) =>
+      adapter.returnInspection({
+        orderId: dummyOrderId,
+        actorUserId: staffId,
+        idempotencyKey: 'obs-retry',
+        expectedVersion: 4,
+        now: new Date('2026-10-21T00:00:00Z'),
+        items: [{ unitId: dummyUnitId, outcome: 'OBSERVED_RECEIVED', evidenceIds: [], accessoryIssues: [] }],
+      } as any);
+
+    it('RB-API-602 rejects observations after Inventory received the return', async () => {
+      const tx = observationTx(DeliveryTaskStatus.INVENTORY_RECEIVED, true);
+      const adapter = new PrismaRentalReturnAdapter({ $transaction: jest.fn((cb: any) => cb(tx)) } as any);
+
+      await expect(observe(adapter)).rejects.toMatchObject({ code: RR.INVALID_RETURN_STATE });
+      expect(tx.depositSettlementItem.update).not.toHaveBeenCalled();
+      expect(tx.deliveryTask.update).not.toHaveBeenCalled();
+    });
+
+    it('RB-API-602 rejects a unit already received by Inventory during a partial transfer', async () => {
+      const tx = observationTx(DeliveryTaskStatus.RETURNED, true);
+      const adapter = new PrismaRentalReturnAdapter({ $transaction: jest.fn((cb: any) => cb(tx)) } as any);
+
+      await expect(observe(adapter)).rejects.toMatchObject({
+        code: RR.INVALID_RETURN_STATE,
+        details: expect.objectContaining({ reason: 'UNIT_ALREADY_RECEIVED_BY_INVENTORY' }),
+      });
+      expect(tx.depositSettlementItem.update).not.toHaveBeenCalled();
+    });
+
+    it('RB-API-606 replays an already settled item without rewriting it to REFUND_PENDING', async () => {
+      const update = jest.fn();
+      const tx = {
+        user: { findFirst: jest.fn().mockResolvedValue({ id: staffId, role: UserRole.ADMIN }) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        idempotencyRecord: idempotency(),
+        rentalOrder: {
+          findUnique: jest.fn().mockResolvedValue({ id: dummyOrderId, rentalPolicy: {}, depositSettlementViaOrderId: null }),
+          update: jest.fn(),
+        },
+        returnInspection: { findFirst: jest.fn().mockResolvedValue({ id: dummyAssessmentId, orderId: dummyOrderId }) },
+        depositSettlementItem: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'item-1',
+            status: DepositItemStatus.SETTLED,
+            depositAmount: new Prisma.Decimal(200000),
+            deductionAmount: new Prisma.Decimal(50000),
+            refundAmount: new Prisma.Decimal(150000),
+            decisionSnapshot: { approvedDeduction: '50000', approvalRef: 'APR-1' },
+          }),
+          update,
+        },
+        rentalExceptionCase: { findFirst: jest.fn().mockResolvedValue({ id: dummyExceptionId, approvalRef: 'APR-1' }) },
+        depositSettlement: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: dummySettlementId,
+            status: DepositSettlementStatus.SETTLED,
+            outcome: 'PARTIAL_REFUND',
+            totalDeposit: new Prisma.Decimal(200000),
+            totalDeduction: new Prisma.Decimal(50000),
+            refundAmount: new Prisma.Decimal(150000),
+            version: 7,
+          }),
+        },
+        refund: { findUnique: jest.fn().mockResolvedValue(null) },
+        depositRefundItemAllocation: { findUnique: jest.fn().mockResolvedValue({ refundId: 'refund-grouped-1' }) },
+      };
+      const adapter = new PrismaRentalReturnAdapter({ $transaction: jest.fn((cb: any) => cb(tx)) } as any);
+
+      const result = await adapter.createDepositSettlement({
+        orderId: dummyOrderId,
+        assessmentId: dummyAssessmentId,
+        approvalRef: 'APR-1',
+        actorUserId: staffId,
+        idempotencyKey: 'settle-second-click',
+        now: new Date(),
+      });
+
+      expect(result).toMatchObject({
+        status: DepositItemStatus.SETTLED,
+        refundRef: 'refund-grouped-1',
+        refundAmount: 150000,
+        deductionAmount: 50000,
+      });
+      expect(update).not.toHaveBeenCalled();
+      expect(tx.rentalOrder.update).not.toHaveBeenCalled();
+    });
+  });
 });
+
+describe('customer deposit review data', () => {
+  it('returns the publication window and the state of the customer review per item', async () => {
+    const accessibleAt = new Date(Date.now() - 60_000)
+    const item = { id: 'item', unitId: 'unit', inspectionId: 'inspection', unit: { assetCode: 'U1' },
+      status: DepositItemStatus.DEDUCTION_APPROVED, inspection: { outcome: 'DAMAGE_CONFIRMED' },
+      decisionSnapshot: { approvedDeduction: '100' }, depositAmount: new Prisma.Decimal(500),
+      deductionAmount: new Prisma.Decimal(0), refundAmount: new Prisma.Decimal(0),
+      depositRefundAllocations: [], refundViaDepositSettlementItemId: null, reason: null }
+    const db: any = {
+      rentalOrder: { findUnique: jest.fn().mockResolvedValue({ id: 'order', userId: 'owner',
+        rentalPolicy: { userAssessmentReviewMinutes: 2880 }, depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [item] } }) },
+      returnInspectionTask: { findMany: jest.fn().mockResolvedValue([]) },
+      rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([{ id: 'published', inspectionId: 'inspection', evidenceAccessibleAt: accessibleAt }]) },
+      rentalAssessmentReview: { findMany: jest.fn().mockResolvedValue([]) },
+    }
+    const adapter = new PrismaRentalReturnAdapter(db)
+    const first = await adapter.getDeposit({ orderId: 'order', actorUserId: 'owner' })
+    expect(first.items[0]).toMatchObject({ assessmentId: 'inspection', exceptionCaseId: 'published',
+      reviewStatus: 'NOT_SUBMITTED', canSubmitReview: true, approvedDeduction: 100, status: 'REVIEW_REQUIRED' })
+    expect(first.items[0].reviewWindowEndsAt).toBe(new Date(accessibleAt.getTime() + 2880 * 60_000).toISOString())
+    db.rentalAssessmentReview.findMany.mockResolvedValue([{ inspectionId: 'inspection', exceptionCaseId: 'review', exceptionCase: { status: 'RESOLVED' } }])
+    const after = await adapter.getDeposit({ orderId: 'order', actorUserId: 'owner' })
+    expect(after.items[0]).toMatchObject({ reviewCaseId: 'review', reviewStatus: 'RESOLVED', canSubmitReview: false,
+      cannotSubmitReviewReason: 'REVIEW_ALREADY_SUBMITTED' })
+  })
+
+  it('rejects a second review before creating or reopening a case', async () => {
+    const tx: any = {
+      idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      rentalOrder: { findUnique: jest.fn().mockResolvedValue({ id: 'order', userId: 'owner', rentalPolicy: {} }) },
+      rentalAssessmentReview: { findUnique: jest.fn().mockResolvedValue({ id: 'existing' }) },
+      rentalExceptionCase: { create: jest.fn(), update: jest.fn() },
+    }
+    const adapter = new PrismaRentalReturnAdapter({ $transaction: (callback: any) => callback(tx) } as any)
+    await expect(adapter.createAssessmentReview({ actorUserId: 'owner', orderId: 'order', assessmentId: 'inspection',
+      reason: 'existing issue', evidenceIds: [], idempotencyKey: 'new-key', now: new Date() }))
+      .rejects.toMatchObject({ code: RR.INVALID_RETURN_STATE, details: { reason: 'REVIEW_ALREADY_SUBMITTED' } })
+    expect(tx.rentalExceptionCase.create).not.toHaveBeenCalled()
+    expect(tx.rentalExceptionCase.update).not.toHaveBeenCalled()
+  })
+})
 

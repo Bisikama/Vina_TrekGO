@@ -1,6 +1,9 @@
 import { PublicInvitationsController } from './public-invitations.controller'
 import { PublicInvitationsService, PublicInvitationRequestService } from './public-invitations.service'
 import { Module } from '@nestjs/common'
+import { BookingParticipationContextService } from './booking-participation-context.service'
+import { InvitationInboxController } from './invitation-inbox.controller'
+import { InvitationInboxService } from './invitation-inbox.service'
 import { TicketsController } from './tickets.controller'
 import { TicketsService } from './tickets.service'
 import { ParticipantClaimService } from './participant-claim.service'
@@ -15,6 +18,7 @@ import { LeaderCheckinService } from './leader-checkin.service'
 
 @Module({
   controllers: [
+    InvitationInboxController,
     PublicInvitationsController,
     TicketsController,
     BookingsController,
@@ -24,6 +28,8 @@ import { LeaderCheckinService } from './leader-checkin.service'
     LeaderCheckinController,
   ],
   providers: [
+    BookingParticipationContextService,
+    InvitationInboxService,
     PublicInvitationsService,
     PublicInvitationRequestService,
     ParticipantClaimService,
@@ -34,6 +40,6 @@ import { LeaderCheckinService } from './leader-checkin.service'
     BookingPolicyService,
     LeaderCheckinService,
   ],
-  exports: [BookingPaymentConsumer, BookingsService, LeaderCheckinService],
+  exports: [BookingPaymentConsumer, BookingsService, LeaderCheckinService, BookingParticipationContextService],
 })
 export class BookingsModule {}

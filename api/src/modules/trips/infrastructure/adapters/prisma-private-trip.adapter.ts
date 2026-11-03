@@ -2,7 +2,17 @@ import { Injectable } from '@nestjs/common'
 import { syncPendingInvitations } from './private-invitation-transition'
 import { databaseTime } from '../../../bookings/booking-capacity'
 import { Prisma, Trip } from '@prisma/client'
-import { randomBytes } from 'crypto'
+import { randomInt } from 'crypto'
+
+const INVITE_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+const INVITE_CODE_LENGTH = 6
+function generateInviteCode(): string {
+  let code = ''
+  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
+    code += INVITE_CODE_ALPHABET[randomInt(0, INVITE_CODE_ALPHABET.length)]
+  }
+  return code
+}
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, COMMON_ERROR_CODES as C } from '../../../../shared/errors'
 import { PrivateTripPort, PrivateTripInput, PrivateTripUpdate } from '../../application/private-trip.port'
@@ -34,7 +44,7 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
             if (id) await tx.$queryRaw`SELECT id FROM trips WHERE id = ${id}::uuid FOR UPDATE`
             return work(tx)
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 40000 },
         )
       } catch (e) {
         const retry =
@@ -172,6 +182,8 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         aggregateId: next.id,
         payload: {
           tripId: next.id,
+          effectiveAt: (next.cancelledAt ?? new Date()).toISOString(),
+          tripVersion: next.version,
           creatorId: next.creatorId,
           oldWindow: { startAt: old.startAt.toISOString(), endAt: old.endAt.toISOString() },
           newWindow: { startAt: next.startAt.toISOString(), endAt: next.endAt.toISOString() },
@@ -232,19 +244,6 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
   }
   invite(userId: string, id: string, version: number, expiresAt?: string) {
     return this.transaction(userId, id, async (tx) => {
-      const configuredOrigin = process.env.WEB_APP_ORIGIN
-      if (!configuredOrigin && process.env.NODE_ENV === 'production')
-        fail(C.INTERNAL_ERROR, 'Invite link origin is not configured')
-      const origin = new URL(configuredOrigin || 'http://localhost:3001')
-      if (
-        !['http:', 'https:'].includes(origin.protocol) ||
-        origin.username ||
-        origin.password ||
-        origin.pathname !== '/' ||
-        origin.search ||
-        origin.hash
-      )
-        fail(C.INTERNAL_ERROR, 'Invalid invite link origin configuration')
       const trip = await this.owned(tx, userId, id, version)
       const expiry = expiresAt
         ? new Date(expiresAt)
@@ -255,11 +254,18 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
         where: { tripId: id, status: 'ACTIVE' },
         data: { status: 'REVOKED', revokedAt: new Date() },
       })
+      let code = generateInviteCode()
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const existing = await tx.privateTripInvite.findUnique({ where: { code }, select: { id: true } })
+        if (!existing) break
+        if (attempt === 9) fail(C.INTERNAL_ERROR, 'Failed to generate unique invite code')
+        code = generateInviteCode()
+      }
       const invite = await tx.privateTripInvite.create({
         data: {
           tripId: id,
           createdBy: userId,
-          code: randomBytes(32).toString('base64url'),
+          code,
           expiresAt: expiry,
           maxUses: null,
         },
@@ -268,7 +274,6 @@ export class PrismaPrivateTripAdapter extends PrivateTripPort {
       return {
         inviteId: invite.id,
         inviteCode: invite.code,
-        inviteUrl: `${origin.origin}/invite/${invite.code}`,
         expiresAt: invite.expiresAt,
         status: invite.status,
         tripVersion: next.version,

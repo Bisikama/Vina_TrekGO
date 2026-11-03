@@ -1,0 +1,96 @@
+{
+  "contextBefore": {
+    "contractVersion": "1.0",
+    "tripId": "991e0379-7e0c-4485-bfda-5b6453e7cb99",
+    "userId": "74f6979d-fc2b-4fe2-aa1f-941e9fad4103",
+    "actorActive": true,
+    "trip": {
+      "status": "OPEN",
+      "version": 1,
+      "startAt": "2026-10-27T06:00:08.598Z",
+      "endAt": "2026-10-28T06:00:08.598Z",
+      "cancelledAt": null,
+      "completedAt": null,
+      "leaderId": "abea9b28-060d-4e3f-bf30-85fed61d0475"
+    },
+    "sources": [
+      {
+        "membershipKind": "PUBLIC_PARTICIPANT",
+        "membershipRef": "e8ff1fcd-3f06-4197-bba0-0f5849d3615f",
+        "bookingId": "feec5be8-5da4-4f85-9d86-1c6888923c28",
+        "bookingVersion": 2,
+        "bookingStatus": "CONFIRMED",
+        "participantStatus": "ACTIVE",
+        "checkinStatus": "NOT_CHECKED_IN",
+        "sourceActive": true
+      }
+    ]
+  },
+  "contextAfter": {
+    "contractVersion": "1.0",
+    "tripId": "991e0379-7e0c-4485-bfda-5b6453e7cb99",
+    "userId": "74f6979d-fc2b-4fe2-aa1f-941e9fad4103",
+    "actorActive": true,
+    "trip": {
+      "status": "CLOSED",
+      "version": 2,
+      "startAt": "2026-10-27T06:00:08.598Z",
+      "endAt": "2026-10-28T06:00:08.598Z",
+      "cancelledAt": null,
+      "completedAt": null,
+      "leaderId": "abea9b28-060d-4e3f-bf30-85fed61d0475"
+    },
+    "sources": [
+      {
+        "membershipKind": "PUBLIC_PARTICIPANT",
+        "membershipRef": "e8ff1fcd-3f06-4197-bba0-0f5849d3615f",
+        "bookingId": "feec5be8-5da4-4f85-9d86-1c6888923c28",
+        "bookingVersion": 3,
+        "bookingStatus": "CHECKED_IN",
+        "participantStatus": "ACTIVE",
+        "checkinStatus": "CHECKED_IN",
+        "sourceActive": true
+      }
+    ]
+  },
+  "checkin": {
+    "alreadyCheckedIn": false,
+    "replayed": false,
+    "bookingStatus": "CHECKED_IN",
+    "bookingVersion": 3,
+    "participant": {
+      "id": "e8ff1fcd-3f06-4197-bba0-0f5849d3615f",
+      "bookingId": "feec5be8-5da4-4f85-9d86-1c6888923c28",
+      "bookingStatus": "CHECKED_IN",
+      "fullName": "Declared traveller",
+      "phone": "PRIVATE_PHONE",
+      "dateOfBirth": null,
+      "idDocumentNo": "PRIVATE_ID",
+      "emergencyContactName": null,
+      "emergencyContactPhone": null,
+      "participantStatus": "ACTIVE",
+      "checkinStatus": "CHECKED_IN",
+      "checkinMethod": "QR",
+      "checkedInAt": "2026-10-26T06:00:09.610Z",
+      "checkedInBy": "abea9b28-060d-4e3f-bf30-85fed61d0475",
+      "isLinkedAccount": true,
+      "linkedUserDisplay": "Account name",
+      "buyerDisplay": "Account name",
+      "buyerPhone": null,
+      "pickupPoint": {
+        "id": "b46e7383-e57e-4ad9-a2c3-160c22786c0f",
+        "name": "M5 pickup",
+        "address": "test"
+      }
+    },
+    "summary": {
+      "capacity": 10,
+      "minPax": 1,
+      "totalParticipants": 1,
+      "checkedInCount": 1,
+      "notCheckedInCount": 0,
+      "noShowCount": 0,
+      "progressPercent": 100
+    }
+  }
+}

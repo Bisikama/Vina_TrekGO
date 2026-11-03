@@ -33,7 +33,7 @@ export function useLeaderTripOptions() {
       setDestinations(data);
       return data;
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "CanceledError") return;
+      if (err instanceof Error && err.name === "CanceledError") return [];
       const msg = getLeaderTripErrorMessage(err, "Không thể tải danh sách điểm đến.");
       setDestinationError(msg);
       return [];
@@ -51,7 +51,13 @@ export function useLeaderTripOptions() {
       try {
         return await getLeaderPickupPointOptions(destinationId, { page: 1, pageSize: 100 }, signal);
       } catch (err: unknown) {
-        throw new Error(getLeaderTripErrorMessage(err, "Không thể tải danh sách điểm đón xe."));
+        if (err instanceof Error && err.name === "CanceledError") return [];
+        console.warn(
+          "Không thể tải điểm đón cho destinationId:",
+          destinationId,
+          getLeaderTripErrorMessage(err, "Không thể tải danh sách điểm đón xe.")
+        );
+        return [];
       }
     },
     []
@@ -66,7 +72,13 @@ export function useLeaderTripOptions() {
       try {
         return await getLeaderCheckpointOptions(destinationId, { page: 1, pageSize: 100 }, signal);
       } catch (err: unknown) {
-        throw new Error(getLeaderTripErrorMessage(err, "Không thể tải danh sách checkpoint."));
+        if (err instanceof Error && err.name === "CanceledError") return [];
+        console.warn(
+          "Không thể tải checkpoints cho destinationId:",
+          destinationId,
+          getLeaderTripErrorMessage(err, "Không thể tải danh sách checkpoint.")
+        );
+        return [];
       }
     },
     []

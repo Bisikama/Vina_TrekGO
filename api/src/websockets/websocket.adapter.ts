@@ -24,7 +24,6 @@ export class WebsocketAdapter extends IoAdapter {
     return server
   }
   authMiddleware(socket: Socket, next: (err?: any) => void) {
-    console.log(socket.handshake)
     console.log('new connection', socket.id)
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`)

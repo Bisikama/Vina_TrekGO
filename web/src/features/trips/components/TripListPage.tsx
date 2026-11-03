@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TripCard } from "./TripCard";
-import { mockTripsData, type TripData } from "../data/mockTripsData";
+import type { TripData } from "../data/mockTripsData";
 import { listPublicTrips } from "../services";
 import type { PublicTripItem } from "../types/public-trips";
 
@@ -35,20 +35,22 @@ function publicTripToTripData(trip: PublicTripItem): TripData {
 export const TripListPage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [trips, setTrips] = useState<TripData[]>([]);
+  const [loadError, setLoadError] = useState(false);
+
+  const fetchTrips = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const data = await listPublicTrips({ page: 1, pageSize: 20 });
+      setTrips(data.map(publicTripToTripData));
+    } catch (err) {
+      console.error("Failed to fetch public trips:", err);
+      setLoadError(true);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchTrips = async () => {
-      try {
-        const data = await listPublicTrips({ page: 1, pageSize: 20 });
-        const mapped = data.map(publicTripToTripData);
-        setTrips(mapped);
-      } catch (err) {
-        console.error("Failed to fetch public trips:", err);
-        setTrips(mockTripsData); // Fallback to mock data if API fails
-      }
-    };
     fetchTrips();
-  }, []);
+  }, [fetchTrips]);
 
   return (
     <div className="bg-[#F7F7F4] min-h-screen">
@@ -226,11 +228,24 @@ export const TripListPage = () => {
         </div>
 
         {/* Grid of Trips */}
-        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-          {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} />
-          ))}
-        </div>
+        {loadError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
+            <p className="text-sm font-bold text-red-800">Không tải được danh sách chuyến đi.</p>
+            <p className="mt-1 text-xs text-red-600">Hệ thống đang bận hoặc mất kết nối. Vui lòng thử lại.</p>
+            <button
+              onClick={fetchTrips}
+              className="mt-4 rounded-xl bg-[#1B5E41] px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#154B36]"
+            >
+              Thử lại
+            </button>
+          </div>
+        ) : (
+          <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+            {trips.map(trip => (
+              <TripCard key={trip.id} trip={trip} />
+            ))}
+          </div>
+        )}
 
         {/* Pagination */}
         <div className="flex items-center justify-between mt-10">

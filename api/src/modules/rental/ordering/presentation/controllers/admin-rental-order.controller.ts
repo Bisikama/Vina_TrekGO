@@ -1,5 +1,9 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
+import { ApiErrorResponses } from 'src/shared/swagger/api-error-response.helper';
+import { CancelRentalOrderSystemFaultUseCase } from '../../application/use-cases/cancel-rental-order-system-fault.use-case';
+import { SYSTEM_FAULT_REASON_CODES } from '../../application/ports/rental-system-fault-cancellation.port';
 import { Prisma, RentalFinancialStatus, RentalOrderExceptionStatus, RentalOrderStatus } from '@prisma/client';
 import { UserRole } from 'src/shared/constants/enum.constant';
 import { AuthType } from 'src/shared/constants/auth.constant';
@@ -11,10 +15,13 @@ import { RENTAL_ORDERING_ERROR_CODES } from 'src/shared/errors/codes/rental-orde
 import { ZodValidationPipe } from 'src/shared/pipes/zod-validation.pipe';
 import { ApiErrorResponse } from 'src/shared/swagger/api-error-response.helper';
 import {
+  AdminIdempotencyKeySchema,
   AdminRentalOrderIdParamSchema,
   ListAdminRentalOrdersQuerySchema,
+  SystemFaultCancellationBodySchema,
   type AdminRentalOrderIdParamDto,
   type ListAdminRentalOrdersQueryDto,
+  type SystemFaultCancellationBodyDto,
 } from '../dtos/admin-rental-order.dto';
 
 @ApiTags('Admin Rental Orders - Quản trị đơn thuê')
@@ -23,7 +30,106 @@ import {
 @Roles(UserRole.ADMIN, UserRole.STAFF_INVENTORY, UserRole.STAFF_DELIVERY)
 @Controller('admin/rental-orders')
 export class AdminRentalOrderController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cancelSystemFaultUseCase: CancelRentalOrderSystemFaultUseCase,
+  ) {}
+
+  @Post(':orderId/system-fault-cancellation')
+  @Roles(UserRole.ADMIN)
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Team Extension — ADMIN huỷ đơn do lỗi TrekGo trước bàn giao (hoàn 100%)',
+    description: `
+**Team Extension (ngoài contract 1.3.2/1.3.3)** — chỉ ADMIN.
+Dùng khi TrekGo không giao được đơn đã thanh toán, ví dụ hạ hạng làm thiếu hàng (\`GRADE_DOWNGRADE_CAPACITY_SHORTAGE\`) và không tìm được món đúng hạng.
+- Chỉ đơn PAID / PREPARING / READY_FOR_HANDOVER, chưa bàn giao, \`financialStatus = PAID\`.
+- Hoàn 100% tiền thuê + tiền cọc về nguồn thanh toán gốc, giải phóng reservation, thu hồi pickup code.
+- Unit đã pick/đóng gói còn ở kho chính được trả về AVAILABLE; unit khác được trả trong \`unsafeUnits\` và đơn giữ \`ACTION_REQUIRED\`.
+- Kiện đã giao cho nhân viên giao hàng → 409 \`CANCELLATION_REQUIRES_CUSTODY_RETURN\` (đưa về kho trước).
+- Đơn đã gia hạn (nhiều hoá đơn) → 409 \`PAYMENT_RECONCILIATION_REQUIRED\`.
+- Khách nhận thông báo huỷ qua RENTAL_ORDER_CANCELLED.
+- Retry cùng body với cùng Idempotency-Key trả lại kết quả cũ.
+`,
+  })
+  @ApiParam({ name: 'orderId', type: String, format: 'uuid', description: 'UUID đơn thuê thiết bị' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'Khóa duy nhất để tránh gọi trùng (8–200 ký tự)', example: 'sysfault-20261031-abc123' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['reasonCode', 'note', 'expectedVersion'],
+      properties: {
+        reasonCode: { type: 'string', enum: [...SYSTEM_FAULT_REASON_CODES] },
+        note: { type: 'string', minLength: 3, maxLength: 2000, description: 'Ghi chú nội bộ' },
+        expectedVersion: { type: 'integer', minimum: 1, description: 'version hiện tại của đơn' },
+      },
+      example: {
+        reasonCode: 'GRADE_DOWNGRADE_CAPACITY_SHORTAGE',
+        note: 'Không còn lều hạng Rất mới cho khoảng thuê này',
+        expectedVersion: 4,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Đơn đã huỷ, yêu cầu hoàn tiền đã tạo',
+    schema: {
+      type: 'object',
+      properties: {
+        order: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            status: { type: 'string', example: 'CANCELLED' },
+            financialStatus: { type: 'string', example: 'REFUND_PENDING' },
+            exceptionStatus: { type: 'string' },
+            cancelledAt: { type: 'string', format: 'date-time' },
+            version: { type: 'integer' },
+          },
+        },
+        refund: {
+          type: 'object',
+          properties: {
+            refundRef: { type: 'string', format: 'uuid' },
+            amount: { type: 'number' },
+            feeRefund: { type: 'number' },
+            depositRefund: { type: 'number' },
+            status: { type: 'string' },
+          },
+        },
+        releasedUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+        unsafeUnits: {
+          type: 'array',
+          items: { type: 'object', properties: { unitId: { type: 'string' }, reason: { type: 'string' } } },
+        },
+      },
+    },
+  })
+  @ApiErrorResponse(400, 'Thiếu Idempotency-Key', 'IDEMPOTENCY_KEY_REQUIRED', 'Gửi header Idempotency-Key 8–200 ký tự')
+  @ApiErrorResponse(404, 'Không tìm thấy đơn thuê', 'RENTAL_ORDER_NOT_FOUND', 'Đơn thuê không tồn tại')
+  @ApiErrorResponses(409, 'Không huỷ được lúc này', [
+    { name: 'notAllowed', summary: 'Đơn không ở trạng thái huỷ system-fault được', code: 'RENTAL_SYSTEM_FAULT_CANCELLATION_NOT_ALLOWED', message: 'Chỉ đơn PAID/PREPARING/READY_FOR_HANDOVER chưa bàn giao' },
+    { name: 'custody', summary: 'Kiện đang ở chỗ nhân viên giao', code: 'CANCELLATION_REQUIRES_CUSTODY_RETURN', message: 'Đưa kiện về kho trước' },
+    { name: 'payment', summary: 'Cần đối soát thanh toán', code: 'PAYMENT_RECONCILIATION_REQUIRED', message: 'details.reason cho biết lý do (đơn gia hạn, nguồn thanh toán chưa xác thực...)' },
+    { name: 'trip', summary: 'Trip đã huỷ', code: 'TRIP_CANCELLATION_PROCESSING', message: 'Luồng huỷ Trip sẽ xử lý đơn' },
+    { name: 'version', summary: 'Xung đột phiên bản', code: 'VERSION_CONFLICT', message: 'Tải lại đơn rồi thử lại' },
+    { name: 'keyReused', summary: 'Idempotency-Key dùng lại với body khác', code: 'IDEMPOTENCY_KEY_REUSED', message: 'Dùng khoá mới' },
+  ])
+  async cancelSystemFault(
+    @Param(new ZodValidationPipe(AdminRentalOrderIdParamSchema)) params: AdminRentalOrderIdParamDto,
+    @Body(new ZodValidationPipe(SystemFaultCancellationBodySchema)) body: SystemFaultCancellationBodyDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser('id') actorUserId: string,
+  ) {
+    const key = AdminIdempotencyKeySchema.safeParse(rawKey);
+    if (!key.success) throw AppError.fromCode(RENTAL_ORDERING_ERROR_CODES.IDEMPOTENCY_KEY_REQUIRED);
+    return this.cancelSystemFaultUseCase.execute({
+      orderId: params.orderId,
+      actorUserId,
+      idempotencyKey: key.data,
+      ...body,
+    });
+  }
 
   @Get()
   @ApiOperation({

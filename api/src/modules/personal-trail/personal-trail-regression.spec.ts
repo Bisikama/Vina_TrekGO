@@ -1,9 +1,13 @@
-import { Controller, Get, INestApplication } from '@nestjs/common'
+import { Body, Controller, Get, INestApplication, Post } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { PrismaPersonalTrailAdapter } from './infrastructure/adapters/prisma-personal-trail.adapter'
 import { AppError, GlobalErrorFilter, PersonalTrailErrorCode } from '../../shared/errors'
 import { PersonalTrailUseCase } from './application/use-cases/personal-trail.use-case'
+import { Prisma } from '@prisma/client'
+import { finishRecordingSchema, rawSamplesBatchSchema } from './presentation/dtos/personal-trail.dto'
+import type { RawSamplesBatchInput } from './presentation/dtos/personal-trail.dto'
+import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
 
 describe('Personal trail repository regressions', () => {
   let adapter: PrismaPersonalTrailAdapter
@@ -37,6 +41,8 @@ describe('Personal trail repository regressions', () => {
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       trailRecording: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
         findUnique: jest
           .fn()
           .mockResolvedValue({ id: 'recording', userId: 'owner', status: 'STOPPED', updatedAt, startedAt: updatedAt }),
@@ -44,7 +50,7 @@ describe('Personal trail repository regressions', () => {
       },
       trailRecordingPoint: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       destination: {
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue({ id: 'hcm' }),
         create: jest.fn().mockResolvedValue({ id: 'hcm' }),
       },
       personalTrail: {
@@ -61,7 +67,86 @@ describe('Personal trail repository regressions', () => {
       },
       trailSubmission: { create: jest.fn().mockResolvedValue({ createdAt: updatedAt }) },
     }
-    adapter = new PrismaPersonalTrailAdapter({ ...tx, $transaction: (fn: any) => fn(tx) })
+    adapter = new PrismaPersonalTrailAdapter({ ...tx, $transaction: jest.fn((fn: any) => fn(tx)) })
+  })
+
+  it('recovers a concurrent start conflict only for the same owner', async () => {
+    tx.trailRecording.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: '6.3.1' }),
+    )
+    tx.trailRecording.findFirst.mockResolvedValue({ id: 'existing', userId: 'owner' })
+    const start = { clientRecordingId: 'client-id', userId: 'owner', startedAt: updatedAt, status: 'RECORDING' }
+    await expect(adapter.createRecording(start)).resolves.toMatchObject({ id: 'existing' })
+    tx.trailRecording.findFirst.mockResolvedValue(null)
+    await expect(adapter.createRecording(start)).rejects.toMatchObject({ code: 'CLIENT_RECORDING_ID_CONFLICT' })
+    expect(tx.trailRecording.findFirst).toHaveBeenLastCalledWith({
+      where: { clientRecordingId: 'client-id', userId: 'owner' },
+    })
+  })
+
+  it.each([
+    ['P2028', undefined, 'PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE'],
+    ['P2034', undefined, 'PERSONAL_TRAIL_STORAGE_BUSY'],
+    ['P2010', { code: '55P03' }, 'PERSONAL_TRAIL_STORAGE_BUSY'],
+  ])('maps %s without replaying a failed transaction', async (code, meta, expectedCode) => {
+    tx.$queryRaw.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('failed', { code, meta, clientVersion: '6.3.1' }),
+    )
+    await expect(adapter.updateRecordingStatus('recording', 'PAUSED')).rejects.toMatchObject({ code: expectedCode })
+    expect(tx.trailRecording.update).not.toHaveBeenCalled()
+  })
+
+  it('preserves zero elapsed time and saves ordered custom checkpoints in the finish transaction', async () => {
+    await adapter.completeRecordingAndCreateTrail({
+      ...params,
+      provisionalTelemetry: { elapsedSeconds: 0, duration: '00:00:00' },
+      checkpoints: [{ name: 'Water', latitude: 11.15, longitude: 106.15, radiusMeters: 50 }],
+    })
+    expect(tx.trailRecording.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ elapsedSeconds: 0, duration: '00:00:00' }) }),
+    )
+    expect(tx.personalCheckpoint.createMany.mock.calls[0][0].data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ info: 'START', sequence: 1 }),
+        expect.objectContaining({ name: 'Water', sequence: 2, radiusMeters: 50 }),
+        expect.objectContaining({ info: 'END', sequence: 3 }),
+      ]),
+    )
+  })
+
+  it('stops before READY if checkpoint creation fails', async () => {
+    tx.personalCheckpoint.createMany.mockRejectedValue(new Error('checkpoint failed'))
+    await expect(adapter.completeRecordingAndCreateTrail(params)).rejects.toThrow('checkpoint failed')
+    expect(tx.trailRecording.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects a finish time before start', async () => {
+    await expect(
+      adapter.completeRecordingAndCreateTrail({ ...params, endedAt: new Date(updatedAt.getTime() - 1) }),
+    ).rejects.toMatchObject({ code: 'INVALID_RECORDING_TIME' })
+    expect(tx.personalTrail.create).not.toHaveBeenCalled()
+  })
+
+  it('filters PENDING by the latest submission including UNDER_REVIEW', async () => {
+    tx.$queryRaw.mockResolvedValue([{ personal_trail_id: 'pending-trail' }])
+    await adapter.findMyPersonalTrails('owner', { page: 1, limit: 20, verificationStatus: 'PENDING' })
+    const sql = tx.$queryRaw.mock.calls[0][0]
+    expect(sql.sql).toContain('DISTINCT ON')
+    expect(sql.values).toEqual(expect.arrayContaining(['SUBMITTED', 'UNDER_REVIEW']))
+    expect(tx.personalTrail.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ['pending-trail'] } }) }),
+    )
+  })
+
+  it('locks soft deletion before checking ownership and does not delete another owner trail', async () => {
+    tx.personalTrail.findUnique.mockResolvedValue({ userId: 'other' })
+    await expect(adapter.softDeletePersonalTrail('trail', 'owner')).rejects.toMatchObject({
+      code: 'TRAIL_ACCESS_DENIED',
+    })
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      tx.personalTrail.findUnique.mock.invocationCallOrder[0],
+    )
+    expect(tx.personalTrail.update).not.toHaveBeenCalled()
   })
 
   it('locks the recording before creating and reuses the committed trail on replay', async () => {
@@ -82,16 +167,12 @@ describe('Personal trail repository regressions', () => {
     tx.personalTrail.findUniqueOrThrow.mockResolvedValue({ id: 'trail' })
     expect((await adapter.completeRecordingAndCreateTrail(params)).personalTrail.id).toBe('trail')
     expect(tx.personalTrail.create).toHaveBeenCalledTimes(1)
-    expect(tx.destination.create).toHaveBeenCalledTimes(1)
+    expect(tx.destination.create).not.toHaveBeenCalled()
   })
 
-  it('creates the HCM destination and links it when finishing a recording', async () => {
+  it('links the manually prepared HCM destination without creating it', async () => {
     await adapter.completeRecordingAndCreateTrail(params)
-    expect(tx.destination.create).toHaveBeenCalledWith({
-      data: {
-        name: 'Hồ Chí Minh', region: 'SOUTH', centerLat: 10.7769, centerLng: 106.7009, status: 'ACTIVE',
-      },
-    })
+    expect(tx.destination.create).not.toHaveBeenCalled()
     expect(tx.personalTrail.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ destinationId: 'hcm' }),
     })
@@ -104,14 +185,15 @@ describe('Personal trail repository regressions', () => {
     expect(tx.personalTrail.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ destinationId: 'existing-hcm' }),
     })
-    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
-      tx.destination.findFirst.mock.invocationCallOrder[0],
-    )
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(tx.destination.findFirst.mock.invocationCallOrder[0])
   })
 
-  it('does not finish the recording when destination creation fails', async () => {
-    tx.destination.create.mockRejectedValue(new Error('destination unavailable'))
-    await expect(adapter.completeRecordingAndCreateTrail(params)).rejects.toThrow('destination unavailable')
+  it('does not create a replacement destination or trail when HCM is unavailable', async () => {
+    tx.destination.findFirst.mockResolvedValue(null)
+    await expect(adapter.completeRecordingAndCreateTrail(params)).rejects.toMatchObject({
+      code: 'PERSONAL_TRAIL_DESTINATION_UNAVAILABLE',
+    })
+    expect(tx.destination.create).not.toHaveBeenCalled()
     expect(tx.personalTrail.create).not.toHaveBeenCalled()
     expect(tx.trailRecording.update).not.toHaveBeenCalled()
   })
@@ -173,9 +255,10 @@ describe('Personal trail repository regressions', () => {
 
   it('maps VERIFIED to the Prisma APPROVED enum', async () => {
     await adapter.findMyPersonalTrails('owner', { page: 1, limit: 20, verificationStatus: 'VERIFIED' })
+    expect(tx.$queryRaw.mock.calls[0][0].values).toContain('APPROVED')
     expect(tx.personalTrail.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ trailSubmissionsViaPersonalTrailId: { some: { status: 'APPROVED' } } }),
+        where: expect.objectContaining({ id: { in: [] } }),
       }),
     )
   })
@@ -246,9 +329,25 @@ describe('Personal trail repository regressions', () => {
 
 @Controller('trail-error-test')
 class TrailErrorController {
+  @Post('samples')
+  samples(@Body(new ZodValidationPipe(rawSamplesBatchSchema)) input: RawSamplesBatchInput) {
+    return { receivedCount: input.samples.length }
+  }
   @Get()
   conflict() {
     throw new AppError({ code: PersonalTrailErrorCode.RECORDING_CHANGED })
+  }
+  @Get('busy')
+  busy() {
+    throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_STORAGE_BUSY })
+  }
+  @Get('transaction')
+  transaction() {
+    throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE })
+  }
+  @Get('destination')
+  destination() {
+    throw new AppError({ code: PersonalTrailErrorCode.PERSONAL_TRAIL_DESTINATION_UNAVAILABLE })
   }
 }
 
@@ -271,5 +370,57 @@ describe('Recording conflict HTTP error contract', () => {
     expect(response.body.error).toMatchObject({ code: 'RECORDING_CHANGED', retryable: true })
     expect(response.body.meta).toMatchObject({ requestId: 'trail-request', contractVersion: '0.2.0-final-flow' })
     expect(response.body.meta.serverTime).toEqual(expect.any(String))
+  })
+  it.each([
+    ['busy', 'PERSONAL_TRAIL_STORAGE_BUSY', true],
+    ['transaction', 'PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE', false],
+    ['destination', 'PERSONAL_TRAIL_DESTINATION_UNAVAILABLE', false],
+  ])('uses the shared 503 contract for %s', async (route, code, retryable) => {
+    const response = await request(app.getHttpServer()).get(`/trail-error-test/${route}`).expect(503)
+    expect(response.body.error).toMatchObject({ code, retryable })
+    expect(response.body.meta).toHaveProperty('requestId')
+  })
+  it('returns shared validation errors for an oversized GPS batch', async () => {
+    const sample = {
+      clientSampleId: '11111111-1111-4111-8111-111111111111',
+      latitude: 11,
+      longitude: 106,
+      recordedAt: '2026-10-27T00:00:00Z',
+    }
+    const response = await request(app.getHttpServer())
+      .post('/trail-error-test/samples')
+      .send({ samples: Array(501).fill(sample) })
+      .expect(400)
+    expect(response.body.error).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      retryable: false,
+      details: expect.arrayContaining([expect.objectContaining({ field: 'samples' })]),
+    })
+  })
+})
+
+describe('Personal trail input limits', () => {
+  const sample = {
+    clientSampleId: '11111111-1111-4111-8111-111111111111',
+    latitude: 11,
+    longitude: 106,
+    recordedAt: '2026-10-27T00:00:00Z',
+  }
+  it('accepts 500 GPS samples and rejects 501', () => {
+    expect(rawSamplesBatchSchema.safeParse({ samples: Array(500).fill(sample) }).success).toBe(true)
+    expect(rawSamplesBatchSchema.safeParse({ samples: Array(501).fill(sample) }).success).toBe(false)
+  })
+  it.each([-1, 1.5, 2_147_483_648])('rejects invalid elapsedSeconds %s', (elapsedSeconds) => {
+    expect(finishRecordingSchema.safeParse({ provisionalTelemetry: { elapsedSeconds } }).success).toBe(false)
+  })
+  it('validates duration and custom checkpoint payloads', () => {
+    expect(finishRecordingSchema.safeParse({ provisionalTelemetry: { duration: 'x'.repeat(101) } }).success).toBe(false)
+    expect(
+      finishRecordingSchema.safeParse({ checkpoints: [{ name: 'Water', latitude: 91, longitude: 106 }] }).success,
+    ).toBe(false)
+    expect(
+      finishRecordingSchema.parse({ checkpoints: [{ name: 'Water', latitude: 11, longitude: 106 }] }).checkpoints?.[0]
+        .radiusMeters,
+    ).toBe(50)
   })
 })

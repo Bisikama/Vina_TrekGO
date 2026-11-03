@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { AppError } from '../../../../shared/errors/app-error';
 import { MEDIA_ERROR_CODES } from '../../../../shared/errors/codes/media.error-codes';
 import { COMMON_ERROR_CODES } from '../../../../shared/errors/codes/common.error-codes';
@@ -10,6 +10,7 @@ import type { MediaStoragePort } from '../ports/media-storage.port';
 import { MediaPolicyService } from '../policies/media.policy';
 import type { ActiveUserData } from '../../../../shared/types/user.type';
 import envConfig from '../../../../shared/config';
+import { MEDIA_REFERENCE_PORT, type MediaReferencePort } from '../ports/media-reference.port';
 
 export interface GetMediaDeliveryUseCaseInput {
   mediaId: string;
@@ -23,6 +24,7 @@ export class GetMediaDeliveryUseCase {
     @Inject(MEDIA_ASSET_PORT) private readonly mediaAssetPort: MediaAssetPort,
     @Inject(MEDIA_STORAGE_PORT) private readonly mediaStoragePort: MediaStoragePort,
     private readonly mediaPolicyService: MediaPolicyService,
+    @Optional() @Inject(MEDIA_REFERENCE_PORT) private readonly mediaReferencePort?: MediaReferencePort,
   ) {}
 
   async execute(input: GetMediaDeliveryUseCaseInput, activeUser?: ActiveUserData) {
@@ -96,8 +98,10 @@ export class GetMediaDeliveryUseCase {
       const isOwner = asset.ownerUserId === activeUser.id;
       const isStaffOrAdmin = ['STAFF_INVENTORY', 'STAFF_DELIVERY', 'ADMIN'].includes(activeUser.role);
       
-      // EXCEPTION_EVIDENCE might need more complex checks, but fallback to owner or staff for now
-      if (!isOwner && !isStaffOrAdmin) {
+      const isRentalCaseOwner = !isOwner && !isStaffOrAdmin && activeUser.status === 'ACTIVE' &&
+        ['EXCEPTION_EVIDENCE', 'RETURN_EVIDENCE', 'CONDITION_EVIDENCE'].includes(asset.scope) &&
+        await this.mediaReferencePort?.isPublishedRentalEvidenceForOwner?.(asset.id, activeUser.id);
+      if (!isOwner && !isStaffOrAdmin && !isRentalCaseOwner) {
         throw new AppError({
           code: COMMON_ERROR_CODES.FORBIDDEN,
           message: 'You are not authorized to access this media',

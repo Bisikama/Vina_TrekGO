@@ -1,13 +1,14 @@
 import envconfig from 'src/shared/config'
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
-import { Prisma, RentalOrderExceptionStatus } from '@prisma/client'
+import { Prisma, RentalExceptionCaseStatus, RentalExceptionType, RentalOrderExceptionStatus } from '@prisma/client'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { PaymentsPort } from '../../payments/payments.port'
 import { AppError, PAYMENT_ERROR_CODES as E } from '../../../shared/errors'
 import { updateSettlementProgress } from './settlement-progress'
 import { planDepositRefundGroups, DepositRefundCandidate } from '../returns/application/deposit-grouping.policy'
 import { tryCompleteOrder } from '../returns/infrastructure/adapters/prisma-rental-return.adapter'
+import { deductionReviewGate } from '../returns/application/deduction-review-gate'
 
 @Injectable()
 export class RentalDepositWorker {
@@ -78,6 +79,30 @@ export class RentalDepositWorker {
     const candidates: DepositRefundCandidate[] = []
 
     for (const item of items) {
+      const orderId = item.settlement.orderId
+      const finalInspections = await this.db.returnInspection.findMany({
+        where: { orderId, stage: 'FINAL' },
+        select: { assignmentId: true },
+      })
+      const missingPrelims = await this.db.returnInspection.findMany({
+        where: {
+          orderId,
+          stage: 'PRELIMINARY',
+          outcome: 'MISSING_PENDING_REVIEW',
+        },
+        select: { assignmentId: true },
+      })
+      const completedAssignmentIds = new Set([
+        ...finalInspections.map((f) => f.assignmentId),
+        ...missingPrelims.map((m) => m.assignmentId),
+      ])
+      const assignments = await this.db.rentalUnitAssignment.findMany({
+        where: { orderLine: { orderId } },
+        select: { id: true },
+      })
+      const isOrderComplete = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))
+      if (!isOrderComplete) continue
+
       const payment = await this.db.payment.findFirst({
         where: {
           application: { status: 'APPLIED' },
@@ -181,99 +206,111 @@ export class RentalDepositWorker {
   }
 
   private async settleRetained(itemId: string): Promise<null> {
-    return this.db.$transaction(async (tx) => {
-      const initial = await tx.depositSettlementItem.findUniqueOrThrow({
-        where: { id: itemId },
-        include: { settlement: true },
-      })
-      await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${initial.settlement.orderId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id=${initial.settlementId}::uuid FOR UPDATE`
-      await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id=${initial.settlementId}::uuid ORDER BY id FOR UPDATE`
-      const item = await tx.depositSettlementItem.findUniqueOrThrow({
-        where: { id: itemId },
-        include: {
-          settlement: { include: { order: true } },
-          inspection: true,
-          assignment: { include: { orderLine: true } },
-          refundViaDepositSettlementItemId: true,
-        },
-      })
-      if (
-        item.settlementId !== initial.settlementId ||
-        item.settlement.orderId !== initial.settlement.orderId ||
-        !item.refundAmount.isZero() ||
-        !item.depositAmount.gt(0) ||
-        !item.deductionAmount.equals(item.depositAmount) ||
-        item.assignment.orderLine.orderId !== item.settlement.orderId ||
-        item.assignment.equipmentUnitId !== item.unitId ||
-        !item.depositAmount.equals(item.assignment.orderLine.depositPerUnitSnapshot) ||
-        item.refundViaDepositSettlementItemId ||
-        !item.approvedBy ||
-        !item.approvedAt ||
-        !item.decisionSnapshot ||
-        !['DEDUCTION_APPROVED', 'SETTLED'].includes(item.status) ||
-        !['RETURN_PENDING', 'RETURN_PROCESSING', 'COMPLETED'].includes(item.settlement.order.status) ||
-        !item.inspection ||
-        item.inspection.orderId !== item.settlement.orderId ||
-        item.inspection.assignmentId !== item.assignmentId ||
-        item.inspection.unitId !== item.unitId ||
-        !['DAMAGE_CONFIRMED', 'LOST_CONFIRMED'].includes(item.inspection.outcome) ||
-        (await tx.rentalExceptionCase.findFirst({
-          where: {
-            orderId: item.settlement.orderId,
-            status: { in: ['OPEN', 'UNDER_REVIEW'] },
-            OR: [
-              { assignmentId: item.assignmentId },
-              { inspectionId: item.inspectionId },
-              { assignmentId: null, inspectionId: null },
-            ],
+    return this.db.$transaction(
+      async (tx) => {
+        const initial = await tx.depositSettlementItem.findUniqueOrThrow({
+          where: { id: itemId },
+          include: { settlement: true },
+        })
+        await tx.$queryRaw`SELECT id FROM rental_orders WHERE id=${initial.settlement.orderId}::uuid FOR UPDATE`
+        await tx.$queryRaw`SELECT id FROM deposit_settlements WHERE id=${initial.settlementId}::uuid FOR UPDATE`
+        await tx.$queryRaw`SELECT id FROM deposit_settlement_items WHERE settlement_id=${initial.settlementId}::uuid ORDER BY id FOR UPDATE`
+        const item = await tx.depositSettlementItem.findUniqueOrThrow({
+          where: { id: itemId },
+          include: {
+            settlement: { include: { order: true } },
+            inspection: true,
+            assignment: { include: { orderLine: true } },
+            refundViaDepositSettlementItemId: true,
           },
-        }))
-      )
-        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
-      if (item.status === 'SETTLED') return null
-      const payment = await tx.payment.findFirst({
-        where: {
-          invoice: { rentalOrderId: item.settlement.orderId },
-          application: { status: 'APPLIED' },
-          status: 'SUCCEEDED',
-        },
-        include: { allocations: true },
-      })
-      if (
-        !payment ||
-        !payment.allocations.some(
-          (a) =>
-            a.rentalOrderLineId === item.assignment.orderLineId &&
-            a.component === 'RENTAL_DEPOSIT' &&
-            a.amount.equals(item.assignment.orderLine.lineDeposit),
+        })
+        if (
+          item.settlementId !== initial.settlementId ||
+          item.settlement.orderId !== initial.settlement.orderId ||
+          !item.refundAmount.isZero() ||
+          !item.depositAmount.gt(0) ||
+          !item.deductionAmount.equals(item.depositAmount) ||
+          item.assignment.orderLine.orderId !== item.settlement.orderId ||
+          item.assignment.equipmentUnitId !== item.unitId ||
+          !item.depositAmount.equals(item.assignment.orderLine.depositPerUnitSnapshot) ||
+          item.refundViaDepositSettlementItemId ||
+          !item.approvedBy ||
+          !item.approvedAt ||
+          !item.decisionSnapshot ||
+          !['DEDUCTION_APPROVED', 'SETTLED'].includes(item.status) ||
+          !['RETURN_PENDING', 'RETURN_PROCESSING', 'COMPLETED'].includes(item.settlement.order.status) ||
+          !item.inspection ||
+          item.inspection.orderId !== item.settlement.orderId ||
+          item.inspection.assignmentId !== item.assignmentId ||
+          item.inspection.unitId !== item.unitId ||
+          !['DAMAGE_CONFIRMED', 'LOST_CONFIRMED'].includes(item.inspection.outcome) ||
+          (await tx.rentalExceptionCase.findFirst({
+            where: {
+              orderId: item.settlement.orderId,
+              status: { in: ['OPEN', 'UNDER_REVIEW'] },
+              OR: [
+                { assignmentId: item.assignmentId },
+                { inspectionId: item.inspectionId },
+                { assignmentId: null, inspectionId: null },
+              ],
+            },
+          }))
         )
-      )
-        throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
-      const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
-      await tx.depositSettlementItem.update({
-        where: { id: item.id },
-        data: { status: 'SETTLED', settledAt: now, version: { increment: 1 } },
-      })
-      await updateSettlementProgress(tx, item.settlementId, now)
-      await tryCompleteOrder(tx, item.settlement.orderId, now)
-      await tx.rentalOutboxEvent.create({
-        data: {
-          deduplicationKey: `deposit-item:${item.id}:retained:v1`,
-          eventType: 'DEPOSIT_RETAINED',
-          aggregateType: 'DepositSettlementItem',
-          aggregateId: item.id,
-          payload: {
-            schemaVersion: 1,
-            itemId: item.id,
-            settlementId: item.settlementId,
-            orderId: item.settlement.orderId,
-            amount: item.deductionAmount.toFixed(),
+          throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+        if (item.status === 'SETTLED') return null
+        const order = await tx.rentalOrder.findUniqueOrThrow({
+          where: { id: item.settlement.orderId }, include: { rentalPolicy: true },
+        })
+        const [{ now: gateNow }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        const reason = await deductionReviewGate(tx, {
+          orderId: order.id, inspectionId: item.inspection.id, assignmentId: item.assignmentId,
+          reviewMinutes: order.rentalPolicy.userAssessmentReviewMinutes, now: gateNow,
+        })
+        if (reason) throw AppError.fromCode(E.REFUND_SOURCE_INVALID, { details: { reason } })
+        const payment = await tx.payment.findFirst({
+          where: {
+            invoice: { rentalOrderId: item.settlement.orderId },
+            application: { status: 'APPLIED' },
+            status: 'SUCCEEDED',
           },
-        },
-      })
-      return null
-    })
+          include: { allocations: true },
+        })
+        if (
+          !payment ||
+          !payment.allocations.some(
+            (a) =>
+              a.rentalOrderLineId === item.assignment.orderLineId &&
+              a.component === 'RENTAL_DEPOSIT' &&
+              a.amount.equals(item.assignment.orderLine.lineDeposit),
+          )
+        )
+          throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
+        const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        await tx.depositSettlementItem.update({
+          where: { id: item.id },
+          data: { status: 'SETTLED', settledAt: now, version: { increment: 1 } },
+        })
+        await updateSettlementProgress(tx, item.settlementId, now)
+        await tryCompleteOrder(tx, item.settlement.orderId, now)
+        await tx.rentalOutboxEvent.create({
+          data: {
+            deduplicationKey: `deposit-item:${item.id}:retained:v1`,
+            eventType: 'DEPOSIT_RETAINED',
+            aggregateType: 'DepositSettlementItem',
+            aggregateId: item.id,
+            payload: {
+              schemaVersion: 1,
+              itemId: item.id,
+              settlementId: item.settlementId,
+              orderId: item.settlement.orderId,
+              amount: item.deductionAmount.toFixed(),
+            },
+          },
+        })
+        return null
+      },
+      { timeout: 15000, maxWait: 10000 },
+    )
   }
 
   async consume(eventId: string) {
@@ -287,10 +324,8 @@ export class RentalDepositWorker {
           depositRefundItems: true,
         },
       })
-      if (!initial || initial.purpose !== 'DEPOSIT' || !initial.depositSettlement)
-        return
-      if (!initial.depositSettlementItemId && initial.depositRefundItems.length === 0)
-        return
+      if (!initial || initial.purpose !== 'DEPOSIT' || !initial.depositSettlement) return
+      if (!initial.depositSettlementItemId && initial.depositRefundItems.length === 0) return
 
       const orderId = initial.depositSettlement.orderId
       const settlementId = initial.depositSettlement.id
@@ -312,7 +347,7 @@ export class RentalDepositWorker {
         where: { id: initial.id },
         include: {
           payment: { include: { invoice: true, application: true } },
-          allocations: { include: { paymentAllocation: true } },
+          allocations: { include: { paymentAllocation: { include: { rentalOrderLine: true } } } },
           depositRefundItems: true,
           depositSettlementItem: true,
         },
@@ -330,16 +365,43 @@ export class RentalDepositWorker {
         include: { assignment: true },
       })
 
+      const refundAllocationTotal = refund.allocations.reduce(
+        (sum, allocation) => sum.plus(allocation.amount),
+        new Prisma.Decimal(0),
+      )
+      const itemAllocationTotal =
+        refund.depositRefundItems.length > 0
+          ? refund.depositRefundItems.reduce((sum, allocation) => sum.plus(allocation.amount), new Prisma.Decimal(0))
+          : refund.amount
+      const allocationMismatch = refund.allocations.some(
+        (allocation) =>
+          allocation.paymentAllocation.paymentId !== refund.paymentId ||
+          allocation.paymentAllocation.component !== 'RENTAL_DEPOSIT' ||
+          allocation.paymentAllocation.rentalOrderLine.orderId !== orderId ||
+          allocation.amount.lte(0) ||
+          allocation.amount.gt(allocation.paymentAllocation.amount),
+      )
+      const itemMismatch =
+        items.length !== itemIds.length ||
+        items.some((item) => item.settlementId !== settlementId) ||
+        refund.depositRefundItems.some((allocation) => allocation.amount.lte(0))
+
       const payload = event.payload as Prisma.JsonObject
       if (
         refund.depositSettlementId !== settlementId ||
+        (refund.rentalOrderId !== null && refund.rentalOrderId !== orderId) ||
         refund.paymentId !== payment.id ||
         refund.payment.invoiceId !== payment.invoiceId ||
         refund.payment.invoice.rentalOrderId !== orderId ||
         refund.payment.application?.status !== 'APPLIED' ||
         payload.schemaVersion !== 1 ||
         payload.refundId !== refund.id ||
-        event.eventType !== `REFUND_${refund.status}`
+        event.eventType !== `REFUND_${refund.status}` ||
+        refund.allocations.length === 0 ||
+        !refundAllocationTotal.equals(refund.amount) ||
+        !itemAllocationTotal.equals(refund.amount) ||
+        allocationMismatch ||
+        itemMismatch
       )
         throw new Error('Rental refund result does not match approved item')
 
@@ -401,29 +463,47 @@ export class RentalDepositWorker {
         const allSettlementItems = await tx.depositSettlementItem.findMany({
           where: { settlementId },
         })
-        const allSettled =
-          allSettlementItems.length > 0 && allSettlementItems.every((i) => i.status === 'SETTLED')
-        const hasFailedOrPending = allSettlementItems.some((i) =>
-          ['REFUND_FAILED', 'REFUND_PENDING'].includes(i.status),
-        )
+        const allSettled = allSettlementItems.length > 0 && allSettlementItems.every((i) => i.status === 'SETTLED')
+        const hasFailedOrPending = allSettlementItems.some((i) => ['REFUND_FAILED', 'REFUND_PENDING'].includes(i.status))
         const hasFailed = allSettlementItems.some((i) => i.status === 'REFUND_FAILED')
 
         await tx.rentalOrder.update({
           where: { id: orderId },
           data: {
-            financialStatus: (pendingCount > 0 || hasFailedOrPending)
-              ? (refundedDeposit.gt(0) ? 'PARTIALLY_REFUNDED' : 'REFUND_PENDING')
-              : allSettled
-                ? 'SETTLED'
-                : refundedDeposit.equals(totalDeposit)
-                  ? 'REFUNDED'
-                  : refundedDeposit.gt(0)
-                    ? 'PARTIALLY_REFUNDED'
-                    : 'PAID',
+            financialStatus:
+              pendingCount > 0 || hasFailedOrPending
+                ? refundedDeposit.gt(0)
+                  ? 'PARTIALLY_REFUNDED'
+                  : 'REFUND_PENDING'
+                : allSettled
+                  ? 'SETTLED'
+                  : refundedDeposit.equals(totalDeposit)
+                    ? 'REFUNDED'
+                    : refundedDeposit.gt(0)
+                      ? 'PARTIALLY_REFUNDED'
+                      : 'PAID',
             ...(hasFailed ? { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED } : {}),
             version: { increment: 1 },
           },
         })
+
+        if (refund.status === 'SUCCEEDED' && typeof (tx as any).rentalExceptionCase?.updateMany === 'function') {
+          await tx.rentalExceptionCase.updateMany({
+            where: {
+              orderId,
+              caseType: RentalExceptionType.REFUND_FAILURE,
+              status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+              reason: { contains: `[refund:${refund.id}]` },
+            },
+            data: {
+              status: RentalExceptionCaseStatus.RESOLVED,
+              adminReviewStatus: 'RESOLVED_BY_PROVIDER',
+              resolution: 'REFUND_SUCCEEDED',
+              resolvedAt: now,
+              version: { increment: 1 },
+            },
+          })
+        }
 
         await tryCompleteOrder(tx, orderId, now)
         await tx.paymentConsumerReceipt.create({ data: { eventId, consumerName: 'rental-deposit-v1' } })
@@ -438,10 +518,64 @@ export class RentalDepositWorker {
 
   @Interval(2000)
   async tick() {
-    const isWorkerEnabled = envconfig.PAYMENT_EVENTS_WORKER_ENABLED && process.env.PAYMENT_EVENTS_WORKER_ENABLED !== 'false'
+    const isWorkerEnabled =
+      envconfig.PAYMENT_EVENTS_WORKER_ENABLED && process.env.PAYMENT_EVENTS_WORKER_ENABLED !== 'false'
     if (this.running || !isWorkerEnabled) return
     this.running = true
     try {
+      // Scanner: Release any orders where all assignments have completed inspection
+      const awaitGrouped = await this.db.depositSettlementItem.findMany({
+        where: {
+          status: 'REVIEW_REQUIRED',
+          reason: 'FINAL_PASS_AWAIT_GROUPED_REFUND',
+        },
+        include: { settlement: true },
+        take: 25,
+      })
+      const handledOrders = new Set<string>()
+      for (const ag of awaitGrouped) {
+        const orderId = ag.settlement.orderId
+        if (handledOrders.has(orderId)) continue
+        handledOrders.add(orderId)
+
+        const finalInspections = await this.db.returnInspection.findMany({
+          where: { orderId, stage: 'FINAL' },
+          select: { assignmentId: true },
+        })
+        const missingPrelims = await this.db.returnInspection.findMany({
+          where: {
+            orderId,
+            stage: 'PRELIMINARY',
+            outcome: 'MISSING_PENDING_REVIEW',
+          },
+          select: { assignmentId: true },
+        })
+        const completedAssignmentIds = new Set([
+          ...finalInspections.map((f) => f.assignmentId),
+          ...missingPrelims.map((m) => m.assignmentId),
+        ])
+        const assignments = await this.db.rentalUnitAssignment.findMany({
+          where: { orderLine: { orderId } },
+          select: { id: true },
+        })
+        const allInspected = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))
+        if (allInspected) {
+          const now = new Date()
+          await this.db.depositSettlementItem.updateMany({
+            where: {
+              settlementId: ag.settlementId,
+              status: 'REVIEW_REQUIRED',
+              reason: 'FINAL_PASS_AWAIT_GROUPED_REFUND',
+            },
+            data: {
+              status: 'REFUND_PENDING',
+              approvedAt: now,
+              reason: 'INVENTORY_FINAL_PASS',
+            },
+          })
+        }
+      }
+
       const items = await this.db.depositSettlementItem.findMany({
         where: {
           ...(this.itemCursor ? { id: { gt: this.itemCursor } } : {}),

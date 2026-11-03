@@ -55,7 +55,8 @@ export class StaffReturnController {
       properties: {
         pendingTransferId: { type: 'string', format: 'uuid', description: 'UUID pending custody transfer từ RB-API-603', example: '990e8400-e29b-41d4-a716-446655440010' },
         inventoryLocationId: { type: 'string', format: 'uuid', description: 'UUID vị trí kho nhận hàng (phải khớp transfer đích)', example: 'aa0e8400-e29b-41d4-a716-446655440020' },
-        scannedUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 100, description: 'UUID thiết bị đã quét xác nhận', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        scannedUnitIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 100, description: 'UUID thiết bị thực tế đã quét nhận; có thể rỗng nếu toàn bộ transfer thất lạc', example: ['550e8400-e29b-41d4-a716-446655440001'] },
+        incidentNote: { type: 'string', description: 'Mô tả bắt buộc khi kho nhận thiếu so với transfer' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại', example: 4 },
       },
     },
@@ -190,12 +191,32 @@ export class StaffReturnController {
         inspectionId: { type: 'string', format: 'uuid', description: 'UUID bản kiểm tra liên quan (tùy chọn)' },
         accessoriesChecked: { type: 'boolean', description: 'Đã kiểm tra phụ kiện đầy đủ chưa?', example: true },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản hiện tại', example: 7 },
+        gradeDecision: {
+          type: 'object',
+          description:
+            'Bắt buộc khi thiết bị thuộc sản phẩm có hạng (grade); không gửi với sản phẩm thường. ' +
+            'KEEP = giữ hạng. DOWNGRADE = chuyển thiết bị sang sản phẩm "Đã sử dụng tốt" cùng nhóm (chỉ từ "Rất mới"), bắt buộc reason. ' +
+            'Nếu hạ hạng làm thiếu hàng cho đơn đã đặt chưa bàn giao: đơn không đổi, được đánh dấu ACTION_REQUIRED để nhân viên xử lý.',
+          required: ['decision'],
+          properties: {
+            decision: { type: 'string', enum: ['KEEP', 'DOWNGRADE'], example: 'KEEP' },
+            reason: { type: 'string', minLength: 3, maxLength: 1000, description: 'Lý do (bắt buộc khi DOWNGRADE)' },
+            note: { type: 'string', maxLength: 3000 },
+            evidenceIds: { type: 'array', maxItems: 10, items: { type: 'string', format: 'uuid' }, description: 'UUID ảnh bằng chứng' },
+          },
+        },
       },
+      example: { accessoriesChecked: true, expectedVersion: 7, gradeDecision: { decision: 'KEEP' } },
     },
   })
-  @ApiResponse({ status: 200, description: 'Thiết bị đã được đánh dấu AVAILABLE' })
+  @ApiResponse({ status: 200, description: 'Thiết bị đã được đánh dấu AVAILABLE; trả thêm gradeReview (null với sản phẩm thường)' })
   @ApiResponse({ status: 409, description: 'Xung đột phiên bản' })
-  @ApiResponse({ status: 422, description: 'Thiết bị không ở trạng thái hợp lệ để đánh dấu AVAILABLE' })
+  @ApiResponse({
+    status: 422,
+    description:
+      'Thiết bị không ở trạng thái hợp lệ để đánh dấu AVAILABLE; RENTAL_GRADE_DECISION_REQUIRED; RENTAL_GRADE_DECISION_NOT_APPLICABLE; ' +
+      'RENTAL_GRADE_DOWNGRADE_NOT_ALLOWED; RENTAL_GRADE_TARGET_NOT_FOUND',
+  })
   async ready(@Param(new ZodValidationPipe(EquipmentUnitIdParamSchema)) params: EquipmentUnitIdParamDto, @Body(new ZodValidationPipe(MarkUnitReadyBodySchema)) body: MarkUnitReadyBodyDto, @Headers('idempotency-key') rawKey: string | undefined, @ActiveUser('id') actorUserId: string) {
     return this.readyUseCase.execute({ actorUserId, unitId: params.id, ...body, idempotencyKey: requireKey(rawKey), now: new Date() });
   }

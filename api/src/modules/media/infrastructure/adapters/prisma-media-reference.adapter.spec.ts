@@ -33,6 +33,18 @@ describe('PrismaMediaReferenceAdapter', () => {
     jest.clearAllMocks();
   });
 
+  it('limits customer evidence access to approved cases on their own order', async () => {
+    (prismaService.rentalExceptionCase.count as jest.Mock).mockResolvedValue(1);
+    expect(await adapter.isPublishedRentalEvidenceForOwner('media-a', 'user-a')).toBe(true);
+    expect(prismaService.rentalExceptionCase.count).toHaveBeenCalledWith({
+      where: {
+        order: { userId: 'user-a' }, status: 'RESOLVED',
+        OR: [{ resolution: { startsWith: 'APPROVE_DEDUCTION:' } }, { resolution: { startsWith: 'CONFIRM_LOST:' } }],
+        evidenceIds: { array_contains: ['media-a'] },
+      },
+    });
+  });
+
   describe('PostgreSQL JSON Reference Check', () => {
     it('should query using array_contains: [mediaId]', async () => {
       (prismaService.rentalProduct.count as jest.Mock).mockResolvedValue(0);

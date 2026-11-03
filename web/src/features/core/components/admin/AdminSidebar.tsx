@@ -41,6 +41,7 @@ export const AdminSidebar = () => {
       </div>
 
       <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <Link href="/admin/trip-cancellation-requests" className={getLinkClass("/admin/trip-cancellation-requests")}>Duyệt hủy chuyến</Link>
         <Link href="/admin" className={getLinkClass("/admin")}>
           <svg className={getIconClass("/admin")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
           Dashboard
@@ -71,6 +72,16 @@ export const AdminSidebar = () => {
         <Link href="/admin/rentals" className={getLinkClass("/admin/rentals")}>
           <svg className={getIconClass("/admin/rentals")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
           Thiết bị cho thuê
+        </Link>
+        <Link href="/admin/gear-catalog" className={getLinkClass("/admin/gear-catalog")}>
+          <svg className={getIconClass("/admin/gear-catalog")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+          Duyệt hồ sơ sản phẩm Gear
+        </Link>
+        <Link href="/admin/rental-returns" className={getLinkClass("/admin/rental-returns")}>
+          <svg className={getIconClass("/admin/rental-returns")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h11a4 4 0 014 4v1M4 7l3-3M4 7l3 3m13 7H9a4 4 0 01-4-4v-1m15 5l-3-3m3 3l-3 3" />
+          </svg>
+          Hoàn trả & quyết toán
         </Link>
         <div className="flex items-center justify-between px-3 py-2.5 rounded-lg text-red-600 hover:bg-red-50 text-[13px] font-semibold transition-colors cursor-pointer mt-4">
           <div className="flex items-center gap-3">

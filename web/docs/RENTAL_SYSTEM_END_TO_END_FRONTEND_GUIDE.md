@@ -13,15 +13,16 @@ Frontend **không được** thiết kế Rental như một giỏ hàng thương
 
 ```mermaid
 graph TD
-    Trip[Trips & Checkpoints] -->|Meeting Points, GPS Lat/Lng, Cutoff Time| RentalCtx[Rental Context]
+    Trip["Trips & Checkpoints"] -->|Meeting Points, GPS Lat/Lng, Cutoff Time| RentalCtx[Rental Context]
     Booking[Bookings Module] -->|Trip Membership: userId + tripId| RentalCtx
     RentalCtx -->|Kiểm tra điều kiện: eligible=true| RentalOrder[Đơn thuê: RentalOrder]
-    RentalOrder -->|Tổng tiền = Thuê + Cọc (BigInt)| Payment[Payments Module]
-    RentalOrder -->|Giao nhận tại Meeting Point| Handover[Delivery & Custody Transfer]
-    RentalOrder -->|Thu hồi & Trừ phạt| Settlement[Final Inspection & Hoàn cọc]
+    RentalOrder -->|"Tổng tiền = Thuê + Cọc (BigInt)"| Payment[Payments Module]
+    RentalOrder -->|Giao nhận tại Meeting Point| Handover["Delivery & Custody Transfer"]
+    RentalOrder -->|Thu hồi & Trừ phạt| Settlement["Final Inspection & Hoàn cọc"]
 ```
 
 ### 1.1. Liên kết với `trips` & `checkpoint` (Lịch trình, Tọa độ GPS & Điểm hẹn)
+
 - **Thời gian thuê (`rentalStartAt` / `rentalEndAt`)**:
   - `rentalStartAt` bắt buộc neo theo giờ hẹn tập kết đi (`pickup.scheduledAt`) của chuyến đi.
   - `rentalEndAt` mặc định neo theo giờ kết thúc tại điểm trả (`dropoff.scheduledAt`), hoặc theo `returnOptionId` được server cấp.
@@ -30,10 +31,12 @@ graph TD
 - **Thời hạn chốt đơn (`rentalCutoffAt`)**: Chuyến đi có mốc cutoff. Nếu thời gian hiện tại `now >= rentalCutoffAt`, backend lập tức từ chối tạo đơn mới với mã lỗi `RENTAL_CUTOFF_PASSED`.
 
 ### 1.2. Liên kết với `bookings` (Tư cách hội viên & Ranh giới tài khoản)
+
 - **Phân quyền dựa trên `TripMember` (`RB-TBD-02`)**: Quyền đặt thuê được kiểm tra qua cặp `(userId, tripId)`. **Tuyệt đối không dùng `bookingId` để phân quyền**.
 - **Người đi cùng (Companion) tự thuê**: Nếu người đặt tour (A) đặt vé hộ người đi cùng (B), và người B đã có tài khoản liên kết với `booking_participants.userId`, thì **B được quyền tự tạo đơn thuê riêng cho chính mình**, tự thanh toán và tự nhận đồ. FE không chặn B chỉ vì B không phải chủ booking.
 
 ### 1.3. Liên kết với `payments` (Thanh toán & Quyết toán cọc)
+
 - **Thu tiền gộp 1 lần**: Khi checkout ban đầu, hệ thống thu gộp `totalAmount = rentalFee + totalDeposit`.
 - **Hoàn cọc đúng nguồn gốc (`RB-POL-22`, `RB-POL-29`)**: Cọc hoàn về đúng tài khoản/nguồn thanh toán ban đầu đã thu. Không hoàn cọc vào thẻ khác.
 - **Payment Truth $\neq$ Business Truth**: Trạng thái thanh toán của cổng (`Payment SUCCEEDED`) chưa phải là xong; đơn chỉ hợp lệ khi Backend kích hoạt nghiệp vụ chuyển sang `orderStatus = PAID` và `Reservation = CONFIRMED`.
@@ -42,22 +45,22 @@ graph TD
 
 ## 2. BẢN ĐỒ MÀN HÌNH FRONTEND (THEO 3 NHÓM ACTORS)
 
-| Nhóm Đối tượng (Actor) | Tên màn hình / Chức năng | URL Route Frontend đề xuất | API Backend cốt lõi |
-|---|---|---|---|
-| **Khách hàng (User / Leader)** | 1. Báo giá & Chọn thiết bị theo Tour | `/trips/:tripId/rentals` | `GET /trips/:tripId/rental-eligibility`<br/>`GET /rentals/availability`<br/>`POST /rentals/quote` |
-| | 2. Chi tiết đơn & Checkout | `/rentals/:orderId/checkout` | `POST /rental-orders`<br/>`POST /rental-orders/:id/payments`<br/>`GET /rental-orders/:id/payment` |
-| | 3. Hủy đơn trước khi giao | `/rentals/:orderId/cancel` | `GET /rental-orders/:id/cancellation-preview`<br/>`POST /rental-orders/:id/cancel` |
-| | 4. Lấy mã nhận hàng (OTP/QR) | `/rentals/:orderId/pickup` | `GET /rental-orders/:id/pickup-code` |
-| | 5. Xin gia hạn đơn thuê | `/rentals/:orderId/extend` | `POST /rental-orders/:id/extension-quotes`<br/>`POST /rental-orders/:id/extensions`<br/>`POST /rental-extensions/:id/payments` |
-| | 6. Bảng kê cọc & Khiếu nại hư hại | `/rentals/:orderId/deposit` | `GET /rental-orders/:id/deposit`<br/>`POST /rental-orders/:id/assessment-reviews` |
-| | 7. Xem & Tải hợp đồng/chứng từ | `/rentals/:orderId/documents` | `GET /rental-orders/:id/documents`<br/>`GET /rental-documents/:documentId/download` |
-| **Nhân viên Kho (Staff Inventory)** | 8. Danh sách đơn cần soạn đồ | `/staff/warehouse/tasks` | `GET /staff/warehouse/tasks`<br/>`POST /staff/warehouse/tasks/:id/claim` |
-| | 9. Quét Barcode gán món & Đóng gói | `/staff/warehouse/tasks/:id` | `POST /staff/warehouse/tasks/:id/pick`<br/>`POST /staff/warehouse/tasks/:id/condition`<br/>`POST /staff/warehouse/tasks/:id/pack`<br/>`POST /staff/warehouse/tasks/:id/ready`<br/>`POST /staff/warehouse/tasks/:id/transfer` |
-| | 10. Tiếp nhận đồ trả về kho & SLA | `/staff/returns` | `GET /staff/returns`<br/>`POST /staff/returns/:id/receive` *(Kích hoạt SLA 72h)* |
-| | 11. Giám định Final Inspection | `/staff/returns/:id/inspect` | `POST /staff/returns/:id/final-inspection`<br/>`POST /staff/returns/:id/finalize`<br/>`POST /staff/equipment-units/:id/ready` |
-| **Nhân viên Giao nhận (Staff Delivery)** | 12. Danh sách nhiệm vụ giao nhận | `/staff/delivery/tasks` | `GET /delivery/tasks`<br/>`POST /delivery/tasks/:id/claim`<br/>`POST /delivery/tasks/:id/receive` *(ACK Custody)* |
-| | 13. Giao đồ tại điểm hẹn (Handover) | `/staff/delivery/tasks/:id/handover` | `POST /delivery/tasks/:id/verify-recipient`<br/>`POST /rental-orders/:id/handover`<br/>`POST /rental-orders/:id/no-show` |
-| | 14. Thu hồi đồ sau tour tại điểm hẹn | `/staff/delivery/tasks/:id/return` | `POST /rental-orders/:id/return-scan`<br/>`POST /rental-orders/:id/return-observations`<br/>`POST /delivery/tasks/:id/return-to-inventory-location` |
+| Nhóm Đối tượng (Actor)                   | Tên màn hình / Chức năng             | URL Route Frontend đề xuất           | API Backend cốt lõi                                                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Khách hàng (User / Leader)**           | 1. Báo giá & Chọn thiết bị theo Tour | `/trips/:tripId/rentals`             | `GET /trips/:tripId/rental-eligibility`<br/>`GET /rentals/availability`<br/>`POST /rentals/quote`                                                                                                                            |
+|                                          | 2. Chi tiết đơn & Checkout           | `/rentals/:orderId/checkout`         | `POST /rental-orders`<br/>`POST /rental-orders/:id/payments`<br/>`GET /rental-orders/:id/payment`                                                                                                                            |
+|                                          | 3. Hủy đơn trước khi giao            | `/rentals/:orderId/cancel`           | `GET /rental-orders/:id/cancellation-preview`<br/>`POST /rental-orders/:id/cancel`                                                                                                                                           |
+|                                          | 4. Lấy mã nhận hàng (OTP/QR)         | `/rentals/:orderId/pickup`           | `GET /rental-orders/:id/pickup-code`                                                                                                                                                                                         |
+|                                          | 5. Xin gia hạn đơn thuê              | `/rentals/:orderId/extend`           | `POST /rental-orders/:id/extension-quotes`<br/>`POST /rental-orders/:id/extensions`<br/>`POST /rental-extensions/:id/payments`                                                                                               |
+|                                          | 6. Bảng kê cọc & Khiếu nại hư hại    | `/rentals/:orderId/deposit`          | `GET /rental-orders/:id/deposit`<br/>`POST /rental-orders/:id/assessment-reviews`                                                                                                                                            |
+|                                          | 7. Xem & Tải hợp đồng/chứng từ       | `/rentals/:orderId/documents`        | `GET /rental-orders/:id/documents`<br/>`GET /rental-documents/:documentId/download`                                                                                                                                          |
+| **Nhân viên Kho (Staff Inventory)**      | 8. Danh sách đơn cần soạn đồ         | `/staff/warehouse/tasks`             | `GET /staff/warehouse/tasks`<br/>`POST /staff/warehouse/tasks/:id/claim`                                                                                                                                                     |
+|                                          | 9. Quét Barcode gán món & Đóng gói   | `/staff/warehouse/tasks/:id`         | `POST /staff/warehouse/tasks/:id/pick`<br/>`POST /staff/warehouse/tasks/:id/condition`<br/>`POST /staff/warehouse/tasks/:id/pack`<br/>`POST /staff/warehouse/tasks/:id/ready`<br/>`POST /staff/warehouse/tasks/:id/transfer` |
+|                                          | 10. Tiếp nhận đồ trả về kho & SLA    | `/staff/returns`                     | `GET /staff/returns`<br/>`POST /staff/returns/:id/receive` _(Kích hoạt SLA 72h)_                                                                                                                                             |
+|                                          | 11. Giám định Final Inspection       | `/staff/returns/:id/inspect`         | `POST /staff/returns/:id/final-inspection`<br/>`POST /staff/returns/:id/finalize`<br/>`POST /staff/equipment-units/:id/ready`                                                                                                |
+| **Nhân viên Giao nhận (Staff Delivery)** | 12. Danh sách nhiệm vụ giao nhận     | `/staff/delivery/tasks`              | `GET /delivery/tasks`<br/>`POST /delivery/tasks/:id/claim`<br/>`POST /delivery/tasks/:id/receive` _(ACK Custody)_                                                                                                            |
+|                                          | 13. Giao đồ tại điểm hẹn (Handover)  | `/staff/delivery/tasks/:id/handover` | `POST /delivery/tasks/:id/verify-recipient`<br/>`POST /rental-orders/:id/handover`<br/>`POST /rental-orders/:id/no-show`                                                                                                     |
+|                                          | 14. Thu hồi đồ sau tour tại điểm hẹn | `/staff/delivery/tasks/:id/return`   | `POST /rental-orders/:id/return-scan`<br/>`POST /rental-orders/:id/return-observations`<br/>`POST /delivery/tasks/:id/return-to-inventory-location`                                                                          |
 
 ---
 
@@ -81,9 +84,11 @@ stateDiagram-v2
 ### BƯỚC 1: KIỂM TRA ĐIỀU KIỆN & LẤY BÁO GIÁ (QUOTE)
 
 #### 1. Kiểm tra quyền thuê của thành viên (`RB-API-101`)
+
 - **Method & Route**: `GET /api/v1/trips/:tripId/rental-eligibility`
 - **Headers**: `Authorization: Bearer <token>`
 - **Response**:
+
 ```json
 {
   "eligible": true,
@@ -101,9 +106,11 @@ stateDiagram-v2
   ]
 }
 ```
+
 - **Xử lý UI**: Nếu `eligible === false`, hiển thị `reason` và khóa form thuê. Nếu `existingOpenOrderId !== null`, dẫn user về đơn đang mở.
 
 #### 2. Kiểm tra tồn kho khả dụng thời gian thực (`RB-API-102`)
+
 - **Method & Route**: `GET /api/v1/rentals/availability`
 - **Query Params**:
   - `tripId`: UUID (bắt buộc)
@@ -113,8 +120,10 @@ stateDiagram-v2
 - **Response**: Trả về `availableCount` (tính bằng thuật toán Sweep-line nửa mở `[start, end)` có cộng buffer).
 
 #### 3. Tạo báo giá (`RB-API-103`)
+
 - **Method & Route**: `POST /api/v1/rentals/quote`
 - **Request Body**:
+
 ```json
 {
   "tripId": "550e8400-e29b-41d4-a716-446655440101",
@@ -126,7 +135,9 @@ stateDiagram-v2
   ]
 }
 ```
+
 - **Response (HTTP 201)**:
+
 ```json
 {
   "id": "quote-uuid-abc",
@@ -141,6 +152,7 @@ stateDiagram-v2
   "expiresAt": "2026-10-22T23:00:00.000Z"
 }
 ```
+
 - **Bất biến**: Quote có hạn hiệu lực 15 phút, **chưa giữ chỗ trong kho**, **chưa gán món đồ vật lý**.
 
 ---
@@ -148,34 +160,41 @@ stateDiagram-v2
 ### BƯỚC 2: TẠO ĐƠN THUÊ & CHECKOUT THANH TOÁN
 
 #### 1. Tạo đơn hàng từ Quote (`RB-API-201`)
+
 - **Method & Route**: `POST /api/v1/rental-orders`
 - **Headers**:
   - `Authorization: Bearer <token>`
-  - `Idempotency-Key: <UUID>` *(bắt buộc để chống tạo đơn trùng)*
+  - `Idempotency-Key: <UUID>` _(bắt buộc để chống tạo đơn trùng)_
 - **Request Body**:
+
 ```json
 {
   "quoteId": "quote-uuid-abc"
 }
 ```
+
 - **Xử lý Backend**: Tạo đơn hàng ở trạng thái `PENDING_PAYMENT`, đồng thời giữ chỗ công suất kho nguyên tử (`RentalQuantityReservation` ở trạng thái `HELD`). Hạn giữ chỗ thanh toán: 15 phút (`paymentExpiresAt`).
 
 #### 2. Khởi tạo phiên thanh toán (`RB-API-204`)
+
 - **Method & Route**: `POST /api/v1/rental-orders/:id/payments`
 - **Headers**:
   - `Authorization: Bearer <token>`
   - `Idempotency-Key: <UUID>`
 - **Request Body**:
+
 ```json
 {
   "paymentMethod": "REDIRECT",
   "gateway": "vnpay"
 }
 ```
+
 > [!CAUTION]
 > **LƯU Ý ĐẶC BIỆT KHI DEMO/DEV:** Khi backend chạy cấu hình `PAYMENT_PROVIDER=mock`, trường `gateway` **BẮT BUỘC ĐỂ TRỐNG HOẶC KHÔNG TRUYỀN**. Nếu cố tình truyền `"vnpay"` hay `"momo"` khi backend chưa cấu hình sandbox keys, server sẽ trả lỗi HTTP 503 `PAYMENT_PROVIDER_UNAVAILABLE`.
 
 - **Response (HTTP 201)**:
+
 ```json
 {
   "paymentId": "payment-uuid-123",
@@ -194,18 +213,22 @@ stateDiagram-v2
 ```
 
 #### 3. Giả lập thanh toán tức thì (Dành cho Test / Demo môi trường Mock)
+
 - **Method & Route**: `POST /api/v1/payments/:paymentId/mock-confirm`
-- **Headers**: `Authorization: Bearer <token>` *(chính user tạo đơn)*
+- **Headers**: `Authorization: Bearer <token>` _(chính user tạo đơn)_
 - **Response**: HTTP 202 `{ "accepted": true, "paymentId": "...", "paymentStatus": "PENDING" }`. Backend worker xử lý bất đồng bộ để kích hoạt đơn hàng sang `PAID` mà không cần tài khoản ngân hàng thật.
 
 #### 4. Polling trạng thái thanh toán từ Backend (`RB-API-206`)
+
 - **Method & Route**: `GET /api/v1/rental-orders/:id/payment`
 - **Quy tắc FE tại trang `/payment-return`**: Khi trình duyệt redirect về, **không được** tin query params trên URL. Gọi API này lặp lại mỗi 2.5s (tối đa 5 lần) cho đến khi:
   - `status === "SUCCEEDED"` VÀ `orderStatus === "PAID"`.
 
 #### 5. Hủy đơn trước khi giao (Tùy chọn - `RB-API-207` & `RB-API-205`)
+
 - **Bước A (Xem trước chi phí hoàn lại)**: `GET /api/v1/rental-orders/:id/cancellation-preview` $\rightarrow$ Nhận về `previewVersion`, `refundPercentage`, `refundAmount`.
 - **Bước B (Thực hiện hủy)**: `POST /api/v1/rental-orders/:id/cancel`
+
 ```json
 {
   "reason": "Tôi bận việc đột xuất",
@@ -218,26 +241,32 @@ stateDiagram-v2
 
 ### BƯỚC 3: KHO CHUẨN BỊ, GÁN MÃ VẬT LÝ & CHUYỂN CUSTODY
 
-*(Dành cho Nhân viên Kho `STAFF_INVENTORY`)*
+_(Dành cho Nhân viên Kho `STAFF_INVENTORY`)_
 
 #### 1. Nhận task chuẩn bị:
+
 - **Xem task**: `GET /api/v1/staff/warehouse/tasks` (Hỗ trợ lọc theo `status`, `tripId`, `date`).
 - **Claim task**: `POST /api/v1/staff/warehouse/tasks/:id/claim` với `{ "expectedVersion": 1 }`.
 
 #### 2. Quét Barcode gán món vật lý (Paid Post-Pick - `RB-API-303`):
+
 - **Method & Route**: `POST /api/v1/staff/warehouse/tasks/:id/pick`
 - **Body**:
+
 ```json
 {
   "assetCodes": ["LEU-EUR-001", "GAY-LEK-002"],
   "expectedVersion": 2
 }
 ```
-*Logic*: Backend kiểm tra các thiết bị mang mã `assetCode` này có đang `AVAILABLE` tại kho chính không, sau đó chuyển trạng thái sang `PICKED`.
+
+_Logic_: Backend kiểm tra các thiết bị mang mã `assetCode` này có đang `AVAILABLE` tại kho chính không, sau đó chuyển trạng thái sang `PICKED`.
 
 #### 3. Chụp ảnh tình trạng trước khi xuất kho (`RB-API-304`):
+
 - **Method & Route**: `POST /api/v1/staff/warehouse/tasks/:id/condition`
 - **Body**:
+
 ```json
 {
   "unitId": "unit-uuid",
@@ -252,11 +281,13 @@ stateDiagram-v2
 ```
 
 #### 4. Đóng thùng & Sẵn sàng bàn giao (`RB-API-305` & `RB-API-306`):
+
 - **Đóng thùng**: `POST /api/v1/staff/warehouse/tasks/:id/pack` với `{ "unitIds": ["unit-1", "unit-2"], "expectedVersion": 4 }` $\rightarrow$ Trả về `packageId`.
 - **Sẵn sàng**: `POST /api/v1/staff/warehouse/tasks/:id/ready` với `{ "packageId": "package-uuid", "expectedVersion": 5 }`.
-  - *Response*: Trả về `deliveryTaskId` (Nhiệm vụ giao hàng được tự động sinh cho Shipper), đơn hàng chuyển sang `READY_FOR_HANDOVER`.
+  - _Response_: Trả về `deliveryTaskId` (Nhiệm vụ giao hàng được tự động sinh cho Shipper), đơn hàng chuyển sang `READY_FOR_HANDOVER`.
 
 #### 5. Yêu cầu chuyển giao quyền quản lý tài sản (`RB-API-308`):
+
 - **Method & Route**: `POST /api/v1/staff/warehouse/tasks/:id/transfer`
 - **Body**: `{ "packageId": "package-uuid", "toStaffId": "delivery-staff-uuid", "expectedVersion": 6 }`.
 
@@ -264,29 +295,34 @@ stateDiagram-v2
 
 ### BƯỚC 4: GIAO NHẬN TẠI ĐIỂM HẸN (HANDOVER TẠI MEETING POINT)
 
-*(Dành cho Khách hàng & Nhân viên Giao nhận `STAFF_DELIVERY`)*
+_(Dành cho Khách hàng & Nhân viên Giao nhận `STAFF_DELIVERY`)_
 
 #### 1. Khách hàng mở app lấy mã nhận hàng (`RB-API-407`):
+
 - **Method & Route**: `GET /api/v1/rental-orders/:id/pickup-code`
 - **Response**: `{ "pickupCode": "TREK-8821", "expiresAt": "...", "qrCode": "data:image/png;base64,..." }`.
 
 #### 2. Shipper nhận kiện hàng từ Kho (Ký nhận Custody - `RB-API-408`):
+
 - **Method & Route**: `POST /api/v1/delivery/tasks/:id/receive`
 - **Headers**: `Idempotency-Key: <UUID>`
 - **Body**: `{ "custodyTransferId": "transfer-uuid", "packageCode": "PKG-001", "expectedVersion": 1 }`.
-- *Quy tắc*: Shipper chính thức nắm giữ tài sản vật lý (`Custody`).
+- _Quy tắc_: Shipper chính thức nắm giữ tài sản vật lý (`Custody`).
 
 #### 3. Xác thực khách tại Điểm hẹn (Quy trình 2 bước bắt buộc):
 
 **Bước A — Xác thực mã nhận đồ (`RB-API-403`)**:
+
 - **API**: `POST /api/v1/delivery/tasks/:id/verify-recipient`
 - **Body**: `{ "pickupCode": "TREK-8821", "expectedVersion": 2 }`
 - **Response**: Trả về chuỗi mã xác minh **`verificationRef`** (ví dụ: `"VRF-8A3F-2026"`).
 
 **Bước B — Cam kết Bàn giao Nguyên gói (All-or-Nothing - `RB-API-404`)**:
+
 - **API**: `POST /api/v1/rental-orders/:id/handover`
 - **Headers**: `Idempotency-Key: <UUID>`
 - **Body**:
+
 ```json
 {
   "packageId": "package-uuid",
@@ -296,6 +332,7 @@ stateDiagram-v2
   "expectedVersion": 3
 }
 ```
+
 > [!IMPORTANT]
 > **BẤT BIẾN BÀN GIAO NGUYÊN GÓI (`RB-TBD-04`):** Nếu tại điểm hẹn phát hiện lều rách hoặc thiếu gậy mà không có đồ thay thế ngay: **CẤM giao 1 phần**. Shipper phải gọi `POST /api/v1/rental-orders/:id/no-show` với lý do `SYSTEM_DAMAGED_EQUIPMENT` hoặc `SYSTEM_MISSING_EQUIPMENT`. Hệ thống sẽ hủy đơn và hoàn 100% tiền + cọc cho khách.
 
@@ -305,16 +342,17 @@ Khi bàn giao thành công: Đơn chuyển sang **`ACTIVE`**, thiết bị chuy�
 
 ### BƯỚC 5: GIA HẠN ĐƠN THUÊ TRONG TOUR (RENTAL EXTENSION)
 
-*(Khách muốn giữ đồ thêm ngày khi đang đi tour)*
+_(Khách muốn giữ đồ thêm ngày khi đang đi tour)_
 
 1. **Lấy báo giá gia hạn**:
    - `POST /api/v1/rental-orders/:id/extension-quotes`
    - Body: `{ "requestedReturnAt": "2026-12-05T18:00:00.000Z", "returnOptionId": "RETURN_AT_BASE" }`
-   - *Response*: Trả về `extensionQuoteId`, `termsVersion`, `termsHash`, `additionalFee`.
+   - _Response_: Trả về `extensionQuoteId`, `termsVersion`, `termsHash`, `additionalFee`.
 2. **Xác nhận gia hạn**:
    - `POST /api/v1/rental-orders/:id/extensions`
    - Headers: `Idempotency-Key: <UUID>`
    - Body:
+
 ```json
 {
   "extensionQuoteId": "ext-quote-uuid",
@@ -323,9 +361,10 @@ Khi bàn giao thành công: Đơn chuyển sang **`ACTIVE`**, thiết bị chuy�
   "termsHash": "terms-hash-string-64-chars"
 }
 ```
+
 3. **Thanh toán phí gia hạn (nếu phát sinh chi phí `additionalFee > 0`)**:
    - `POST /api/v1/rental-extensions/:extensionId/payments` với `{ "paymentMethod": "REDIRECT" }`.
-   - *Lưu ý*: Thanh toán gia hạn **chỉ thu phí thuê thêm**, **không thu lại cọc**.
+   - _Lưu ý_: Thanh toán gia hạn **chỉ thu phí thuê thêm**, **không thu lại cọc**.
    - Poll trạng thái qua `GET /api/v1/rental-extensions/:extensionId/payment` cho đến khi `extensionStatus === "APPLIED"`. Backend tự động sinh phụ lục hợp đồng (`EXTENSION_APPENDIX`).
 
 ---
@@ -358,7 +397,9 @@ sequenceDiagram
 ```
 
 #### 1. Shipper quét thu hồi tại điểm hẹn:
+
 - **Quét mã từng món (`RB-API-601`)**: `POST /api/v1/rental-orders/:id/return-scan`
+
 ```json
 {
   "assetCodes": ["LEU-EUR-001", "GAY-LEK-002"],
@@ -366,26 +407,36 @@ sequenceDiagram
   "expectedVersion": 1
 }
 ```
+
 - **Lập biên bản quan sát ngoại quan (`RB-API-602`)**: `POST /api/v1/rental-orders/:id/return-observations`
+
 ```json
 {
   "items": [
     { "unitId": "unit-1", "visibleDamage": false, "notes": "Nguyên vẹn" },
-    { "unitId": "unit-2", "visibleDamage": true, "notes": "Cán gậy cong nhẹ", "evidenceIds": ["media-uuid-2"] }
+    {
+      "unitId": "unit-2",
+      "visibleDamage": true,
+      "notes": "Cán gậy cong nhẹ",
+      "evidenceIds": ["media-uuid-2"]
+    }
   ],
   "expectedVersion": 2
 }
 ```
+
 > [!WARNING]
 > **QUY TẮC HIỆN TRƯỜNG (`RB-TBD-08`):** Shipper **tuyệt đối không được kết luận trừ cọc hay hứa hẹn hoàn cọc** cho khách tại hiện trường. Toàn bộ quyền kiểm định thuộc về Kho.
 
 - **Shipper mang đồ về trả kho (`RB-API-603`)**: `POST /api/v1/delivery/tasks/:id/return-to-inventory-location` với `{ "unitIds": ["unit-1", "unit-2"], "expectedVersion": 3 }`.
 
 #### 2. Kho tiếp nhận & Giám định FINAL (SLA 72 giờ - `RB-POL-28`):
+
 - **Ký nhận vào kho (`RB-API-604`)**: `POST /api/v1/staff/returns/:returnId/receive`
   - Body: `{ "pendingTransferId": "transfer-uuid", "inventoryLocationId": "warehouse-uuid", "scannedUnitIds": ["unit-1", "unit-2"], "expectedVersion": 1 }`.
-  - *Hệ thống kích hoạt đồng hồ đếm ngược SLA 72 giờ không thể bị reset.*
+  - _Hệ thống kích hoạt đồng hồ đếm ngược SLA 72 giờ không thể bị reset._
 - **Ghi nhận kết quả giám định chuyên sâu (`RB-API-605`)**: `POST /api/v1/staff/returns/:returnId/final-inspection`
+
 ```json
 {
   "items": [
@@ -401,7 +452,11 @@ sequenceDiagram
       "outcome": "ISSUE",
       "condition": "DAMAGED",
       "damage": [
-        { "ruleId": "damage-rule-cong-gay-uuid", "quantity": 1, "notes": "Cong 30 độ" }
+        {
+          "ruleId": "damage-rule-cong-gay-uuid",
+          "quantity": 1,
+          "notes": "Cong 30 độ"
+        }
       ],
       "evidenceIds": ["media-uuid-3"]
     }
@@ -409,7 +464,9 @@ sequenceDiagram
   "expectedVersion": 2
 }
 ```
+
 - **Chốt kết quả kiểm định (`RB-API-608`)**: `POST /api/v1/staff/returns/:returnId/finalize`
+
 ```json
 {
   "unitOutcomes": [
@@ -420,7 +477,8 @@ sequenceDiagram
   "expectedVersion": 3
 }
 ```
-- **Xử lý hoàn tiền cọc tự động**: 
+
+- **Xử lý hoàn tiền cọc tự động**:
   - Món `NORMAL` được gom lại tạo lệnh hoàn tiền tự động (`Batch Refund`) về tài khoản thanh toán ban đầu.
   - Món `DAMAGED` bị trừ tiền cọc tương ứng theo bảng giá hư hại, phần dư (nếu có) được hoàn tiếp.
 - **Đưa thiết bị về lại trạng thái sẵn sàng cho thuê (`RB-API-611`)**:
@@ -428,8 +486,10 @@ sequenceDiagram
   - Body: `{ "accessoriesChecked": true, "expectedVersion": 7 }`. Thiết bị chuyển sang `AVAILABLE`.
 
 #### 3. User xem phân bổ cọc & Khiếu nại (nếu có):
+
 - **Xem bảng kê cọc**: `GET /api/v1/rental-orders/:id/deposit`
 - **Gửi khiếu nại nếu không đồng ý mức phạt**: `POST /api/v1/rental-orders/:id/assessment-reviews`
+
 ```json
 {
   "assessmentId": "assessment-uuid",
@@ -443,6 +503,7 @@ sequenceDiagram
 ## 4. TỔNG HỢP MÃ LỖI CHUẨN BACKEND (ERROR CODES)
 
 Tất cả các lỗi nghiệp vụ được trả về qua `GlobalErrorFilter` theo format chuẩn:
+
 ```json
 {
   "error": {
@@ -458,21 +519,21 @@ Tất cả các lỗi nghiệp vụ được trả về qua `GlobalErrorFilter` 
 }
 ```
 
-| Mã lỗi (`error.code`) | HTTP Status | Màn hình phát sinh | Hướng dẫn hiển thị & Xử lý phía Frontend |
-|---|:---:|---|---|
-| `TRIP_MEMBERSHIP_NOT_FOUND` | 404 | Eligibility | User chưa có tên trong danh sách chuyến đi. Yêu cầu đặt tour trước. |
-| `TRIP_MEMBERSHIP_NOT_ELIGIBLE` | 422 | Eligibility | Vé tour chưa thanh toán hoặc đang bị hủy. |
-| `RENTAL_CUTOFF_PASSED` | 422 | Eligibility / Quote | Đã quá giờ cho phép đặt thuê thiết bị. Khóa nút tạo đơn. |
-| `INSUFFICIENT_AVAILABLE_QUANTITY` | 422 | Availability / Quote | Kho không đủ số lượng cho khung giờ yêu cầu. Báo user giảm số lượng. |
-| `RENTAL_DURATION_NOT_ALLOWED` | 422 | Quote / Extension | Ngày trả vượt quá giới hạn tối đa cho phép sau tour (`maxRentalAfterTripHours`). |
-| `ORDER_NOT_CANCELLABLE` | 422 | Cancel Order | Đơn đã qua thời điểm cho phép hủy (sau khi đã đóng gói hoặc đang giao). |
-| `VERSION_CONFLICT` | 409 | Mọi lệnh mutation | `expectedVersion` không khớp (dữ liệu đã bị người khác cập nhật). Tải lại trang. |
-| `IDEMPOTENCY_CONFLICT` | 409 | Order / Payment / Handover | Gửi cùng `Idempotency-Key` nhưng body khác nhau. Yêu cầu sinh key mới. |
-| `PAYMENT_PROVIDER_UNAVAILABLE` | 503 | Checkout | Cổng thanh toán chưa cấu hình keys (nhớ bỏ trống field `gateway` khi test Mock). |
-| `HANDOVER_INCOMPLETE` | 422 | Handover | Phát hiện thiết bị thiếu/hỏng tại điểm hẹn. Kích hoạt xử lý All-or-Nothing. |
-| `EXTENSION_LIMIT_EXCEEDED` | 422 | Extension | Đã hết số lượt xin gia hạn cho phép (tối đa 2 lần). |
-| `EXTENSION_TOO_LATE` | 422 | Extension | Đã qua thời hạn cutoff được phép xin gia hạn trước giờ trả. |
-| `CUSTODY_TRANSFER_REQUIRED` | 403 | Delivery / Return | Người thực hiện chưa bấm ký nhận bàn giao tài sản (`ACK Custody`). |
+| Mã lỗi (`error.code`)             | HTTP Status | Màn hình phát sinh         | Hướng dẫn hiển thị & Xử lý phía Frontend                                         |
+| --------------------------------- | :---------: | -------------------------- | -------------------------------------------------------------------------------- |
+| `TRIP_MEMBERSHIP_NOT_FOUND`       |     404     | Eligibility                | User chưa có tên trong danh sách chuyến đi. Yêu cầu đặt tour trước.              |
+| `TRIP_MEMBERSHIP_NOT_ELIGIBLE`    |     422     | Eligibility                | Vé tour chưa thanh toán hoặc đang bị hủy.                                        |
+| `RENTAL_CUTOFF_PASSED`            |     422     | Eligibility / Quote        | Đã quá giờ cho phép đặt thuê thiết bị. Khóa nút tạo đơn.                         |
+| `INSUFFICIENT_AVAILABLE_QUANTITY` |     422     | Availability / Quote       | Kho không đủ số lượng cho khung giờ yêu cầu. Báo user giảm số lượng.             |
+| `RENTAL_DURATION_NOT_ALLOWED`     |     422     | Quote / Extension          | Ngày trả vượt quá giới hạn tối đa cho phép sau tour (`maxRentalAfterTripHours`). |
+| `ORDER_NOT_CANCELLABLE`           |     422     | Cancel Order               | Đơn đã qua thời điểm cho phép hủy (sau khi đã đóng gói hoặc đang giao).          |
+| `VERSION_CONFLICT`                |     409     | Mọi lệnh mutation          | `expectedVersion` không khớp (dữ liệu đã bị người khác cập nhật). Tải lại trang. |
+| `IDEMPOTENCY_CONFLICT`            |     409     | Order / Payment / Handover | Gửi cùng `Idempotency-Key` nhưng body khác nhau. Yêu cầu sinh key mới.           |
+| `PAYMENT_PROVIDER_UNAVAILABLE`    |     503     | Checkout                   | Cổng thanh toán chưa cấu hình keys (nhớ bỏ trống field `gateway` khi test Mock). |
+| `HANDOVER_INCOMPLETE`             |     422     | Handover                   | Phát hiện thiết bị thiếu/hỏng tại điểm hẹn. Kích hoạt xử lý All-or-Nothing.      |
+| `EXTENSION_LIMIT_EXCEEDED`        |     422     | Extension                  | Đã hết số lượt xin gia hạn cho phép (tối đa 2 lần).                              |
+| `EXTENSION_TOO_LATE`              |     422     | Extension                  | Đã qua thời hạn cutoff được phép xin gia hạn trước giờ trả.                      |
+| `CUSTODY_TRANSFER_REQUIRED`       |     403     | Delivery / Return          | Người thực hiện chưa bấm ký nhận bàn giao tài sản (`ACK Custody`).               |
 
 ---
 

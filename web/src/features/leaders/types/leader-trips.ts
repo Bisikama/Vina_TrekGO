@@ -196,3 +196,62 @@ export interface LeaderTrailDetail {
   elevationGainM: number | null;
   checkpointIds: string[];
 }
+
+export interface LeaderParticipantItem {
+  id: string;
+  bookingId: string;
+  bookingStatus: 'CONFIRMED' | 'PARTIAL_CHECKIN' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW';
+  fullName: string;
+  phone: string | null;
+  dateOfBirth: string | null;
+  idDocumentNo: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  participantStatus: 'ACTIVE' | 'NO_SHOW' | 'COMPLETED';
+  checkinStatus: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'NO_SHOW';
+  checkinMethod: 'QR' | 'MANUAL' | null;
+  checkedInAt: string | null;
+  checkedInBy: string | null;
+  isLinkedAccount: boolean;
+  linkedUserDisplay: string | null;
+  buyerDisplay: string;
+  buyerPhone: string | null;
+  pickupPoint: { id: string; name: string; address: string } | null;
+}
+
+export interface LeaderParticipantsSummary {
+  capacity: number;
+  minPax: number;
+  totalParticipants: number;
+  checkedInCount: number;
+  notCheckedInCount: number;
+  noShowCount: number;
+  progressPercent: number;
+}
+
+export interface LeaderParticipantsResponse {
+  trip: {
+    id: string;
+    title: string;
+    status: string;
+    startAt: string;
+    endAt: string;
+    capacity: number;
+    minPax: number;
+  };
+  summary: LeaderParticipantsSummary;
+  items: LeaderParticipantItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface LeaderCheckinResult {
+  alreadyCheckedIn: boolean;
+  replayed: boolean;
+  bookingStatus: 'CONFIRMED' | 'PARTIAL_CHECKIN' | 'CHECKED_IN' | 'NO_SHOW';
+  bookingVersion: number;
+  participant: LeaderParticipantItem;
+  summary: LeaderParticipantsSummary;
+}

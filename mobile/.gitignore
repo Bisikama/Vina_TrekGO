@@ -8,7 +8,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
-
+.env
 # Native
 .kotlin/
 *.orig.*
@@ -31,8 +31,8 @@ yarn-error.*
 *.pem
 
 # local env files
-.env
 .env*.local
+.env*
 
 # typescript
 *.tsbuildinfo
@@ -42,3 +42,10 @@ example
 # generated native folders
 /ios
 /android
+
+# generated api client
+src/api/
+/docs/*
+!/docs/TRIP_GPS_OFFLINE_SYNC_V2.md
+!/docs/TRIP_GPS_V2_API_HANDOFF.md
+!/docs/TRIP_GPS_V2_MOBILE_IMPLEMENTATION.md

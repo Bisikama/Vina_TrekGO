@@ -4,6 +4,11 @@ import type { RentalProductPort, RentalProductView, CreateRentalProductParams } 
 import { RENTAL_CATEGORY_PORT } from '../ports/rental-category.port';
 import type { RentalCategoryPort } from '../ports/rental-category.port';
 import { AppError, RENTAL_ERROR_CODES } from '../../../../../shared/errors';
+import {
+  assertFinancialFieldsAllowed,
+  assertGradedDepositIsFixed,
+  isAdminRole,
+} from '../services/rental-grade-pricing.rules';
 
 @Injectable()
 export class CreateRentalProductUseCase {
@@ -18,15 +23,29 @@ export class CreateRentalProductUseCase {
     if (params.dailyPrice < 0) {
       throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DAILY_PRICE);
     }
-    if (params.replacementValue < 0) {
-      throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_REPLACEMENT_VALUE);
+
+    // STAFF_INVENTORY không được gửi cọc/giá trị thay thế; ADMIN thì bắt buộc gửi.
+    assertFinancialFieldsAllowed(params.actorRole, {
+      replacementValue: params.replacementValue,
+      depositPolicy: params.depositPolicy,
+    });
+    if (isAdminRole(params.actorRole)) {
+      if (params.replacementValue === undefined || params.replacementValue < 0) {
+        throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_REPLACEMENT_VALUE);
+      }
+      if (params.depositPolicy === undefined) {
+        throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY);
+      }
     }
-    if (params.depositPolicy.type === 'FIXED' && (params.depositPolicy.amount === undefined || params.depositPolicy.amount < 0)) {
-      throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY);
+    if (params.depositPolicy !== undefined) {
+      if (params.depositPolicy.type === 'FIXED' && (params.depositPolicy.amount === undefined || params.depositPolicy.amount < 0)) {
+        throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY);
+      }
+      if (params.depositPolicy.type === 'PERCENT_REPLACEMENT_VALUE' && (params.depositPolicy.percentage === undefined || params.depositPolicy.percentage < 0 || params.depositPolicy.percentage > 100)) {
+        throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY);
+      }
     }
-    if (params.depositPolicy.type === 'PERCENT_REPLACEMENT_VALUE' && (params.depositPolicy.percentage === undefined || params.depositPolicy.percentage < 0 || params.depositPolicy.percentage > 100)) {
-      throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_DEPOSIT_POLICY);
-    }
+    assertGradedDepositIsFixed(params.grade, params.depositPolicy?.type);
 
     const category = await this.rentalCategoryPort.getCategoryById(params.categoryId);
     if (!category) {

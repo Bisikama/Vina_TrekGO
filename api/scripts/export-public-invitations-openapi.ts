@@ -26,9 +26,9 @@ async function main() {
       app,
       new DocumentBuilder()
         .setTitle('TrekGo Public participant invitations')
-        .setVersion('1.0.0')
+        .setVersion('1.1.0')
         .setDescription(
-          'M6 backend contract. Six invitation operations; additive buyer linkage projection included. Operational gates M7/M9 remain pending. Deployment not implied.',
+          'M6/M7 backend contract. Six invitation operations; buyer linkage and actor-scoped navigation permissions. Rental integration remains M9. Deployment not implied.',
         )
         .addBearerAuth(undefined, 'bearer')
         .build(),

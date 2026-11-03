@@ -9,8 +9,8 @@ Hệ thống Backend cho nền tảng **TrekGo** phục vụ:
 
 ## ⚡ HƯỚNG DẪN KHỞI CHẠY NHANH CHO THÀNH VIÊN NHÓM
 
-Chi tiết tài liệu hướng dẫn đầy đủ vui lòng xem tại:  
-👉 **[HUONG_DAN_CHAY_DU_AN.md](HUONG_DAN_CHAY_DU_AN.md)**
+Chi tiết tài liệu hướng dẫn seed dữ liệu đầy đủ vui lòng xem tại:  
+👉 **[HUONG_DAN_SEED_DU_LIEU.md](HUONG_DAN_SEED_DU_LIEU.md)**
 
 ### Tóm tắt 4 bước chạy nhanh:
 

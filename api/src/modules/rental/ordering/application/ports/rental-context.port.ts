@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+
 /** Read-only Area A Trip rental context: independent from Booking. */
 export interface RentalRecipientOption {
   memberId: string
@@ -65,7 +67,9 @@ export interface RentalPolicyContext extends Omit<
 }
 export interface RentalEligibilityContext {
   userId: string
+  membershipKind: string // PRIVATE_TRIP_MEMBER | PUBLIC_TRIP_LEADER | PUBLIC_PARTICIPANT | PUBLIC_BOOKING_BUYER | LEGACY
   membershipRef: string
+  membershipSourceVersion: number | null // Separate from contextVersion
   membershipStatus: string
   membershipRole: string
   rentalEligible: boolean
@@ -84,4 +88,5 @@ export interface RentalEligibilityContext {
 export const RENTAL_CONTEXT_PORT = Symbol('RENTAL_CONTEXT_PORT')
 export interface RentalContextPort {
   getByTripId(tripId: string, userId: string, now: Date): Promise<RentalEligibilityContext | null>
+  lockAndRead(tx: Prisma.TransactionClient, tripId: string, userId: string, now: Date): Promise<RentalEligibilityContext | null>
 }

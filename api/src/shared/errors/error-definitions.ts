@@ -1,32 +1,72 @@
-import { COMMON_ERROR_CODES } from './codes/common.error-codes';
-import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes';
-import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes';
-import { RENTAL_ERROR_CODES } from './codes/rental.error-codes';
-import { MEDIA_ERROR_CODES } from './codes/media.error-codes';
-import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes';
-import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes';
-import { NOTIFICATION_ERROR_CODES } from './codes/notification.error-codes';
-import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes';
-import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes';
-import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes';
-import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes';
-import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes';
-import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes';
-import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes';
-import { TRIP_PRICING_ERROR_CODES as TP } from './codes/trip-pricing.error-codes';
-import { GEAR_ERROR_CODES as G } from './codes/gear.error-codes';
+import { COMMON_ERROR_CODES } from './codes/common.error-codes'
+import { TRIP_GPS_ERROR_CODES as GPS } from './codes/trip-gps.error-codes'
+import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes'
+import { LEADER_ERROR_CODES as L } from './codes/leader.error-codes'
+import { RENTAL_ERROR_CODES } from './codes/rental.error-codes'
+import { MEDIA_ERROR_CODES } from './codes/media.error-codes'
+import { BOOKING_ERROR_CODES as B } from './codes/booking.error-codes'
+import { PAYMENT_ERROR_CODES as P } from './codes/payment.error-codes'
+import { NOTIFICATION_ERROR_CODES } from './codes/notification.error-codes'
+import { RENTAL_ORDERING_ERROR_CODES as RO } from './codes/rental-ordering.error-codes'
+import { PREPARATION_ERROR_CODES as PR } from './codes/preparation.error-codes'
+import { DELIVERY_ERROR_CODES as DL } from './codes/delivery.error-codes'
+import { RENTAL_RETURN_ERROR_CODES as RR } from './codes/rental-return.error-codes'
+import { RENTAL_DOCUMENT_ERROR_CODES as RD } from './codes/rental-document.error-codes'
+import { RENTAL_LIFECYCLE_ERROR_CODES as LC } from './codes/rental-lifecycle.error-codes'
+import { PersonalTrailErrorCode as PT } from './codes/personal-trail.error-codes'
+import { TRIP_PRICING_ERROR_CODES as TP } from './codes/trip-pricing.error-codes'
+import { GEAR_ERROR_CODES as G } from './codes/gear.error-codes'
+import { RENTAL_REVIEW_ERROR_CODES as RV } from './codes/rental-review.error-codes'
 
 export interface ErrorDefinition {
-  status: number;
-  message: string;
-  retryable: boolean;
+  status: number
+  message: string
+  retryable: boolean
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
-  [B.PARTICIPANT_ALREADY_LINKED]: { status: 409, message: 'Participant is already linked to another account', retryable: false },
-  [B.TRIP_PARTICIPATION_EXISTS]: { status: 409, message: 'Account already has a valid participant for this trip', retryable: false },
-  [B.PARTICIPANT_CLAIM_NOT_ALLOWED]: { status: 409, message: 'Participant cannot be claimed in the current state', retryable: false },
-  [B.PENDING_INVITATION_EXISTS]: { status: 409, message: 'An unexpired invitation is already pending', retryable: false },
+  [P.MANUAL_REFUND_INVALID_STATE]: { status: 409, message: 'Manual refund action is not allowed in this state', retryable: false },
+  [P.MANUAL_REFUND_VERSION_CONFLICT]: { status: 409, message: 'Reload the manual refund before retrying', retryable: false },
+  [P.MANUAL_REFUND_RECIPIENT_LOCKED]: { status: 409, message: 'Recipient is locked after the refund is claimed', retryable: false },
+  [P.MANUAL_REFUND_ALREADY_CLAIMED]: { status: 409, message: 'Refund is not ready or already assigned', retryable: false },
+  [P.MANUAL_REFUND_NOT_ASSIGNED]: { status: 409, message: 'Only the assigned administrator may perform this action', retryable: false },
+  [P.MANUAL_REFUND_AMOUNT_MISMATCH]: { status: 409, message: 'Transferred amount must equal the approved refund amount', retryable: false },
+  [P.MANUAL_REFUND_TRANSFER_REUSED]: { status: 409, message: 'Bank transfer reference has already been recorded', retryable: false },
+  [GPS.PROTOCOL_CONFLICT]: { status: 409, message: 'GPS protocol does not match session', retryable: false },
+  [GPS.SYNC_CONFLICT]: { status: 409, message: 'GPS sync revision or payload conflicts', retryable: false },
+  [GPS.SYNC_INCOMPLETE]: { status: 409, message: 'GPS snapshot has missing batches', retryable: false },
+  [GPS.SYNC_UNAVAILABLE]: { status: 503, message: 'GPS sync temporarily unavailable', retryable: true },
+  [GPS.SESSION_NOT_FOUND]: { status: 404, message: 'GPS session not found', retryable: false },
+  [GPS.TRIP_NOT_RECORDABLE]: { status: 409, message: 'Trip is not in progress', retryable: false },
+  [GPS.RATE_LIMITED]: { status: 429, message: 'GPS request limit exceeded', retryable: true },
+  [GPS.NOT_FOUND]: { status: 404, message: 'GPS resource not found', retryable: false },
+  [GPS.INVALID_STATE]: { status: 409, message: 'GPS operation is not allowed in this state', retryable: false },
+  [GPS.DEVICE_CONFLICT]: { status: 409, message: 'Recording belongs to another device', retryable: false },
+  [GPS.ACTIVE_SESSION_EXISTS]: { status: 409, message: 'An open GPS session already exists', retryable: false },
+  [GPS.IDEMPOTENCY_CONFLICT]: { status: 409, message: 'Idempotency key payload differs', retryable: false },
+  [GPS.VERSION_CONFLICT]: { status: 409, message: 'Reload GPS session before retrying', retryable: false },
+  [GPS.UPLOAD_CLOSED]: { status: 409, message: 'GPS upload deadline has passed', retryable: false },
+  [GPS.POLICY_UNAVAILABLE]: { status: 503, message: 'An effective GPS policy is required', retryable: true },
+  [B.PARTICIPANT_ALREADY_LINKED]: {
+    status: 409,
+    message: 'Participant is already linked to another account',
+    retryable: false,
+  },
+  [B.TRIP_PARTICIPATION_EXISTS]: {
+    status: 409,
+    message: 'Account already has a valid participant for this trip',
+    retryable: false,
+  },
+  [B.PARTICIPANT_CLAIM_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Participant cannot be claimed in the current state',
+    retryable: false,
+  },
+  [B.PENDING_INVITATION_EXISTS]: {
+    status: 409,
+    message: 'An unexpired invitation is already pending',
+    retryable: false,
+  },
   [B.INVITATION_NOT_ACTIONABLE]: { status: 409, message: 'Invitation no longer allows this action', retryable: false },
   [B.INVITATION_RECIPIENT_UNAVAILABLE]: { status: 422, message: 'This account cannot be invited', retryable: false },
   [RD.INTEGRITY_FAILED]: { status: 409, message: 'Document integrity verification failed', retryable: false },
@@ -34,7 +74,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RD.RENDER_RETRY_EXHAUSTED]: { status: 409, message: 'Document render retry limit reached', retryable: false },
   [RD.STORAGE_UNAVAILABLE]: { status: 503, message: 'Private document storage unavailable', retryable: true },
   [RD.AUDIT_UNAVAILABLE]: { status: 503, message: 'Document access audit unavailable', retryable: true },
-  [TT.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.', retryable: false },
+  [TT.NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy chuyến public, nhà xe hoặc xe của chuyến.',
+    retryable: false,
+  },
   [TT.PROVIDER_UNAVAILABLE]: { status: 409, message: 'Nhà xe không tồn tại hoặc đã ngừng hợp tác.', retryable: false },
   [TT.LOCKED]: {
     status: 409,
@@ -97,6 +141,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     retryable: false,
   },
   [B.BOOKING_POLICY_UNAVAILABLE]: { status: 503, message: 'An effective booking policy is required', retryable: true },
+  [B.RELATED_RENTALS_REQUIRE_RESOLUTION]: {
+    status: 409,
+    message: 'Vui lòng xử lý đơn thuê liên quan trước, sau đó quay lại hủy đặt chỗ.',
+    retryable: false,
+  },
+  [B.TRIP_CANCELLATION_VERSION_CONFLICT]: { status: 409, message: 'Thông tin chuyến hoặc yêu cầu đã thay đổi. Vui lòng tải lại.', retryable: false },
+  [B.TRIP_CANCELLATION_NOT_REVIEWABLE]: { status: 409, message: 'Yêu cầu không còn ở trạng thái chờ duyệt hoặc chuyến đã vận hành.', retryable: false },
+  [B.TRIP_CANCELLATION_PROCESSING]: { status: 409, message: 'Chuyến đã được hủy. Hệ thống đang xử lý đơn theo chính sách tổ chức hủy.', retryable: false },
+  [B.TRIP_CANCELLATION_REVIEW_DISABLED]: { status: 503, message: 'Chức năng duyệt hủy chưa được bật.', retryable: false },
+  [B.TRIP_CANCELLATION_REPLAY_NOT_ALLOWED]: { status: 409, message: 'Chỉ có thể thử lại delivery thất bại hoặc sự kiện lịch sử đã đối soát.', retryable: false },
   [B.BOOKING_CANCELLATION_NOT_ALLOWED]: {
     status: 409,
     message: 'Booking cannot be cancelled in its current state',
@@ -247,6 +301,61 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Version conflict. The resource was updated by another transaction.',
     retryable: true,
   },
+  [RENTAL_ERROR_CODES.RENTAL_PRODUCT_FINANCIAL_FIELDS_ADMIN_ONLY]: {
+    status: 403,
+    message: 'Chỉ ADMIN được đặt tiền cọc và giá trị thay thế của sản phẩm thuê',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_PRODUCT_PRICING_NOT_APPROVED]: {
+    status: 409,
+    message: 'ADMIN chưa đặt tiền cọc và giá trị thay thế; chưa thể kích hoạt sản phẩm',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DEPOSIT_MUST_BE_FIXED]: {
+    status: 422,
+    message: 'Sản phẩm có hạng phải dùng tiền cọc cố định (FIXED)',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_PRICE_ORDER_INVALID]: {
+    status: 422,
+    message: 'Hạng Rất mới phải có giá thuê và tiền cọc cao hơn hạng Đã sử dụng tốt',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_GROUP_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy nhóm hạng sản phẩm',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_GROUP_CATEGORY_MISMATCH]: {
+    status: 422,
+    message: 'Các hạng trong cùng nhóm phải thuộc cùng danh mục và cùng loại tiền',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_ALREADY_IN_GROUP]: {
+    status: 409,
+    message: 'Nhóm này đã có sản phẩm cho hạng được chọn',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DECISION_REQUIRED]: {
+    status: 422,
+    message: 'Thiết bị thuộc sản phẩm có hạng, cần chọn giữ hạng hoặc hạ hạng',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DECISION_NOT_APPLICABLE]: {
+    status: 422,
+    message: 'Thiết bị thuộc sản phẩm không phân hạng, không được gửi quyết định hạng',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_DOWNGRADE_NOT_ALLOWED]: {
+    status: 422,
+    message: 'Chỉ được hạ hạng từ Rất mới xuống Đã sử dụng tốt',
+    retryable: false,
+  },
+  [RENTAL_ERROR_CODES.RENTAL_GRADE_TARGET_NOT_FOUND]: {
+    status: 422,
+    message: 'Nhóm chưa có sản phẩm hạng Đã sử dụng tốt để chuyển thiết bị sang',
+    retryable: false,
+  },
   [RENTAL_ERROR_CODES.INVENTORY_LOCATION_NOT_FOUND]: {
     status: 404,
     message: 'Inventory location not found',
@@ -289,6 +398,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Equipment unit state is not maintainable',
     retryable: false,
   },
+  [RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_REGRADABLE]: {
+    status: 409,
+    message: 'Thiết bị phải ở trạng thái AVAILABLE, không được gán cho đơn và không có cam kết sẵn sàng mới được đổi hạng',
+    retryable: false,
+  },
   [RENTAL_ERROR_CODES.BATCH_QUANTITY_INVALID]: {
     status: 400,
     message: 'Batch quantity must be greater than 0',
@@ -313,6 +427,48 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     status: 409,
     message: 'Multiple active maintenance records found',
     retryable: false,
+  },
+  [RV.RENTAL_ORDER_NOT_FOUND]: { status: 404, message: 'Rental order not found', retryable: false },
+  [RV.RENTAL_ORDER_NOT_ELIGIBLE_FOR_REVIEW]: {
+    status: 409,
+    message: 'Rental order is not eligible for product reviews',
+    retryable: false,
+  },
+  [RV.PRODUCT_NOT_IN_RENTAL_ORDER]: {
+    status: 400,
+    message: 'Product is not part of this rental order',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_PRODUCT_NOT_HANDED_OVER]: {
+    status: 409,
+    message: 'Product has not been handed over for this rental order',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_ALREADY_EXISTS]: {
+    status: 409,
+    message: 'This rental product has already been reviewed for the order',
+    retryable: false,
+  },
+  [RV.INVALID_RATING_VALUE]: { status: 400, message: 'Rating must be an integer from 1 to 5', retryable: false },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_REQUIRED]: {
+    status: 400,
+    message: 'Idempotency-Key is required',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_INVALID]: {
+    status: 400,
+    message: 'Idempotency-Key must contain 8 to 200 characters',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_IDEMPOTENCY_KEY_REUSED]: {
+    status: 409,
+    message: 'Idempotency-Key was already used with a different request',
+    retryable: false,
+  },
+  [RV.RENTAL_REVIEW_OPERATION_IN_PROGRESS]: {
+    status: 409,
+    message: 'A rental review request with this Idempotency-Key is still in progress',
+    retryable: true,
   },
   // --- MEDIA ---
   [MEDIA_ERROR_CODES.MEDIA_NOT_FOUND]: { status: 404, message: 'Media asset not found', retryable: false },
@@ -359,6 +515,66 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Notification not found or access denied',
     retryable: false,
   },
+  [RO.TRIP_MEMBERSHIP_NOT_FOUND]: {
+    status: 403,
+    message: 'Không tìm thấy thông tin thành viên của chuyến đi',
+    retryable: false,
+  },
+  [RO.TRIP_MEMBERSHIP_NOT_ELIGIBLE]: {
+    status: 403,
+    message: 'Chuyến đi không đủ điều kiện thuê thiết bị',
+    retryable: false,
+  },
+  [RO.TRIP_NOT_FOUND]: {
+    status: 404,
+    message: 'Chuyến đi không tồn tại',
+    retryable: false,
+  },
+  [RO.RENTAL_CUTOFF_PASSED]: {
+    status: 409,
+    message: 'Đã qua thời hạn cho phép đặt thuê thiết bị của chuyến đi',
+    retryable: false,
+  },
+  [RO.AREA_A_CONTEXT_UNAVAILABLE]: {
+    status: 503,
+    message: 'Ngữ cảnh chuyến đi Area A tạm thời không khả dụng',
+    retryable: true,
+  },
+  [RO.TRIP_LOGISTICS_UNAVAILABLE]: {
+    status: 503,
+    message: 'Chưa xác định được điểm giao nhận thiết bị cho chuyến đi',
+    retryable: true,
+  },
+  [RO.BOOKING_NOT_FOUND]: {
+    status: 404,
+    message: 'Đơn đặt vé không tồn tại',
+    retryable: false,
+  },
+  [RO.BOOKING_NOT_RENTAL_ELIGIBLE]: {
+    status: 403,
+    message: 'Đơn đặt vé không đủ điều kiện thuê thiết bị',
+    retryable: false,
+  },
+  [RO.RENTAL_RECIPIENT_INVALID]: {
+    status: 400,
+    message: 'Người nhận thiết bị không hợp lệ',
+    retryable: false,
+  },
+  [RO.RENTAL_DURATION_NOT_ALLOWED]: {
+    status: 422,
+    message: 'Thời gian thuê không hợp lệ theo chính sách chuyến đi',
+    retryable: false,
+  },
+  [RO.RENTAL_RETURN_OPTION_UNAVAILABLE]: {
+    status: 404,
+    message: 'Phương thức trả đồ không khả dụng',
+    retryable: false,
+  },
+  [RO.RENTAL_POLICY_NOT_CONFIGURED]: {
+    status: 503,
+    message: 'Chính sách thuê chưa được cấu hình hoặc đã hết hạn',
+    retryable: true,
+  },
   [RO.INSUFFICIENT_AVAILABLE_QUANTITY]: {
     status: 400,
     message: 'Insufficient available quantity for rental',
@@ -369,7 +585,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.QUOTE_NOT_FOUND]: { status: 404, message: 'Rental quote not found', retryable: false },
   [RO.OPEN_ORDER_EXISTS]: {
     status: 409,
-    message: 'An open rental order already exists for this trip',
+    message: 'Đã có một đơn thuê đang chờ thanh toán cho chuyến đi này',
     retryable: false,
   },
   [RO.OPERATION_CONFLICT]: { status: 409, message: 'Operation conflict', retryable: false },
@@ -384,6 +600,16 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [RO.INVENTORY_LOCATION_NOT_CONFIGURED]: {
     status: 500,
     message: 'Primary rental inventory location is not configured or inactive',
+    retryable: false,
+  },
+  [RO.CANCELLATION_REQUIRES_CUSTODY_RETURN]: {
+    status: 409,
+    message: 'Kiện hàng đã giao cho nhân viên giao hàng; cần đưa về kho trước khi huỷ đơn',
+    retryable: false,
+  },
+  [RO.RENTAL_SYSTEM_FAULT_CANCELLATION_NOT_ALLOWED]: {
+    status: 409,
+    message: 'Chỉ huỷ do lỗi TrekGo được với đơn đã thanh toán và chưa bàn giao',
     retryable: false,
   },
   [RO.TERMS_NOT_ACCEPTED]: { status: 400, message: 'Extension terms must be accepted', retryable: false },
@@ -541,6 +767,21 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [LC.API_KEY_INVALID]: { status: 401, message: 'Invalid rental integration API key', retryable: false },
 
   // Personal Trail & Elevation
+  [PT.PERSONAL_TRAIL_STORAGE_BUSY]: {
+    status: 503, message: 'Personal trail storage is busy. Retry the same operation.', retryable: true,
+  },
+  [PT.PERSONAL_TRAIL_TRANSACTION_UNAVAILABLE]: {
+    status: 503, message: 'Personal trail transaction could not complete. Reconcile recording status before retrying.', retryable: false,
+  },
+  [PT.PERSONAL_TRAIL_DESTINATION_UNAVAILABLE]: {
+    status: 503, message: 'The existing active Ho Chi Minh destination is unavailable. Contact support.', retryable: false,
+  },
+  [PT.CLIENT_RECORDING_ID_CONFLICT]: {
+    status: 409, message: 'This client recording ID cannot be used. Generate a new recording ID.', retryable: false,
+  },
+  [PT.INVALID_RECORDING_TIME]: {
+    status: 400, message: 'Recording end time or elapsed duration is invalid.', retryable: false,
+  },
   [PT.INSUFFICIENT_GPS_POINTS]: {
     status: 400,
     message: 'Cung đường cần tối thiểu 2 điểm GPS hợp lệ',
@@ -570,16 +811,52 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     retryable: false,
   },
   [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
-  [PT.DEM_PROCESSING_FAILED]: { status: 500, message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM', retryable: true },
-  [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: { status: 400, message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh', retryable: false },
+  [PT.DEM_PROCESSING_FAILED]: {
+    status: 500,
+    message: 'Lỗi trong quá trình xử lý mô hình độ cao vệ tinh DEM',
+    retryable: true,
+  },
+  [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: {
+    status: 400,
+    message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh',
+    retryable: false,
+  },
   [TP.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến đi hoặc bảng dự toán chi phí.', retryable: false },
-  [TP.LOCKED]: { status: 409, message: 'Chuyến đi đã bắt đầu, kết thúc hoặc bị hủy nên không thể điều chỉnh giá.', retryable: false },
-  [TP.VERSION_CONFLICT]: { status: 409, message: 'Dữ liệu chuyến đi hoặc bảng giá đã thay đổi. Vui lòng tải lại.', retryable: false },
-  [TP.COST_PLAN_INVALID]: { status: 422, message: 'Cấu hình bảng chi phí hoặc bậc tăng chi phí không hợp lệ.', retryable: false },
-  [TP.PAX_INVALID]: { status: 422, message: 'Số lượng khách mục tiêu hoặc khách tối thiểu không hợp lệ.', retryable: false },
-  [TP.IMPOSSIBLE]: { status: 422, message: 'Tổng tỷ lệ phí và lợi nhuận mục tiêu vượt quá 100% doanh thu.', retryable: false },
-  [TP.LOSS_INTERVAL]: { status: 409, message: 'Tồn tại quy mô đoàn từ ngưỡng tối thiểu bị lỗ âm. Hãy điều chỉnh giá bán hoặc ngưỡng khách.', retryable: false },
-  [TP.STALE]: { status: 409, message: 'Thông số chuyến đi hoặc cấu hình phí đã thay đổi sau khi chốt giá. Hãy xác nhận lại bảng giá.', retryable: false },
+  [TP.LOCKED]: {
+    status: 409,
+    message: 'Chuyến đi đã bắt đầu, kết thúc hoặc bị hủy nên không thể điều chỉnh giá.',
+    retryable: false,
+  },
+  [TP.VERSION_CONFLICT]: {
+    status: 409,
+    message: 'Dữ liệu chuyến đi hoặc bảng giá đã thay đổi. Vui lòng tải lại.',
+    retryable: false,
+  },
+  [TP.COST_PLAN_INVALID]: {
+    status: 422,
+    message: 'Cấu hình bảng chi phí hoặc bậc tăng chi phí không hợp lệ.',
+    retryable: false,
+  },
+  [TP.PAX_INVALID]: {
+    status: 422,
+    message: 'Số lượng khách mục tiêu hoặc khách tối thiểu không hợp lệ.',
+    retryable: false,
+  },
+  [TP.IMPOSSIBLE]: {
+    status: 422,
+    message: 'Tổng tỷ lệ phí và lợi nhuận mục tiêu vượt quá 100% doanh thu.',
+    retryable: false,
+  },
+  [TP.LOSS_INTERVAL]: {
+    status: 409,
+    message: 'Tồn tại quy mô đoàn từ ngưỡng tối thiểu bị lỗ âm. Hãy điều chỉnh giá bán hoặc ngưỡng khách.',
+    retryable: false,
+  },
+  [TP.STALE]: {
+    status: 409,
+    message: 'Thông số chuyến đi hoặc cấu hình phí đã thay đổi sau khi chốt giá. Hãy xác nhận lại bảng giá.',
+    retryable: false,
+  },
 
   [G.GEAR_ITEM_NOT_FOUND]: { status: 404, message: 'Không tìm thấy món đồ cá nhân', retryable: false },
   [G.GEAR_ITEM_VERSION_CONFLICT]: { status: 409, message: 'Xung đột phiên bản món đồ cá nhân', retryable: true },
@@ -647,5 +924,115 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Báo giá thuê không đủ điều kiện liên kết (hết hạn hoặc trạng thái không hợp lệ)',
     retryable: false,
   },
-};
-
+  [G.GEAR_ITEM_POSSIBLE_DUPLICATE]: {
+    status: 409,
+    message: 'Phát hiện món đồ có thông số tương tự trong tủ đồ',
+    retryable: false,
+  },
+  [G.GEAR_ITEM_LIMIT_EXCEEDED]: {
+    status: 400,
+    message: 'Tủ đồ đã đạt giới hạn tối đa 50 món',
+    retryable: false,
+  },
+  [G.GEAR_CLIMATE_NOT_CONFIRMED]: {
+    status: 400,
+    message: 'Điều kiện thời tiết của chuyến đi chưa được xác nhận',
+    retryable: false,
+  },
+  [G.GEAR_PHOTO_LIMIT_EXCEEDED]: {
+    status: 400,
+    message: 'Mỗi món đồ chỉ được tối đa 3 ảnh',
+    retryable: false,
+  },
+  [G.GEAR_NEEDS_CONTEXT]: {
+    status: 400,
+    message: 'Chuyến đi thiếu dữ kiện ngữ cảnh cần thiết (độ khó, địa hình hoặc số ngày)',
+    retryable: false,
+  },
+  [G.GEAR_CONFIGURATION_ERROR]: {
+    status: 500,
+    message: 'Lỗi cấu hình quy tắc trang bị trong hệ thống',
+    retryable: false,
+  },
+  [G.GEAR_AI_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ nhận diện AI hiện chưa được cấu hình. Vui lòng nhập thông số bằng tay.',
+    retryable: false,
+  },
+  [G.GEAR_AI_TIMEOUT]: {
+    status: 504,
+    message: 'Quá thời gian chờ phản hồi từ dịch vụ AI',
+    retryable: true,
+  },
+  [G.GEAR_AI_REFUSED]: {
+    status: 502,
+    message: 'Dịch vụ AI từ chối xử lý yêu cầu',
+    retryable: false,
+  },
+  [G.GEAR_EXTRACTION_SCHEMA_MISMATCH]: {
+    status: 502,
+    message: 'Dữ liệu trả về từ AI không đúng cấu trúc quy định',
+    retryable: true,
+  },
+  [G.GEAR_AI_RATE_LIMITED]: {
+    status: 429,
+    message: 'Dịch vụ AI vượt quá giới hạn tần suất, vui lòng thử lại sau',
+    retryable: true,
+  },
+  [G.GEAR_EXTRACTION_QUOTA_EXCEEDED]: {
+    status: 429,
+    message:
+      'Bạn đã sử dụng hết hạn mức 20 lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.',
+    retryable: false,
+  },
+  [G.GEAR_MANUAL_DRAFT_RATE_LIMITED]: {
+    status: 429,
+    message: 'Bạn đã tạo quá nhiều bản nháp trang bị trong một giờ. Vui lòng thử lại sau.',
+    retryable: true,
+  },
+  [G.GEAR_MEDIA_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ lưu trữ ảnh tạm thời chưa sẵn sàng. Vui lòng thử lại sau.',
+    retryable: true,
+  },
+  [G.GEAR_PAGE_READER_UNAVAILABLE]: {
+    status: 503,
+    message: 'Dịch vụ đọc link sản phẩm chưa được cấu hình hoặc không khả dụng. Vui lòng tải ảnh hoặc nhập bằng tay.',
+    retryable: false,
+  },
+  [G.GEAR_PAGE_FETCH_FAILED]: {
+    status: 502,
+    message: 'Không thể đọc nội dung từ đường dẫn sản phẩm đã cung cấp',
+    retryable: true,
+  },
+  [G.GEAR_SSRF_BLOCKED]: {
+    status: 400,
+    message: 'Đường dẫn không hợp lệ hoặc trỏ đến địa chỉ mạng nội bộ bị cấm',
+    retryable: false,
+  },
+  [G.GEAR_PLAN_NOT_EVALUATED]: {
+    status: 400,
+    message: 'Kế hoạch chưa được đánh giá trước khi thực hiện thao tác',
+    retryable: false,
+  },
+  [G.GEAR_PLAN_STALE]: {
+    status: 409,
+    message: 'Kế hoạch trang bị đã thay đổi sau lần đánh giá cuối, vui lòng đánh giá lại',
+    retryable: true,
+  },
+  [G.GEAR_OPTION_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy phương án trang bị được yêu cầu',
+    retryable: false,
+  },
+  [G.GEAR_OPTION_SET_NOT_FOUND]: {
+    status: 404,
+    message: 'Không tìm thấy tập phương án trang bị tương ứng',
+    retryable: false,
+  },
+  [G.GEAR_OPTION_SET_EXPIRED]: {
+    status: 410,
+    message: 'Tập phương án trang bị đã hết hạn. Vui lòng tạo lại phương án mới.',
+    retryable: false,
+  },
+}

@@ -11,23 +11,29 @@ import {
 export function usePrivateTripMembership() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+
   const [invitation, setInvitation] = useState<PrivateTripInvitation | null>(null);
   const [room, setRoom] = useState<PrivateTripRoom | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
   const [activeMemberCount, setActiveMemberCount] = useState<number>(0);
   const [totalMembers, setTotalMembers] = useState<number>(0);
 
+  const apiErrorCode = (err: any): string | null =>
+    err?.response?.data?.error?.code || err?.response?.data?.code || null;
+
   // Lấy chi tiết lời mời
   const loadInvitation = useCallback(async (code: string) => {
     setBusy(true);
     setError(null);
+    setErrorCode(null);
     try {
       const data = await privateTripMembershipApi.getInvitation(code);
       setInvitation(data);
       return data;
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tải thông tin lời mời.";
+      setErrorCode(apiErrorCode(err));
+      const msg = err?.response?.data?.error?.message || err?.response?.data?.message || "Không thể tải thông tin lời mời.";
       setError(msg);
       return null;
     } finally {
@@ -39,11 +45,13 @@ export function usePrivateTripMembership() {
   const joinTrip = async (code: string) => {
     setBusy(true);
     setError(null);
+    setErrorCode(null);
     try {
       const result = await privateTripMembershipApi.join(code);
       return result;
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || "Không thể tham gia chuyến đi.";
+      setErrorCode(apiErrorCode(err));
+      const msg = err?.response?.data?.error?.message || err?.response?.data?.message || "Không thể tham gia chuyến đi.";
       setError(msg);
       throw err;
     } finally {
@@ -141,6 +149,7 @@ export function usePrivateTripMembership() {
   return {
     busy,
     error,
+    errorCode,
     invitation,
     room,
     members,

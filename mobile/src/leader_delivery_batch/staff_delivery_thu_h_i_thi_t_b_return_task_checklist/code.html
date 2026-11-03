@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#121c2a", "on-secondary": "#ffffff", "on-tertiary": "#ffffff", "primary-fixed": "#b1f0cd", "surface": "#f8f9ff", "surface-container": "#e6eeff", "on-tertiary-fixed-variant": "#005048", "on-surface-variant": "#404943", "surface-container-highest": "#d9e3f6", "error-container": "#ffdad6", "background": "#f8f9ff", "secondary-fixed-dim": "#ffb4a2", "on-primary-fixed-variant": "#105137", "inverse-on-surface": "#eaf1ff", "surface-variant": "#d9e3f6", "outline-variant": "#c0c9c1", "inverse-surface": "#27313f", "primary-container": "#2f6b4f", "on-tertiary-fixed": "#00201c", "secondary-fixed": "#ffdad2", "surface-bright": "#f8f9ff", "primary-fixed-dim": "#96d4b2", "primary": "#125238", "on-background": "#121c2a", "error": "#ba1a1a", "on-primary-fixed": "#002113", "on-secondary-container": "#731a04", "on-error-container": "#93000a", "on-tertiary-container": "#84eddd", "tertiary-fixed": "#8cf5e4", "surface-dim": "#d0dbed", "surface-tint": "#2d694d", "on-primary-container": "#aae9c6", "surface-container-low": "#eff4ff", "secondary": "#a33d23", "surface-container-lowest": "#ffffff", "tertiary": "#005249", "secondary-container": "#ff8162", "outline": "#707972", "on-secondary-fixed": "#3c0700", "on-error": "#ffffff", "tertiary-fixed-dim": "#6fd8c8", "surface-container-high": "#dee9fc", "on-primary": "#ffffff", "inverse-primary": "#96d4b2", "tertiary-container": "#006c61", "on-secondary-fixed-variant": "#83260e" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-xs": "0.25rem", "gutter": "0.75rem", "space-xl": "1.5rem", "margin": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-lg": "1rem" }, "fontFamily": { "body-sm": ["Inter"], "label-md": ["Inter"], "body-md": ["Inter"], "label-lg": ["Inter"], "headline-lg": ["Inter"], "label-sm": ["Inter"], "headline-sm": ["Inter"], "headline-md": ["Inter"], "body-lg": ["Inter"], "headline-xl": ["Inter"] }, "fontSize": { "body-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400"}], "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}], "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "700"}], "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700"}], "label-sm": ["10px", {"lineHeight": "12px", "letterSpacing": "0.06em", "fontWeight": "700"}], "headline-sm": ["18px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600"}], "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "500"}], "headline-xl": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800"}] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-sm flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Quay lại" class="w-12 h-12 flex items-center justify-center rounded-lg text-on-surface hover:bg-surface-container active:bg-surface-container-high transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><div class="flex flex-col"><h1 class="font-headline-sm text-headline-sm text-on-surface uppercase tracking-tight">Xác Thực Đơn Hàng</h1><div class="flex items-center gap-1"><span class="font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant px-1.5 py-0.5 rounded">#DEL-8921</span><span class="font-label-sm text-label-sm text-tertiary font-bold">CAMP-A5</span></div></div></div><div class="flex items-center gap-space-xs"><a aria-label="Hotline hỗ trợ khẩn cấp" class="w-11 h-11 flex items-center justify-center rounded-lg bg-secondary-fixed text-on-secondary-fixed hover:bg-secondary-fixed-dim transition-colors" href="tel:19008899"><span class="material-symbols-outlined text-[20px]">sos</span></a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-surface min-h-screen"><div class="flex flex-col w-full pb-36">
+<!-- Status Banner: Dispatch / Timing alert -->
+<div class="mx-margin mt-space-md p-space-md rounded-xl bg-surface-container-high shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px] text-on-primary" style="font-variation-settings: 'FILL' 1;">hiking</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">Đoàn vừa hạ sơn lúc 14:20</span>
+<span class="font-body-sm text-body-sm text-on-surface truncate">Khung giờ thu hồi: <strong class="font-semibold text-primary">14:15 - 14:45</strong></span>
+</div>
+</div>
+<span class="px-2 py-1 rounded bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm uppercase font-bold whitespace-nowrap">Hẹn 30p</span>
+</div>
+<!-- Customer & Tour Dossier Card -->
+<div class="mx-margin mt-space-md p-space-lg rounded-xl bg-surface-container-lowest shadow-md flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold">#BK-7892</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">Fansipan 3N2Đ</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate">Nguyễn Tuấn Anh</h2>
+<span class="font-body-sm text-body-sm text-on-surface-variant">SĐT: 0982 *** 618</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<a aria-label="Gọi khách hàng" class="w-11 h-11 rounded-lg bg-surface-container flex items-center justify-center text-primary active:bg-surface-container-high transition-colors" href="tel:0982888618">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">call</span>
+</a>
+<a aria-label="Nhắn tin khách" class="w-11 h-11 rounded-lg bg-surface-container flex items-center justify-center text-primary active:bg-surface-container-high transition-colors" href="sms:0982888618">
+<span class="material-symbols-outlined text-[20px]">sms</span>
+</a>
+</div>
+</div>
+<!-- Rendezvous location details -->
+<div class="p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[22px] flex-shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">fmd_bad</span>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-bold">Trạm dừng Bãi đỗ xe Bản Sín Chải</span>
+<span class="font-label-sm text-label-sm text-secondary font-bold whitespace-nowrap">Cách 300m</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1">Đoàn đang nghỉ chân uống nước &amp; giãn cơ tại quán trà dốc Bản</span>
+</div>
+</div>
+</div>
+<!-- Tactical Mini-Map Card -->
+<div class="mx-margin mt-space-md rounded-xl overflow-hidden shadow-sm bg-surface-container-lowest">
+<div class="relative w-full h-44 bg-surface-container">
+<div class="w-full h-full bg-cover bg-center" data-location="Bản Sín Chải, Sa Pa, Lào Cai, Vietnam" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCI8cAHo-vKC8jvK4B4rzbH5xEvGSEufcfXWKFjApcZC7Zte8u1n7IkxJ8nH0sFXXDDy_RwrY5TdNCorqiqzkb0ZINv8DXadYxazmVMTClZWIFHlKVQgyeDt3xAFRo9IcbMh4KilGLv3DX2fagTK32h1s39ZyT6wnwUBV_kVMtkP25fn1iETDq0NNq9ezMwyz81NXpivYArbgoW-gqr02x_VYYM7W7QtDeN09r7LTKP8UFkZj0Snzgb')"></div>
+<!-- HUD Overlay Elements -->
+<div class="absolute inset-0 bg-gradient-to-t from-on-surface/40 via-transparent to-transparent pointer-events-none"></div>
+<!-- Staff GPS Chip -->
+<div class="absolute top-3 left-3 px-2 py-1 rounded bg-on-surface/80 backdrop-blur-md text-surface font-label-sm text-label-sm flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-fixed-dim animate-ping"></span>
+<span class="tracking-wide">GPS: 22.3481° N, 103.8295° E</span>
+</div>
+<!-- Navigation telemetry HUD tag -->
+<div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-surface">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/90 backdrop-blur-md text-on-primary">
+<span class="material-symbols-outlined text-[16px]">navigation</span>
+<span class="font-label-md text-label-md">Đi bộ 4 phút theo lối bậc đá</span>
+</div>
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest/90 backdrop-blur-md text-on-surface font-label-sm text-label-sm font-bold flex items-center gap-1 shadow-sm" id="openMapBtn">
+<span>Xem bản đồ lớn</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Recovery Item Progress Header -->
+<div class="mx-margin mt-space-lg flex items-center justify-between">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Thiết bị thu hồi</h3>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold" id="itemCountBadge">3 / 4 ĐÃ NHẬN</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Đối soát trực quan</span>
+</div>
+<!-- Filter Pills Bar -->
+<div class="w-full overflow-x-auto no-scrollbar mt-space-sm px-margin flex items-center gap-2">
+<button class="filter-pill px-3 py-1.5 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="all">
+      Tất cả (4)
+    </button>
+<button class="filter-pill px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="received">
+      Đã nhận (3)
+    </button>
+<button class="filter-pill px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="pending">
+      Chưa nhận (1)
+    </button>
+<button class="filter-pill px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="missing">
+      Thiếu thiết bị (0)
+    </button>
+<button class="filter-pill px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="damaged">
+      Có hư hỏng (0)
+    </button>
+<button class="filter-pill px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-bold whitespace-nowrap active:scale-95 transition-all" data-filter="review">
+      Cần kiểm tra (1)
+    </button>
+</div>
+<!-- Gear Inspection Checklist Cards -->
+<div class="mx-margin mt-space-md flex flex-col gap-space-md">
+<!-- Item 1: Balo Deuter -->
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm relative overflow-hidden" data-status="received">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-start gap-space-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="High angle shot of a rugged Deuter 45L forest green mountain trekking backpack with compression straps resting on alpine stone pavers under crisp morning sunlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuArqKHdGGCxiF-sNcQX3L8cKPoBQ_RwYmrCNLOIWuZTpdLbOogMUlIw66DhYVi2LOKaKiuC-PjUHrFJQGO2GpEFMCQQqi5j9qFD_JfUUgxJDVf4oJYgbjVv9vmiJfNY8x-YN35sjAlJywm4Qkr_4iP0qvoYv7LBIni7TTsNk1PztXjD_bcfmxqWzoP9BqM_iv_2yrqJIk1378h96STnLXCGZJqAaqgYbjxOt1FDQ1rdk_BCs2uJdWOQ"/>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-bold">#EQ-BL-4508</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">SL: 01</span>
+</div>
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold truncate">Balo trekking Deuter 45L</h4>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Lúc giao: Mới 98% • Khóa nẹp nguyên vẹn</span>
+</div>
+</div>
+<!-- Current State Feedback & Quick Action -->
+<div class="pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-primary-fixed/40 text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-label-sm text-label-sm font-semibold">Đã nhận lại - Bám bụi nhẹ</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-bold flex items-center gap-1 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[16px]">photo_camera</span>
+<span>Chụp ảnh (1)</span>
+</button>
+</div>
+</div>
+<!-- Item 2: Gậy Trekking BD Trail Pro -->
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm relative overflow-hidden" data-status="received">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-start gap-space-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Pair of tactical carbon fiber trekking poles with black and copper accents lying side by side on a clean wooden field dispatch table in Sapa mountain air" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDV82oYVkjOuWJh2ln9VwTXzfoL9kZPb8TKWuB5S0VhmSvp9I98wWpPNFnMvnLubmkfFSNfyTFeL7TNZwbkn5LVsmPB--ipKT6oPZ-cjt9AQZomJ_fesl2xQ8zf7g7dqgsx7iaAJbxly1W3hDrulKLIcA4sqot5hUFoOinUWXQiX2ADfPgk1lCjeSj2aEcAgq268UzyLYR16VjtOZGKx-HDjkT-NdTHIxdJh5Y1k5T1G2irF613X1Ja"/>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-bold">#EQ-GT-8812</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">SL: 02</span>
+</div>
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold truncate">Cặp Gậy trekking Carbon BD Trail Pro</h4>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Lúc giao: Trầy xước nhẹ • Khóa FlickLock tốt</span>
+</div>
+</div>
+<!-- Current State Feedback & Quick Action -->
+<div class="pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-primary-fixed/40 text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-label-sm text-label-sm font-semibold">Đã nhận lại - Đủ 02 gậy</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-bold flex items-center gap-1 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[16px]">add_a_photo</span>
+<span>Thêm ảnh</span>
+</button>
+</div>
+</div>
+<!-- Item 3: Áo Mưa Bộ Gore-Tex -->
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm relative overflow-hidden" data-status="received review">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-secondary-container"></div>
+<div class="flex items-start gap-space-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Technical Gore-Tex waterproof jacket and pants folded neatly in a staff inspection tray showing water repellent outer fabric surface after a rainy mountain descent" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCML_lm6L__WB8AzJRG3CILjZA9Q2NM9TFvO9FH8PZkAqT7h536DAbYPKxSlPoe4gjCyN_y4KN-Gf59oM4kTP14s62ZDw5mdLGAjzJVVmiV8CfAA9vm2zVN0WcqZTpMipLMgJ2kmh9ldyHZy-vWb8KfbhREZrur7XSPlNH-oqzQSdb8Wb8j-DRkEcOhMECobK4U9J-4N9XRiQ9QvrhfICv6ApRCZWr7h-CYbUiKCSuLv2ojNTVKuSJZ"/>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-bold">#EQ-AM-1044</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">SL: 01 bộ</span>
+</div>
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold truncate">Áo mưa bộ Gore-Tex Cỡ L</h4>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Lúc giao: Tốt • Keo ép dán chống thấm kín</span>
+</div>
+</div>
+<!-- Current State Feedback & Quick Action -->
+<div class="pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-secondary-fixed text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[16px]">water_drop</span>
+<span class="font-label-sm text-label-sm font-semibold">Đã nhận - Còn ẩm ướt sau mưa</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-bold flex items-center gap-1 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[16px]">flag</span>
+<span>Báo sấy kho</span>
+</button>
+</div>
+</div>
+<!-- Item 4: Đèn pin Naturehike (Chưa nhận) -->
+<div class="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm relative overflow-hidden" data-status="pending">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-secondary"></div>
+<div class="flex items-start gap-space-md">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex-shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Compact headlamp with durable elastic strap sitting on field logistics packing desk with battery level indicator showing bright LED reflector lens" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvbc3PLUV1Y6eKeK9Hm8fToXXr9utI09djB7avGRzjq5pfKNGA09F8eQzKD_03BeYKy_SBjgr1ITDrlSm6C2iNh0BxIngjU4w27xrxmPCRi-vBYQiPiAfHpGyOZB_V4GDAbah7eL8lyTIAzKZbsV6sMVQMPR2socdGflqI1i3kKv156ePNl-3X_VGcCg-fkADmKpwd1UjxJ55__AqBVqh52M369NGpi4zmRcFv0a5QgxzrgSTkuudY"/>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-bold">#EQ-DP-3301</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm font-bold">SL: 01</span>
+</div>
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold truncate">Đèn pin đội đầu Naturehike 220Lm</h4>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Lúc giao: Pin 100% • Kèm cáp sạc Type-C</span>
+</div>
+</div>
+<!-- Current State Feedback & Quick Action -->
+<div class="pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-secondary-fixed text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[16px] animate-pulse">hourglass_top</span>
+<span class="font-label-sm text-label-sm font-bold">Chưa nhận / Đang đối soát</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm font-bold flex items-center gap-1 hover:bg-primary-container active:scale-95 transition-all" id="quickConfirmItem4">
+<span class="material-symbols-outlined text-[16px]">done</span>
+<span>Nhận ngay</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Operational Field Note Box -->
+<div class="mx-margin mt-space-md p-space-md rounded-xl bg-surface-container flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px] flex-shrink-0 mt-0.5">verified_user</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+      Khách hạ sơn có thể gửi balo phụ trước tại xe ôm hoặc người dẫn đường địa phương. Hãy đối soát đúng mã vạch hoặc tem QR dán trên thân thiết bị trước khi chốt biên bản.
+    </p>
+</div>
+<!-- Floating Sticky Action Deck (Pinned within ergonomic thumb reach) -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-md px-margin pt-3 pb-safe shadow-[0_-4px_16px_rgba(0,0,0,0.06)] flex flex-col gap-2">
+<!-- Secondary action button -->
+<button class="w-full h-11 rounded-lg bg-surface-container text-secondary font-label-md text-label-md font-bold uppercase tracking-wide flex items-center justify-center gap-1.5 active:bg-surface-container-high transition-colors" id="delayReportBtn">
+<span class="material-symbols-outlined text-[18px]">history_toggle_off</span>
+<span>Báo khách trễ giờ hạ sơn</span>
+</button>
+<!-- Primary Action Button with High Tactical Contrast -->
+<button class="w-full h-13 py-3.5 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg uppercase font-bold tracking-wider flex items-center justify-center gap-2 shadow-md active:bg-primary-container active:scale-[0.99] transition-all" id="verifyClientBtn">
+<span class="material-symbols-outlined text-[22px]">qr_code_scanner</span>
+<span>Xác minh khách hàng &amp; Kiểm đồ</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+</div>
+<!-- Interactive Action Confirmation Modal (Local Micro-interaction) -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm hidden flex-col justify-end p-margin pb-safe" id="actionModal">
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-lg shadow-xl flex flex-col gap-space-md animate-in fade-in duration-200">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Xác nhận thu hồi</h3>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant" id="closeModalBtn">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+        Quét mã QR trên màn hình ứng dụng Vina_TrekGo của khách <strong class="text-on-surface">Nguyễn Tuấn Anh</strong> (#BK-7892) hoặc nhập OTP xác thực hoàn tất thủ tục bàn giao.
+      </p>
+<div class="flex flex-col gap-2.5">
+<button class="w-full h-12 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+<span>BẬT CAMERA QUÉT QR KHÁCH</span>
+</button>
+<button class="w-full h-12 rounded-lg bg-surface-container text-on-surface font-label-lg text-label-lg font-bold flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">pin</span>
+<span>NHẬP MÃ OTP 4 SỐ</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    // Quick Item 4 confirm interaction
+    const item4Btn = document.getElementById('quickConfirmItem4');
+    const badge = document.getElementById('itemCountBadge');
+    if (item4Btn && badge) {
+      item4Btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const parent = this.closest('[data-status]');
+        if (parent) {
+          parent.setAttribute('data-status', 'received');
+          const leftBar = parent.querySelector('.absolute.left-0');
+          if (leftBar) {
+            leftBar.className = 'absolute left-0 top-0 bottom-0 w-1.5 bg-primary';
+          }
+          this.parentElement.innerHTML = `
+            <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-primary-fixed/40 text-on-primary-fixed-variant">
+              <span class="material-symbols-outlined text-[16px]">check_circle</span>
+              <span class="font-label-sm text-label-sm font-semibold">Đã nhận lại - Đầy đủ pin & sạc</span>
+            </div>
+            <button class="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-bold flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">add_a_photo</span>
+              <span>Thêm ảnh</span>
+            </button>
+          `;
+          badge.textContent = '4 / 4 ĐÃ NHẬN';
+          badge.className = 'px-2 py-0.5 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-bold';
+        }
+      });
+    }
+
+    // Interactive Filter Pills
+    const filterPills = document.querySelectorAll('.filter-pill');
+    const items = document.querySelectorAll('[data-status]');
+
+    filterPills.forEach(pill => {
+      pill.addEventListener('click', function() {
+        // Reset styles
+        filterPills.forEach(p => {
+          p.classList.remove('bg-primary', 'text-on-primary');
+          p.classList.add('bg-surface-container', 'text-on-surface-variant');
+        });
+        this.classList.add('bg-primary', 'text-on-primary');
+        this.classList.remove('bg-surface-container', 'text-on-surface-variant');
+
+        const filter = this.getAttribute('data-filter');
+        items.forEach(card => {
+          const status = card.getAttribute('data-status') || '';
+          if (filter === 'all' || status.includes(filter)) {
+            card.style.display = 'flex';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    });
+
+    // Modal triggers
+    const modal = document.getElementById('actionModal');
+    const verifyBtn = document.getElementById('verifyClientBtn');
+    const closeBtn = document.getElementById('closeModalBtn');
+    const delayBtn = document.getElementById('delayReportBtn');
+
+    if (verifyBtn && modal && closeBtn) {
+      verifyBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+      closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+      });
+    }
+
+    if (delayBtn) {
+      delayBtn.addEventListener('click', () => {
+        const confirmed = confirm('Gửi thông báo trễ giờ hạ sơn tới điều phối viên và cập nhật định vị khách?');
+        if (confirmed) {
+          delayBtn.innerHTML = `
+            <span class="material-symbols-outlined text-[18px]">check</span>
+            <span>Đã gửi báo trễ (+20 phút)</span>
+          `;
+          delayBtn.classList.replace('text-secondary', 'text-primary');
+        }
+      });
+    }
+  })();
+</script></main></body></html>

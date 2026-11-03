@@ -1,4 +1,6 @@
+import { manualLateRentalRefund } from '../../../../payments/manual-refund-reservation'
 import { cancelPendingRentalChargesWithTx, reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
+import { validateRentalOrderPaymentMembershipWithTx } from '../../../payments/rental-membership.guard'
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { createHash } from 'node:crypto'
 import { consumeExtensionPaymentWithTx, releaseExtensionWithTx } from '../../extension/rental-extension.service'
@@ -37,19 +39,45 @@ import type {
   RentalPaymentResult,
 } from '../../application/ports/rental-order.port'
 import { RENTAL_CONTEXT_PORT, type RentalContextPort } from '../../application/ports/rental-context.port'
-import { parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
+import { describeDeposit, parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
-const OPEN_RENTAL_ORDER_STATUSES: RentalOrderStatus[] = [
+// Keep at most one unfinished checkout per customer and trip. Paid and later
+// lifecycle orders are independent rentals and must not block an additional one.
+const PENDING_PAYMENT_ORDER_STATUSES: RentalOrderStatus[] = [
   RentalOrderStatus.PENDING_PAYMENT,
-  RentalOrderStatus.PAID,
-  RentalOrderStatus.PREPARING,
-  RentalOrderStatus.READY_FOR_HANDOVER,
-  RentalOrderStatus.ACTIVE,
-  RentalOrderStatus.RETURN_PENDING,
-  RentalOrderStatus.RETURN_PROCESSING,
 ]
+
+
+async function runWithTransactionRetry<T>(
+  action: () => Promise<T>,
+  maxAttempts = 3,
+  initialBackoffMs = 50,
+): Promise<T> {
+  let attempt = 0
+  while (attempt < maxAttempts) {
+    try {
+      return await action()
+    } catch (err: any) {
+      attempt++
+      const isDeadlockOrConflict =
+        err?.code === 'P2034' ||
+        err?.code === '40P01' ||
+        (typeof err?.message === 'string' &&
+          (err.message.includes('40P01') ||
+            err.message.includes('deadlock detected') ||
+            err.message.includes('could not serialize access')))
+      if (isDeadlockOrConflict && attempt < maxAttempts) {
+        const backoff = initialBackoffMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 20)
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error('Unreachable')
+}
 
 @Injectable()
 export class PrismaRentalOrderAdapter implements RentalOrderPort {
@@ -67,13 +95,19 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
     })
     if (!quotePointer) throw AppError.fromCode(RT.QUOTE_NOT_FOUND)
 
-    // Area A context is read through the frozen B1 port; B2 never locks Area A tables.
-    const currentContext = await this.contextPort.getByTripId(quotePointer.tripId, command.userId, command.now)
-    if (!currentContext) throw AppError.fromCode(RT.STALE_CONTEXT)
-
     try {
-      return await this.prisma.$transaction(
-        async (tx) => {
+      return await runWithTransactionRetry(() =>
+        this.prisma.$transaction(
+          async (tx) => {
+            // Contract M9 same-database: Area B coordinates locking with Area A in the same transaction.
+            // Lock order is strictly: Trip -> Booking/Participant -> Quote -> Order -> Product/stock.
+            const currentContext = await this.contextPort.lockAndRead(
+              tx,
+              quotePointer.tripId,
+              command.userId,
+              command.now,
+            )
+            if (!currentContext) throw AppError.fromCode(RT.STALE_CONTEXT)
           const cached = await tx.idempotencyRecord.findUnique({
             where: {
               scope_userId_idempotencyKey: {
@@ -115,13 +149,26 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
               quote.rentalQuoteLinesViaQuoteId.some((line) =>
                 (line.occupiedFrom ?? quote.occupiedStartAt) > baselineOccupiedFrom))
             throw AppError.fromCode(RT.STALE_CONTEXT)
-          if (
-            currentContext.userId !== command.userId ||
-            currentContext.membershipRef !== quote.membershipRef ||
-            currentContext.trip.id !== quote.tripId ||
-            currentContext.contextVersion !== quote.contextVersion
+          const kindMismatch = Boolean(quote.membershipKind && quote.membershipKind !== currentContext.membershipKind)
+          const versionMismatch = Boolean(
+            quote.membershipSourceVersion != null &&
+              quote.membershipSourceVersion !== currentContext.membershipSourceVersion,
           )
+          const refMismatch = quote.membershipRef !== currentContext.membershipRef
+          const userMismatch = currentContext.userId !== command.userId || quote.userId !== command.userId
+          const tripMismatch = currentContext.trip.id !== quote.tripId
+          const contextVersionMismatch = currentContext.contextVersion !== quote.contextVersion
+
+          if (
+            kindMismatch ||
+            versionMismatch ||
+            refMismatch ||
+            userMismatch ||
+            tripMismatch ||
+            contextVersionMismatch
+          ) {
             throw AppError.fromCode(RT.STALE_CONTEXT)
+          }
 
           const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx)
           const snap = quote.policySnapshot as Record<string, unknown> | null
@@ -141,8 +188,36 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             now: command.now,
           })
 
+          // Eligibility ignores expired payment holds so the customer can start
+          // another checkout immediately. Expire the stale order under its row
+          // lock before inserting the new PENDING_PAYMENT order; this releases
+          // its reservations, invoices, payment attempts and emits its outbox
+          // event through the established expiry flow.
+          const expiredPendingOrder = await tx.rentalOrder.findFirst({
+            where: {
+              userId: quote.userId,
+              tripId: quote.tripId,
+              status: RentalOrderStatus.PENDING_PAYMENT,
+              paymentExpiresAt: { lte: command.now },
+            },
+            select: { id: true },
+          })
+          if (expiredPendingOrder) {
+            await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${expiredPendingOrder.id}::uuid FOR UPDATE`
+            const currentPendingOrder = await tx.rentalOrder.findUnique({
+              where: { id: expiredPendingOrder.id },
+              select: { status: true, paymentExpiresAt: true },
+            })
+            if (
+              currentPendingOrder?.status === RentalOrderStatus.PENDING_PAYMENT &&
+              currentPendingOrder.paymentExpiresAt <= command.now
+            ) {
+              await expireOrderWithTx(tx, expiredPendingOrder.id, command.now)
+            }
+          }
+
           const openOrder = await tx.rentalOrder.findFirst({
-            where: { userId: quote.userId, tripId: quote.tripId, status: { in: OPEN_RENTAL_ORDER_STATUSES } },
+            where: { userId: quote.userId, tripId: quote.tripId, status: { in: PENDING_PAYMENT_ORDER_STATUSES } },
             select: { id: true },
           })
           if (openOrder) throw AppError.fromCode(RT.OPEN_ORDER_EXISTS, { details: { rentalOrderId: openOrder.id } })
@@ -191,7 +266,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
               userId: quote.userId,
               tripId: quote.tripId,
               bookingId: quote.bookingId,
+              membershipKind: quote.membershipKind,
               membershipRef: quote.membershipRef,
+              membershipSourceVersion: quote.membershipSourceVersion,
               membershipSnapshot: (quote.membershipSnapshot ?? Prisma.JsonNull) as any,
               returnOptionSnapshot: (quote.returnOptionSnapshot ?? Prisma.JsonNull) as any,
               recipientUserId: quote.recipientUserId,
@@ -313,7 +390,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           maxWait: 15000,
           timeout: 30000,
         },
-      )
+      ))
     } catch (error) {
       if (error instanceof AppError) {
         if (error.code === RT.INSUFFICIENT_AVAILABLE_QUANTITY && error.details) {
@@ -411,7 +488,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       include: {
         rentalOrderLinesViaOrderId: {
           include: {
-            product: { select: { id: true, sku: true, name: true } },
+            product: { select: { id: true, sku: true, name: true, grade: true, gradeGroupId: true } },
             rentalQuantityReservationsViaOrderLineId: { orderBy: { reservationCycle: 'desc' } },
             rentalUnitAssignmentsViaOrderLineId: {
               include: { equipmentUnit: { select: { id: true, assetCode: true, status: true, condition: true } } },
@@ -453,6 +530,9 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         assignmentId: a.id,
         orderLineId: line.id,
         productId: line.productId,
+        // Hạng khách đã thuê (theo dòng đơn). Món được pick luôn thuộc đúng sản phẩm này.
+        productName: line.product.name,
+        grade: line.product.grade,
         unitId: a.equipmentUnit.id,
         assetCode: a.equipmentUnit.assetCode,
         assignmentStatus: a.status,
@@ -470,6 +550,10 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         dailyPrice: decimalVndToApiInteger(line.dailyPriceSnapshot.toString()),
         depositPerUnit: decimalVndToApiInteger(line.depositPerUnitSnapshot.toString()),
         replacementValue: decimalVndToApiInteger(line.replacementValueSnapshot.toString()),
+        depositExplanation: describeDeposit(
+          parseWholeVnd(line.depositPerUnitSnapshot.toString()),
+          parseWholeVnd(line.replacementValueSnapshot.toString()),
+        ),
         chargedDays: line.chargedDays,
         feeAmount: decimalVndToApiInteger(line.lineRentalFee.toString()),
         depositAmount: decimalVndToApiInteger(line.lineDeposit.toString()),
@@ -561,12 +645,20 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
     })
     if (!order) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
     if (order.userId !== query.userId) throw AppError.fromCode('FORBIDDEN')
-    return calculateCancellationPreview(order, query.now)
+    const trip = await this.prisma.trip.findUnique({where:{id:order.tripId},select:{status:true}})
+    if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
+    return { ...calculateCancellationPreview(order, query.now), tripCancellationPending: trip?.status === 'CANCEL_PENDING' }
   }
 
   // RB-API-205
   async cancelOrder(command: CancelRentalOrderCommand): Promise<CancelRentalOrderResult> {
     return this.prisma.$transaction(async (tx) => {
+      const pointer = await tx.rentalOrder.findUnique({where:{id:command.orderId},select:{tripId:true,userId:true}})
+      if (!pointer) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
+      if (pointer.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
+      await tx.$queryRaw`SELECT id FROM trips WHERE id=${pointer.tripId}::uuid FOR UPDATE`
+      const trip = await tx.trip.findUnique({where:{id:pointer.tripId},select:{status:true}})
+      if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${command.orderId}::uuid FOR UPDATE`
       const order = await tx.rentalOrder.findUnique({
         where: { id: command.orderId },
@@ -710,12 +802,8 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
           }),
         )
       : false
-    const target = pointer?.invoice.rentalOrder
     // Existing rental settlement MUST survive Trip completion / temporary Area A unavailability.
-    // Only the INITIAL order authorization performs the fresh membership check.
-    const liveContext =
-      target && !isExtensionPayment ? await this.contextPort.getByTripId(target.tripId, target.userId, now) : null
-    const baseRentalEligible = liveContext ? evaluateRentalEligibility(liveContext, now).eligible : false
+    // Only the INITIAL order authorization performs the fresh membership check inside transaction.
     await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { id: command.paymentRef }, include: { invoice: true } })
       if (!payment || !payment.invoice.rentalOrderId) throw AppError.fromCode(RT.PAYMENT_NOT_FOUND)
@@ -802,17 +890,13 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         data: { status: InvoiceStatus.PAID, paidAt: now, version: { increment: 1 } },
       })
 
-      const membershipMatches =
-        (!liveContext?.bookingId || !order.bookingId || liveContext.bookingId === order.bookingId) &&
-        (liveContext?.membershipRef === order.membershipRef ||
-          (liveContext?.bookingId != null && order.membershipRef === liveContext.bookingId))
+      const memberEligible = await validateRentalOrderPaymentMembershipWithTx(tx, order)
 
       if (
         order.status === RentalOrderStatus.EXPIRED ||
         order.status === RentalOrderStatus.CANCELLED ||
         now > order.paymentExpiresAt ||
-        !baseRentalEligible ||
-        !membershipMatches
+        !memberEligible
       ) {
         if (order.status === RentalOrderStatus.PENDING_PAYMENT) await expireOrderWithTx(tx, order.id, now)
         const lateRefund = await tx.refund.upsert({
@@ -827,6 +911,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             status: RefundStatus.PENDING,
             idempotencyKey: `late-payment:${payment.id}`,
             rentalOrderId: order.id,
+            ...manualLateRentalRefund(payment),
           },
         })
         await tx.rentalOutboxEvent.upsert({
@@ -1203,7 +1288,7 @@ function assertContextStillRentalEligible(input: {
 }) {
   if (!input.rentalEligible || input.membershipStatus !== 'ACTIVE')
     throw AppError.fromCode(RT.TRIP_MEMBERSHIP_NOT_ELIGIBLE)
-  if (input.now >= input.rentalCutoffAt) throw AppError.fromCode(RT.RENTAL_CUTOFF_PASSED)
+  if (input.now.getTime() > input.rentalCutoffAt.getTime()) throw AppError.fromCode(RT.RENTAL_CUTOFF_PASSED)
 }
 
 function buildAllowedActions(

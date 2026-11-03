@@ -5,6 +5,8 @@ import { PrismaTripLifecycleAdapter } from './infrastructure/adapters/prisma-tri
 import { HandleTripRescheduledUseCase } from './application/use-cases/handle-trip-rescheduled.use-case';
 import { HandleTripCancelledUseCase } from './application/use-cases/handle-trip-cancelled.use-case';
 import { HandleBookingCancelledUseCase } from './application/use-cases/handle-booking-cancelled.use-case';
+import { HandleMembershipSourceChangedUseCase } from './application/use-cases/handle-membership-source-changed.use-case';
+import { BookingMembershipEventConsumer } from './infrastructure/consumers/booking-membership-event.consumer';
 import { TripLifecycleWebhookController } from './presentation/controllers/trip-lifecycle-webhook.controller';
 import { RentalOverdueService } from './application/services/rental-overdue.service';
 
@@ -16,6 +18,8 @@ import { RentalOverdueService } from './application/services/rental-overdue.serv
     HandleTripRescheduledUseCase,
     HandleTripCancelledUseCase,
     HandleBookingCancelledUseCase,
+    HandleMembershipSourceChangedUseCase,
+    BookingMembershipEventConsumer,
     {
       provide: TRIP_LIFECYCLE_PORT,
       useClass: PrismaTripLifecycleAdapter,
@@ -27,6 +31,8 @@ import { RentalOverdueService } from './application/services/rental-overdue.serv
     HandleTripRescheduledUseCase,
     HandleTripCancelledUseCase,
     HandleBookingCancelledUseCase,
+    HandleMembershipSourceChangedUseCase,
+    BookingMembershipEventConsumer,
   ],
 })
 export class LifecycleModule {}

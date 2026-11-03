@@ -102,8 +102,16 @@ describe('TrailRecordingUseCase Unit Tests', () => {
 
   describe('finish', () => {
     it('returns the original trail when finish is retried after READY', async () => {
-      mockRepo.findRecordingById.mockResolvedValue({ id: 'rec-01', userId: mockUser.id, status: 'READY', createdPersonalTrailId: 'trail-01' } as any)
-      expect(await useCase.finish(mockUser, 'rec-01', {})).toMatchObject({ serverPersonalTrailId: 'trail-01', status: 'READY' })
+      mockRepo.findRecordingById.mockResolvedValue({
+        id: 'rec-01',
+        userId: mockUser.id,
+        status: 'READY',
+        createdPersonalTrailId: 'trail-01',
+      } as any)
+      expect(await useCase.finish(mockUser, 'rec-01', {})).toMatchObject({
+        serverPersonalTrailId: 'trail-01',
+        status: 'READY',
+      })
       expect(mockElevationUseCase.execute.mock.calls).toHaveLength(0)
       expect(mockRepo.completeRecordingAndCreateTrail.mock.calls).toHaveLength(0)
     })
@@ -112,6 +120,7 @@ describe('TrailRecordingUseCase Unit Tests', () => {
         id: 'rec-01',
         userId: mockUser.id,
         status: 'RECORDING',
+        startedAt: new Date('2026-10-15T00:00:00Z'),
       } as any)
       mockRepo.getPointsByRecordingId.mockResolvedValue([
         {
@@ -145,6 +154,7 @@ describe('TrailRecordingUseCase Unit Tests', () => {
         id: 'rec-01',
         userId: mockUser.id,
         status: 'RECORDING',
+        startedAt: new Date('2026-10-15T00:00:00Z'),
       } as any)
 
       mockRepo.getPointsByRecordingId.mockResolvedValue([
@@ -226,7 +236,9 @@ describe('TrailRecordingUseCase Unit Tests', () => {
 
   it('rejects late GPS uploads after READY', async () => {
     mockRepo.findRecordingById.mockResolvedValue({ id: 'rec-01', userId: mockUser.id, status: 'READY' } as any)
-    await expect(useCase.saveRawSamples(mockUser, 'rec-01', { samples: [] })).rejects.toMatchObject({ code: 'RECORDING_ALREADY_FINISHED' })
+    await expect(useCase.saveRawSamples(mockUser, 'rec-01', { samples: [] })).rejects.toMatchObject({
+      code: 'RECORDING_ALREADY_FINISHED',
+    })
     expect(mockRepo.saveRawSamplesBatch.mock.calls).toHaveLength(0)
   })
 })

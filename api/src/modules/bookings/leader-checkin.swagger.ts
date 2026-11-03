@@ -47,7 +47,7 @@ const participantItemSchema = obj({
   },
   checkinMethod: {
     type: 'string',
-    enum: ['QR', 'MANUAL', null as unknown as string],
+    enum: ['QR', 'MANUAL', null],
     nullable: true,
   },
   checkedInAt: { ...time, nullable: true },

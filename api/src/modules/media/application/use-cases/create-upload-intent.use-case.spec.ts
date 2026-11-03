@@ -82,6 +82,11 @@ describe('CreateUploadIntentUseCase', () => {
       ['EXCEPTION_EVIDENCE', 'STAFF_INVENTORY', true],
       ['EXCEPTION_EVIDENCE', 'STAFF_DELIVERY', true],
       ['EXCEPTION_EVIDENCE', 'ADMIN', true],
+      ['USER_GEAR', 'USER', true],
+      ['USER_GEAR', 'LEADER', true],
+      ['USER_GEAR', 'STAFF_INVENTORY', true],
+      ['USER_GEAR', 'STAFF_DELIVERY', true],
+      ['USER_GEAR', 'ADMIN', true],
     ])('Scope %s for role %s should be allowed: %s', async (scope, role, allowed) => {
       const input = {
         scope: scope as MediaScopeValue,
@@ -200,6 +205,25 @@ describe('CreateUploadIntentUseCase', () => {
     
     expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
       deliveryType: 'authenticated',
+    }));
+  });
+
+  it('validates and accepts USER_GEAR scope via createUploadIntentSchema and use case', async () => {
+    const payload = {
+      scope: 'USER_GEAR',
+      resourceType: 'IMAGE',
+      fileName: 'jacket.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 2048,
+    };
+
+    mockAssetPort.createPendingUpload.mockImplementation(async (data) => ({ id: data.id, status: 'PENDING_UPLOAD' } as unknown as never));
+
+    const result = await useCase.execute(payload as never, mockUser('USER'));
+    expect(result.mediaId).toBeDefined();
+    expect(mockStoragePort.createUploadIntent).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryType: 'upload',
+      publicId: expect.stringContaining('trekgo/user-gear/'),
     }));
   });
 });

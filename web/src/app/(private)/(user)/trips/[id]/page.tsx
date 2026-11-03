@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { TripData } from "@/features/trips/data/mockTripsData";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
 import { bookingApiService } from "@/features/bookings/services/booking.api";
 import { getTripCostPlan } from "@/features/leaders/services/leader-pricing.api";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { LoadingState, EmptyState, Button } from "@/components/ui";
 import { apiClient } from "@/lib/axios";
 
 export default function TripDetailPage() {
@@ -123,34 +126,70 @@ export default function TripDetailPage() {
           rawData.remainingSlots !== undefined ? rawData.remainingSlots : capacity;
         const booked = Math.max(0, capacity - remainingSlots);
 
-        // 7.5. Lấy bảng chi phí chi tiết nếu có
+        // 7.5. Lấy bảng chi phí chi tiết nếu người dùng là Leader (tránh lỗi 403 Forbidden cho trekker)
         let costItems = rawData.costItems || [];
         let priceExplanation = rawData.priceExplanation || null;
-        try {
-          const planRes = await getTripCostPlan(id);
-          if (planRes?.plan?.items && planRes.plan.items.length > 0) {
-            costItems = planRes.plan.items.map((i: any) => ({
-              id: i.id,
-              category: i.category,
-              name: i.name,
-              kind: i.kind,
-              basis: i.basis,
-              unitPrice: i.unitPrice,
-              quantity: i.quantity,
-              durationUnits: i.durationUnits,
-              capacityPerUnit: i.capacityPerUnit,
-              includedInPrice: i.includedInPrice,
-              sourceNote: i.sourceNote,
-            }));
-          }
-        } catch {}
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser?.role === "LEADER") {
+          try {
+            const planRes = await getTripCostPlan(id);
+            if (planRes?.plan?.items && planRes.plan.items.length > 0) {
+              costItems = planRes.plan.items.map((i: any) => ({
+                id: i.id,
+                category: i.category,
+                name: i.name,
+                kind: i.kind,
+                basis: i.basis,
+                unitPrice: i.unitPrice,
+                quantity: i.quantity,
+                durationUnits: i.durationUnits,
+                capacityPerUnit: i.capacityPerUnit,
+                includedInPrice: i.includedInPrice,
+                sourceNote: i.sourceNote,
+              }));
+            }
+          } catch {}
+        }
 
-        // 8. Cung đường System Trail (CHỈ GÁN NẾU CÓ THẬT, TUYỆT ĐỐI KHÔNG FALLBACK TRAIL_BADEN_COTDIEN)
-        const sysTrailId =
+        // 8. Cung đường System Trail (Tra cứu chính xác mã System Trail)
+        let sysTrailCode =
           rawData.trails?.[0]?.systemTrailId ||
-          rawData.routes?.[0]?.id ||
+          rawData.trails?.[0]?.code ||
           rawData.systemTrailId ||
           null;
+
+        // Nếu rawData từ Booking Discovery (/api/v1/trips/:id), routes[0].id là ID bảng trip_trail_plans chứ không phải system_trails.
+        // Ta dùng destinationId hoặc snapshotName để tra cứu đúng System Trail của hệ thống:
+        if (!sysTrailCode) {
+          const routeSnapshotName = rawData.routes?.[0]?.snapshotName;
+          const destinationId = rawData.destination?.id || rawData.destinationId;
+
+          if (destinationId || routeSnapshotName) {
+            try {
+              const trailsRes = await apiClient.get<any>("/api/v1/system-trails", {
+                params: {
+                  destinationId: destinationId || undefined,
+                  keyword: routeSnapshotName || undefined,
+                  pageSize: 10,
+                },
+              });
+              const items = trailsRes.data?.items || trailsRes.data;
+              if (Array.isArray(items) && items.length > 0) {
+                const matched = routeSnapshotName
+                  ? items.find(
+                      (t: any) =>
+                        t.name?.trim().toLowerCase() === routeSnapshotName.trim().toLowerCase() ||
+                        t.code?.trim().toLowerCase() === routeSnapshotName.trim().toLowerCase()
+                    )
+                  : null;
+                const chosen = matched || items[0];
+                sysTrailCode = chosen.code || chosen.id;
+              }
+            } catch (err) {
+              console.warn("Không thể tra cứu System Trail từ địa danh:", err);
+            }
+          }
+        }
 
         const statusMap: Record<string, { label: string; color: string }> = {
           OPEN: { label: "Đang mở đăng ký", color: "text-emerald-600" },
@@ -162,7 +201,7 @@ export default function TripDetailPage() {
         };
 
         if (!cancelled) {
-          setTrailCode(sysTrailId);
+          setTrailCode(sysTrailCode);
           setTrip({
             id: rawData.id,
             title: rawData.title,
@@ -195,7 +234,9 @@ export default function TripDetailPage() {
             closedAt: rawData.closedAt || null,
             leader: {
               name: rawData.leader?.fullName || "Leader Vina TrekGO",
-              avatar: "/images/avatars/avatar-1.png",
+              avatar:
+                rawData.leader?.avatar ||
+                "/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg",
               badge: "LEADER ĐÃ XÁC THỰC",
               experience: "Đội ngũ dẫn đoàn chuyên nghiệp Vina TrekGO",
             },
@@ -241,19 +282,24 @@ export default function TripDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
-        <span className="h-8 w-8 animate-spin rounded-full border-3 border-emerald-600 border-t-transparent" />
-        <span className="text-sm font-medium text-slate-500">Đang tải chi tiết chuyến đi...</span>
+      <div className="flex min-h-[60vh] items-center justify-center p-6 bg-[#F7F7F4]">
+        <LoadingState message="Đang tải chi tiết chuyến đi..." />
       </div>
     );
   }
 
   if (error || !trip) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center p-10 text-center">
-        <div className="text-4xl">⚠️</div>
-        <h2 className="mt-2 text-lg font-bold text-slate-800">Không tìm thấy chuyến đi</h2>
-        <p className="mt-1 text-sm text-slate-500">Chuyến đi không tồn tại hoặc chưa được công khai.</p>
+      <div className="flex min-h-[60vh] items-center justify-center p-6 bg-[#F7F7F4]">
+        <EmptyState
+          title="Không tìm thấy chuyến đi"
+          description="Chuyến đi không tồn tại, đã hoàn thành hoặc chưa được công khai."
+          action={
+            <Link href="/trips">
+              <Button variant="primary">Khám phá các chuyến đi khác</Button>
+            </Link>
+          }
+        />
       </div>
     );
   }

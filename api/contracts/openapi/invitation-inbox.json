@@ -1,0 +1,355 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/me/invitations": {
+      "get": {
+        "description": "USER/LEADER ACTIVE. Keyset order createdAt/type/id descending. storedStatus is not an action or permission: fetch the type-specific preview for current status/actions. No status filter.",
+        "operationId": "InvitationInboxController_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ALL",
+                "PUBLIC",
+                "PRIVATE"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "PUBLIC",
+                              "PRIVATE"
+                            ]
+                          },
+                          "tripId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "tripTitle": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "storedStatus": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING",
+                              "ACCEPTED",
+                              "DECLINED",
+                              "REVOKED",
+                              "EXPIRED",
+                              "INVALIDATED"
+                            ]
+                          },
+                          "previewRequired": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "tripId",
+                          "tripTitle",
+                          "createdAt",
+                          "expiresAt",
+                          "storedStatus",
+                          "previewRequired"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor",
+                    "hasMore"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shared error/meta: invalid query or cursor/filter mismatch."
+          },
+          "401": {
+            "description": "Shared error/meta: authentication required."
+          },
+          "403": {
+            "description": "Shared error/meta: actor unavailable or disallowed role."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recipient inbox combining Public and Private invitations",
+        "tags": [
+          "Invitation inbox"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo loại nghiệp vụ",
+            "schema": {
+              "enum": [
+                "PAYMENT_SUCCESS",
+                "PAYMENT_FAILED",
+                "PAYMENT_REFUND",
+                "BOOKING_CONFIRMED",
+                "BOOKING_HOLD_EXPIRED",
+                "BOOKING_CANCELLED",
+                "PRIVATE_TRIP_INVITE",
+                "PUBLIC_PARTICIPANT_INVITE",
+                "PUBLIC_PARTICIPANT_CLAIMED",
+                "PRIVATE_TRIP_MEMBER_JOINED",
+                "TRIP_UPCOMING_REMINDER",
+                "RENTAL_ORDER_CONFIRMED",
+                "RENTAL_ORDER_CANCELLED",
+                "RENTAL_READY_FOR_PICKUP",
+                "RENTAL_ORDER_REMINDER",
+                "RENTAL_ORDER_RETURNED",
+                "RENTAL_ORDER_RETURNED_LATE",
+                "RENTAL_DAMAGE_REPORTED",
+                "RENTAL_DEPOSIT_REFUNDED",
+                "TRIP_ALERT",
+                "DEVIATION_WARNING",
+                "RANK_UPGRADE",
+                "SYSTEM_ANNOUNCEMENT"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Lọc theo trạng thái đọc",
+            "schema": {
+              "enum": [
+                "UNREAD",
+                "READ",
+                "ARCHIVED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Số lượng item mỗi trang (mặc định: 10)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Số trang (mặc định: 1)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy danh sách thông báo phân trang của người dùng",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_unreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lấy số lượng thông báo chưa đọc",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "patch": {
+        "operationId": "NotificationsController_markAllAsRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đánh dấu tất cả thông báo là đã đọc",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationsController_markAsRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Đánh dấu một thông báo là đã đọc",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/archive": {
+      "patch": {
+        "operationId": "NotificationsController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lưu trữ một thông báo",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "TrekGo invitation inbox M8",
+    "description": "Local backend contract. Unified recipient inbox and existing notification endpoints. Deployment not implied. Notification response fields are documented in contracts/invitation-inbox/README.md.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {}
+  }
+}

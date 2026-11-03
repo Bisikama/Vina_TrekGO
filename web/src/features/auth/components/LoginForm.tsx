@@ -31,6 +31,15 @@ export const LoginForm = ({ onSuccess, onSwitchToRegister }: LoginFormProps) => 
     if (result) {
       if (onSuccess) {
         onSuccess();
+        return;
+      }
+      // ?next= chỉ nhận đường dẫn nội bộ (bắt đầu bằng "/", không "//") để quay lại
+      // đúng trang trước khi bị đưa tới login (ví dụ trang preview lời mời /invite/:code).
+      const next = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        window.location.href = next;
       } else {
         window.location.href = getDashboardForRole(result.user.role);
       }

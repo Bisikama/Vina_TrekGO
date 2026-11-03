@@ -3,6 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CustodyTransferStatus, EventStatus, RentalExceptionCaseStatus, RentalOrderExceptionStatus, RentalOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { tryCompleteOrder } from '../adapters/prisma-rental-return.adapter';
+import envConfig from 'src/shared/config';
+import { emitGradeShortageDeadlineAlerts } from '../../../inventory/infrastructure/grade-shortage-deadline';
 
 /** Periodic monitoring only. NEVER mutates custody/inspection/approval/refund outcomes. */
 @Injectable()
@@ -32,6 +34,14 @@ export class RentalOperationalEscalationScheduler {
     await this.emit(tx,`admin-sla:${c.id}`,c.orderId,{kind:'ADMIN_DEDUCTION_SLA_BREACHED',caseId:c.id,approvalDueAt:c.adminApprovalDueAt?.toISOString()});
     this.log.warn(`Admin deduction review SLA breached: ${c.id}`);
    });
+  }
+
+  // Đơn vẫn thiếu hàng do hạ hạng và sắp tới giờ nhận đồ: nhắc ADMIN/STAFF_INVENTORY qua outbox (khách chưa được báo).
+  try {
+    const alerted = await emitGradeShortageDeadlineAlerts(this.db, { now, alertHours: envConfig.GRADE_SHORTAGE_ALERT_HOURS });
+    if (alerted.length) this.log.warn(`Grade shortage near handover: ${alerted.length} order(s)`);
+  } catch (err) {
+    this.log.warn(`Grade shortage deadline sweep deferred: ${(err as Error).message}`);
   }
 
   // Phase 09 Order Closure Sweep: Reconciles candidate orders stuck in RETURN_PROCESSING / RETURN_PENDING

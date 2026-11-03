@@ -68,6 +68,25 @@ export function TripPricingManager({
     fetchPricingConfig();
   }, [fetchPricingConfig]);
 
+  // Đồng bộ currentTripVersion khi prop tripVersion từ trang cha tăng lên (VD: sau khi lưu mô tả)
+  useEffect(() => {
+    if (tripVersion && tripVersion > currentTripVersion) {
+      setCurrentTripVersion(tripVersion);
+    }
+  }, [tripVersion, currentTripVersion]);
+
+  // Đồng bộ targetPax & selectedMinPax khi capacity/minPax của chuyến đi thay đổi
+  useEffect(() => {
+    const safeCap = Math.max(1, capacity);
+    setTargetPax((prev) => {
+      if (prev > safeCap || prev === 15) {
+        return Math.min(15, safeCap);
+      }
+      return Math.max(1, Math.min(prev, safeCap));
+    });
+    setSelectedMinPax((prev) => Math.max(1, Math.min(minPax || prev, safeCap)));
+  }, [capacity, minPax]);
+
   // 2. Nạp Bảng chi phí & mô phỏng hiện có nếu có tripId
   useEffect(() => {
     if (!tripId) return;
@@ -83,19 +102,35 @@ export function TripPricingManager({
         setCurrentTripVersion(res.tripVersion);
         setCostPlanStatus(res.costPlanStatus);
 
+        const effectiveCap = Math.max(1, res.tripContext?.maxPax || capacity);
+        const effectiveMin = Math.max(
+          1,
+          Math.min(effectiveCap, res.tripContext?.minPax || minPax)
+        );
+
         if (res.plan && res.plan.items.length > 0) {
           setItems(res.plan.items);
-          setTargetPax(res.plan.targetPax || Math.min(15, capacity));
+          setTargetPax(
+            Math.min(effectiveCap, Math.max(1, res.plan.targetPax || effectiveCap))
+          );
           setTargetMarginPercent(Math.round((res.plan.targetMarginBps || 1200) / 100));
           setContingencyPercent(Math.round((res.plan.contingencyBps || 500) / 100));
           if (res.plan.selectedPrice) {
             setSelectedPrice(res.plan.selectedPrice);
           }
           if (res.plan.selectedMinPax) {
-            setSelectedMinPax(res.plan.selectedMinPax);
+            setSelectedMinPax(
+              Math.min(effectiveCap, Math.max(1, res.plan.selectedMinPax))
+            );
+          } else {
+            setSelectedMinPax(effectiveMin);
           }
-        } else if (res.tripContext.pricePerPax) {
-          setSelectedPrice(res.tripContext.pricePerPax);
+        } else {
+          setTargetPax(Math.min(15, effectiveCap));
+          setSelectedMinPax(effectiveMin);
+          if (res.tripContext?.pricePerPax) {
+            setSelectedPrice(res.tripContext.pricePerPax);
+          }
         }
 
         if (res.evaluation) {
@@ -106,7 +141,7 @@ export function TripPricingManager({
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          console.error("Lỗi tải cost-plan:", err);
+          console.warn("Lỗi tải cost-plan:", err);
           setError(getLeaderTripErrorMessage(err, "Không thể tải bảng chi phí"));
         }
       } finally {
@@ -118,7 +153,7 @@ export function TripPricingManager({
     return () => {
       cancelled = true;
     };
-  }, [tripId, capacity]);
+  }, [tripId, capacity, minPax]);
 
   // 3. Hàm kích hoạt Preview (chạy Simulator)
   const triggerPreview = useCallback(
@@ -142,7 +177,7 @@ export function TripPricingManager({
           items: customItems,
         });
         setEvaluation(result);
-        setCurrentTripVersion(result.tripVersion);
+        setCurrentTripVersion((prev) => Math.max(prev, result.tripVersion));
         setError(null);
       } catch (err: unknown) {
         console.warn("Lỗi preview pricing:", err);
@@ -209,20 +244,46 @@ export function TripPricingManager({
       return;
     }
 
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
     setIsConfirming(true);
     setError(null);
 
     try {
-      // Bước A: Lưu Cost Plan xuống DB
-      const saveRes = await saveTripCostPlan(tripId, {
-        expectedVersion: currentTripVersion,
+      const savePayloadBase = {
         targetPax,
         targetMarginBps: Math.round(targetMarginPercent * 100),
         contingencyBps: Math.round(contingencyPercent * 100),
         selectedPrice,
         selectedMinPax,
         items,
-      });
+      };
+
+      // Bước A: Lưu Cost Plan xuống DB (tự động đồng bộ lại version nếu bị lệch 409)
+      let saveRes: { tripId: string; tripVersion: number; costPlanStatus: string };
+      try {
+        saveRes = await saveTripCostPlan(tripId, {
+          expectedVersion: currentTripVersion,
+          ...savePayloadBase,
+        });
+      } catch (firstErr: unknown) {
+        const status = (firstErr as { response?: { status?: number } })?.response?.status;
+        if (status === 409) {
+          const latest = await getTripCostPlan(tripId);
+          setCurrentTripVersion(latest.tripVersion);
+          saveRes = await saveTripCostPlan(tripId, {
+            expectedVersion: latest.tripVersion,
+            ...savePayloadBase,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
+
+      // Cập nhật ngay currentTripVersion sau Bước A để nếu Bước B báo lỗi (VD: lỗ vốn), version không bị lệch
+      setCurrentTripVersion(saveRes.tripVersion);
 
       // Bước B: Gọi Confirm Pricing để chốt giá vé vào Trip
       const confirmRes = await confirmTripPricing(tripId, {
@@ -251,7 +312,7 @@ export function TripPricingManager({
         costPlanStatus: "CONFIRMED",
       });
     } catch (err: unknown) {
-      console.error("Lỗi khi chốt bảng giá:", err);
+      console.warn("Lỗi khi chốt bảng giá:", err);
       setError(getLeaderTripErrorMessage(err, "Không thể chốt mức giá vé này. Vui lòng thử lại."));
     } finally {
       setIsConfirming(false);

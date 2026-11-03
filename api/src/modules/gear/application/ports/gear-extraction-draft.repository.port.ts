@@ -20,7 +20,7 @@ export interface ConfirmDraftResult {
 }
 
 export interface GearExtractionDraftRepositoryPort {
-  createDraft(input: CreateDraftInput): Promise<GearExtractionDraftDomain>;
+  createDraft(input: CreateDraftInput, client?: unknown): Promise<GearExtractionDraftDomain>;
   findByIdAndUser(id: string, userId: string): Promise<GearExtractionDraftDomain | null>;
   updateExtractedData(
     id: string,

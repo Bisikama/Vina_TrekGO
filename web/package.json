@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack -p 5000",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start -p 5000",
     "lint": "eslint",
     "download:dem": "node scripts/download-dem.mjs"
   },

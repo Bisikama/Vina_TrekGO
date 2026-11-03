@@ -24,7 +24,7 @@ import { rentalMembershipValid } from '../src/modules/rental/payments/rental-mem
 describe('CF04 Swagger and HTTP inputs without external services', () => {
   let app: INestApplication
   const actor = { id: randomUUID(), role: 'USER', status: 'ACTIVE' }
-  const code = 'a'.repeat(43),
+  const code = 'A1B2C3',
     tripId = randomUUID(),
     memberId = randomUUID()
   const port = {
@@ -85,7 +85,7 @@ describe('CF04 Swagger and HTTP inputs without external services', () => {
         if (path.endsWith('/{code}') && method === 'get') expect(op.security ?? []).toEqual([])
         else expect(op.security).toContainEqual({ bearer: [] })
         for (const match of path.matchAll(/\{(\w+)\}/g)) {
-          const schema = match[1] === 'code' ? { pattern: '^[A-Za-z0-9_-]{32,120}$' } : { format: 'uuid' }
+          const schema = match[1] === 'code' ? { pattern: '^[A-Z0-9]{6}$' } : { format: 'uuid' }
           expect(op.parameters).toEqual(
             expect.arrayContaining([
               expect.objectContaining({
@@ -132,6 +132,7 @@ describe('CF04 Swagger and HTTP inputs without external services', () => {
     const bad = await request(app.getHttpServer()).post(path).send({ userId: actor.id }).expect(400)
     expect(bad.body.error.code).toBe('VALIDATION_ERROR')
     await request(app.getHttpServer()).get('/api/v1/private-trip-invitations/short').expect(400)
+    await request(app.getHttpServer()).get('/api/v1/private-trip-invitations/a1b2c3').expect(400)
     await request(app.getHttpServer())
       .get(`/api/v1/private-trip-invitations/${code}`)
       .expect(200)
@@ -180,7 +181,6 @@ if (url) {
     return (await hostApi.invite(host, trip.id, current.version)) as {
       inviteCode: string
       tripVersion: number
-      inviteUrl: string
     }
   }
   const join = (u = guest, c = code) =>
@@ -395,7 +395,7 @@ if (url) {
   it('validates expiry and revoke with shared 400/404/409/410 contract', async () => {
     await request(app.getHttpServer()).get('/api/v1/private-trip-invitations/bad').expect(400)
     await request(app.getHttpServer())
-      .get(`/api/v1/private-trip-invitations/${'z'.repeat(43)}`)
+      .get(`/api/v1/private-trip-invitations/${'Z'.repeat(6)}`)
       .expect(404)
     await db.privateTripInvite.update({ where: { code }, data: { expiresAt: new Date(Date.now() - 1000) } })
     const expired = await request(app.getHttpServer()).get(`/api/v1/private-trip-invitations/${code}`).expect(410)

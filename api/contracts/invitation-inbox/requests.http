@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:3000/api/v1
+@token = REPLACE_WITH_BEARER_TOKEN
+@cursor = REPLACE_WITH_RESPONSE_NEXT_CURSOR
+@notificationId = REPLACE_WITH_NOTIFICATION_ID
+
+### First page (USER/LEADER ACTIVE)
+GET {{baseUrl}}/me/invitations?type=ALL&limit=20
+Authorization: Bearer {{token}}
+
+### Same filter/limit/account required
+GET {{baseUrl}}/me/invitations?type=ALL&limit=20&cursor={{cursor}}
+Authorization: Bearer {{token}}
+
+### Existing notification list and badge
+GET {{baseUrl}}/notifications?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+###
+GET {{baseUrl}}/notifications/unread-count
+Authorization: Bearer {{token}}
+
+###
+PATCH {{baseUrl}}/notifications/{{notificationId}}/read
+Authorization: Bearer {{token}}
+
+###
+PATCH {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{token}}
+
+###
+PATCH {{baseUrl}}/notifications/{{notificationId}}/archive
+Authorization: Bearer {{token}}

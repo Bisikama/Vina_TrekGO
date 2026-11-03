@@ -1,3 +1,4 @@
+import { CancellationDeliveryService } from './services/cancellation-delivery.service'
 import { Global, Module } from '@nestjs/common'
 import { PrismaService } from './services/prisma.service'
 import { SupabaseService } from './services/supabase.service'
@@ -12,6 +13,7 @@ import { RedisService } from './redis/redis.service'
 @Global()
 @Module({
   providers: [
+    CancellationDeliveryService,
     PrismaService,
     SupabaseService,
     RedisService,
@@ -26,6 +28,6 @@ import { RedisService } from './redis/redis.service'
       useClass: RolesGuard,
     },
   ],
-  exports: [PrismaService, SupabaseService, RedisService],
+  exports: [CancellationDeliveryService, PrismaService, SupabaseService, RedisService],
 })
 export class SharedModule {}

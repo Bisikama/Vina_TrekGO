@@ -12,9 +12,9 @@ export function paymentFailure(error: unknown) {
     stack:
       error instanceof Error
         ? error.stack
-            ?.split('\n')
-            .filter((line) => /^\s+at /.test(line))
-            .join('\n')
+          ?.split('\n')
+          .filter((line) => /^\s+at /.test(line))
+          .join('\n')
         : undefined,
   }
 }
@@ -44,7 +44,7 @@ export async function paymentTransaction<T>(
         stage('commit')
         return value
       },
-      { timeout: 10_000 },
+      { timeout: 30_000 },
     )
     stage('done')
     const entry = { operation, ...context, elapsedMs: Math.round(performance.now() - started), stages }

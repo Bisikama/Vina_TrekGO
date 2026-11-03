@@ -1,0 +1,430 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="in_trip_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "error": "#ba1a1a", "surface-container": "#e6eeff", "inverse-primary": "#96d4b2", "surface-container-high": "#dee9fc", "on-error": "#ffffff", "surface-container-highest": "#d9e3f6", "tertiary-container": "#006c61", "outline-variant": "#c0c9c1", "primary-container": "#2f6b4f", "on-secondary": "#ffffff", "on-secondary-fixed": "#3c0700", "background": "#f8f9ff", "outline": "#707972", "on-primary-fixed": "#002113", "on-secondary-fixed-variant": "#83260e", "on-error-container": "#93000a", "tertiary-fixed-dim": "#6fd8c8", "inverse-surface": "#27313f", "surface-dim": "#d0dbed", "on-tertiary-fixed-variant": "#005048", "secondary-fixed-dim": "#ffb4a2", "surface": "#f8f9ff", "on-surface": "#121c2a", "surface-bright": "#f8f9ff", "on-primary": "#ffffff", "surface-container-lowest": "#ffffff", "on-tertiary-container": "#84eddd", "primary": "#125238", "on-surface-variant": "#404943", "on-tertiary-fixed": "#00201c", "inverse-on-surface": "#eaf1ff", "on-tertiary": "#ffffff", "tertiary-fixed": "#8cf5e4", "secondary-fixed": "#ffdad2", "secondary": "#a33d23", "primary-fixed": "#b1f0cd", "primary-fixed-dim": "#96d4b2", "error-container": "#ffdad6", "on-background": "#121c2a", "surface-tint": "#2d694d", "surface-container-low": "#eff4ff", "secondary-container": "#ff8162", "on-primary-fixed-variant": "#105137", "on-secondary-container": "#731a04", "tertiary": "#005249", "on-primary-container": "#aae9c6", "surface-variant": "#d9e3f6" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "space-xl": "1.5rem", "space-sm": "0.5rem", "space-lg": "1rem", "margin": "1rem", "space-md": "0.75rem", "gutter": "0.75rem", "space-xs": "0.25rem" }, fontFamily: { "body-md": ["Inter"], "body-lg": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"], "headline-xl": ["Inter"], "label-lg": ["Inter"], "body-sm": ["Inter"], "label-sm": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"] }, fontSize: { "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "500" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.06em", "fontWeight": "700" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-16 px-space-md flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><button aria-label="Quay lại" class="w-12 h-12 flex items-center justify-center rounded-xl bg-surface-container-low text-on-surface hover:bg-surface-container active:scale-95 transition-all" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Brand logo. - Primary color: #2f6b4f
+- Font: inter
+- Mode: light
+- Roundness: rounded-sm
+" class="h-7 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1WwM_OOpy3-vnmouAjzzwHjSR5G7secqjdE0ckPZPsmeNzt1Qv1WlHI_vQR3skLLjX6HNbaDdcG_JHaG7qiLvdtaYXEegFpMpzWpGmmiOCF6R5biAIjl_lp61PzYfgyouv92xRvbkCij5W47fLrm55k_w9JjQ0VN1uwzSfnxMjeoAOtVEdkFIUEZg1dllLUZff1NAE0P1c6d16Z6r8SVQoczZeC_oWfrAiuQ7jsmkiEykeCFFam7DTOTg"><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Xác Thực Điểm Danh Checkpoint</h1><span class="font-label-sm text-label-sm text-tertiary flex items-center gap-1 font-mono"><span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>21°34'N 103°36'E</span></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><button aria-label="Báo cáo tọa độ khẩn cấp" class="min-h-[44px] px-space-sm rounded-xl bg-error-container text-on-error-container font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all"><span class="material-symbols-outlined text-[20px] text-error">near_me</span><span class="hidden sm:inline uppercase tracking-wider font-bold">SOS GPS</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-12">
+<div class="px-margin pt-space-md flex flex-col gap-space-md">
+<!-- Stepper & Top Progress Card -->
+<div class="bg-surface-container-low rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-primary text-on-primary font-label-sm text-label-sm uppercase tracking-wider">Trạm Kiểm Soát</span>
+<span class="font-label-md text-label-md text-primary font-bold">CP03</span>
+</div>
+<div class="flex items-center gap-1.5 bg-surface-container px-2.5 py-1 rounded-full text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-tertiary">flag</span>
+<span class="font-label-md text-label-md">Tiến độ: <strong class="text-primary font-bold">3/6 điểm</strong></span>
+</div>
+</div>
+<div class="flex flex-col gap-1.5 mt-1">
+<div class="flex justify-between items-baseline">
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">Đồi Cỏ Lộng Gió</h2>
+<span class="font-label-sm text-label-sm text-outline font-mono">VFRS-REF: 103.6°E</span>
+</div>
+<!-- Segmented progress bar (3 of 6 completed) -->
+<div class="grid grid-cols-6 gap-1 w-full pt-1">
+<div class="h-1.5 rounded-full bg-primary"></div>
+<div class="h-1.5 rounded-full bg-primary"></div>
+<div class="h-1.5 rounded-full bg-primary animate-pulse"></div>
+<div class="h-1.5 rounded-full bg-surface-container-highest"></div>
+<div class="h-1.5 rounded-full bg-surface-container-highest"></div>
+<div class="h-1.5 rounded-full bg-surface-container-highest"></div>
+</div>
+</div>
+</div>
+<!-- Live Field Benchmark Photo with GPS Visual HUD -->
+<div class="relative w-full rounded-xl overflow-hidden shadow-md bg-surface-container-highest aspect-[4/3]">
+<img class="w-full h-full object-cover" data-alt="A tactical close up of a weathered wooden trail marker post with a laser engraved metallic VFRS badge standing atop a vast windswept highland grass hill in Vietnam, dramatic cloudy mountain backdrop, golden alpine sunlight, ultra crisp details" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBB5I_V5B3o87Qu9T4GUSzSDBaFjteqQID2oLyu2xjHOHGeVXgosEY6azS6E-Avng7HyuHq8DR4au6Eq40BgGVOiw3prbqIHk81iNR31Lml5-UxdjzwGTf6AQbpUKIzZ5m2jI5anOM0ebZu5PpOupTCgKi_7iYHQuFISyLLwzNoNKyeOOBv1gaveHsZhvIllBUeCkpOTVFFSEr8NYk5XzvMal5gsEfimftR2-8UAdFeBEuDR8kTjA8n">
+<!-- Overlay Tactical Telemetry Chips -->
+<div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/85 via-inverse-surface/20 to-transparent p-space-md flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface/90 backdrop-blur-md text-on-surface font-label-sm text-label-sm shadow-sm font-mono">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+            RADAR GPS KHÓA VỊ TRÍ
+          </span>
+<span class="px-2 py-1 rounded-lg bg-inverse-surface/80 text-inverse-on-surface font-label-sm text-label-sm font-mono">
+            H: 1,480m
+          </span>
+</div>
+<div class="flex flex-col gap-1 text-on-primary">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-tertiary-fixed">verified</span>
+<span class="font-label-md text-label-md font-bold tracking-wide uppercase">Cột Mốc Thực Địa Chuẩn VFRS</span>
+</div>
+<p class="font-body-sm text-body-sm text-surface-container-highest">Cột mốc gỗ gắn phiến đồng định danh tọa độ tại tâm Đồi Cỏ.</p>
+</div>
+</div>
+</div>
+<!-- Active GPS Validation State Banner (Primary State) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md" id="validationStatusCard">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-on-primary-fixed flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">satellite_alt</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Hợp Lệ Định Vị</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">12 m tới tâm mốc</h3>
+</div>
+</div>
+<span class="px-2.5 py-1 rounded bg-primary-fixed-dim text-on-primary-fixed font-label-sm text-label-sm font-bold uppercase">
+          Trong Bán Kính
+        </span>
+</div>
+<!-- Distance Gauge & Metrics Grid -->
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-md rounded-xl">
+<div class="flex justify-between items-center font-label-sm text-label-sm">
+<span class="text-on-surface-variant font-medium">Khoảng cách hiện tại</span>
+<span class="text-primary font-bold font-mono">12m / Tối đa 50m</span>
+</div>
+<!-- Metric Gauge bar -->
+<div class="w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden flex">
+<div class="bg-primary h-full rounded-full transition-all duration-700" style="width: 24%"></div>
+</div>
+<div class="flex justify-between items-center text-outline font-label-sm text-label-sm pt-0.5">
+<span>0m (Tâm mốc)</span>
+<span class="font-bold text-on-surface-variant">Ngưỡng quét 50m</span>
+</div>
+</div>
+<!-- 3 Precision Metric Tiles -->
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-outline uppercase">Sai số GPS</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-sm text-headline-sm text-tertiary font-bold font-mono">±3.5</span>
+<span class="font-label-sm text-label-sm text-tertiary">m</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary font-medium">Tín hiệu cực tốt</span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-outline uppercase">Bán kính chuẩn</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold font-mono">≤ 50</span>
+<span class="font-label-sm text-label-sm text-outline">m</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-medium">Đạt điều kiện</span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm text-outline uppercase">Chạm mốc lúc</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold font-mono">14:32</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline font-medium">Ngày thứ 2</span>
+</div>
+</div>
+</div>
+<!-- Auxiliary Validation States Visual Explorer (Mini Interactive Demo) -->
+<div class="bg-surface-container-low rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-tertiary">tune</span>
+          Mô Phỏng Trạng Thái Thực Địa
+        </span>
+<span class="font-label-sm text-label-sm text-outline">Nhấp để xem</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<button class="p-2 rounded-xl text-left bg-surface-container-lowest shadow-sm flex flex-col gap-1 active:scale-95 transition-transform" id="btnStateValid" onclick="switchState('in_range')" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Trong bán kính</span>
+<span class="font-label-sm text-label-sm text-primary">12m (Mặc định)</span>
+</button>
+<button class="p-2 rounded-xl text-left bg-surface-container-high flex flex-col gap-1 active:scale-95 transition-transform opacity-70" id="btnStateFar" onclick="switchState('out_range')" type="button">
+<span class="material-symbols-outlined text-[18px] text-error">cancel</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Quá xa mốc</span>
+<span class="font-label-sm text-label-sm text-error">&gt;50m (Khóa)</span>
+</button>
+<button class="p-2 rounded-xl text-left bg-surface-container-high flex flex-col gap-1 active:scale-95 transition-transform opacity-70" id="btnStateComputing" onclick="switchState('computing')" type="button">
+<span class="material-symbols-outlined text-[18px] text-tertiary animate-spin">sync</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Đang tính toán</span>
+<span class="font-label-sm text-label-sm text-tertiary">Chờ vệ tinh...</span>
+</button>
+</div>
+</div>
+<!-- Safety Warning Card -->
+<div class="rounded-xl p-space-md bg-secondary-fixed text-on-secondary-fixed flex items-start gap-space-sm shadow-sm">
+<div class="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center text-on-secondary flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">air</span>
+</div>
+<div class="flex flex-col gap-1 min-w-0">
+<h4 class="font-label-lg text-label-lg font-bold text-on-secondary-fixed">Chỉ dẫn an toàn tại CP03</h4>
+<p class="font-body-md text-body-md text-on-secondary-fixed-variant leading-relaxed">
+          Khu vực đón gió mạnh, không dựng lều sát mép dốc. Bổ sung nước và kiểm tra khớp gối trước khi đổ dốc Thác Yavly.
+        </p>
+</div>
+</div>
+<!-- Optional Field Proof Section -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-primary">add_a_photo</span>
+<span class="font-label-lg text-label-lg font-bold text-on-surface">Bằng chứng thực địa</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Tùy chọn</span>
+</div>
+<!-- Photo attachment card -->
+<div class="flex items-center gap-space-md p-space-sm rounded-xl bg-surface-container-low">
+<div class="w-20 h-20 rounded-xl overflow-hidden relative flex-shrink-0 bg-surface-container-highest">
+<img class="w-full h-full object-cover" data-alt="A joyful selfie group photo of three Vietnamese trekkers in tactical outdoor backpacks and hats smiling cheerfully beside a wooden trail benchmark CP03 under an open mountain sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBfzdIj7xMSLpjoM94a1bZm07e5_-q5UKHbBRSUTbShZMEhYf81nDkeN4bJi95E5O6LUw-GG2YIDIR2qC5B5YyYRId1D-jnlvggE2v2QNd00dEBQMA1KS1KDWoynQJDyBQtHZBMmemuGZlnteKgyypOqr-lLpJImm0uC_U1wz9odBU8DFExeBoApS-IlrgCRRApAqz_2LOQIyLWZKrGcZrxPblpy0cVgkRY-crmm879xeI5t3RcDUD">
+<div class="absolute bottom-1 right-1 bg-inverse-surface/80 rounded px-1 py-0.5 text-inverse-on-surface font-label-sm text-[9px] font-mono">14:30</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0">
+<div>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-label-sm text-label-sm font-bold">Đã đính kèm ảnh đoàn</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5">IMG_TREK_CP03_TEAM.JPG</p>
+</div>
+<button class="mt-2 inline-flex items-center gap-1 text-secondary font-label-md text-label-md font-bold self-start active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[16px]">photo_camera</span>
+            Chụp lại
+          </button>
+</div>
+</div>
+<!-- Field notes input -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between" for="fieldNotes">
+<span>Ghi chú ngắn hiện trường</span>
+<span class="text-outline font-normal font-label-sm text-label-sm">Tự động gắn thẻ GPS</span>
+</label>
+<div class="relative">
+<input class="w-full min-h-[48px] px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-0 placeholder:text-outline" id="fieldNotes" placeholder="Nhập ghi chú hiện trường..." type="text" value="Đồi cỏ khô ráo, gió nhẹ, toàn đội sức khỏe ổn định">
+<span class="material-symbols-outlined absolute right-3 top-3 text-[20px] text-outline">edit_note</span>
+</div>
+</div>
+</div>
+<!-- Success Confirmation Box (Hidden initially, shown upon validation click) -->
+<div class="hidden rounded-xl p-space-md bg-primary-fixed text-on-primary-fixed shadow-md animate-fade-in flex flex-col gap-space-sm relative overflow-hidden" id="successStampCard">
+<!-- Watermark Background Stamp -->
+<div class="absolute -right-6 -bottom-6 w-32 h-32 rounded-full border-4 border-dashed border-primary/20 flex items-center justify-center pointer-events-none transform rotate-12">
+<span class="font-mono font-black text-primary/20 text-[18px] uppercase tracking-widest text-center">VFRS<br>OFFICIAL</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[28px]">verified_user</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-primary-fixed-variant font-bold">Chứng Nhận Điện Tử VFRS</span>
+<h3 class="font-headline-sm text-headline-sm font-bold text-on-primary-fixed">ĐÃ XÁC NHẬN CP03 LÚC 14:32</h3>
+</div>
+</div>
+<div class="bg-surface-container-lowest/80 backdrop-blur-sm rounded-xl p-3 flex items-center justify-between font-mono font-label-sm text-label-sm text-on-surface">
+<div class="flex flex-col">
+<span class="text-outline">MÃ XÁC THỰC</span>
+<span class="font-bold text-primary">VFRS-VN-8842-CP03</span>
+</div>
+<div class="flex flex-col text-right">
+<span class="text-outline">ĐỘ CHÍNH XÁC</span>
+<span class="font-bold text-primary">12m (±3.5m)</span>
+</div>
+</div>
+</div>
+<!-- Main Verification Action Trigger Button -->
+<div class="pt-2 flex flex-col gap-space-sm">
+<button class="w-full min-h-[54px] px-space-lg rounded-xl bg-primary text-on-primary font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all" id="mainVerifyBtn" onclick="confirmCheckpoint()" type="button">
+<span class="material-symbols-outlined text-[22px]">where_to_vote</span>
+<span id="mainVerifyText">Xác nhận Checkpoint CP03</span>
+</button>
+<p class="font-label-sm text-label-sm text-center text-outline" id="mainBtnHelp">
+        * Nút chỉ kích hoạt khi thiết bị nằm trọn trong bán kính định vị an toàn (≤ 50m).
+      </p>
+</div>
+<!-- Trail Checkpoint Navigation Rail -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm mt-space-sm">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-bold">Điều Hướng Tuyến Mốc</span>
+<div class="grid grid-cols-2 gap-2">
+<button class="min-h-[48px] px-3 rounded-xl bg-surface-container-low text-on-surface flex items-center gap-2 active:scale-95 transition-transform text-left" type="button">
+<span class="material-symbols-outlined text-[20px] text-tertiary">chevron_left</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-outline">Trạm trước</span>
+<span class="font-label-md text-label-md font-bold truncate">CP02 Suối Đá</span>
+</div>
+</button>
+<button class="min-h-[48px] px-3 rounded-xl bg-surface-container-low text-on-surface flex items-center justify-between gap-2 active:scale-95 transition-transform text-right" type="button">
+<div class="flex flex-col min-w-0 flex-1">
+<span class="font-label-sm text-label-sm text-outline">Trạm tiếp theo</span>
+<span class="font-label-md text-label-md font-bold truncate">CP04 Cây Độc Mộc</span>
+</div>
+<span class="material-symbols-outlined text-[20px] text-primary">chevron_right</span>
+</button>
+</div>
+<button class="w-full min-h-[48px] rounded-xl bg-surface-container text-on-surface font-label-md text-label-md font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform" onclick="history.back()" type="button">
+<span class="material-symbols-outlined text-[20px]">map</span>
+        Quay lại Bản đồ hành trình
+      </button>
+</div>
+</div>
+</div>
+<script>
+  let currentState = 'in_range';
+  let isVerified = false;
+
+  function switchState(state) {
+    currentState = state;
+    const btnValid = document.getElementById('btnStateValid');
+    const btnFar = document.getElementById('btnStateFar');
+    const btnComputing = document.getElementById('btnStateComputing');
+    const verifyBtn = document.getElementById('mainVerifyBtn');
+    const verifyText = document.getElementById('mainVerifyText');
+    const helpText = document.getElementById('mainBtnHelp');
+    const statusCard = document.getElementById('validationStatusCard');
+
+    // Reset simulator button opacities
+    [btnValid, btnFar, btnComputing].forEach(el => {
+      el.classList.add('opacity-70', 'bg-surface-container-high');
+      el.classList.remove('bg-surface-container-lowest', 'shadow-sm');
+    });
+
+    if (state === 'in_range') {
+      btnValid.classList.remove('opacity-70', 'bg-surface-container-high');
+      btnValid.classList.add('bg-surface-container-lowest', 'shadow-sm');
+
+      verifyBtn.disabled = false;
+      verifyBtn.className = "w-full min-h-[54px] px-space-lg rounded-xl bg-primary text-on-primary font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all cursor-pointer";
+      verifyText.innerText = "Xác nhận Checkpoint CP03";
+      helpText.innerText = "* Thiết bị nằm trọn trong vùng định vị an toàn (12m / ≤ 50m). Sẵn sàng ghi nhận.";
+      helpText.className = "font-label-sm text-label-sm text-center text-primary font-medium";
+
+      statusCard.innerHTML = `
+        <div class="flex items-start justify-between gap-space-sm">
+          <div class="flex items-center gap-space-sm">
+            <div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-on-primary-fixed flex-shrink-0 shadow-sm">
+              <span class="material-symbols-outlined text-[24px]">satellite_alt</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-primary"></span>
+                <span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Hợp Lệ Định Vị</span>
+              </div>
+              <h3 class="font-headline-sm text-headline-sm text-on-surface">12 m tới tâm mốc</h3>
+            </div>
+          </div>
+          <span class="px-2.5 py-1 rounded bg-primary-fixed-dim text-on-primary-fixed font-label-sm text-label-sm font-bold uppercase">
+            Trong Bán Kính
+          </span>
+        </div>
+        <div class="flex flex-col gap-space-xs bg-surface-container-low p-space-md rounded-xl">
+          <div class="flex justify-between items-center font-label-sm text-label-sm">
+            <span class="text-on-surface-variant font-medium">Khoảng cách hiện tại</span>
+            <span class="text-primary font-bold font-mono">12m / Tối đa 50m</span>
+          </div>
+          <div class="w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden flex">
+            <div class="bg-primary h-full rounded-full transition-all duration-700" style="width: 24%"></div>
+          </div>
+          <div class="flex justify-between items-center text-outline font-label-sm text-label-sm pt-0.5">
+            <span>0m (Tâm mốc)</span>
+            <span class="font-bold text-on-surface-variant">Ngưỡng quét 50m</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+            <span class="font-label-sm text-label-sm text-outline uppercase">Sai số GPS</span>
+            <div class="flex items-baseline gap-1">
+              <span class="font-headline-sm text-headline-sm text-tertiary font-bold font-mono">±3.5</span>
+              <span class="font-label-sm text-label-sm text-tertiary">m</span>
+            </div>
+            <span class="font-label-sm text-label-sm text-tertiary font-medium">Tín hiệu cực tốt</span>
+          </div>
+          <div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+            <span class="font-label-sm text-label-sm text-outline uppercase">Bán kính chuẩn</span>
+            <div class="flex items-baseline gap-1">
+              <span class="font-headline-sm text-headline-sm text-on-surface font-bold font-mono">≤ 50</span>
+              <span class="font-label-sm text-label-sm text-outline">m</span>
+            </div>
+            <span class="font-label-sm text-label-sm text-primary font-medium">Đạt điều kiện</span>
+          </div>
+          <div class="bg-surface-container-low rounded-xl p-2.5 flex flex-col gap-0.5">
+            <span class="font-label-sm text-label-sm text-outline uppercase">Chạm mốc lúc</span>
+            <div class="flex items-baseline gap-1">
+              <span class="font-headline-sm text-headline-sm text-on-surface font-bold font-mono">14:32</span>
+            </div>
+            <span class="font-label-sm text-label-sm text-outline font-medium">Ngày thứ 2</span>
+          </div>
+        </div>
+      `;
+    } else if (state === 'out_range') {
+      btnFar.classList.remove('opacity-70', 'bg-surface-container-high');
+      btnFar.classList.add('bg-surface-container-lowest', 'shadow-sm');
+
+      verifyBtn.disabled = true;
+      verifyBtn.className = "w-full min-h-[54px] px-space-lg rounded-xl bg-surface-container-highest text-outline font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed opacity-80";
+      verifyText.innerText = "Bị khóa: Quá xa mốc (>50m)";
+      helpText.innerText = "⚠️ Bạn đang cách tâm mốc 78m. Vui lòng di chuyển lại gần điểm mốc để xác thực.";
+      helpText.className = "font-label-sm text-label-sm text-center text-error font-medium";
+
+      statusCard.innerHTML = `
+        <div class="flex items-start justify-between gap-space-sm">
+          <div class="flex items-center gap-space-sm">
+            <div class="w-10 h-10 rounded-xl bg-error-container flex items-center justify-center text-on-error-container flex-shrink-0 shadow-sm">
+              <span class="material-symbols-outlined text-[24px]">wrong_location</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-error"></span>
+                <span class="font-label-sm text-label-sm text-error font-bold uppercase tracking-wider">Ngoài Bán Kính</span>
+              </div>
+              <h3 class="font-headline-sm text-headline-sm text-on-surface">78 m tới tâm mốc</h3>
+            </div>
+          </div>
+          <span class="px-2.5 py-1 rounded bg-error-container text-on-error-container font-label-sm text-label-sm font-bold uppercase">
+            Quá Xa (+28m)
+          </span>
+        </div>
+        <div class="flex flex-col gap-space-xs bg-surface-container-low p-space-md rounded-xl">
+          <div class="flex justify-between items-center font-label-sm text-label-sm">
+            <span class="text-error font-medium">Vượt ngưỡng cho phép</span>
+            <span class="text-error font-bold font-mono">78m / Tối đa 50m</span>
+          </div>
+          <div class="w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden flex">
+            <div class="bg-error h-full rounded-full transition-all duration-700" style="width: 100%"></div>
+          </div>
+        </div>
+      `;
+    } else if (state === 'computing') {
+      btnComputing.classList.remove('opacity-70', 'bg-surface-container-high');
+      btnComputing.classList.add('bg-surface-container-lowest', 'shadow-sm');
+
+      verifyBtn.disabled = true;
+      verifyBtn.className = "w-full min-h-[54px] px-space-lg rounded-xl bg-tertiary-container text-on-tertiary-container font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-2 cursor-wait";
+      verifyText.innerText = "Đang đồng bộ vệ tinh GPS...";
+      helpText.innerText = "Đang quét tín hiệu 8 vệ tinh GNSS/GLONASS. Giữ thiết bị ngửa lên trời.";
+      helpText.className = "font-label-sm text-label-sm text-center text-tertiary font-medium";
+
+      statusCard.innerHTML = `
+        <div class="flex items-center gap-space-sm p-space-sm">
+          <span class="material-symbols-outlined text-[32px] text-tertiary animate-spin">refresh</span>
+          <div class="flex flex-col">
+            <span class="font-headline-sm text-headline-sm text-on-surface">Đang tính toán tọa độ...</span>
+            <span class="font-body-sm text-body-sm text-outline">Chờ khử sai số phản xạ vách núi (DOP: 1.2)</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function confirmCheckpoint() {
+    if (currentState !== 'in_range') return;
+    isVerified = true;
+    const stamp = document.getElementById('successStampCard');
+    const mainBtn = document.getElementById('mainVerifyBtn');
+    const mainText = document.getElementById('mainVerifyText');
+    const helpText = document.getElementById('mainBtnHelp');
+
+    stamp.classList.remove('hidden');
+    stamp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    mainBtn.className = "w-full min-h-[54px] px-space-lg rounded-xl bg-surface-container-highest text-primary font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-2 shadow-inner cursor-default";
+    mainText.innerHTML = `<span class="material-symbols-outlined text-primary text-[22px]">task_alt</span> ĐÃ LƯU & XÁC THỰC THÀNH CÔNG`;
+    helpText.innerText = "Dữ liệu xác thực CP03 đã được đóng băng và lưu ngoại tuyến sẵn sàng đồng bộ TrekOps.";
+    helpText.className = "font-label-sm text-label-sm text-center text-primary font-bold";
+  }
+</script></main></body></html>
