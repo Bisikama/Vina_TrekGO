@@ -1419,7 +1419,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
   })
 
   it('28. GET /api/v1/admin/refunds/:id trả chi tiết hoàn tiền PayOS kèm VietQR, khấu trừ cọc và chặn cổng mock', async () => {
-    ;(prismaMock as any).refund = {
+    ; (prismaMock as any).refund = {
       findUnique: jest.fn().mockResolvedValueOnce({
         id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
         paymentId,
