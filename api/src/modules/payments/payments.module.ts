@@ -101,4 +101,4 @@ import { AdminCashflowController } from './admin-cashflow.controller'
   ],
   exports: [PaymentsService, PaymentsPort, PaymentHistoryService],
 })
-export class PaymentsModule {}
+export class PaymentsModule { }

@@ -1237,4 +1237,286 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
     expect(raw).not.toContain('TOP_SECRET_IDEMPOTENCY_KEY')
     expect(raw).not.toContain('DONT_LEAK')
   })
+
+  it('25. Bộ lọc gateway hỗ trợ BOTH/ALL (vnpay + payos), chỉ vnpay, chỉ payos và từ chối cổng mock/momo với 400 VALIDATION_ERROR', async () => {
+    // 1. Mặc định (không truyền gateway -> BOTH = ['vnpay', 'payos'])
+    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
+    const resBoth = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+    expect(resBoth.body.appliedFilters).toEqual({
+      gateway: 'BOTH',
+      allowedGateways: ['vnpay', 'payos'],
+    })
+
+    // 2. Chỉ lọc riêng PayOS (gateway=payos)
+    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
+    const resPayos = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?gateway=payos')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+    expect(resPayos.body.appliedFilters).toEqual({
+      gateway: 'payos',
+      allowedGateways: ['payos'],
+    })
+
+    // 3. Chỉ lọc riêng VNPay (gateway=vnpay)
+    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
+    const resVnpay = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?gateway=vnpay')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+    expect(resVnpay.body.appliedFilters).toEqual({
+      gateway: 'vnpay',
+      allowedGateways: ['vnpay'],
+    })
+
+    // 4. Từ chối cổng giả lập mock và momo
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?gateway=mock')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(400)
+
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?gateway=momo')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(400)
+  })
+
+  it('26. GET /api/v1/admin/transactions bóc tách đúng breakdown (phí thuê, tiền cọc, tiền khấu trừ cọc) và lọc theo direction/category', async () => {
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
+          kind: 'REFUND',
+          source: 'RENTAL',
+          sourceId: '88888888-8888-4888-a888-888888888888',
+          paymentId,
+          refundId: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
+          invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+          userId: customerId,
+          userFullName: 'Nguyễn Văn A',
+          userEmail: 'nguyenvana@example.com',
+          amount: '900000.00',
+          currency: 'VND',
+          status: 'PENDING',
+          financialEffect: 'NONE',
+          paymentGateway: 'payos',
+          providerEnvironment: 'PRODUCTION',
+          paymentMethod: 'QR',
+          transactionRef: null,
+          payosOrderCode: '1730366400',
+          reconcileStatus: 'IDLE',
+          reconciliationRequired: true,
+          createdAt: new Date('2026-10-31T10:00:00.000Z'),
+          completedAt: null,
+          invoiceNo: 'INV-RT-20261031-002',
+          revisionNo: 1,
+          refundPurpose: 'RENTAL_DEPOSIT_RETURN',
+          executionMode: 'MANUAL_BANK_TRANSFER',
+          confirmationSource: 'MANUAL_PROOF',
+          manualRefundStatus: 'PENDING_PROOF',
+          isExtension: false,
+          category: 'DEPOSIT_REFUND',
+          serviceFeeAmount: '0',
+          rentalFeeAmount: '0',
+          depositAmount: '900000',
+          deductionAmount: '100000',
+        },
+      ])
+      .mockResolvedValueOnce([{ total: 1 }])
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions?gateway=payos&direction=CASH_OUT&category=DEPOSIT_REFUND')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body.items[0]).toMatchObject({
+      kind: 'REFUND',
+      direction: 'CASH_OUT',
+      source: 'RENTAL',
+      category: 'DEPOSIT_REFUND',
+      paymentGateway: 'payos',
+      payosOrderCode: '1730366400',
+      manualRefundStatus: 'PENDING_PROOF',
+      canSimulateSandbox: false,
+      breakdown: {
+        serviceFeeAmount: '0.00',
+        rentalFeeAmount: '0.00',
+        depositAmount: '900000.00',
+        deductionAmount: '100000.00',
+        isExtension: false,
+      },
+    })
+  })
+
+  it('27. GET /api/v1/admin/transactions/summary trả về KPI mở rộng (doanh thu dịch vụ, phí thuê, tiền cọc, khấu trừ cọc, hàng đợi PayOS/VNPay)', async () => {
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          totalInflowAmount: '45000000',
+          totalInflowCount: 25,
+          totalOutflowAmount: '8500000',
+          totalOutflowCount: 8,
+          pendingInflowAmount: '3000000',
+          pendingInflowCount: 2,
+          pendingOutflowAmount: '1800000',
+          pendingOutflowCount: 1,
+          reconciliationRequiredCount: 2,
+          bookingInflowAmount: '30000000',
+          rentalFeeInflowAmount: '7500000',
+          rentalExtensionInflowAmount: '1500000',
+          rentalDepositInflowAmount: '5000000',
+          trailAccessInflowAmount: '1000000',
+          depositOutflowAmount: '4500000',
+          bookingCancellationOutflowAmount: '3500000',
+          rentalCancellationOutflowAmount: '500000',
+          technicalReversalOutflowAmount: '0',
+          retainedDepositDeductionAmount: '500000',
+          payosManualRefundPendingCount: 3,
+          vnpaySandboxPendingRefundCount: 1,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/transactions/summary?gateway=BOTH')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body.appliedFilters).toEqual({
+      gateway: 'BOTH',
+      allowedGateways: ['vnpay', 'payos'],
+      source: null,
+    })
+    expect(res.body.totals).toMatchObject({
+      totalInflowAmount: '45000000.00',
+      serviceRevenueAmount: '40000000.00',
+      bookingInflowAmount: '30000000.00',
+      rentalFeeInflowAmount: '7500000.00',
+      rentalExtensionInflowAmount: '1500000.00',
+      rentalDepositInflowAmount: '5000000.00',
+      trailAccessInflowAmount: '1000000.00',
+      depositOutflowAmount: '4500000.00',
+      retainedDepositDeductionAmount: '500000.00',
+      activeDepositHeldAmount: '0.00',
+      payosManualRefundPendingCount: 3,
+      vnpaySandboxPendingRefundCount: 1,
+    })
+  })
+
+  it('28. GET /api/v1/admin/refunds/:id trả chi tiết hoàn tiền PayOS kèm VietQR, khấu trừ cọc và chặn cổng mock', async () => {
+    ;(prismaMock as any).refund = {
+      findUnique: jest.fn().mockResolvedValueOnce({
+        id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
+        paymentId,
+        invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+        amount: new Prisma.Decimal(900000),
+        currency: 'VND',
+        status: 'PENDING',
+        purpose: 'RENTAL_DEPOSIT_RETURN',
+        reason: 'Hoàn cọc sau khi khấu trừ hư hỏng nhẹ',
+        providerEnvironment: 'PRODUCTION',
+        executionMode: 'MANUAL_BANK_TRANSFER',
+        providerPayload: null,
+        refundTransactionRef: null,
+        reconcileStatus: 'IDLE',
+        retryCount: 0,
+        lastCheckedAt: null,
+        lastErrorCode: null,
+        createdAt: new Date('2026-10-31T10:00:00.000Z'),
+        refundedAt: null,
+        paymentViaPaymentId: {
+          id: paymentId,
+          amount: new Prisma.Decimal(1500000),
+          status: 'SUCCEEDED',
+          paymentGateway: 'payos',
+          providerEnvironment: 'PRODUCTION',
+          transactionRef: 'PAYOS-TX-01',
+          paidAt: new Date('2026-10-30T08:00:00.000Z'),
+          payosCheckout: {
+            orderCode: BigInt(1730366400),
+          },
+          allocations: [
+            {
+              id: 'alloc-pay-1',
+              rentalOrderLineId: 'line-1',
+              component: 'RENTAL_FEE',
+              amount: new Prisma.Decimal(500000),
+            },
+            {
+              id: 'alloc-pay-2',
+              rentalOrderLineId: 'line-1',
+              component: 'RENTAL_DEPOSIT',
+              amount: new Prisma.Decimal(1000000),
+            },
+          ],
+        },
+        invoice: {
+          id: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
+          invoiceNo: 'INV-RT-20261031-002',
+          status: 'PAID',
+          invoiceType: 'RENTAL',
+          bookingId: null,
+          rentalOrderId: '88888888-8888-4888-a888-888888888888',
+          trailAccessId: null,
+          user: {
+            id: customerId,
+            fullName: 'Nguyễn Văn A',
+            email: 'nguyenvana@example.com',
+          },
+        },
+        allocations: [
+          {
+            id: 'alloc-ref-1',
+            rentalOrderLineId: 'line-1',
+            component: 'RENTAL_DEPOSIT',
+            amount: new Prisma.Decimal(900000),
+          },
+        ],
+        manualRefund: {
+          status: 'PENDING_PROOF',
+          beneficiaryBankCode: 'MB',
+          beneficiaryBankName: 'MB Bank',
+          beneficiaryAccountNumber: '0123456789',
+          beneficiaryAccountHolderName: 'NGUYEN VAN A',
+          transferReference: null,
+          transferredAt: null,
+          confirmedById: null,
+          confirmedAt: null,
+          evidenceMediaId: null,
+          evidenceMedia: null,
+          note: 'Chờ kế toán chuyển khoản',
+        },
+      }),
+    }
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/admin/refunds/01e76d7f-e0a7-4b0a-9633-d0e13bd20436')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+
+    expect(res.body).toMatchObject({
+      refundId: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
+      category: 'DEPOSIT_REFUND',
+      paymentGateway: 'payos',
+      executionMode: 'MANUAL_BANK_TRANSFER',
+      canSimulateSandbox: false,
+      breakdown: {
+        serviceFeeAmount: '0.00',
+        rentalFeeAmount: '0.00',
+        depositAmount: '900000.00',
+        deductionAmount: '100000.00',
+        isExtension: false,
+      },
+      sourcePayment: {
+        paymentId,
+        payosOrderCode: '1730366400',
+      },
+    })
+    expect(res.body.manualRefund.vietQrImageUrl).toContain('https://img.vietqr.io/image/MB-0123456789-compact2.png')
+    expect(res.body.manualRefund.vietQrImageUrl).toContain('amount=900000')
+  })
 })

@@ -132,7 +132,7 @@ function buildVietQrUrl(params: {
 
 @Injectable()
 export class PaymentHistoryService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(private readonly db: PrismaService) { }
 
   /**
    * API 1 — Rental Order Payment History
@@ -1508,7 +1508,7 @@ export class PaymentHistoryService {
         const confirmationSource = simulated
           ? 'SANDBOX_SIMULATION'
           : r.manualRefund?.status === 'COMPLETED' ||
-              (r.executionMode === 'MANUAL_BANK_TRANSFER' && r.status === 'SUCCEEDED')
+            (r.executionMode === 'MANUAL_BANK_TRANSFER' && r.status === 'SUCCEEDED')
             ? 'ADMIN_MANUAL'
             : r.executionMode === 'PROVIDER_API' && r.status === 'SUCCEEDED'
               ? 'PROVIDER'
@@ -1608,7 +1608,7 @@ export class PaymentHistoryService {
     const confirmationSource = simulated
       ? 'SANDBOX_SIMULATION'
       : m?.status === 'COMPLETED' ||
-          (refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === 'SUCCEEDED')
+        (refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === 'SUCCEEDED')
         ? 'ADMIN_MANUAL'
         : refund.executionMode === 'PROVIDER_API' && refund.status === 'SUCCEEDED'
           ? 'PROVIDER'
@@ -1724,35 +1724,35 @@ export class PaymentHistoryService {
       })),
       manualRefund: m
         ? {
-            manualStatus: m.status,
-            version: m.version,
-            assignedAdminId: m.assignedAdminId,
-            claimedAt: m.claimedAt ? m.claimedAt.toISOString() : null,
-            recipient: m.accountNumber
-              ? {
-                  bankBin: m.bankBin,
-                  accountNumber: m.accountNumber,
-                  accountHolderName: m.accountHolderName,
-                  ownershipConfirmedAt: m.ownershipConfirmedAt
-                    ? m.ownershipConfirmedAt.toISOString()
-                    : null,
-                  vietQrImageUrl: buildVietQrUrl({
-                    bankBin: m.bankBin,
-                    accountNumber: m.accountNumber,
-                    accountHolderName: m.accountHolderName,
-                    amount: refund.amount,
-                    invoiceNo: inv.invoiceNo,
-                    refundId: refund.id,
-                  }),
-                }
-              : null,
-            bankTransactionRef: m.bankTransactionRef,
-            transferredAt: m.transferredAt ? m.transferredAt.toISOString() : null,
-            confirmedBy: m.confirmedBy,
-            evidenceMediaId: m.evidenceMediaId,
-            evidenceMediaUrl,
-            note: m.note,
-          }
+          manualStatus: m.status,
+          version: m.version,
+          assignedAdminId: m.assignedAdminId,
+          claimedAt: m.claimedAt ? m.claimedAt.toISOString() : null,
+          recipient: m.accountNumber
+            ? {
+              bankBin: m.bankBin,
+              accountNumber: m.accountNumber,
+              accountHolderName: m.accountHolderName,
+              ownershipConfirmedAt: m.ownershipConfirmedAt
+                ? m.ownershipConfirmedAt.toISOString()
+                : null,
+              vietQrImageUrl: buildVietQrUrl({
+                bankBin: m.bankBin,
+                accountNumber: m.accountNumber,
+                accountHolderName: m.accountHolderName,
+                amount: refund.amount,
+                invoiceNo: inv.invoiceNo,
+                refundId: refund.id,
+              }),
+            }
+            : null,
+          bankTransactionRef: m.bankTransactionRef,
+          transferredAt: m.transferredAt ? m.transferredAt.toISOString() : null,
+          confirmedBy: m.confirmedBy,
+          evidenceMediaId: m.evidenceMediaId,
+          evidenceMediaUrl,
+          note: m.note,
+        }
         : null,
     }
   }

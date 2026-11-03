@@ -1,11 +1,15 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, getGearCapabilities, listMyGear,
-  updateMyGear, uploadUserGearPhoto, type GearCapabilities, type GearCategory, type GearCondition,
+  addGearFromCatalog, confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, getGearCapabilities, listMyGear,
+  searchGearCatalog, updateMyGear, uploadUserGearPhoto, type GearCapabilities, type GearCatalogEntry, type GearCategory, type GearCondition,
   type GearExtractionDraft, type GearItemInput, type UserGearItem,
 } from "@/features/rentals/services/gear.api";
+import {
+  getGearPlanGuidance, listGearPlans, listGearTripCandidates, type GearPlan, type PlanGuidance,
+} from "@/features/rentals/services/gear-advisor.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
 import { RentalPageHeader } from "./RentalSectionNav";
 
@@ -88,6 +92,7 @@ export function RentalWardrobePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [aiProgress, setAiProgress] = useState<{ source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" } | null>(null);
   const [capabilities, setCapabilities] = useState<GearCapabilities | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const aiRequestLock = useRef(false);
 
@@ -192,6 +197,7 @@ export function RentalWardrobePage() {
             <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
             <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) fileRef.current?.click(); }} className="rounded-xl border border-[#165c45] bg-white px-4 py-3 text-sm font-bold text-[#165c45] disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "IMAGE" ? "⛰️ Đang phân tích..." : "✦ Nạp ảnh bằng AI"}</button>
             <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) setLinkOpen(true); }} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "LINK" ? "⛰️ Đang đọc link..." : "🔗 Dán link sản phẩm"}</button>
+            <button disabled={busy || Boolean(aiProgress)} onClick={() => setCatalogOpen(true)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 disabled:cursor-wait disabled:opacity-60">🏷️ Danh mục đã duyệt</button>
             <button onClick={() => setEditor({})} className="rounded-xl bg-[#123f32] px-4 py-3 text-sm font-extrabold text-white shadow-sm">＋ Nhập tay</button>
           </div>
         </div>
@@ -220,7 +226,15 @@ export function RentalWardrobePage() {
           try { await deleteMyGear(item.id); setItems((current) => current.filter((entry) => entry.id !== item.id)); }
           catch (reason) { setError(getRentalApiErrorMessage(reason, "Chưa xóa được món đồ.")); }
         }} />)}</div>}
+
+      <TripReviewSection items={items} />
     </section>
+
+    {catalogOpen && <CatalogDialog onClose={() => setCatalogOpen(false)} onAdded={(saved) => {
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setCatalogOpen(false);
+      setNotice(`Đã thêm “${saved.name}” từ danh mục đã duyệt.`);
+    }} />}
 
     {editor && <GearEditor context={editor} busy={busy} onClose={() => setEditor(null)} onSave={(input) => void save(input)} />}
     {linkOpen && <LinkDialog busy={busy} onClose={() => { if (!aiRequestLock.current) setLinkOpen(false); }} onSubmit={async (url) => {
@@ -350,13 +364,18 @@ function DuplicateDialog({ data, busy, onBack, onConfirm }: { data: Record<strin
 function State({ title, description }: { title: string; description: string }) { return <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><div className="text-4xl">🎒</div><p className="mt-4 font-black text-slate-900">{title}</p><p className="mt-2 text-sm text-slate-500">{description}</p></div>; }
 function formatAttribute(value: unknown, unit: string) { if (value === true) return "Có"; if (value === false) return "Không"; if (value === null || value === undefined || value === "") return "Chưa biết"; if (unit === "coverage") return value === "FULL_BODY" ? "Toàn thân" : "Thân trên"; return `${String(value)}${unit}`; }
 function formatDateTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date); }
-function CapabilityRow({ label, status }: { label: string; status?: GearCapabilities["imageExtraction"] }) {
+// Trạng thái tiện ích là THÔNG TIN, không phải nút: hiển thị dạng chấm + chữ và chỉ rõ chỗ để dùng.
+function CapabilityRow({ label, status, hint, href }: { label: string; status?: GearCapabilities["imageExtraction"]; hint: string; href?: string }) {
   const ready = Boolean(status?.enabled && status.configured);
-  const tone = !status ? "bg-slate-100 text-slate-600" : ready ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800";
-  const badge = !status ? "Đang kiểm tra" : ready ? "Sẵn sàng" : !status.enabled ? "Đang tắt" : "Chưa cấu hình";
-  return <div className="flex flex-col gap-1 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between">
-    <div><p className="text-xs font-black text-slate-800">{label}</p>{status && <p className="mt-1 text-[11px] leading-5 text-slate-500">{status.messageVi}</p>}</div>
-    <span className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${tone}`}>{badge}</span>
+  const dot = !status ? "bg-slate-300" : ready ? "bg-emerald-500" : "bg-amber-500";
+  const state = !status ? "Đang kiểm tra" : ready ? "Đang bật" : !status.enabled ? "Đang tắt" : "Chưa cấu hình";
+  return <div className="rounded-xl border border-slate-200 p-3">
+    <div className="flex items-start justify-between gap-3">
+      <p className="text-xs font-black text-slate-800">{label}</p>
+      <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-semibold text-slate-600"><span className={`size-2 rounded-full ${dot}`} />{state}</span>
+    </div>
+    {status && <p className="mt-1 text-[11px] leading-5 text-slate-500">{status.messageVi}</p>}
+    {href ? <Link href={href} className="mt-1 inline-block text-[11px] font-bold text-[#165c45] underline">{hint}</Link> : <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
   </div>;
 }
 function ExtractionGuide({ capabilities }: { capabilities: GearCapabilities | null }) {
@@ -365,10 +384,10 @@ function ExtractionGuide({ capabilities }: { capabilities: GearCapabilities | nu
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-wider text-[#27735a]">Trạng thái tiện ích</p>
-        <CapabilityRow label="Đọc từ ảnh tem/mác" status={capabilities?.imageExtraction} />
-        <CapabilityRow label="Đọc từ link sản phẩm" status={capabilities?.linkExtraction} />
-        <CapabilityRow label="Tư vấn theo bộ quy tắc" status={capabilities?.ruleBasedAdvice} />
-        <CapabilityRow label="Tư vấn bổ sung bằng AI" status={capabilities?.aiAdvice} />
+        <CapabilityRow label="Đọc từ ảnh tem/mác" status={capabilities?.imageExtraction} hint="Dùng nút “✦ Nạp ảnh bằng AI” ở trên" />
+        <CapabilityRow label="Đọc từ link sản phẩm" status={capabilities?.linkExtraction} hint="Dùng nút “🔗 Dán link sản phẩm” ở trên" />
+        <CapabilityRow label="Tư vấn theo bộ quy tắc" status={capabilities?.ruleBasedAdvice} hint="Dùng trong Kế hoạch đồ ›" href="/rentals/gear-advisor" />
+        <CapabilityRow label="Tư vấn bổ sung bằng AI" status={capabilities?.aiAdvice} hint="Trong Kế hoạch đồ → phương án thuê → Xem lời khuyên ›" href="/rentals/gear-advisor" />
       </div>
       <div className="space-y-3 text-xs leading-5">
         <p className="font-black uppercase tracking-wider text-[#27735a]">Cách dùng</p>
@@ -402,5 +421,151 @@ function DraftSourceDetails({ data }: { data: GearExtractionDraft["extractedData
       </li>)}</ul>
     </details>}
     {unknown.length > 0 && <p>Chưa đọc được: <b>{unknown.map(fieldLabel).join(", ")}</b>. Bạn có thể tự nhập nếu biết.</p>}
+  </div>;
+}
+
+const DISPLAY_STATUS: Record<string, { label: string; className: string }> = {
+  SUITABLE: { label: "Phù hợp", className: "bg-emerald-50 text-emerald-800" },
+  NEEDS_INFORMATION: { label: "Thiếu thông tin", className: "bg-amber-50 text-amber-800" },
+  NEEDS_ATTENTION: { label: "Cần chú ý", className: "bg-red-50 text-red-700" },
+};
+
+/** Xem lại theo chuyến: lấy từ bản đánh giá mới nhất của từng kế hoạch đã lưu, không chạy lại bộ luật. */
+function TripReviewSection({ items }: { items: UserGearItem[] }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<{ plan: GearPlan; tripTitle: string; guidance: PlanGuidance | null }[] | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const [plans, trips] = await Promise.all([listGearPlans(), listGearTripCandidates().catch(() => [])]);
+      const evaluated = plans.filter((plan) => plan.evaluatedRevision);
+      const guidances = await Promise.all(evaluated.map((plan) => getGearPlanGuidance(plan.id, plan.evaluatedRevision as number).catch(() => null)));
+      setRows(evaluated.map((plan, index) => ({ plan, tripTitle: trips.find((trip) => trip.id === plan.tripId)?.title ?? plan.title, guidance: guidances[index] })));
+    } catch (reason) {
+      setError(getRentalApiErrorMessage(reason, "Không tải được lịch sử kiểm tra."));
+    } finally { setLoading(false); }
+  }, []);
+
+  return <details className="mt-6 rounded-2xl border border-slate-200 bg-white p-4" onToggle={(event) => {
+    const next = (event.currentTarget as HTMLDetailsElement).open;
+    setOpen(next);
+    if (next && !rows) void load();
+  }}>
+    <summary className="cursor-pointer font-black text-slate-900">Đã kiểm tra theo chuyến</summary>
+    {open && <div className="mt-4 space-y-3">
+      {loading && <p className="text-sm text-slate-500">Đang tải...</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {rows && rows.length === 0 && <p className="text-sm text-slate-500">Chưa có chuyến nào được đánh giá. <Link href="/rentals/gear-advisor" className="font-bold text-[#165c45] underline">Tạo kế hoạch đồ ›</Link></p>}
+      <div className="grid gap-3 md:grid-cols-2">
+        {rows?.map(({ plan, tripTitle, guidance }) => <div key={plan.id} className="rounded-xl border border-slate-200 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-black text-slate-900">{tripTitle}</p>
+              <p className="mt-0.5 text-xs text-slate-500">Lần đánh giá #{plan.evaluatedRevision}{plan.isStale || guidance?.needsReevaluation ? " · cần đánh giá lại vì dữ liệu đã đổi" : ""}</p>
+            </div>
+            <Link href="/rentals/gear-advisor" className="shrink-0 text-xs font-bold text-[#165c45] underline">Mở kế hoạch</Link>
+          </div>
+          {!guidance || !guidance.available ? <p className="mt-3 text-xs text-slate-500">Bản đánh giá này không có chi tiết từng món.</p> :
+            <ul className="mt-3 divide-y divide-slate-100">{(guidance.items ?? []).map((entry) => {
+              const status = DISPLAY_STATUS[entry.displayStatus] ?? { label: entry.displayStatus, className: "bg-slate-100 text-slate-700" };
+              const current = items.find((item) => item.id === entry.itemId);
+              return <li key={entry.itemId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="text-slate-800">{entry.nameAtEvaluation ?? current?.name ?? "Món đã xoá"}</span>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${status.className}`}>{status.label}</span>
+              </li>;
+            })}</ul>}
+        </div>)}
+      </div>
+      {rows && <button onClick={() => void load()} className="text-xs font-bold text-[#165c45] underline">Tải lại</button>}
+    </div>}
+  </details>;
+}
+
+/** Danh mục sản phẩm đã được TrekGo kiểm duyệt: tìm và thêm bản sao vào tủ. */
+function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (item: UserGearItem) => void }) {
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState<GearCategory | "">("");
+  const [results, setResults] = useState<GearCatalogEntry[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<GearCatalogEntry | null>(null);
+  const [condition, setCondition] = useState<GearCondition>("good");
+  const [adding, setAdding] = useState(false);
+
+  const search = useCallback(async (cursor?: string) => {
+    setLoading(true); setError(null);
+    try {
+      const result = await searchGearCatalog({ q, category: category || undefined, cursor });
+      setResults((current) => cursor ? [...current, ...result.items] : result.items);
+      setNextCursor(result.nextCursor);
+    } catch (reason) {
+      setError(getRentalApiErrorMessage(reason, "Không tải được danh mục."));
+    } finally { setLoading(false); }
+  }, [q, category]);
+
+  // Đổi loại đồ → tìm lại từ đầu.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void search(); }, [category]);
+
+  async function add(acknowledgeDuplicate = false) {
+    if (!selected) return;
+    setAdding(true); setError(null);
+    try {
+      onAdded(await addGearFromCatalog(selected.id, { condition, acknowledgeDuplicate }));
+    } catch (reason) {
+      const issue = issueOf(reason);
+      if (issue.code === "GEAR_ITEM_POSSIBLE_DUPLICATE") {
+        const similar = (issue.details.similarItem as { name?: string } | undefined)?.name ?? "một món đã lưu";
+        if (window.confirm(`Tủ đã có món tương tự (“${similar}”). Đây chỉ là so sánh thông số. Vẫn thêm?`)) await add(true);
+      } else setError(getRentalApiErrorMessage(reason, "Chưa thêm được món đồ."));
+    } finally { setAdding(false); }
+  }
+
+  const fieldsOf = (entry: GearCatalogEntry) => attributeConfig[entry.category].filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
+
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4">
+    <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-3 border-b p-5">
+        <div><p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">Danh mục đã duyệt</p><h2 className="mt-1 text-xl font-black">{selected ? "Thêm vào tủ đồ" : "Tìm sản phẩm"}</h2></div>
+        <button onClick={selected ? () => setSelected(null) : onClose} className="rounded-xl border px-3 py-2 text-sm font-bold">{selected ? "‹ Quay lại" : "Đóng"}</button>
+      </div>
+      <div className="overflow-y-auto p-5">
+        {error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {selected ? <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">{categoryLabel(selected.category)} · Đã kiểm duyệt</p>
+            <p className="mt-1 text-lg font-black">{selected.name}</p>
+            {selected.brand && <p className="text-sm text-slate-500">{selected.brand}</p>}
+            <ul className="mt-3 space-y-1.5 text-sm">{fieldsOf(selected).map(([key, label, unit]) => <li key={key}>
+              <b>{label}:</b> {formatAttribute(selected.attributes[key], unit)}
+              {selected.evidence?.[key] && <span className="block text-xs text-slate-500">Nguồn: {selected.evidence[key]}</span>}
+            </li>)}</ul>
+          </div>
+          <Field label="Tình trạng món của bạn"><select value={condition} onChange={(event) => setCondition(event.target.value as GearCondition)} className={inputClass}>{conditions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+          <p className="text-xs text-slate-500">Thông số được TrekGo kiểm duyệt theo nguồn nhà sản xuất, không đảm bảo tình trạng thực tế của món bạn đang có.</p>
+          <div className="flex justify-end"><button disabled={adding} onClick={() => void add()} className="rounded-xl bg-[#123f32] px-5 py-2.5 text-sm font-black text-white disabled:opacity-60">{adding ? "Đang thêm..." : "Thêm vào tủ đồ"}</button></div>
+        </div> : <>
+          <form onSubmit={(event) => { event.preventDefault(); void search(); }} className="flex flex-col gap-2 sm:flex-row">
+            <input value={q} onChange={(event) => setQ(event.target.value)} className={inputClass} placeholder="Tên hoặc thương hiệu..." />
+            <select value={category} onChange={(event) => setCategory(event.target.value as GearCategory | "")} className={`${inputClass} sm:w-48`}><option value="">Tất cả loại</option>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <button className="rounded-xl bg-[#123f32] px-5 py-2.5 text-sm font-black text-white">Tìm</button>
+          </form>
+          <div className="mt-4 space-y-2">
+            {!loading && results.length === 0 && <p className="text-sm text-slate-500">Chưa có sản phẩm đã duyệt phù hợp.</p>}
+            {results.map((entry) => <button key={entry.id} onClick={() => setSelected(entry)} className="block w-full rounded-xl border border-slate-200 p-3 text-left transition hover:border-[#27735a] hover:bg-emerald-50/40">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[#27735a]">{categoryLabel(entry.category)}</p>
+              <p className="font-black text-slate-900">{entry.name}{entry.brand ? <span className="font-semibold text-slate-500"> · {entry.brand}</span> : null}</p>
+              <p className="mt-1 text-xs text-slate-600">{fieldsOf(entry).map(([key, label, unit]) => `${label}: ${formatAttribute(entry.attributes[key], unit)}`).join(" · ") || "Chưa có thông số"}</p>
+            </button>)}
+            {loading && <p className="text-sm text-slate-500">Đang tải...</p>}
+            {nextCursor && !loading && <button onClick={() => void search(nextCursor)} className="w-full rounded-xl border px-4 py-2.5 text-sm font-bold">Tải thêm</button>}
+          </div>
+        </>}
+      </div>
+    </div>
   </div>;
 }

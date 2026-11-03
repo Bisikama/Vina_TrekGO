@@ -189,22 +189,6 @@ export const UserHeader = () => {
   return (
     <>
       <header className="bg-white border-b border-gray-100 sticky top-0 z-[100] w-full max-w-full">
-        {/* Top thin bar */}
-        <div className="flex items-center justify-between gap-2 border-b border-gray-100 bg-[#F8FAFC] px-4 py-1.5 text-[10px] font-medium text-gray-500 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="truncate">Khám phá vùng lõi núi Việt Nam</span>
-            <span className="hidden items-center gap-1.5 lg:flex whitespace-nowrap">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-              Hệ thống cảnh báo an toàn hoạt động tốt
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="whitespace-nowrap">Bà Đen 28°C, Nắng đẹp</span>
-            <span className="hidden md:inline whitespace-nowrap">Đang theo dõi 124 đoàn</span>
-          </div>
-        </div>
-
         {/* Main Navbar */}
         <div className="flex h-16 items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
           {/* Logo */}
@@ -443,26 +427,6 @@ export const UserHeader = () => {
           </div>
         )}
 
-        {/* Tracking Sub-bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-[#154B36] px-4 py-2 text-[11px] font-medium text-white sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold border border-emerald-500/30 whitespace-nowrap shrink-0">
-              GPS TRACKING ON
-            </span>
-            <span className="hidden md:inline truncate opacity-90">
-              Thời tiết Núi Bà Đen (Tây Ninh): 28°C • Độ ẩm 65% • Nắng ráo, mây quang đãng
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 sm:gap-4 opacity-90 shrink-0 ml-auto">
-            <span className="hidden sm:inline whitespace-nowrap">
-              Vệ tinh Garmin InReach Sẵn sàng
-            </span>
-            <span className="sm:border-l sm:border-white/20 sm:pl-4 whitespace-nowrap">
-              Trung tâm điều phối 1800-9988
-            </span>
-          </div>
-        </div>
       </header>
 
       {/* HỘP THƯ LỜI MỜI TRÊN HEADER */}

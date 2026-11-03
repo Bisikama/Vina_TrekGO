@@ -41,19 +41,19 @@ function TaskCard({ task }: { task: PreparationTaskSummary }) {
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] font-black text-slate-900">{task.orderCode}</p>
+          <p className="font-mono text-[11px] font-bold text-slate-900">{task.orderCode}</p>
           <p className="mt-1 text-[10px] text-slate-500">Task {task.id.slice(0, 8)}</p>
         </div>
-        <span className="rounded-md bg-orange-50 px-2 py-1 text-[9px] font-black text-orange-700">{task.status}</span>
+        <span className="rounded-md bg-orange-50 px-2 py-1 text-[9px] font-bold text-orange-700">{task.status}</span>
       </div>
 
-      <h3 className="mt-3 text-sm font-black text-slate-950">{task.pickup.name}</h3>
+      <h3 className="mt-3 text-sm font-bold text-slate-950">{task.pickup.name}</h3>
       <p className="mt-1 text-[11px] text-slate-600">Kho: <strong>{task.inventoryLocation.name}</strong></p>
       <p className="mt-1 text-[11px] text-slate-600">Hạn: <strong>{formatDateTime(task.deadline)}</strong></p>
       <div className="mt-3 rounded-lg bg-[#edf3ff] p-3 text-[11px] leading-5 text-slate-700">{items || "Chưa có dòng thiết bị"}</div>
 
       <div className="mt-3">
-        <div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500">
+        <div className="mb-1 flex justify-between text-[10px] font-semibold text-slate-500">
           <span>Đã pick</span><span>{task.progress.picked}/{task.progress.required}</span>
         </div>
         <div className="h-1.5 rounded-full bg-slate-200">
@@ -61,7 +61,7 @@ function TaskCard({ task }: { task: PreparationTaskSummary }) {
         </div>
       </div>
 
-      <Link href={`/staff/orders/${encodeURIComponent(task.id)}`} className="mt-4 block w-full rounded-lg bg-[#0d5b3a] px-3 py-2 text-center text-[11px] font-black text-white hover:bg-[#09482e]">
+      <Link href={`/staff/orders/${encodeURIComponent(task.id)}`} className="mt-4 block w-full rounded-lg bg-[#0d5b3a] px-3 py-2 text-center text-[11px] font-bold text-white hover:bg-[#09482e]">
         {task.status === "OPEN" ? "Nhận & soạn ngay" : "Mở task"}
       </Link>
     </article>
@@ -113,10 +113,10 @@ export function StaffWorkQueue() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs text-slate-500">Kho vận › Luồng thuê thiết bị</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">Chuẩn bị Rental Order</h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Chuẩn bị Rental Order</h1>
             <p className="mt-2 text-sm text-slate-600">Dữ liệu thật từ Inventory Task. Luồng trả thiết bị không hiển thị tại đây.</p>
           </div>
-          <button type="button" onClick={() => void loadTasks()} disabled={loading} className="rounded-lg bg-[#0d5b3a] px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+          <button type="button" onClick={() => void loadTasks()} disabled={loading} className="rounded-lg bg-[#0d5b3a] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
             {loading ? "Đang tải..." : "Làm mới"}
           </button>
         </div>
@@ -138,8 +138,8 @@ export function StaffWorkQueue() {
             return (
               <div key={column.key} className="rounded-xl bg-[#eaf0fc] p-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-black">{column.title}</h2>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold">{columnTasks.length}</span>
+                  <h2 className="text-xs font-bold">{column.title}</h2>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">{columnTasks.length}</span>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-500">{column.hint}</p>
                 <div className="mt-3 space-y-3">{columnTasks.map((task) => <TaskCard key={task.id} task={task} />)}</div>

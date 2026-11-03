@@ -22,6 +22,106 @@ import { DeductionReviewPanel } from "./DeductionReviewPanel";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
+// Tiến trình đơn thuê. Chỉ hiện giờ thật cho bước có mốc trong `timeline` của API;
+// bước nhận đồ / hạn trả chỉ hiện thời gian dự kiến theo chuyến đi.
+const ORDER_STEPS: Array<{ status: string; label: string; event?: string }> = [
+  { status: "PENDING_PAYMENT", label: "Đặt đơn", event: "ORDER_CREATED" },
+  { status: "PAID", label: "Đã thanh toán", event: "PAID" },
+  { status: "PREPARING", label: "Kho đang chuẩn bị" },
+  { status: "READY_FOR_HANDOVER", label: "Sẵn sàng bàn giao", event: "PACKED" },
+  { status: "ACTIVE", label: "Đang sử dụng", event: "HANDED_OVER" },
+  { status: "RETURN_PENDING", label: "Chờ thu hồi" },
+  { status: "RETURN_PROCESSING", label: "Đang xử lý trả", event: "RETURNED" },
+  { status: "COMPLETED", label: "Hoàn tất", event: "COMPLETED" },
+];
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  PENDING_PAYMENT: "Chờ thanh toán",
+  PAID: "Đã thanh toán",
+  PREPARING: "Kho đang chuẩn bị",
+  READY_FOR_HANDOVER: "Sẵn sàng bàn giao",
+  ACTIVE: "Đang sử dụng",
+  RETURN_PENDING: "Chờ thu hồi",
+  RETURN_PROCESSING: "Đang xử lý trả",
+  COMPLETED: "Hoàn tất",
+  CANCELLED: "Đã hủy",
+  EXPIRED: "Đã hết hạn",
+};
+
+// Tên sản phẩm có hạng thường kèm hậu tố ("– Rất mới"); nhãn hạng đã hiển thị riêng.
+function stripGradeSuffix(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .trim();
+}
+
+function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
+  const times = new Map((detail.timeline ?? []).map((event) => [event.type, event.at]));
+  const status = detail.order.status;
+  const current = ORDER_STEPS.findIndex((step) => step.status === status);
+  const cancelledAt = times.get("CANCELLED");
+
+  return (
+    <section className="mt-6 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-xl font-black text-gray-900">Tiến trình đơn thuê</h2>
+        <p className="text-xs font-semibold text-gray-400">Trạng thái do hệ thống và nhân viên cập nhật</p>
+      </div>
+      {status === "CANCELLED" || status === "EXPIRED" ? (
+        <p className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm font-semibold text-gray-600">
+          {ORDER_STATUS_LABELS[status]}
+          {cancelledAt ? ` lúc ${dateTime(cancelledAt)}` : ""}.
+        </p>
+      ) : (
+        <ol className="mt-5 grid gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
+          {ORDER_STEPS.map((step, index) => {
+            const complete = current >= index;
+            const active = current === index;
+            const at = step.event ? times.get(step.event) : undefined;
+            let note: { text: string; planned: boolean } | null = null;
+            if (complete && at) note = { text: dateTime(at), planned: false };
+            else if (!complete && step.status === "ACTIVE" && detail.trip?.rentalStartAt)
+              note = { text: `Dự kiến ${dateTime(detail.trip.rentalStartAt)}`, planned: true };
+            else if (!complete && step.status === "RETURN_PENDING" && detail.trip?.dueAt)
+              note = { text: `Hạn trả ${dateTime(detail.trip.dueAt)}`, planned: true };
+            return (
+              <li key={step.status} className="relative flex gap-3 sm:block">
+                <div className="flex items-center sm:mb-2">
+                  <span
+                    className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 text-xs font-black ${
+                      active
+                        ? "border-[#2F6B4F] bg-[#2F6B4F] text-white ring-4 ring-emerald-100"
+                        : complete
+                          ? "border-[#2F6B4F] bg-[#2F6B4F] text-white"
+                          : "border-gray-200 bg-white text-gray-400"
+                    }`}
+                  >
+                    {complete ? "✓" : index + 1}
+                  </span>
+                  {index < ORDER_STEPS.length - 1 && (
+                    <span
+                      className={`ml-2 hidden h-0.5 flex-1 sm:block ${current > index ? "bg-[#2F6B4F]" : "bg-gray-200"}`}
+                    />
+                  )}
+                </div>
+                <div className="min-w-0 sm:pr-2">
+                  <p className={`text-xs font-bold ${complete ? "text-gray-900" : "text-gray-400"}`}>{step.label}</p>
+                  {note && (
+                    <p className={`mt-0.5 text-[11px] leading-4 ${note.planned ? "italic text-gray-400" : "text-gray-500"}`}>
+                      {note.text}
+                    </p>
+                  )}
+                  {active && <p className="mt-0.5 text-[10px] font-bold text-[#2F6B4F]">Hiện tại</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 const depositStatusLabels: Record<string, string> = {
   HELD: "Đang giữ để xử lý",
   REVIEW_REQUIRED: "Đang chờ kiểm tra",
@@ -196,13 +296,15 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
           <>
             <RentalCancellation orderId={orderId} status={detail.order.status} onCancelled={async () => { setDetail(await getMyRentalOrder(orderId)); await loadDeposit(); }} />
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <Info label="Trạng thái" value={detail.order.status.replaceAll("_", " ")} />
+              <Info label="Trạng thái" value={ORDER_STATUS_LABELS[detail.order.status] ?? detail.order.status.replaceAll("_", " ")} />
               <Info
                 label="Tổng thanh toán"
                 value={money(detail.order.totalAmount, detail.order.currency)}
               />
               <Info label="Hạn trả thiết bị" value={dateTime(detail.order.dueAt)} />
             </div>
+
+            <OrderProgress detail={detail} />
 
             {detail.order.status === "PENDING_PAYMENT" ? (
               <PaymentCountdown expiresAt={detail.order.paymentExpiresAt} />
@@ -232,12 +334,14 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                             {visual.sku}
                           </p>
                         ) : null}
-                        <h3 className="mt-1 font-black text-gray-900">{visual.name}</h3>
+                        <h3 className="mt-1 font-black text-gray-900">
+                          {item.product.grade ? stripGradeSuffix(visual.name) : visual.name}
+                        </h3>
                         <p className="mt-2 text-xs text-gray-500">
                           Số lượng: {item.quantity}
                           {item.product.grade ? (
                             <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              {item.product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}
+                              {item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
                             </span>
                           ) : null}
                         </p>

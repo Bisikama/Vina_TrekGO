@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
-import { getRentalCatalog } from "@/features/rentals/services/rental.api";
+import { getRentalCatalog, getTripWeather, type TripWeather } from "@/features/rentals/services/rental.api";
 import type {
   RentalCatalogData,
   RentalCatalogItem,
@@ -55,7 +55,54 @@ function categoryKey(value: string) {
   return cleanCategoryName(value).toLocaleLowerCase("vi");
 }
 
-const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Sử dụng tốt" } as const;
+const DIFFICULTY_LABELS: Record<string, string> = {
+  EASY: "Dễ",
+  BEGINNER: "Dễ",
+  MODERATE: "Trung bình",
+  MEDIUM: "Trung bình",
+  INTERMEDIATE: "Trung bình",
+  HARD: "Khó",
+  CHALLENGING: "Khó",
+  DIFFICULT: "Khó",
+  EXTREME: "Rất khó",
+  EXPERT: "Rất khó",
+};
+
+function difficultyLabel(value: string) {
+  return DIFFICULTY_LABELS[value.toUpperCase()] ?? value;
+}
+
+const WEATHER_RISK_LABELS: Record<string, string> = {
+  LOW: "Rủi ro thấp",
+  MEDIUM: "Rủi ro trung bình",
+  HIGH: "Rủi ro cao",
+  SEVERE: "Nguy hiểm",
+};
+
+// Dựng chữ thời tiết từ api thật; không có số liệu thì nói rõ là chưa có, không bịa số.
+function describeWeather(weather: TripWeather | null) {
+  if (!weather || weather.snapshot.riskLevel === "UNKNOWN") return null;
+  const day = weather.forecast[0];
+  const parts: string[] = [];
+  const condition = day?.condition || weather.snapshot.weatherCondition;
+  if (condition) parts.push(condition);
+  if (day && day.temperatureMinC !== null && day.temperatureMaxC !== null) {
+    parts.push(`${Math.round(day.temperatureMinC)}–${Math.round(day.temperatureMaxC)}°C`);
+  } else if (weather.snapshot.temperatureC !== null) {
+    parts.push(`${Math.round(weather.snapshot.temperatureC)}°C`);
+  }
+  const rain = day?.rainProbabilityPercent ?? weather.snapshot.rainProbabilityPercent;
+  if (rain !== null && rain !== undefined) parts.push(`Mưa ${Math.round(rain)}%`);
+  if (!parts.length) return null;
+  return {
+    text: parts.join(" · "),
+    risk: WEATHER_RISK_LABELS[weather.snapshot.riskLevel] ?? null,
+    riskLevel: weather.snapshot.riskLevel,
+    title: weather.snapshot.riskSummary ?? undefined,
+  };
+}
+
+const GRADE_LABELS = { LIKE_NEW: "Như mới", GOOD_USED: "Sử dụng tốt" } as const;
 const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
 
 type CatalogGroup = { key: string; name: string; variants: RentalCatalogItem[] };
@@ -90,6 +137,13 @@ function groupCatalogItems(items: RentalCatalogItem[]): CatalogGroup[] {
     ),
   );
   return [...groups.values()];
+}
+
+function groupReasons(group: CatalogGroup) {
+  const best = group.variants
+    .filter((variant) => variant.recommendation)
+    .sort((a, b) => (b.recommendation?.score ?? 0) - (a.recommendation?.score ?? 0))[0];
+  return best?.recommendation?.reasons ?? [];
 }
 
 function CartIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -131,11 +185,11 @@ function QuantityControl({
         type="button"
         aria-label="Giảm số lượng"
         onClick={() => onChange(quantity - 1)}
-        className="grid h-full w-10 place-items-center text-lg font-black text-[#174B36] transition hover:bg-emerald-50"
+        className="grid h-full w-10 place-items-center text-lg font-bold text-[#174B36] transition hover:bg-emerald-50"
       >
         −
       </button>
-      <span className="grid h-full min-w-10 place-items-center border-x border-emerald-800/10 text-sm font-black text-gray-950">
+      <span className="grid h-full min-w-10 place-items-center border-x border-emerald-800/10 text-sm font-bold text-gray-950">
         {quantity}
       </span>
       <button
@@ -143,7 +197,7 @@ function QuantityControl({
         aria-label="Tăng số lượng"
         disabled={quantity >= maximum}
         onClick={() => onChange(quantity + 1)}
-        className="grid h-full w-10 place-items-center text-lg font-black text-[#174B36] transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-gray-300"
+        className="grid h-full w-10 place-items-center text-lg font-bold text-[#174B36] transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-gray-300"
       >
         +
       </button>
@@ -159,10 +213,12 @@ function ProductCard({
   bookingId,
   quantity,
   onQuantityChange,
+  reasons = [],
 }: {
   item: RentalCatalogItem;
   title: string;
   variants: RentalCatalogItem[];
+  reasons?: string[];
   onSelectVariant: (id: string) => void;
   bookingId: string;
   quantity: number;
@@ -188,24 +244,24 @@ function ProductCard({
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_top,#e7f3e8,#f3f5ef)] text-[#668071]">
             <span className="text-4xl">🏕️</span>
-            <span className="text-xs font-bold">Đang cập nhật ảnh</span>
+            <span className="text-xs font-semibold">Đang cập nhật ảnh</span>
           </div>
         )}
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/40 to-transparent" />
-        {item.recommendation && (
-          <span className="absolute left-3 top-3 rounded-full bg-[#F7C846] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#493500] shadow-sm">
+        {(item.recommendation?.score ?? 0) > 0 && (
+          <span className="absolute left-3 top-3 rounded-full bg-[#F7C846] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#493500] shadow-sm">
             ✦ Hợp chuyến đi
           </span>
         )}
         {item.grade && (
           <span
-            className={`absolute right-3 top-3 rounded-full px-3 py-1.5 text-[11px] font-bold shadow-sm backdrop-blur ${item.grade === "LIKE_NEW" ? "bg-white/95 text-[#17603F]" : "bg-[#FFF6E0]/95 text-[#8A5A00]"}`}
+            className={`absolute right-3 top-3 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm backdrop-blur ${item.grade === "LIKE_NEW" ? "bg-white/95 text-[#17603F]" : "bg-[#FFF6E0]/95 text-[#8A5A00]"}`}
           >
             {GRADE_LABELS[item.grade]}
           </span>
         )}
         <span
-          className={`absolute bottom-3 right-3 rounded-full px-3 py-1.5 text-[10px] font-black shadow-sm backdrop-blur ${checking ? "bg-sky-700/90 text-white" : availableCount > 0 ? "bg-white/95 text-[#17603F]" : "bg-gray-900/85 text-white"}`}
+          className={`absolute bottom-3 right-3 rounded-full px-3 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur ${checking ? "bg-sky-700/90 text-white" : availableCount > 0 ? "bg-white/95 text-[#17603F]" : "bg-gray-900/85 text-white"}`}
         >
           {checking
             ? "Đang kiểm tra"
@@ -216,15 +272,27 @@ function ProductCard({
       </Link>
 
       <div className="flex flex-1 flex-col p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
           {cleanCategoryName(item.category.name)}
         </p>
         <Link
           href={detailUrl}
-          className="mt-2 line-clamp-2 min-h-12 text-base font-black leading-6 text-[#17251D] transition hover:text-emerald-700"
+          className="mt-2 line-clamp-2 min-h-12 text-[15px] font-semibold leading-6 tracking-[-0.01em] text-[#17251D] transition hover:text-emerald-700"
         >
           {title}
         </Link>
+        {reasons.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {reasons.slice(0, 3).map((reason) => (
+              <span
+                key={reason}
+                className="rounded-full bg-[#FFF6D6] px-2.5 py-1 text-[10px] font-semibold text-[#7A5600]"
+              >
+                ✦ {reason}
+              </span>
+            ))}
+          </div>
+        )}
         {gradeVariants.length > 1 && (
           <div
             role="radiogroup"
@@ -240,7 +308,7 @@ function ProductCard({
                   role="radio"
                   aria-checked={selected}
                   onClick={() => onSelectVariant(variant.id)}
-                  className={`h-8 rounded-lg text-xs font-bold transition ${selected ? "bg-white text-[#174B36] shadow-sm" : "text-gray-500 hover:text-[#174B36]"}`}
+                  className={`h-8 rounded-lg text-xs font-semibold transition ${selected ? "bg-white text-[#174B36] shadow-sm" : "text-gray-500 hover:text-[#174B36]"}`}
                 >
                   {variant.grade ? GRADE_LABELS[variant.grade] : variant.name}
                 </button>
@@ -262,11 +330,21 @@ function ProductCard({
               <p className="text-[10px] font-semibold text-gray-400">
                 Giá thuê từ
               </p>
-              <p className="mt-0.5 text-xl font-black text-[#17603F]">
-                {formatMoney(item.dailyPrice, item.currency)}
-                <span className="text-[11px] font-bold text-gray-400">
-                  /ngày
+              <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xl font-bold tracking-tight text-[#17603F]">
+                <span>
+                  {formatMoney(item.dailyPrice, item.currency)}
+                  <span className="text-[11px] font-semibold text-gray-400">
+                    /ngày
+                  </span>
                 </span>
+                {(item.replacementValue ?? 0) > 0 && (
+                  <span
+                    title="Giá gốc của món đồ"
+                    className="text-xs font-semibold text-gray-400 line-through opacity-80"
+                  >
+                    {formatMoney(item.replacementValue ?? 0, item.currency)}
+                  </span>
+                )}
               </p>
               {typeof item.depositPerUnit === "number" && (
                 <p className="mt-1 text-[11px] font-semibold text-gray-500">
@@ -287,7 +365,7 @@ function ProductCard({
             </div>
             <Link
               href={detailUrl}
-              className="text-xs font-bold text-gray-500 underline decoration-gray-300 underline-offset-4 hover:text-emerald-700"
+              className="text-xs font-semibold text-gray-500 underline decoration-gray-300 underline-offset-4 hover:text-emerald-700"
             >
               Chi tiết
             </Link>
@@ -295,7 +373,7 @@ function ProductCard({
           <div className="mt-4">
             {quantity > 0 ? (
               <div className="flex items-center justify-between rounded-2xl bg-[#EEF7EE] p-2">
-                <span className="pl-1 text-xs font-black text-[#174B36]">
+                <span className="pl-1 text-xs font-bold text-[#174B36]">
                   Đã chọn
                 </span>
                 <QuantityControl
@@ -310,7 +388,7 @@ function ProductCard({
                 type="button"
                 disabled={checking || availableCount < 1}
                 onClick={() => onQuantityChange(1)}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#174B36] text-sm font-black text-white shadow-[0_8px_18px_rgba(23,75,54,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0F5A3B] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#174B36] text-sm font-bold text-white shadow-[0_8px_18px_rgba(23,75,54,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0F5A3B] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-500 disabled:shadow-none"
               >
                 <span className="text-lg">+</span>
                 {checking
@@ -370,17 +448,22 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
   }, [load]);
 
   const categories = useMemo(() => {
+    // Đếm theo món (gộp 2 hạng Như mới / Sử dụng tốt), khớp với số thẻ hiển thị.
     const groups = new Map<
       string,
-      { key: string; label: string; count: number }
+      { key: string; label: string; count: number; members: Set<string> }
     >();
     data?.items.forEach((item) => {
       const key = categoryKey(item.category.name);
-      groups.set(key, {
+      const current = groups.get(key) ?? {
         key,
         label: cleanCategoryName(item.category.name),
-        count: (groups.get(key)?.count ?? 0) + 1,
-      });
+        count: 0,
+        members: new Set<string>(),
+      };
+      current.members.add(item.gradeGroupId ? `grade:${item.gradeGroupId}` : item.id);
+      current.count = current.members.size;
+      groups.set(key, current);
     });
     return [...groups.values()].sort((a, b) =>
       a.label.localeCompare(b.label, "vi"),
@@ -400,10 +483,51 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
     );
   }, [activeCategory, data, search]);
 
+  const [weather, setWeather] = useState<TripWeather | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setWeather(null);
+    getTripWeather(bookingId, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setWeather(result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setWeather(null);
+      });
+    return () => controller.abort();
+  }, [bookingId]);
+  const weatherInfo = useMemo(() => describeWeather(weather), [weather]);
+
   const groupedItems = useMemo(
     () => groupCatalogItems(filteredItems),
     [filteredItems],
   );
+
+  // Tách theo gợi ý của GET /trips/{tripId}/rental-recommendations (đã gắn vào item.recommendation).
+  const catalogSections = useMemo(() => {
+    const score = (group: CatalogGroup) =>
+      Math.max(0, ...group.variants.map((variant) => variant.recommendation?.score ?? 0));
+    const isRecommended = (group: CatalogGroup) =>
+      group.variants.some((variant) => (variant.recommendation?.score ?? 0) > 0);
+    const recommended = groupedItems.filter(isRecommended).sort((a, b) => score(b) - score(a));
+    const others = groupedItems.filter((group) => !isRecommended(group));
+    if (!recommended.length) {
+      return [{ key: "all", eyebrow: "Danh mục thiết bị", title: "Trang bị cho chuyến đi", description: "", groups: groupedItems }];
+    }
+    const sections = [
+      {
+        key: "recommended",
+        eyebrow: "Gợi ý cho chuyến đi",
+        title: "Phù hợp cho chuyến đi",
+        description: "Xếp theo mức độ phù hợp với thời gian, độ khó và thời tiết của chuyến.",
+        groups: recommended,
+      },
+    ];
+    if (others.length) {
+      sections.push({ key: "others", eyebrow: "Danh mục thiết bị", title: "Những món đồ xinh xinh khác", description: "", groups: others });
+    }
+    return sections;
+  }, [groupedItems]);
 
   if (loading)
     return (
@@ -423,14 +547,14 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
     return (
       <div className="min-h-[600px] bg-[#F4F6F1] px-4 py-20">
         <div className="mx-auto max-w-xl rounded-3xl border border-red-100 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-black text-gray-950">
+          <h1 className="text-xl font-bold text-gray-950">
             Không thể tải thiết bị
           </h1>
           <p className="mt-3 text-sm text-gray-600">{error}</p>
           <button
             type="button"
             onClick={() => void load()}
-            className="mt-6 rounded-xl bg-[#174B36] px-5 py-3 text-sm font-black text-white"
+            className="mt-6 rounded-xl bg-[#174B36] px-5 py-3 text-sm font-bold text-white"
           >
             Thử lại
           </button>
@@ -445,7 +569,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-amber-100 text-2xl">
             ⛰️
           </div>
-          <h1 className="mt-4 text-xl font-black text-gray-950">
+          <h1 className="mt-4 text-xl font-bold text-gray-950">
             Chuyến đi chưa thể thuê thiết bị
           </h1>
           <p className="mt-3 text-sm text-gray-600">
@@ -454,7 +578,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
           </p>
           <Link
             href="/my-trips"
-            className="mt-6 inline-flex rounded-xl bg-[#174B36] px-5 py-3 text-sm font-black text-white"
+            className="mt-6 inline-flex rounded-xl bg-[#174B36] px-5 py-3 text-sm font-bold text-white"
           >
             Xem chuyến đi của tôi
           </Link>
@@ -470,10 +594,10 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
         <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_80%_20%,#b9e769_0,transparent_28%),linear-gradient(120deg,transparent_55%,#2d7657_55%,transparent_75%)]" />
         <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8 lg:py-12">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-lime-300">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-lime-300">
               TrekGo Gear Station
             </p>
-            <h1 className="mt-3 max-w-2xl text-3xl font-black leading-tight sm:text-4xl">
+            <h1 className="mt-3 max-w-2xl text-3xl font-bold leading-tight sm:text-4xl">
               Chọn hành trang, sẵn sàng lên đường
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-emerald-50/75">
@@ -482,10 +606,10 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
             </p>
           </div>
           <div className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-lime-300">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-lime-300">
               Chuyến đi đang chọn
             </p>
-            <p className="mt-2 text-lg font-black">
+            <p className="mt-2 text-lg font-bold">
               {data.eligibility.trip.name}
             </p>
             <p className="mt-3 text-xs leading-5 text-emerald-50/75">
@@ -525,15 +649,15 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
               <span className="flex items-center gap-3">
                 <CartIcon />
                 <span className="text-left">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-emerald-100">
                     Giỏ hành trang
                   </span>
-                  <span className="block text-sm font-black">
+                  <span className="block text-sm font-bold">
                     {cart.totalQuantity} thiết bị
                   </span>
                 </span>
               </span>
-              <span className="rounded-full bg-lime-300 px-2.5 py-1 text-xs font-black text-[#123D2C]">
+              <span className="rounded-full bg-lime-300 px-2.5 py-1 text-xs font-bold text-[#123D2C]">
                 {cart.totalQuantity}
               </span>
             </button>
@@ -556,14 +680,14 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
               className="flex flex-1 gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {[
-                { key: "all", label: "Tất cả", count: data.items.length },
+                { key: "all", label: "Tất cả", count: groupCatalogItems(data.items).length },
                 ...categories,
               ].map((category) => (
                 <button
                   key={category.key}
                   type="button"
                   onClick={() => setActiveCategory(category.key)}
-                  className={`shrink-0 rounded-full border px-4 py-2.5 text-xs font-black transition ${activeCategory === category.key ? "border-[#174B36] bg-[#174B36] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-emerald-400 hover:text-emerald-800"}`}
+                  className={`shrink-0 rounded-full border px-4 py-2.5 text-xs font-bold transition ${activeCategory === category.key ? "border-[#174B36] bg-[#174B36] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-emerald-400 hover:text-emerald-800"}`}
                 >
                   {category.label}{" "}
                   <span className="ml-1 opacity-60">{category.count}</span>
@@ -585,54 +709,98 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
           </div>
         </section>
 
-        <div className="mt-7 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
-              Danh mục thiết bị
-            </p>
-            <h2 className="mt-1 text-2xl font-black text-[#17251D]">
-              Trang bị cho chuyến đi
-            </h2>
-          </div>
-          <p className="text-sm font-bold text-gray-500">
-            {groupedItems.length} sản phẩm
-          </p>
-        </div>
-        {groupedItems.length ? (
-          <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {groupedItems.map((group) => {
-              const item =
-                group.variants.find(
-                  (variant) => variant.id === selectedVariantIds[group.key],
-                ) ?? group.variants[0];
-              const cartItem = cart.items.find(
-                (entry) => entry.product.id === item.id,
-              );
-              return (
-                <ProductCard
-                  key={group.key}
-                  item={item}
-                  title={group.name}
-                  variants={group.variants}
-                  onSelectVariant={(id) =>
-                    setSelectedVariantIds((current) => ({
-                      ...current,
-                      [group.key]: id,
-                    }))
-                  }
-                  bookingId={bookingId}
-                  quantity={cartItem?.quantity ?? 0}
-                  onQuantityChange={(quantity) =>
-                    cart.setQuantity(item, item.availableCount ?? 0, quantity)
-                  }
-                />
-              );
-            })}
-          </section>
+        {catalogSections.length && groupedItems.length ? (
+          catalogSections.map((section) => (
+            <div key={section.key}>
+              <div className="mt-7 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                    {section.eyebrow}
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-[#17251D]">
+                    {section.title}
+                  </h2>
+                  {section.description && (
+                    <p className="mt-1 text-sm text-gray-500">{section.description}</p>
+                  )}
+                  {(section.key === "recommended" || section.key === "all") && (data.tripSummary || weatherInfo) && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#174B36]">
+                      {data.tripSummary && (
+                        <span className="rounded-full bg-[#E5F2E6] px-3 py-1.5">
+                          🗓 {data.tripSummary.durationDays} ngày
+                        </span>
+                      )}
+                      {data.tripSummary?.difficulty && (
+                        <span className="rounded-full bg-[#E5F2E6] px-3 py-1.5">
+                          ⛰ Độ khó {difficultyLabel(data.tripSummary.difficulty).toLocaleLowerCase("vi")}
+                        </span>
+                      )}
+                      <span title={weatherInfo?.title} className="rounded-full bg-[#E5F2E6] px-3 py-1.5">
+                        ☁ {weatherInfo?.text || data.tripSummary?.weatherSummary || "Chưa có dự báo thời tiết"}
+                      </span>
+                      {weatherInfo?.risk && (
+                        <span
+                          title={weatherInfo.title}
+                          className={`rounded-full px-3 py-1.5 ${
+                            weatherInfo.riskLevel === "LOW"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : weatherInfo.riskLevel === "MEDIUM"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-red-50 text-red-700"
+                          }`}
+                        >
+                          {weatherInfo.risk}
+                        </span>
+                      )}
+                      {data.recommendationsGeneratedAt && (
+                        <span className="text-[11px] font-medium text-gray-400">
+                          Cập nhật {formatDate(data.recommendationsGeneratedAt)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm font-semibold text-gray-500">
+                  {section.groups.length} sản phẩm
+                </p>
+              </div>
+              <section className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {section.groups.map((group) => {
+                  const item =
+                    group.variants.find(
+                      (variant) => variant.id === selectedVariantIds[group.key],
+                    ) ?? group.variants[0];
+                  const cartItem = cart.items.find(
+                    (entry) => entry.product.id === item.id,
+                  );
+                  return (
+                    <ProductCard
+                      key={group.key}
+                      item={item}
+                      title={group.name}
+                      variants={group.variants}
+                      reasons={groupReasons(group)}
+                      onSelectVariant={(id) =>
+                        setSelectedVariantIds((current) => ({
+                          ...current,
+                          [group.key]: id,
+                        }))
+                      }
+                      bookingId={bookingId}
+                      quantity={cartItem?.quantity ?? 0}
+                      onQuantityChange={(quantity) =>
+                        cart.setQuantity(item, item.availableCount ?? 0, quantity)
+                      }
+                    />
+                  );
+                })}
+              </section>
+            </div>
+          ))
         ) : (
           <section className="mt-6 rounded-3xl border border-dashed border-gray-300 bg-white p-12 text-center">
             <div className="text-4xl">🧭</div>
-            <h2 className="mt-3 text-lg font-black text-gray-900">
+            <h2 className="mt-3 text-lg font-bold text-gray-900">
               Chưa tìm thấy thiết bị phù hợp
             </h2>
             <p className="mt-2 text-sm text-gray-500">
@@ -651,7 +819,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
               className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#E5F2E6] text-[#174B36]"
             >
               <CartIcon />
-              <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#F7C846] px-1 text-[10px] font-black text-gray-950">
+              <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#F7C846] px-1 text-[10px] font-bold text-gray-950">
                 {cart.totalQuantity}
               </span>
             </button>
@@ -660,7 +828,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
               onClick={() => setCartOpen(true)}
               className="min-w-0 flex-1 text-left"
             >
-              <p className="truncate text-sm font-black text-gray-950">
+              <p className="truncate text-sm font-bold text-gray-950">
                 {cart.totalQuantity} thiết bị cho {data.eligibility.trip.name}
               </p>
               <p className="mt-0.5 text-xs font-semibold text-gray-500">
@@ -669,7 +837,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
             </button>
             <Link
               href={checkoutUrl}
-              className="rounded-2xl bg-[#174B36] px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-950/15 transition hover:bg-[#0F5A3B]"
+              className="rounded-2xl bg-[#174B36] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-950/15 transition hover:bg-[#0F5A3B]"
             >
               Kiểm tra & đặt thuê <span className="hidden sm:inline">→</span>
             </Link>
@@ -688,10 +856,10 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
           <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-[#F7F8F5] shadow-2xl">
             <header className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-5">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
                   Giỏ hành trang
                 </p>
-                <h2 className="mt-1 text-xl font-black text-gray-950">
+                <h2 className="mt-1 text-xl font-bold text-gray-950">
                   Thiết bị đã chọn
                 </h2>
               </div>
@@ -708,7 +876,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
               {cart.items.length === 0 ? (
                 <div className="mt-24 text-center">
                   <div className="text-5xl">🎒</div>
-                  <p className="mt-4 font-black text-gray-900">
+                  <p className="mt-4 font-bold text-gray-900">
                     Giỏ hành trang đang trống
                   </p>
                   <p className="mt-2 text-sm text-gray-500">
@@ -735,10 +903,10 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm font-black text-gray-950">
+                      <p className="line-clamp-2 text-sm font-bold text-gray-950">
                         {product.name}
                       </p>
-                      <p className="mt-1 text-xs font-black text-emerald-700">
+                      <p className="mt-1 text-xs font-bold text-emerald-700">
                         {formatMoney(product.dailyPrice, product.currency)}/ngày
                       </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
@@ -755,7 +923,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
                           onClick={() =>
                             cart.setQuantity(product, availableCount, 0)
                           }
-                          className="text-xs font-bold text-red-600 hover:underline"
+                          className="text-xs font-semibold text-red-600 hover:underline"
                         >
                           Xóa
                         </button>
@@ -772,14 +940,14 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
                     <p className="text-xs font-semibold text-gray-500">
                       Tạm tính mỗi ngày
                     </p>
-                    <p className="mt-1 text-2xl font-black text-[#174B36]">
+                    <p className="mt-1 text-2xl font-bold text-[#174B36]">
                       {formatMoney(cart.dailyTotal)}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={cart.clear}
-                    className="text-xs font-bold text-gray-500 hover:text-red-600"
+                    className="text-xs font-semibold text-gray-500 hover:text-red-600"
                   >
                     Xóa giỏ
                   </button>
@@ -790,7 +958,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
                 </p>
                 <Link
                   href={checkoutUrl}
-                  className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#174B36] px-5 py-4 text-sm font-black text-white shadow-lg shadow-emerald-950/15"
+                  className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#174B36] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-950/15"
                 >
                   Kiểm tra tồn kho & tiếp tục →
                 </Link>
