@@ -1,0 +1,76 @@
+# TrekGo API + PostgreSQL + MongoDB + Redis
+# Dùng chung cho máy local và VPS. Xem HUONG_DAN_DOCKER.md.
+#
+# Biến môi trường:
+#   - VPS:   chỉ cần file .env (copy từ .env.docker.example)
+#   - Local: .env (dùng cho npm run start:dev) + .env.docker ghi đè lên
+#            (host postgres/mongo/redis thay cho localhost)
+# File sau ghi đè file trước; file nào không có thì bỏ qua.
+
+x-env-files: &env-files
+  - path: .env
+    required: false
+  - path: .env.docker
+    required: false
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Đọc POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+    env_file: *env-files
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Chỉ mở cho chính máy (127.0.0.1) để chạy seed / DBeaver; dùng 5433 để không trùng Postgres cài sẵn
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27018:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    image: trekgo-api
+    restart: unless-stopped
+    env_file: *env-files
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:

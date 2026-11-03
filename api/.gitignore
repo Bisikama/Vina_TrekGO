@@ -41,6 +41,9 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+# Docker: .env.docker chứa secret (ignore), file mẫu thì commit
+.env.docker
+!.env.docker.example
 
 # temp directory
 .temp
