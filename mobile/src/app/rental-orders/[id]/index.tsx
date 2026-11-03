@@ -21,6 +21,7 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebViewModal";
 import { rentalApi } from "@/features/rentals/api";
 import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
+import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -933,6 +934,8 @@ export default function RentalOrderDetailScreen() {
             ) : null}
           </Section>
         )}
+
+        {orderId ? <RentalDocumentsCard orderId={orderId} accessToken={accessToken} /> : null}
 
         {deposit && (
           <Section title="Theo dõi tiền cọc" subtitle="Cọc được xử lý riêng theo từng thiết bị">

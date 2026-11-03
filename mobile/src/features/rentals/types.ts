@@ -565,3 +565,32 @@ export function rentalProductSpecs(product: RentalProduct) {
     )
     .map(([key, value]) => `${key}: ${String(value)}`);
 }
+
+// Chứng từ đơn thuê (RB-API-1001 / 1003 / 1005).
+export type RentalDocumentSummary = {
+  id: string;
+  type: string;
+  documentNo: string;
+  rootDocumentId: string | null;
+  renderStatus: "PENDING_RENDER" | "READY" | "RENDER_FAILED" | string;
+  downloadReady: boolean;
+  issuedAt: string | null;
+  version: number;
+};
+
+export type RentalDocumentDownload = {
+  downloadUrl: string;
+  expiresAt: string;
+  fileName: string;
+  contentType: string;
+  sha256: string;
+};
+
+export type RentalDocumentVerification = {
+  documentNo: string;
+  issuedAt: string;
+  verified: boolean;
+  snapshotVerified: boolean;
+  pdfVerified: boolean | null;
+  verificationStatus: "VERIFIED" | "SNAPSHOT_ONLY" | "FAILED" | string;
+};

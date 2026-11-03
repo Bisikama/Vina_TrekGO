@@ -19,6 +19,7 @@ import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav
 
 import { RentalCancellation } from "./RentalCancellation";
 import { DeductionReviewPanel } from "./DeductionReviewPanel";
+import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -372,6 +373,8 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               <Location title="Điểm nhận" point={detail.pickupPoint} />
               <Location title="Điểm trả" point={detail.returnPoint} />
             </div>
+
+            <RentalDocumentsPanel orderId={orderId} />
 
             <DepositSettlementPanel
               orderId={orderId}
