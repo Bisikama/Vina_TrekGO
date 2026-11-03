@@ -38,7 +38,7 @@ Rồi điền các giá trị `<...>`. Ba quy tắc quan trọng:
 2. **Không** dùng `localhost` cho DB/Mongo/Redis. Phải dùng tên service: `postgres`, `mongo`, `redis`.
 3. `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` phải khớp với user / mật khẩu / tên DB trong `DATABASE_URL` và `DIRECT_URL`.
 
-Các dòng có đánh dấu `[VPS]` trong file mẫu là những dòng cần đổi khi deploy lên VPS (xem bước 6).
+Các dòng có đánh dấu `[VPS]` trong file mẫu là những dòng cần đổi khi deploy lên VPS (xem bước 7).
 
 ## 3. Chạy
 
@@ -110,7 +110,65 @@ docker compose exec postgres pg_restore -U <POSTGRES_USER> -d <POSTGRES_DB> --cl
 docker compose restart api
 ```
 
-## 6. Deploy lên VPS
+## 6. Quy trình khi có code mới (build → chạy thử → Docker Hub)
+
+Hai bước Prisma chạy ở hai thời điểm khác nhau:
+
+| Lệnh | Chạy khi nào | Làm gì |
+| --- | --- | --- |
+| `prisma generate` | Lúc **build image** | Sinh Prisma Client, đóng gói vào image. Không đụng DB. |
+| `prisma migrate deploy` | Lúc **container khởi động** | Kết nối DB và áp migration mới. |
+
+**Bước 1: Build image** (trong thư mục `api/`)
+
+```bash
+docker compose build api
+```
+
+Image được tạo ra tên là `trekgo-api`. Kiểm tra: `docker images trekgo-api`.
+
+**Bước 2: Chạy thử trên máy**
+
+```bash
+docker compose up -d
+docker compose logs -f api
+```
+
+Mở http://localhost:3000/docs để kiểm tra. Bước 1 + 2 có thể gộp thành `docker compose up -d --build`.
+
+**Bước 3: Đẩy lên Docker Hub** (khi đã chạy thử ổn)
+
+```bash
+docker login                                              # chỉ cần lần đầu
+docker tag trekgo-api <dockerhub-user>/trekgo-api:latest
+docker push <dockerhub-user>/trekgo-api:latest
+
+# Nên gắn thêm tag phiên bản để quay lại bản cũ khi bản mới lỗi
+docker tag trekgo-api <dockerhub-user>/trekgo-api:v1.0.1
+docker push <dockerhub-user>/trekgo-api:v1.0.1
+```
+
+Hoặc build + đẩy một lần, hỗ trợ cả máy Intel/AMD và Mac chip M:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t <dockerhub-user>/trekgo-api:latest --push .
+```
+
+> Không cần tạo repo trước trên Docker Hub: `docker push` tự tạo, mặc định là **public**. Muốn private thì vào repo trên hub.docker.com → **Settings → Make private** (tài khoản free được 1 repo private) và thêm người dùng ở **Collaborators**.
+
+**Bước 4: Người khác lấy bản mới**
+
+Người nhận cần `docker-compose.yml`, trong đó service `api` dùng `image: <dockerhub-user>/trekgo-api:latest` và **bỏ** dòng `build: .`, cùng file `.env` (gửi qua kênh riêng vì chứa secret). Rồi chạy:
+
+```bash
+docker login                 # nếu repo private
+docker compose pull
+docker compose up -d
+```
+
+Migration mới (nếu có) tự chạy khi container khởi động.
+
+## 7. Deploy lên VPS
 
 1. Đưa source lên VPS: `git clone` repo, rồi `cd api`.
 2. Tạo `.env` trên VPS: `cp .env.docker.example .env` (hoặc `scp` từ máy lên), rồi đổi các dòng `[VPS]`:
@@ -131,7 +189,7 @@ git pull
 docker compose up -d --build
 ```
 
-## 7. Xử lý lỗi thường gặp
+## 8. Xử lý lỗi thường gặp
 
 | Lỗi trong log | Nguyên nhân / cách xử lý |
 | --- | --- |
@@ -143,5 +201,7 @@ docker compose up -d --build
 | API tắt ngay, log có lỗi Prisma migrate | Migration lỗi; đọc `docker compose logs api`. Không dùng `migrate reset` / `db push` để "sửa". |
 | API tắt ngay, log báo lỗi env | Thiếu hoặc sai biến (Zod kiểm tra lúc khởi động). So lại với `.env.docker.example`. |
 | `port is already allocated` | Cổng 3000 đang bị dùng (có thể do `npm run start:dev`). Tắt app đó, hoặc đổi `"3000:3000"` thành `"3001:3000"` trong `docker-compose.yml`. |
+| `no configuration file provided: not found` | Đang đứng sai thư mục. `cd api` (nơi có `docker-compose.yml`) rồi chạy lại. |
+| `No images found matching "ls"` | Gõ nhầm `docker images ls`. Dùng `docker images` hoặc `docker image ls`. |
 | Code mới không có tác dụng | Thiếu `--build`: chạy `docker compose up -d --build`. |
 | Hết dung lượng ổ đĩa | `docker system prune` (xoá container đã dừng, image không dùng; **không** xoá volume). |
