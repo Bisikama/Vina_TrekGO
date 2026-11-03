@@ -36,7 +36,7 @@ export const PAYMENT_CHECKOUT_RESPONSE_SCHEMA: SchemaObject = {
     amount: { type: 'string', description: 'Số tiền nguyên ở dạng chuỗi để không mất độ chính xác', example: '150000' },
     currency: { type: 'string', example: 'VND' },
     providerEnvironment: { type: 'string', enum: ['MOCK', 'SANDBOX', 'PRODUCTION'] },
-    gateway: { type: 'string', enum: ['momo', 'vnpay'] },
+    gateway: { type: 'string', enum: ['momo', 'vnpay', 'payos'] },
     checkout: {
       nullable: true,
       oneOf: [
@@ -86,15 +86,16 @@ export const PAYMENT_OPTIONS_RESPONSE_SCHEMA: SchemaObject = {
   type: 'object',
   required: ['defaultGateway', 'gateways'],
   properties: {
-    defaultGateway: { type: 'string', enum: ['momo', 'vnpay'], nullable: true },
+    defaultGateway: { type: 'string', enum: ['momo', 'vnpay', 'payos'], nullable: true },
     gateways: {
       type: 'array',
       items: {
         type: 'object',
         required: ['gateway', 'environment', 'methods'],
         properties: {
-          gateway: { type: 'string', enum: ['momo', 'vnpay'] },
+          gateway: { type: 'string', enum: ['momo', 'vnpay', 'payos'] },
           environment: { type: 'string', enum: ['SANDBOX', 'PRODUCTION'] },
+          refundMode: { type: 'string', enum: ['MANUAL_BANK_TRANSFER'] },
           methods: { type: 'array', items: { type: 'string', enum: ['QR', 'REDIRECT'] } },
         },
       },
@@ -146,7 +147,7 @@ export const RENTAL_PAYMENT_STATUS_RESPONSE_SCHEMA: SchemaObject = {
     applicationReasonCode: { type: 'string', nullable: true },
     reconciliationStatus: { type: 'string', enum: reconciliationStatusEnum, nullable: true },
     reconciliationRequired: { type: 'boolean' },
-    gateway: { type: 'string', enum: ['momo', 'vnpay'], nullable: true },
+    gateway: { type: 'string', enum: ['momo', 'vnpay', 'payos'], nullable: true },
     providerEnvironment: { type: 'string', enum: ['MOCK', 'SANDBOX', 'PRODUCTION'], nullable: true },
     paymentMethod: { type: 'string', enum: ['QR', 'REDIRECT'], nullable: true },
     orderStatus: { type: 'string' },

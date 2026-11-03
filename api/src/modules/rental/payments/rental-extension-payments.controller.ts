@@ -58,7 +58,7 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
       properties: {
         gateway: {
           type: 'string',
-          enum: ['momo', 'vnpay'],
+          enum: ['momo', 'vnpay', 'payos'],
           description: 'Bỏ trống để dùng cổng mặc định từ GET /api/v1/payments/options',
           example: 'vnpay',
         },
@@ -125,10 +125,10 @@ Khởi tạo luồng thanh toán phí gia hạn cho extension request đã xác 
     @Headers('idempotency-key') idempotencyKey: string,
     @Body(
       new ZodValidationPipe(
-        z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict(),
+        z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay', 'payos']).optional() }).strict(),
       ),
     )
-    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
+    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' | 'payos' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,

@@ -105,7 +105,7 @@ export class RentalPaymentsController {
 - Webhook sẽ tự động cập nhật trạng thái đơn khi thanh toán thành công.
 
 **Cách test trên Swagger:** Authorize bằng Bearer token → nhập RentalOrder UUID → nhập một Idempotency-Key mới → Execute. Nếu request timeout, retry đúng cùng key và body. Sau thanh toán, kiểm tra GET /api/v1/rental-orders/{id}/payment.
-- **LƯU Ý QUAN TRỌNG VỀ GATEWAY:** Khi môi trường đang chạy \`PAYMENT_PROVIDER=mock\`, trường \`gateway\` trong request body **BẮT BUỘC ĐỂ TRỐNG** (hoặc không truyền). Nếu cố tình điền "momo" hoặc "vnpay" khi chưa cấu hình sandbox keys tương ứng, API sẽ trả về lỗi HTTP 503 \`PAYMENT_PROVIDER_UNAVAILABLE\`. Chỉ điền gateway khi đã cấu hình đầy đủ keys cho cổng đó.
+- **GATEWAY:** Lấy danh sách từ GET /api/v1/payments/options. Chỉ chọn cổng đã bật; payos là production opt-in và có thể hoạt động cùng cổng sandbox/default hiện có.
 `,
   })
   @ApiParam({
@@ -130,9 +130,9 @@ export class RentalPaymentsController {
       properties: {
         gateway: {
           type: 'string',
-          enum: ['momo', 'vnpay'],
+          enum: ['momo', 'vnpay', 'payos'],
           description:
-            'Cổng thanh toán. QUAN TRỌNG: Bắt buộc bỏ trống khi môi trường chạy PAYMENT_PROVIDER=mock. Chỉ điền "momo" hoặc "vnpay" khi backend đã cấu hình thông tin kết nối sandbox tương ứng.',
+            'Chỉ truyền gateway được công bố bởi GET /api/v1/payments/options. payos nhận tiền thật khi PAYOS_ENABLED=true; bỏ trống để dùng cổng mặc định.',
         },
         paymentMethod: {
           type: 'string',
@@ -195,8 +195,8 @@ export class RentalPaymentsController {
   async create(
     @Param('id', new ZodValidationPipe(z.string().uuid())) rentalOrderId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()))
-    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
+    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay', 'payos']).optional() }).strict()))
+    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' | 'payos' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,

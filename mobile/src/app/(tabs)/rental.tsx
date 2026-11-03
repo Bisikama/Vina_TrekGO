@@ -29,6 +29,9 @@ import {
   RentalOrderSummary,
   RentalProduct,
   rentalProductSpecs,
+  type RentalRecommendation,
+  type RentalTripSummary,
+  type TripWeather,
 } from "@/features/rentals/types";
 import { EquipmentItem } from "@/types";
 
@@ -79,7 +82,49 @@ function productFamilyName(product: RentalProduct) {
     .trim();
 }
 
-const GRADE_LABELS = { LIKE_NEW: "Mới", GOOD_USED: "Sử dụng tốt" } as const;
+const DIFFICULTY_LABELS: Record<string, string> = {
+  EASY: "Dễ",
+  BEGINNER: "Dễ",
+  MODERATE: "Trung bình",
+  MEDIUM: "Trung bình",
+  INTERMEDIATE: "Trung bình",
+  HARD: "Khó",
+  CHALLENGING: "Khó",
+  DIFFICULT: "Khó",
+  EXTREME: "Rất khó",
+  EXPERT: "Rất khó",
+};
+
+function difficultyLabel(value: string) {
+  return DIFFICULTY_LABELS[value.toUpperCase()] ?? value;
+}
+
+const WEATHER_RISK_LABELS: Record<string, string> = {
+  LOW: "Rủi ro thấp",
+  MEDIUM: "Rủi ro trung bình",
+  HIGH: "Rủi ro cao",
+  SEVERE: "Nguy hiểm",
+};
+
+// Chữ thời tiết từ api thật; không có số liệu thì trả null, không bịa số.
+function describeWeather(weather: TripWeather | null) {
+  if (!weather || weather.snapshot.riskLevel === "UNKNOWN") return null;
+  const day = weather.forecast?.[0];
+  const parts: string[] = [];
+  const condition = day?.condition || weather.snapshot.weatherCondition;
+  if (condition) parts.push(condition);
+  if (day && day.temperatureMinC !== null && day.temperatureMaxC !== null) {
+    parts.push(`${Math.round(day.temperatureMinC)}–${Math.round(day.temperatureMaxC)}°C`);
+  } else if (weather.snapshot.temperatureC !== null) {
+    parts.push(`${Math.round(weather.snapshot.temperatureC)}°C`);
+  }
+  const rain = day?.rainProbabilityPercent ?? weather.snapshot.rainProbabilityPercent;
+  if (rain !== null && rain !== undefined) parts.push(`Mưa ${Math.round(rain)}%`);
+  if (!parts.length) return null;
+  return { text: parts.join(" · "), risk: WEATHER_RISK_LABELS[weather.snapshot.riskLevel] ?? null, riskLevel: weather.snapshot.riskLevel };
+}
+
+const GRADE_LABELS = { LIKE_NEW: "Như mới", GOOD_USED: "Sử dụng tốt" } as const;
 const GRADE_ORDER = { LIKE_NEW: 0, GOOD_USED: 1 } as const;
 
 // Backend: mỗi hạng là một RentalProduct riêng, nối bằng gradeGroupId;
@@ -139,6 +184,10 @@ export default function RentalScreen() {
   const [categories, setCategories] = useState<RentalCategory[]>([]);
   const [products, setProducts] = useState<RentalProduct[]>([]);
   const [catalogAvailability, setCatalogAvailability] = useState<Record<string, RentalAvailability>>({});
+  const [recommendations, setRecommendations] = useState<Record<string, RentalRecommendation>>({});
+  const [tripSummary, setTripSummary] = useState<RentalTripSummary | null>(null);
+  const [tripWeather, setTripWeather] = useState<TripWeather | null>(null);
+  const weatherInfo = useMemo(() => describeWeather(tripWeather), [tripWeather]);
   const [selectedVariantIds, setSelectedVariantIds] = useState<Record<string, string>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>();
   const [searchDraft, setSearchDraft] = useState("");
@@ -158,11 +207,43 @@ export default function RentalScreen() {
   );
   const productGroups = useMemo(() => groupRentalProducts(products), [products]);
 
+  // Tách theo GET /trips/{tripId}/rental-recommendations: món phù hợp lên trước, còn lại xuống dưới.
+  const groupScore = useCallback(
+    (group: { variants: RentalProduct[] }) =>
+      Math.max(0, ...group.variants.map((variant) => recommendations[variant.id]?.score ?? 0)),
+    [recommendations],
+  );
+  const groupReasons = useCallback(
+    (group: { variants: RentalProduct[] }) => {
+      const best = group.variants
+        .map((variant) => recommendations[variant.id])
+        .filter((item): item is RentalRecommendation => Boolean(item))
+        .sort((a, b) => b.score - a.score)[0];
+      return best?.reasons ?? [];
+    },
+    [recommendations],
+  );
+  const catalogSections = useMemo(() => {
+    const recommended = productGroups
+      .filter((group) => groupScore(group) > 0)
+      .sort((a, b) => groupScore(b) - groupScore(a));
+    const others = productGroups.filter((group) => groupScore(group) <= 0);
+    if (!recommended.length) return [{ key: "all", groups: productGroups }];
+    return [
+      { key: "recommended", groups: recommended },
+      ...(others.length ? [{ key: "others", groups: others }] : []),
+    ];
+  }, [groupScore, productGroups]);
+  const hasRecommended = catalogSections[0]?.key === "recommended";
+
   const loadCatalog = useCallback(async (isRefresh = false) => {
     if (!accessToken || !selectedTrip) {
       setCategories([]);
       setProducts([]);
       setCatalogAvailability({});
+      setRecommendations({});
+      setTripSummary(null);
+      setTripWeather(null);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -172,12 +253,26 @@ export default function RentalScreen() {
     setError(undefined);
 
     try {
-      const [categoryResult, productResult] = await Promise.all([
+      const [categoryResult, productResult, recommendationResult] = await Promise.all([
         rentalApi.listCategories(),
         rentalApi.listProducts({ search, categoryId: selectedCategoryId }),
+        // Chuyến chưa đủ điều kiện thuê sẽ trả lỗi: khi đó chỉ hiện danh sách thường.
+        rentalApi
+          .getRecommendations(selectedTrip.id, accessToken, { categoryId: selectedCategoryId, limit: 50 })
+          .catch(() => null),
       ]);
+      void rentalApi
+        .getTripWeather(selectedTrip.id, accessToken)
+        .then(setTripWeather)
+        .catch(() => setTripWeather(null));
       setCategories(categoryResult.items);
       setProducts(productResult.items);
+      setRecommendations(
+        Object.fromEntries(
+          (recommendationResult?.recommendations ?? []).map((item) => [item.productId, item]),
+        ),
+      );
+      setTripSummary(recommendationResult?.tripSummary ?? null);
       const availabilityResults = await Promise.allSettled(
         productResult.items.map(async (product) => ({
           productId: product.id,
@@ -530,11 +625,46 @@ export default function RentalScreen() {
 
         <View style={styles.productSectionHeader}>
           <View>
-            <Text style={styles.sectionEyebrow}>THIẾT BỊ TREKKING</Text>
-            <Text style={styles.productSectionTitle}>Danh sách sản phẩm</Text>
+            <Text style={styles.sectionEyebrow}>
+              {hasRecommended ? "GỢI Ý CHO CHUYẾN ĐI" : "THIẾT BỊ TREKKING"}
+            </Text>
+            <Text style={styles.productSectionTitle}>
+              {hasRecommended ? "Phù hợp cho chuyến đi" : "Danh sách sản phẩm"}
+            </Text>
           </View>
-          <Text style={styles.productCount}>{productGroups.length} mẫu</Text>
+          <Text style={styles.productCount}>
+            {hasRecommended ? catalogSections[0].groups.length : productGroups.length} mẫu
+          </Text>
         </View>
+        {tripSummary || weatherInfo ? (
+          <View style={styles.tripSummaryRow}>
+            {tripSummary ? (
+              <Text style={styles.tripSummaryChip}>🗓 {tripSummary.durationDays} ngày</Text>
+            ) : null}
+            {tripSummary?.difficulty ? (
+              <Text style={styles.tripSummaryChip}>
+                ⛰ Độ khó {difficultyLabel(tripSummary.difficulty).toLocaleLowerCase("vi")}
+              </Text>
+            ) : null}
+            <Text style={styles.tripSummaryChip} numberOfLines={1}>
+              ☁ {weatherInfo?.text || tripSummary?.weatherSummary || "Chưa có dự báo thời tiết"}
+            </Text>
+            {weatherInfo?.risk ? (
+              <Text
+                style={[
+                  styles.tripSummaryChip,
+                  weatherInfo.riskLevel === "LOW"
+                    ? styles.riskLow
+                    : weatherInfo.riskLevel === "MEDIUM"
+                      ? styles.riskMedium
+                      : styles.riskHigh,
+                ]}
+              >
+                {weatherInfo.risk}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.centerState}>
@@ -556,8 +686,21 @@ export default function RentalScreen() {
             description="Thử đổi từ khóa hoặc chọn danh mục khác."
           />
         ) : (
+          <View>
+          {catalogSections.map((section, sectionIndex) => (
+          <View key={section.key}>
+            {sectionIndex > 0 ? (
+              <View style={[styles.productSectionHeader, styles.otherSectionHeader]}>
+                <View>
+                  <Text style={styles.sectionEyebrow}>THIẾT BỊ TREKKING</Text>
+                  <Text style={styles.productSectionTitle}>Những món đồ xinh xinh khác</Text>
+                </View>
+                <Text style={styles.productCount}>{section.groups.length} mẫu</Text>
+              </View>
+            ) : null}
           <View style={styles.productsGrid}>
-            {productGroups.map((group) => {
+            {section.groups.map((group) => {
+              const reasons = groupReasons(group);
               const selectedId = selectedVariantIds[group.key];
               const product =
                 group.variants.find((variant) => variant.id === selectedId) ??
@@ -632,6 +775,15 @@ export default function RentalScreen() {
                       {group.name}
                     </Text>
                     {product.sku ? <Text style={styles.productSku}>SKU {product.sku}</Text> : null}
+                    {reasons.length > 0 ? (
+                      <View style={styles.reasonRow}>
+                        {reasons.slice(0, 2).map((reason) => (
+                          <Text key={reason} style={styles.reasonChip} numberOfLines={1}>
+                            ✦ {reason}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
                     {gradeVariants.length > 1 ? (
                       <View style={styles.variantBlock}>
                         <View style={styles.gradeSegment}>
@@ -690,10 +842,20 @@ export default function RentalScreen() {
                     ) : productSize(product) ? (
                       <Text style={styles.singleVariant}>Kích cỡ: {productSize(product)}</Text>
                     ) : null}
-                    <Text style={styles.dailyPrice}>
-                      {formatMoney(product.dailyPrice)}{" "}
-                      <Text style={styles.perDay}>/ngày</Text>
-                    </Text>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.dailyPrice}>
+                        {formatMoney(product.dailyPrice)}{" "}
+                        <Text style={styles.perDay}>/ngày</Text>
+                      </Text>
+                      {product.replacementValue > 0 ? (
+                        <Text
+                          style={styles.originalPrice}
+                          accessibilityLabel={`Giá gốc ${formatMoney(product.replacementValue)}`}
+                        >
+                          {formatMoney(product.replacementValue)}
+                        </Text>
+                      ) : null}
+                    </View>
                     <Text style={styles.depositPrice}>
                       Cọc dự kiến: {formatMoney(deposit)}
                     </Text>
@@ -761,6 +923,9 @@ export default function RentalScreen() {
                 </View>
               );
             })}
+          </View>
+          </View>
+          ))}
           </View>
         )}
           </>
@@ -1014,6 +1179,34 @@ const styles = StyleSheet.create({
   productSectionHeader: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 10, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   productSectionTitle: { marginTop: 2, color: Colors.onSurface, fontSize: 18, lineHeight: 24, fontWeight: "700", letterSpacing: -0.2 },
   productCount: { color: Colors.onSurfaceMuted, fontSize: 10, lineHeight: 14 },
+  otherSectionHeader: { paddingTop: 18 },
+  riskLow: { backgroundColor: "#E7F6EC", color: "#1F7A45" },
+  riskMedium: { backgroundColor: "#FFF4DB", color: "#8A5A00" },
+  riskHigh: { backgroundColor: "#FDE8E8", color: "#B42318" },
+  tripSummaryRow: { paddingHorizontal: 16, paddingBottom: 10, flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tripSummaryChip: {
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryPale,
+    color: Colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  reasonRow: { marginTop: 6, flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  reasonChip: {
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    backgroundColor: "#FFF6D6",
+    color: "#7A5600",
+    fontSize: 8,
+    fontWeight: "700",
+  },
   catalogHeading: { paddingHorizontal: 16, paddingTop: 14 },
   catalogHeadingHint: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 10, lineHeight: 14 },
   contextBanner: {
@@ -1272,11 +1465,23 @@ const styles = StyleSheet.create({
   sizeText: { color: Colors.onSurfaceVariant, fontSize: 9, fontWeight: "600" },
   sizeTextActive: { color: Colors.primaryDark },
   singleVariant: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 9 },
-  dailyPrice: {
+  priceRow: {
     marginTop: 9,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    columnGap: 6,
+  },
+  dailyPrice: {
     color: Colors.primaryDark,
     fontSize: 15,
     fontWeight: "600",
+  },
+  originalPrice: {
+    color: Colors.onSurfaceMuted,
+    fontSize: 10,
+    textDecorationLine: "line-through",
+    opacity: 0.75,
   },
   perDay: { color: Colors.onSurfaceVariant, fontSize: 10, fontWeight: "500" },
   depositRatio: { marginTop: 1, color: Colors.onSurfaceVariant, fontSize: 8 },

@@ -1,3 +1,4 @@
+import { manualRefundReservation } from '../../payments/manual-refund-reservation'
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 
@@ -180,6 +181,7 @@ export async function reserveRentalCancellationRefundWithTx(
     paymentGateway: payment.paymentGateway, providerEnvironment: payment.providerEnvironment,
     merchantAccountKey: payment.merchantAccountKey, merchantRefundRef: `refund:${id}`,
     reconcileStatus: 'SCHEDULED', nextRetryAt: input.now,
+    ...manualRefundReservation(payment.paymentGateway),
     allocations: { create: selected },
   } });
 }

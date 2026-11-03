@@ -27,8 +27,10 @@ export type SandboxSimulateRefundBodyDto = z.infer<typeof SandboxSimulateRefundB
 export interface SandboxSimulateRefundResponseDto {
   simulationId: string
   refundId: string
-  rentalOrderId: string
-  depositSettlementId: string
+  rentalOrderId: string | null
+  depositSettlementId: string | null
+  bookingId?: string
+  bookingCancellationId?: string
   provider: 'VNPAY_SANDBOX'
   providerRefundStatus: 'SUCCEEDED'
   simulationStatus: 'SIMULATED'

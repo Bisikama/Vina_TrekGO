@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   type FormEvent,
@@ -149,6 +149,33 @@ const initialCreateForm: CreateForm = {
   condition: "GOOD",
   acquiredAt: "",
 };
+
+// Tên sản phẩm có hạng kèm hậu tố ("– Rất mới" / "– Đã sử dụng tốt"): tách thành tên + nhãn hạng.
+function splitGradeName(name: string): { base: string; grade: "Như mới" | "Sử dụng tốt" | null } {
+  const match = name.match(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i);
+  if (!match) return { base: name, grade: null };
+  const suffix = match[1].toLocaleLowerCase("vi");
+  return {
+    base: name.slice(0, match.index).trim(),
+    grade: suffix.includes("sử dụng") ? "Sử dụng tốt" : "Như mới",
+  };
+}
+
+function GradeName({ name, className }: { name: string; className: string }) {
+  const { base, grade } = splitGradeName(name);
+  return (
+    <span className={className}>
+      {base}
+      {grade && (
+        <span
+          className={`ml-1.5 inline-block rounded-full px-2 py-0.5 align-middle text-[10px] font-semibold ${grade === "Như mới" ? "bg-[#E4F6D8] text-[#17603F]" : "bg-[#FFF2D1] text-[#8A5A00]"}`}
+        >
+          {grade}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function StaffInventory() {
   const [products, setProducts] = useState<RentalProduct[]>([]);
@@ -568,10 +595,10 @@ export function StaffInventory() {
               Kho & Thiết bị <span className="mx-2">›</span> Quản lý hiện vật
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-black text-slate-950">
+              <h1 className="text-2xl font-bold text-slate-950">
                 Quản lý Kho thiết bị & Vật tư
               </h1>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold text-emerald-800">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold text-emerald-800">
                 API thật · {locations.length} kho hoạt động
               </span>
             </div>
@@ -582,7 +609,7 @@ export function StaffInventory() {
               type="button"
               onClick={exportCsv}
               disabled={units.length === 0}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs font-bold shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs font-semibold shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               ⇩ Xuất CSV trang hiện tại
             </button>
@@ -590,7 +617,7 @@ export function StaffInventory() {
               type="button"
               onClick={openCreateModal}
               disabled={products.length === 0 || locations.length === 0}
-              className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               ⊕ Nhập thiết bị mới
             </button>
@@ -598,13 +625,13 @@ export function StaffInventory() {
         </div>
 
         {error && (
-          <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-800">
+          <div className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-800">
             <span>⚠ {error}</span>
             <button type="button" onClick={() => setError("")}>×</button>
           </div>
         )}
         {notice && (
-          <div className="mt-4 rounded-lg bg-emerald-100 px-4 py-3 text-xs font-bold text-emerald-900">
+          <div className="mt-4 rounded-lg bg-emerald-100 px-4 py-3 text-xs font-semibold text-emerald-900">
             ✓ {notice}
           </div>
         )}
@@ -614,7 +641,7 @@ export function StaffInventory() {
             <article key={stat.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[10px] text-slate-600">{stat.label}</p>
               <div className="mt-3 flex items-end gap-1">
-                <strong className={`text-2xl font-black ${stat.color}`}>{stat.value}</strong>
+                <strong className={`text-2xl font-bold ${stat.color}`}>{stat.value}</strong>
                 <span className="pb-1 text-[9px] text-slate-600">{stat.detail}</span>
               </div>
               <div className="mt-4 h-1 overflow-hidden rounded-full bg-[#e4ebf8]">
@@ -675,8 +702,8 @@ export function StaffInventory() {
 
             {selectedIds.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-[#edf3ff] p-3">
-                <p className="text-xs font-bold text-slate-700">☑ Đã chọn {selectedIds.length} thiết bị</p>
-                <button type="button" disabled={saving} onClick={() => void requestLabels(selectedIds)} className="rounded-lg bg-[#125238] px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">
+                <p className="text-xs font-semibold text-slate-700">☑ Đã chọn {selectedIds.length} thiết bị</p>
+                <button type="button" disabled={saving} onClick={() => void requestLabels(selectedIds)} className="rounded-lg bg-[#125238] px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-50">
                   ▦ Lấy dữ liệu in QR
                 </button>
               </div>
@@ -698,11 +725,11 @@ export function StaffInventory() {
                   {units.map((unit) => (
                     <tr key={unit.id} onClick={() => setActiveId(unit.id)} className={`cursor-pointer border-b border-slate-100 transition ${activeId === unit.id ? "bg-[#edf3ff]" : "hover:bg-slate-50"}`}>
                       <td className="px-4 py-4" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(unit.id)} onChange={() => toggleSelected(unit.id)} className="h-4 w-4 accent-[#125238]" /></td>
-                      <td className="px-3 py-4"><p className="font-mono text-[11px] font-black text-emerald-900">{unit.assetCode}</p><p className="mt-1 max-w-40 truncate font-mono text-[9px] text-slate-500">{unit.qrCode ?? "Chưa có QR"}</p></td>
-                      <td className="px-3 py-4"><p className="text-xs font-black text-slate-950">{unit.product.name}</p><p className="mt-1 text-[9px] text-slate-500">{unit.product.sku}</p></td>
-                      <td className="px-3 py-4"><p className="text-xs font-bold">{unit.currentInventoryLocation?.name ?? "Ngoài kho"}</p><p className="mt-1 text-[9px] text-slate-500">{unit.currentInventoryLocation?.code ?? "—"}</p></td>
+                      <td className="px-3 py-4"><p className="font-mono text-[11px] font-bold text-emerald-900">{unit.assetCode}</p><p className="mt-1 max-w-40 truncate font-mono text-[9px] text-slate-500">{unit.qrCode ?? "Chưa có QR"}</p></td>
+                      <td className="px-3 py-4"><p className="text-xs font-bold text-slate-950"><GradeName name={unit.product.name} className="" /></p><p className="mt-1 text-[9px] text-slate-500">{unit.product.sku}</p></td>
+                      <td className="px-3 py-4"><p className="text-xs font-semibold">{unit.currentInventoryLocation?.name ?? "Ngoài kho"}</p><p className="mt-1 text-[9px] text-slate-500">{unit.currentInventoryLocation?.code ?? "—"}</p></td>
                       <td className="px-3 py-4"><span className="rounded bg-[#e4ebf8] px-3 py-1.5 text-[9px] font-semibold text-slate-700">{conditionLabel[unit.condition]}</span></td>
-                      <td className="px-3 py-4"><span className={`inline-flex rounded-full px-3 py-2 text-[9px] font-black ${statusConfig[unit.status].className}`}>{statusConfig[unit.status].label}</span></td>
+                      <td className="px-3 py-4"><span className={`inline-flex rounded-full px-3 py-2 text-[9px] font-bold ${statusConfig[unit.status].className}`}>{statusConfig[unit.status].label}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -711,21 +738,21 @@ export function StaffInventory() {
               {!loading && units.length === 0 && (
                 <div className="p-12 text-center">
                   <div className="text-4xl">📦</div>
-                  <h3 className="mt-3 text-sm font-black text-slate-900">Chưa có thiết bị phù hợp</h3>
+                  <h3 className="mt-3 text-sm font-bold text-slate-900">Chưa có thiết bị phù hợp</h3>
                   <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-slate-500">
                     API hiện trả về 0 thiết bị. Hãy bỏ bộ lọc hoặc nhập thiết bị đầu tiên từ sản phẩm và kho đang hoạt động.
                   </p>
-                  <button type="button" onClick={openCreateModal} className="mt-4 rounded-lg bg-[#125238] px-4 py-3 text-xs font-black text-white">⊕ Nhập thiết bị đầu tiên</button>
+                  <button type="button" onClick={openCreateModal} className="mt-4 rounded-lg bg-[#125238] px-4 py-3 text-xs font-bold text-white">⊕ Nhập thiết bị đầu tiên</button>
                 </div>
               )}
-              {loading && <div className="p-12 text-center text-xs font-bold text-slate-500">Đang tải dữ liệu kho thật...</div>}
+              {loading && <div className="p-12 text-center text-xs font-semibold text-slate-500">Đang tải dữ liệu kho thật...</div>}
             </div>
 
             <footer className="flex flex-wrap items-center justify-between gap-3 bg-[#edf3ff] px-4 py-3 text-[10px] text-slate-600">
               <span>Trang {pagination.page} · {pagination.totalItems} thiết bị</span>
               <div className="flex gap-2">
-                <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)} className="rounded bg-white px-3 py-2 font-bold disabled:opacity-40">‹ Trước</button>
-                <button type="button" disabled={pagination.totalPages === 0 || page >= pagination.totalPages || loading} onClick={() => setPage((value) => value + 1)} className="rounded bg-white px-3 py-2 font-bold disabled:opacity-40">Sau ›</button>
+                <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)} className="rounded bg-white px-3 py-2 font-semibold disabled:opacity-40">‹ Trước</button>
+                <button type="button" disabled={pagination.totalPages === 0 || page >= pagination.totalPages || loading} onClick={() => setPage((value) => value + 1)} className="rounded bg-white px-3 py-2 font-semibold disabled:opacity-40">Sau ›</button>
               </div>
             </footer>
           </section>
@@ -737,39 +764,39 @@ export function StaffInventory() {
               <>
                 <div className="bg-[#e7eefc] p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div><p className="font-mono text-[11px] font-black text-emerald-900">#{activeUnit.assetCode}</p><h2 className="mt-2 text-xl font-black text-slate-950">{activeUnit.product.name}</h2><p className="mt-1 text-[10px] text-slate-500">{activeUnit.product.sku} · v{activeUnit.version}</p></div>
-                    <span className={`rounded-full px-3 py-2 text-[9px] font-black ${statusConfig[activeUnit.status].className}`}>{statusConfig[activeUnit.status].label}</span>
+                    <div><p className="font-mono text-[11px] font-bold text-emerald-900">#{activeUnit.assetCode}</p><h2 className="mt-2 text-xl font-bold text-slate-950"><GradeName name={activeUnit.product.name} className="" /></h2><p className="mt-1 text-[10px] text-slate-500">{activeUnit.product.sku} · v{activeUnit.version}</p></div>
+                    <span className={`rounded-full px-3 py-2 text-[9px] font-bold ${statusConfig[activeUnit.status].className}`}>{statusConfig[activeUnit.status].label}</span>
                   </div>
                 </div>
                 <div className="space-y-4 p-5">
-                  {detailLoading && <p className="text-[10px] font-bold text-slate-500">Đang tải lịch sử...</p>}
+                  {detailLoading && <p className="text-[10px] font-semibold text-slate-500">Đang tải lịch sử...</p>}
                   <section className="rounded-xl bg-[#edf3ff] p-4">
-                    <h3 className="text-[10px] font-black uppercase text-slate-700">Nhận diện & vị trí</h3>
+                    <h3 className="text-[10px] font-bold uppercase text-slate-700">Nhận diện & vị trí</h3>
                     <dl className="mt-3 space-y-3 text-[10px]">
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">QR payload</dt><dd className="max-w-48 truncate font-mono font-black">{activeUnit.qrCode ?? "—"}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Serial</dt><dd className="font-black">{activeUnit.serialNumber ?? "—"}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Kho gốc</dt><dd className="text-right font-black">{activeUnit.homeInventoryLocation.name}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Kho hiện tại</dt><dd className="text-right font-black">{activeUnit.currentInventoryLocation?.name ?? "Ngoài kho"}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Ngày nhập</dt><dd className="font-black">{formatDate(activeUnit.acquiredAt)}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Tình trạng</dt><dd className="font-black">{conditionLabel[activeUnit.condition]}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">QR payload</dt><dd className="max-w-48 truncate font-mono font-bold">{activeUnit.qrCode ?? "—"}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Serial</dt><dd className="font-bold">{activeUnit.serialNumber ?? "—"}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Kho gốc</dt><dd className="text-right font-bold">{activeUnit.homeInventoryLocation.name}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Kho hiện tại</dt><dd className="text-right font-bold">{activeUnit.currentInventoryLocation?.name ?? "Ngoài kho"}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Ngày nhập</dt><dd className="font-bold">{formatDate(activeUnit.acquiredAt)}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Tình trạng</dt><dd className="font-bold">{conditionLabel[activeUnit.condition]}</dd></div>
                     </dl>
                   </section>
 
                   <section>
-                    <div className="flex items-center justify-between"><h3 className="text-[10px] font-black uppercase">Nhật ký vận hành</h3><span className="text-[9px] text-slate-500">{activeDetail?.history.length ?? 0} sự kiện</span></div>
+                    <div className="flex items-center justify-between"><h3 className="text-[10px] font-bold uppercase">Nhật ký vận hành</h3><span className="text-[9px] text-slate-500">{activeDetail?.history.length ?? 0} sự kiện</span></div>
                     <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
                       {(activeDetail?.history ?? []).map((event, index) => (
-                        <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] font-black">● {event.type}</p><p className="mt-1 text-[9px] text-slate-500">{formatDate(event.occurredAt)}{event.actor ? ` · ${event.actor}` : ""}</p></div>
+                        <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] font-bold">● {event.type}</p><p className="mt-1 text-[9px] text-slate-500">{formatDate(event.occurredAt)}{event.actor ? ` · ${event.actor}` : ""}</p></div>
                       ))}
                       {!detailLoading && (activeDetail?.history.length ?? 0) === 0 && <p className="rounded-lg bg-slate-50 p-3 text-[10px] text-slate-500">Chưa có sự kiện lịch sử.</p>}
                     </div>
                   </section>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" disabled={saving} onClick={() => void requestLabels([activeUnit.id])} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-bold disabled:opacity-50">▦ In tem QR</button>
-                    <button type="button" onClick={openEditModal} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-bold">✎ Sửa metadata</button>
+                    <button type="button" disabled={saving} onClick={() => void requestLabels([activeUnit.id])} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-semibold disabled:opacity-50">▦ In tem QR</button>
+                    <button type="button" onClick={openEditModal} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-semibold">✎ Sửa metadata</button>
                   </div>
-                  <button type="button" onClick={() => setShowMaintenance(true)} disabled={!(["AVAILABLE", "CLEANING", "DAMAGED", "MAINTENANCE"] as EquipmentUnitStatus[]).includes(activeUnit.status)} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-black text-amber-900 disabled:cursor-not-allowed disabled:opacity-40">
+                  <button type="button" onClick={() => setShowMaintenance(true)} disabled={!(["AVAILABLE", "CLEANING", "DAMAGED", "MAINTENANCE"] as EquipmentUnitStatus[]).includes(activeUnit.status)} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900 disabled:cursor-not-allowed disabled:opacity-40">
                     {activeUnit.status === "MAINTENANCE" ? "✓ Hoàn tất bảo trì" : "⚒ Bắt đầu bảo trì"}
                   </button>
                 </div>
@@ -783,7 +810,7 @@ export function StaffInventory() {
         <Modal title="Nhập thiết bị vào kho" onClose={() => setShowCreate(false)}>
           <form onSubmit={submitCreate} className="space-y-4">
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#edf3ff] p-1">
-              {(["single", "batch"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCreateForm((current) => ({ ...current, mode }))} className={`rounded-lg px-3 py-2 text-xs font-black ${createForm.mode === mode ? "bg-white text-emerald-900 shadow-sm" : "text-slate-500"}`}>{mode === "single" ? "Một thiết bị" : "Nhập hàng loạt"}</button>)}
+              {(["single", "batch"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCreateForm((current) => ({ ...current, mode }))} className={`rounded-lg px-3 py-2 text-xs font-bold ${createForm.mode === mode ? "bg-white text-emerald-900 shadow-sm" : "text-slate-500"}`}>{mode === "single" ? "Một thiết bị" : "Nhập hàng loạt"}</button>)}
             </div>
             <Field label="Sản phẩm"><select required value={createForm.productId} onChange={(event) => setCreateForm((current) => ({ ...current, productId: event.target.value }))} className={inputClass}><option value="">Chọn sản phẩm</option>{products.filter((product) => product.status === "ACTIVE").map((product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}</select></Field>
             <Field label="Kho gốc"><select required value={createForm.homeInventoryLocationId} onChange={(event) => setCreateForm((current) => ({ ...current, homeInventoryLocationId: event.target.value }))} className={inputClass}><option value="">Chọn kho</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.code} · {location.name}</option>)}</select></Field>
@@ -818,9 +845,9 @@ export function StaffInventory() {
       {labels.length > 0 && (
         <Modal title={`Dữ liệu tem QR (${labels.length})`} onClose={() => setLabels([])}>
           <div className="max-h-[55vh] space-y-3 overflow-y-auto">
-            {labels.map((label) => <article key={label.unitId} className="rounded-xl border border-dashed border-slate-300 p-4"><p className="font-mono text-sm font-black text-emerald-900">{label.assetCode}</p><p className="mt-2 break-all font-mono text-[10px] text-slate-500">{label.qrPayload}</p><p className="mt-2 text-xs font-bold">{label.printText}</p></article>)}
+            {labels.map((label) => <article key={label.unitId} className="rounded-xl border border-dashed border-slate-300 p-4"><p className="font-mono text-sm font-bold text-emerald-900">{label.assetCode}</p><p className="mt-2 break-all font-mono text-[10px] text-slate-500">{label.qrPayload}</p><p className="mt-2 text-xs font-semibold">{label.printText}</p></article>)}
           </div>
-          <div className="mt-5 flex justify-end"><button type="button" onClick={() => window.print()} className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-black text-white">In bằng trình duyệt</button></div>
+          <div className="mt-5 flex justify-end"><button type="button" onClick={() => window.print()} className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-bold text-white">In bằng trình duyệt</button></div>
         </Modal>
       )}
     </main>
@@ -830,15 +857,15 @@ export function StaffInventory() {
 const inputClass = "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}><section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4"><h2 className="text-lg font-black text-slate-950">{title}</h2><button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg">×</button></header><div className="p-6">{children}</div></section></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}><section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4"><h2 className="text-lg font-bold text-slate-950">{title}</h2><button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg">×</button></header><div className="p-6">{children}</div></section></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-600">{label}</span>{children}</label>;
+  return <label className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-wide text-slate-600">{label}</span>{children}</label>;
 }
 
 function ModalActions({ saving, onCancel, submitLabel }: { saving: boolean; onCancel: () => void; submitLabel: string }) {
-  return <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={onCancel} className="rounded-lg bg-slate-100 px-4 py-3 text-xs font-bold">Hủy</button><button type="submit" disabled={saving} className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-black text-white disabled:opacity-50">{saving ? "Đang xử lý..." : submitLabel}</button></div>;
+  return <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={onCancel} className="rounded-lg bg-slate-100 px-4 py-3 text-xs font-semibold">Hủy</button><button type="submit" disabled={saving} className="rounded-lg bg-[#125238] px-4 py-3 text-xs font-bold text-white disabled:opacity-50">{saving ? "Đang xử lý..." : submitLabel}</button></div>;
 }
 
 
