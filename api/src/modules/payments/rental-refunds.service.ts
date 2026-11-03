@@ -1,3 +1,4 @@
+import { manualRefundReservation } from './manual-refund-reservation'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
@@ -219,6 +220,7 @@ export class RentalRefundsService {
           merchantRefundRef: `refund:${id}`,
           reconcileStatus: 'SCHEDULED',
           nextRetryAt: now,
+          ...manualRefundReservation(payment.paymentGateway),
           allocations: {
             create: input.allocations.map((a) => ({
               paymentAllocationId: a.paymentAllocationId,

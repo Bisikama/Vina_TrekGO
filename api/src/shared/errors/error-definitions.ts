@@ -25,6 +25,13 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [P.MANUAL_REFUND_INVALID_STATE]: { status: 409, message: 'Manual refund action is not allowed in this state', retryable: false },
+  [P.MANUAL_REFUND_VERSION_CONFLICT]: { status: 409, message: 'Reload the manual refund before retrying', retryable: false },
+  [P.MANUAL_REFUND_RECIPIENT_LOCKED]: { status: 409, message: 'Recipient is locked after the refund is claimed', retryable: false },
+  [P.MANUAL_REFUND_ALREADY_CLAIMED]: { status: 409, message: 'Refund is not ready or already assigned', retryable: false },
+  [P.MANUAL_REFUND_NOT_ASSIGNED]: { status: 409, message: 'Only the assigned administrator may perform this action', retryable: false },
+  [P.MANUAL_REFUND_AMOUNT_MISMATCH]: { status: 409, message: 'Transferred amount must equal the approved refund amount', retryable: false },
+  [P.MANUAL_REFUND_TRANSFER_REUSED]: { status: 409, message: 'Bank transfer reference has already been recorded', retryable: false },
   [GPS.PROTOCOL_CONFLICT]: { status: 409, message: 'GPS protocol does not match session', retryable: false },
   [GPS.SYNC_CONFLICT]: { status: 409, message: 'GPS sync revision or payload conflicts', retryable: false },
   [GPS.SYNC_INCOMPLETE]: { status: 409, message: 'GPS snapshot has missing batches', retryable: false },

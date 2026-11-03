@@ -21,13 +21,13 @@ export class TrailPurchaseController {
   @ApiHeader({ name: 'idempotency-key', required: true, description: 'Khóa duy nhất tránh giao dịch trùng lặp (1–200 ký tự ASCII)' })
   @ApiBody({ description: 'Phương thức thanh toán', schema: { type: 'object', additionalProperties: false, required: ['paymentMethod'], properties: {
     paymentMethod: { type: 'string', enum: ['QR', 'REDIRECT'], description: 'Phương thức thanh toán: QR (quét mã) hoặc REDIRECT (chuyển hướng)', example: 'QR' },
-    gateway: { type: 'string', enum: ['momo', 'vnpay'], description: 'Bỏ trống để dùng cổng mặc định' },
+    gateway: { type: 'string', enum: ['momo', 'vnpay', 'payos'], description: 'Bỏ trống để dùng cổng mặc định' },
   } } })
   async create(
     @Param('trailId', new ZodValidationPipe(z.string())) trailId: string,
     @Headers('idempotency-key') idempotencyKey: string,
-    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay']).optional() }).strict()))
-    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' },
+    @Body(new ZodValidationPipe(z.object({ paymentMethod: z.enum(['QR', 'REDIRECT']), gateway: z.enum(['momo', 'vnpay', 'payos']).optional() }).strict()))
+    body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' | 'payos' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,

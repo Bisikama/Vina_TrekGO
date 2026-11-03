@@ -115,6 +115,16 @@ const envConfigSchema = z
     // Secret HMAC-SHA256 (>= 32 bytes) để ký và xác thực webhook của cổng Mock
     PAYMENT_MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
 
+    // payOS production is independent of legacy sandbox environment.
+    PAYOS_ENABLED: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
+    PAYOS_CLIENT_ID: z.string().max(100).optional(),
+    PAYOS_API_KEY: z.string().optional(),
+    PAYOS_CHECKSUM_KEY: z.string().optional(),
+    PAYOS_RETURN_URL: z.string().optional(),
+    PAYOS_CANCEL_URL: z.string().optional(),
+    PAYOS_RECEIVING_BANK_BIN: z.string().optional(),
+    PAYOS_RECEIVING_ACCOUNT_NUMBER: z.string().optional(),
+
     // VNPay Sandbox Gateway
     VNPAY_SANDBOX_TMN_CODE: z
       .string()

@@ -1,3 +1,4 @@
+import { manualLateRentalRefund } from '../../../../payments/manual-refund-reservation'
 import { cancelPendingRentalChargesWithTx, reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
 import { validateRentalOrderPaymentMembershipWithTx } from '../../../payments/rental-membership.guard'
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location'
@@ -910,6 +911,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             status: RefundStatus.PENDING,
             idempotencyKey: `late-payment:${payment.id}`,
             rentalOrderId: order.id,
+            ...manualLateRentalRefund(payment),
           },
         })
         await tx.rentalOutboxEvent.upsert({

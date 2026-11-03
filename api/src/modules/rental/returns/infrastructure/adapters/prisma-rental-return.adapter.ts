@@ -1463,9 +1463,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             depositSettlementItemsViaSettlementId: {
               include: {
                 unit: { select: { id: true, assetCode: true } },
-                refundViaDepositSettlementItemId: true,
+                refundViaDepositSettlementItemId: { include: { manualRefund: true } },
                 inspection: { select: { outcome: true } },
-                depositRefundAllocations: { include: { refund: true } },
+                depositRefundAllocations: { include: { refund: { include: { manualRefund: true } } } },
               },
             },
           },
@@ -1498,18 +1498,20 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       }),
     ])
     const now = Date.now()
-    const refundById = new Map<string, { refundRef: string; status: RefundStatus; amount: number; itemIds: string[] }>()
+    const refundById = new Map<string, { refundRef: string; status: RefundStatus; amount: number; itemIds: string[]; executionMode: string; confirmationSource: string | null }>()
     const items = settlement.depositSettlementItemsViaSettlementId.map((item) => {
       const grouped = item.depositRefundAllocations[0]
       const refund = grouped?.refund ?? item.refundViaDepositSettlementItemId
       const simulation = (refund?.providerPayload as any)?.sandboxSimulation
       const settlementMode = simulation
         ? 'SANDBOX_SIMULATED'
-        : ((item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD')
+        : refund?.executionMode === 'MANUAL_BANK_TRANSFER' ? 'MANUAL_BANK_TRANSFER' : ((item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD')
       const itemRefundAmount = grouped ? decimalToInteger(grouped.amount) : decimalToInteger(item.refundAmount)
       if (grouped && refund) {
         const existing = refundById.get(refund.id) ?? {
           refundRef: refund.id,
+          executionMode: refund.executionMode ?? 'PROVIDER_API',
+          confirmationSource: refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
           status: refund.status,
           amount: 0,
           itemIds: [],
@@ -1567,6 +1569,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         refundBatchId: grouped ? (refund?.id ?? null) : null,
         refundRef: refund?.id ?? null,
         refundStatus: refund?.status ?? null,
+        executionMode: refund?.executionMode ?? 'PROVIDER_API',
+        confirmationSource: refund?.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
+        manualStatus: refund?.manualRefund?.status ?? null,
         heldReason: item.reason ?? null,
         deduction: decimalToInteger(item.deductionAmount),
         refundAmount: itemRefundAmount,
@@ -1610,10 +1615,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       items,
       groupedRefunds: [...refundById.values()],
       financialTruth: {
-        providerRefundedAmount: refundedAmount,
-        providerRefundPendingAmount: refundPendingAmount,
+        providerRefundedAmount: refundedAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && item.refundStatus === RefundStatus.SUCCEEDED).reduce((sum, item) => sum + item.refundAmount, 0),
+        adminConfirmedRefundedAmount: items.filter(item => item.confirmationSource === 'ADMIN_MANUAL').reduce((sum, item) => sum + item.refundAmount, 0),
+        providerRefundPendingAmount: refundPendingAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && [RefundStatus.PENDING, RefundStatus.PROCESSING].includes(item.refundStatus as any)).reduce((sum, item) => sum + item.refundAmount, 0),
         realMoneyReturned: items.some(
-          (item) => item.refundStatus === RefundStatus.SUCCEEDED && item.settlementMode !== 'SANDBOX_SIMULATED',
+          (item) => item.refundStatus === RefundStatus.SUCCEEDED && item.settlementMode !== 'SANDBOX_SIMULATED' && item.executionMode !== 'MANUAL_BANK_TRANSFER',
         ),
       },
       ...(hasSimulatedItems

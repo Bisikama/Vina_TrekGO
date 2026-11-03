@@ -15,7 +15,7 @@ export type RentalCheckoutCommand = {
   actorUserId: string
   idempotencyKey: string
   paymentMethod: PaymentMethod
-  gateway?: 'momo' | 'vnpay'
+  gateway?: 'momo' | 'vnpay' | 'payos'
   clientIp?: string
 }
 
@@ -24,7 +24,7 @@ export type RentalExtensionCheckoutCommand = {
   actorUserId: string
   idempotencyKey: string
   paymentMethod: PaymentMethod
-  gateway?: 'momo' | 'vnpay'
+  gateway?: 'momo' | 'vnpay' | 'payos'
   clientIp?: string
 }
 
