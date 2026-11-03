@@ -23,7 +23,7 @@ function formatMoney(value: number, currency: string) {
 }
 
 const GRADE_LABELS = {
-  LIKE_NEW: "Mới",
+  LIKE_NEW: "Như mới",
   GOOD_USED: "Sử dụng tốt",
 } as const;
 
@@ -313,6 +313,14 @@ export function RentalProductDetailPage({
                     product.currency,
                   )}
                 </p>
+                {(product.replacementValue ?? 0) > 0 && (
+                  <p className="mt-1 text-xs font-semibold text-gray-400">
+                    Giá gốc{" "}
+                    <span className="line-through opacity-80">
+                      {formatMoney(product.replacementValue ?? 0, product.currency)}
+                    </span>
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl bg-[#F7F7F4] p-4">

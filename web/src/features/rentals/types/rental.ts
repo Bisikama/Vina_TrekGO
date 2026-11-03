@@ -136,6 +136,9 @@ export type RentalCatalogData = {
   categories: RentalCategory[];
   items: RentalCatalogItem[];
   pagination: RentalPagination;
+  /** Tóm tắt chuyến do api gợi ý trả về (số ngày, độ khó, thời tiết); null nếu chưa đủ điều kiện thuê. */
+  tripSummary?: RentalTripSummary | null;
+  recommendationsGeneratedAt?: string | null;
 };
 
 export type RentalProductDetailData = {

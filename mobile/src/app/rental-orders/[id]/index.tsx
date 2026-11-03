@@ -55,6 +55,30 @@ const STEP_LABELS: Record<string, string> = {
   EXPIRED: "Đã hết hạn",
 };
 
+// Mốc thời gian thật mà API trả trong `timeline` ({ type, at }).
+const TIMELINE_LABELS: Record<string, string> = {
+  ORDER_CREATED: "Đặt đơn thuê",
+  PAID: "Thanh toán thành công",
+  PACKED: "Kho đã đóng gói xong",
+  HANDED_OVER: "Đã bàn giao thiết bị",
+  RETURNED: "Đã nhận lại thiết bị",
+  CANCELLED: "Đơn đã hủy",
+  COMPLETED: "Hoàn tất đơn thuê",
+};
+
+// Bước tiến trình nào có mốc thời gian thật từ API.
+const STEP_EVENT: Record<string, string> = {
+  PENDING_PAYMENT: "ORDER_CREATED",
+  PAID: "PAID",
+  READY_FOR_HANDOVER: "PACKED",
+  ACTIVE: "HANDED_OVER",
+  RETURN_PROCESSING: "RETURNED",
+  COMPLETED: "COMPLETED",
+};
+
+const stripGradeSuffix = (name: string) =>
+  name.replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim();
+
 const EXCEPTION_LABELS: Record<string, string> = {
   ACTION_REQUIRED: "TrekGo đang kiểm tra đơn của bạn",
   OVERDUE: "Đơn đã quá hạn trả thiết bị",
@@ -597,6 +621,23 @@ export default function RentalOrderDetailScreen() {
   }
 
   const { order, items, assignedUnits = [], timeline = [] } = detail;
+  const eventTimes = new Map<string, string>();
+  timeline.forEach((event) => {
+    const key = event.type || event.status;
+    const at = event.at || event.occurredAt || event.createdAt;
+    if (key && at) eventTimes.set(key, at);
+  });
+  const stepTime = (step: string, complete: boolean) => {
+    const eventAt = STEP_EVENT[step] ? eventTimes.get(STEP_EVENT[step]) : undefined;
+    if (complete && eventAt) return { text: dateTime(eventAt), planned: false };
+    if (!complete && step === "ACTIVE" && detail.trip?.rentalStartAt) {
+      return { text: `Dự kiến nhận: ${dateTime(detail.trip.rentalStartAt)}`, planned: true };
+    }
+    if (!complete && step === "RETURN_PENDING" && (detail.trip?.dueAt || order.dueAt)) {
+      return { text: `Hạn trả: ${dateTime(detail.trip?.dueAt || order.dueAt)}`, planned: true };
+    }
+    return null;
+  };
   const tripTitle = order.trip?.title?.trim();
   const canShowPickupCode = order.status === "READY_FOR_HANDOVER";
   const canCancelOrder = [
@@ -671,6 +712,7 @@ export default function RentalOrderDetailScreen() {
           {ORDER_STEPS.map((step, index) => {
             const complete = currentStep >= index;
             const active = currentStep === index;
+            const time = stepTime(step, complete);
             return (
               <View key={step} style={styles.stepRow}>
                 <View style={styles.stepRail}>
@@ -693,6 +735,11 @@ export default function RentalOrderDetailScreen() {
                   <Text style={[styles.stepTitle, complete && styles.stepTitleComplete]}>
                     {STEP_LABELS[step]}
                   </Text>
+                  {time ? (
+                    <Text style={[styles.stepTime, time.planned && styles.stepTimePlanned]}>
+                      {time.text}
+                    </Text>
+                  ) : null}
                   {active && <Text style={styles.stepCurrent}>Trạng thái hiện tại</Text>}
                 </View>
               </View>
@@ -715,12 +762,14 @@ export default function RentalOrderDetailScreen() {
               )}
               <View style={styles.flexOne}>
                 <Text style={styles.lineName}>
-                  {item.name || item.product?.name || "Thiết bị thuê"}
+                  {item.product?.grade
+                    ? stripGradeSuffix(item.name || item.product?.name || "Thiết bị thuê")
+                    : item.name || item.product?.name || "Thiết bị thuê"}
                 </Text>
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
                   {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
-                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
+                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}` : ""}
                 </Text>
                 {typeof item.depositPerUnit === "number" && typeof item.depositAmount === "number" ? (
                   <Text style={styles.lineMeta}>
@@ -947,12 +996,14 @@ export default function RentalOrderDetailScreen() {
         {timeline.length > 0 && (
           <Section title="Lịch sử cập nhật">
             {timeline.map((event, index) => (
-              <View key={event.id || `${event.status}-${index}`} style={styles.historyRow}>
+              <View key={event.id || `${event.type || event.status}-${index}`} style={styles.historyRow}>
                 <Ionicons name="time-outline" size={17} color={Colors.primaryDark} />
                 <View style={styles.flexOne}>
-                  <Text style={styles.historyTitle}>{event.title || event.status || "Cập nhật đơn"}</Text>
+                  <Text style={styles.historyTitle}>
+                    {event.title || TIMELINE_LABELS[event.type || ""] || event.status || "Cập nhật đơn"}
+                  </Text>
                   {event.description ? <Text style={styles.lineMeta}>{event.description}</Text> : null}
-                  <Text style={styles.historyTime}>{dateTime(event.occurredAt || event.createdAt)}</Text>
+                  <Text style={styles.historyTime}>{dateTime(event.at || event.occurredAt || event.createdAt)}</Text>
                 </View>
               </View>
             ))}
@@ -1166,6 +1217,8 @@ const styles = StyleSheet.create({
   stepTitle: { color: Colors.onSurfaceMuted, fontSize: 12, fontWeight: "500" },
   stepTitleComplete: { color: Colors.onSurface, fontWeight: "600" },
   stepCurrent: { marginTop: 3, color: Colors.primaryDark, fontSize: 9, fontWeight: "600" },
+  stepTime: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
+  stepTimePlanned: { color: Colors.onSurfaceMuted, fontStyle: "italic" },
   lineItem: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
   lineIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
   lineImage: { width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainer },

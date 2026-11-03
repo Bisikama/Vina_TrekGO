@@ -53,8 +53,8 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
   return (
     <main className="px-6 py-5">
       <div className="mx-auto max-w-5xl">
-        <Link href="/staff/returns" className="text-xs font-bold text-emerald-800">← Quay lại tiếp nhận hoàn trả</Link>
-        <h1 className="mt-3 text-2xl font-black">Theo dõi xử lý cọc</h1>
+        <Link href="/staff/returns" className="text-xs font-semibold text-emerald-800">← Quay lại tiếp nhận hoàn trả</Link>
+        <h1 className="mt-3 text-2xl font-bold">Theo dõi xử lý cọc</h1>
         <p className="mt-1 text-sm text-slate-500">
           Staff Inventory chỉ xem kết quả kiểm định và số tiền cần xử lý. Admin duyệt quyết toán; cổng thanh toán xử lý hoàn tiền.
         </p>
@@ -69,10 +69,10 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
                 <article key={item.unitId} className="rounded-xl border bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap justify-between gap-3">
                     <div>
-                      <h2 className="font-black">{unit?.productName ?? item.unitId}</h2>
+                      <h2 className="font-bold">{unit?.productName ?? item.unitId}</h2>
                       <p className="mt-1 font-mono text-xs text-slate-500">{unit?.assetCode}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${awaitingGroupedRefund ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${awaitingGroupedRefund ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>
                       {awaitingGroupedRefund ? "Đạt chuẩn · chờ hoàn cọc gộp" : statusLabel(item.status)}
                     </span>
                   </div>
@@ -105,5 +105,5 @@ export function StaffDepositSettlement({ returnId }: { returnId: string }) {
 }
 
 function Amount({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] uppercase text-slate-500">{label}</p><p className="mt-1 font-black">{money(value)}</p></div>;
+  return <div className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] uppercase text-slate-500">{label}</p><p className="mt-1 font-bold">{money(value)}</p></div>;
 }

@@ -320,7 +320,50 @@ export type RentalReturnReceipt = {
   version: number;
 };
 
+/** GET /trips/{tripId}/rental-recommendations — gợi ý theo quy tắc; score chỉ để xếp hạng. */
+export type RentalRecommendation = {
+  productId: string;
+  score: number;
+  reasons: string[];
+  source?: "RULE" | "AI" | string;
+};
+
+/** Tóm tắt chuyến trả kèm gợi ý: số ngày, độ khó, thời tiết. */
+export type RentalTripSummary = {
+  tripId: string;
+  name?: string;
+  durationDays: number;
+  difficulty: string;
+  weatherSummary: string | null;
+};
+
+/** GET /api/v1/weather/trips/{tripId} (RC-API-501). */
+export type TripWeather = {
+  tripId: string;
+  destinationName?: string;
+  startDate?: string;
+  durationDays?: number;
+  snapshot: {
+    temperatureC: number | null;
+    humidityPercent: number | null;
+    rainProbabilityPercent: number | null;
+    weatherCondition: string | null;
+    riskLevel: string;
+    riskSummary: string | null;
+  };
+  forecast: {
+    date: string;
+    condition: string | null;
+    temperatureMaxC: number | null;
+    temperatureMinC: number | null;
+    rainProbabilityPercent: number | null;
+  }[];
+};
+
 export type RentalOrderTimelineItem = {
+  /** API hiện trả { type, at }: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
+  type?: string;
+  at?: string;
   id?: string;
   status?: string;
   title?: string;
@@ -346,6 +389,8 @@ export type RentalOrderDetail = {
   payment?: RentalPaymentStatus | null;
   deposit?: RentalDepositStatus | null;
   timeline?: RentalOrderTimelineItem[];
+  /** Thời gian thuê theo chuyến đi (dự kiến), không phải mốc bàn giao/trả thực tế. */
+  trip?: { id?: string; rentalStartAt?: string; dueAt?: string; occupiedUntil?: string } | null;
 };
 
 export type RentalPaymentGateway = "momo" | "vnpay";
