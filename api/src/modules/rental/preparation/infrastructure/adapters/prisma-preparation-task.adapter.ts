@@ -83,7 +83,8 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
     const where: Prisma.InventoryTaskWhereInput = {
       AND: [
         { OR: [{ staffId: null }, { staffId: query.actorUserId }] },
-        query.status ? { status: query.status as InventoryTaskStatus } : {},
+        // Không lọc trạng thái: ẩn task của đơn đã huỷ khỏi hàng đợi; vẫn xem được khi lọc status=CANCELLED.
+        query.status ? { status: query.status as InventoryTaskStatus } : { status: { not: InventoryTaskStatus.CANCELLED } },
         query.tripId ? { order: { tripId: query.tripId } } : {},
         dateWindow ? { deadline: { gte: dateWindow.start, lt: dateWindow.end } } : {},
       ],

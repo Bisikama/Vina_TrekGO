@@ -331,7 +331,7 @@ export function RentalQuotePage({
   async function handleCreateOrderAndPayment() {
     if (!quote || submitting) return;
     if (!paymentGateways.includes(gateway)) {
-      setError("Backend hiện chưa bật cổng thanh toán khả dụng.");
+      setError("Cổng thanh toán trực tuyến hiện đang bảo trì.");
       return;
     }
 
@@ -574,7 +574,7 @@ export function RentalQuotePage({
             </h2>
             {paymentGateways.length === 0 && (
               <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
-                Backend chưa trả về VNPay hoặc MoMo khả dụng.
+                Cổng thanh toán trực tuyến đang tạm bảo trì.
               </p>
             )}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -589,7 +589,7 @@ export function RentalQuotePage({
                   {
                     id: "momo",
                     title: "MoMo",
-                    detail: "Ví MoMo sandbox",
+                    detail: "Ví điện tử MoMo",
                     icon: "M",
                   },
                 ] as const
@@ -857,7 +857,7 @@ export function RentalQuotePage({
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-emerald-50/70">Tiền cọc</dt>
-                <dd className="font-bold text-lime-300">Backend sẽ tính</dd>
+                <dd className="font-bold text-lime-300">Tự động tính</dd>
               </div>
             </dl>
             {!eligibility.eligible && (
