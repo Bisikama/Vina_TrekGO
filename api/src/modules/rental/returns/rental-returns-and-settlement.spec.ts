@@ -1678,7 +1678,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         expect(snap.remarks).toBe('Returned in good shape');
         expect(snap.userRemarks).toBeNull();
         expect(snap.policyVersion).toBe('1.5.2');
-        expect(snap.templateVersion).toBe('1.3.2');
+        expect(snap.templateVersion).toBe('1.4.0');
 
         // Verify receivedUnits enriched fields from verified session observation
         expect(snap.receivedUnits).toHaveLength(1);
@@ -3043,6 +3043,68 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
 
       const getRes = await adapter.getRentalDocument({ documentId: testDocId, actorUserId: staffInvAssigned, actorRole: UserRole.STAFF_INVENTORY });
       expect(getRes.id).toBe(testDocId);
+    });
+
+    describe('document access for handover staff and recipient', () => {
+      const handoverStaff = 'staff-delivery-handover';
+      const recipient = 'recipient-user';
+      const accessOrder = {
+        id: testOrderId,
+        userId: testUserA,
+        recipientUserId: recipient,
+        recipientSnapshot: { userId: recipient },
+        deliveryTasksViaOrderId: [{ staffId: handoverStaff, taskType: 'HANDOVER' }],
+        inventoryTaskViaOrderId: null,
+      };
+      const documentPrisma = (documentType: RentalDocumentType) => ({
+        rentalOrder: { findUnique: jest.fn().mockResolvedValue(accessOrder) },
+        rentalDocument: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: testDocId, orderId: testOrderId, documentType, documentNumber: 'DOC-1', sourceRef: 'src',
+            renderStatus: RentalDocumentRenderStatus.READY, pdfStorageKey: 'key/pdf', snapshotHash: 'h',
+            snapshotJson: {}, issuedAt: new Date(), order: accessOrder,
+          }),
+          count: jest.fn().mockResolvedValue(0),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        rentalDocumentAccessLog: { create: jest.fn().mockResolvedValue({}) },
+      });
+
+      it('lets the staff who handed the order over read its HANDOVER document', async () => {
+        const adapter = new PrismaRentalReturnAdapter(documentPrisma(RentalDocumentType.HANDOVER) as any);
+        const res = await adapter.getRentalDocument({ documentId: testDocId, actorUserId: handoverStaff, actorRole: UserRole.STAFF_DELIVERY });
+        expect(res.id).toBe(testDocId);
+        await expect(
+          adapter.getRentalDocument({ documentId: testDocId, actorUserId: 'other-staff', actorRole: UserRole.STAFF_DELIVERY }),
+        ).rejects.toThrow(expect.objectContaining({ code: RR.FORBIDDEN }));
+      });
+
+      it('lets the recipient read only money-free documents', async () => {
+        const receipt = new PrismaRentalReturnAdapter(documentPrisma(RentalDocumentType.RETURN_RECEIPT) as any);
+        const res = await receipt.getRentalDocument({ documentId: testDocId, actorUserId: recipient, actorRole: UserRole.USER });
+        expect(res.id).toBe(testDocId);
+
+        for (const type of [RentalDocumentType.HANDOVER, RentalDocumentType.EXTENSION_APPENDIX, RentalDocumentType.CORRECTION_NOTICE]) {
+          const adapter = new PrismaRentalReturnAdapter(documentPrisma(type) as any);
+          await expect(
+            adapter.getRentalDocument({ documentId: testDocId, actorUserId: recipient, actorRole: UserRole.USER }),
+          ).rejects.toThrow(expect.objectContaining({ code: RR.FORBIDDEN }));
+        }
+      });
+
+      it('filters the recipient document list to money-free types', async () => {
+        const prisma = documentPrisma(RentalDocumentType.RETURN_RECEIPT);
+        const adapter = new PrismaRentalReturnAdapter(prisma as any);
+        await adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: recipient, actorRole: UserRole.USER });
+        expect(prisma.rentalDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({
+          where: { orderId: testOrderId, documentType: { in: [RentalDocumentType.RETURN_RECEIPT, RentalDocumentType.SCHEDULE_NOTICE] } },
+        }));
+
+        await adapter.listRentalDocuments({ orderId: testOrderId, actorUserId: recipient, actorRole: UserRole.USER, type: RentalDocumentType.HANDOVER });
+        expect(prisma.rentalDocument.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+          where: { orderId: testOrderId, documentType: { in: [] } },
+        }));
+      });
     });
 
     it('finalizeReturnReceipt: rejects zero-scan session when failure evidence is missing, UNREADY or foreign (EVIDENCE_NOT_READY)', async () => {
