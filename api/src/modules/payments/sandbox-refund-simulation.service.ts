@@ -305,14 +305,12 @@ export class SandboxRefundSimulationService {
       const simulationId = paymentHash(['ADMIN_SANDBOX_SIMULATION', refund.id, 'v1'])
       const providerEventId = `sandbox-refund-simulation:${refund.id}:succeeded:v1`
       const vnpayResponse = providerPayload?.vnpayResponse as Record<string, unknown> | undefined
-      const providerConfirmation = isBookingCancellation || isRentalCancellation
-        ? vnpayResponse?.vnp_ResponseCode === '00' &&
-          ['05', '06'].includes(String(vnpayResponse?.vnp_TransactionStatus))
+      // Chỉ ghi PROCESSING_RESPONSE khi thật sự có phản hồi 05/06 của VNPay.
+      const providerConfirmation =
+        String(vnpayResponse?.vnp_ResponseCode) === '00' &&
+        ['05', '06'].includes(String(vnpayResponse?.vnp_TransactionStatus))
           ? 'PROCESSING_RESPONSE'
           : 'UNCONFIRMED_DEMO'
-        : refund.status === 'PENDING'
-          ? 'UNCONFIRMED_DEMO'
-          : 'PROCESSING_RESPONSE'
       const vnpayTransactionNo =
         typeof vnpayResponse?.vnp_TransactionNo === 'string' && vnpayResponse.vnp_TransactionNo.trim().length > 0
           ? vnpayResponse.vnp_TransactionNo.trim()
@@ -627,6 +625,9 @@ export class SandboxRefundSimulationService {
       })
     }
     if (refund.status === 'PROCESSING') {
+      // Demo: lệnh refund đã gửi VNPay nhưng không nhận được phản hồi (timeout/không ký được) nên reconcile
+      // mãi UNKNOWN. Chỉ mở khi chưa có phản hồi nào; phản hồi khác 05/06 (VNPay từ chối) vẫn bị chặn.
+      if (payload?.vnpayDispatch && !payload?.vnpayResponse && this.allowsPendingRefundSimulation()) return
       this.assertVnpayProcessingProvenance(payload)
       return
     }

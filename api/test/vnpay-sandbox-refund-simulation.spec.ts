@@ -308,6 +308,28 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       )
     })
 
+    it('simulates a PROCESSING refund whose VNPay dispatch got no response only with the demo flag', async () => {
+      const dispatchedOnly = { status: 'PROCESSING', providerPayload: { vnpayDispatch: { vnp_Command: 'refund' } } }
+      await expect(invoke(createHarness({ refund: dispatchedOnly }))).rejects.toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }),
+      )
+
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
+      const harness = createHarness({ refund: { ...dispatchedOnly, providerPayload: { ...dispatchedOnly.providerPayload } } })
+      await invoke(harness)
+      expect(harness.refund.providerPayload.sandboxSimulation.providerConfirmation).toBe('UNCONFIRMED_DEMO')
+
+      // VNPay đã trả kết quả khác 05/06 (ví dụ từ chối) thì không được ghi đè bằng thành công giả.
+      const rejected = createHarness({
+        refund: {
+          status: 'PROCESSING',
+          providerPayload: { vnpayDispatch: {}, vnpayResponse: { vnp_ResponseCode: '00', vnp_TransactionStatus: '02' } },
+        },
+      })
+      await expect(invoke(rejected)).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
+      expect(rejected.refunds.applyEvent).not.toHaveBeenCalled()
+    })
+
     it('rejects PENDING simulation after a VNPay dispatch was attempted', async () => {
       process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
       const harness = createHarness({
@@ -386,15 +408,40 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       expect(harness.refunds.applyEvent).not.toHaveBeenCalled()
     })
 
+    const settlementTx = (blockedTasks = 0, openCases = 0) => ({
+      paymentOutboxEvent: { create: jest.fn().mockResolvedValue({}) },
+      refund: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(780000) } }) },
+      invoice: { update: jest.fn().mockResolvedValue({}) },
+      rentalOrder: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      rentalExceptionCase: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(openCases),
+      },
+      inventoryTask: { count: jest.fn().mockResolvedValue(blockedTasks) },
+    })
+    const clearCall = (tx: any) =>
+      tx.rentalOrder.updateMany.mock.calls.find(([args]: any[]) => args.data.exceptionStatus === 'NONE')
+
+    it('clears ACTION_REQUIRED once the refund failure case is resolved and nothing else is pending', async () => {
+      const harness = cancellation()
+      const tx: any = settlementTx()
+      await publishRefundSettlement(tx, harness.refund, { status: 'SUCCEEDED', refundTransactionRef: 'simulated' }, 'SANDBOX_SIMULATION')
+      expect(clearCall(tx)?.[0].where).toEqual({ id: harness.orderId, status: 'CANCELLED', exceptionStatus: 'ACTION_REQUIRED' })
+    })
+
+    it.each([
+      ['a warehouse task is BLOCKED', 1, 0],
+      ['another exception case is open', 0, 1],
+    ])('keeps ACTION_REQUIRED when %s', async (_label, blockedTasks, openCases) => {
+      const harness = cancellation()
+      const tx: any = settlementTx(blockedTasks, openCases)
+      await publishRefundSettlement(tx, harness.refund, { status: 'SUCCEEDED', refundTransactionRef: 'simulated' }, 'SANDBOX_SIMULATION')
+      expect(clearCall(tx)).toBeUndefined()
+    })
+
     it('updates the cancelled order and resolves only its linked exception with simulation provenance', async () => {
       const harness = cancellation()
-      const tx: any = {
-        paymentOutboxEvent: { create: jest.fn().mockResolvedValue({}) },
-        refund: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(780000) } }) },
-        invoice: { update: jest.fn().mockResolvedValue({}) },
-        rentalOrder: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-        rentalExceptionCase: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      }
+      const tx: any = settlementTx()
       await publishRefundSettlement(tx, harness.refund, { status: 'SUCCEEDED', refundTransactionRef: 'simulated' }, 'SANDBOX_SIMULATION')
       expect(tx.rentalOrder.updateMany).toHaveBeenCalledWith(expect.objectContaining({
         where: { id: harness.orderId, status: 'CANCELLED' },

@@ -381,7 +381,7 @@ export function AdminRentalReturnExceptions() {
       setNotice(
         result.settlementProcessingStatus === "APPLIED"
           ? "Đã ghi nhận hoàn tiền"
-          : "Đã ghi nhận hoàn tiền; hệ thống đang đồng bộ quyết toán. Không có tiền thật được chuyển.",
+          : "Đã ghi nhận hoàn tiền; hệ thống đang đồng bộ quyết toán.",
       );
       setDetail(await getRentalException(detail.case.id));
       setRefundInfo(undefined);

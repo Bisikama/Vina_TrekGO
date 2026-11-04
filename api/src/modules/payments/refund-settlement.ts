@@ -75,7 +75,7 @@ export async function publishRefundSettlement(
           version: { increment: 1 },
         },
       })
-      await tx.rentalExceptionCase?.updateMany({
+      const resolved = await tx.rentalExceptionCase?.updateMany({
         where: {
           orderId: refund.rentalOrderId,
           caseType: 'REFUND_FAILURE',
@@ -90,6 +90,22 @@ export async function publishRefundSettlement(
           version: { increment: 1 },
         },
       })
+      // payment-recovery đặt đơn ACTION_REQUIRED kèm case REFUND_FAILURE; refund này xong thì gỡ cờ,
+      // trừ khi đơn còn vướng việc khác (case khác còn mở, unit chưa trả kho → task BLOCKED).
+      if (resolved?.count) {
+        const openCases = await tx.rentalExceptionCase.count({
+          where: { orderId: refund.rentalOrderId, status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+        })
+        const blockedTasks = await tx.inventoryTask.count({
+          where: { orderId: refund.rentalOrderId, status: 'BLOCKED' },
+        })
+        if (openCases === 0 && blockedTasks === 0) {
+          await tx.rentalOrder.updateMany({
+            where: { id: refund.rentalOrderId, status: 'CANCELLED', exceptionStatus: 'ACTION_REQUIRED' },
+            data: { exceptionStatus: 'NONE', version: { increment: 1 } },
+          })
+        }
+      }
     } else if (event.status === 'FAILED' || event.status === 'CANCELLED') {
       await tx.rentalOrder.updateMany({
         where: { id: refund.rentalOrderId, status: 'CANCELLED' },
