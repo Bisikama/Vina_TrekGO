@@ -1,15 +1,15 @@
 import 'dotenv/config'
-import { PrismaClient, DifficultyLevel, GearCategory, GearCondition, GearItemSource } from '@prisma/client'
-import { seedProductTechnicalProfiles } from './seeds/product-technical-profile.seed'
+import { PrismaClient, GearCategory, GearCondition, GearItemSource } from '@prisma/client'
+import { GEAR_RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
+import { PrismaTripContextReadAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-trip-context-read.adapter'
+import type { PrismaService } from '../src/shared/services/prisma.service'
 
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL
 const prisma = new PrismaClient({
   datasources: { db: { url: dbUrl } },
 })
 
-/**
- * GeoJSON chuẩn chứa đầy đủ các thuộc tính địa hình kỹ thuật bắt buộc cho Gear Advisor.
- */
+/** Dữ liệu địa hình mẫu cho kịch bản demo; seed không tự áp dụng lên chuyến hiện có. */
 export const CANONICAL_GEAR_GEOJSON = {
   type: 'FeatureCollection',
   properties: {
@@ -106,6 +106,13 @@ export const CANONICAL_SAMPLE_GEAR_ITEMS = [
       weight_g: 350,
     },
   },
+  {
+    name: 'Giày trekking chưa rõ thông số (Cần bổ sung thông tin)',
+    category: GearCategory.FOOTWEAR,
+    brand: 'Demo',
+    condition: GearCondition.GOOD,
+    attributes: { weight_g: 600 },
+  },
 
   // ================= 3. BALO (BACKPACK) =================
   {
@@ -170,222 +177,63 @@ export const CANONICAL_SAMPLE_GEAR_ITEMS = [
   },
 ]
 
-/**
- * Chuẩn hóa MỘT chuyến đi cụ thể được chỉ định:
- * 1. Đảm bảo trạng thái OPEN và thời gian đi ở tương lai (endAt > Date.now()).
- * 2. Đảm bảo có kế hoạch cung đường (TripTrailPlan) với đầy đủ dữ kiện terrain và difficulty.
- * 3. Đảm bảo danh sách người dùng được cấp quyền ACTIVE TripMember.
- */
-export async function normalizeTripForGearAdvisor(
-  tripId: string,
-  activeUsers: Array<{ id: string }>,
-  client: PrismaClient = prisma,
-) {
-  const trip = await client.trip.findUnique({
-    where: { id: tripId },
-    include: {
-      tripTrailPlansViaTripId: true,
-      tripActiveTrailPlanViaTripId: {
-        include: { tripTrailPlan: true },
-      },
-    },
+/** Chỉ tạo dữ liệu demo còn thiếu, không sửa dữ liệu có sẵn. */
+export async function seedGearDemo(client: PrismaClient, userId: string, tripId?: string) {
+  const user = await client.user.findUnique({ where: { id: userId }, select: { id: true, status: true } })
+  if (!user || user.status !== 'ACTIVE') throw new Error('Không tìm thấy tài khoản ACTIVE với userId đã chỉ định.')
+  if (tripId) {
+    const context = await new PrismaTripContextReadAdapter(client as PrismaService).getTripContext(tripId, userId)
+    console.log('Chuyến hợp lệ:', context.tripId, 'số ngày:', context.days, 'độ khó:', context.difficulty, 'địa hình:', context.terrain.join(', '))
+  }
+  const existingRules = await client.gearRequirementRule.findMany()
+  const canonical = new Map(GEAR_RULE_METADATA_REGISTRY.map((rule) => [rule.id, rule]))
+  const conflicts = existingRules.filter((rule) => {
+    const expected = canonical.get(rule.id)
+    if (!expected) return rule.isActive
+    return !rule.isActive || rule.category !== expected.category ||
+      rule.defaultVerdict !== expected.defaultVerdict || rule.templateVi !== expected.templateVi
   })
-
-  if (!trip) {
-    console.log(`⚠️ Không tìm thấy chuyến đi có ID: ${tripId}`)
-    return null
+  if (conflicts.length) {
+    throw new Error('Quy tắc Gear không khớp cấu hình chuẩn: ' + conflicts.map((rule) => rule.id).join(', ') + '. Kiểm tra cấu hình trước khi seed; script không ghi đè quy tắc.')
   }
-
-  console.log(`\n👉 Đang chuẩn hóa riêng chuyến đi: "${trip.title}" (${trip.id})`)
-
-  // 1. Kiểm tra ngày kết thúc và trạng thái
-  const isPast = trip.endAt ? new Date(trip.endAt).getTime() < Date.now() : true
-  const isIneligible = ['CANCELLED', 'COMPLETED', 'INTERRUPTED'].includes(trip.status)
-  if (isPast || isIneligible) {
-    const newStart = new Date(Date.now() + 7 * 86400000)
-    const newEnd = new Date(Date.now() + 10 * 86400000)
-    await client.trip.update({
-      where: { id: trip.id },
-      data: {
-        status: 'OPEN',
-        startAt: newStart,
-        endAt: newEnd,
-      },
+  const result = await client.$transaction(async (tx) => {
+    const rules = await tx.gearRequirementRule.createMany({
+      data: GEAR_RULE_METADATA_REGISTRY.map((rule) => ({
+        id: rule.id, category: rule.category as any, defaultVerdict: rule.defaultVerdict as any,
+        templateVi: rule.templateVi, isActive: rule.isActive, ruleVersion: rule.ruleVersion,
+      })),
+      skipDuplicates: true,
     })
-    console.log(
-      `  ✅ Đã cập nhật trạng thái 'OPEN' và dời ngày đi sang tương lai (${newStart.toISOString().slice(0, 10)})`,
-    )
-  }
-
-  // 2. Chuẩn hóa Kế hoạch cung đường & dữ kiện địa hình
-  let plan = trip.tripActiveTrailPlanViaTripId?.tripTrailPlan ?? trip.tripTrailPlansViaTripId?.[0]
-  if (plan) {
-    await client.tripTrailPlan.update({
-      where: { id: plan.id },
-      data: {
-        snapshotDifficulty: plan.snapshotDifficulty || DifficultyLevel.MEDIUM,
-        snapshotGeojson: CANONICAL_GEAR_GEOJSON,
-      },
-    })
-    console.log(`  ✅ Đã cập nhật snapshotGeojson chứa terrain cho Kế hoạch: ${plan.id}`)
-
-    if (plan.systemTrailId) {
-      await client.systemTrail.update({
-        where: { id: plan.systemTrailId },
-        data: {
-          difficulty: DifficultyLevel.MEDIUM,
-          routeGeojson: CANONICAL_GEAR_GEOJSON,
-        },
-      })
-      console.log(`  ✅ Đã cập nhật routeGeojson cho SystemTrail: ${plan.systemTrailId}`)
-    }
-  } else {
-    // Tạo mới TripTrailPlan nếu chuyến chưa có plan nào
-    const newPlan = await client.tripTrailPlan.create({
-      data: {
-        tripId: trip.id,
-        sequence: 1,
-        snapshotName: `${trip.title} - Cung đường Chuẩn Gear`,
-        snapshotDifficulty: DifficultyLevel.MEDIUM,
-        snapshotGeojson: CANONICAL_GEAR_GEOJSON,
-        snapshotDistanceKm: 12.5,
-        snapshotElevationGainM: 950,
-      },
-    })
-    await client.tripActiveTrailPlan.upsert({
-      where: { tripId: trip.id },
-      update: { trailPlanId: newPlan.id },
-      create: {
-        tripId: trip.id,
-        trailPlanId: newPlan.id,
-        changedBy: trip.creatorId,
-      },
-    })
-    console.log(`  ✅ Đã tạo mới TripTrailPlan & kích hoạt ActiveTrailPlan: ${newPlan.id}`)
-  }
-
-  // 3. Đảm bảo tất cả người dùng active đều là ACTIVE TripMember của chuyến này
-  for (const u of activeUsers) {
-    await client.tripMember.upsert({
-      where: {
-        tripId_userId: {
-          tripId: trip.id,
-          userId: u.id,
-        },
-      },
-      update: { status: 'ACTIVE' },
-      create: {
-        tripId: trip.id,
-        userId: u.id,
-        role: trip.creatorId === u.id ? 'HOST' : 'MEMBER',
-        status: 'ACTIVE',
-      },
-    })
-  }
-  console.log(`  ✅ Đã đồng bộ quyền ACTIVE TripMember cho ${activeUsers.length} tài khoản`)
-
-  return trip
-}
-
-/**
- * Nạp đồ mẫu vào tủ đồ cá nhân (UserGearItem) cho người dùng
- */
-export async function seedWardrobeItems(users: Array<{ id: string }>, client: PrismaClient = prisma) {
-  let syncedCount = 0
-  for (const u of users) {
+    let created = 0
     for (const item of CANONICAL_SAMPLE_GEAR_ITEMS) {
-      const existing = await client.userGearItem.findFirst({
-        where: {
-          userId: u.id,
-          name: item.name,
-        },
-      })
-      if (existing) {
-        // Cập nhật lại thuộc tính chuẩn để dọn dẹp các trường cũ không hợp lệ (như frame_type)
-        await client.userGearItem.update({
-          where: { id: existing.id },
-          data: {
-            attributes: item.attributes,
-            condition: item.condition,
-          },
-        })
-        syncedCount++
-      } else {
-        await client.userGearItem.create({
-          data: {
-            userId: u.id,
-            name: item.name,
-            category: item.category,
-            brand: item.brand,
-            condition: item.condition,
-            attributes: item.attributes,
-            source: GearItemSource.MANUAL,
-          },
-        })
-        syncedCount++
-      }
+      const name = '[DEMO] ' + item.name
+      const existing = await tx.userGearItem.findFirst({ where: { userId, name }, select: { id: true } })
+      if (existing) continue
+      await tx.userGearItem.create({ data: {
+        userId, name, category: item.category, brand: item.brand,
+        condition: item.condition, attributes: item.attributes, source: GearItemSource.MANUAL,
+      } })
+      created++
     }
-  }
-
-
-  console.log(`✅ Đã đồng bộ & chuẩn hóa ${syncedCount} món trang bị mẫu (Đạt chuẩn + Không phù hợp) trong tủ đồ`)
-}
-
-/**
- * Hàm điều phối chính:
- * - QUY TẮC: TUYỆT ĐỐI KHÔNG tự động cập nhật chuyến đi nếu KHÔNG truyền tripId!
- * - Chỉ khi người dùng truyền `--tripId=<UUID>` hoặc `TRIP_ID=<UUID>` thì mới chuẩn hóa chuyến đi đó.
- * - Mặc định luôn cập nhật Tủ đồ cá nhân (bao gồm cả đồ đạt chuẩn và đồ không phù hợp để test cảnh báo).
- */
-export async function seedGearDemo() {
-  console.log('🚀 Bắt đầu quá trình nạp dữ liệu chuẩn cho tính năng Gear Advisor...')
-
-  // 1. Đọc tham số dòng lệnh hoặc biến môi trường nếu có
-  const cliTripArg = process.argv.find((arg) => arg.startsWith('--tripId='))
-  const specifiedTripId = cliTripArg ? cliTripArg.split('=')[1] : process.env.TRIP_ID
-
-  // 2. Lấy danh sách users active
-  const activeUsers = await prisma.user.findMany({
-    where: { status: 'ACTIVE' },
-    select: { id: true, fullName: true, email: true },
-    take: 20,
+    return { rules: rules.count, items: created }
   })
-
-  if (activeUsers.length === 0) {
-    console.log('⚠️ Không tìm thấy người dùng active nào trong cơ sở dữ liệu!')
-    return
-  }
-  console.log(`👥 Tìm thấy ${activeUsers.length} người dùng active trong hệ thống`)
-
-  // 3. Xử lý Chuyến Đi (Trips): CHỈ cập nhật khi có specifiedTripId
-  if (specifiedTripId) {
-    console.log(`🎯 Nhận được tripId = "${specifiedTripId}". Tiến hành chuẩn hóa riêng chuyến đi này...`)
-    await normalizeTripForGearAdvisor(specifiedTripId, activeUsers, prisma)
-  } else {
-    console.log('\nℹ️ [QUY TẮC AN TOÀN] Không có trip_id nào được truyền vào.')
-    console.log('🔒 Script KHÔNG tự động cập nhật bất kỳ chuyến đi nào trong database.')
-    console.log('👉 Nếu bạn muốn chuẩn hóa một chuyến đi cụ thể, hãy chạy:')
-    console.log('   npm run seed:gear-demo -- --tripId=<ID_CHUYẾN_ĐI>')
-    console.log('   (hoặc: TRIP_ID=<ID_CHUYẾN_ĐI> npm run seed:gear-demo)\n')
-  }
-
-  // 4. Đồng bộ tủ đồ cá nhân phong phú (gồm cả đồ Đạt chuẩn & đồ Không phù hợp)
-  await seedWardrobeItems(activeUsers, prisma)
-
-  // 5. Đồng bộ hồ sơ kỹ thuật (ProductTechnicalProfile) cho Catalog sản phẩm thuê
-  await seedProductTechnicalProfiles(prisma)
-
-  console.log('\n🎉 HOÀN TẤT ĐỒNG BỘ DỮ LIỆU GEAR DEMO THÀNH CÔNG!')
-  console.log('👉 Tủ đồ cá nhân của bạn hiện đã có cả món phù hợp và món không phù hợp để bạn test hiển thị cảnh báo.')
+  console.log('Hoàn tất: thêm', result.rules, 'quy tắc và', result.items, 'món demo cho tài khoản', userId)
+  console.log('Chạy lại giữ nguyên món demo đã tồn tại; không cập nhật chuyến đi, thành viên hay sản phẩm thuê.')
+  if (!tripId) console.log('Để kiểm tra quyền và dữ kiện chuyến demo, truyền thêm --tripId=<UUID>.')
+  return result
 }
 
 if (require.main === module) {
-  seedGearDemo()
-    .catch((e) => {
-      console.error('❌ Lỗi khi chạy:', e)
-      process.exit(1)
-    })
-    .finally(async () => {
-      await prisma.$disconnect()
-    })
+  const argument = (name: string) => process.argv.find((arg) => arg.startsWith('--' + name + '='))?.slice(name.length + 3)
+  const userId = argument('userId')
+  const tripId = argument('tripId')
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!userId || !uuid.test(userId) || (tripId && !uuid.test(tripId))) {
+    console.error('Cách dùng: npm run seed:gear-demo -- --userId=<UUID> [--tripId=<UUID>]')
+    process.exitCode = 1
+  } else {
+    seedGearDemo(prisma, userId, tripId)
+      .catch((error) => { console.error('Không thể seed Gear demo:', error.message); process.exitCode = 1 })
+      .finally(async () => { await prisma.$disconnect() })
+  }
 }
