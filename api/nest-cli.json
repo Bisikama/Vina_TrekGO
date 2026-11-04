@@ -8,6 +8,10 @@
       {
         "include": "**/*.md",
         "outDir": "dist/src"
+      },
+      {
+        "include": "modules/rental/documents/assets/*.jpg",
+        "outDir": "dist/src"
       }
     ]
   }
