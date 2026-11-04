@@ -1,448 +1,671 @@
 "use client";
 
-import React, { useState } from 'react';
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-const inventoryItems = [
-  {
-    id: 'SKU: TENT-NH-24P',
-    name: 'Lều cắm trại 2-4 người',
-    brand: 'Naturehike Cloud Up / Mongar 2',
-    total: 280,
-    available: 190,
-    tour: 72,
-    maintenance: 18,
-    status: 'ok',
-    icon: '⛺'
-  },
-  {
-    id: 'SKU: SLEEP-MS-10',
-    name: 'Túi ngủ chịu lạnh âm độ',
-    brand: 'Nhiệt độ biên: -5°C -> 10°C',
-    total: 350,
-    available: 245,
-    tour: 90,
-    maintenance: 15,
-    status: 'ok',
-    icon: '🛏️'
-  },
-  {
-    id: 'SKU: POLE-BD-PRO',
-    name: 'Gậy trekking hợp kim carbon',
-    brand: 'Black Diamond Trail Pro',
-    total: 320,
-    available: 85,
-    tour: 210,
-    maintenance: 25,
-    status: 'warning',
-    icon: '🦯'
-  },
-  {
-    id: 'SKU: COM-MOTO-T82',
-    name: 'Bộ đàm cự ly xa UHF/VHF',
-    brand: 'Motorola Extreme 446MHz',
-    total: 120,
-    available: 32,
-    tour: 76,
-    maintenance: 12,
-    status: 'warning',
-    icon: '📻'
-  },
-  {
-    id: 'SKU: PACK-OSP-70',
-    name: 'Balo trợ lực 50L - 70L',
-    brand: 'Osprey Atmos AG & Deuter',
-    total: 160,
-    available: 112,
-    tour: 40,
-    maintenance: 8,
-    status: 'ok',
-    icon: '🎒'
-  },
-  {
-    id: 'SKU: HEAD-BD-STRM',
-    name: 'Đèn đội đầu chống nước & Pin',
-    brand: 'Black Diamond Storm 450lm',
-    total: 100,
-    available: 138,
-    tour: 48,
-    maintenance: 4,
-    status: 'ok',
-    icon: '🔦'
+import {
+  getAllEquipmentUnits,
+  listAdminRentalOrders,
+  type AdminRentalOrderStatus,
+  type AdminRentalOrderSummary,
+} from "@/features/inventory/services/admin-inventory.api";
+import { getRentalAssignees, initialsOf } from "@/features/rentals/services/staff-overview.api";
+import type { RentalAssignee } from "@/features/rentals/services/staff-preparation.api";
+import { listRentalExceptions, type RentalExceptionSummary } from "@/features/rentals/services/staff-returns.api";
+import {
+  getInventoryLocations,
+  getStaffInventoryErrorMessage,
+  getStaffRentalProducts,
+} from "@/features/rentals/services/staff-inventory.api";
+import type { EquipmentUnit, EquipmentUnitStatus, InventoryLocation, RentalProduct } from "@/features/rentals/types/rental";
+
+// Kho vật tư (Admin) — toàn bộ số liệu lấy từ api thật:
+// sản phẩm /staff/rental-products, thiết bị /staff/equipment-units, kho /staff/inventory-locations,
+// đơn thuê /admin/rental-orders, ngoại lệ /staff/rental-exceptions, nhân sự /staff/rental-assignees.
+
+const LOW_STOCK_RATIO = 0.2;
+
+const OUT_STATUSES: EquipmentUnitStatus[] = ["PICKED", "PACKED", "RENTED", "RETURN_PENDING"];
+const SERVICE_STATUSES: EquipmentUnitStatus[] = ["CLEANING", "MAINTENANCE", "DAMAGED"];
+
+const UNIT_STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: "Sẵn sàng",
+  PICKED: "Đã lấy",
+  PACKED: "Đã đóng gói",
+  RENTED: "Đang cho thuê",
+  RETURN_PENDING: "Chờ trả",
+  CLEANING: "Đang vệ sinh",
+  MAINTENANCE: "Đang bảo trì",
+  DAMAGED: "Hư hỏng",
+  LOST: "Thất lạc",
+  RETIRED: "Đã thanh lý",
+};
+
+const CONDITION_LABELS: Record<string, string> = {
+  NEW: "Mới",
+  GOOD: "Tốt",
+  FAIR: "Khá",
+  DAMAGED: "Hư hỏng",
+  LOST: "Thất lạc",
+};
+
+const GRADE_LABELS: Record<string, string> = { LIKE_NEW: "Như mới", GOOD_USED: "Sử dụng tốt" };
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  PAID: "Đã thanh toán",
+  PREPARING: "Đang soạn đồ",
+  READY_FOR_HANDOVER: "Chờ bàn giao",
+  RETURN_PENDING: "Chờ nhận trả",
+  RETURN_PROCESSING: "Đang kiểm tra trả",
+};
+
+const EXCEPTION_TYPE_LABELS: Record<string, string> = {
+  DAMAGE_DISPUTE: "Hư hại / khoản trừ cọc",
+  OVERDUE: "Trả thiết bị quá hạn",
+  RETURN_INCOMPLETE: "Trả thiếu thiết bị",
+  PAYMENT_MISMATCH: "Sai lệch thanh toán",
+  REFUND_FAILURE: "Hoàn cọc cần đối soát",
+  OTHER: "Ngoại lệ khác",
+};
+
+const EXCEPTION_STATUS_LABELS: Record<string, string> = { OPEN: "Cần xử lý", UNDER_REVIEW: "Đang xem xét" };
+
+const OUTBOUND_STATUSES: AdminRentalOrderStatus[] = ["PAID", "PREPARING", "READY_FOR_HANDOVER"];
+const INBOUND_STATUSES: AdminRentalOrderStatus[] = ["RETURN_PENDING", "RETURN_PROCESSING"];
+
+type ProductStock = {
+  product: RentalProduct;
+  total: number;
+  available: number;
+  out: number;
+  service: number;
+};
+
+type InventoryData = {
+  products: RentalProduct[];
+  units: EquipmentUnit[];
+  unitTotal: number;
+  locations: InventoryLocation[];
+  outbound: AdminRentalOrderSummary[];
+  inbound: AdminRentalOrderSummary[];
+  exceptions: RentalExceptionSummary[];
+  staff: RentalAssignee[];
+  partialErrors: string[];
+};
+
+function stripGradeSuffix(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .trim();
+}
+
+function orderCode(id: string) {
+  return `#${id.replace(/-/g, "").slice(-6).toUpperCase()}`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatMoney(value: number, currency = "VND") {
+  return `${new Intl.NumberFormat("vi-VN").format(Math.round(value))} ${currency === "VND" ? "₫" : currency}`;
+}
+
+function percent(part: number, whole: number) {
+  return whole > 0 ? Math.round((part / whole) * 100) : 0;
+}
+
+async function settle<T>(label: string, task: Promise<T>, fallback: T, errors: string[]) {
+  try {
+    return await task;
+  } catch (error) {
+    errors.push(`${label}: ${getStaffInventoryErrorMessage(error)}`);
+    return fallback;
   }
-];
+}
+
+async function loadInventory(signal: AbortSignal): Promise<InventoryData> {
+  const errors: string[] = [];
+  const [products, unitResult, locations, exceptions, staff, ...orderLists] = await Promise.all([
+    settle("Sản phẩm", getStaffRentalProducts({ pageSize: 100, signal }).then((r) => r.items), [] as RentalProduct[], errors),
+    settle("Thiết bị", getAllEquipmentUnits(signal), null, errors),
+    settle("Kho", getInventoryLocations({ pageSize: 100, signal }).then((r) => r.items), [] as InventoryLocation[], errors),
+    settle("Ngoại lệ", listRentalExceptions().then((r) => r.items ?? []), [] as RentalExceptionSummary[], errors),
+    settle("Nhân sự kho", getRentalAssignees("STAFF_INVENTORY", signal), [] as RentalAssignee[], errors),
+    ...[...OUTBOUND_STATUSES, ...INBOUND_STATUSES].map((status) =>
+      settle(
+        `Đơn ${ORDER_STATUS_LABELS[status] ?? status}`,
+        listAdminRentalOrders(status, signal).then((r) => r.items),
+        [] as AdminRentalOrderSummary[],
+        errors,
+      ),
+    ),
+  ]);
+
+  const outbound = orderLists.slice(0, OUTBOUND_STATUSES.length).flat();
+  const inbound = orderLists.slice(OUTBOUND_STATUSES.length).flat();
+  const byStart = (a: AdminRentalOrderSummary, b: AdminRentalOrderSummary) => a.rentalStartAt.localeCompare(b.rentalStartAt);
+  const byEnd = (a: AdminRentalOrderSummary, b: AdminRentalOrderSummary) => a.rentalEndAt.localeCompare(b.rentalEndAt);
+
+  return {
+    products,
+    units: unitResult?.items ?? [],
+    unitTotal: unitResult?.totalItems ?? 0,
+    locations,
+    outbound: outbound.sort(byStart),
+    inbound: inbound.sort(byEnd),
+    exceptions: exceptions.filter((item) => item.status === "OPEN" || item.status === "UNDER_REVIEW"),
+    staff,
+    partialErrors: errors,
+  };
+}
+
+function StatCard({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: number;
+  note: string;
+  tone: "slate" | "emerald" | "sky" | "amber" | "rose";
+}) {
+  const tones = {
+    slate: "border-slate-200 text-slate-900",
+    emerald: "border-emerald-200 text-emerald-700",
+    sky: "border-sky-200 text-sky-700",
+    amber: "border-amber-200 text-amber-700",
+    rose: "border-rose-200 text-rose-700",
+  } as const;
+  return (
+    <div className={`rounded-2xl border bg-white p-5 shadow-sm ${tones[tone]}`}>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight">{value.toLocaleString("vi-VN")}</p>
+      <p className="mt-1 text-xs text-slate-500">{note}</p>
+    </div>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return <p className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">{text}</p>;
+}
 
 export const InventoryManagement = () => {
+  const [data, setData] = useState<InventoryData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [locationId, setLocationId] = useState("");
+  const [category, setCategory] = useState("");
+  const [search, setSearch] = useState("");
+  const [orderTab, setOrderTab] = useState<"outbound" | "inbound">("outbound");
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    loadInventory(controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setData(result);
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setError(getStaffInventoryErrorMessage(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
+
+  const units = useMemo(() => {
+    const all = data?.units ?? [];
+    return locationId ? all.filter((unit) => unit.currentInventoryLocation?.id === locationId) : all;
+  }, [data, locationId]);
+
+  const summary = useMemo(() => {
+    const active = units.filter((unit) => unit.status !== "RETIRED" && unit.status !== "LOST");
+    return {
+      total: active.length,
+      available: active.filter((unit) => unit.status === "AVAILABLE").length,
+      out: active.filter((unit) => OUT_STATUSES.includes(unit.status)).length,
+      service: active.filter((unit) => SERVICE_STATUSES.includes(unit.status)).length,
+      lost: units.filter((unit) => unit.status === "LOST").length,
+    };
+  }, [units]);
+
+  const stocks = useMemo<ProductStock[]>(() => {
+    const map = new Map<string, ProductStock>();
+    for (const product of data?.products ?? []) {
+      map.set(product.id, { product, total: 0, available: 0, out: 0, service: 0 });
+    }
+    for (const unit of units) {
+      const row = map.get(unit.product.id);
+      if (!row || unit.status === "RETIRED" || unit.status === "LOST") continue;
+      row.total += 1;
+      if (unit.status === "AVAILABLE") row.available += 1;
+      else if (OUT_STATUSES.includes(unit.status)) row.out += 1;
+      else if (SERVICE_STATUSES.includes(unit.status)) row.service += 1;
+    }
+    return [...map.values()];
+  }, [data, units]);
+
+  const isLow = (row: ProductStock) => row.total > 0 && row.available / row.total < LOW_STOCK_RATIO;
+  const lowStock = useMemo(() => stocks.filter(isLow), [stocks]);
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const row of stocks) {
+      const key = row.product.category?.id ?? "";
+      if (!key) continue;
+      const current = counts.get(key) ?? { name: row.product.category.name, count: 0 };
+      current.count += 1;
+      counts.set(key, current);
+    }
+    return [...counts.entries()];
+  }, [stocks]);
+
+  const visibleStocks = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return stocks
+      .filter((row) => !category || row.product.category?.id === category)
+      .filter(
+        (row) =>
+          !keyword ||
+          row.product.name.toLowerCase().includes(keyword) ||
+          (row.product.sku ?? "").toLowerCase().includes(keyword),
+      )
+      .sort((a, b) => Number(isLow(b)) - Number(isLow(a)) || b.total - a.total);
+  }, [stocks, category, search]);
+
+  const serviceUnits = useMemo(
+    () => units.filter((unit) => SERVICE_STATUSES.includes(unit.status)).slice(0, 8),
+    [units],
+  );
+
+  const orders = orderTab === "outbound" ? data?.outbound ?? [] : data?.inbound ?? [];
+  const tableRows = showAll ? visibleStocks : visibleStocks.slice(0, 8);
+  const truncated = data ? data.units.length < data.unitTotal : false;
+
+  if (loading && !data) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#1B5E41]" />
+          Đang tải dữ liệu kho...
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="p-6">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+          <p className="font-medium">Không tải được dữ liệu kho</p>
+          <p className="mt-1">{error}</p>
+          <button type="button" onClick={reload} className="mt-3 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100">
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6">
-      {/* Alert */}
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start justify-between">
-        <div className="flex gap-3">
-          <div className="bg-red-100 p-2 rounded-lg text-red-600">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          </div>
+    <div className="space-y-6 p-6">
+      {lowStock.length > 0 ? (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4">
           <div>
-            <h4 className="font-bold text-red-800 text-sm">Cảnh báo thiếu hụt cấp độ 2: Bộ đàm UHF & Gậy trekking Carbon</h4>
-            <p className="text-red-600 text-xs mt-1">Số lượng khả dụng chỉ còn phục vụ tối đa 2 đoàn trekking cuối tuần này. Yêu cầu thu hồi từ đoàn về hoặc nhập khẩn.</p>
+            <p className="text-sm font-semibold text-rose-800">
+              {lowStock.length} sản phẩm còn dưới {Math.round(LOW_STOCK_RATIO * 100)}% thiết bị sẵn sàng
+            </p>
+            <p className="mt-1 text-xs text-rose-700">
+              {lowStock
+                .slice(0, 4)
+                .map((row) => `${stripGradeSuffix(row.product.name)} (${row.available}/${row.total})`)
+                .join(" · ")}
+              {lowStock.length > 4 ? ` · và ${lowStock.length - 4} sản phẩm khác` : ""}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCategory("");
+              setSearch("");
+              setShowAll(true);
+            }}
+            className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
+          >
+            Xem danh sách
+          </button>
         </div>
-        <div className="flex gap-2">
-          <button className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded text-xs font-bold hover:bg-red-50">Xem danh sách thiếu</button>
-          <button className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-bold hover:bg-red-700">Đặt hàng khẩn</button>
-        </div>
-      </div>
+      ) : null}
 
-      {/* Header */}
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-sm text-gray-500 mb-1">
-            <span>Quản trị hệ thống</span>
-            <span className="mx-2">&gt;</span>
-            <span>Hậu cần & Vật tư</span>
-            <span className="mx-2">&gt;</span>
-            <span className="font-medium text-gray-900">Tổng quan Kho vật tư</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">Quản lý Kho Vật tư & Thiết bị Dã ngoại</h1>
-            <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full uppercase">V4.6 LIVE</span>
-          </div>
-          <p className="text-gray-500 text-sm mt-1">
-            Điều phối tồn kho, theo dõi đơn chuẩn bị cho các đoàn trekking, kiểm định thiết bị hoàn trả và ghi nhận hư hại theo thời gian thực.
-          </p>
+          <p className="text-xs font-medium text-slate-500">Quản trị · Hậu cần</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Kho vật tư & thiết bị</h1>
+          <p className="mt-1 text-sm text-slate-500">Tồn kho theo sản phẩm, đơn đang soạn và chờ trả, thiết bị đang bảo trì.</p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            Xuất báo cáo (Excel/PDF)
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={locationId}
+            onChange={(event) => setLocationId(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#1B5E41]"
+          >
+            <option value="">Tất cả kho</option>
+            {(data?.locations ?? []).map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={reload}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {loading ? "Đang tải..." : "Làm mới"}
           </button>
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-            Kiểm kê tức thì (Audit Scan)
-          </button>
-          <button className="px-4 py-2 bg-[#1B5E41] text-white rounded-lg text-sm font-bold hover:bg-[#144a33] flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Nhập kho thiết bị mới
-          </button>
+          <Link href="/admin/rentals" className="rounded-xl bg-[#1B5E41] px-4 py-2 text-sm font-medium text-white hover:bg-[#144a33]">
+            Thiết bị cho thuê
+          </Link>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-gray-500 uppercase">Tổng thiết bị kho</span>
-            <div className="w-6 h-6 rounded bg-blue-50 text-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-black text-gray-900">1.420</span>
-            <span className="text-xs text-gray-500">món</span>
-          </div>
-          <div className="flex gap-2">
-             <span className="bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded">100% tài sản</span>
-             <span className="text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200">~1.85 tỷ ₫</span>
-          </div>
+      {data && data.partialErrors.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          Một số mục chưa tải được: {data.partialErrors.join(" · ")}
         </div>
+      ) : null}
 
-        <div className="bg-white p-5 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -z-10"></div>
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-gray-500 uppercase">Sẵn sàng cho thuê</span>
-            <div className="w-6 h-6 rounded bg-emerald-100 text-emerald-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-black text-emerald-600">985</span>
-            <span className="text-xs text-gray-500">món (69.4%)</span>
-          </div>
-          <div className="flex gap-2">
-             <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-100">Khả dụng</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-gray-500 uppercase">Đang xuất / Đi tour</span>
-            <div className="w-6 h-6 rounded bg-blue-100 text-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-black text-blue-600">320</span>
-            <span className="text-xs text-gray-500">món (22.5%)</span>
-          </div>
-          <div className="text-[10px] text-gray-500 font-medium">Phục vụ 25 đoàn thực địa</div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-orange-200 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-gray-500 uppercase">Đang bảo trì / Kiểm định</span>
-            <div className="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-black text-orange-600">78</span>
-            <span className="text-xs text-gray-500">món (5.5%)</span>
-          </div>
-          <div className="text-[10px] text-gray-500 font-medium">12 sửa chữa • 66 phân loại...</div>
-        </div>
-
-        <div className="bg-red-50 p-5 rounded-xl border border-red-200 shadow-sm relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-16 h-16 bg-red-100 rounded-bl-full -z-10"></div>
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-red-700 uppercase">Cảnh báo sắp hết</span>
-            <div className="w-6 h-6 rounded bg-red-100 text-red-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-black text-red-600">37</span>
-            <span className="text-xs text-red-500">món (2.6%)</span>
-          </div>
-          <div className="flex gap-2">
-             <span className="bg-red-200 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">Cần bổ sung</span>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard
+          label="Tổng thiết bị"
+          value={summary.total}
+          tone="slate"
+          note={summary.lost > 0 ? `Không tính ${summary.lost} thất lạc, đã thanh lý` : "Không tính thiết bị đã thanh lý"}
+        />
+        <StatCard label="Sẵn sàng cho thuê" value={summary.available} tone="emerald" note={`${percent(summary.available, summary.total)}% tổng thiết bị`} />
+        <StatCard label="Đang xuất / đi tour" value={summary.out} tone="sky" note={`${percent(summary.out, summary.total)}% · đã lấy, đóng gói, đang thuê, chờ trả`} />
+        <StatCard label="Vệ sinh / bảo trì" value={summary.service} tone="amber" note={`${percent(summary.service, summary.total)}% · gồm thiết bị hư hỏng`} />
+        <StatCard label="Sản phẩm sắp hết" value={lowStock.length} tone="rose" note={`Sẵn sàng dưới ${Math.round(LOW_STOCK_RATIO * 100)}%`} />
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        {/* Main Content */}
-        <div className="col-span-8 space-y-6">
-          {/* Inventory List */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+      {truncated ? (
+        <p className="text-xs text-slate-500">
+          Đang tính trên {data?.units.length.toLocaleString("vi-VN")}/{data?.unitTotal.toLocaleString("vi-VN")} thiết bị đầu tiên.
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div className="space-y-6 xl:col-span-8">
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
               <div>
-                <h3 className="font-bold text-gray-900 text-lg">Danh mục Thiết bị & Tỷ lệ Tồn kho</h3>
-                <p className="text-xs text-gray-500">Giám sát số lượng khả dụng so với tổng tải đăng ký cung tour</p>
+                <h2 className="text-base font-semibold text-slate-900">Tồn kho theo sản phẩm</h2>
+                <p className="text-xs text-slate-500">{stocks.length} sản phẩm · đếm theo từng thiết bị vật lý</p>
               </div>
-              <div className="relative">
-                <input type="text" placeholder="Lọc mã SKU, tên..." className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm w-64 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
-                <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              </div>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm tên hoặc SKU..."
+                className="w-64 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-[#1B5E41] focus:bg-white"
+              />
             </div>
 
-            <div className="p-4 border-b border-gray-100 flex gap-2">
-              <button className="px-3 py-1.5 bg-[#1B5E41] text-white text-xs font-bold rounded-full">Tất cả danh mục (8)</button>
-              <button className="px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-xs font-semibold rounded-full hover:bg-gray-100">Chỗ ngủ & Lều trại</button>
-              <button className="px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-xs font-semibold rounded-full hover:bg-gray-100">Leo núi & Dây đai</button>
-              <button className="px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 text-xs font-semibold rounded-full hover:bg-gray-100">Thiết bị điện tử & Định vị</button>
-            </div>
+            {categories.length > 0 ? (
+              <div className="flex flex-wrap gap-2 border-b border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setCategory("")}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${!category ? "bg-[#1B5E41] text-white" : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                >
+                  Tất cả ({stocks.length})
+                </button>
+                {categories.map(([id, item]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setCategory(id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium ${category === id ? "bg-[#1B5E41] text-white" : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    {item.name} ({item.count})
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    <th className="p-4 w-1/2">Thiết bị & SKU</th>
+                  <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-medium text-slate-500">
+                    <th className="p-4">Sản phẩm</th>
                     <th className="p-4 text-center">Tổng</th>
-                    <th className="p-4 text-center text-emerald-600">Khả dụng</th>
-                    <th className="p-4 text-center text-blue-600">Đi tour</th>
-                    <th className="p-4 text-center text-orange-600">Bảo trì</th>
-                    <th className="p-4">Tỷ lệ Sẵn sàng</th>
+                    <th className="p-4 text-center text-emerald-700">Sẵn sàng</th>
+                    <th className="p-4 text-center text-sky-700">Đang xuất</th>
+                    <th className="p-4 text-center text-amber-700">Bảo trì</th>
+                    <th className="p-4">Tỷ lệ sẵn sàng</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {inventoryItems.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="p-4 flex gap-3 items-center">
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl shadow-sm border border-gray-200">{item.icon}</div>
-                        <div>
-                          <div className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                            {item.name}
-                            {item.status === 'warning' && <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">Thiếu</span>}
+                <tbody className="divide-y divide-slate-100">
+                  {tableRows.map((row) => {
+                    const low = isLow(row);
+                    const ratio = percent(row.available, row.total);
+                    const image = row.product.imageUrls?.[0];
+                    return (
+                      <tr key={row.product.id} className="hover:bg-slate-50/60">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                              {image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={image} alt="" className="h-full w-full object-cover" />
+                              ) : null}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900">
+                                {stripGradeSuffix(row.product.name)}
+                                {row.product.grade ? (
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                    {GRADE_LABELS[row.product.grade] ?? row.product.grade}
+                                  </span>
+                                ) : null}
+                                {low ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-700">Sắp hết</span> : null}
+                              </p>
+                              <p className="mt-0.5 text-xs text-slate-500">
+                                {row.product.sku ? <span className="font-mono">{row.product.sku}</span> : null}
+                                {row.product.sku && row.product.category?.name ? " · " : ""}
+                                {row.product.category?.name}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
-                            <span className="font-mono text-[10px] bg-gray-100 px-1 py-0.5 rounded border border-gray-200">{item.id}</span>
-                            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                            {item.brand}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 text-center font-bold text-gray-900">{item.total}</td>
-                      <td className={`p-4 text-center font-bold ${item.status === 'warning' ? 'text-red-600' : 'text-emerald-600'}`}>{item.available}</td>
-                      <td className="p-4 text-center font-medium text-gray-600">{item.tour}</td>
-                      <td className="p-4 text-center font-medium text-gray-600">{item.maintenance}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold ${item.status === 'warning' ? 'text-red-600' : 'text-emerald-600'}`}>
-                            {Math.round((item.available / item.total) * 100)}%
-                          </span>
-                          <div className="w-16 h-1.5 bg-gray-200 rounded-full">
-                            <div className={`h-1.5 rounded-full ${item.status === 'warning' ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${(item.available / item.total) * 100}%` }}></div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-4 text-center text-sm font-medium text-slate-900">{row.total}</td>
+                        <td className={`p-4 text-center text-sm font-medium ${low ? "text-rose-600" : "text-emerald-700"}`}>{row.available}</td>
+                        <td className="p-4 text-center text-sm text-slate-600">{row.out}</td>
+                        <td className="p-4 text-center text-sm text-slate-600">{row.service}</td>
+                        <td className="p-4">
+                          {row.total === 0 ? (
+                            <span className="text-xs text-slate-400">Chưa có thiết bị</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className={`w-9 text-xs font-medium ${low ? "text-rose-600" : "text-emerald-700"}`}>{ratio}%</span>
+                              <div className="h-1.5 w-16 rounded-full bg-slate-200">
+                                <div className={`h-1.5 rounded-full ${low ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${ratio}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              {tableRows.length === 0 ? (
+                <div className="p-5">
+                  <EmptyRow text="Không có sản phẩm phù hợp." />
+                </div>
+              ) : null}
             </div>
-            <div className="p-4 border-t border-gray-100 text-center">
-              <button className="text-sm font-bold text-[#1B5E41] hover:underline flex items-center gap-1 mx-auto">
-                Xem toàn bộ 48 phân loại con <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-          </div>
 
-          {/* Damaged Equipment */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                 </div>
-                 <div>
-                    <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">Thiết bị Hư hỏng & Chờ Thẩm định <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">18 thiết bị cần xử lý</span></h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Ghi nhận biên bản từ Leader đoàn, mức phạt cọc hoàn trả và tiền đền bù khắc phục</p>
-                 </div>
+            {visibleStocks.length > 8 ? (
+              <div className="border-t border-slate-100 p-4 text-center">
+                <button type="button" onClick={() => setShowAll((value) => !value)} className="text-sm font-medium text-[#1B5E41] hover:underline">
+                  {showAll ? "Thu gọn" : `Xem tất cả ${visibleStocks.length} sản phẩm`}
+                </button>
               </div>
-              <button className="text-sm font-semibold text-gray-600 hover:text-gray-900 flex items-center gap-1">Xem lịch sử đền bù <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-               {/* Item 1 */}
-               <div className="border border-gray-200 rounded-lg p-4 flex gap-4 items-start relative overflow-hidden">
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
-                  <img src="https://images.unsplash.com/photo-1504280390224-dd25b3e6e810?q=80&w=150&auto=format&fit=crop" className="w-16 h-16 rounded object-cover shadow-sm border border-gray-200" alt="Tent" />
-                  <div className="flex-1">
-                     <div className="text-[10px] font-bold text-gray-500 mb-0.5">#EQ-TN-042</div>
-                     <h4 className="font-bold text-gray-900 text-sm mb-1">Lều Naturehike Cloud Up 2P</h4>
-                     <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-0.5 rounded mb-2 inline-block">Chờ duyệt khấu trừ</span>
-                     <div className="text-xs text-gray-600 space-y-1">
-                        <div><span className="font-semibold">Đoàn:</span> Tà Xùa 3N2Đ (#TRIP-TX-88)</div>
-                        <div><span className="font-semibold">Leader:</span> Hoàng Thu Trang</div>
-                        <div className="text-red-600"><span className="font-semibold">Lỗi:</span> Rách vải lều 15cm do gió bão + cong 1 cọc nhôm</div>
-                     </div>
-                  </div>
-                  <div className="text-right">
-                     <div className="text-[10px] font-bold text-gray-500 uppercase mb-0.5">Dự kiến khấu trừ</div>
-                     <div className="text-xl font-bold text-red-600 mb-2">350.000 ₫</div>
-                     <div className="flex gap-2">
-                        <button className="px-3 py-1.5 bg-[#1B5E41] text-white text-xs font-bold rounded">Xử lý đền bù</button>
-                        <button className="px-2 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded hover:bg-gray-200"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg></button>
-                     </div>
-                  </div>
-               </div>
+            ) : null}
+          </section>
 
-               {/* Item 2 */}
-               <div className="border border-gray-200 rounded-lg p-4 flex gap-4 items-start relative overflow-hidden">
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-400"></div>
-                  <img src="https://images.unsplash.com/photo-1584988770281-b58607153b69?q=80&w=150&auto=format&fit=crop" className="w-16 h-16 rounded object-cover shadow-sm border border-gray-200" alt="Radio" />
-                  <div className="flex-1">
-                     <div className="text-[10px] font-bold text-gray-500 mb-0.5">#EQ-BD-109</div>
-                     <h4 className="font-bold text-gray-900 text-sm mb-1">Bộ đàm Motorola T82 #04</h4>
-                     <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded mb-2 inline-block border border-gray-200">Gửi bảo hành hãng</span>
-                     <div className="text-xs text-gray-600 space-y-1">
-                        <div><span className="font-semibold">Đoàn:</span> Lảo Thẩn (#TRIP-LT-21)</div>
-                        <div><span className="font-semibold">Trekker:</span> Lê Anh Tuấn</div>
-                        <div className="text-amber-600"><span className="font-semibold">Lỗi:</span> Rơi suối ngấm nước sâu, chập mạch thu phát âm thanh</div>
-                     </div>
-                  </div>
-                  <div className="text-right">
-                     <div className="text-[10px] font-bold text-gray-500 uppercase mb-0.5">Phí sửa thay màng</div>
-                     <div className="text-xl font-bold text-amber-600 mb-2">650.000 ₫</div>
-                     <button className="px-4 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded border border-blue-200">Biên bản bàn giao</button>
-                  </div>
-               </div>
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Ngoại lệ hoàn trả cần xử lý</h2>
+                <p className="text-xs text-slate-500">Hư hại, trả thiếu, quá hạn và đối soát hoàn cọc đang mở</p>
+              </div>
+              <Link href="/admin/rental-returns" className="text-sm font-medium text-[#1B5E41] hover:underline">
+                Mở Hoàn trả & quyết toán
+              </Link>
             </div>
-          </div>
+            <div className="space-y-3 p-5">
+              {(data?.exceptions ?? []).length === 0 ? (
+                <EmptyRow text="Không có ngoại lệ đang mở." />
+              ) : (
+                (data?.exceptions ?? []).slice(0, 6).map((item) => (
+                  <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 p-4">
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500">
+                        Đơn {orderCode(item.orderId)}
+                        {item.unit ? ` · ${item.unit.assetCode}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-sm font-medium text-slate-900">{EXCEPTION_TYPE_LABELS[item.type] ?? item.type}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {item.order.tripTitle} · {item.order.customerName}
+                      </p>
+                      {item.reason ? <p className="mt-1 text-xs text-slate-500">{item.reason}</p> : null}
+                    </div>
+                    <div className="text-right">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${item.status === "OPEN" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>
+                        {EXCEPTION_STATUS_LABELS[item.status] ?? item.status}
+                      </span>
+                      {item.dueAt ? <p className="mt-2 text-xs text-slate-500">Hạn {formatDate(item.dueAt)}</p> : null}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
 
-        {/* Right Sidebar */}
-        <div className="col-span-4 space-y-6">
-          {/* Orders Today */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-             <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-bold text-gray-900 text-base">Đơn Xuất & Hoàn trả Hôm nay</h3>
-                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">24/10/2024</span>
-             </div>
-             <div className="p-2 border-b border-gray-100 flex gap-1">
-                <button className="flex-1 py-1.5 bg-gray-100 text-gray-800 text-xs font-bold rounded">Đang soạn đồ (4)</button>
-                <button className="flex-1 py-1.5 text-gray-500 hover:bg-gray-50 text-xs font-medium rounded">Chờ nhận trả (3)</button>
-             </div>
-             
-             <div className="p-4 space-y-4">
-                {/* Order 1 */}
-                <div className="border border-orange-200 bg-orange-50/50 rounded-lg p-3 relative overflow-hidden">
-                   <div className="flex justify-between items-start mb-1">
-                      <div className="text-[10px] font-black text-gray-900 bg-white px-2 py-0.5 rounded border border-gray-200 shadow-sm">#ORD-RENT-8021</div>
-                      <span className="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-orange-200">Xuất phát 20:00 sáng mai</span>
-                   </div>
-                   <h4 className="font-bold text-gray-900 text-sm mb-1 mt-2">Đoàn Tà Xùa Mùa Mây</h4>
-                   <div className="text-[11px] text-gray-600 mb-2"><span className="font-semibold">Leader:</span> Phạm Minh Đức • 18 Trekker</div>
-                   <div className="text-[11px] text-gray-800 font-medium mb-3 bg-white p-2 rounded border border-orange-100">
-                      Gói vật tư: 8 Lều 2P, 18 Túi ngủ, 18 Gậy trekking, 4 Bộ đàm VHF.
-                   </div>
-                   <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-1.5 text-[10px] text-orange-700 font-semibold">
-                         <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                         Đang gói: 3/4 kiện
-                      </div>
-                      <button className="px-3 py-1 bg-[#1B5E41] text-white text-[10px] font-bold rounded shadow-sm">Kiểm kiện</button>
-                   </div>
-                </div>
+        <div className="space-y-6 xl:col-span-4">
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="text-base font-semibold text-slate-900">Đơn đang xử lý</h2>
+            </div>
+            <div className="flex gap-1 border-b border-slate-100 p-2">
+              <button
+                type="button"
+                onClick={() => setOrderTab("outbound")}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-medium ${orderTab === "outbound" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                Chờ xuất ({data?.outbound.length ?? 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderTab("inbound")}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-medium ${orderTab === "inbound" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                Chờ nhận trả ({data?.inbound.length ?? 0})
+              </button>
+            </div>
+            <div className="max-h-[420px] space-y-3 overflow-y-auto p-4">
+              {orders.length === 0 ? (
+                <EmptyRow text={orderTab === "outbound" ? "Không có đơn chờ xuất." : "Không có đơn chờ nhận trả."} />
+              ) : (
+                orders.map((order) => (
+                  <div key={order.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-medium text-slate-900">{orderCode(order.id)}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {ORDER_STATUS_LABELS[order.status] ?? order.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {orderTab === "outbound" ? "Bắt đầu thuê" : "Hạn trả"}:{" "}
+                      <span className="font-medium text-slate-800">{formatDate(orderTab === "outbound" ? order.rentalStartAt : order.rentalEndAt)}</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {order.linesCount} dòng thiết bị · {formatMoney(order.totalAmount, order.currency)}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
 
-                {/* Order 2 */}
-                <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-3 relative overflow-hidden">
-                   <div className="flex justify-between items-start mb-1">
-                      <div className="text-[10px] font-black text-gray-900 bg-white px-2 py-0.5 rounded border border-gray-200 shadow-sm">#ORD-RENT-8018</div>
-                      <span className="bg-emerald-100 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-200">Chuẩn bị xuất xe 21h</span>
-                   </div>
-                   <h4 className="font-bold text-gray-900 text-sm mb-1 mt-2">Đoàn Fansipan Trekking 2N1Đ</h4>
-                   <div className="text-[11px] text-gray-600 mb-2"><span className="font-semibold">Leader:</span> Bùi Quang Huy • 12 Trekker</div>
-                   <div className="text-[11px] text-gray-800 font-medium mb-3 bg-white p-2 rounded border border-emerald-100">
-                      Gói vật tư: 12 Balo 50L, 12 Đèn đội đầu, 5 Dây cứu hộ 30m.
-                   </div>
-                   <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold">
-                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                         Xong test pin & Khóa an toàn
-                      </div>
-                      <button className="px-3 py-1 bg-white border border-gray-200 text-gray-700 text-[10px] font-bold rounded shadow-sm">Chi tiết</button>
-                   </div>
-                </div>
-             </div>
-          </div>
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="text-base font-semibold text-slate-900">Thiết bị đang vệ sinh / bảo trì</h2>
+            </div>
+            <div className="space-y-2 p-4">
+              {serviceUnits.length === 0 ? (
+                <EmptyRow text="Không có thiết bị đang bảo trì." />
+              ) : (
+                serviceUnits.map((unit) => (
+                  <div key={unit.id} className="flex items-start justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-slate-900">{stripGradeSuffix(unit.product.name)}</p>
+                      <p className="text-xs text-slate-500">
+                        <span className="font-mono">{unit.assetCode}</span> · {CONDITION_LABELS[unit.condition] ?? unit.condition}
+                        {unit.currentInventoryLocation ? ` · ${unit.currentInventoryLocation.name}` : ""}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${unit.status === "DAMAGED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>
+                        {UNIT_STATUS_LABELS[unit.status] ?? unit.status}
+                      </span>
+                      {unit.expectedReadyAt ? <p className="mt-1 text-[11px] text-slate-500">Dự kiến {formatDate(unit.expectedReadyAt)}</p> : null}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
 
-          {/* Duty Roster */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-             <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-bold text-gray-900 text-base">Ca trực Kho hôm nay</h3>
-                <button className="text-xs text-[#1B5E41] font-semibold hover:underline">Đổi ca</button>
-             </div>
-             <div className="p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">NA</div>
-                   <div className="flex-1">
-                      <div className="font-bold text-sm text-gray-900 flex justify-between">Nguyễn Văn An <span className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded uppercase">Ca sáng</span></div>
-                      <div className="text-[11px] text-gray-500">Quản lý Kho chính • Ext 102</div>
-                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">TM</div>
-                   <div className="flex-1">
-                      <div className="font-bold text-sm text-gray-900 flex justify-between">Đặng Thị Mai <span className="bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded uppercase">Đang trực</span></div>
-                      <div className="text-[11px] text-gray-500">Kỹ thuật & Khử trùng</div>
-                   </div>
-                </div>
-             </div>
-          </div>
-
-          {/* Safety Standards */}
-          <div className="bg-[#1B5E41] rounded-xl shadow-md p-5 text-white relative overflow-hidden">
-             <div className="absolute -right-4 -top-4 opacity-10">
-                <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.642 2 6.319 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.358-.166-2.001A11.954 11.954 0 0110 1.944zM11 14a1 1 0 11-2 0 1 1 0 012 0zm0-7a1 1 0 10-2 0v3a1 1 0 102 0V7z" clipRule="evenodd" /></svg>
-             </div>
-             <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">Quy chuẩn An toàn định kỳ</div>
-             <h4 className="font-bold text-lg mb-2 leading-tight">Kiểm chuẩn Định kỳ Dây đai & Khóa Carabiner</h4>
-             <p className="text-xs text-emerald-100/90 leading-relaxed mb-4">
-                Kỳ kiểm định đợt Tháng 11/2024: Còn 5 ngày. Đã gửi 40 bộ dây cứu sinh và chốt neo chịu tải kiểm nghiệm tại Trung tâm Quatest 1.
-             </p>
-             <button className="text-xs font-bold text-white hover:text-emerald-200 flex items-center gap-1 transition-colors">
-                Xem chứng thư <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-             </button>
-          </div>
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <h2 className="text-base font-semibold text-slate-900">Nhân sự kho</h2>
+            </div>
+            <div className="space-y-3 p-4">
+              {(data?.staff ?? []).length === 0 ? (
+                <EmptyRow text="Chưa có nhân viên kho." />
+              ) : (
+                (data?.staff ?? []).map((person) => (
+                  <div key={person.id} className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-medium text-emerald-800">
+                      {initialsOf(person.displayName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-slate-900">{person.displayName}</p>
+                      <p className="truncate text-xs text-slate-500">{person.email ?? person.phone ?? "Nhân viên kho vận"}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${person.activeTaskCount > 0 ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-500"}`}>
+                      {person.activeTaskCount > 0 ? `${person.activeTaskCount} việc` : "Rảnh"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>
