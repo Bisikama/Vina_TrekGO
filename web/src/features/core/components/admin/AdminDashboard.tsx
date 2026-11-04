@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { StatCards } from './DashboardOverview/StatCards';
+import { AdminInventoryAlert } from '@/features/inventory/components/AdminInventoryAlert';
 
 export const AdminDashboard = () => {
   const [activeTime, setActiveTime] = useState('Tháng này');
@@ -131,10 +132,7 @@ export const AdminDashboard = () => {
             </div>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-64 flex flex-col justify-center items-center text-gray-400">
-            <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-            Cảnh báo Tồn kho Vật tư (Mock)
-          </div>
+          <AdminInventoryAlert />
         </div>
       </div>
     </div>
