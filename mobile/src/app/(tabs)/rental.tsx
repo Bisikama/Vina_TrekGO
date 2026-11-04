@@ -20,6 +20,7 @@ import { TopHeader } from "@/components/TopHeader";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { rentalApi } from "@/features/rentals/api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
 import {
@@ -746,25 +747,7 @@ export default function RentalScreen() {
                         </Text>
                       </View>
                       {product.grade ? (
-                        <View
-                          style={[
-                            styles.gradeBadge,
-                            product.grade === "LIKE_NEW"
-                              ? styles.gradeBadgeLikeNew
-                              : styles.gradeBadgeGoodUsed,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.gradeBadgeText,
-                              product.grade === "LIKE_NEW"
-                                ? styles.gradeBadgeTextLikeNew
-                                : styles.gradeBadgeTextGoodUsed,
-                            ]}
-                          >
-                            {GRADE_LABELS[product.grade]}
-                          </Text>
-                        </View>
+                        <GradeBadge grade={product.grade} style={styles.gradeBadge} />
                       ) : null}
                     </View>
                   </TouchableOpacity>
@@ -1410,19 +1393,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "600",
   },
-  gradeBadge: {
-    position: "absolute",
-    left: 8,
-    top: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
-  },
-  gradeBadgeLikeNew: { backgroundColor: "rgba(255,255,255,0.93)" },
-  gradeBadgeGoodUsed: { backgroundColor: "#FFF6E0" },
-  gradeBadgeText: { fontSize: 8, fontWeight: "700" },
-  gradeBadgeTextLikeNew: { color: Colors.primaryDark },
-  gradeBadgeTextGoodUsed: { color: "#8A5A00" },
+  gradeBadge: { position: "absolute", left: 8, top: 8 },
   productBody: { padding: 12 },
   categoryTag: {
     color: Colors.primaryDark,

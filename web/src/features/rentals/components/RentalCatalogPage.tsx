@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { GradeBadge } from "@/features/rentals/components/GradeBadge";
 import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import { getRentalCatalog, getTripWeather, type TripWeather } from "@/features/rentals/services/rental.api";
 import type {
@@ -254,11 +255,7 @@ function ProductCard({
           </span>
         )}
         {item.grade && (
-          <span
-            className={`absolute right-3 top-3 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm backdrop-blur ${item.grade === "LIKE_NEW" ? "bg-white/95 text-[#17603F]" : "bg-[#FFF6E0]/95 text-[#8A5A00]"}`}
-          >
-            {GRADE_LABELS[item.grade]}
-          </span>
+          <GradeBadge grade={item.grade} className="absolute right-3 top-3 shadow-sm" />
         )}
         <span
           className={`absolute bottom-3 right-3 rounded-full px-3 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur ${checking ? "bg-sky-700/90 text-white" : availableCount > 0 ? "bg-white/95 text-[#17603F]" : "bg-gray-900/85 text-white"}`}

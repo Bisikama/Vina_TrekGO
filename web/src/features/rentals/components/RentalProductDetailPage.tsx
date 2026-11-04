@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { GradeBadge } from "@/features/rentals/components/GradeBadge";
 import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import { ProductReviews } from "@/features/rentals/components/ProductReviews";
 import { getRentalProductDetail } from "@/features/rentals/services/rental.api";
@@ -21,11 +22,6 @@ function formatMoney(value: number, currency: string) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
-const GRADE_LABELS = {
-  LIKE_NEW: "Như mới",
-  GOOD_USED: "Sử dụng tốt",
-} as const;
 
 // Tên sản phẩm có hạng thường kèm hậu tố hạng; nhãn hạng đã hiển thị riêng.
 function displayProductName(name: string, hasGrade: boolean) {
@@ -253,11 +249,7 @@ export function RentalProductDetailPage({
               </span>
 
               {product.grade && (
-                <span
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold ${product.grade === "LIKE_NEW" ? "bg-emerald-50 text-[#17603F] ring-1 ring-emerald-200" : "bg-[#FFF6E0] text-[#8A5A00] ring-1 ring-amber-200"}`}
-                >
-                  {GRADE_LABELS[product.grade]}
-                </span>
+                <GradeBadge grade={product.grade} />
               )}
 
               <span
