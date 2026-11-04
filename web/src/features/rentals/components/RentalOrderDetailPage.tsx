@@ -28,6 +28,8 @@ import {
 
 import { RentalCancellation } from "./RentalCancellation";
 import { DeductionReviewPanel } from "./DeductionReviewPanel";
+import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
+import { GradeBadge } from "./GradeBadge";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -445,11 +447,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                         <p className="mt-2 text-xs text-gray-500">
                           Số lượng: {item.quantity}
                           {item.product.grade ? (
-                            <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              {item.product.grade === "LIKE_NEW"
-                                ? "Như mới"
-                                : "Sử dụng tốt"}
-                            </span>
+                            <GradeBadge grade={item.product.grade} className="ml-2" />
                           ) : null}
                         </p>
                         <p className="mt-1 text-sm font-extrabold text-gray-900">
@@ -488,6 +486,8 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               <Location title="Điểm nhận" point={detail.pickupPoint} />
               <Location title="Điểm trả" point={detail.returnPoint} />
             </div>
+
+            <RentalDocumentsPanel orderId={orderId} />
 
             {detail.order.status === "CANCELLED" &&
             detail.cancellationRefunds?.length ? (

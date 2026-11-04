@@ -21,6 +21,8 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebViewModal";
 import { rentalApi } from "@/features/rentals/api";
 import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
+import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -870,14 +872,10 @@ export default function RentalOrderDetailScreen() {
                       )
                     : item.name || item.product?.name || "Thiết bị thuê"}
                 </Text>
+                {item.product?.grade ? <GradeBadge grade={item.product.grade} style={styles.lineGrade} /> : null}
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
-                  {item.sku || item.product?.sku
-                    ? ` · SKU ${item.sku || item.product?.sku}`
-                    : ""}
-                  {item.product?.grade
-                    ? ` · ${item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}`
-                    : ""}
+                  {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
                 </Text>
                 {typeof item.depositPerUnit === "number" &&
                 typeof item.depositAmount === "number" ? (
@@ -1141,6 +1139,8 @@ export default function RentalOrderDetailScreen() {
             ) : null}
           </Section>
         )}
+
+        {orderId ? <RentalDocumentsCard orderId={orderId} accessToken={accessToken} /> : null}
 
         {deposit &&
           (order.status !== "CANCELLED" ||
@@ -1614,6 +1614,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: "700",
   },
+  lineGrade: { marginTop: 4 },
   lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10 },
   lineAmount: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
   unitWrap: {
