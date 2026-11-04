@@ -214,12 +214,18 @@ describe('CloudinaryStorageAdapter', () => {
       cloudinary.url = jest.fn().mockReturnValue('https://example.com/test');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const https = require('https');
-      jest.spyOn(https, 'get').mockImplementation((url, cb: any) => {
+      const get = jest.spyOn(https, 'get').mockImplementation((url, _options, cb: any) => {
         cb({ statusCode: 200, on: jest.fn() });
         return { on: jest.fn() };
       });
       await adapter.openOriginalStream({ providerPublicId: 'p1', resourceType: 'IMAGE', deliveryType: 'authenticated' });
       expect(cloudinary.url).toHaveBeenCalledWith('p1', expect.objectContaining({ sign_url: true }));
+      // Không dùng lại socket keep-alive cũ (nguồn gây read ECONNRESET) và luôn có timeout.
+      expect(get).toHaveBeenCalledWith(
+        'https://example.com/test',
+        expect.objectContaining({ agent: false, timeout: expect.any(Number) }),
+        expect.any(Function),
+      );
     });
   });
 
