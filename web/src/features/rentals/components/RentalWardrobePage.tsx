@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  addGearFromCatalog, confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, getGearCapabilities, listMyGear,
+  addGearFromCatalog, confirmGearExtraction, createGearExtraction, createMyGear, deleteMyGear, getGearCapabilities, getGearExtractionQuota, listMyGear,
   searchGearCatalog, updateMyGear, uploadUserGearPhoto, type GearCapabilities, type GearCatalogEntry, type GearCategory, type GearCondition,
-  type GearExtractionDraft, type GearItemInput, type UserGearItem,
+  type GearExtractionDraft, type GearExtractionQuota, type GearItemInput, type UserGearItem,
 } from "@/features/rentals/services/gear.api";
+import { Button, ErrorAlert } from "@/components/ui";
 import {
   getGearPlanGuidance, listGearPlans, listGearTripCandidates, type GearPlan, type PlanGuidance,
 } from "@/features/rentals/services/gear-advisor.api";
@@ -91,9 +92,42 @@ export function RentalWardrobePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [aiProgress, setAiProgress] = useState<{ source: "IMAGE" | "LINK"; stage: "UPLOADING" | "ANALYZING" } | null>(null);
   const [capabilities, setCapabilities] = useState<GearCapabilities | null>(null);
+  const [quota, setQuota] = useState<GearExtractionQuota | null>(null);
+  const [quotaError, setQuotaError] = useState(false);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const quotaRequest = useRef(0);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const aiRequestLock = useRef(false);
+
+  const refreshQuota = useCallback(async () => {
+    const requestId = ++quotaRequest.current;
+    setQuotaLoading(true);
+    try {
+      const result = await getGearExtractionQuota();
+      if (requestId === quotaRequest.current) { setQuota(result); setQuotaError(false); }
+    } catch {
+      if (requestId === quotaRequest.current) { setQuota(null); setQuotaError(true); }
+    } finally {
+      if (requestId === quotaRequest.current) setQuotaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const requestCounter = quotaRequest;
+    const initialTimer = window.setTimeout(() => void refreshQuota(), 0);
+    const onFocus = () => void refreshQuota();
+    window.addEventListener("focus", onFocus);
+    return () => { window.clearTimeout(initialTimer); requestCounter.current++; window.removeEventListener("focus", onFocus); };
+  }, [refreshQuota]);
+
+  useEffect(() => {
+    if (!quota) return;
+    const delay = new Date(quota.resetAt).getTime() - Date.now();
+    if (!Number.isFinite(delay)) return;
+    const timer = window.setTimeout(() => void refreshQuota(), Math.max(1000, delay + 1000));
+    return () => window.clearTimeout(timer);
+  }, [quota, refreshQuota]);
 
   useEffect(() => {
     let active = true;
@@ -167,6 +201,7 @@ export function RentalWardrobePage() {
       aiRequestLock.current = false;
       setAiProgress(null);
       setBusy(false);
+      void refreshQuota();
     }
   }
 
@@ -194,7 +229,12 @@ export function RentalWardrobePage() {
               <button disabled={busy || Boolean(aiProgress)} onClick={() => setCatalogOpen(true)} className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-[#165c45]/40 hover:bg-emerald-50/60 disabled:cursor-wait disabled:opacity-60">Chọn có sẵn</button>
               <button onClick={() => setEditor({})} className="flex items-center justify-center rounded-xl bg-[#165c45] px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#124b39]">Tự nhập</button>
             </div>
-            <p className="mt-2 text-[11px] text-slate-400">Đọc ảnh và đường dẫn tự động: tối đa 20 lượt/ngày</p>
+            <div className="mt-2 text-xs text-slate-600" aria-live="polite">
+              {quota ? <p>Đọc ảnh và đường dẫn hôm nay: <strong className="tabular-nums">đã dùng {quota.used}/{quota.limit} lượt · còn {quota.remaining} lượt</strong>. Làm mới lúc 00:00 giờ Việt Nam.</p> : quotaLoading ? <p>Đang tải số lượt AI...</p> : null}
+              {quota && <p className="mt-1 text-slate-500">Kết quả có sẵn trong cache và bản nháp nhập tay không tính lượt.</p>}
+              {quotaError && <ErrorAlert className="mt-2 text-left" message="Không tải được số lượt AI." onRetry={() => void refreshQuota()} />}
+              {quota && <Button type="button" variant="ghost" size="sm" onClick={() => void refreshQuota()} disabled={quotaLoading}>Cập nhật số lượt</Button>}
+            </div>
             {(imageNotice || linkNotice) && <div className="mt-2 space-y-1 text-xs leading-5 text-amber-700">
               {imageNotice && <p>Ảnh: {imageNotice}</p>}
               {linkNotice && <p>Đường dẫn: {linkNotice}</p>}
@@ -260,6 +300,7 @@ export function RentalWardrobePage() {
         aiRequestLock.current = false;
         setAiProgress(null);
         setBusy(false);
+        void refreshQuota();
       }
     }} />}
     {duplicate && <DuplicateDialog data={duplicate.details} busy={busy} onBack={() => { setDuplicate(null); setEditor({ item: duplicate.item, draft: duplicate.draft }); }} onConfirm={() => void save(duplicate.input, { item: duplicate.item, draft: duplicate.draft }, true)} />}
