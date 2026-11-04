@@ -321,8 +321,8 @@ export default function InventoryReturnsScreen() {
           const expected = detail.expectedUnits.find((unit) => unit.unitId === received.unitId);
           const draft = drafts[received.unitId];
           if (!draft) throw new Error(`Thiếu kết quả cho ${received.assetCode}.`);
-          if (!draft.imageIds.length || !draft.videoIds.length) {
-            throw new Error(`Cần đủ 1 ảnh và 1 video cho mã ${shortAssetCode(received.assetCode)}.`);
+          if (!draft.imageIds.length) {
+            throw new Error(`Cần ít nhất 1 ảnh cho mã ${shortAssetCode(received.assetCode)}; video không bắt buộc.`);
           }
           const evidenceIds = [...draft.imageIds, ...draft.videoIds];
           const issue = draft.condition === "DAMAGED";
@@ -466,7 +466,7 @@ export default function InventoryReturnsScreen() {
                     <TextInput value={draft.notes} onChangeText={(notes) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, notes } }))} placeholder="Ghi chú kiểm định" placeholderTextColor={Colors.onSurfaceMuted} style={styles.input} />
                     <View style={styles.evidenceCountRow}>
                       <View style={styles.evidenceCount}><Ionicons name="images-outline" size={17} color={Colors.primaryDark} /><Text style={styles.evidenceCountText}>Ảnh {draft.imageIds.length}/1</Text></View>
-                      <View style={styles.evidenceCount}><Ionicons name="videocam-outline" size={17} color={Colors.primaryDark} /><Text style={styles.evidenceCountText}>Video {draft.videoIds.length}/1</Text></View>
+                      <View style={styles.evidenceCount}><Ionicons name="videocam-outline" size={17} color={Colors.primaryDark} /><Text style={styles.evidenceCountText}>Video {draft.videoIds.length} (tùy chọn)</Text></View>
                     </View>
                     <View style={styles.captureRow}>
                       <TouchableOpacity style={styles.camera} disabled={Boolean(busy)} onPress={() => void capture(received.unitId, "image")}>
