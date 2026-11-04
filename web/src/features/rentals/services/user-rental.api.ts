@@ -47,6 +47,7 @@ export type RentalOrderDetail = {
   pickupPoint: null | { id: string; name: string; address: string };
   returnPoint: null | { id: string; name: string; address: string };
   allowedActions: string[];
+  cancellationRefunds?: Array<{ refundId: string; amount: number; currency: string; status: string; settlementMode: "STANDARD" | "SANDBOX_SIMULATED" }>;
   /** Mốc thời gian thật do API trả: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
   timeline?: Array<{ type: string; at: string }>;
 };
@@ -117,6 +118,8 @@ export type RentalTransaction = {
   paymentRef?: string;
   refundRef?: string;
   purpose?: string;
+  confirmationSource?: string | null;
+  financialEffect?: "DEBIT" | "CREDIT" | "NONE";
 };
 
 export type ReviewableItem = {

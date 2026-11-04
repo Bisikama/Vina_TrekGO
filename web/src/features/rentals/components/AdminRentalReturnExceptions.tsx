@@ -1,18 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  ConfirmModal,
+  ErrorAlert,
+  LoadingState,
+  EmptyState,
+} from "@/components/ui";
 
 import {
   approveDepositSettlement,
   confirmRentalRefundSettlement,
   getRentalException,
+  getAdminRentalRefundInfo,
   getStaffReturnErrorMessage,
   listRentalExceptions,
   reconcileRentalRefund,
   resolveRentalException,
   type RentalExceptionDetail,
   type RentalExceptionSummary,
+  type AdminRentalRefundInfo,
 } from "@/features/rentals/services/staff-returns.api";
 
 type ExceptionDecision =
@@ -22,7 +30,7 @@ type ExceptionDecision =
   | "CLOSE_NO_ACTION";
 
 const exceptionLabels: Record<string, string> = {
-  REFUND_FAILURE: "Hoàn cọc cần đối soát",
+  REFUND_FAILURE: "Ngoại lệ hoàn tiền",
   DAMAGE: "Thiết bị hư hỏng",
   MISSING: "Thiết bị thiếu hoặc thất lạc",
   RETURN_EXCEPTION: "Ngoại lệ hoàn trả",
@@ -68,13 +76,16 @@ const reconcileStatusLabels: Record<string, string> = {
   CONFIRMED: "\u0110\u00e3 x\u00e1c nh\u1eadn",
   SUCCEEDED: "\u0110\u00e3 x\u00e1c nh\u1eadn ho\u00e0n ti\u1ec1n",
   FAILED: "\u0110\u1ed1i so\u00e1t th\u1ea5t b\u1ea1i",
+  RESOLVED: "Đã xử lý đối soát",
+  IDLE: "Chưa có yêu cầu đối soát",
 };
 
 const errorLabels: Record<string, string> = {
   RECOVERY_UNKNOWN: "Chưa xác định được trạng thái từ cổng thanh toán",
   REFUND_QUERY_MISMATCH: "Kết quả đối soát không khớp lệnh hoàn tiền",
   REFUND_LEGACY_METADATA: "Lệnh hoàn tiền thiếu dữ liệu đối soát",
-  DEDUCTION_APPROVAL_REQUIRED: "Kiểm định ghi nhận hư hại · cần duyệt khoản trừ",
+  DEDUCTION_APPROVAL_REQUIRED:
+    "Kiểm định ghi nhận hư hại · cần duyệt khoản trừ",
   DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · cần xử lý riêng",
   ASSESSMENT_REQUIRED_FOR_FINAL_ISSUE: "Kiểm định cuối có lỗi · cần đánh giá",
 };
@@ -95,7 +106,10 @@ function visibleReason(reason: string) {
   const value = reason.replace(/^\[refund:[0-9a-f-]{36}\]\s*/i, "");
   if (value.startsWith("DELIVERY_CUSTODY_DISCREPANCY")) {
     return value
-      .replace(/^DELIVERY_CUSTODY_DISCREPANCY:(TRANSFER_OMISSION|WAREHOUSE_RECEIPT_SHORTAGE):?\s*/i, "")
+      .replace(
+        /^DELIVERY_CUSTODY_DISCREPANCY:(TRANSFER_OMISSION|WAREHOUSE_RECEIPT_SHORTAGE):?\s*/i,
+        "",
+      )
       .trim();
   }
   return errorLabels[value] ?? value.replace(/_/g, " ");
@@ -124,31 +138,85 @@ export function AdminRentalReturnExceptions() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [listLoading, setListLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [refundInfo, setRefundInfo] = useState<AdminRentalRefundInfo>();
+  const [refundInfoError, setRefundInfoError] = useState(false);
+  const [refundInfoRevision, setRefundInfoRevision] = useState(0);
+  const [showSimulationConfirm, setShowSimulationConfirm] = useState(false);
 
   const load = useCallback(async () => {
     setError(undefined);
+    setListLoading(true);
     try {
       const result = await listRentalExceptions();
       setItems(result.items);
-      if (detail) setDetail(await getRentalException(detail.case.id));
+      if (detail) {
+        setDetail(await getRentalException(detail.case.id));
+        setRefundInfo(undefined);
+        setRefundInfoRevision((current) => current + 1);
+      }
     } catch (loadError) {
       setError(getStaffReturnErrorMessage(loadError));
+    } finally {
+      setListLoading(false);
     }
   }, [detail]);
 
   useEffect(() => {
+    let active = true;
     void listRentalExceptions()
-      .then((result) => setItems(result.items))
-      .catch((loadError) => setError(getStaffReturnErrorMessage(loadError)));
+      .then((result) => {
+        if (active) setItems(result.items);
+      })
+      .catch((loadError) => {
+        if (active) setError(getStaffReturnErrorMessage(loadError));
+      })
+      .finally(() => {
+        if (active) setListLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const refundId =
+    detail?.case.type === "REFUND_FAILURE" ? detail.refund?.id : undefined;
+  useEffect(() => {
+    if (!refundId) return;
+    let active = true;
+    void getAdminRentalRefundInfo(refundId)
+      .then((result) => {
+        if (active) {
+          setRefundInfo(result);
+          setRefundInfoError(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setRefundInfo(undefined);
+          setRefundInfoError(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [refundId, refundInfoRevision]);
 
   async function selectException(exceptionId: string) {
     setError(undefined);
     setNotice(undefined);
+    setDetail(undefined);
+    setRefundInfo(undefined);
+    setRefundInfoError(false);
+    setReason("");
+    setDetailLoading(true);
     try {
       setDetail(await getRentalException(exceptionId));
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
+    } finally {
+      setDetailLoading(false);
     }
   }
 
@@ -165,19 +233,30 @@ export function AdminRentalReturnExceptions() {
         assessmentVersion: detail.assessment?.version,
         expectedVersion: detail.case.version,
       });
-      let settlementResult: Awaited<ReturnType<typeof approveDepositSettlement>> | undefined;
+      let settlementResult:
+        | Awaited<ReturnType<typeof approveDepositSettlement>>
+        | undefined;
       let settlementError: string | undefined;
       let settlementAssessment = detail.assessment;
-      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && !settlementAssessment) {
-        settlementAssessment = (await getRentalException(detail.case.id)).assessment;
+      if (
+        result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" &&
+        !settlementAssessment
+      ) {
+        settlementAssessment = (await getRentalException(detail.case.id))
+          .assessment;
       }
-      if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && settlementAssessment && decision !== "APPROVE_DEDUCTION" && decision !== "CONFIRM_LOST") {
+      if (
+        result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" &&
+        settlementAssessment &&
+        decision !== "APPROVE_DEDUCTION" &&
+        decision !== "CONFIRM_LOST"
+      ) {
         try {
           settlementResult = await approveDepositSettlement({
-          orderId: detail.case.orderId,
-          assessmentId: settlementAssessment.id,
-          approvalRef: result.approvalRef,
-          version: settlementAssessment.version,
+            orderId: detail.case.orderId,
+            assessmentId: settlementAssessment.id,
+            approvalRef: result.approvalRef,
+            version: settlementAssessment.version,
           });
         } catch (error) {
           settlementError = getStaffReturnErrorMessage(error);
@@ -188,18 +267,33 @@ export function AdminRentalReturnExceptions() {
           `Đã chốt quyết toán cọc. Khoản ${formatMoney(settlementResult.refundAmount, "VND")} đang được gửi sang cổng thanh toán; đây chưa phải trạng thái đã hoàn tiền.`,
         );
       } else if (settlementResult) {
-        setNotice("Đã chốt quyết toán cọc. Không phát sinh khoản phải hoàn qua cổng thanh toán.");
+        setNotice(
+          "Đã chốt quyết toán cọc. Không phát sinh khoản phải hoàn qua cổng thanh toán.",
+        );
       } else if (settlementError) {
-        setNotice(`Đã lưu quyết định. Quyết toán chưa hoàn tất: ${settlementError}`);
-      } else if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" && (decision === "APPROVE_DEDUCTION" || decision === "CONFIRM_LOST")) {
-        setNotice("Đã lưu quyết định. Cần công bố chứng cứ và chờ thời hạn phản hồi trước khi quyết toán.");
+        setNotice(
+          `Đã lưu quyết định. Quyết toán chưa hoàn tất: ${settlementError}`,
+        );
+      } else if (
+        result.nextAction === "CREATE_DEPOSIT_SETTLEMENT" &&
+        (decision === "APPROVE_DEDUCTION" || decision === "CONFIRM_LOST")
+      ) {
+        setNotice(
+          "Đã lưu quyết định. Cần công bố chứng cứ và chờ thời hạn phản hồi trước khi quyết toán.",
+        );
       } else if (result.nextAction === "CREATE_DEPOSIT_SETTLEMENT") {
-        setNotice("Đã lưu quyết định; chưa lấy được kết quả kiểm định để quyết toán. Hãy tải lại hồ sơ.");
+        setNotice(
+          "Đã lưu quyết định; chưa lấy được kết quả kiểm định để quyết toán. Hãy tải lại hồ sơ.",
+        );
       } else {
-        setNotice("Đã lưu quyết định ngoại lệ. Không phát sinh bước quyết toán mới.");
+        setNotice(
+          "Đã lưu quyết định ngoại lệ. Không phát sinh bước quyết toán mới.",
+        );
       }
       setReason("");
       setDetail(await getRentalException(detail.case.id));
+      setRefundInfo(undefined);
+      setRefundInfoRevision((current) => current + 1);
       setItems((await listRentalExceptions()).items);
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
@@ -210,18 +304,31 @@ export function AdminRentalReturnExceptions() {
 
   async function retrySettlement() {
     if (!detail?.assessment || !detail.case.approvalRef || busy) return;
-    setBusy(true); setError(undefined); setNotice(undefined);
+    setBusy(true);
+    setError(undefined);
+    setNotice(undefined);
     try {
-      const result = await approveDepositSettlement({ orderId: detail.case.orderId,
-        assessmentId: detail.assessment.id, approvalRef: detail.case.approvalRef, version: detail.assessment.version });
-      setNotice(result.refundAmount > 0 ? "Đã yêu cầu quyết toán; theo dõi trạng thái hoàn tiền." : "Đã quyết toán khoản cọc.");
+      const result = await approveDepositSettlement({
+        orderId: detail.case.orderId,
+        assessmentId: detail.assessment.id,
+        approvalRef: detail.case.approvalRef,
+        version: detail.assessment.version,
+      });
+      setNotice(
+        result.refundAmount > 0
+          ? "Đã yêu cầu quyết toán; theo dõi trạng thái hoàn tiền."
+          : "Đã quyết toán khoản cọc.",
+      );
       setDetail(await getRentalException(detail.case.id));
-    } catch (error) { setError(getStaffReturnErrorMessage(error)); }
-    finally { setBusy(false); }
+    } catch (error) {
+      setError(getStaffReturnErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function reconcileRefund() {
-    if (!detail?.refund || reason.trim().length < 3 || busy) return;
+    if (!detail?.refund || !reason.trim() || busy) return;
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
@@ -235,6 +342,8 @@ export function AdminRentalReturnExceptions() {
         "Đã xếp lịch đối soát. Hồ sơ chỉ tự đóng khi cổng thanh toán xác nhận hoàn tiền thành công.",
       );
       setDetail(await getRentalException(detail.case.id));
+      setRefundInfo(undefined);
+      setRefundInfoRevision((current) => current + 1);
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
     } finally {
@@ -243,7 +352,15 @@ export function AdminRentalReturnExceptions() {
   }
 
   async function confirmRefundSettlement() {
-    if (!detail?.refund || reason.trim().length < 5 || busy) return;
+    if (
+      !detail?.refund ||
+      refundInfo?.refundId !== detail.refund.id ||
+      !["DEPOSIT", "RENTAL_CANCELLATION"].includes(refundInfo.purpose) ||
+      !refundInfo.canSimulateSandbox ||
+      reason.trim().length < 5 ||
+      busy
+    )
+      return;
 
     const status = detail.refund.status.trim().toUpperCase();
     if (status !== "PROCESSING" && status !== "PENDING") {
@@ -263,20 +380,48 @@ export function AdminRentalReturnExceptions() {
       setReason("");
       setNotice(
         result.settlementProcessingStatus === "APPLIED"
-          ? "Đã xác nhận hoàn cọc thành công. Quyết toán và trạng thái đơn đã được cập nhật."
-          : "Đã xác nhận hoàn cọc. Hệ thống đang hoàn tất cập nhật quyết toán và trạng thái đơn.",
+          ? "Đã ghi nhận hoàn tiền"
+          : "Đã ghi nhận hoàn tiền; hệ thống đang đồng bộ quyết toán. Không có tiền thật được chuyển.",
       );
       setDetail(await getRentalException(detail.case.id));
+      setRefundInfo(undefined);
+      setRefundInfoRevision((current) => current + 1);
       setItems((await listRentalExceptions()).items);
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
     } finally {
+      setShowSimulationConfirm(false);
       setBusy(false);
     }
   }
 
   const isRefundFailure = detail?.case.type === "REFUND_FAILURE";
-  const isCustodyIncident = detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
+  const currentRefundInfo =
+    refundInfo?.refundId === detail?.refund?.id ? refundInfo : undefined;
+  const refundPurposeLabels: Record<string, string> = {
+    RENTAL_CANCELLATION: "Hoàn tiền do hủy đơn thuê",
+    DEPOSIT: "Hoàn cọc sau trả thiết bị",
+    TECHNICAL_REVERSAL: "Hoàn tiền do lỗi thanh toán",
+    BOOKING_CANCELLATION: "Hoàn tiền do hủy đặt chỗ",
+  };
+  const refundPurposeLabel = currentRefundInfo
+    ? (refundPurposeLabels[currentRefundInfo.purpose] ?? "Giao dịch hoàn tiền")
+    : "Giao dịch hoàn tiền";
+  const canReconcile =
+    currentRefundInfo?.executionMode === "PROVIDER_API" &&
+    currentRefundInfo.paymentGateway !== "payos" &&
+    ["PENDING", "PROCESSING"].includes(detail?.refund?.status ?? "");
+  const canSimulate =
+    process.env.NODE_ENV !== "production" &&
+    !!currentRefundInfo &&
+    ["DEPOSIT", "RENTAL_CANCELLATION"].includes(currentRefundInfo.purpose) &&
+    currentRefundInfo.canSimulateSandbox &&
+    ["PENDING", "PROCESSING"].includes(detail?.refund?.status ?? "");
+  const isCustodyIncident =
+    detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
+  const caseOpen = detail
+    ? ["OPEN", "UNDER_REVIEW"].includes(detail.case.status)
+    : false;
 
   return (
     <main className="min-h-screen bg-[#f7f8f5] px-4 py-6 text-slate-900 sm:px-6">
@@ -290,16 +435,16 @@ export function AdminRentalReturnExceptions() {
               Ngoại lệ hoàn trả và quyết toán cọc
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Theo dõi kiểm định, khấu trừ và các giao dịch hoàn cọc cần xử lý.
+              Theo dõi kiểm định, khấu trừ và các giao dịch hoàn tiền cần xử lý.
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            disabled={listLoading || detailLoading || busy}
             onClick={() => void load()}
-            className="h-10 rounded-xl bg-[#125238] px-4 text-sm font-medium text-white transition hover:bg-[#0d432e]"
           >
             Làm mới dữ liệu
-          </button>
+          </Button>
         </div>
 
         {error ? (
@@ -322,12 +467,20 @@ export function AdminRentalReturnExceptions() {
               </span>
             </div>
             <div className="mt-4 space-y-2.5">
+              {listLoading && <LoadingState message="Đang tải hồ sơ..." />}
+              {!listLoading && !items.length && !error && (
+                <EmptyState
+                  title="Không có hồ sơ"
+                  description="Hiện không có hồ sơ để hiển thị."
+                />
+              )}
               {items.map((item) => {
                 const selected = detail?.case.id === item.id;
                 return (
                   <button
                     type="button"
                     key={item.id}
+                    disabled={detailLoading || busy}
                     onClick={() => void selectException(item.id)}
                     className={`w-full rounded-xl border p-4 text-left transition ${
                       selected
@@ -347,9 +500,13 @@ export function AdminRentalReturnExceptions() {
                       {item.order.customerName}
                     </p>
                     <p className="mt-2 text-xs font-medium text-emerald-700">
-                      {item.unit?.assetCode ?? labelFor(exceptionLabels, item.type)}
+                      {item.unit?.assetCode ??
+                        labelFor(exceptionLabels, item.type)}
                     </p>
                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                      {!["OPEN", "UNDER_REVIEW"].includes(item.status)
+                        ? "Lý do ban đầu: "
+                        : ""}
                       {visibleReason(item.reason)}
                     </p>
                     <p className="mt-2 text-[11px] text-slate-400">
@@ -362,7 +519,9 @@ export function AdminRentalReturnExceptions() {
           </aside>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            {!detail ? (
+            {detailLoading ? (
+              <LoadingState message="Đang tải chi tiết hồ sơ..." />
+            ) : !detail ? (
               <div className="py-16 text-center">
                 <p className="text-base font-medium text-slate-700">
                   Chọn một hồ sơ để xem chi tiết
@@ -394,7 +553,7 @@ export function AdminRentalReturnExceptions() {
 
                 <div className="mt-5 rounded-xl bg-slate-50 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Nội dung cần xử lý
+                    {caseOpen ? "Nội dung cần xử lý" : "Lý do ghi nhận ban đầu"}
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-700">
                     {visibleReason(detail.case.reason)}
@@ -406,25 +565,73 @@ export function AdminRentalReturnExceptions() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-amber-950">
-                          Giao dịch hoàn cọc
+                          {refundPurposeLabel}
                         </p>
                         <p className="mt-1 text-xs text-amber-800/70">
                           Mã giao dịch {shortCode(detail.refund.id)}
                         </p>
                       </div>
                       <p className="text-xl font-semibold text-amber-950">
-                        {formatMoney(detail.refund.amount, detail.refund.currency)}
+                        {formatMoney(
+                          detail.refund.amount,
+                          detail.refund.currency,
+                        )}
                       </p>
                     </div>
+                    {currentRefundInfo && (
+                      <p className="mt-3 text-xs text-amber-900">
+                        Cổng: {currentRefundInfo.paymentGateway.toUpperCase()} ·
+                        Môi trường:{" "}
+                        {currentRefundInfo.providerEnvironment ??
+                          "Chưa xác định"}{" "}
+                        · Hình thức:{" "}
+                        {currentRefundInfo.executionMode ===
+                        "MANUAL_BANK_TRANSFER"
+                          ? "Chuyển khoản thủ công"
+                          : "Qua cổng thanh toán"}
+                      </p>
+                    )}
+                    {currentRefundInfo?.confirmationSource ===
+                      "SANDBOX_SIMULATION" && (
+                      <p className="mt-2 rounded-lg bg-amber-100 p-3 text-xs font-semibold text-amber-900">
+                        Kết quả Hoàn Tiền.
+                      </p>
+                    )}
+                    {!currentRefundInfo && !refundInfoError && (
+                      <p className="mt-3 text-xs text-slate-500">
+                        Đang tải thông tin giao dịch...
+                      </p>
+                    )}
+                    {refundInfoError && (
+                      <ErrorAlert
+                        className="mt-3"
+                        message="Không tải được loại giao dịch; các thao tác hoàn tiền tạm ẩn."
+                        onRetry={() => {
+                          setRefundInfoError(false);
+                          setRefundInfoRevision((current) => current + 1);
+                        }}
+                      />
+                    )}
                     <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                       <div>
-                        <dt className="text-xs text-slate-500">Trạng thái hoàn tiền</dt>
+                        <dt className="text-xs text-slate-500">
+                          Trạng thái hoàn tiền
+                        </dt>
                         <dd className="mt-1 font-medium text-slate-800">
-                          {labelFor(refundStatusLabels, detail.refund.status)}
+                          {detail.refund.status === "SUCCEEDED" &&
+                          currentRefundInfo?.confirmationSource ===
+                            "SANDBOX_SIMULATION"
+                            ? "Đã mô phỏng hoàn tiền"
+                            : labelFor(
+                                refundStatusLabels,
+                                detail.refund.status,
+                              )}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-slate-500">Trạng thái đối soát</dt>
+                        <dt className="text-xs text-slate-500">
+                          Trạng thái đối soát
+                        </dt>
                         <dd className="mt-1 font-medium text-slate-800">
                           {labelFor(
                             reconcileStatusLabels,
@@ -433,13 +640,17 @@ export function AdminRentalReturnExceptions() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-slate-500">Lần kiểm tra gần nhất</dt>
+                        <dt className="text-xs text-slate-500">
+                          Lần kiểm tra gần nhất
+                        </dt>
                         <dd className="mt-1 text-slate-700">
                           {formatDateTime(detail.refund.lastCheckedAt)}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-slate-500">Kết quả gần nhất</dt>
+                        <dt className="text-xs text-slate-500">
+                          Kết quả gần nhất
+                        </dt>
                         <dd className="mt-1 text-slate-700">
                           {detail.refund.lastErrorCode
                             ? labelFor(errorLabels, detail.refund.lastErrorCode)
@@ -448,16 +659,28 @@ export function AdminRentalReturnExceptions() {
                       </div>
                     </dl>
                     <p className="mt-4 rounded-lg bg-white/70 p-3 text-xs leading-5 text-amber-900">
-                      Đã thử đối soát {detail.refund.retryCount} lần. Chỉ yêu cầu lại khi đã kiểm tra trạng thái trên cổng thanh toán; thao tác này không tự đánh dấu hoàn tiền thành công.
+                      Đã thử đối soát {detail.refund.retryCount} lần.
+                      {canReconcile
+                        ? " Chỉ yêu cầu lại khi đã kiểm tra trạng thái trên cổng thanh toán; thao tác này không tự đánh dấu hoàn tiền thành công."
+                        : ""}
                     </p>
                   </div>
                 ) : null}
+                {isRefundFailure && !detail.refund && (
+                  <ErrorAlert
+                    className="mt-5"
+                    message="Không tìm thấy giao dịch hoàn tiền liên quan đến hồ sơ này. Vui lòng kiểm tra dữ liệu trước khi xử lý."
+                  />
+                )}
 
                 {detail.assessment ? (
                   <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
-                    <p className="font-medium text-slate-800">Kết quả kiểm định</p>
+                    <p className="font-medium text-slate-800">
+                      Kết quả kiểm định
+                    </p>
                     <p className="mt-2 text-slate-600">
-                      {labelFor(outcomeLabels, detail.assessment.outcome)} · Mức đề xuất{" "}
+                      {labelFor(outcomeLabels, detail.assessment.outcome)} · Mức
+                      đề xuất{" "}
                       {detail.assessment.findings
                         .map((finding) => formatMoney(finding.amount, "VND"))
                         .join(" · ") || "0 ₫"}
@@ -465,56 +688,93 @@ export function AdminRentalReturnExceptions() {
                   </div>
                 ) : null}
 
-                {detail.case.status === "RESOLVED" && detail.case.approvalRef && detail.assessment ? (
-                  <Button type="button" disabled={busy} onClick={() => void retrySettlement()}>
+                {detail.case.status === "RESOLVED" &&
+                detail.case.approvalRef &&
+                detail.assessment ? (
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void retrySettlement()}
+                  >
                     Thử quyết toán cọc
                   </Button>
                 ) : null}
 
-                <label className="mt-5 block text-sm font-medium text-slate-700">
-                  Ghi chú xử lý
-                  <textarea
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    placeholder={
-                      isRefundFailure
-                        ? "Nhập ghi chú xác nhận hoàn cọc (ít nhất 5 ký tự)"
-                        : "Nhập lý do cho quyết định"
-                    }
-                    className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-normal outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white"
-                  />
-                </label>
+                {((isRefundFailure && (canReconcile || canSimulate)) ||
+                  (!isRefundFailure && caseOpen)) && (
+                  <label className="mt-5 block text-sm font-medium text-slate-700">
+                    Ghi chú xử lý
+                    <textarea
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                      placeholder={
+                        isRefundFailure
+                          ? "Nhập ghi chú xử lý hoặc lý do hoàn tiền..."
+                          : "Nhập lý do cho quyết định"
+                      }
+                      className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-normal outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white"
+                    />
+                  </label>
+                )}
 
                 {isRefundFailure ? (
                   <div className="mt-3 space-y-2">
-                    {reason.trim().length >= 5 ? (
-                      <button
-                        type="button"
-                        disabled={busy || !detail.refund}
-                        onClick={() => void confirmRefundSettlement()}
-                        className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {busy ? "Đang xác nhận..." : "Xác nhận hoàn cọc"}
-                      </button>
-                    ) : (
-                      <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                        Nhập ghi chú ít nhất 5 ký tự để xác nhận hoàn cọc.
+                    {currentRefundInfo?.purpose === "RENTAL_CANCELLATION" && (
+                      <p className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-900">
+                        Khoản hoàn tiền do hủy đơn thuê thiết bị.
                       </p>
                     )}
-                    <button
-                      type="button"
-                      disabled={busy || reason.trim().length < 5 || !detail.refund}
-                      onClick={() => void reconcileRefund()}
-                      className="w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {busy ? "Đang gửi yêu cầu..." : "Yêu cầu đối soát lại"}
-                    </button>
+                    {currentRefundInfo?.executionMode ===
+                      "MANUAL_BANK_TRANSFER" && (
+                      <p className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-900">
+                        {currentRefundInfo.status === "SUCCEEDED"
+                          ? "Đã ghi nhận xác nhận chuyển khoản thủ công."
+                          : "Khoản tiền này áp dụng chuyển khoản ngân hàng trực tiếp. Vui lòng chuyển khoản cho khách và xác nhận tại quy trình hoàn tiền thủ công."}
+                      </p>
+                    )}
+                    {canReconcile && (
+                      <Button
+                        variant="outline"
+                        fullWidth
+                        disabled={busy || reason.trim().length < 1}
+                        onClick={() => void reconcileRefund()}
+                      >
+                        {busy
+                          ? "Đang gửi yêu cầu..."
+                          : "Kiểm tra lại trạng thái giao dịch"}
+                      </Button>
+                    )}
+                    {canSimulate && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                        <p>
+                          Chỉ dành cho kiểm thử VNPay Sandbox. Mô phỏng không
+                          chuyển tiền và không xác nhận tiền đã về tài khoản.
+                          Backend sẽ kiểm tra điều kiện áp dụng.
+                        </p>
+                        <Button
+                          className="mt-3"
+                          variant="secondary"
+                          fullWidth
+                          disabled={busy || reason.trim().length < 5}
+                          onClick={() => setShowSimulationConfirm(true)}
+                        >
+                          Mô phỏng hoàn tiền Sandbox
+                        </Button>
+                        <p className="mt-2">
+                          Nhập lý do ít nhất 5 ký tự để mô phỏng.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                ) : isCustodyIncident ? (
+                ) : !caseOpen ? null : isCustodyIncident ? (
                   <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-                    <p className="text-sm font-semibold text-amber-950">Sai lệch xảy ra sau khi Delivery đã nhận đồ từ khách.</p>
+                    <p className="text-sm font-semibold text-amber-950">
+                      Sai lệch xảy ra sau khi Delivery đã nhận đồ từ khách.
+                    </p>
                     <p className="mt-1 text-xs leading-5 text-amber-900">
-                      Không được khấu trừ cọc của khách. Xác nhận sự việc sẽ chuyển toàn bộ cọc của món này sang chờ hoàn qua cổng thanh toán.
+                      Không được khấu trừ cọc của khách. Xác nhận sự việc sẽ
+                      chuyển toàn bộ cọc của món này sang chờ hoàn qua cổng
+                      thanh toán.
                     </p>
                     <button
                       disabled={busy || reason.trim().length < 3}
@@ -561,6 +821,15 @@ export function AdminRentalReturnExceptions() {
           </section>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showSimulationConfirm}
+        onClose={() => setShowSimulationConfirm(false)}
+        onConfirm={() => void confirmRefundSettlement()}
+        title="Mô phỏng hoàn tiền Sandbox"
+        description="Thao tác ghi kết quả giả lập cho dữ liệu kiểm thử. Không có tiền thật được chuyển và kết quả không chứng minh khách đã nhận tiền. Bạn có muốn tiếp tục?"
+        confirmLabel="Xác nhận mô phỏng"
+        loading={busy}
+      />
     </main>
   );
 }

@@ -75,6 +75,21 @@ export async function publishRefundSettlement(
           version: { increment: 1 },
         },
       })
+      await tx.rentalExceptionCase?.updateMany({
+        where: {
+          orderId: refund.rentalOrderId,
+          caseType: 'REFUND_FAILURE',
+          status: { in: ['OPEN', 'UNDER_REVIEW'] },
+          reason: { contains: `[refund:${refund.id}]` },
+        },
+        data: {
+          status: 'RESOLVED',
+          adminReviewStatus: confirmationSource === 'SANDBOX_SIMULATION' ? 'RESOLVED_BY_SIMULATION' : 'RESOLVED_BY_PROVIDER',
+          resolution: confirmationSource === 'SANDBOX_SIMULATION' ? 'SANDBOX_SIMULATED_REFUND' : 'REFUND_SUCCEEDED',
+          resolvedAt: new Date(),
+          version: { increment: 1 },
+        },
+      })
     } else if (event.status === 'FAILED' || event.status === 'CANCELLED') {
       await tx.rentalOrder.updateMany({
         where: { id: refund.rentalOrderId, status: 'CANCELLED' },

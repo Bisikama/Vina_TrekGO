@@ -369,6 +369,7 @@ export const USER_TRANSACTIONS_RESPONSE_SCHEMA: SchemaObject = {
           currency: { type: 'string', example: 'VND' },
           status: { type: 'string' },
           financialEffect: { type: 'string', enum: ['DEBIT', 'CREDIT', 'NONE'] },
+          confirmationSource: { type: 'string', nullable: true, description: 'SANDBOX_SIMULATION là kết quả giả lập, không có tiền thật được hoàn.' },
           description: { type: 'string', example: 'Thanh toán đơn thuê thiết bị' },
           paymentMethod: { type: 'string', nullable: true, example: 'QR' },
           createdAt: { type: 'string', format: 'date-time' },

@@ -388,6 +388,13 @@ export type RentalOrderDetail = {
   assignedUnits?: RentalAssignedUnit[];
   payment?: RentalPaymentStatus | null;
   deposit?: RentalDepositStatus | null;
+  cancellationRefunds?: {
+    refundId: string;
+    amount: number;
+    currency: string;
+    status: string;
+    settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
+  }[];
   timeline?: RentalOrderTimelineItem[];
   /** Thời gian thuê theo chuyến đi (dự kiến), không phải mốc bàn giao/trả thực tế. */
   trip?: { id?: string; rentalStartAt?: string; dueAt?: string; occupiedUntil?: string } | null;

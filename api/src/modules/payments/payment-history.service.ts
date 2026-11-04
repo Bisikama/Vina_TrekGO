@@ -410,7 +410,7 @@ export class PaymentHistoryService {
         r.amount::text AS amount,
         r.currency AS currency,
         r.status::text AS status,
-        CASE WHEN r.status = 'SUCCEEDED' THEN 'CREDIT' ELSE 'NONE' END AS "financialEffect",
+        CASE WHEN r.status = 'SUCCEEDED' AND COALESCE(r.provider_payload->'sandboxSimulation'->>'origin', '') <> 'ADMIN_SANDBOX_SIMULATION' THEN 'CREDIT' ELSE 'NONE' END AS "financialEffect",
         p.payment_method AS "paymentMethod",
         r.created_at AS "createdAt",
         r.refunded_at AS "completedAt",
@@ -418,7 +418,8 @@ export class PaymentHistoryService {
         i.revision_no AS "revisionNo",
         r.purpose::text AS "refundPurpose",
         r.execution_mode::text AS "executionMode",
-        CASE WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
+        CASE WHEN r.status = 'SUCCEEDED' AND r.provider_payload->'sandboxSimulation'->>'origin' = 'ADMIN_SANDBOX_SIMULATION' THEN 'SANDBOX_SIMULATION'
+             WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
         FALSE AS "isExtension"
       FROM refunds r
       JOIN payments p ON p.id = r.payment_id

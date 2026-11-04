@@ -58,6 +58,8 @@ export const refundSummary = (r: Refund) => {
           ],
           simulationNotice: r.purpose === 'BOOKING_CANCELLATION'
             ? 'Hoàn tiền hủy booking mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
+            : r.purpose === 'RENTAL_CANCELLATION'
+            ? 'Hoàn tiền hủy đơn thuê mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
             : 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
           ...(hasDiscrepancy ? { discrepancy: 'SIMULATION_DIVERGED_FROM_PROVIDER_FAILURE' } : {}),
         }

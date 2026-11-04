@@ -24,6 +24,7 @@ import { PaymentOperationsController } from '../src/modules/payments/payment-ope
 import { SandboxRefundSimulationService } from '../src/modules/payments/sandbox-refund-simulation.service'
 import { SandboxSimulateRefundBodySchema } from '../src/modules/payments/dtos/sandbox-refund-simulation.dto'
 import { RefundsService, refundSummary } from '../src/modules/payments/refunds.service'
+import { publishRefundSettlement } from '../src/modules/payments/refund-settlement'
 import { paymentHash } from '../src/modules/payments/payment-utils'
 import {
   PrismaRentalReturnAdapter,
@@ -117,10 +118,11 @@ const createHarness = (options: HarnessOptions = {}) => {
   }
   options.mutate?.({ refund, items, payment })
 
-  const order = {
+  const order: { id: string; userId: string; status: RentalOrderStatus; financialStatus: RentalFinancialStatus } = {
     id: ids.orderId,
+    userId: randomUUID(),
     status: RentalOrderStatus.RETURN_PROCESSING,
-    financialStatus: RentalFinancialStatus.DEPOSIT_HELD,
+    financialStatus: RentalFinancialStatus.REFUND_PENDING,
   }
   const idempotencyRecord = {
     findUnique: jest.fn().mockResolvedValue(options.cachedIdempotency ?? null),
@@ -137,7 +139,7 @@ const createHarness = (options: HarnessOptions = {}) => {
       findUnique: jest
         .fn()
         .mockImplementation((args: any) =>
-          Promise.resolve(args?.select ? { id: refund.id, paymentId: refund.paymentId } : refund),
+          Promise.resolve(args?.select ? { id: refund.id, paymentId: refund.paymentId, purpose: refund.purpose, rentalOrderId: refund.rentalOrderId } : refund),
         ),
       findUniqueOrThrow: jest.fn().mockResolvedValue(refund),
       update: jest.fn().mockImplementation(({ data }: any) => {
@@ -148,7 +150,7 @@ const createHarness = (options: HarnessOptions = {}) => {
       }),
     },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
-    rentalOrder: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+    rentalOrder: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), findUnique: jest.fn().mockResolvedValue(order) },
     paymentOutboxEvent: {
       findUnique: jest.fn().mockResolvedValue({
         status: options.outboxStatus ?? 'PENDING',
@@ -336,6 +338,88 @@ describe('VNPay sandbox deposit-refund settlement', () => {
   })
 
   describe('Shared Payment transition and worker boundary', () => {
+    const cancellation = () => {
+      const harness = createHarness({ refund: { purpose: 'RENTAL_CANCELLATION', depositSettlementId: null, depositSettlement: null, depositSettlementItemId: null, depositRefundItems: [] } })
+      harness.order.status = RentalOrderStatus.CANCELLED
+      harness.refund.businessActionId = `rental-cancellation:${harness.orderId}:request`
+      harness.refund.requestHashVersion = 1
+      Object.assign(harness.refund.payment, { amount: new Prisma.Decimal(1000000), paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX', merchantAccountKey: 'TEST1234', application: { status: 'APPLIED' } })
+      harness.refund.payment.invoice.invoiceType = 'RENTAL'
+      harness.refund.payment.invoice.userId = harness.order.userId
+      harness.refund.allocations[0].paymentAllocationId = randomUUID()
+      return harness
+    }
+
+    it('simulates a verified cancelled rental without a deposit settlement', async () => {
+      const harness = cancellation()
+      const result = await invoke(harness)
+      expect(result).toMatchObject({ rentalOrderId: harness.orderId, depositSettlementId: null, simulationStatus: 'SIMULATED', settlementProcessingStatus: 'APPLIED', orderStatus: 'CANCELLED' })
+      expect(harness.refund.providerPayload.sandboxSimulation).toMatchObject({ origin: 'ADMIN_SANDBOX_SIMULATION', status: 'SUCCEEDED' })
+      expect(harness.refunds.applyEvent).toHaveBeenCalledWith(expect.objectContaining({ status: 'SUCCEEDED', amount: '780000' }))
+    })
+
+    it('rejects a cancelled rental with an unverified processing response', async () => {
+      const harness = cancellation()
+      harness.refund.providerPayload = {}
+      await expect(invoke(harness)).rejects.toThrow(expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }))
+      expect(harness.refunds.applyEvent).not.toHaveBeenCalled()
+    })
+
+    it('simulates an undispatched pending cancellation only with the demo flag', async () => {
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
+      const harness = cancellation()
+      harness.refund.status = 'PENDING'
+      harness.refund.providerPayload = null
+      const result = await invoke(harness, { expectedProviderStatus: 'PENDING' })
+      expect(result.simulationStatus).toBe('SIMULATED')
+      expect(harness.refund.providerPayload.sandboxSimulation.providerConfirmation).toBe('UNCONFIRMED_DEMO')
+    })
+
+    it('rejects a pending cancelled rental already dispatched to VNPay', async () => {
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ALLOW_PENDING_REFUND = 'true'
+      const harness = cancellation()
+      harness.refund.status = 'PENDING'
+      harness.refund.providerPayload = { vnpayDispatch: { vnp_Command: 'refund' } }
+      await expect(invoke(harness, { expectedProviderStatus: 'PENDING' })).rejects.toThrow(
+        expect.objectContaining({ code: P.SANDBOX_SIMULATION_INVALID_REFUND }),
+      )
+      expect(harness.refunds.applyEvent).not.toHaveBeenCalled()
+    })
+
+    it('updates the cancelled order and resolves only its linked exception with simulation provenance', async () => {
+      const harness = cancellation()
+      const tx: any = {
+        paymentOutboxEvent: { create: jest.fn().mockResolvedValue({}) },
+        refund: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: new Prisma.Decimal(780000) } }) },
+        invoice: { update: jest.fn().mockResolvedValue({}) },
+        rentalOrder: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        rentalExceptionCase: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      }
+      await publishRefundSettlement(tx, harness.refund, { status: 'SUCCEEDED', refundTransactionRef: 'simulated' }, 'SANDBOX_SIMULATION')
+      expect(tx.rentalOrder.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: harness.orderId, status: 'CANCELLED' },
+        data: expect.objectContaining({ financialStatus: 'PARTIALLY_REFUNDED' }),
+      }))
+      expect(tx.rentalExceptionCase.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ orderId: harness.orderId, reason: { contains: `[refund:${harness.refundId}]` } }),
+        data: expect.objectContaining({ adminReviewStatus: 'RESOLVED_BY_SIMULATION', resolution: 'SANDBOX_SIMULATED_REFUND' }),
+      }))
+      expect(tx.paymentOutboxEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payload: expect.objectContaining({ confirmationSource: 'SANDBOX_SIMULATION' }) }) }))
+    })
+
+    it.each(['order', 'payment', 'allocation', 'amount', 'lease'])(
+      'rejects cancellation simulation with an invalid %s', async (failure) => {
+        const harness = cancellation()
+        if (failure === 'order') harness.order.status = RentalOrderStatus.PAID
+        if (failure === 'payment') harness.refund.payment.invoice.rentalOrderId = randomUUID()
+        if (failure === 'allocation') harness.refund.allocations[0].paymentAllocation.rentalOrderLine.orderId = randomUUID()
+        if (failure === 'amount') harness.refund.allocations[0].amount = new Prisma.Decimal(1)
+        if (failure === 'lease') harness.refund.leaseUntil = new Date('2026-10-24T12:00:00.000Z')
+        await expect(invoke(harness)).rejects.toThrow()
+        expect(harness.refunds.applyEvent).not.toHaveBeenCalled()
+      },
+    )
+
     it('applies a synthetic SUCCEEDED event through RefundsService', async () => {
       const harness = createHarness()
       const result = await invoke(harness)
@@ -360,7 +444,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       expect(result.settlementProcessingStatus).toBe('PENDING')
       expect(result.completionMode).toBe('SANDBOX_SIMULATED')
       expect(result.orderStatus).toBe(RentalOrderStatus.RETURN_PROCESSING)
-      expect(result.financialStatus).toBe(RentalFinancialStatus.DEPOSIT_HELD)
+      expect(result.financialStatus).toBe(RentalFinancialStatus.REFUND_PENDING)
       expect(harness.items[0].status).toBe(DepositItemStatus.REFUND_PENDING)
       expect(harness.order.status).toBe(RentalOrderStatus.RETURN_PROCESSING)
     })
@@ -575,6 +659,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
             id: orderId,
             userId: actorUserId,
             recipientSnapshot: null,
+            rentalPolicy: { userAssessmentReviewMinutes: 2880 },
             depositSettlementViaOrderId: {
               id: randomUUID(),
               depositSettlementItemsViaSettlementId: [
@@ -608,6 +693,8 @@ describe('VNPay sandbox deposit-refund settlement', () => {
           }),
         },
         returnInspectionTask: { findMany: jest.fn().mockResolvedValue([]) },
+        rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([]) },
+        rentalAssessmentReview: { findMany: jest.fn().mockResolvedValue([]) },
       }
       const result = await new PrismaRentalReturnAdapter(prisma).getDeposit({ orderId, actorUserId })
 
@@ -631,7 +718,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       const harness = createHarness({ refund: { status: 'PROCESSING' } })
       expect(harness.refund.status).toBe('PROCESSING')
       expect(harness.order.status).toBe(RentalOrderStatus.RETURN_PROCESSING)
-      expect(harness.order.financialStatus).toBe(RentalFinancialStatus.DEPOSIT_HELD)
+      expect(harness.order.financialStatus).toBe(RentalFinancialStatus.REFUND_PENDING)
       expect(harness.items[0].status).toBe(DepositItemStatus.REFUND_PENDING)
     })
   })
@@ -976,7 +1063,7 @@ describe('VNPay sandbox deposit-refund settlement', () => {
       id: orderId,
       version: 1,
       status: RentalOrderStatus.RETURN_PROCESSING,
-      financialStatus: RentalFinancialStatus.DEPOSIT_HELD,
+      financialStatus: RentalFinancialStatus.REFUND_PENDING,
       rentalOrderLinesViaOrderId: [
         {
           rentalUnitAssignmentsViaOrderLineId: [
@@ -1283,14 +1370,17 @@ describe('VNPay sandbox deposit-refund settlement', () => {
           create: jest.fn().mockResolvedValue({}),
         },
         rentalExceptionCase: {
-          findFirst: jest.fn().mockResolvedValue(null),
+          findFirst: jest.fn().mockImplementation(({ where }) => Promise.resolve(
+            where.evidenceAccessibleAt ? { evidenceAccessibleAt: new Date(now.getTime() - 3 * 86400000), evidenceAccessBlockedAt: null, dueAt: null } : null,
+          )),
         },
         rentalOrder: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: orderId, rentalPolicy: { userAssessmentReviewMinutes: 2880 } }),
           findUnique: jest.fn().mockResolvedValue({
             id: orderId,
             version: 1,
             status: RentalOrderStatus.RETURN_PROCESSING,
-            financialStatus: RentalFinancialStatus.DEPOSIT_HELD,
+            financialStatus: RentalFinancialStatus.PAID,
             rentalOrderLinesViaOrderId: [
               { rentalUnitAssignmentsViaOrderLineId: [{ status: RentalUnitAssignmentStatus.CLOSED }] },
             ],
