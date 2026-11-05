@@ -42,7 +42,8 @@ export interface SandboxSimulateRefundResponseDto {
   settlementMode: 'SANDBOX_SIMULATED'
   settlementProcessingStatus: 'PENDING' | 'APPLIED'
   simulatedAt: string
-  actorAdminId: string
+  actorAdminId: string | null
+  trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
   reason: string
   warnings: string[]
   notices: {

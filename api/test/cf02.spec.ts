@@ -647,10 +647,12 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
             merchantAccountKey: 'CF02_TEST',
           },
         })
-        await cancel(booking.id, 'sandbox-cancel').expect(202)
-        await cancel(booking.id, 'sandbox-cancel').expect(202)
+        // Exercise the recovery API using a genuinely pending refund, not by resetting a settled one.
+        process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'false'
+        const cancelled = await cancel(booking.id, 'sandbox-cancel').expect(202)
+        const replay = await cancel(booking.id, 'sandbox-cancel').expect(202)
         const cancellation = await db.bookingCancellation.findFirstOrThrow({ where: { bookingId: booking.id } })
-        const refund = await cancellations.dispatch(cancellation.id)
+        const refund = cancelled.body.refund
         if (percent === 0) {
           expect(refund).toBeNull()
           expect(cancellation.refundableAmount.toFixed()).toBe('0')
@@ -659,21 +661,14 @@ describe('CF02 PostgreSQL and shared HTTP contract', () => {
           expect((await detail(booking.id).expect(200)).body.status).toBe('CANCELLED')
           return
         }
-        expect((await cancellations.dispatch(cancellation.id))!.refundId).toBe(refund!.refundId)
-        await db.refund.update({
-          where: { id: refund!.refundId },
-          data: {
-            status: 'PROCESSING',
-            reconcileStatus: 'NEEDS_REVIEW',
-            lastErrorCode: 'RECOVERY_UNKNOWN',
-            nextRetryAt: null,
-          },
-        })
+        expect(replay.body.refund.refundId).toBe(refund!.refundId)
+        expect(refund).toMatchObject({ status: 'PENDING', executionMode: 'SANDBOX_SIMULATED' })
+        process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
         const endpoint = `/api/v1/admin/payment-refunds/${refund!.refundId}/sandbox-simulate-settlement`
         const body = {
           reason: 'CF02 sandbox cancellation evidence test',
           acknowledgeSandboxSimulation: true,
-          expectedProviderStatus: 'PROCESSING',
+          expectedProviderStatus: 'PENDING',
         }
         const simulate = (actor = otherId, input = body) =>
           request(app.getHttpServer())

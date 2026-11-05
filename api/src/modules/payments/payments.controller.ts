@@ -95,7 +95,7 @@ export class PaymentsController {
   @ApiResponse({ status: 409, description: 'Đơn đặt chỗ đã được thanh toán hoặc đã hủy' })
   async create(
     @Param('id', new ZodValidationPipe(z.string().uuid())) bookingId: string,
-    @Headers('idempotency-key') idempotencyKey: string,
+    @Headers('Idempotency-Key') idempotencyKey: string,
     @Body(new ZodValidationPipe(bodySchema)) body: { paymentMethod: PaymentMethod; gateway?: 'momo' | 'vnpay' | 'payos' },
     @ActiveUser('id') actorUserId: string,
     @Res({ passthrough: true }) response: Response,

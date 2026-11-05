@@ -43,7 +43,8 @@ export async function publishRefundSettlement(
   ) {
     // Returning a rejected duplicate must not overwrite the invoice funded by another applied payment.
     const otherApplied =
-      confirmationSource === 'ADMIN_MANUAL' && refund.payment.application?.status === 'REJECTED'
+      (confirmationSource === 'ADMIN_MANUAL' || confirmationSource === 'SANDBOX_SIMULATION') &&
+      refund.payment.application?.status === 'REJECTED'
         ? await tx.paymentApplication.findFirst({
             where: { invoiceId: refund.payment.invoiceId, paymentId: { not: refund.paymentId }, status: 'APPLIED' },
           })

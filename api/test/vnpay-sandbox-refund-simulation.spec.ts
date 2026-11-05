@@ -159,6 +159,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     },
   }
   const prisma: any = {
+    refund: tx.refund,
     $transaction: jest.fn().mockImplementation((fn: any) => fn(tx)),
     idempotencyRecord: {
       findUnique: jest.fn().mockResolvedValue(options.concurrentIdempotency ?? null),

@@ -42,12 +42,12 @@ export const refundSummary = (r: Refund) => {
     currency: r.currency,
     status: r.status,
     executionMode: r.executionMode ?? 'PROVIDER_API',
-    confirmationSource: r.executionMode === 'MANUAL_BANK_TRANSFER' ? (r.status === 'SUCCEEDED' ? 'ADMIN_MANUAL' : null) : null,
+    confirmationSource: simulation && r.status === 'SUCCEEDED' ? 'SANDBOX_SIMULATION' : r.executionMode === 'MANUAL_BANK_TRANSFER' ? (r.status === 'SUCCEEDED' ? 'ADMIN_MANUAL' : null) : null,
     refundedAt: r.refundedAt?.toISOString() ?? null,
     reconciliationRequired: ['SCHEDULED', 'RUNNING', 'NEEDS_REVIEW'].includes(r.reconcileStatus),
-    ...(simulation
+    ...(simulation || r.executionMode === 'SANDBOX_SIMULATED'
       ? {
-          simulationStatus: 'SIMULATED',
+          simulationStatus: r.status === 'SUCCEEDED' ? 'SIMULATED' : 'PENDING',
           settlementMode: 'SANDBOX_SIMULATED',
           warnings: [
             'TEST_ONLY',
@@ -59,8 +59,10 @@ export const refundSummary = (r: Refund) => {
           simulationNotice: r.purpose === 'BOOKING_CANCELLATION'
             ? 'Hoàn tiền hủy booking mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
             : r.purpose === 'RENTAL_CANCELLATION'
-            ? 'Hoàn tiền hủy đơn thuê mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
-            : 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
+              ? 'Hoàn tiền hủy đơn thuê mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
+            : r.purpose === 'DEPOSIT'
+              ? 'Hoàn cọc mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách'
+              : 'Hoàn tiền mô phỏng (VNPay Sandbox) - Không phải tiền đã về tài khoản khách',
           ...(hasDiscrepancy ? { discrepancy: 'SIMULATION_DIVERGED_FROM_PROVIDER_FAILURE' } : {}),
         }
       : {}),
@@ -178,6 +180,9 @@ export class RefundsService {
           reconcileStatus: 'SCHEDULED',
           nextRetryAt: now,
           ...manualRefundReservation(payment.paymentGateway),
+          ...(payment.paymentGateway === 'vnpay' && payment.providerEnvironment === 'SANDBOX'
+            ? { executionMode: 'SANDBOX_SIMULATED' as const }
+            : {}),
         },
       })
     })
@@ -281,6 +286,9 @@ export class RefundsService {
           reconcileStatus: 'SCHEDULED',
           nextRetryAt: now,
           ...manualRefundReservation(payment.paymentGateway),
+          ...(payment.invoice.invoiceType === 'BOOKING' && payment.paymentGateway === 'vnpay' && payment.providerEnvironment === 'SANDBOX'
+            ? { executionMode: 'SANDBOX_SIMULATED' as const }
+            : {}),
           allocations: { create: payment.allocations.map((a) => ({ paymentAllocationId: a.id, amount: a.amount })) },
         },
       })
@@ -336,8 +344,10 @@ export class RefundsService {
       const existingPayload = refund.providerPayload as Prisma.JsonObject | null
       const sandboxSimulation = existingPayload?.sandboxSimulation as Record<string, unknown> | undefined
       const isSandboxSimulationEvent =
-        sandboxSimulation?.origin === 'ADMIN_SANDBOX_SIMULATION' &&
-        sandboxSimulation.providerEventId === event.providerEventId
+        ['ADMIN_SANDBOX_SIMULATION', 'BOOKING_SANDBOX_SIMULATION'].includes(String(sandboxSimulation?.origin)) &&
+        sandboxSimulation?.providerEventId === event.providerEventId
+      // Internally simulated refunds must never be settled or corrected by provider callbacks.
+      if (refund.executionMode === 'SANDBOX_SIMULATED' && (!isSandboxSimulationEvent || options.inboxId || options.lease)) return false
       if (
         options.lease &&
         (options.refundId !== refund.id ||
@@ -450,7 +460,9 @@ export class RefundsService {
           await tx.auditLog.create({
             data: {
               action: isSandboxSimulationEvent
-                ? 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED'
+                ? sandboxSimulation?.origin === 'BOOKING_SANDBOX_SIMULATION'
+                  ? 'BOOKING_SANDBOX_REFUND_SIMULATION_ACCEPTED'
+                  : 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED'
                 : event.status === 'SUCCEEDED'
                   ? 'REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION'
                   : 'REAL_PROVIDER_REFUND_FAILED_AFTER_SIMULATION',

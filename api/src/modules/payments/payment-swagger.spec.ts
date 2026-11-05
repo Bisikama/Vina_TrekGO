@@ -57,6 +57,14 @@ describe('Rental payment Swagger contract', () => {
     const config = new DocumentBuilder().build()
     const document = SwaggerModule.createDocument(app, config)
 
+    const bookingCheckout = document.paths['/api/v1/bookings/{id}/payments']?.post
+    const bookingHeaderParams = (bookingCheckout?.parameters ?? []).filter(
+      (p): p is { in: string; name: string; required?: boolean } => 'in' in p && p.in === 'header',
+    )
+    expect(bookingHeaderParams).toEqual([
+      expect.objectContaining({ in: 'header', name: 'Idempotency-Key', required: true }),
+    ])
+
     const checkout = document.paths['/api/v1/rental-orders/{id}/payments']?.post
     expect(checkout?.operationId).toBe('createRentalOrderPayment')
     expect(checkout?.parameters).toEqual(

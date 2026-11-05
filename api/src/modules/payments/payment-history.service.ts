@@ -110,7 +110,6 @@ interface RawCashflowTotalsRow {
 function normalizeSupportedGateway(raw: string | null | undefined): SupportedAdminGateway | null {
   const lower = (raw ?? '').trim().toLowerCase()
   if (lower === 'vnpay') return 'vnpay'
-  if (lower === 'payos') return 'payos'
   return null
 }
 
@@ -133,6 +132,12 @@ function buildVietQrUrl(params: {
 @Injectable()
 export class PaymentHistoryService {
   constructor(private readonly db: PrismaService) { }
+
+  private simulationDisclosure(mode: string | null, confirmation: string | null) {
+    return mode === 'SANDBOX_SIMULATED' || confirmation === 'SANDBOX_SIMULATION'
+      ? { settlementMode: 'SANDBOX_SIMULATED' as const, warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'] }
+      : {}
+  }
 
   /**
    * API 1 — Rental Order Payment History
@@ -418,8 +423,8 @@ export class PaymentHistoryService {
         i.revision_no AS "revisionNo",
         r.purpose::text AS "refundPurpose",
         r.execution_mode::text AS "executionMode",
-        CASE WHEN r.status = 'SUCCEEDED' AND r.provider_payload->'sandboxSimulation'->>'origin' = 'ADMIN_SANDBOX_SIMULATION' THEN 'SANDBOX_SIMULATION'
-             WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
+        CASE WHEN r.status = 'SUCCEEDED' AND (r.provider_payload -> 'sandboxSimulation') IS NOT NULL THEN 'SANDBOX_SIMULATION'
+          WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
         FALSE AS "isExtension"
       FROM refunds r
       JOIN payments p ON p.id = r.payment_id
@@ -507,6 +512,7 @@ export class PaymentHistoryService {
         financialEffect: row.financialEffect,
         executionMode: row.executionMode ?? null,
         confirmationSource: row.confirmationSource ?? null,
+        ...this.simulationDisclosure(row.executionMode, row.confirmationSource),
         description,
         paymentMethod: row.paymentMethod ?? null,
         createdAt: new Date(row.createdAt).toISOString(),
@@ -531,7 +537,7 @@ export class PaymentHistoryService {
    *
    * Retrieves unified timeline of all payments (Cash-In) and refunds (Cash-Out) across
    * BOOKING, RENTAL (with rental fee, extension, deposit, deduction breakdown), and TRAIL_ACCESS.
-   * Supports gateway filter: BOTH (vnpay + payos, excluding mock/momo), vnpay only, or payos only.
+   * VNPay SANDBOX only; ALL/BOTH are aliases. Refund entries require simulation provenance or mode.
    */
   async getAdminTransactions(input: {
     query: AdminTransactionsQueryDto
@@ -540,7 +546,7 @@ export class PaymentHistoryService {
     const page = query.page ?? 1
     const pageSize = query.pageSize ?? 20
     const offset = (page - 1) * pageSize
-    const gatewayFilter: AdminGatewayFilter = query.gateway ?? 'BOTH'
+    const gatewayFilter: AdminGatewayFilter = query.gateway ?? 'vnpay'
     const allowedGateways = resolveAllowedGateways(gatewayFilter)
     const gatewaySqlList = Prisma.join(allowedGateways.map((g) => Prisma.sql`${g}`))
 
@@ -564,9 +570,13 @@ export class PaymentHistoryService {
 
     const paymentConditions: Prisma.Sql[] = [
       Prisma.sql`LOWER(p.payment_gateway) IN (${gatewaySqlList})`,
+      Prisma.sql`p.provider_environment = 'SANDBOX'`,
     ]
     const refundConditions: Prisma.Sql[] = [
       Prisma.sql`LOWER(COALESCE(r.payment_gateway, p.payment_gateway)) IN (${gatewaySqlList})`,
+      Prisma.sql`p.payment_gateway = 'vnpay' AND p.provider_environment = 'SANDBOX' AND p.status = 'SUCCEEDED'`,
+      Prisma.sql`r.payment_gateway = 'vnpay' AND r.provider_environment = 'SANDBOX'`,
+      Prisma.sql`(r.execution_mode::text = 'SANDBOX_SIMULATED' OR (r.provider_payload -> 'sandboxSimulation') IS NOT NULL)`,
     ]
 
     if (query.userId) {
@@ -790,7 +800,7 @@ export class PaymentHistoryService {
         r.purpose::text AS "refundPurpose",
         r.execution_mode::text AS "executionMode",
         CASE
-          WHEN (r.provider_payload -> 'sandboxSimulation') IS NOT NULL THEN 'SANDBOX_SIMULATION'
+          WHEN r.status = 'SUCCEEDED' AND (r.provider_payload -> 'sandboxSimulation') IS NOT NULL THEN 'SANDBOX_SIMULATION'
           WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL'
           WHEN r.execution_mode = 'PROVIDER_API' AND r.status = 'SUCCEEDED' THEN 'PROVIDER'
           ELSE NULL
@@ -967,7 +977,7 @@ export class PaymentHistoryService {
         row.kind === 'REFUND' &&
         gw === 'vnpay' &&
         env === 'SANDBOX' &&
-        (row.executionMode ?? 'PROVIDER_API') === 'PROVIDER_API' &&
+        ['SANDBOX_SIMULATED', 'PROVIDER_API'].includes(row.executionMode ?? 'PROVIDER_API') &&
         (row.status === 'PENDING' || row.status === 'PROCESSING')
 
       return {
@@ -995,11 +1005,12 @@ export class PaymentHistoryService {
         providerEnvironment: env,
         paymentMethod: row.paymentMethod ?? null,
         transactionRef: row.transactionRef ?? null,
-        payosOrderCode: row.payosOrderCode ?? null,
+        payosOrderCode: null,
         reconcileStatus: row.reconcileStatus,
         reconciliationRequired: Boolean(row.reconciliationRequired),
         executionMode: row.executionMode ?? null,
         confirmationSource: row.confirmationSource ?? null,
+        ...this.simulationDisclosure(row.executionMode, row.confirmationSource),
         refundPurpose: row.refundPurpose ?? null,
         manualRefundStatus: row.manualRefundStatus ?? null,
         canSimulateSandbox,
@@ -1029,17 +1040,17 @@ export class PaymentHistoryService {
   }
 
   /**
-   * API 4 — Admin Cashflow Summary (VNPay & PayOS)
+   * API 4 — Admin Cashflow Summary (VNPay SANDBOX)
    * Method: GET /api/v1/admin/cashflow/summary (and alias GET /api/v1/admin/transactions/summary)
    *
    * Aggregates system-wide inflows (SUCCEEDED payments), outflows (SUCCEEDED refunds),
-   * pending amounts, reconciliation backlog, and breakdowns by source & gateway (vnpay / payos).
+   * pending amounts, reconciliation backlog, and breakdowns by source within the same sandbox scope.
    */
   async getAdminCashflowSummary(input: {
     query: AdminCashflowSummaryQueryDto
   }): Promise<AdminCashflowSummaryResponseDto> {
     const { query } = input
-    const gatewayFilter: AdminGatewayFilter = query.gateway ?? 'BOTH'
+    const gatewayFilter: AdminGatewayFilter = query.gateway ?? 'vnpay'
     const allowedGateways = resolveAllowedGateways(gatewayFilter)
     const gatewaySqlList = Prisma.join(allowedGateways.map((g) => Prisma.sql`${g}`))
 
@@ -1053,9 +1064,13 @@ export class PaymentHistoryService {
 
     const paymentConditions: Prisma.Sql[] = [
       Prisma.sql`LOWER(p.payment_gateway) IN (${gatewaySqlList})`,
+      Prisma.sql`p.provider_environment = 'SANDBOX'`,
     ]
     const refundConditions: Prisma.Sql[] = [
       Prisma.sql`LOWER(COALESCE(r.payment_gateway, p.payment_gateway)) IN (${gatewaySqlList})`,
+      Prisma.sql`p.payment_gateway = 'vnpay' AND p.provider_environment = 'SANDBOX' AND p.status = 'SUCCEEDED'`,
+      Prisma.sql`r.payment_gateway = 'vnpay' AND r.provider_environment = 'SANDBOX'`,
+      Prisma.sql`(r.execution_mode::text = 'SANDBOX_SIMULATED' OR (r.provider_payload -> 'sandboxSimulation') IS NOT NULL)`,
     ]
 
     if (query.source) {
@@ -1192,7 +1207,7 @@ export class PaymentHistoryService {
           WHERE ${refundWhere}
             AND LOWER(COALESCE(r.payment_gateway, p.payment_gateway)) = 'vnpay'
             AND COALESCE(r.provider_environment, p.provider_environment) = 'SANDBOX'
-            AND r.execution_mode = 'PROVIDER_API'
+            AND (r.execution_mode::text = 'SANDBOX_SIMULATED' OR (r.provider_payload -> 'sandboxSimulation') IS NOT NULL)
             AND r.status IN ('PENDING', 'PROCESSING')
         ), 0) AS "vnpaySandboxPendingRefundCount"
     `
@@ -1318,7 +1333,7 @@ export class PaymentHistoryService {
         ).toFixed(2),
         retainedDepositDeductionAmount: depositDeducted.toFixed(2),
         activeDepositHeldAmount: activeDepositHeld.toFixed(2),
-        payosManualRefundPendingCount: Number(rawTotals.payosManualRefundPendingCount ?? 0),
+        payosManualRefundPendingCount: 0,
         vnpaySandboxPendingRefundCount: Number(rawTotals.vnpaySandboxPendingRefundCount ?? 0),
       }
     }
@@ -1364,6 +1379,8 @@ export class PaymentHistoryService {
         source: query.source ?? null,
       },
       currency: 'VND',
+      settlementMode: 'SANDBOX_SIMULATED',
+      warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
       period: {
         from: query.from ? new Date(query.from).toISOString() : null,
         to: query.to ? new Date(query.to).toISOString() : null,
@@ -1391,7 +1408,7 @@ export class PaymentHistoryService {
    * Method: GET /api/v1/admin/payments/:id (and alias GET /api/v1/admin/transactions/payments/:id)
    *
    * Returns complete payment & reconciliation diagnostics for Admin without leaking gateway secrets.
-   * Only allows payments from vnpay or payos.
+   * Only allows VNPay SANDBOX payments.
    */
   async getAdminPaymentDetail(input: { paymentId: string }): Promise<AdminPaymentDetailResponseDto> {
     const payment = await this.db.payment.findUnique({
@@ -1422,7 +1439,7 @@ export class PaymentHistoryService {
     })
 
     const gw = normalizeSupportedGateway(payment?.paymentGateway)
-    if (!payment || !gw) {
+    if (!payment || !gw || payment.providerEnvironment !== 'SANDBOX') {
       throw AppError.fromCode(PAYMENT_ERROR_CODES.PAYMENT_NOT_FOUND)
     }
 
@@ -1483,8 +1500,8 @@ export class PaymentHistoryService {
       paymentMethod: payment.paymentMethod ?? null,
       transactionRef: payment.transactionRef ?? null,
       merchantRequestRef: payment.merchantRequestRef ?? null,
-      payosOrderCode: payment.payosCheckout?.orderCode.toString() ?? null,
-      payosPaymentLinkId: payment.payosCheckout?.paymentLinkId ?? null,
+      payosOrderCode: null,
+      payosPaymentLinkId: null,
       applicationStatus: payment.application?.status ?? null,
       applicationReasonCode: payment.application?.reasonCode ?? null,
       reconcileStatus: payment.reconcileStatus,
@@ -1502,11 +1519,14 @@ export class PaymentHistoryService {
         component: a.component,
         amount: new Prisma.Decimal(a.amount).toFixed(2),
       })),
-      refunds: payment.refundsViaPaymentId.map((r) => {
+      refunds: payment.refundsViaPaymentId.filter((r) =>
+        r.paymentGateway === 'vnpay' && r.providerEnvironment === 'SANDBOX' &&
+        (r.executionMode === 'SANDBOX_SIMULATED' || Boolean((r.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation)),
+      ).map((r) => {
         const simulated = Boolean(
           (r.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation,
         )
-        const confirmationSource = simulated
+        const confirmationSource = simulated && r.status === 'SUCCEEDED'
           ? 'SANDBOX_SIMULATION'
           : r.manualRefund?.status === 'COMPLETED' ||
             (r.executionMode === 'MANUAL_BANK_TRANSFER' && r.status === 'SUCCEEDED')
@@ -1520,7 +1540,7 @@ export class PaymentHistoryService {
         const canSimulateSandbox =
           rGw === 'vnpay' &&
           rEnv === 'SANDBOX' &&
-          r.executionMode === 'PROVIDER_API' &&
+          ['SANDBOX_SIMULATED', 'PROVIDER_API'].includes(r.executionMode) &&
           (r.status === 'PENDING' || r.status === 'PROCESSING')
 
         return {
@@ -1535,6 +1555,7 @@ export class PaymentHistoryService {
             r.manualRefund?.status === 'NEEDS_REVIEW',
           executionMode: r.executionMode,
           confirmationSource,
+          ...this.simulationDisclosure(r.executionMode, simulated ? 'SANDBOX_SIMULATION' : null),
           manualRefundStatus: r.manualRefund?.status ?? null,
           canSimulateSandbox,
           refundTransactionRef: r.refundTransactionRef ?? null,
@@ -1549,8 +1570,7 @@ export class PaymentHistoryService {
    * API 6 — Admin Refund Detail
    * Method: GET /api/v1/admin/refunds/:id (and alias GET /api/v1/admin/transactions/refunds/:id)
    *
-   * Returns complete refund diagnostics for Admin, including PayOS manual bank transfer
-   * recipient info (with VietQR helper URL & UNC evidence media URL) and VNPay Sandbox simulation status.
+   * Returns simulated VNPay SANDBOX refund diagnostics and the original invoice owner.
    */
   async getAdminRefundDetail(input: { refundId: string }): Promise<AdminRefundDetailResponseDto> {
     const refund = await this.db.refund.findUnique({
@@ -1589,7 +1609,10 @@ export class PaymentHistoryService {
     const gw = normalizeSupportedGateway(
       refund?.paymentGateway ?? refund?.payment.paymentGateway,
     )
-    if (!refund || !gw) {
+    if (!refund || !gw || refund.providerEnvironment !== 'SANDBOX' ||
+      refund.payment.paymentGateway !== 'vnpay' || refund.payment.providerEnvironment !== 'SANDBOX' ||
+      refund.payment.status !== 'SUCCEEDED' ||
+      (refund.executionMode !== 'SANDBOX_SIMULATED' && !(refund.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation)) {
       throw AppError.fromCode(PAYMENT_ERROR_CODES.PAYMENT_NOT_FOUND)
     }
 
@@ -1606,7 +1629,7 @@ export class PaymentHistoryService {
       (refund.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation,
     )
     const m = refund.manualRefund
-    const confirmationSource = simulated
+    const confirmationSource = simulated && refund.status === 'SUCCEEDED'
       ? 'SANDBOX_SIMULATION'
       : m?.status === 'COMPLETED' ||
         (refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === 'SUCCEEDED')
@@ -1619,7 +1642,7 @@ export class PaymentHistoryService {
     const canSimulateSandbox =
       gw === 'vnpay' &&
       env === 'SANDBOX' &&
-      refund.executionMode === 'PROVIDER_API' &&
+      ['SANDBOX_SIMULATED', 'PROVIDER_API'].includes(refund.executionMode) &&
       (refund.status === 'PENDING' || refund.status === 'PROCESSING')
 
     const refundAmt = new Prisma.Decimal(refund.amount)
@@ -1698,6 +1721,7 @@ export class PaymentHistoryService {
       providerEnvironment: env,
       executionMode: refund.executionMode,
       confirmationSource,
+      ...this.simulationDisclosure(refund.executionMode, simulated ? 'SANDBOX_SIMULATION' : null),
       reconcileStatus: refund.reconcileStatus,
       reconciliationRequired:
         ['NEEDS_REVIEW', 'SCHEDULED', 'RUNNING'].includes(refund.reconcileStatus) ||
@@ -1714,7 +1738,7 @@ export class PaymentHistoryService {
         paymentGateway: normalizeSupportedGateway(payment.paymentGateway) ?? gw,
         paymentMethod: payment.paymentMethod ?? null,
         transactionRef: payment.transactionRef ?? null,
-        payosOrderCode: payment.payosCheckout?.orderCode.toString() ?? null,
+        payosOrderCode: null,
         paidAt: payment.paidAt ? payment.paidAt.toISOString() : null,
       },
       allocations: refund.allocations.map((ra) => ({
