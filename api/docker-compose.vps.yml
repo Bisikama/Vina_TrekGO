@@ -57,7 +57,8 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      # Chỉ mở cho chính VPS: truy cập từ ngoài phải đi qua Nginx (cổng 80/443)
+      - "127.0.0.1:3000:3000"
 
 volumes:
   postgres_data:
