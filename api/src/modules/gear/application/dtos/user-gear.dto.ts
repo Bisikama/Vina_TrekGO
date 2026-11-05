@@ -117,42 +117,25 @@ export const CANONICAL_CATEGORY_FIELD_KEYS: Record<GearCategory, readonly string
   RAIN_GEAR: ['waterproof_mm', 'coverage', 'weight_g'],
 }
 
+export const CATEGORY_ATTRIBUTE_SCHEMAS: Record<GearCategory, z.ZodType> = {
+  JACKET: jacketAttributesSchema,
+  FOOTWEAR: footwearAttributesSchema,
+  PANTS: pantsAttributesSchema,
+  BACKPACK: backpackAttributesSchema,
+  SLEEPING_BAG: sleepingBagAttributesSchema,
+  TENT: tentAttributesSchema,
+  TREKKING_POLE: trekkingPoleAttributesSchema,
+  RAIN_GEAR: rainGearAttributesSchema,
+}
+
 export function validateAttributesForCategory(category: GearCategory, rawAttrs: unknown): Record<string, unknown> {
   if (rawAttrs === null || typeof rawAttrs !== 'object' || Array.isArray(rawAttrs)) {
     throw new Error('attributes must be a non-null object')
   }
 
-  let parsed: Record<string, unknown>
-  switch (category) {
-    case 'JACKET':
-      parsed = jacketAttributesSchema.parse(rawAttrs)
-      break
-    case 'FOOTWEAR':
-      parsed = footwearAttributesSchema.parse(rawAttrs)
-      break
-    case 'PANTS':
-      parsed = pantsAttributesSchema.parse(rawAttrs)
-      break
-    case 'BACKPACK':
-      parsed = backpackAttributesSchema.parse(rawAttrs)
-      break
-    case 'SLEEPING_BAG':
-      parsed = sleepingBagAttributesSchema.parse(rawAttrs)
-      break
-    case 'TENT':
-      parsed = tentAttributesSchema.parse(rawAttrs)
-      break
-    case 'TREKKING_POLE':
-      parsed = trekkingPoleAttributesSchema.parse(rawAttrs)
-      break
-    case 'RAIN_GEAR':
-      parsed = rainGearAttributesSchema.parse(rawAttrs)
-      break
-    default:
-      throw new Error(`Unsupported category: ${String(category)}`)
-  }
-
-  return parsed
+  const schema = CATEGORY_ATTRIBUTE_SCHEMAS[category]
+  if (!schema) throw new Error(`Unsupported category: ${String(category)}`)
+  return schema.parse(rawAttrs) as Record<string, unknown>
 }
 
 /**

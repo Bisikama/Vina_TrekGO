@@ -9,9 +9,10 @@ import { RentalDocumentService } from './rental-document.service';
 import { evaluateDocumentRetention } from './rental-document-retention.policy';
 import { snapshotHash } from './rental-document-events';
 import { MemoryDocumentStorage, documentObjectKey, pdfDigest } from '../infrastructure/document-storage.port';
-import { RentalPdfRenderer, documentLines, formatVndExact } from '../infrastructure/rental-pdf.renderer';
+import { RentalPdfRenderer, documentText, formatVndExact } from '../infrastructure/rental-pdf.renderer';
 import { RentalDocumentRenderWorker } from '../infrastructure/rental-document-render.worker';
 import { CorrectionBodySchema } from '../presentation/rental-document-admin.dto';
+import { documentEvidenceIds, rentalEvidenceLink, verifyRentalEvidenceSignature } from './rental-evidence-link';
 
 const id = '550e8400-e29b-41d4-a716-446655440000';
 const snapshot = { kind: 'HANDOVER', recipientNotes: 'Đã nhận đủ thiết bị' };
@@ -66,21 +67,20 @@ describe('Rental Phase 11 documents (pure mock)', () => {
     const cases: Array<[RentalDocumentType, Record<string, unknown>, string]> = [
       [RentalDocumentType.HANDOVER, { recipient: { displayName: 'Nguyễn An' },
         units: [{ assetCode: 'BAL-001', condition: 'GOOD', accessories: ['Dây đeo'] }],
-        policySnapshot: { secret: 'must-not-render' } }, 'Mã tài sản: BAL-001'],
+        policySnapshot: { secret: 'must-not-render' } }, 'BAL-001 | Tốt | Dây đeo'],
       [RentalDocumentType.RETURN_RECEIPT, { receivedUnits: [{ assetCode: 'BAL-001', condition: 'GOOD' }],
-        notReturnedUnitIdsAtSessionEnd: ['unit-2'] }, 'THIẾT BỊ CHƯA GHI NHẬN TRẢ'],
+        notReturnedUnitIdsAtSessionEnd: ['unit-2'] }, 'Thiết bị chưa trả (1)'],
       [RentalDocumentType.EXTENSION_APPENDIX, { oldRentalEndAt: '2026-10-20T10:00:00Z',
         newRentalEndAt: '2026-10-21T10:00:00Z', additionalFee: '9007199254740993',
         acceptance: { acceptedTermsVersion: 'v1.5.2' }, templateVersion: '1.0.0' },
       '9.007.199.254.740.993 VND'],
       [RentalDocumentType.SCHEDULE_NOTICE, { operationalReturnDueAt: '2026-10-21T10:00:00Z' },
-        'THAY ĐỔI LỊCH VẬN HÀNH'],
+        'Hạn trả mới: 17:00, 21/10/2026'],
       [RentalDocumentType.CORRECTION_NOTICE, { corrections: [{ field: 'remarks',
-        oldValue: 'Cũ', newValue: 'Mới' }] }, 'Giá trị sau: Mới'],
+        oldValue: 'Cũ', newValue: 'Mới' }] }, 'remarks | Cũ | Mới'],
     ];
     for (const [documentType, value, expected] of cases) {
-      const text = documentLines({ ...doc(), documentType, snapshotJson: value } as any)
-        .map(line => line.text).join('\n');
+      const text = documentText({ ...doc(), documentType, snapshotJson: value } as any);
       expect(text).toContain(expected);
       expect(text).not.toContain('policySnapshot');
       expect(text).not.toContain('must-not-render');
@@ -216,6 +216,14 @@ describe('Rental Phase 11 documents (pure mock)', () => {
       expect(bytes.toString('latin1')).toContain('/ToUnicode');
       expect(bytes.toString('latin1')).toMatch(/\/Count [2-9]/);
       expect(bytes.toString('latin1')).toContain('%%EOF');
+      // Logo Vina TrekGo nhúng dạng JPEG và vẽ ở đầu trang 1.
+      expect(bytes.toString('latin1')).toContain('/Filter /DCTDecode');
+      expect(pdfPageText(bytes)[0]).toContain('VINA TREKGO');
+      // Chứng từ mẫu mới phát hành cũng render được; mẫu lạ bị từ chối.
+      await expect(new RentalPdfRenderer().render({ ...doc(), templateVersion: '1.4.0',
+        snapshotJson: longSnapshot, snapshotHash: snapshotHash(longSnapshot) } as any)).resolves.toBeInstanceOf(Buffer);
+      await expect(new RentalPdfRenderer().render({ ...doc(), templateVersion: '9.9.9',
+        snapshotJson: longSnapshot, snapshotHash: snapshotHash(longSnapshot) } as any)).rejects.toThrow('PDF_SNAPSHOT_INTEGRITY_OR_TEMPLATE_FAILED');
     } finally {
       if (previous === undefined) delete process.env.RENTAL_PDF_FONT_PATH;
       else process.env.RENTAL_PDF_FONT_PATH = previous;
@@ -250,6 +258,77 @@ describe('Rental Phase 11 documents (pure mock)', () => {
         else process.env.RENTAL_PDF_FONT_PATH = previous;
       }
     });
+
+  describe('evidence links in PDF', () => {
+    const mediaId = '7c1e0a2b-1f3d-4b8e-9a6c-0d2e4f6a8b00';
+    const otherMedia = '7c1e0a2b-1f3d-4b8e-9a6c-0d2e4f6a8b99';
+    const linkedSnapshot = { kind: 'HANDOVER', units: [{ assetCode: 'TENT-001', condition: 'GOOD', evidenceIds: [mediaId] }] };
+    const saved: Record<string, string | undefined> = {};
+    beforeEach(() => {
+      for (const key of ['RENTAL_DOCUMENT_LINK_SECRET', 'RENTAL_DOCUMENT_LINK_BASE_URL']) saved[key] = process.env[key];
+      process.env.RENTAL_DOCUMENT_LINK_SECRET = 'x'.repeat(40);
+      process.env.RENTAL_DOCUMENT_LINK_BASE_URL = 'https://api.trekgo.test/';
+    });
+    afterEach(() => {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+    const sigOf = (url: string) => new URL(url).searchParams.get('sig');
+
+    it('signs a link bound to one document and one evidence id', () => {
+      const url = rentalEvidenceLink(id, mediaId)!;
+      expect(url).toMatch(new RegExp(`^https://api\\.trekgo\\.test/api/v1/rental-documents/${id}/evidence/${mediaId}\\?sig=`));
+      expect(verifyRentalEvidenceSignature(id, mediaId, sigOf(url))).toBe(true);
+      expect(verifyRentalEvidenceSignature(id, otherMedia, sigOf(url))).toBe(false);
+      expect(verifyRentalEvidenceSignature(id, mediaId, 'forged')).toBe(false);
+      expect(documentEvidenceIds({ receivedUnits: [{ evidenceIds: [mediaId] }], failureEvidenceId: otherMedia }))
+        .toEqual(new Set([mediaId, otherMedia]));
+      delete process.env.RENTAL_DOCUMENT_LINK_SECRET;
+      expect(rentalEvidenceLink(id, mediaId)).toBeNull();
+    });
+
+    it('redirects only for a valid signature, an evidence id of that document and a READY evidence asset', async () => {
+      const asset = { status: 'READY', scope: 'CONDITION_EVIDENCE', resourceType: 'IMAGE',
+        providerPublicId: 'evidence/abc', deliveryType: 'authenticated' };
+      const prisma: any = {
+        rentalDocument: { findUnique: jest.fn().mockResolvedValue({ snapshotJson: linkedSnapshot, snapshotHash: snapshotHash(linkedSnapshot) }) },
+        mediaAsset: { findUnique: jest.fn().mockResolvedValue(asset) },
+      };
+      const media: any = { createDeliveryUrl: jest.fn().mockResolvedValue({ url: 'https://res.cloudinary.com/signed' }) };
+      const service = new RentalDocumentService(prisma, {} as any, new MemoryDocumentStorage(), media);
+      const sig = sigOf(rentalEvidenceLink(id, mediaId)!);
+
+      await expect(service.resolveEvidenceLink(id, mediaId, sig)).resolves.toBe('https://res.cloudinary.com/signed');
+      expect(media.createDeliveryUrl).toHaveBeenCalledWith(expect.objectContaining({ variant: 'EVIDENCE_PREVIEW' }));
+
+      const notFound = expect.objectContaining({ code: 'RENTAL_DOCUMENT_NOT_FOUND' });
+      await expect(service.resolveEvidenceLink(id, mediaId, 'forged')).rejects.toThrow(notFound);
+      // Chữ ký hợp lệ nhưng ảnh không thuộc snapshot của chứng từ.
+      await expect(service.resolveEvidenceLink(id, otherMedia, sigOf(rentalEvidenceLink(id, otherMedia)!))).rejects.toThrow(notFound);
+      prisma.mediaAsset.findUnique.mockResolvedValueOnce({ ...asset, status: 'DELETED' });
+      await expect(service.resolveEvidenceLink(id, mediaId, sig)).rejects.toThrow(notFound);
+      expect(media.createDeliveryUrl).toHaveBeenCalledTimes(1);
+    });
+
+    (existsSync(localFont) ? it : it.skip)('adds clickable link annotations for evidence ids', async () => {
+      const previous = process.env.RENTAL_PDF_FONT_PATH;
+      process.env.RENTAL_PDF_FONT_PATH = localFont;
+      try {
+        const bytes = await new RentalPdfRenderer().render({ ...doc(), templateVersion: '1.4.0',
+          snapshotJson: linkedSnapshot, snapshotHash: snapshotHash(linkedSnapshot) } as any);
+        const pdf = bytes.toString('latin1');
+        expect(pdf).toContain('/Subtype /Link');
+        expect(pdf).toContain(`/URI (https://api.trekgo.test/api/v1/rental-documents/${id}/evidence/${mediaId}?sig=`);
+        expect(pdf).not.toContain('cloudinary');
+        expect(pdfPageText(bytes)[0]).toContain('#4F6A8B00');
+      } finally {
+        if (previous === undefined) delete process.env.RENTAL_PDF_FONT_PATH;
+        else process.env.RENTAL_PDF_FONT_PATH = previous;
+      }
+    });
+  });
 
   (existsSync(localFont) ? it : it.skip).each([1, 10, 45])(
     'keeps a received asset and its observations together on one PDF page (%i units)', async count => {

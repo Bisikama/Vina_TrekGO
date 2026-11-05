@@ -118,7 +118,7 @@ export class PaymentOperationsController {
   @Post('payment-refunds/:refundId/sandbox-simulate-settlement')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Xác nhận hoàn tiền booking hoặc hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+    summary: 'Mô phỏng hoàn tiền hủy booking, hủy đơn thuê hoặc hoàn cọc VNPay Sandbox (TEST ONLY)',
     description:
       'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING hoặc không có API refund. ' +
       'API ghi nhận một kết quả provider SUCCEEDED giả lập qua Shared Payment; Rental chỉ cập nhật settlement bằng outbox worker. ' +

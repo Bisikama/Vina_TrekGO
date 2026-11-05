@@ -24,6 +24,8 @@ import type {
   DeleteAssetInput
 } from '../../application/ports/media-storage.port';
 
+const ORIGINAL_STREAM_TIMEOUT_MS = 15_000;
+
 interface CloudinaryError {
   http_code?: number;
   message?: string;
@@ -315,8 +317,11 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
           sign_url: input.deliveryType === 'authenticated',
         });
 
-        https.get(url, (response) => {
+        // agent: false → mỗi lần tải mở kết nối mới. Agent mặc định (keepAlive từ Node 19) có thể dùng lại
+        // socket CDN đã đóng phía bên kia → "read ECONNRESET". Timeout tính theo socket rảnh, cả lúc đang đọc.
+        const request = https.get(url, { agent: false, timeout: ORIGINAL_STREAM_TIMEOUT_MS }, (response) => {
           if (response.statusCode && response.statusCode >= 400) {
+            response.resume();
             reject(
               new AppError({
                 code: MEDIA_ERROR_CODES.MEDIA_PROVIDER_ERROR,
@@ -326,7 +331,9 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
             return;
           }
           resolve({ stream: response });
-        }).on('error', (err) => {
+        });
+        request.on('timeout', () => request.destroy(Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' })));
+        request.on('error', (err) => {
           this.logger.error('Error fetching stream', { publicId: input.providerPublicId, operation: 'stream', code: 'network_error' });
           reject(
             new AppError({

@@ -46,6 +46,57 @@ describe('PrismaRentalOrderAdapter rental payment and ownership', () => {
       depositPerUnit: 750000, replacementValue: 2500000, depositAmount: 1500000,
       depositExplanation: { percentageOfReplacementValue: 30, formula: 'depositPerUnit / replacementValue * 100' },
     })])
+    const order = await findUnique.mock.results[0].value
+    order.refundsViaRentalOrderId = [{ id: 'refund-1', amount: new Prisma.Decimal(100), currency: 'VND', status: 'SUCCEEDED', providerPayload: { sandboxSimulation: { origin: 'ADMIN_SANDBOX_SIMULATION' } } }]
+    const simulated = await adapter.getOrder({ orderId: 'order-1', actorUserId: 'user-1', actorRole: 'USER' })
+    expect(simulated.cancellationRefunds).toEqual([{ refundId: 'refund-1', amount: 100, currency: 'VND', status: 'SUCCEEDED', settlementMode: 'SANDBOX_SIMULATED' }])
+  })
+
+  it('returns actual unit timestamps and order milestones, including a partial return', async () => {
+    const date = (hour: number) => new Date(`2026-10-18T${String(hour).padStart(2, '0')}:00:00.000Z`)
+    const unit = (id: string, packedAt: Date | null, handedOverAt: Date | null, returnedAt: Date | null, status = 'RETURNED') => ({
+      id, status, packedAt, handedOverAt, returnedAt, closedAt: null,
+      equipmentUnit: { id, assetCode: id, status: 'AVAILABLE', condition: 'GOOD' },
+    })
+    const assignments = [unit('1', date(2), date(4), date(6)), unit('2', date(3), date(5), null, 'HANDED_OVER'),
+      unit('old', date(1), null, null, 'REPLACED')]
+    findUnique.mockResolvedValue({
+      id: 'order-1', userId: 'user-1', status: 'RETURN_PROCESSING', financialStatus: 'PAID',
+      rentalFee: new Prisma.Decimal(100), totalDeposit: new Prisma.Decimal(200), totalAmount: new Prisma.Decimal(300),
+      currency: 'VND', paymentExpiresAt: date(1), rentalStartAt: date(1), rentalEndAt: date(8),
+      occupiedEndAt: date(8), createdAt: date(0), paidAt: date(1), policySnapshot: {}, invoicesViaRentalOrderId: [],
+      rentalOrderLinesViaOrderId: [{
+        id: 'line-1', productId: 'p1', quantity: 2, chargedDays: 1, product: { name: 'Tent' },
+        dailyPriceSnapshot: new Prisma.Decimal(50), depositPerUnitSnapshot: new Prisma.Decimal(100),
+        replacementValueSnapshot: new Prisma.Decimal(200), lineRentalFee: new Prisma.Decimal(100),
+        lineDeposit: new Prisma.Decimal(200), rentalUnitAssignmentsViaOrderLineId: assignments,
+        rentalQuantityReservationsViaOrderLineId: [],
+      }],
+    })
+    const query = { orderId: 'order-1', actorUserId: 'user-1', actorRole: 'USER' }
+    const result = await adapter.getOrder(query)
+    expect(result.assignedUnits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ assignmentId: '1', packedAt: date(2).toISOString(), handedOverAt: date(4).toISOString(), returnedAt: date(6).toISOString(), closedAt: null }),
+      expect.objectContaining({ assignmentId: '2', returnedAt: null }),
+    ]))
+    expect(result.timeline).toEqual([
+      { type: 'ORDER_CREATED', at: date(0).toISOString() }, { type: 'PAID', at: date(1).toISOString() },
+      { type: 'PACKED', at: date(3).toISOString() }, { type: 'HANDED_OVER', at: date(5).toISOString() },
+      { type: 'RETURNED', at: date(6).toISOString() },
+    ])
+
+    assignments[1].packedAt = null
+    const partial = await adapter.getOrder(query)
+    expect(partial.timeline).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'PACKED' })]))
+
+    assignments[0].closedAt = date(7)
+    assignments[1].closedAt = date(8)
+    assignments[1].returnedAt = date(7)
+    const closed = await adapter.getOrder(query)
+    expect(closed.timeline).toEqual(expect.arrayContaining([
+      { type: 'RETURNED', at: date(6).toISOString() },
+      { type: 'CLOSED', at: date(8).toISOString() },
+    ]))
   })
 
   it('returns the authoritative payment, application, reconciliation, and order states', async () => {

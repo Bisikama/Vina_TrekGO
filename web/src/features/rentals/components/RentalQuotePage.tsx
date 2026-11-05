@@ -719,7 +719,7 @@ export function RentalQuotePage({
                   {
                     id: "momo",
                     title: "MoMo",
-                    detail: "Ví MoMo sandbox",
+                    detail: "Ví điện tử MoMo",
                     icon: "M",
                   },
                 ] as const

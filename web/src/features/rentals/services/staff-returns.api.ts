@@ -317,6 +317,24 @@ export type RentalExceptionDetail = {
   reviews: { id: string; reason: string; evidenceIds: string[]; createdAt: string }[];
 };
 
+export type AdminRentalRefundInfo = {
+  refundId: string;
+  purpose: string;
+  paymentGateway: string;
+  providerEnvironment: string | null;
+  executionMode: string;
+  confirmationSource: string | null;
+  status: string;
+  canSimulateSandbox: boolean;
+};
+
+export async function getAdminRentalRefundInfo(refundId: string) {
+  const response = await apiClient.get<Envelope<AdminRentalRefundInfo>>(
+    `/api/v1/admin/refunds/${encodeURIComponent(refundId)}`,
+  );
+  return unwrap(response.data);
+}
+
 export async function listRentalExceptions() {
   const response = await apiClient.get<Envelope<Paginated<RentalExceptionSummary>>>(
     "/api/v1/staff/rental-exceptions",

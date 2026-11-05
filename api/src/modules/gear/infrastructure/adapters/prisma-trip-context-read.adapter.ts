@@ -1,14 +1,21 @@
+import { createHash } from 'crypto'
 import { Injectable } from '@nestjs/common'
+import type { Trip } from '@prisma/client'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { AppError } from '../../../../shared/errors/app-error'
 import { GEAR_ERROR_CODES } from '../../../../shared/errors/codes/gear.error-codes'
 import { TripContextFactData, TripContextReadPort } from '../../application/ports/trip-context-read.port'
+import {
+  PUBLIC_PARTICIPATION_BOOKING_STATUSES,
+  PUBLIC_PARTICIPATION_TRIP_STATUSES,
+} from '../../../bookings/public-participation.policy'
 
 /** Tên gọi khác → khoá trong bảng khí hậu ước tính (`CLIMATE_ESTIMATE_REGISTRY`). */
 const CLIMATE_DESTINATION_ALIASES: Array<{ key: string; aliases: string[] }> = [
   { key: 'fansipan', aliases: ['fansipan', 'phan xi păng', 'phan xi pang', 'phanxipang'] },
   { key: 'ta nang', aliases: ['ta nang', 'tà năng'] },
   { key: 'bidoup', aliases: ['bidoup'] },
+  { key: 'nui dinh', aliases: ['nui dinh', 'núi dinh'] },
 ]
 
 /**
@@ -43,7 +50,14 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
   private extractFacts(
     trip: any,
     plan: any,
-  ): { difficulty: number; terrain: string[]; days: number; destination?: string; contextVersion: string; sourceReferences: any } {
+  ): {
+    difficulty: number
+    terrain: string[]
+    days: number
+    destination?: string
+    contextVersion: string
+    sourceReferences: any
+  } {
     // 1. Calculate canonical days
     const diffMs = trip.endAt.getTime() - trip.startAt.getTime()
     const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
@@ -111,10 +125,11 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
     const dedupedTerrain = Array.from(new Set(terrainList))
     const tripUpdatedTime = trip.updatedAt ? new Date(trip.updatedAt).getTime() : 0
     const planUpdatedTime = plan?.updatedAt ? new Date(plan.updatedAt).getTime() : 0
-    const contextVersion = `ctx_${trip.id}_${tripUpdatedTime}_${plan?.id ?? 'none'}_${planUpdatedTime}`
+    const rawContextVersion = `ctx_${trip.id}_${tripUpdatedTime}_${plan?.id ?? 'none'}_${planUpdatedTime}`
+    const contextVersion = `ctx_${createHash('sha256').update(rawContextVersion).digest('hex').slice(0, 12)}`
 
     let destName = trip.destination?.name || trip.title || plan?.snapshotName || ''
-    if ((trip).destinationName) destName = (trip).destinationName
+    if (trip.destinationName) destName = trip.destinationName
     const destination = resolveClimateDestination(destName)
 
     const sourceReferences = {
@@ -180,7 +195,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       })
     }
 
-    // 3. Verify user membership in trip (creator, leader, or active member)
+    // 3. Verify user membership in trip (creator, leader, active private member, or public booking)
     const isCreatorOrLeader = trip.creatorId === userId || trip.leaderId === userId
     if (!isCreatorOrLeader) {
       const member = await this.prisma.tripMember.findFirst({
@@ -191,7 +206,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
         },
       })
 
-      if (!member) {
+      if (!member && !(await this.hasPublicBookingAccess(trip, userId))) {
         throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_FORBIDDEN, {
           message: 'Bạn không phải là thành viên hợp lệ của chuyến đi này',
         })
@@ -214,6 +229,38 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
     }
+  }
+
+  /**
+   * Chuyến PUBLIC không có `trip_members`: người tham gia nằm ở bookings / booking_participants.
+   * Cùng quy tắc với Navigation (`prisma-navigation-context.adapter.ts`):
+   * - người mua có booking đã xác nhận (CONFIRMED / PARTIAL_CHECKIN / CHECKED_IN);
+   * - hoặc người đã nhận vé (participant ACTIVE), khi Trip còn mở và tài khoản USER/LEADER đang ACTIVE.
+   */
+  private async hasPublicBookingAccess(
+    trip: Pick<Trip, 'id' | 'tripType' | 'status'>,
+    userId: string,
+  ): Promise<boolean> {
+    if (trip.tripType !== 'PUBLIC') return false
+
+    const buyerBooking = await this.prisma.booking.findFirst({
+      where: { tripId: trip.id, userId, status: { in: PUBLIC_PARTICIPATION_BOOKING_STATUSES } },
+      select: { id: true },
+    })
+    if (buyerBooking) return true
+
+    if (!PUBLIC_PARTICIPATION_TRIP_STATUSES.includes(trip.status)) return false
+    const actor = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } })
+    if (actor?.status !== 'ACTIVE' || !['USER', 'LEADER'].includes(actor.role)) return false
+    const participant = await this.prisma.bookingParticipant.findFirst({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        booking: { tripId: trip.id, status: { in: PUBLIC_PARTICIPATION_BOOKING_STATUSES } },
+      },
+      select: { id: true },
+    })
+    return !!participant
   }
 
   async getHistoricalTripContext(tripId: string, userId: string, planId: string): Promise<TripContextFactData> {

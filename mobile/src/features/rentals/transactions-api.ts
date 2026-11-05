@@ -12,6 +12,8 @@ export type RentalTransaction = {
   orderId?: string;
   reference?: string;
   purpose?: string;
+  confirmationSource?: string;
+  financialEffect?: string;
 };
 
 export type RentalTransactionPage = {
@@ -66,7 +68,9 @@ function normalizeTransaction(value: unknown, index: number): RentalTransaction 
       readString(value, "rentalOrderId", "orderId", "sourceId") ||
       readString(metadata, "rentalOrderId", "orderId", "sourceId"),
     reference: readString(value, "reference", "paymentRef", "refundRef", "transactionRef"),
-    purpose: readString(value, "purpose", "description", "label"),
+    purpose: readString(value, "refundPurpose", "purpose", "description", "label"),
+    confirmationSource: readString(value, "confirmationSource"),
+    financialEffect: readString(value, "financialEffect"),
   };
 }
 

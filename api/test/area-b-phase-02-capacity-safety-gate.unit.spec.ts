@@ -123,6 +123,60 @@ describe('Capacity Safety Gate P0 (RB-POL-31)', () => {
     });
   });
 
+  describe('No double counting of a reservation and its own assigned units', () => {
+    const fiveUnits = (notReady: string[] = []) =>
+      ['u1', 'u2', 'u3', 'u4', 'u5'].map((id) => ({ id, ready: !notReady.includes(id) }));
+
+    it('keeps the count unchanged when the order unit is picked/packed/rented (left the pool)', () => {
+      const before = calculateSafeCapacity({ from, until, units: fiveUnits(), reservations: [
+        { id: 'res-a', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [] },
+      ] });
+      const afterPick = calculateSafeCapacity({ from, until, units: fiveUnits(['u1']), reservations: [
+        { id: 'res-a', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u1', released: false }] },
+      ] });
+      expect(before.availableCount).toBe(4);
+      expect(afterPick.availableCount).toBe(4);
+      expect(afterPick.peakReserved).toBe(0);
+    });
+
+    it('still reserves a slot when the assigned unit is still AVAILABLE in the warehouse', () => {
+      const result = calculateSafeCapacity({ from, until, units: fiveUnits(), reservations: [
+        { id: 'res-a', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u1', released: false }] },
+      ] });
+      expect(result.availableCount).toBe(4);
+    });
+
+    it('frees the slot once the order has returned the unit back to the pool', () => {
+      const result = calculateSafeCapacity({ from, until, units: fiveUnits(), reservations: [
+        { id: 'res-done', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u1', released: true }] },
+      ] });
+      expect(result.availableCount).toBe(5);
+    });
+
+    it('only covers the assigned part of a multi-quantity reservation', () => {
+      const result = calculateSafeCapacity({ from, until, units: fiveUnits(['u1']), reservations: [
+        { id: 'res-a', quantity: 3, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u1', released: false }] },
+      ] });
+      // 4 sẵn ở kho, còn 2 món chưa gán phải giữ chỗ.
+      expect(result.availableCount).toBe(2);
+    });
+
+    it('keeps unrelated rented units conservative (UNKNOWN) when their order no longer overlaps', () => {
+      const result = calculateSafeCapacity({ from, until, units: fiveUnits(['u1']), reservations: [] });
+      expect(result.verifiedSupply).toBe(4);
+      expect(result.unknownUnitCount).toBe(1);
+      expect(result.availableCount).toBe(4);
+    });
+
+    it('matches the observed case: 5 units, one ACTIVE order (rented) and one COMPLETED order (returned)', () => {
+      const result = calculateSafeCapacity({ from, until, units: fiveUnits(['u1']), reservations: [
+        { id: 'res-active', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u1', released: false }] },
+        { id: 'res-completed', quantity: 1, occupiedFrom: from, occupiedUntil: until, assignedUnits: [{ unitId: 'u2', released: true }] },
+      ] });
+      expect(result.availableCount).toBe(4);
+    });
+  });
+
   describe('Occupied Window Bounds', () => {
     it('should throw error if from >= until', () => {
       expect(() => {
