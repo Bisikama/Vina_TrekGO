@@ -257,7 +257,7 @@ export function LeaderTripEditScreen() {
       setCancelReason("");
       Alert.alert(
         "Yêu cầu đã gửi",
-        "Yêu cầu hủy chuyến đã được ghi nhận (CANCEL_PENDING). Ban quản trị sẽ đối soát và xử lý hoàn tiền theo quy định.",
+        "Đã gửi yêu cầu hủy chuyến. Vui lòng chờ Admin xem xét. Bạn có thể theo dõi kết quả trong danh sách yêu cầu hủy.",
         [
           {
             text: "Về danh sách",
@@ -557,7 +557,7 @@ export function LeaderTripEditScreen() {
               <Text style={styles.modalTitle}>Yêu cầu hủy chuyến đi</Text>
             </View>
             <Text style={styles.modalDesc}>
-              Thao tác này sẽ chuyển chuyến đi sang trạng thái Chờ hủy (CANCEL_PENDING). Hệ thống sẽ thông báo cho các Trekker đã đăng ký và kích hoạt quy trình hoàn tiền.
+              Yêu cầu sẽ được gửi cho Admin xem xét. Chuyến tạm ngừng nhận đăng ký mới; việc hủy đặt chỗ và xử lý hoàn tiền chỉ bắt đầu sau khi được duyệt.
             </Text>
 
             <Text style={styles.modalSectionLabel}>Lý do hủy chuyến (Bắt buộc) *</Text>

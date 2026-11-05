@@ -2,6 +2,10 @@
 
 import React, { useState } from "react";
 import { TripData } from "@/features/trips/data/mockTripsData";
+import { Button, SurfaceCard } from "@/components/ui";
+import type { PaymentGateway } from "../../types/booking.types";
+import { useBookingPaymentOptions } from "../../hooks/useBookingPaymentOptions";
+import { BookingPaymentMethods, paymentGatewayLabels } from "../BookingPaymentMethods";
 
 export interface MemberData {
   id?: string;
@@ -19,7 +23,7 @@ interface BookingPaymentStepProps {
   members: MemberData[];
   equipmentCost: number;
   onBack: () => void;
-  onConfirmPayment: (paymentData: { method: string }) => void;
+  onConfirmPayment: (paymentData: { method: PaymentGateway }) => void;
   bookingCode?: string;
   remainingSeconds?: number;
   isHoldExpired?: boolean;
@@ -40,7 +44,9 @@ export const BookingPaymentStep = ({
   isProcessingPayment = false,
   errorMessage,
 }: BookingPaymentStepProps) => {
-  const [paymentMethod, setPaymentMethod] = useState<string>("vnpay");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentGateway>("vnpay");
+  const { options, loading, error, retry } = useBookingPaymentOptions();
+  const selectedGateway = options.find((option) => option.gateway === paymentMethod)?.gateway ?? options[0]?.gateway;
 
   const isProcessing = isProcessingPayment;
 
@@ -58,8 +64,9 @@ export const BookingPaymentStep = ({
     : "Lịch trình mở";
 
   const handleSubmit = () => {
+    if (!selectedGateway || isProcessing || isHoldExpired) return;
     onConfirmPayment({
-      method: paymentMethod,
+      method: selectedGateway,
     });
   };
 
@@ -129,7 +136,7 @@ export const BookingPaymentStep = ({
               </p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onBack}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 hover:text-emerald-700 cursor-pointer"
@@ -148,7 +155,7 @@ export const BookingPaymentStep = ({
               />
             </svg>
             Sửa thông tin
-          </button>
+          </Button>
         </div>
 
         {/* Chuyến đi tổng quan */}
@@ -232,112 +239,16 @@ export const BookingPaymentStep = ({
         </div>
       </div>
 
-      {/* 2. CHỌN PHƯƠNG THỨC THANH TOÁN */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="mb-4">
-          <h3 className="font-bold text-gray-900">Chọn phương thức thanh toán</h3>
-          <p className="text-xs text-gray-500">
-            Mọi giao dịch đều được mã hóa bảo mật SSL 256-bit và bảo hiểm ký quỹ VFRS
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {/* Cổng VNPAY */}
-          <div className="space-y-2">
-            <label
-              onClick={() => setPaymentMethod("vnpay")}
-              className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition ${
-                paymentMethod === "vnpay"
-                  ? "border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20 shadow-xs"
-                  : "border-gray-200 bg-white hover:border-gray-300"
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <input
-                  type="radio"
-                  name="payment_method"
-                  value="vnpay"
-                  checked={paymentMethod === "vnpay"}
-                  onChange={() => setPaymentMethod("vnpay")}
-                  className="h-4 w-4 accent-[#125238] cursor-pointer"
-                />
-                <div className="flex h-10 w-12 items-center justify-center rounded-lg bg-[#005BAA] font-black text-white text-[11px] tracking-tight shadow-xs">
-                  VNPAY
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-900">Cổng thanh toán VNPAY (QR / ATM / Visa)</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      Khuyên dùng
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Hỗ trợ quét mã VNPAY-QR 40+ ứng dụng ngân hàng, thẻ ATM Napas, thẻ Visa/Mastercard
-                  </p>
-                </div>
-              </div>
-              <div className="hidden text-right text-xs font-semibold text-emerald-700 sm:block">
-                Miễn phí giao dịch
-              </div>
-            </label>
-
-            {/* Chi tiết VNPAY khi được chọn */}
-            {paymentMethod === "vnpay" && (
-              <div className="ml-7 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs text-blue-950 space-y-2 animate-fadeIn">
-                <div className="flex items-center gap-2 font-bold text-[#005BAA] text-sm">
-                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                  <span>Thanh toán bảo mật qua Cổng VNPAY Sandbox</span>
-                </div>
-                <p className="text-gray-700 leading-relaxed">
-                  Hệ thống sẽ chuyển hướng bạn sang cổng VNPAY an toàn. Bạn có thể mở App ngân hàng (VCB, BIDV, VietinBank, MB, TPBank,...) để quét mã QR hoặc thanh toán bằng thẻ nội địa / quốc tế.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Cổng MoMo (Đã vô hiệu hóa) */}
-          <div className="space-y-2">
-            <label
-              className="flex cursor-not-allowed items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4 opacity-50 transition"
-            >
-              <div className="flex items-center gap-3.5">
-                <input
-                  type="radio"
-                  name="payment_method"
-                  value="momo"
-                  checked={false}
-                  disabled
-                  className="h-4 w-4 cursor-not-allowed"
-                />
-                <div className="flex h-10 w-12 items-center justify-center rounded-lg bg-[#A50064] font-black text-white text-xs shadow-xs">
-                  MoMo
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-900">Ví điện tử MoMo (MoMo App / Quét QR)</span>
-                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-600">
-                      Tạm ngưng
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Quét mã trực tiếp bằng ứng dụng Ví MoMo hoặc liên kết thẻ ngân hàng
-                  </p>
-                </div>
-              </div>
-              <div className="hidden text-right text-xs font-semibold text-gray-400 sm:block">
-                Chưa khả dụng
-              </div>
-            </label>
-          </div>
-        </div>
-      </div>
+      <SurfaceCard>
+        <BookingPaymentMethods options={options} value={selectedGateway} onChange={setPaymentMethod}
+          disabled={isProcessing || isHoldExpired} loading={loading} error={error} onRetry={retry} />
+      </SurfaceCard>
 
       {/* 3. NÚT ĐIỀU HƯỚNG */}
       <div className="mt-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={onBack}
           className="flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-200 cursor-pointer"
         >
@@ -355,11 +266,11 @@ export const BookingPaymentStep = ({
             />
           </svg>
           Quay lại sửa thông tin
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
-          disabled={isProcessing || isHoldExpired}
+          disabled={isProcessing || isHoldExpired || loading || !selectedGateway}
           onClick={handleSubmit}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-8 py-3.5 font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#2f6b4f] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
@@ -388,7 +299,7 @@ export const BookingPaymentStep = ({
             </>
           ) : (
             <>
-              Xác nhận & Thanh toán ({grandTotal.toLocaleString("vi-VN")}₫) qua {paymentMethod === "vnpay" ? "VNPAY" : "MoMo"}
+              Xác nhận & Thanh toán ({grandTotal.toLocaleString("vi-VN")}₫) qua {selectedGateway ? paymentGatewayLabels[selectedGateway] : "cổng thanh toán"}
               <svg
                 className="h-4 w-4"
                 fill="none"
@@ -404,7 +315,7 @@ export const BookingPaymentStep = ({
               </svg>
             </>
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

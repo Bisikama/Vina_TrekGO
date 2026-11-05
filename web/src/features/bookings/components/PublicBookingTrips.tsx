@@ -12,6 +12,9 @@ import {
 import { formatBookingDateTime, formatMoneyVND } from '../services/booking.api';
 import type { Participant, PublicTrip } from '../types/booking.types';
 import { BookingSignIn } from './BookingSignIn';
+import { UnavailableBookingTrip } from './UnavailableBookingTrip';
+import { isTripRegistrationPaused, TripCancellationNotice } from './TripCancellationNotice';
+import { MyTripCancellationAlerts, useMyTripCancellationAlerts } from './MyTripCancellationAlerts';
 import {
   PageShell,
   PageHeader,
@@ -42,6 +45,9 @@ export function PublicBookingTrips() {
     setFilters,
     refetch,
   } = usePublicBookingTrips();
+  const cancellationAlerts = useMyTripCancellationAlerts();
+  const pausedTripIds = new Set(cancellationAlerts.enabled ? cancellationAlerts.data?.map((item) => item.trip.id) : []);
+  const availableTrips = trips.filter((trip) => !pausedTripIds.has(trip.id));
 
   const handleFilterSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -112,13 +118,15 @@ export function PublicBookingTrips() {
           </form>
         </SurfaceCard>
 
+        <MyTripCancellationAlerts state={cancellationAlerts} />
+
         {error && <ErrorAlert message={error} onRetry={refetch} />}
 
         {isLoading && !error && (
           <LoadingState label="Đang tải danh sách chuyến đi công khai…" />
         )}
 
-        {!isLoading && trips.length === 0 && !error && (
+        {!isLoading && availableTrips.length === 0 && !error && (
           <EmptyState
             title="Chưa có chuyến đi phù hợp"
             description="Hãy thay đổi bộ lọc tìm kiếm hoặc quay lại kiểm tra sau."
@@ -126,7 +134,7 @@ export function PublicBookingTrips() {
         )}
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {trips.map((trip: PublicTrip) => {
+          {availableTrips.map((trip: PublicTrip) => {
             const nowMs = Date.now();
             const openAtMs = trip.registrationOpenAt
               ? new Date(trip.registrationOpenAt).getTime()
@@ -326,6 +334,7 @@ export function PublicBookingTrip({
   const { createBooking, isSubmitting, error: mutationError } = useBookingMutations();
 
   const handleCreate = async (people: Participant[]) => {
+    if (!canCreateNewBooking) return;
     try {
       const result = await createBooking(tripId, people);
       router.push(`/bookings/${result.id}`);
@@ -349,6 +358,7 @@ export function PublicBookingTrip({
   const isPastDeadline =
     deadlineMs !== null && Number.isFinite(deadlineMs) && nowMs >= deadlineMs;
   const canCreateNewBooking =
+    !fetchError &&
     trip?.status === 'OPEN' &&
     !isNotOpenYet &&
     !isPastDeadline &&
@@ -364,14 +374,15 @@ export function PublicBookingTrip({
           ← Quay lại danh sách chuyến đi
         </Link>
 
-        {error && <ErrorAlert message={error} onRetry={refetch} />}
+        {fetchError ? <UnavailableBookingTrip key={tripId} tripId={tripId} onReload={() => { void refetch(); }} /> : error && <ErrorAlert message={error} onRetry={refetch} />}
 
         {isLoading && !error && (
           <LoadingState label="Đang tải thông tin chuyến đi…" />
         )}
 
-        {trip && (
+        {trip && !fetchError && (
           <>
+            <TripCancellationNotice status={trip.status} />
             <TripSummaryBanner
               title={trip.title}
               status={isNotOpenYet ? 'NOT_OPEN_YET' : trip.status}
@@ -499,7 +510,11 @@ export function PublicBookingTrip({
                     <InfoBanner
                       variant="warning"
                       title={
-                        isNotOpenYet
+                        trip.status === 'CANCEL_PENDING'
+                          ? 'Chuyến đang chờ duyệt hủy.'
+                          : trip.status === 'CANCELLED'
+                            ? 'Chuyến đi đã bị hủy.'
+                          : isNotOpenYet
                           ? 'Chuyến đi chưa đến giờ mở form đăng ký.'
                           : trip.status === 'CLOSED' || isPastDeadline
                             ? 'Chuyến đi đã đóng sổ đăng ký tạo đơn mới.'
@@ -508,8 +523,7 @@ export function PublicBookingTrip({
                               : 'Chuyến đi hiện không còn nhận đặt chỗ mới.'
                       }
                     >
-                      Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn
-                      vẫn có thể hoàn tất thanh toán trong thời hạn giữ chỗ tại mục{' '}
+                      {isTripRegistrationPaused(trip.status) ? 'Chuyến hiện không nhận đăng ký. Kiểm tra các booking đã có tại mục ' : 'Lưu ý: Nếu bạn đã tạo đơn giữ chỗ trước thời điểm đóng form, bạn vẫn có thể hoàn tất thanh toán trong thời hạn giữ chỗ tại mục '}
                       <Link href="/bookings" className="font-bold underline">
                         Đặt chỗ của tôi
                       </Link>

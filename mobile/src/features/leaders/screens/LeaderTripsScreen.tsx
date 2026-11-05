@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { BookingFlowButton } from '@/features/bookings/components/BookingFlowUI';
 
 type FilterTabKey = "all" | "draft" | "open" | "in_progress" | "completed" | "cancelled";
 
@@ -271,6 +272,7 @@ export function LeaderTripsScreen({
         </TouchableOpacity>
       </View>
 
+      <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}><BookingFlowButton label="Theo dõi yêu cầu hủy chuyến" onPress={() => router.push('/field-operations/trip-cancellations' as any)} /></View>
       {/* 2. Thanh Tabs lọc theo trạng thái (kèm số lượng đếm trên từng tab) */}
       <View style={styles.tabsWrapper}>
         <ScrollView

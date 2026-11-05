@@ -26,6 +26,7 @@ import type {
 } from "@/features/bookings/types";
 import { getCurrentUserApi } from "@/features/auth/services/auth.api";
 import { useAuthStore } from "@/features/auth/store/authStore";
+import { rememberPayosBookingCheckout } from '../../payos-checkout';
 
 const createEmptyMember = (): MemberData => ({
   name: "",
@@ -348,7 +349,7 @@ export const BookingLayout = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleConfirmPayment = async (paymentData: { method: string }) => {
+  const handleConfirmPayment = async (paymentData: { method: PaymentGateway }) => {
     setLocalError(null);
     clearError();
     setPaymentMethod(paymentData.method);
@@ -358,13 +359,13 @@ export const BookingLayout = () => {
       return;
     }
 
-    const gateway: PaymentGateway = paymentData.method === "momo" ? "momo" : "vnpay";
-    const apiMethod: PaymentMethod =
-      paymentData.method === "vietqr" ? "QR" : "REDIRECT";
+    const gateway = paymentData.method;
+    const apiMethod: PaymentMethod = "REDIRECT";
 
     try {
       const paymentResult = await createPayment(activeBooking.id, apiMethod, gateway);
       if (paymentResult.checkout?.url) {
+        if (gateway === 'payos') rememberPayosBookingCheckout(activeBooking.id, paymentResult.checkout.url);
         setCheckoutUrl(paymentResult.checkout.url);
         setIsRedirecting(true);
         // Tự động chuyển hướng ngay sang cổng thanh toán (VNPAY / MoMo)

@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { TripData } from "@/features/trips/data/mockTripsData";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
 import { bookingApiService } from "@/features/bookings/services/booking.api";
 import { getTripCostPlan } from "@/features/leaders/services/leader-pricing.api";
 import { useAuthStore } from "@/features/auth/store/authStore";
-import { LoadingState, EmptyState, Button } from "@/components/ui";
+import { LoadingState, PageHeader, PageShell } from "@/components/ui";
+import { UnavailableBookingTrip } from "@/features/bookings/components/UnavailableBookingTrip";
+import { useRefreshOnReturn } from "@/features/bookings/hooks/useRefreshOnReturn";
 import { apiClient } from "@/lib/axios";
 
 export default function TripDetailPage() {
@@ -17,6 +18,9 @@ export default function TripDetailPage() {
   const [trailCode, setTrailCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const refreshOnReturn = useCallback(() => setAttempt((value) => value + 1), []);
+  useRefreshOnReturn(refreshOnReturn);
 
   useEffect(() => {
     if (!id) return;
@@ -197,6 +201,7 @@ export default function TripDetailPage() {
           CLOSED: { label: "Đã đóng form đăng ký", color: "text-stone-600" },
           IN_PROGRESS: { label: "Đang khởi hành", color: "text-sky-600" },
           COMPLETED: { label: "Đã hoàn thành", color: "text-slate-600" },
+          CANCEL_PENDING: { label: "Chờ duyệt hủy", color: "text-amber-700" },
           CANCELLED: { label: "Đã hủy chuyến", color: "text-red-600" },
         };
 
@@ -278,7 +283,7 @@ export default function TripDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   if (isLoading) {
     return (
@@ -290,17 +295,7 @@ export default function TripDetailPage() {
 
   if (error || !trip) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center p-6 bg-[#F7F7F4]">
-        <EmptyState
-          title="Không tìm thấy chuyến đi"
-          description="Chuyến đi không tồn tại, đã hoàn thành hoặc chưa được công khai."
-          action={
-            <Link href="/trips">
-              <Button variant="primary">Khám phá các chuyến đi khác</Button>
-            </Link>
-          }
-        />
-      </div>
+      <PageShell maxWidth="md"><PageHeader title="Thông tin chuyến đi" /><UnavailableBookingTrip key={id} tripId={id} onReload={refreshOnReturn} /></PageShell>
     );
   }
 
