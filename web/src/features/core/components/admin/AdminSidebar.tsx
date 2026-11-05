@@ -69,9 +69,17 @@ export const AdminSidebar = () => {
           <svg className={getIconClass("/admin/inventory")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
           Quản lý Kho vật tư
         </Link>
+        <Link href="/admin/rental-tasks" className={getLinkClass("/admin/rental-tasks")}>
+          <svg className={getIconClass("/admin/rental-tasks")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+          Phân công việc
+        </Link>
         <Link href="/admin/rentals" className={getLinkClass("/admin/rentals")}>
           <svg className={getIconClass("/admin/rentals")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
           Thiết bị cho thuê
+        </Link>
+        <Link href="/admin/product-profiles" className={getLinkClass("/admin/product-profiles")}>
+          <svg className={getIconClass("/admin/product-profiles")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M14 4v4M8 10v4M16 16v4" /></svg>
+          Thông số sản phẩm
         </Link>
         <Link href="/admin/gear-catalog" className={getLinkClass("/admin/gear-catalog")}>
           <svg className={getIconClass("/admin/gear-catalog")} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
