@@ -2,6 +2,7 @@ import { CANONICAL_SAMPLE_GEAR_ITEMS, seedGearDemo } from '../prisma/seed-gear-d
 import { CATEGORY_ATTRIBUTE_SCHEMAS } from '../src/modules/gear/application/dtos/user-gear.dto'
 import { GEAR_RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
 import { PrismaTripContextReadAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-trip-context-read.adapter'
+import nuiDinh from '../prisma/seeds/data/destination-nui-dinh.seed.json'
 
 describe('gear demo seed', () => {
   function setup() {
@@ -45,6 +46,24 @@ describe('gear demo seed', () => {
     rules.push({ ...GEAR_RULE_METADATA_REGISTRY[0], isActive: false })
     await expect(seedGearDemo(client, 'user')).rejects.toThrow('không khớp')
     expect(client.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('dừng trước khi ghi khi phiên bản quy tắc không khớp', async () => {
+    const { client, rules } = setup()
+    rules.push({ ...GEAR_RULE_METADATA_REGISTRY[0], ruleVersion: 'old' })
+    await expect(seedGearDemo(client, 'user')).rejects.toThrow('không khớp')
+    expect(client.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('đọc địa hình từ snapshot cung Núi Dinh trong dữ liệu seed', () => {
+    const trail = nuiDinh.system_trails.find((item) => item.code === 'HBS_COKIEU_LABAN')!
+    const adapter = new PrismaTripContextReadAdapter({} as any) as any
+    const facts = adapter.extractFacts(
+      { id: 'trip', startAt: new Date('2026-01-01'), endAt: new Date('2026-01-02') },
+      { id: 'plan', snapshotDifficulty: trail.difficulty, snapshotGeojson: trail.route_geojson },
+    )
+    expect(facts.difficulty).toBe(3)
+    expect(facts.terrain).toEqual(['mountain', 'rocky'])
   })
 
   it('không ghi nếu tài khoản không hoạt động', async () => {

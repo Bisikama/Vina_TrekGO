@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { PrismaClient, DifficultyLevel, CheckpointType } from '@prisma/client'
 import * as fs from 'fs'
 import * as path from 'path'
+import { isDeepStrictEqual } from 'node:util'
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL
 const prisma = new PrismaClient({
   datasources: {
@@ -195,6 +196,7 @@ export async function seedNuiDinhData(prismaClient: PrismaClient = prisma) {
 
   // 5. System Trails
   for (const st of seedData.system_trails) {
+    const existing = await prismaClient.systemTrail.findUnique({ where: { code: st.code }, select: { routeGeojson: true } })
     const trail = await prismaClient.systemTrail.upsert({
       where: { code: st.code },
       update: {
@@ -205,6 +207,9 @@ export async function seedNuiDinhData(prismaClient: PrismaClient = prisma) {
         elevationGainM: st.elevation_gain_m,
         estimatedDurationMinutes: st.estimated_duration_minutes,
         routeGeojson: st.route_geojson,
+        ...(existing && !isDeepStrictEqual(existing.routeGeojson, st.route_geojson)
+          ? { version: { increment: 1 } }
+          : {}),
         price: st.price,
         status: st.status,
       },

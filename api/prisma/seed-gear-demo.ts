@@ -9,38 +9,9 @@ const prisma = new PrismaClient({
   datasources: { db: { url: dbUrl } },
 })
 
-/** Dữ liệu địa hình mẫu cho kịch bản demo; seed không tự áp dụng lên chuyến hiện có. */
-export const CANONICAL_GEAR_GEOJSON = {
-  type: 'FeatureCollection',
-  properties: {
-    name: 'Cung đường Trekking Núi Bà Đen - Cột Điện',
-    terrain: ['forest', 'mountain', 'rocky', 'muddy'],
-  },
-  terrain: ['forest', 'mountain', 'rocky', 'muddy'],
-  features: [
-    {
-      type: 'Feature',
-      properties: {
-        terrain: ['forest', 'mountain', 'rocky', 'muddy'],
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [106.1798, 11.3645, 42.0],
-          [106.1768, 11.369, 175.0],
-          [106.174, 11.373, 420.0],
-          [106.172, 11.377, 710.0],
-          [106.1712, 11.3789, 986.0],
-        ],
-      },
-    },
-  ],
-}
-
 /**
- * Danh mục đồ mẫu phong phú:
- * Bao gồm cả MÓN ĐẠT CHUẨN (SUITABLE) và MÓN KHÔNG PHÙ HỢP (NEEDS_ATTENTION / Cảnh báo)
- * để kiểm thử toàn diện giao diện và bộ quy tắc an toàn (Rule Engine).
+ * Món mẫu với thông số đa dạng; kết quả thực tế phụ thuộc dữ kiện chuyến và khí hậu.
+ * Giữ tên ổn định để chạy lại không tạo món trùng hoặc ghi đè món đã chỉnh sửa.
  */
 export const CANONICAL_SAMPLE_GEAR_ITEMS = [
   // ================= 1. ÁO KHOÁC (JACKET) =================
@@ -190,8 +161,9 @@ export async function seedGearDemo(client: PrismaClient, userId: string, tripId?
   const conflicts = existingRules.filter((rule) => {
     const expected = canonical.get(rule.id)
     if (!expected) return rule.isActive
-    return !rule.isActive || rule.category !== expected.category ||
-      rule.defaultVerdict !== expected.defaultVerdict || rule.templateVi !== expected.templateVi
+    return rule.isActive !== expected.isActive || rule.category !== expected.category ||
+      rule.defaultVerdict !== expected.defaultVerdict || rule.templateVi !== expected.templateVi ||
+      rule.ruleVersion !== expected.ruleVersion
   })
   if (conflicts.length) {
     throw new Error('Quy tắc Gear không khớp cấu hình chuẩn: ' + conflicts.map((rule) => rule.id).join(', ') + '. Kiểm tra cấu hình trước khi seed; script không ghi đè quy tắc.')

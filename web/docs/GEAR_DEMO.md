@@ -1,5 +1,15 @@
 # Seed demo Gear Advisor
 
+Để chuẩn bị chuyến booking demo, chạy trong `api`:
+
+```powershell
+npm run seed:booking-all -- --config=prisma/seeds/data/booking-demo.local.json
+```
+
+Lệnh nạp cung hệ thống `HBS_COKIEU_LABAN` từ `prisma/seeds/data/destination-nui-dinh.seed.json` trước khi tạo chuyến. GeoJSON của cung có `terrain: ["mountain", "rocky"]` làm dữ kiện cho kịch bản demo; đây là dữ liệu mẫu cần được người quản lý cung xác minh trước khi sử dụng thực tế. Các chuyến mới chọn cung sau khi nạp sẽ lưu GeoJSON và độ khó vào snapshot. Cung khác trong cấu hình cũng cần có địa hình riêng để dùng Gear Advisor. Chuyến đã tạo trước đó không tự cập nhật snapshot.
+
+**Lưu ý khi chạy lại:** `seed:booking-all` ghi đè các trường của cung Núi Dinh và thay thế checkpoint của cung theo dữ liệu seed; nó cũng thay thế các chuyến demo thuộc batch, bao gồm thay đổi đã thực hiện trên các chuyến đó. Kiểm tra dữ liệu và dừng API/background workers theo cấu hình trước khi chạy. Không dùng lệnh này trên database có dữ liệu cần giữ lại nếu chưa đánh giá tác động. Script tăng phiên bản cung khi GeoJSON thay đổi.
+
 Seed dành cho PostgreSQL của TrekGo đã áp dụng các migration tương ứng với phiên bản mã nguồn và đã chạy `prisma generate`. Không có seed nào bảo đảm chạy được trên mọi database hoặc schema cũ. Kiểm tra `DIRECT_URL` và `DATABASE_URL` trong cấu hình API: script ưu tiên `DIRECT_URL` khi có, nếu không dùng `DATABASE_URL`. Chỉ trỏ tới database được phép thêm dữ liệu demo.
 
 Trong thư mục `api`, chọn một tài khoản `ACTIVE` đã tồn tại và chạy:
