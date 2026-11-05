@@ -21,14 +21,20 @@ import type {
   LinkageStatus,
   Participant,
   PaymentGateway,
+  CancelBookingResponse,
 } from "@/features/bookings/types";
+import { BookingRefunds } from '../components/BookingRefunds';
+import { TripCancellationNotice } from '../components/TripCancellationNotice';
+import { bookingPaymentState } from '../refund.utils';
+import { getCancellationAttempt } from '../cancellation-session';
 import { buildShortCode } from "@/features/check-in/utils/checkInQr";
 import { paymentGatewayLabels } from '../payment-gateways';
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   KeyboardAvoidingView,
   Linking,
@@ -100,6 +106,15 @@ export interface BookingCheckoutScreenProps {
 }
 
 export function BookingCheckoutScreen({
+  ...props
+}: BookingCheckoutScreenProps) {
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const target = props.bookingId ?? (Array.isArray(params.id) ? params.id[0] : params.id) ?? '';
+  return <BookingCheckoutContent key={(user?.id ?? 'signed-out') + ':' + target} {...props} />;
+}
+
+function BookingCheckoutContent({
   bookingId: propId,
 }: BookingCheckoutScreenProps) {
   const router = useRouter();
@@ -130,6 +145,29 @@ export function BookingCheckoutScreen({
   const [qrModalData, setQrModalData] = useState<string | null>(null);
   const [paymentWebViewUrl, setPaymentWebViewUrl] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [cancellation, setCancellation] = useState<CancelBookingResponse | null>(() => getCancellationAttempt((user?.id ?? '') + ':' + bookingId)?.result ?? null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && (booking?.trip.status === 'CANCEL_PENDING' || booking?.status === 'CANCELLED' || booking?.paymentSummary?.applicationStatus === 'REJECTED')) void refetch();
+    });
+    return () => sub.remove();
+  }, [booking?.trip.status, booking?.status, booking?.paymentSummary?.applicationStatus, refetch]);
+
+  useEffect(() => {
+    if (booking?.trip.status !== 'CANCEL_PENDING' || !['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status)) return;
+    let active = true, reads = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = setTimeout(() => { active = false; clearTimeout(timer); }, 60_000);
+    async function check() {
+      if (!active) return;
+      await refetch();
+      if (active && ++reads < 30) timer = setTimeout(check, 2000);
+    }
+    timer = setTimeout(check, 2000);
+    return () => { active = false; clearTimeout(timer); clearTimeout(deadline); };
+  }, [booking?.trip.status, booking?.status, refetch]);
 
   // M6 Ticket Management State
   const [selectedParticipantForQr, setSelectedParticipantForQr] = useState<Participant | null>(null);
@@ -246,41 +284,35 @@ export function BookingCheckoutScreen({
   const handlePaymentWebViewComplete = useCallback(
     async (result: PaymentCompleteResult) => {
       setPaymentWebViewUrl(null);
-
-      if (result.success || result.requiresVerification) {
-        setIsWaitingPaymentConfirmation(true);
-
-        const isSuccessStatus = (s?: string) =>
-          ["CONFIRMED", "PARTIAL_CHECKIN", "CHECKED_IN", "COMPLETED"].includes(s || "");
-
-        // Retry refetch (mỗi 1s) để đảm bảo backend đã kịp ghi nhận webhook / return và đổi trạng thái sang CONFIRMED
-        let updated = await refetch();
-        if (!isSuccessStatus(updated?.status)) {
-          for (let attempt = 0; attempt < 10; attempt++) {
-            await new Promise((r) => setTimeout(r, 1000));
-            updated = await refetch();
-            if (isSuccessStatus(updated?.status)) break;
-          }
+      setIsWaitingPaymentConfirmation(true);
+      let updated = await refetch();
+      if (!mounted.current) return;
+      // Every return is verified by the booking API; provider URL flags do not confirm a booking.
+      if (bookingPaymentState(updated) === 'VERIFYING') {
+        for (let attempt = 0; attempt < 10; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (!mounted.current) return;
+          updated = await refetch();
+          if (!mounted.current) return;
+          if (bookingPaymentState(updated) !== 'VERIFYING') break;
         }
-        setIsWaitingPaymentConfirmation(false);
-        if (isSuccessStatus(updated?.status)) {
-          bookingApiService.clearBookingPaymentSession(bookingId);
-          setShowSuccessModal(true);
-        } else if (result.requiresVerification && ['FAILED', 'CANCELLED', 'EXPIRED'].includes(updated?.paymentSummary?.status ?? '')) {
-          bookingApiService.clearBookingPaymentSession(bookingId);
-          Alert.alert('Giao dịch chưa thành công', 'Máy chủ đã ghi nhận giao dịch bị hủy, hết hạn hoặc thất bại. Bạn có thể kiểm tra đặt chỗ và thử lại.');
-        } else {
-          Alert.alert(
-            "Đang xử lý đối soát",
-            "Giao dịch của bạn đã được tiếp nhận và đang chờ máy chủ cập nhật trạng thái.",
-          );
-        }
+      }
+      setIsWaitingPaymentConfirmation(false);
+      const state = bookingPaymentState(updated);
+      if (state === 'CONFIRMED') {
+        bookingApiService.clearBookingPaymentSession(bookingId);
+        setShowSuccessModal(true);
+      } else if (state === 'REJECTED') {
+        Alert.alert('Chưa xác nhận được đặt chỗ', 'Hệ thống đã ghi nhận khoản thanh toán. Xem phần Khoản hoàn của bạn để theo dõi kết quả.');
+      } else if (state === 'CANCELLED') {
+        Alert.alert('Đặt chỗ đã hủy', 'Xem thông tin hủy và khoản hoàn trong chi tiết đặt chỗ.');
+      } else if (state === 'FAILED') {
+        bookingApiService.clearBookingPaymentSession(bookingId);
+        Alert.alert('Giao dịch chưa thành công', 'Hệ thống đã ghi nhận giao dịch bị hủy, hết hạn hoặc chưa thành công.');
       } else {
-        setIsWaitingPaymentConfirmation(false);
-        // KHÔNG xóa session key ở đây để nếu user bấm "Thanh toán ngay" lại, app tái sử dụng cùng key/phiên thanh toán
         Alert.alert(
-          "Chưa hoàn tất thanh toán",
-          result.message || "Giao dịch chưa hoàn tất. Bạn có thể nhấn 'Thanh toán ngay' để tiếp tục.",
+          result.success ? 'Đang kiểm tra thanh toán' : 'Chưa có xác nhận thanh toán',
+          'Chưa có kết quả cuối cùng. Hãy kiểm tra lại đặt chỗ. Nếu đã thanh toán, đừng thanh toán thêm.',
         );
       }
     },
@@ -324,8 +356,10 @@ export function BookingCheckoutScreen({
   }
 
   const isTripCancelled = booking.trip?.status === "CANCELLED";
+  const isTripCancellationPending = booking.trip?.status === 'CANCEL_PENDING';
+  const paymentRejected = bookingPaymentState(booking) === 'REJECTED';
   const isCancelled = booking.status === "CANCELLED" || isTripCancelled;
-  const isPending = !isCancelled && booking.status === "PENDING_PAYMENT";
+  const isPending = !isCancelled && !isTripCancellationPending && !paymentRejected && booking.status === "PENDING_PAYMENT";
   const isConfirmed =
     !isCancelled &&
     (booking.status === "CONFIRMED" ||
@@ -342,7 +376,7 @@ export function BookingCheckoutScreen({
   const endDate = booking.trip?.endAt ? new Date(booking.trip.endAt) : null;
 
   async function handlePay() {
-    if (!booking || !effectiveGateway || optionsLoading || isSubmitting || isWaitingPaymentConfirmation) return;
+    if (!booking || !effectiveGateway || optionsLoading || isSubmitting || isWaitingPaymentConfirmation || isTripCancellationPending || isCancelled || paymentRejected) return;
 
     if (isHoldExpired) {
       Alert.alert(
@@ -399,7 +433,7 @@ export function BookingCheckoutScreen({
         const fresh = await refetch();
 
         // Nếu trạng thái đơn thực ra đã là CONFIRMED
-        if (fresh?.status === "CONFIRMED") {
+        if (bookingPaymentState(fresh) === 'CONFIRMED') {
           setShowSuccessModal(true);
           return;
         }
@@ -452,6 +486,8 @@ export function BookingCheckoutScreen({
         showsVerticalScrollIndicator={false}
       >
         {/* Status / Countdown Banner */}
+        {isTripCancellationPending && <TripCancellationNotice status={booking.trip.status} activeBooking={!isCancelled} onRefresh={() => void refetch()} />}
+        {paymentRejected && <View style={styles.cancelledBanner}><View style={styles.flex1}><Text style={styles.cancelledTitle}>Đã thanh toán, chưa xác nhận được đặt chỗ</Text><Text style={styles.cancelledSub}>Khoản thanh toán đã được ghi nhận. Xem phần khoản hoàn bên dưới để theo dõi kết quả.</Text></View></View>}
         {isPending && !isHoldExpired ? (
           <View style={styles.countdownBanner}>
             <View style={styles.countdownIcon}>
@@ -488,8 +524,8 @@ export function BookingCheckoutScreen({
               </Text>
               <Text style={styles.cancelledSub}>
                 {isTripCancelled
-                  ? "Chuyến đi này đã được hủy bởi Ban tổ chức / Trưởng đoàn. Toàn bộ tiền vé và chi phí dịch vụ liên quan sẽ được tự động hoàn trả 100% về tài khoản của bạn."
-                  : "Đặt chỗ của bạn đã được hủy thành công. Hệ thống đang tiến hành thủ tục hoàn tiền theo chính sách."}
+                  ? "Chuyến đi đã hủy. Khoản hoàn của từng đặt chỗ được ghi nhận riêng; xem số tiền và trạng thái bên dưới."
+                  : "Đặt chỗ đã hủy. Xem thông tin khoản hoàn theo chính sách bên dưới."}
               </Text>
             </View>
           </View>
@@ -880,34 +916,7 @@ export function BookingCheckoutScreen({
           </View>
         </View>
 
-        {/* Refund Details (if any) */}
-        {booking.refunds && booking.refunds.length > 0 ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Thông tin hoàn tiền</Text>
-            {booking.refunds.map((ref, idx) => (
-              <View key={ref.refundId || idx} style={styles.refundBox}>
-                <View style={styles.refundRow}>
-                  <Text style={styles.refundLabel}>Số tiền hoàn:</Text>
-                  <Text style={styles.refundVal}>
-                    {Number(ref.amount || 0).toLocaleString("vi-VN")} đ
-                  </Text>
-                </View>
-                <View style={styles.refundRow}>
-                  <Text style={styles.refundLabel}>Trạng thái:</Text>
-                  <Text style={styles.refundStatus}>{ref.status}</Text>
-                </View>
-                {ref.refundedAt ? (
-                  <View style={styles.refundRow}>
-                    <Text style={styles.refundLabel}>Thời gian hoàn:</Text>
-                    <Text style={styles.refundTime}>
-                      {new Date(ref.refundedAt).toLocaleString("vi-VN")}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        ) : null}
+        <BookingRefunds bookingId={bookingId} booking={booking} cancellation={cancellation} />
 
         {/* Cancellation Option */}
         {booking.canCancel && !isTripCancelled && !isCancelled ? (
@@ -978,8 +987,9 @@ export function BookingCheckoutScreen({
           visible={showCancelModal}
           bookingId={booking.id}
           totalAmount={booking.totalAmount}
-          onClose={() => setShowCancelModal(false)}
-          onSuccess={() => {
+          onClose={() => { setShowCancelModal(false); void refetch(); }}
+          onSuccess={(result) => {
+            setCancellation(result);
             void refetch();
           }}
         />
@@ -998,7 +1008,7 @@ export function BookingCheckoutScreen({
       ) : null}
 
       {/* Payment Success Celebration Modal */}
-      {showSuccessModal && booking ? (
+      {showSuccessModal && booking && bookingPaymentState(booking) === 'CONFIRMED' ? (
         <Modal
           visible={showSuccessModal}
           animationType="fade"

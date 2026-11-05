@@ -111,7 +111,7 @@ export interface Checkout {
 export interface PaymentSummary {
   paymentId: string;
   status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "EXPIRED" | string;
-  applicationStatus: "APPLIED" | "REJECTED" | null;
+  applicationStatus: "PENDING" | "APPLIED" | "REJECTED" | null;
   applicationReasonCode: string | null;
   reconciliationRequired: boolean;
   checkout: Checkout | null;
@@ -127,8 +127,12 @@ export interface RefundItem {
   amount: string;
   currency?: string;
   status: string;
-  refundedAt?: string;
+  refundedAt?: string | null;
   reconciliationRequired?: boolean;
+  executionMode: string;
+  confirmationSource: string | null;
+  settlementMode?: string | null;
+  warnings?: string[];
 }
 
 export interface BookingTransport {
@@ -236,7 +240,42 @@ export interface PaymentCheckoutResponse {
 export interface CancelBookingResponse {
   bookingId: string;
   cancellationId: string;
-  status: BookingStatus;
+  status: "CANCELLED";
   refundableAmount: string;
   currency: string;
+  refundProcessingStatus: "COMPLETED" | "PENDING" | "NOT_REQUIRED";
+  refund: RefundItem | null;
+}
+
+export interface CancellationPreview {
+  canCancel: boolean;
+  refundableAmount: string;
+  currency: string;
+  tripCancellationPending: boolean;
+  rentals: { orderId: string | null; status: string; ownedByViewer: boolean }[];
+}
+
+export interface BookingTransaction {
+  id: string;
+  kind: "PAYMENT" | "REFUND";
+  source: "BOOKING";
+  sourceId: string | null;
+  paymentId: string;
+  refundId: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  financialEffect: "DEBIT" | "CREDIT" | "NONE";
+  purpose?: string;
+  executionMode?: string | null;
+  confirmationSource?: string | null;
+  settlementMode?: string | null;
+  description: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BookingTransactionsResponse {
+  items: BookingTransaction[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }

@@ -1,7 +1,9 @@
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { BOOKING_STATUS_LABELS } from "@/features/bookings/services/booking.api";
 import type { BookingStatus, BookingSummary } from "@/features/bookings/types";
+import { bookingGroup } from "@/features/trips/trip-groups";
 import { Ionicons } from "@expo/vector-icons";
+import { TripCancellationNotice } from './TripCancellationNotice';
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -46,13 +48,13 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
       })
     : "Chưa xác định";
 
-  const statusLabel = BOOKING_STATUS_LABELS[status] || status;
+  const group = bookingGroup(booking);
+  const displayedStatus = group === "CANCELLED" ? "CANCELLED" : group === "INACTIVE" && status === "PENDING_PAYMENT" ? "EXPIRED" : status;
+  const statusLabel = group === "CANCELLED" && status !== "CANCELLED" ? "Chuyến đã hủy" : BOOKING_STATUS_LABELS[displayedStatus] || displayedStatus;
+  const canPay = group === "PENDING" && trip?.status !== 'CANCEL_PENDING';
 
   function renderStatusBadge() {
-    const endAt = trip?.endAt ? new Date(trip.endAt) : null;
-    const isPast = endAt && !isNaN(endAt.getTime()) && endAt < new Date();
-    const isTripCompleted = (trip?.status || "").toUpperCase() === "COMPLETED" || Boolean(isPast);
-    if (isTripCompleted && (status === "CONFIRMED" || status === "CHECKED_IN" || status === "COMPLETED")) {
+    if (group === "HISTORY") {
       return (
         <View style={[styles.badge, { backgroundColor: "#DCFCE7" }]}>
           <Ionicons name="checkmark-circle" size={12} color="#16A34A" />
@@ -65,7 +67,7 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
     let fg = Colors.onSurfaceVariant;
     let icon: keyof typeof Ionicons.glyphMap = "time-outline";
 
-    switch (status as BookingStatus) {
+    switch (displayedStatus as BookingStatus) {
       case "CONFIRMED":
       case "COMPLETED":
         bg = "#DCFCE7";
@@ -120,7 +122,8 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
       </View>
 
       {/* Countdown warning for pending payment */}
-      {status === "PENDING_PAYMENT" && remainingSec > 0 ? (
+      {trip?.status === 'CANCEL_PENDING' && <TripCancellationNotice status={trip.status} />}
+      {canPay && remainingSec > 0 ? (
         <View style={styles.holdBanner}>
           <Ionicons name="timer-outline" size={14} color="#D97706" />
           <Text style={styles.holdText}>
@@ -152,12 +155,12 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
         </View>
         <View style={styles.actionPill}>
           <Text style={styles.actionText}>
-            {status === "PENDING_PAYMENT" ? "Thanh toán ngay" : "Xem chi tiết chuyến đi"}
+            {canPay ? "Thanh toán ngay" : group === "CANCELLED" ? "Xem đặt chỗ & khoản hoàn" : "Xem chi tiết đặt chỗ"}
           </Text>
           <Ionicons
             name="chevron-forward"
             size={14}
-            color={status === "PENDING_PAYMENT" ? "#FFFFFF" : Colors.primaryDark}
+            color={Colors.primaryDark}
           />
         </View>
       </View>
@@ -243,6 +246,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
   },
   priceLabel: {
     fontSize: 10,

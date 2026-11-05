@@ -4,6 +4,8 @@ import type {
   BookingListQuery,
   BookingSummary,
   CancelBookingResponse,
+  CancellationPreview,
+  BookingTransactionsResponse,
   PageResponse,
   Participant,
   PaymentCheckoutResponse,
@@ -209,8 +211,8 @@ export const bookingApiService = {
    * GET /api/v1/bookings/{id}
    * Xem chi tiết đặt chỗ và thông tin thanh toán / vé
    */
-  getBookingDetail: async (bookingId: string): Promise<BookingDetail> => {
-    const res = await apiRequest<any>(`/api/v1/bookings/${bookingId}`);
+  getBookingDetail: async (bookingId: string, accessToken?: string, timeoutMs = 15_000): Promise<BookingDetail> => {
+    const res = await apiRequest<any>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`, { accessToken, timeoutMs });
     return unwrapBooking(res);
   },
 
@@ -360,19 +362,21 @@ export const bookingApiService = {
   },
 
   /**
-   * POST /api/v1/bookings/{id}/cancel
+   * POST /api/v1/bookings/{id}/cancellations
    * Hủy đặt chỗ theo chính sách hoàn tiền
    */
   cancelBooking: async (
     bookingId: string,
     reason: string,
     idempotencyKey?: string,
+    accessToken?: string,
   ): Promise<CancelBookingResponse> => {
     const key = idempotencyKey || generateIdempotencyKey();
     const res = await apiRequest<CancelBookingResponse>(
-      `/api/v1/bookings/${bookingId}/cancel`,
+      `/api/v1/bookings/${encodeURIComponent(bookingId)}/cancellations`,
       {
         method: "POST",
+        accessToken,
         headers: {
           "Idempotency-Key": key,
         },
@@ -383,6 +387,12 @@ export const bookingApiService = {
     delete bookingPaymentSessions[bookingId];
     return res;
   },
+
+  cancellationPreview: (bookingId: string, accessToken?: string) =>
+    apiRequest<CancellationPreview>(`/api/v1/bookings/${encodeURIComponent(bookingId)}/cancellation-preview`, { accessToken, timeoutMs: 8000 }),
+
+  listBookingTransactions: (page = 1, accessToken?: string) =>
+    apiRequest<BookingTransactionsResponse>(`/api/v1/user/transactions?source=BOOKING&page=${page}&pageSize=20`, { accessToken, timeoutMs: 8000 }),
 
   /**
    * POST /api/v1/bookings/{id}/participants/{pid}/self-claim
