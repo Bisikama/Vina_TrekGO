@@ -352,6 +352,61 @@ docker compose restart api
 
 > ⚠️ `docker compose down -v` **xoá luôn volume, tức là mất toàn bộ dữ liệu**. Muốn dừng thì dùng `docker compose down` (không có `-v`).
 
+## C4. Mở Postgres ra internet cho team
+
+`docker-compose.vps.yml` mở Postgres ở cổng **`54329`** (ngoài cổng `127.0.0.1:5433` cho SSH tunnel). Docker **đi vòng qua `ufw`**, nên bắt buộc phải chặn bằng iptables `DOCKER-USER`, chỉ cho IP của team. **Làm bước 1 trước khi deploy** bản compose mở cổng.
+
+**1. Chỉ cho IP của team** (trên VPS; xem IP của mỗi người tại https://ifconfig.me):
+
+```bash
+IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')    # card mạng ra internet, vd eth0
+
+# Mỗi IP được phép một dòng ACCEPT
+sudo iptables -I DOCKER-USER -i $IFACE -p tcp --dport 5432 -s <IP-nguoi-1> -j ACCEPT
+sudo iptables -I DOCKER-USER -i $IFACE -p tcp --dport 5432 -s <IP-nguoi-2> -j ACCEPT
+
+# Chặn mọi IP khác từ internet vào Postgres (luôn ở CUỐI)
+sudo iptables -A DOCKER-USER -i $IFACE -p tcp --dport 5432 -j DROP
+
+# Lưu để giữ sau khi VPS khởi động lại
+sudo apt install -y iptables-persistent
+sudo netfilter-persistent save
+```
+
+- `--dport 5432` là cổng **bên trong container**, không phải `54329`: Docker đã đổi cổng trước khi gói tin tới `DOCKER-USER`.
+- `-i $IFACE` để rule chỉ áp với kết nối **từ internet**, không chặn API trong Docker kết nối tới Postgres.
+- Xem rule hiện có: `sudo iptables -L DOCKER-USER -n -v --line-numbers`.
+- IP của ai đó thay đổi: thêm dòng `ACCEPT` mới bằng `-I` (chèn lên đầu), rồi `sudo netfilter-persistent save`. Xoá rule cũ: `sudo iptables -D DOCKER-USER <số-dòng>`.
+
+**2. Deploy** `docker-compose.vps.yml` (push lên `deploy/docker`, hoặc chạy tay trên VPS `docker compose up -d postgres`).
+
+**3. Kiểm tra:**
+
+```bash
+# Trên VPS: phải thấy 0.0.0.0:54329->5432
+docker compose ps postgres
+```
+
+Từ máy được phép (PowerShell): `Test-NetConnection 160.30.161.237 -Port 54329` phải ra `TcpTestSucceeded : True`. Từ IP không được phép (ví dụ 4G điện thoại) thì phải **không** kết nối được.
+
+**4. Chuỗi kết nối** cho `.env` của từng người:
+
+```
+DATABASE_URL=postgresql://postgres:<POSTGRES_PASSWORD>@160.30.161.237:54329/trekGo?schema=public
+DIRECT_URL=postgresql://postgres:<POSTGRES_PASSWORD>@160.30.161.237:54329/trekGo?schema=public
+```
+
+Mật khẩu có ký tự đặc biệt phải mã hoá URL (`@` → `%40`, `#` → `%23`, `/` → `%2F`). Gửi chuỗi này qua kênh riêng.
+
+**Quy tắc khi dùng chung DB này:**
+
+- **Không** chạy `prisma migrate dev`, `migrate reset`, `db push` vào DB này. Migration chỉ được áp qua deploy (container `api` tự chạy `migrate deploy`).
+- API chạy local trỏ vào DB này nên tắt worker: `PAYMENT_EVENTS_WORKER_ENABLED=false`, `PAYMENT_RECOVERY_WORKER_ENABLED=false`, `BOOKING_EXPIRY_WORKER_ENABLED=false`, `NOTIFICATION_CONSUMER_ENABLED=false`, `RENTAL_DOCUMENT_WORKER_ENABLED=false`.
+- Mật khẩu `postgres` phải mạnh (24+ ký tự ngẫu nhiên). Đổi mật khẩu thì phải sửa cả `POSTGRES_PASSWORD`, `DATABASE_URL`, `DIRECT_URL` trong `TREKGO_ENV`.
+- Postgres trong image không bật SSL: dữ liệu truyền qua internet **không được mã hoá**.
+
+**Đóng lại:** xoá dòng `"54329:5432"` trong `docker-compose.vps.yml` rồi deploy.
+
 ---
 
 # Phần D. Các lệnh thường dùng

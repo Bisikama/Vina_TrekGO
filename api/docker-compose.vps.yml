@@ -11,8 +11,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      # Chỉ mở cho chính VPS (127.0.0.1); dùng SSH tunnel để seed từ máy local
+      # Chỉ mở cho chính VPS (127.0.0.1); dùng SSH tunnel để seed / DBeaver
       - "127.0.0.1:5433:5432"
+      # Mở ra internet cho team. BẮT BUỘC có rule iptables DOCKER-USER chỉ cho
+      # IP của team (xem HUONG_DAN_DOCKER.md mục C4), nếu không ai cũng dò được.
+      - "54329:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
