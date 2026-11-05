@@ -77,7 +77,19 @@ export type PublicTrip = PublicBookingTrip;
 export type PaymentMethod = 'QR' | 'REDIRECT';
 
 
-export type PaymentGateway = 'momo' | 'vnpay';
+export type PaymentGateway = 'momo' | 'vnpay' | 'payos';
+
+export interface PaymentOption {
+  gateway: PaymentGateway;
+  environment: string;
+  methods: PaymentMethod[];
+  refundMode?: 'MANUAL_BANK_TRANSFER';
+}
+
+export interface PaymentOptionsResponse {
+  defaultGateway: PaymentGateway | null;
+  gateways: PaymentOption[];
+}
 
 export interface Checkout {
   type: PaymentMethod;

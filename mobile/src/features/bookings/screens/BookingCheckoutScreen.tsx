@@ -23,6 +23,7 @@ import type {
   PaymentGateway,
 } from "@/features/bookings/types";
 import { buildShortCode } from "@/features/check-in/utils/checkInQr";
+import { paymentGatewayLabels } from '../payment-gateways';
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -119,10 +120,11 @@ export function BookingCheckoutScreen({
   } = useBookingDetail(bookingId, true, isWaitingPaymentConfirmation);
 
   const { createPayment, isSubmitting } = useBookingMutations();
-  const { gateways } = usePaymentOptions();
+  const { gateways, isLoading: optionsLoading, error: optionsError, refetch: refetchOptions } = usePaymentOptions();
 
   const { user } = useAuth();
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("vnpay");
+  const effectiveGateway = gateways.find((option) => option.gateway === selectedGateway)?.gateway ?? gateways[0]?.gateway;
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [qrModalData, setQrModalData] = useState<string | null>(null);
@@ -245,9 +247,7 @@ export function BookingCheckoutScreen({
     async (result: PaymentCompleteResult) => {
       setPaymentWebViewUrl(null);
 
-      if (result.success) {
-        // Chỉ xóa session key khi thanh toán đã thành công để các đơn sau tạo mới bình thường
-        bookingApiService.clearBookingPaymentSession(bookingId);
+      if (result.success || result.requiresVerification) {
         setIsWaitingPaymentConfirmation(true);
 
         const isSuccessStatus = (s?: string) =>
@@ -264,7 +264,11 @@ export function BookingCheckoutScreen({
         }
         setIsWaitingPaymentConfirmation(false);
         if (isSuccessStatus(updated?.status)) {
+          bookingApiService.clearBookingPaymentSession(bookingId);
           setShowSuccessModal(true);
+        } else if (result.requiresVerification && ['FAILED', 'CANCELLED', 'EXPIRED'].includes(updated?.paymentSummary?.status ?? '')) {
+          bookingApiService.clearBookingPaymentSession(bookingId);
+          Alert.alert('Giao dịch chưa thành công', 'Máy chủ đã ghi nhận giao dịch bị hủy, hết hạn hoặc thất bại. Bạn có thể kiểm tra đặt chỗ và thử lại.');
         } else {
           Alert.alert(
             "Đang xử lý đối soát",
@@ -338,7 +342,7 @@ export function BookingCheckoutScreen({
   const endDate = booking.trip?.endAt ? new Date(booking.trip.endAt) : null;
 
   async function handlePay() {
-    if (!booking) return;
+    if (!booking || !effectiveGateway || optionsLoading || isSubmitting || isWaitingPaymentConfirmation) return;
 
     if (isHoldExpired) {
       Alert.alert(
@@ -358,7 +362,7 @@ export function BookingCheckoutScreen({
     const existingCheckout = booking.paymentSummary?.checkout;
     const isSameGateway =
       !booking.paymentSummary?.gateway ||
-      booking.paymentSummary?.gateway?.toLowerCase() === selectedGateway.toLowerCase();
+      booking.paymentSummary?.gateway?.toLowerCase() === effectiveGateway?.toLowerCase();
     const isCheckoutNotExpired =
       !existingCheckout?.expiresAt ||
       new Date(existingCheckout.expiresAt).getTime() > Date.now();
@@ -372,7 +376,7 @@ export function BookingCheckoutScreen({
       const res = await createPayment(
         booking.id,
         "REDIRECT",
-        selectedGateway,
+        effectiveGateway,
         booking.paymentSummary?.paymentId,
       );
 
@@ -810,11 +814,17 @@ export function BookingCheckoutScreen({
             <Text style={styles.sectionSub}>
               Cổng thanh toán bảo mật liên kết trực tiếp
             </Text>
+            {optionsLoading ? <ActivityIndicator color={Colors.primaryDark} /> : null}
+            {optionsError ? <TouchableOpacity onPress={() => void refetchOptions()}>
+              <Text style={styles.gatewayDesc}>{optionsError} Nhấn để thử lại.</Text>
+            </TouchableOpacity> : null}
+            {!optionsLoading && !optionsError && !gateways.length ? <Text style={styles.gatewayDesc}>Chưa có phương thức thanh toán khả dụng.</Text> : null}
 
             <View style={styles.gatewayList}>
               {gateways.map((g) => {
-                const isSelected = selectedGateway === g.gateway;
+                const isSelected = effectiveGateway === g.gateway;
                 const isVnPay = g.gateway === "vnpay";
+                const isPayos = g.gateway === "payos";
 
                 return (
                   <TouchableOpacity
@@ -824,6 +834,7 @@ export function BookingCheckoutScreen({
                       isSelected && styles.gatewayOptionSelected,
                     ]}
                     onPress={() => setSelectedGateway(g.gateway)}
+                    disabled={isSubmitting || isWaitingPaymentConfirmation}
                     activeOpacity={0.8}
                   >
                     <View style={styles.radioCircle}>
@@ -831,15 +842,16 @@ export function BookingCheckoutScreen({
                     </View>
                     <View style={styles.gatewayInfo}>
                       <Text style={styles.gatewayName}>
-                        {isVnPay
-                          ? "Cổng VNPAY (ATM / Visa / QR)"
-                          : "Ví điện tử MoMo"}
+                        {paymentGatewayLabels[g.gateway]}
                       </Text>
                       <Text style={styles.gatewayDesc}>
-                        {isVnPay
+                        {isPayos ? "Quét VietQR bằng ứng dụng ngân hàng để chuyển khoản."
+                          : isVnPay
                           ? "Thanh toán qua thẻ nội địa, quốc tế hoặc quét mã VNPAY-QR"
                           : "Xác thực nhanh qua ứng dụng MoMo trên điện thoại"}
                       </Text>
+                      {g.environment === 'SANDBOX' ? <Text style={styles.gatewayDesc}>Thử nghiệm Sandbox</Text> : null}
+                      {isPayos && g.environment === 'PRODUCTION' ? <Text style={styles.gatewayDesc}>Chuyển khoản tiền thật. Kiểm tra số tiền và người nhận trước khi chuyển.</Text> : null}
                     </View>
                   </TouchableOpacity>
                 );
@@ -922,10 +934,10 @@ export function BookingCheckoutScreen({
           <TouchableOpacity
             style={[
               styles.payNowBtn,
-              (isSubmitting || isWaitingPaymentConfirmation) && styles.btnDisabled,
+              (isSubmitting || isWaitingPaymentConfirmation || optionsLoading || !effectiveGateway) && styles.btnDisabled,
             ]}
             onPress={handlePay}
-            disabled={isSubmitting || isWaitingPaymentConfirmation}
+            disabled={isSubmitting || isWaitingPaymentConfirmation || optionsLoading || !effectiveGateway}
             activeOpacity={0.88}
           >
             {isSubmitting || isWaitingPaymentConfirmation ? (
@@ -978,7 +990,8 @@ export function BookingCheckoutScreen({
         <PaymentWebViewModal
           visible={Boolean(paymentWebViewUrl)}
           url={paymentWebViewUrl}
-          title={selectedGateway === "vnpay" ? "Cổng thanh toán VNPAY" : "Cổng thanh toán MoMo"}
+          gateway={effectiveGateway}
+          title={paymentGatewayLabels[effectiveGateway ?? selectedGateway]}
           onClose={() => setPaymentWebViewUrl(null)}
           onPaymentComplete={handlePaymentWebViewComplete}
         />

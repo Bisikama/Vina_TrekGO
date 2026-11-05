@@ -11,7 +11,7 @@ export type BookingStatus =
   | "NO_SHOW";
 
 export type PaymentMethod = "QR" | "REDIRECT";
-export type PaymentGateway = "momo" | "vnpay";
+export type PaymentGateway = "momo" | "vnpay" | "payos";
 
 export type CheckInStatus = "NOT_CHECKED_IN" | "CHECKED_IN" | "NO_SHOW";
 export type LinkageStatus = "UNLINKED" | "INVITATION_PENDING" | "CLAIMED";
@@ -213,9 +213,12 @@ export interface BookingListQuery {
 export interface PaymentOption {
   gateway: PaymentGateway;
   environment: string;
+  methods: PaymentMethod[];
+  refundMode?: "MANUAL_BANK_TRANSFER";
 }
 
 export interface PaymentOptionsResponse {
+  defaultGateway: PaymentGateway | null;
   gateways: PaymentOption[];
 }
 

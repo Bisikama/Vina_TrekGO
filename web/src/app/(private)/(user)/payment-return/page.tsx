@@ -7,6 +7,7 @@ import { bookingApi, dateTime, money } from '@/features/bookings/booking.api';
 import type { Booking } from '@/features/bookings/booking.api';
 import { apiClient } from '@/lib/axios';
 import { useStaticDataStore } from '@/lib/staticDataStore';
+import { PayosBookingReturn } from '@/features/bookings/components/PayosBookingReturn';
 
 function getVnpayErrorMessage(code: string | null): string {
   switch (code) {
@@ -616,6 +617,13 @@ function PaymentReturnContent() {
   );
 }
 
+function PaymentReturnRouter() {
+  const params = useSearchParams();
+  const isPayos = params.get('gateway') === 'payos' || (params.has('orderCode') && params.has('id'));
+  if (isPayos && !params.has('rentalOrderId')) return <PayosBookingReturn />;
+  return <PaymentReturnContent />;
+}
+
 export default function PaymentReturnPage() {
   return (
     <Suspense
@@ -628,7 +636,7 @@ export default function PaymentReturnPage() {
         </div>
       }
     >
-      <PaymentReturnContent />
+      <PaymentReturnRouter />
     </Suspense>
   );
 }

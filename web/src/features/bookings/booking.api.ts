@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiClient } from '@/lib/axios';
+import type { PaymentGateway, PaymentOptionsResponse } from './types/booking.types';
 
 export type Participant = {
   id?: string;
@@ -31,8 +32,7 @@ export type PublicTrip = {
   transportAvailable: boolean; transport: { vehicleType: string }[];
 };
 export type Checkout = { type: 'QR' | 'REDIRECT'; url: string | null; qrData: string | null };
-export type PaymentGateway = 'momo' | 'vnpay';
-export type PaymentOption = { gateway: PaymentGateway; environment: string };
+export type { PaymentGateway, PaymentOption } from './types/booking.types';
 export type Booking = {
   id: string; status: string; version: number; participantCount: number; expiresAt: string; confirmedAt: string | null;
   pricePerPax: string; totalAmount: string; currency: string; canEditParticipants: boolean; canCancel: boolean; rentalEligible: boolean;
@@ -59,7 +59,7 @@ export const bookingApi = {
   detail: async (id: string) => (await apiClient.get<Booking>(`/api/v1/bookings/${id}`, config)).data,
   list: async (page: number, status: string) => (await apiClient.get<Page<BookingSummary>>('/api/v1/bookings', { ...config, params: { page, ...(status ? { status } : {}) } })).data,
   update: async (booking: Booking, participants: Participant[]) => (await apiClient.patch<Booking>(`/api/v1/bookings/${booking.id}/participants`, { ...input(participants), expectedVersion: booking.version }, config)).data,
-  paymentOptions: async () => (await apiClient.get<{ gateways: PaymentOption[] }>('/api/v1/payments/options', config)).data,
+  paymentOptions: async () => (await apiClient.get<PaymentOptionsResponse>('/api/v1/payments/options', config)).data,
   pay: async (id: string, key: string, gateway: PaymentGateway) => (await apiClient.post<{ checkout: Checkout | null; status: string; providerEnvironment: string; gateway: string }>(`/api/v1/bookings/${id}/payments`, { paymentMethod: 'REDIRECT', gateway }, headers(key))).data,
   cancel: async (id: string, reason: string, key: string) => (await apiClient.post(`/api/v1/bookings/${id}/cancel`, { reason }, headers(key))).data,
   selfClaim: async (bookingId: string, participantId: string) => (await apiClient.post(`/api/v1/bookings/${bookingId}/participants/${participantId}/self-claim`, { confirmParticipantIdentity: true }, config)).data,

@@ -5,17 +5,22 @@ import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/features/auth';
 import { bookingApi, bookingError, dateTime, money, statusLabels } from '../booking.api';
-import type { Booking, Participant, PaymentGateway, PaymentOption } from '../booking.api';
+import type { Booking, Participant, PaymentGateway } from '../booking.api';
+import { Button } from '@/components/ui';
+import { useBookingPaymentOptions } from '../hooks/useBookingPaymentOptions';
+import { BookingPaymentMethods, paymentGatewayLabels } from './BookingPaymentMethods';
+import { rememberPayosBookingCheckout } from '../payos-checkout';
 import { BookingSignIn } from './BookingSignIn';
 import { BookingCancellation } from './BookingCancellation';
 
-const gatewayLabels: Record<string, string> = { momo: 'MoMo', vnpay: 'VNPAY' };
+const gatewayLabels: Record<string, string> = paymentGatewayLabels;
 
 export function BookingCheckout({ bookingId }: { bookingId: string }) {
   const { accessToken } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [options, setOptions] = useState<PaymentOption[]>([]);
+  const { options, loading: optionsLoading, error: optionsError, retry: retryOptions } = useBookingPaymentOptions(Boolean(accessToken));
   const [gateway, setGateway] = useState<PaymentGateway>('vnpay');
+  const selectedGateway = options.find((option) => option.gateway === gateway)?.gateway ?? options[0]?.gateway;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
@@ -29,18 +34,6 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
   const [inviteModalError, setInviteModalError] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionBanner, setActionBanner] = useState('');
-
-  useEffect(() => {
-    if (!accessToken) return;
-    let active = true;
-    bookingApi.paymentOptions().then(({ gateways }) => {
-      if (!active) return;
-      const enabledGateways = gateways.filter((item) => item.gateway !== 'momo');
-      setOptions(enabledGateways);
-      setGateway((current) => enabledGateways.some((item) => item.gateway === current) ? current : enabledGateways[0]?.gateway ?? 'vnpay');
-    }).catch((e) => { if (active) setError(bookingError(e).message); });
-    return () => { active = false; };
-  }, [accessToken, retry]);
 
   const [hydrated, setHydrated] = useState(false);
 
@@ -82,15 +75,16 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
   }, [accessToken, bookingId, retry]);
 
   const pay = async () => {
-    if (!booking || submitting.current) return;
+    if (!booking || !selectedGateway || submitting.current) return;
     submitting.current = true;
     setBusy(true); setError('');
     try {
-      const storageKey = `booking-payment:${bookingId}:${gateway}:${booking.paymentSummary?.paymentId ?? 'first'}`;
+      const storageKey = `booking-payment:${bookingId}:${selectedGateway}:${booking.paymentSummary?.paymentId ?? 'first'}`;
       let key = sessionStorage.getItem(storageKey);
       if (!key) { key = crypto.randomUUID(); sessionStorage.setItem(storageKey, key); }
-      const result = await bookingApi.pay(bookingId, key, gateway);
+      const result = await bookingApi.pay(bookingId, key, selectedGateway);
       if (result.checkout?.url && ['PENDING', 'PROCESSING'].includes(result.status)) {
+        if (selectedGateway === 'payos') rememberPayosBookingCheckout(bookingId, result.checkout.url);
         window.location.assign(result.checkout.url);
       } else {
         setBooking(await bookingApi.detail(bookingId));
@@ -434,27 +428,10 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
                   {expired && !confirmed && !paid && <p>Thời gian giữ chỗ đã hết. Nếu đã thanh toán, vui lòng chờ server cập nhật hoặc liên hệ hỗ trợ.</p>}
                   {canPay && <>
                     {payment && <p>Giao dịch trước chưa thành công. Bạn có thể chọn cổng và thử lại.</p>}
-                    <fieldset disabled={busy} className="space-y-3">
-                      <legend className="mb-3 text-lg font-semibold">Chọn cổng thanh toán</legend>
-                      {(['vnpay', 'momo'] as const).map((name) => {
-                        const enabled = options.some((item) => item.gateway === name);
-                        const isVnpay = name === 'vnpay';
-                        return <label key={name} className={`flex cursor-pointer items-center gap-3.5 rounded-xl border p-4 transition ${gateway === name && enabled ? (isVnpay ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/20' : 'border-[#A50064] bg-pink-50/50 ring-2 ring-[#A50064]/20') : 'border-stone-200 bg-white hover:border-stone-300'} ${!enabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                          <input type="radio" name="gateway" value={name} checked={gateway === name && enabled} disabled={!enabled} onChange={() => setGateway(name)} className={`h-4 w-4 cursor-pointer ${isVnpay ? 'accent-[#125238]' : 'accent-[#A50064]'}`} />
-                          <div className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-lg font-black text-white text-[11px] shadow-xs ${isVnpay ? 'bg-[#005BAA]' : 'bg-[#A50064]'}`}>
-                            {isVnpay ? 'VNPAY' : 'MoMo'}
-                          </div>
-                          <div>
-                            <span className="font-bold text-gray-900">{isVnpay ? 'Cổng thanh toán VNPAY (QR / ATM / Visa)' : 'Ví điện tử MoMo (MoMo App / Quét QR)'}</span>
-                            <p className="text-xs text-gray-500">{isVnpay ? 'Hỗ trợ quét mã VNPAY-QR 40+ ngân hàng, thẻ ATM, Visa/Mastercard' : 'Quét mã trực tiếp qua ứng dụng Ví MoMo'}</p>
-                          </div>
-                          {!enabled && <span className="ml-auto text-xs font-semibold text-gray-400">Chưa khả dụng</span>}
-                        </label>;
-                      })}
-                    </fieldset>
-                    <button disabled={busy || !options.some((item) => item.gateway === gateway)} onClick={pay} className="w-full rounded-xl bg-green-900 px-5 py-3 font-semibold text-white disabled:opacity-50">
-                      {busy ? 'Đang tạo giao dịch…' : `Thanh toán ${money(booking.totalAmount)} qua ${gatewayLabels[gateway]}`}
-                    </button>
+                    <BookingPaymentMethods options={options} value={selectedGateway} onChange={setGateway} disabled={busy} loading={optionsLoading} error={optionsError} onRetry={retryOptions} />
+                    <Button fullWidth loading={busy} disabled={busy || optionsLoading || !selectedGateway} onClick={pay}>
+                      {busy ? 'Đang tạo giao dịch…' : `Thanh toán ${money(booking.totalAmount)}${selectedGateway ? ` qua ${gatewayLabels[selectedGateway]}` : ''}`}
+                    </Button>
                   </>}
                 </section>
               )}
