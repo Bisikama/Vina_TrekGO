@@ -4,6 +4,11 @@ export interface CapacityReservation {
   quantity: number;
   occupiedFrom: Date;
   occupiedUntil: Date;
+  /**
+   * Unit đã gán cho dòng đơn của reservation (không gồm REPLACED/UNASSIGNED).
+   * `released`: assignment đã RETURNED/CLOSED — đơn đã xong với unit này.
+   */
+  assignedUnits?: Array<{ unitId: string; released: boolean }>;
 }
 
 export interface CapacityReadyUnit {
@@ -65,7 +70,16 @@ export function calculateSafeCapacity(input: {
     const end = Math.min(until.getTime(), r.occupiedUntil.getTime());
     if (start >= end) continue;
 
-    events.push({ at: start, delta: r.quantity }, { at: end, delta: -r.quantity });
+    // Không trừ một món hai lần: unit của chính reservation này đã rời kho (đã bị loại khỏi supply ở trên)
+    // hoặc đã được đơn trả lại xong thì không còn là nhu cầu trên kho. Unit mới gán nhưng còn sẵn ở kho
+    // vẫn tính là nhu cầu để đơn giữ chỗ.
+    const covered = new Set(
+      (r.assignedUnits ?? []).filter((a) => a.released || !verifiedIds.has(a.unitId)).map((a) => a.unitId),
+    ).size;
+    const demand = Math.max(0, r.quantity - covered);
+    if (demand === 0) continue;
+
+    events.push({ at: start, delta: demand }, { at: end, delta: -demand });
   }
 
   events.sort((a, b) => a.at - b.at || a.delta - b.delta);

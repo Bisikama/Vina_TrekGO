@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { GradeBadge } from "@/features/rentals/components/GradeBadge";
 import { getGearAdvisorErrorMessage } from "@/features/rentals/services/gear-advisor.api";
 import {
   generateGearRentalOptions,
@@ -17,6 +18,12 @@ const OPTION_LABELS: Record<string, string> = {
 
 const money = (value: number) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value);
+
+function stripGradeSuffix(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .trim();
+}
 
 /** Phương án thuê đồ còn thiếu — chỉ hiển thị ước tính, chưa giữ hàng hay tạo đơn. */
 export function GearRentalOptions({ planId, evaluatedRevision }: { planId: string; evaluatedRevision: number }) {
@@ -84,12 +91,8 @@ export function GearRentalOptions({ planId, evaluatedRevision }: { planId: strin
                         <li key={`${line.productId}-${line.requirementId ?? ""}`} className="py-2.5 text-sm">
                           <div className="flex items-start justify-between gap-3">
                             <p className="font-semibold text-slate-800">
-                              {line.productName}
-                              {line.grade ? (
-                                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                                  {line.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
-                                </span>
-                              ) : null}
+                              {line.grade ? stripGradeSuffix(line.productName) : line.productName}
+                              {line.grade ? <GradeBadge grade={line.grade} className="ml-2" /> : null}
                             </p>
                             <span className="shrink-0 text-slate-500">× {line.quantity}</span>
                           </div>

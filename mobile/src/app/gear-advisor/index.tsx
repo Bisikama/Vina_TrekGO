@@ -29,6 +29,7 @@ import {
   type PreparationStatus,
 } from "@/features/gear/advisor-api";
 import { gearApi } from "@/features/gear/api";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import {
   generateGearRentalOptions,
   lineDepositAmount,
@@ -607,6 +608,12 @@ export default function GearAdvisorScreen() {
   );
 }
 
+function stripGradeSuffix(name: string) {
+  return name
+    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .trim();
+}
+
 const vnd = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
 const OPTION_LABELS: Record<string, string> = { opt_min_fee: "Tiết kiệm chi phí nhất", opt_min_weight: "Nhẹ nhất" };
 
@@ -666,10 +673,12 @@ function RentalOptions({
               const percent = line.depositExplanation?.percentageOfReplacementValue;
               return (
                 <View key={`${line.productId}-${line.requirementId ?? ""}`} style={styles.optionLine}>
-                  <Text style={styles.optionLineName}>
-                    {line.productName} × {line.quantity}
-                    {line.grade ? ` · ${line.grade === "LIKE_NEW" ? "Mới" : "Sử dụng tốt"}` : ""}
-                  </Text>
+                  <View style={styles.optionLineHead}>
+                    <Text style={styles.optionLineName}>
+                      {line.grade ? stripGradeSuffix(line.productName) : line.productName} × {line.quantity}
+                    </Text>
+                    {line.grade ? <GradeBadge grade={line.grade} /> : null}
+                  </View>
                   <Text style={styles.hint}>
                     {typeof line.rentalFee === "number" ? `Phí thuê ${vnd(line.rentalFee)}` : ""}
                     {lineDeposit !== null
@@ -869,6 +878,7 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: Colors.primaryDark, fontWeight: "800" },
   optionsBox: { marginTop: 8, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainerLow, gap: 8 },
   optionLine: { marginTop: 6, gap: 2 },
+  optionLineHead: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },
   optionLineName: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
   optionTotal: { marginTop: 4, color: Colors.onSurface, fontSize: 12, fontWeight: "700" },
   banner: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: Radius.md },

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, RentalDocumentRenderStatus, RentalDocumentType } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { AppError } from 'src/shared/errors';
@@ -9,13 +9,46 @@ import { issueCorrectionTx, snapshotHash } from './rental-document-events';
 import { DOCUMENT_STORAGE_PORT, pdfDigest } from '../infrastructure/document-storage.port';
 import type { DocumentStoragePort } from '../infrastructure/document-storage.port';
 import type { CorrectionBody, RetryRenderBody } from '../presentation/rental-document-admin.dto';
+import { MEDIA_STORAGE_PORT, type MediaStoragePort } from '../../../media/application/ports/media-storage.port';
+import { documentEvidenceIds, verifyRentalEvidenceSignature } from './rental-evidence-link';
 
 const hash = (value: unknown) => snapshotHash(value);
 @Injectable()
 export class RentalDocumentService {
+  private readonly logger = new Logger(RentalDocumentService.name);
   constructor(private readonly prisma: PrismaService,
     private readonly getDocument: GetRentalDocumentUseCase,
-    @Inject(DOCUMENT_STORAGE_PORT) private readonly storage: DocumentStoragePort) {}
+    @Inject(DOCUMENT_STORAGE_PORT) private readonly storage: DocumentStoragePort,
+    @Optional() @Inject(MEDIA_STORAGE_PORT) private readonly media?: MediaStoragePort) {}
+
+  /**
+   * Link ảnh bằng chứng in trong PDF (không cần đăng nhập). Chỉ mở ảnh khi chữ ký đúng, ảnh nằm trong snapshot
+   * của đúng chứng từ đó và vẫn còn sẵn sàng. Mọi lỗi trả cùng 404 để không lộ chứng từ/ảnh nào tồn tại.
+   */
+  async resolveEvidenceLink(documentId: string, mediaId: string, signature: unknown): Promise<string> {
+    const notFound = () => AppError.fromCode(RR.DOCUMENT_NOT_FOUND);
+    if (!this.media || !verifyRentalEvidenceSignature(documentId, mediaId, signature)) throw notFound();
+    const doc = await this.prisma.rentalDocument.findUnique({
+      where: { id: documentId }, select: { snapshotJson: true, snapshotHash: true },
+    });
+    if (!doc || hash(doc.snapshotJson) !== doc.snapshotHash) throw notFound();
+    if (!documentEvidenceIds(doc.snapshotJson).has(mediaId.toLowerCase())) throw notFound();
+    const asset = await this.prisma.mediaAsset.findUnique({
+      where: { id: mediaId },
+      select: { status: true, scope: true, resourceType: true, providerPublicId: true, deliveryType: true },
+    });
+    if (!asset || asset.status !== 'READY' || !asset.scope.includes('EVIDENCE') ||
+        !asset.providerPublicId || (asset.deliveryType !== 'authenticated' && asset.deliveryType !== 'upload'))
+      throw notFound();
+    const { url } = await this.media.createDeliveryUrl({
+      providerPublicId: asset.providerPublicId,
+      resourceType: asset.resourceType,
+      deliveryType: asset.deliveryType,
+      variant: asset.resourceType === 'VIDEO' ? 'VIDEO_PREVIEW' : 'EVIDENCE_PREVIEW',
+    });
+    this.logger.log(`Rental document ${documentId} evidence link opened for media ${mediaId}`);
+    return url;
+  }
 
   private async authorized(documentId: string, actorUserId: string, actorRole: string) {
     await this.getDocument.execute({ documentId, actorUserId, actorRole });

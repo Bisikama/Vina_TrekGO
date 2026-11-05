@@ -47,6 +47,7 @@ export type RentalOrderDetail = {
   pickupPoint: null | { id: string; name: string; address: string };
   returnPoint: null | { id: string; name: string; address: string };
   allowedActions: string[];
+  cancellationRefunds?: Array<{ refundId: string; amount: number; currency: string; status: string; settlementMode: "STANDARD" | "SANDBOX_SIMULATED" }>;
   /** Mốc thời gian thật do API trả: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
   timeline?: Array<{ type: string; at: string }>;
 };
@@ -117,6 +118,8 @@ export type RentalTransaction = {
   paymentRef?: string;
   refundRef?: string;
   purpose?: string;
+  confirmationSource?: string | null;
+  financialEffect?: "DEBIT" | "CREDIT" | "NONE";
 };
 
 export type ReviewableItem = {
@@ -212,4 +215,65 @@ export async function previewRentalCancellation(orderId: string) {
 }
 export async function cancelRentalOrder(orderId: string, input: { reason: string; previewVersion: string; expectedVersion: number }) {
   return unwrap((await apiClient.post(`/api/v1/rental-orders/${encodeURIComponent(orderId)}/cancel`, input)).data);
+}
+
+// Chứng từ của đơn thuê (RB-API-1001 / 1003 / 1005).
+export type RentalDocumentType =
+  | "HANDOVER"
+  | "EXTENSION_APPENDIX"
+  | "RETURN_RECEIPT"
+  | "SCHEDULE_NOTICE"
+  | "CORRECTION_NOTICE";
+
+export type RentalDocumentSummary = {
+  id: string;
+  type: RentalDocumentType | string;
+  documentNo: string;
+  rootDocumentId: string | null;
+  renderStatus: "PENDING_RENDER" | "READY" | "RENDER_FAILED" | string;
+  downloadReady: boolean;
+  issuedAt: string | null;
+  version: number;
+};
+
+export type RentalDocumentDownload = {
+  downloadUrl: string;
+  expiresAt: string;
+  fileName: string;
+  contentType: string;
+  sha256: string;
+};
+
+export type RentalDocumentVerification = {
+  documentNo: string;
+  issuedAt: string;
+  verified: boolean;
+  snapshotVerified: boolean;
+  pdfVerified: boolean | null;
+  verificationStatus: "VERIFIED" | "SNAPSHOT_ONLY" | "FAILED" | string;
+};
+
+/** GET /api/v1/rental-orders/:id/documents */
+export async function listRentalOrderDocuments(orderId: string) {
+  const response = await apiClient.get<Envelope<{ items: RentalDocumentSummary[]; pagination: RentalPagination }>>(
+    `/api/v1/rental-orders/${encodeURIComponent(orderId)}/documents`,
+    { params: { page: 1, pageSize: 50 } },
+  );
+  return unwrap(response.data).items ?? [];
+}
+
+/** GET /api/v1/rental-documents/:documentId/download — đường dẫn PDF có chữ ký, hiệu lực 10 phút. */
+export async function getRentalDocumentDownload(documentId: string) {
+  const response = await apiClient.get<Envelope<RentalDocumentDownload>>(
+    `/api/v1/rental-documents/${encodeURIComponent(documentId)}/download`,
+  );
+  return unwrap(response.data);
+}
+
+/** GET /api/v1/rental-documents/:documentId/verification */
+export async function verifyRentalDocument(documentId: string) {
+  const response = await apiClient.get<Envelope<RentalDocumentVerification>>(
+    `/api/v1/rental-documents/${encodeURIComponent(documentId)}/verification`,
+  );
+  return unwrap(response.data);
 }

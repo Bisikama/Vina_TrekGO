@@ -334,12 +334,12 @@ export default function StaffReturnScreen() {
     }
     const missingEvidence = receivedUnits.find((unit) => {
       const draft = evidenceDrafts[unit.unitId];
-      return !draft?.imageIds.length || !draft.videoIds.length;
+      return !draft?.imageIds.length;
     });
     if (missingEvidence) {
       setFeedback({
-        title: "Thiếu ảnh hoặc video",
-        message: `Mã ${shortAssetCode(missingEvidence.assetCode)} cần ít nhất 1 ảnh và 1 video kiểm tra sơ bộ.`,
+        title: "Thiếu ảnh",
+        message: `Mã ${shortAssetCode(missingEvidence.assetCode)} cần ít nhất 1 ảnh kiểm tra sơ bộ; video không bắt buộc.`,
       });
       return;
     }
@@ -623,7 +623,7 @@ export default function StaffReturnScreen() {
                         />
                         <Text style={styles.evidenceText}>
                           {evidence.imageIds.length} ảnh ·{" "}
-                          {evidence.videoIds.length} video
+                          {evidence.videoIds.length} video (tùy chọn)
                         </Text>
                       </View>
                       <View style={styles.evidenceActions}>

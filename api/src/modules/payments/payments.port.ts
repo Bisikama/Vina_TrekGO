@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { RefundCommand, RefundsService, refundSummary } from './refunds.service'
 import { PaymentRecoveryService } from './payment-recovery.service'
+import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
 import { InvoiceCheckoutCommand, PaymentsService } from './payments.service'
 import {
   RentalCheckoutCommand,
@@ -15,6 +16,14 @@ import type {
   UserTransactionsQueryDto,
   UserTransactionsResponseDto,
 } from './dtos/user-transactions.dto'
+import type {
+  AdminCashflowSummaryQueryDto,
+  AdminCashflowSummaryResponseDto,
+  AdminPaymentDetailResponseDto,
+  AdminRefundDetailResponseDto,
+  AdminTransactionsQueryDto,
+  AdminTransactionsResponseDto,
+} from './dtos/admin-cashflow.dto'
 
 export abstract class PaymentsPort {
   abstract createRentalExtensionCheckout(
@@ -38,6 +47,18 @@ export abstract class PaymentsPort {
     actorUserId: string
     query: UserTransactionsQueryDto
   }): Promise<UserTransactionsResponseDto>
+  abstract getAdminTransactions(input: {
+    query: AdminTransactionsQueryDto
+  }): Promise<AdminTransactionsResponseDto>
+  abstract getAdminCashflowSummary(input: {
+    query: AdminCashflowSummaryQueryDto
+  }): Promise<AdminCashflowSummaryResponseDto>
+  abstract getAdminPaymentDetail(input: {
+    paymentId: string
+  }): Promise<AdminPaymentDetailResponseDto>
+  abstract getAdminRefundDetail(input: {
+    refundId: string
+  }): Promise<AdminRefundDetailResponseDto>
 }
 
 @Injectable()
@@ -47,6 +68,7 @@ export class SharedPaymentsPort extends PaymentsPort {
     private readonly recovery: PaymentRecoveryService,
     private readonly checkout: PaymentsService,
     private readonly history: PaymentHistoryService,
+    private readonly simulation: SandboxRefundSimulationService,
   ) {
     super()
   }
@@ -62,14 +84,18 @@ export class SharedPaymentsPort extends PaymentsPort {
   createRentalCheckout(input: RentalCheckoutCommand) {
     return this.checkout.createRentalCheckout(input)
   }
-  requestRefund(input: RefundCommand) {
-    return this.refunds.requestRefund(input)
+  async requestRefund(input: RefundCommand) {
+    const refund = await this.refunds.requestRefund(input)
+    return refund.executionMode === 'SANDBOX_SIMULATED'
+      ? this.simulation.settleAutomaticBookingRefund(refund.refundId)
+      : refund
   }
   reconcilePayment(id: string) {
     return this.recovery.reconcilePayment(id)
   }
-  reconcileRefund(id: string) {
-    return this.recovery.reconcileRefund(id)
+  async reconcileRefund(id: string) {
+    const refund = await this.simulation.settleAutomaticBookingRefund(id)
+    return refund.executionMode === 'SANDBOX_SIMULATED' ? true : this.recovery.reconcileRefund(id)
   }
   getRentalOrderPaymentHistory(input: {
     rentalOrderId: string
@@ -84,5 +110,16 @@ export class SharedPaymentsPort extends PaymentsPort {
   }) {
     return this.history.getUserTransactions(input)
   }
+  getAdminTransactions(input: { query: AdminTransactionsQueryDto }) {
+    return this.history.getAdminTransactions(input)
+  }
+  getAdminCashflowSummary(input: { query: AdminCashflowSummaryQueryDto }) {
+    return this.history.getAdminCashflowSummary(input)
+  }
+  getAdminPaymentDetail(input: { paymentId: string }) {
+    return this.history.getAdminPaymentDetail(input)
+  }
+  getAdminRefundDetail(input: { refundId: string }) {
+    return this.history.getAdminRefundDetail(input)
+  }
 }
-

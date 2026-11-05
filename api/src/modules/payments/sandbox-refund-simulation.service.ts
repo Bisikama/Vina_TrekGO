@@ -6,7 +6,8 @@ import { AppError } from '../../shared/errors'
 import { PAYMENT_ERROR_CODES as P } from '../../shared/errors/codes/payment.error-codes'
 import type { VerifiedRefundEvent } from './payment-provider.port'
 import { paymentHash } from './payment-utils'
-import { RefundsService } from './refunds.service'
+import { RefundsService, refundSummary } from './refunds.service'
+import { isTechnicalReversalReason } from './technical-reversal-reasons'
 import type {
   SandboxSimulateRefundBodyDto,
   SandboxSimulateRefundResponseDto,
@@ -25,6 +26,8 @@ type PreparedSimulation = {
   currency: string
   actorUserId: string
   reason: string
+  trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
+  isRentalCancellation?: boolean
 }
 
 @Injectable()
@@ -38,8 +41,8 @@ export class SandboxRefundSimulationService {
    * Simulation is fail-closed. A remote database is permitted only for an
    * explicitly enabled, hostname-pinned demo environment.
    */
-  assertEnvironmentSafe(): void {
-    if (process.env.NODE_ENV === 'production' || process.env.PAYOS_ENABLED === 'true') {
+  assertEnvironmentSafe(bookingSimulation = false): void {
+    if (!bookingSimulation && (process.env.NODE_ENV === 'production' || process.env.PAYOS_ENABLED === 'true')) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_ENV_UNSAFE, {
         message: 'Sandbox simulation is strictly forbidden in production environment',
       })
@@ -114,15 +117,35 @@ export class SandboxRefundSimulationService {
     )
   }
 
+  /** Scope automatic idempotency to the beneficiary; audit records identify the system trigger. */
+  async settleAutomaticBookingRefund(refundId: string) {
+    const refund = await this.db.refund.findUniqueOrThrow({
+      where: { id: refundId }, include: { payment: { include: { invoice: true } } },
+    })
+    if (refund.executionMode !== 'SANDBOX_SIMULATED') return refundSummary(refund)
+    const simulation = (refund.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation as Prisma.JsonObject | undefined
+    if (refund.status === 'SUCCEEDED' && simulation?.status === 'SUCCEEDED') return refundSummary(refund)
+    await this.simulateRefundSettlement({
+      refundId, actorUserId: refund.payment.invoice.userId,
+      idempotencyKey: `booking-auto-refund:${refundId}`,
+      trigger: 'BOOKING_AUTOMATIC',
+      body: { expectedProviderStatus: 'PENDING', acknowledgeSandboxSimulation: true,
+        reason: 'Automatic booking sandbox refund settlement' },
+    })
+    return refundSummary(await this.db.refund.findUniqueOrThrow({ where: { id: refundId } }))
+  }
+
   async simulateRefundSettlement(input: {
     refundId: string
     actorUserId: string
     idempotencyKey: string
     body: SandboxSimulateRefundBodyDto
+    trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
   }): Promise<SandboxSimulateRefundResponseDto> {
-    this.assertEnvironmentSafe()
+    const row = await this.db.refund.findUnique({ where: { id: input.refundId } })
+    this.assertEnvironmentSafe(row?.executionMode === 'SANDBOX_SIMULATED')
 
-    const scope = `admin-simulate-refund:${input.refundId}`
+    const scope = `${input.trigger === 'BOOKING_AUTOMATIC' ? 'booking-auto-refund' : 'admin-simulate-refund'}:${input.refundId}`
     const requestHash = paymentHash({ refundId: input.refundId, ...input.body })
     const prepared = await this.prepareSimulation(input, scope, requestHash)
     if (prepared.cachedResponse) return prepared.cachedResponse
@@ -145,6 +168,7 @@ export class SandboxRefundSimulationService {
       actorUserId: string
       idempotencyKey: string
       body: SandboxSimulateRefundBodyDto
+      trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
     },
     scope: string,
     requestHash: string,
@@ -172,11 +196,13 @@ export class SandboxRefundSimulationService {
 
       const initial = await tx.refund.findUnique({
         where: { id: input.refundId },
-        select: { id: true, paymentId: true },
+        select: { id: true, paymentId: true, purpose: true, rentalOrderId: true },
       })
       if (!initial) throw AppError.fromCode(P.PAYMENT_NOT_FOUND, { message: 'Refund does not exist' })
 
       const payment = await tx.payment.findUniqueOrThrow({ where: { id: initial.paymentId } })
+      if (initial.purpose === 'RENTAL_CANCELLATION' && initial.rentalOrderId)
+        await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${initial.rentalOrderId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${payment.invoiceId}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM payments WHERE id = ${payment.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${input.refundId}::uuid FOR UPDATE`
@@ -195,6 +221,11 @@ export class SandboxRefundSimulationService {
 
       const settlementOrderId = refund.depositSettlement?.orderId ?? null
       const isBookingCancellation = refund.purpose === 'BOOKING_CANCELLATION'
+      const isRentalCancellation = refund.purpose === 'RENTAL_CANCELLATION'
+      const isBookingReversal = refund.purpose === 'TECHNICAL_REVERSAL' && refund.payment.invoice.invoiceType === 'BOOKING'
+      const isBookingRefund = isBookingCancellation || isBookingReversal
+      if (refund.executionMode === 'SANDBOX_SIMULATED' && !isBookingRefund)
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
       if (isBookingCancellation) {
         const cancellation = refund.bookingCancellation
         if (
@@ -220,6 +251,43 @@ export class SandboxRefundSimulationService {
           refund.payment.merchantAccountKey !== refund.merchantAccountKey
         )
           throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      } else if (isBookingReversal) {
+        const decision = await tx.paymentOutboxEvent.findUnique({
+          where: { deduplicationKey: `payment:${refund.paymentId}:technical-reversal-requested:v1` },
+        })
+        const payload = decision?.payload as Prisma.JsonObject | undefined
+        if (refund.payment.status !== 'SUCCEEDED' || refund.payment.application?.status !== 'REJECTED' ||
+          refund.payment.application.invoiceId !== refund.payment.invoiceId ||
+          refund.payment.application.reasonCode !== refund.reasonCode ||
+          !isTechnicalReversalReason('BOOKING', refund.reasonCode) ||
+          decision?.eventType !== 'TECHNICAL_REVERSAL_REQUESTED' || decision.aggregateId !== refund.paymentId ||
+          payload?.schemaVersion !== 1 || payload.paymentId !== refund.paymentId ||
+          payload.invoiceId !== refund.payment.invoiceId || payload.reasonCode !== refund.reasonCode ||
+          refund.businessActionId !== `payment:${refund.paymentId}:technical-reversal:v1` ||
+          !refund.amount.equals(refund.payment.amount) || refund.amount.lte(0) ||
+          refund.currency !== 'VND' || refund.payment.currency !== refund.currency ||
+          refund.requestHashVersion !== 1 || !refund.merchantRefundRef || !refund.merchantAccountKey ||
+          !refund.payment.merchantRequestRef ||
+          refund.payment.paymentGateway !== refund.paymentGateway ||
+          refund.payment.providerEnvironment !== refund.providerEnvironment ||
+          refund.payment.merchantAccountKey !== refund.merchantAccountKey)
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      } else if (isRentalCancellation) {
+        const order = refund.rentalOrderId
+          ? await tx.rentalOrder.findUnique({ where: { id: refund.rentalOrderId }, select: { id: true, status: true, userId: true } })
+          : null
+        if (!order || order.status !== 'CANCELLED' || refund.payment.invoice.invoiceType !== 'RENTAL' ||
+            refund.payment.invoice.rentalOrderId !== order.id || refund.payment.invoice.userId !== order.userId || refund.payment.status !== 'SUCCEEDED' ||
+            refund.payment.application?.status !== 'APPLIED' || refund.requestHashVersion !== 1 ||
+            !refund.businessActionId?.startsWith(`rental-cancellation:${order.id}:`) ||
+            refund.amount.lte(0) || refund.amount.gt(refund.payment.amount) ||
+            refund.currency !== 'VND' || refund.payment.currency !== refund.currency ||
+            !refund.merchantAccountKey || !refund.merchantRefundRef || !refund.payment.merchantRequestRef ||
+            refund.payment.paymentGateway !== refund.paymentGateway ||
+            refund.payment.providerEnvironment !== refund.providerEnvironment ||
+            refund.payment.merchantAccountKey !== refund.merchantAccountKey)
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+        this.assertRentalCancellationAllocations(refund, order.id)
       } else {
         if (!settlementOrderId || !refund.depositSettlementId) {
           throw AppError.fromCode(P.REFUND_SOURCE_INVALID, {
@@ -276,23 +344,21 @@ export class SandboxRefundSimulationService {
         })
       }
 
-      if (!isBookingCancellation) this.assertAllocations(refund, settlementOrderId!)
+      if (!isBookingRefund && !isRentalCancellation) this.assertAllocations(refund, settlementOrderId!)
 
       const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
-      if (isBookingCancellation && refund.leaseUntil && refund.leaseUntil > now) {
+      if ((isBookingRefund || isRentalCancellation) && refund.leaseUntil && refund.leaseUntil > now) {
         throw AppError.fromCode('VERSION_CONFLICT', { message: 'Refund reconciliation is currently running' })
       }
       const simulationId = paymentHash(['ADMIN_SANDBOX_SIMULATION', refund.id, 'v1'])
       const providerEventId = `sandbox-refund-simulation:${refund.id}:succeeded:v1`
       const vnpayResponse = providerPayload?.vnpayResponse as Record<string, unknown> | undefined
-      const providerConfirmation = isBookingCancellation
-        ? vnpayResponse?.vnp_ResponseCode === '00' &&
-          ['05', '06'].includes(String(vnpayResponse?.vnp_TransactionStatus))
+      // Chỉ ghi PROCESSING_RESPONSE khi thật sự có phản hồi 05/06 của VNPay.
+      const providerConfirmation =
+        String(vnpayResponse?.vnp_ResponseCode) === '00' &&
+        ['05', '06'].includes(String(vnpayResponse?.vnp_TransactionStatus))
           ? 'PROCESSING_RESPONSE'
           : 'UNCONFIRMED_DEMO'
-        : refund.status === 'PENDING'
-          ? 'UNCONFIRMED_DEMO'
-          : 'PROCESSING_RESPONSE'
       const vnpayTransactionNo =
         typeof vnpayResponse?.vnp_TransactionNo === 'string' && vnpayResponse.vnp_TransactionNo.trim().length > 0
           ? vnpayResponse.vnp_TransactionNo.trim()
@@ -338,10 +404,13 @@ export class SandboxRefundSimulationService {
                 providerEventId,
                 refundTransactionRef,
                 requestedAt,
-                actorAdminId: input.actorUserId,
+                actorAdminId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
+                actorUserId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
+                beneficiaryUserId: refund.payment.invoice.userId,
+                trigger: input.trigger ?? 'ADMIN',
                 reason: input.body.reason,
                 testEvidenceRef: input.body.testEvidenceRef ?? null,
-                origin: 'ADMIN_SANDBOX_SIMULATION',
+                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
                 environment: 'SANDBOX',
                 ...(isBookingCancellation
                   ? {
@@ -360,18 +429,18 @@ export class SandboxRefundSimulationService {
         if (!existingSimulation) {
           await tx.auditLog.create({
             data: {
-              userId: input.actorUserId,
-              action: 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
+              userId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
+              action: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_REFUND_SIMULATION_REQUESTED' : 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
               entityType: 'Refund',
               entityId: refund.id,
               newValues: {
                 simulationId,
                 providerEventId,
-                rentalOrderId: settlementOrderId,
+                rentalOrderId: isRentalCancellation ? refund.rentalOrderId : settlementOrderId,
                 depositSettlementId: refund.depositSettlementId,
                 paymentId: refund.paymentId,
                 environment: 'SANDBOX',
-                origin: 'ADMIN_SANDBOX_SIMULATION',
+                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
                 providerConfirmation,
                 warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
@@ -384,18 +453,20 @@ export class SandboxRefundSimulationService {
         simulationId,
         event,
         refundId: refund.id,
-        rentalOrderId: settlementOrderId,
+        rentalOrderId: isRentalCancellation ? refund.rentalOrderId : settlementOrderId,
         depositSettlementId: refund.depositSettlementId,
-        ...(isBookingCancellation
+        isRentalCancellation,
+        ...(isBookingRefund
           ? {
-              bookingId: refund.bookingCancellation!.bookingId,
-              bookingCancellationId: refund.bookingCancellation!.id,
+              bookingId: refund.payment.invoice.bookingId!,
+              ...(isBookingCancellation ? { bookingCancellationId: refund.bookingCancellation!.id } : {}),
             }
           : {}),
         amount: refund.amount.toFixed(0),
         currency: refund.currency,
         actorUserId: input.actorUserId,
         reason: input.body.reason,
+        trigger: input.trigger,
       }
     })
   }
@@ -526,14 +597,17 @@ export class SandboxRefundSimulationService {
           settlementMode: 'SANDBOX_SIMULATED',
           // PROCESSED is transport state. The Rental consumer receipt is the
           // projection-scoped fact proving that the worker transaction committed.
-          settlementProcessingStatus: prepared.bookingId || successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
+          settlementProcessingStatus: prepared.bookingId || prepared.isRentalCancellation || successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
           simulatedAt: refund.refundedAt.toISOString(),
-          actorAdminId: prepared.actorUserId,
+          actorAdminId: prepared.trigger === 'BOOKING_AUTOMATIC' ? null : prepared.actorUserId,
+          trigger: prepared.trigger ?? 'ADMIN',
           reason: prepared.reason,
           warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
           notices: {
             userNotice: 'Sandbox provider result simulated successfully; no real bank transfer occurred.',
-            adminNotice: prepared.bookingId
+            adminNotice: prepared.isRentalCancellation
+              ? 'Shared Payment recorded a simulated rental cancellation refund and updated the order; no real transfer occurred.'
+              : prepared.bookingId
               ? 'Shared Payment recorded a simulated booking refund and updated the invoice; no real transfer occurred.'
               : 'Shared Payment recorded SUCCEEDED. Rental settlement remains asynchronous through the outbox worker.',
           },
@@ -587,9 +661,6 @@ export class SandboxRefundSimulationService {
         ? String(rawTransactionStatus)
         : ''
     if (responseCode !== '00' || !['05', '06'].includes(transactionStatus)) {
-      if (process.env.NODE_ENV !== 'production') {
-        return
-      }
       throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
         message: 'Refund lacks a verified VNPay SANDBOX 05/06 processing response',
       })
@@ -597,7 +668,7 @@ export class SandboxRefundSimulationService {
   }
 
   private assertRefundEligibleForSimulation(
-    refund: { status: string },
+    refund: { status: string; executionMode?: string },
     expectedProviderStatus: 'PENDING' | 'PROCESSING',
     payload: Prisma.JsonObject | null,
   ): void {
@@ -607,10 +678,13 @@ export class SandboxRefundSimulationService {
       })
     }
     if (refund.status === 'PROCESSING') {
+      // Demo: lệnh refund đã gửi VNPay nhưng không nhận được phản hồi (timeout/không ký được) nên reconcile
+      // mãi UNKNOWN. Chỉ mở khi chưa có phản hồi nào; phản hồi khác 05/06 (VNPay từ chối) vẫn bị chặn.
+      if (payload?.vnpayDispatch && !payload?.vnpayResponse && this.allowsPendingRefundSimulation()) return
       this.assertVnpayProcessingProvenance(payload)
       return
     }
-    if (refund.status !== 'PENDING' || !this.allowsPendingRefundSimulation()) {
+    if (refund.status !== 'PENDING' || (refund.executionMode !== 'SANDBOX_SIMULATED' && !this.allowsPendingRefundSimulation())) {
       throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
         message: `Refund status is ${refund.status}; only PROCESSING can be simulated unless pending-demo mode is enabled`,
       })
@@ -618,13 +692,28 @@ export class SandboxRefundSimulationService {
     // A prior dispatch can still be in flight or have an unknown provider result.
     // Never overwrite that ambiguity with a synthetic success.
     if (payload?.vnpayDispatch || payload?.vnpayResponse) {
-      if (process.env.NODE_ENV !== 'production') {
-        return
-      }
       throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
         message: 'Pending demo simulation requires a refund that has never been dispatched to VNPay',
       })
     }
+  }
+
+  private assertRentalCancellationAllocations(refund: any, orderId: string): void {
+    if (!refund.allocations.length) throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+    let total = new Prisma.Decimal(0)
+    const allocated = new Map<string, Prisma.Decimal>()
+    for (const row of refund.allocations) {
+      const source = row.paymentAllocation
+      if (!source || source.paymentId !== refund.paymentId ||
+          !['RENTAL_DEPOSIT', 'RENTAL_FEE'].includes(source.component) ||
+          source.rentalOrderLine?.orderId !== orderId || row.amount.lte(0))
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      const sum = (allocated.get(row.paymentAllocationId) ?? new Prisma.Decimal(0)).plus(row.amount)
+      if (sum.gt(source.amount)) throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      allocated.set(row.paymentAllocationId, sum)
+      total = total.plus(row.amount)
+    }
+    if (!total.equals(refund.amount)) throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
   }
 
   private assertAllocations(refund: any, orderId: string): void {

@@ -18,6 +18,9 @@ import {
   RentalPaymentOptions,
   RentalPaymentStatus,
   RentalPickupCode,
+  RentalDocumentDownload,
+  RentalDocumentSummary,
+  RentalDocumentVerification,
   RentalProduct,
   RentalQuote,
   RentalRecommendation,
@@ -886,6 +889,33 @@ export const rentalApi = {
   async getDepositStatus(orderId: string, accessToken: string) {
     const response = await apiRequest<Envelope<RentalDepositStatus>>(
       `/api/v1/rental-orders/${orderId}/deposit`,
+      { method: "GET", accessToken },
+    );
+
+    return unwrap(response);
+  },
+
+  async listOrderDocuments(orderId: string, accessToken: string) {
+    const response = await apiRequest<Envelope<PaginatedResult<RentalDocumentSummary>>>(
+      `/api/v1/rental-orders/${encodeURIComponent(orderId)}/documents?page=1&pageSize=50`,
+      { method: "GET", accessToken },
+    );
+
+    return unwrap(response).items ?? [];
+  },
+
+  async getDocumentDownload(documentId: string, accessToken: string) {
+    const response = await apiRequest<Envelope<RentalDocumentDownload>>(
+      `/api/v1/rental-documents/${encodeURIComponent(documentId)}/download`,
+      { method: "GET", accessToken },
+    );
+
+    return unwrap(response);
+  },
+
+  async verifyDocument(documentId: string, accessToken: string) {
+    const response = await apiRequest<Envelope<RentalDocumentVerification>>(
+      `/api/v1/rental-documents/${encodeURIComponent(documentId)}/verification`,
       { method: "GET", accessToken },
     );
 

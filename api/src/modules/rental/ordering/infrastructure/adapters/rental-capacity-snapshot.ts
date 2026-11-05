@@ -1,4 +1,10 @@
-import { EquipmentCondition, EquipmentUnitStatus, ReservationStatus, Prisma } from '@prisma/client';
+import {
+  EquipmentCondition,
+  EquipmentUnitStatus,
+  ReservationStatus,
+  RentalUnitAssignmentStatus,
+  Prisma,
+} from '@prisma/client';
 import type { RentalAvailabilityQuery } from '../../application/ports/rental-availability.port';
 import { calculateSafeCapacity } from '../../application/services/capacity-safety-gate';
 
@@ -111,7 +117,20 @@ export async function getVerifiedCapacitySnapshot(
             }
           : {}),
       },
-      select: { id: true, quantity: true, occupiedFrom: true, occupiedUntil: true },
+      select: {
+        id: true,
+        quantity: true,
+        occupiedFrom: true,
+        occupiedUntil: true,
+        orderLine: {
+          select: {
+            rentalUnitAssignmentsViaOrderLineId: {
+              where: { status: { notIn: [RentalUnitAssignmentStatus.REPLACED, RentalUnitAssignmentStatus.UNASSIGNED] } },
+              select: { equipmentUnitId: true, status: true },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -151,6 +170,15 @@ export async function getVerifiedCapacitySnapshot(
     from: q.occupiedFrom,
     until: q.occupiedUntil,
     units: eligible,
-    reservations,
+    reservations: reservations.map((r) => ({
+      id: r.id,
+      quantity: r.quantity,
+      occupiedFrom: r.occupiedFrom,
+      occupiedUntil: r.occupiedUntil,
+      assignedUnits: (r.orderLine?.rentalUnitAssignmentsViaOrderLineId ?? []).map((a) => ({
+        unitId: a.equipmentUnitId,
+        released: a.status === RentalUnitAssignmentStatus.RETURNED || a.status === RentalUnitAssignmentStatus.CLOSED,
+      })),
+    })),
   });
 }

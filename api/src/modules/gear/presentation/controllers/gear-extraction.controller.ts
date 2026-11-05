@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { Auth } from '../../../../shared/decorators/auth.decorator';
@@ -72,6 +73,18 @@ const MANUAL_ENTRY_SCHEMA = {
 export class GearExtractionController {
   constructor(private readonly extractionService: GearExtractionService) {}
 
+  @Get('quota')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Xem số lượt đọc thông số AI trong ngày của người dùng hiện tại', description: 'Ảnh và link dùng chung hạn mức. Lượt đang xử lý được tạm tính; cache và bản nháp nhập tay không tính. Làm mới lúc 00:00 giờ Việt Nam.' })
+  @ApiResponse({ status: 200, schema: { type: 'object', properties: {
+    limit: { type: 'integer', example: 20 }, used: { type: 'integer', example: 7 },
+    remaining: { type: 'integer', example: 13 }, resetAt: { type: 'string', format: 'date-time' },
+    timezone: { type: 'string', example: 'Asia/Ho_Chi_Minh' },
+  } } })
+  getQuota(@ActiveUser('id') userId: string) {
+    return this.extractionService.getDailyQuota(userId)
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -85,7 +98,7 @@ Người dùng nhập tay rồi gọi confirm như bình thường; bản nháp 
 Lỗi đầu vào (URL không hợp lệ/bị chặn, ảnh không thuộc người dùng, sai định dạng, quá dung lượng) và xung đột đồng thời vẫn trả lỗi như cũ.
 
 **Hạn ngạch & Giới hạn:**
-- Mỗi người dùng có **20 lượt trích xuất bằng AI/ngày** (tính theo múi giờ \`Asia/Saigon\`); hết lượt thì nhận bản nháp nhập tay.
+- Hạn mức trích xuất theo ngày có thể cấu hình (mặc định 20 lượt, múi giờ \`Asia/Saigon\`); xem hạn mức thực tế qua \`GET /gear/extractions/quota\`. Hết lượt thì nhận bản nháp nhập tay.
 - Bản nháp trích xuất có thời hạn hiệu lực **24 giờ**.
 
 **Định dạng dữ liệu hỗ trợ (Payload Formats):**

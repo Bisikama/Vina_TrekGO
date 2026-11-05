@@ -23,6 +23,7 @@
     "smoke:boot": "ts-node scripts/smoke-boot.ts",
     "seed:booking-policies": "ts-node prisma/seeds/booking-policy.seed.ts",
     "seed:gear-rules": "ts-node prisma/seeds/gear-rule.seed.ts",
+    "seed:gear-demo": "ts-node prisma/seed-gear-demo.ts",
     "seed:local-rental-products": "ts-node prisma/seed-local-rental-products.ts",
     "seed:damage-rules": "ts-node prisma/seeds/damage-assessment-rule.seed.ts",
     "seed:gps-policy": "ts-node prisma/seeds/gps-policy.seed.ts",
@@ -46,7 +47,8 @@
     "openapi:generate:dev": "cross-env NODE_ENV=development MEDIA_DEV_UPLOAD_ENABLED=true ts-node scripts/generate-openapi.ts",
     "seed:demo-prereqs": "ts-node prisma/seed-demo-prereqs.ts",
     "seed:booking-all": "ts-node prisma/seed-booking-all.ts",
-    "test:trip-cancellations": "node test/run-trip-cancellations.cjs"
+    "test:trip-cancellations": "node test/run-trip-cancellations.cjs",
+    "seed:product-profiles": "ts-node prisma/seed-product-profiles.ts"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",

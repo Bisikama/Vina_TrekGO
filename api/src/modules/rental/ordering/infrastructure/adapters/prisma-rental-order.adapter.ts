@@ -1,5 +1,8 @@
 import { manualLateRentalRefund } from '../../../../payments/manual-refund-reservation'
-import { cancelPendingRentalChargesWithTx, reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund'
+import {
+  cancelPendingRentalChargesWithTx,
+  reserveRentalCancellationRefundWithTx,
+} from '../../../payments/rental-cancellation-refund'
 import { validateRentalOrderPaymentMembershipWithTx } from '../../../payments/rental-membership.guard'
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { createHash } from 'node:crypto'
@@ -7,6 +10,7 @@ import { consumeExtensionPaymentWithTx, releaseExtensionWithTx } from '../../ext
 import { evaluateRentalEligibility } from '../../application/services/rental-ordering.rules'
 import { Inject, Injectable } from '@nestjs/common'
 import {
+  InventoryTaskStatus,
   InvoiceStatus,
   InvoiceType,
   PaymentStatus,
@@ -15,6 +19,7 @@ import {
   RefundPurpose,
   RefundStatus,
   RentalFinancialStatus,
+  RentalOrderExceptionStatus,
   RentalOrderStatus,
   RentalQuoteStatus,
   ReservationStatus,
@@ -39,16 +44,24 @@ import type {
   RentalPaymentResult,
 } from '../../application/ports/rental-order.port'
 import { RENTAL_CONTEXT_PORT, type RentalContextPort } from '../../application/ports/rental-context.port'
-import { describeDeposit, parseWholeVnd, rentalOccupiedFrom, toSafeNumber } from '../../application/services/rental-ordering.rules'
+import {
+  describeDeposit,
+  parseWholeVnd,
+  rentalOccupiedFrom,
+  toSafeNumber,
+} from '../../application/services/rental-ordering.rules'
 import { getAvailableCountWithTx } from './prisma-rental-availability-tx.helper'
+import {
+  hasActiveAssignments,
+  isWithDeliveryStaff,
+  releaseWarehouseCustodyWithTx,
+  warehouseReleaseOrderInclude,
+} from '../rental-warehouse-release'
 
 const IDEMPOTENCY_SCOPE_CREATE_ORDER = 'RB-API-201:create-rental-order'
 // Keep at most one unfinished checkout per customer and trip. Paid and later
 // lifecycle orders are independent rentals and must not block an additional one.
-const PENDING_PAYMENT_ORDER_STATUSES: RentalOrderStatus[] = [
-  RentalOrderStatus.PENDING_PAYMENT,
-]
-
+const PENDING_PAYMENT_ORDER_STATUSES: RentalOrderStatus[] = [RentalOrderStatus.PENDING_PAYMENT]
 
 async function runWithTransactionRetry<T>(
   action: () => Promise<T>,
@@ -108,289 +121,293 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
               command.now,
             )
             if (!currentContext) throw AppError.fromCode(RT.STALE_CONTEXT)
-          const cached = await tx.idempotencyRecord.findUnique({
-            where: {
-              scope_userId_idempotencyKey: {
+            const cached = await tx.idempotencyRecord.findUnique({
+              where: {
+                scope_userId_idempotencyKey: {
+                  scope: IDEMPOTENCY_SCOPE_CREATE_ORDER,
+                  userId: command.userId,
+                  idempotencyKey: command.idempotencyKey,
+                },
+              },
+            })
+            if (cached) {
+              if (cached.requestHash !== requestHash) throw AppError.fromCode(RT.IDEMPOTENCY_KEY_REUSED)
+              if (cached.responseBody) return cached.responseBody as unknown as CreateRentalOrderResult
+              throw AppError.fromCode(RT.OPERATION_CONFLICT)
+            }
+            await tx.idempotencyRecord.create({
+              data: {
                 scope: IDEMPOTENCY_SCOPE_CREATE_ORDER,
                 userId: command.userId,
                 idempotencyKey: command.idempotencyKey,
+                requestHash,
               },
-            },
-          })
-          if (cached) {
-            if (cached.requestHash !== requestHash) throw AppError.fromCode(RT.IDEMPOTENCY_KEY_REUSED)
-            if (cached.responseBody) return cached.responseBody as unknown as CreateRentalOrderResult
-            throw AppError.fromCode(RT.OPERATION_CONFLICT)
-          }
-          await tx.idempotencyRecord.create({
-            data: {
-              scope: IDEMPOTENCY_SCOPE_CREATE_ORDER,
-              userId: command.userId,
-              idempotencyKey: command.idempotencyKey,
-              requestHash,
-            },
-          })
-
-          await tx.$queryRaw`SELECT id FROM rental_quotes WHERE id = ${command.quoteId}::uuid FOR UPDATE`
-          const quote = await tx.rentalQuote.findUnique({
-            where: { id: command.quoteId },
-            include: {
-              rentalQuoteLinesViaQuoteId: true,
-              rentalPolicy: true,
-            },
-          })
-          if (!quote) throw AppError.fromCode(RT.QUOTE_NOT_FOUND)
-          if (quote.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
-          if (quote.status !== RentalQuoteStatus.ACTIVE) throw AppError.fromCode(RT.QUOTE_NOT_ACTIVE)
-          if (quote.expiresAt.getTime() <= command.now.getTime()) throw AppError.fromCode(RT.QUOTE_EXPIRED)
-          // Quote cũ giữ công suất ngắn hơn 12 giờ không được chuyển thành đơn mới.
-          const baselineOccupiedFrom = rentalOccupiedFrom(quote.rentalStartAt)
-          if (quote.occupiedStartAt > baselineOccupiedFrom ||
-              quote.rentalQuoteLinesViaQuoteId.some((line) =>
-                (line.occupiedFrom ?? quote.occupiedStartAt) > baselineOccupiedFrom))
-            throw AppError.fromCode(RT.STALE_CONTEXT)
-          const kindMismatch = Boolean(quote.membershipKind && quote.membershipKind !== currentContext.membershipKind)
-          const versionMismatch = Boolean(
-            quote.membershipSourceVersion != null &&
-              quote.membershipSourceVersion !== currentContext.membershipSourceVersion,
-          )
-          const refMismatch = quote.membershipRef !== currentContext.membershipRef
-          const userMismatch = currentContext.userId !== command.userId || quote.userId !== command.userId
-          const tripMismatch = currentContext.trip.id !== quote.tripId
-          const contextVersionMismatch = currentContext.contextVersion !== quote.contextVersion
-
-          if (
-            kindMismatch ||
-            versionMismatch ||
-            refMismatch ||
-            userMismatch ||
-            tripMismatch ||
-            contextVersionMismatch
-          ) {
-            throw AppError.fromCode(RT.STALE_CONTEXT)
-          }
-
-          const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx)
-          const snap = quote.policySnapshot as Record<string, unknown> | null
-          if (
-            snap?.primaryRentalInventoryLocationId &&
-            snap.primaryRentalInventoryLocationId !== primaryRentalLocationId
-          ) {
-            throw AppError.fromCode(RT.STALE_CONTEXT, {
-              details: { reason: 'PRIMARY_RENTAL_LOCATION_CHANGED_OR_NOT_SNAPSHOTTED' },
             })
-          }
 
-          assertContextStillRentalEligible({
-            rentalEligible: currentContext.rentalEligible,
-            membershipStatus: currentContext.membershipStatus,
-            rentalCutoffAt: currentContext.rentalCutoffAt,
-            now: command.now,
-          })
-
-          // Eligibility ignores expired payment holds so the customer can start
-          // another checkout immediately. Expire the stale order under its row
-          // lock before inserting the new PENDING_PAYMENT order; this releases
-          // its reservations, invoices, payment attempts and emits its outbox
-          // event through the established expiry flow.
-          const expiredPendingOrder = await tx.rentalOrder.findFirst({
-            where: {
-              userId: quote.userId,
-              tripId: quote.tripId,
-              status: RentalOrderStatus.PENDING_PAYMENT,
-              paymentExpiresAt: { lte: command.now },
-            },
-            select: { id: true },
-          })
-          if (expiredPendingOrder) {
-            await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${expiredPendingOrder.id}::uuid FOR UPDATE`
-            const currentPendingOrder = await tx.rentalOrder.findUnique({
-              where: { id: expiredPendingOrder.id },
-              select: { status: true, paymentExpiresAt: true },
+            await tx.$queryRaw`SELECT id FROM rental_quotes WHERE id = ${command.quoteId}::uuid FOR UPDATE`
+            const quote = await tx.rentalQuote.findUnique({
+              where: { id: command.quoteId },
+              include: {
+                rentalQuoteLinesViaQuoteId: true,
+                rentalPolicy: true,
+              },
             })
+            if (!quote) throw AppError.fromCode(RT.QUOTE_NOT_FOUND)
+            if (quote.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
+            if (quote.status !== RentalQuoteStatus.ACTIVE) throw AppError.fromCode(RT.QUOTE_NOT_ACTIVE)
+            if (quote.expiresAt.getTime() <= command.now.getTime()) throw AppError.fromCode(RT.QUOTE_EXPIRED)
+            // Quote cũ giữ công suất ngắn hơn 12 giờ không được chuyển thành đơn mới.
+            const baselineOccupiedFrom = rentalOccupiedFrom(quote.rentalStartAt)
             if (
-              currentPendingOrder?.status === RentalOrderStatus.PENDING_PAYMENT &&
-              currentPendingOrder.paymentExpiresAt <= command.now
+              quote.occupiedStartAt > baselineOccupiedFrom ||
+              quote.rentalQuoteLinesViaQuoteId.some(
+                (line) => (line.occupiedFrom ?? quote.occupiedStartAt) > baselineOccupiedFrom,
+              )
+            )
+              throw AppError.fromCode(RT.STALE_CONTEXT)
+            const kindMismatch = Boolean(quote.membershipKind && quote.membershipKind !== currentContext.membershipKind)
+            const versionMismatch = Boolean(
+              quote.membershipSourceVersion != null &&
+              quote.membershipSourceVersion !== currentContext.membershipSourceVersion,
+            )
+            const refMismatch = quote.membershipRef !== currentContext.membershipRef
+            const userMismatch = currentContext.userId !== command.userId || quote.userId !== command.userId
+            const tripMismatch = currentContext.trip.id !== quote.tripId
+            const contextVersionMismatch = currentContext.contextVersion !== quote.contextVersion
+
+            if (
+              kindMismatch ||
+              versionMismatch ||
+              refMismatch ||
+              userMismatch ||
+              tripMismatch ||
+              contextVersionMismatch
             ) {
-              await expireOrderWithTx(tx, expiredPendingOrder.id, command.now)
+              throw AppError.fromCode(RT.STALE_CONTEXT)
             }
-          }
 
-          const openOrder = await tx.rentalOrder.findFirst({
-            where: { userId: quote.userId, tripId: quote.tripId, status: { in: PENDING_PAYMENT_ORDER_STATUSES } },
-            select: { id: true },
-          })
-          if (openOrder) throw AppError.fromCode(RT.OPEN_ORDER_EXISTS, { details: { rentalOrderId: openOrder.id } })
-
-          const productIds = [...new Set(quote.rentalQuoteLinesViaQuoteId.map((line) => line.productId))].sort()
-          for (const productId of productIds) {
-            await tx.$queryRaw`SELECT id FROM rental_products WHERE id = ${productId}::uuid FOR UPDATE`
-          }
-          const lockedProducts = await tx.rentalProduct.findMany({
-            where: { id: { in: productIds } },
-            select: { id: true, status: true },
-          })
-          const statusMap = new Map(lockedProducts.map((p) => [p.id, p.status]))
-          for (const productId of productIds) {
-            if (statusMap.get(productId) !== 'ACTIVE')
-              throw AppError.fromCode(RT.EQUIPMENT_NOT_AVAILABLE, { details: { productId } })
-          }
-          for (const line of quote.rentalQuoteLinesViaQuoteId) {
-            const lineOccupiedFrom = line.occupiedFrom ?? quote.occupiedStartAt
-            const lineOccupiedUntil = line.occupiedUntil ?? quote.occupiedEndAt
-            const availableCount = await getAvailableCountWithTx(tx, {
-              productId: line.productId,
-              inventoryLocationId: primaryRentalLocationId,
-              occupiedFrom: lineOccupiedFrom,
-              occupiedUntil: lineOccupiedUntil,
-              now: command.now,
-            })
-            if (line.quantity > availableCount) {
-              throw AppError.fromCode(RT.INSUFFICIENT_AVAILABLE_QUANTITY, {
-                details: {
-                  productId: line.productId,
-                  requestedQuantity: line.quantity,
-                  availableCount,
-                  occupiedFrom: lineOccupiedFrom,
-                  occupiedUntil: lineOccupiedUntil,
-                },
+            const primaryRentalLocationId = await resolveActivePrimaryRentalLocation(tx)
+            const snap = quote.policySnapshot as Record<string, unknown> | null
+            if (
+              snap?.primaryRentalInventoryLocationId &&
+              snap.primaryRentalInventoryLocationId !== primaryRentalLocationId
+            ) {
+              throw AppError.fromCode(RT.STALE_CONTEXT, {
+                details: { reason: 'PRIMARY_RENTAL_LOCATION_CHANGED_OR_NOT_SNAPSHOTTED' },
               })
             }
-          }
 
-          const paymentExpiresAt = new Date(command.now.getTime() + quote.rentalPolicy.paymentHoldMinutes * 60_000)
-          const order = await tx.rentalOrder.create({
-            data: {
-              quoteId: quote.id,
-              rentalPolicyId: quote.rentalPolicyId,
-              userId: quote.userId,
-              tripId: quote.tripId,
-              bookingId: quote.bookingId,
-              membershipKind: quote.membershipKind,
-              membershipRef: quote.membershipRef,
-              membershipSourceVersion: quote.membershipSourceVersion,
-              membershipSnapshot: (quote.membershipSnapshot ?? Prisma.JsonNull) as any,
-              returnOptionSnapshot: (quote.returnOptionSnapshot ?? Prisma.JsonNull) as any,
-              recipientUserId: quote.recipientUserId,
-              recipientParticipantId: quote.recipientParticipantId,
-              recipientSnapshot: quote.recipientSnapshot as any,
-              pickupPointId: quote.pickupPointId!,
-              returnPointId: quote.returnPointId!,
-              contextVersionSnapshot: quote.contextVersion,
-              rentalStartAt: quote.rentalStartAt,
-              rentalEndAt: quote.rentalEndAt,
-              plannedHandoverAt: quote.plannedHandoverAt,
-              plannedReturnAt: quote.plannedReturnAt,
-              occupiedStartAt: quote.occupiedStartAt,
-              occupiedEndAt: quote.occupiedEndAt,
-              status: RentalOrderStatus.PENDING_PAYMENT,
-              financialStatus: RentalFinancialStatus.UNPAID,
-              rentalFee: quote.rentalFee,
-              totalDeposit: quote.totalDeposit,
-              totalAmount: quote.totalAmount,
-              currency: quote.currency,
-              policySnapshot: quote.policySnapshot as any,
-              paymentExpiresAt,
-              rentalOrderLinesViaOrderId: {
-                create: quote.rentalQuoteLinesViaQuoteId.map((line) => ({
-                  productId: line.productId,
-                  quantity: line.quantity,
-                  dailyPriceSnapshot: line.dailyPriceSnapshot,
-                  depositPerUnitSnapshot: line.depositPerUnitSnapshot,
-                  replacementValueSnapshot: line.replacementValueSnapshot,
-                  chargedDays: line.chargedDays,
-                  lineRentalFee: line.lineRentalFee,
-                  lineDeposit: line.lineDeposit,
-                })),
+            assertContextStillRentalEligible({
+              rentalEligible: currentContext.rentalEligible,
+              membershipStatus: currentContext.membershipStatus,
+              rentalCutoffAt: currentContext.rentalCutoffAt,
+              now: command.now,
+            })
+
+            // Eligibility ignores expired payment holds so the customer can start
+            // another checkout immediately. Expire the stale order under its row
+            // lock before inserting the new PENDING_PAYMENT order; this releases
+            // its reservations, invoices, payment attempts and emits its outbox
+            // event through the established expiry flow.
+            const expiredPendingOrder = await tx.rentalOrder.findFirst({
+              where: {
+                userId: quote.userId,
+                tripId: quote.tripId,
+                status: RentalOrderStatus.PENDING_PAYMENT,
+                paymentExpiresAt: { lte: command.now },
               },
-            },
-            include: { rentalOrderLinesViaOrderId: true },
-          })
+              select: { id: true },
+            })
+            if (expiredPendingOrder) {
+              await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${expiredPendingOrder.id}::uuid FOR UPDATE`
+              const currentPendingOrder = await tx.rentalOrder.findUnique({
+                where: { id: expiredPendingOrder.id },
+                select: { status: true, paymentExpiresAt: true },
+              })
+              if (
+                currentPendingOrder?.status === RentalOrderStatus.PENDING_PAYMENT &&
+                currentPendingOrder.paymentExpiresAt <= command.now
+              ) {
+                await expireOrderWithTx(tx, expiredPendingOrder.id, command.now)
+              }
+            }
 
-          const quantityReservations: CreateRentalOrderResult['quantityReservations'] = []
-          for (const line of order.rentalOrderLinesViaOrderId) {
-            const quoteLine = quote.rentalQuoteLinesViaQuoteId.find((ql) => ql.productId === line.productId)
-            const lineOccupiedFrom = quoteLine?.occupiedFrom ?? quote.occupiedStartAt
-            const lineOccupiedUntil = quoteLine?.occupiedUntil ?? quote.occupiedEndAt
-            const r = await tx.rentalQuantityReservation.create({
-              data: {
-                orderLineId: line.id,
+            const openOrder = await tx.rentalOrder.findFirst({
+              where: { userId: quote.userId, tripId: quote.tripId, status: { in: PENDING_PAYMENT_ORDER_STATUSES } },
+              select: { id: true },
+            })
+            if (openOrder) throw AppError.fromCode(RT.OPEN_ORDER_EXISTS, { details: { rentalOrderId: openOrder.id } })
+
+            const productIds = [...new Set(quote.rentalQuoteLinesViaQuoteId.map((line) => line.productId))].sort()
+            for (const productId of productIds) {
+              await tx.$queryRaw`SELECT id FROM rental_products WHERE id = ${productId}::uuid FOR UPDATE`
+            }
+            const lockedProducts = await tx.rentalProduct.findMany({
+              where: { id: { in: productIds } },
+              select: { id: true, status: true },
+            })
+            const statusMap = new Map(lockedProducts.map((p) => [p.id, p.status]))
+            for (const productId of productIds) {
+              if (statusMap.get(productId) !== 'ACTIVE')
+                throw AppError.fromCode(RT.EQUIPMENT_NOT_AVAILABLE, { details: { productId } })
+            }
+            for (const line of quote.rentalQuoteLinesViaQuoteId) {
+              const lineOccupiedFrom = line.occupiedFrom ?? quote.occupiedStartAt
+              const lineOccupiedUntil = line.occupiedUntil ?? quote.occupiedEndAt
+              const availableCount = await getAvailableCountWithTx(tx, {
                 productId: line.productId,
-                quantity: line.quantity,
+                inventoryLocationId: primaryRentalLocationId,
                 occupiedFrom: lineOccupiedFrom,
                 occupiedUntil: lineOccupiedUntil,
-                status: ReservationStatus.HELD,
-                holdExpiresAt: paymentExpiresAt,
+                now: command.now,
+              })
+              if (line.quantity > availableCount) {
+                throw AppError.fromCode(RT.INSUFFICIENT_AVAILABLE_QUANTITY, {
+                  details: {
+                    productId: line.productId,
+                    requestedQuantity: line.quantity,
+                    availableCount,
+                    occupiedFrom: lineOccupiedFrom,
+                    occupiedUntil: lineOccupiedUntil,
+                  },
+                })
+              }
+            }
+
+            const paymentExpiresAt = new Date(command.now.getTime() + quote.rentalPolicy.paymentHoldMinutes * 60_000)
+            const order = await tx.rentalOrder.create({
+              data: {
+                quoteId: quote.id,
+                rentalPolicyId: quote.rentalPolicyId,
+                userId: quote.userId,
+                tripId: quote.tripId,
+                bookingId: quote.bookingId,
+                membershipKind: quote.membershipKind,
+                membershipRef: quote.membershipRef,
+                membershipSourceVersion: quote.membershipSourceVersion,
+                membershipSnapshot: (quote.membershipSnapshot ?? Prisma.JsonNull) as any,
+                returnOptionSnapshot: (quote.returnOptionSnapshot ?? Prisma.JsonNull) as any,
+                recipientUserId: quote.recipientUserId,
+                recipientParticipantId: quote.recipientParticipantId,
+                recipientSnapshot: quote.recipientSnapshot as any,
+                pickupPointId: quote.pickupPointId!,
+                returnPointId: quote.returnPointId!,
+                contextVersionSnapshot: quote.contextVersion,
+                rentalStartAt: quote.rentalStartAt,
+                rentalEndAt: quote.rentalEndAt,
+                plannedHandoverAt: quote.plannedHandoverAt,
+                plannedReturnAt: quote.plannedReturnAt,
+                occupiedStartAt: quote.occupiedStartAt,
+                occupiedEndAt: quote.occupiedEndAt,
+                status: RentalOrderStatus.PENDING_PAYMENT,
+                financialStatus: RentalFinancialStatus.UNPAID,
+                rentalFee: quote.rentalFee,
+                totalDeposit: quote.totalDeposit,
+                totalAmount: quote.totalAmount,
+                currency: quote.currency,
+                policySnapshot: quote.policySnapshot as any,
+                paymentExpiresAt,
+                rentalOrderLinesViaOrderId: {
+                  create: quote.rentalQuoteLinesViaQuoteId.map((line) => ({
+                    productId: line.productId,
+                    quantity: line.quantity,
+                    dailyPriceSnapshot: line.dailyPriceSnapshot,
+                    depositPerUnitSnapshot: line.depositPerUnitSnapshot,
+                    replacementValueSnapshot: line.replacementValueSnapshot,
+                    chargedDays: line.chargedDays,
+                    lineRentalFee: line.lineRentalFee,
+                    lineDeposit: line.lineDeposit,
+                  })),
+                },
+              },
+              include: { rentalOrderLinesViaOrderId: true },
+            })
+
+            const quantityReservations: CreateRentalOrderResult['quantityReservations'] = []
+            for (const line of order.rentalOrderLinesViaOrderId) {
+              const quoteLine = quote.rentalQuoteLinesViaQuoteId.find((ql) => ql.productId === line.productId)
+              const lineOccupiedFrom = quoteLine?.occupiedFrom ?? quote.occupiedStartAt
+              const lineOccupiedUntil = quoteLine?.occupiedUntil ?? quote.occupiedEndAt
+              const r = await tx.rentalQuantityReservation.create({
+                data: {
+                  orderLineId: line.id,
+                  productId: line.productId,
+                  quantity: line.quantity,
+                  occupiedFrom: lineOccupiedFrom,
+                  occupiedUntil: lineOccupiedUntil,
+                  status: ReservationStatus.HELD,
+                  holdExpiresAt: paymentExpiresAt,
+                },
+              })
+              quantityReservations.push(mapReservation(r))
+            }
+
+            await tx.invoice.create({
+              data: {
+                invoiceNo: buildRentalInvoiceNo(order.id),
+                userId: quote.userId,
+                invoiceType: InvoiceType.RENTAL,
+                rentalOrderId: order.id,
+                revisionNo: 1,
+                subtotalAmount: quote.totalAmount,
+                discountAmount: 0,
+                totalAmount: quote.totalAmount,
+                currency: quote.currency,
+                status: InvoiceStatus.PENDING_PAYMENT,
+                expiresAt: paymentExpiresAt,
+                invoiceLinesViaInvoiceId: {
+                  create: order.rentalOrderLinesViaOrderId.flatMap((line) => {
+                    const arr: any[] = []
+                    if (line.lineRentalFee.gt(0))
+                      arr.push({
+                        lineCode: 'RENTAL_FEE',
+                        description: 'Rental fee',
+                        quantity: 1,
+                        unitAmount: line.lineRentalFee,
+                        lineAmount: line.lineRentalFee,
+                        referenceType: 'RentalOrderLine',
+                        referenceId: line.id,
+                      })
+                    if (line.lineDeposit.gt(0))
+                      arr.push({
+                        lineCode: 'RENTAL_DEPOSIT',
+                        description: 'Rental deposit',
+                        quantity: 1,
+                        unitAmount: line.lineDeposit,
+                        lineAmount: line.lineDeposit,
+                        referenceType: 'RentalOrderLine',
+                        referenceId: line.id,
+                      })
+                    return arr
+                  }),
+                },
               },
             })
-            quantityReservations.push(mapReservation(r))
-          }
+            await tx.rentalQuote.update({
+              where: { id: quote.id },
+              data: { status: RentalQuoteStatus.CONVERTED, version: { increment: 1 } },
+            })
 
-          await tx.invoice.create({
-            data: {
-              invoiceNo: buildRentalInvoiceNo(order.id),
-              userId: quote.userId,
-              invoiceType: InvoiceType.RENTAL,
-              rentalOrderId: order.id,
-              revisionNo: 1,
-              subtotalAmount: quote.totalAmount,
-              discountAmount: 0,
-              totalAmount: quote.totalAmount,
-              currency: quote.currency,
-              status: InvoiceStatus.PENDING_PAYMENT,
-              expiresAt: paymentExpiresAt,
-              invoiceLinesViaInvoiceId: {
-                create: order.rentalOrderLinesViaOrderId.flatMap((line) => {
-                  const arr: any[] = []
-                  if (line.lineRentalFee.gt(0))
-                    arr.push({
-                      lineCode: 'RENTAL_FEE',
-                      description: 'Rental fee',
-                      quantity: 1,
-                      unitAmount: line.lineRentalFee,
-                      lineAmount: line.lineRentalFee,
-                      referenceType: 'RentalOrderLine',
-                      referenceId: line.id,
-                    })
-                  if (line.lineDeposit.gt(0))
-                    arr.push({
-                      lineCode: 'RENTAL_DEPOSIT',
-                      description: 'Rental deposit',
-                      quantity: 1,
-                      unitAmount: line.lineDeposit,
-                      lineAmount: line.lineDeposit,
-                      referenceType: 'RentalOrderLine',
-                      referenceId: line.id,
-                    })
-                  return arr
-                }),
+            const result: CreateRentalOrderResult = { order: mapOrderSummary(order), quantityReservations }
+            await tx.idempotencyRecord.update({
+              where: {
+                scope_userId_idempotencyKey: {
+                  scope: IDEMPOTENCY_SCOPE_CREATE_ORDER,
+                  userId: command.userId,
+                  idempotencyKey: command.idempotencyKey,
+                },
               },
-            },
-          })
-          await tx.rentalQuote.update({
-            where: { id: quote.id },
-            data: { status: RentalQuoteStatus.CONVERTED, version: { increment: 1 } },
-          })
-
-          const result: CreateRentalOrderResult = { order: mapOrderSummary(order), quantityReservations }
-          await tx.idempotencyRecord.update({
-            where: {
-              scope_userId_idempotencyKey: {
-                scope: IDEMPOTENCY_SCOPE_CREATE_ORDER,
-                userId: command.userId,
-                idempotencyKey: command.idempotencyKey,
-              },
-            },
-            data: { responseBody: result as unknown as Prisma.InputJsonValue, completedAt: command.now },
-          })
-          return result
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
-          maxWait: 15000,
-          timeout: 30000,
-        },
-      ))
+              data: { responseBody: result as unknown as Prisma.InputJsonValue, completedAt: command.now },
+            })
+            return result
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+            maxWait: 15000,
+            timeout: 30000,
+          },
+        ),
+      )
     } catch (error) {
       if (error instanceof AppError) {
         if (error.code === RT.INSUFFICIENT_AVAILABLE_QUANTITY && error.details) {
@@ -508,6 +525,11 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         },
         pickupPoint: { select: { id: true, name: true, address: true } },
         returnPoint: { select: { id: true, name: true, address: true } },
+        refundsViaRentalOrderId: {
+          where: { purpose: 'RENTAL_CANCELLATION' },
+          select: { id: true, amount: true, currency: true, status: true, providerPayload: true },
+          orderBy: { createdAt: 'desc' },
+        },
         depositSettlementViaOrderId: {
           include: {
             depositSettlementItemsViaSettlementId: {
@@ -536,6 +558,10 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         unitId: a.equipmentUnit.id,
         assetCode: a.equipmentUnit.assetCode,
         assignmentStatus: a.status,
+        packedAt: a.packedAt?.toISOString() ?? null,
+        handedOverAt: a.handedOverAt?.toISOString() ?? null,
+        returnedAt: a.returnedAt?.toISOString() ?? null,
+        closedAt: a.closedAt?.toISOString() ?? null,
         physicalStatus: a.equipmentUnit.status,
         condition: a.equipmentUnit.condition,
       })),
@@ -574,6 +600,17 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       pickupPoint: order.pickupPoint,
       returnPoint: order.returnPoint,
       deposit: mapDepositLifecycle(order),
+      cancellationRefunds: (order.refundsViaRentalOrderId ?? []).map((refund) => {
+        const simulation = jsonObject(refund.providerPayload).sandboxSimulation as Record<string, unknown> | undefined
+        const simulated = refund.status === 'SUCCEEDED' && simulation?.origin === 'ADMIN_SANDBOX_SIMULATION'
+        return {
+          refundId: refund.id,
+          amount: decimalVndToApiInteger(refund.amount.toString()),
+          currency: refund.currency,
+          status: refund.status,
+          settlementMode: simulated ? 'SANDBOX_SIMULATED' : 'STANDARD',
+        }
+      }),
       timeline: buildTimeline(order),
       allowedActions: buildAllowedActions(
         query.actorRole,
@@ -645,27 +682,38 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
     })
     if (!order) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
     if (order.userId !== query.userId) throw AppError.fromCode('FORBIDDEN')
-    const trip = await this.prisma.trip.findUnique({where:{id:order.tripId},select:{status:true}})
-    if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
-    return { ...calculateCancellationPreview(order, query.now), tripCancellationPending: trip?.status === 'CANCEL_PENDING' }
+    const trip = await this.prisma.trip.findUnique({ where: { id: order.tripId }, select: { status: true } })
+    if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED')
+      throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
+    return {
+      ...calculateCancellationPreview(order, query.now),
+      tripCancellationPending: trip?.status === 'CANCEL_PENDING',
+    }
   }
 
   // RB-API-205
   async cancelOrder(command: CancelRentalOrderCommand): Promise<CancelRentalOrderResult> {
     return this.prisma.$transaction(async (tx) => {
-      const pointer = await tx.rentalOrder.findUnique({where:{id:command.orderId},select:{tripId:true,userId:true}})
+      const pointer = await tx.rentalOrder.findUnique({
+        where: { id: command.orderId },
+        select: { tripId: true, userId: true, inventoryTaskViaOrderId: { select: { id: true } } },
+      })
       if (!pointer) throw AppError.fromCode(RT.RENTAL_ORDER_NOT_FOUND)
       if (pointer.userId !== command.userId) throw AppError.fromCode('FORBIDDEN')
       await tx.$queryRaw`SELECT id FROM trips WHERE id=${pointer.tripId}::uuid FOR UPDATE`
-      const trip = await tx.trip.findUnique({where:{id:pointer.tripId},select:{status:true}})
-      if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED') throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
+      const trip = await tx.trip.findUnique({ where: { id: pointer.tripId }, select: { status: true } })
+      if (trip?.status === 'CANCELLED' || trip?.status === 'INTERRUPTED')
+        throw AppError.fromCode('TRIP_CANCELLATION_PROCESSING')
+      // Khoá inventory task trước đơn, cùng thứ tự với preparation (task → đơn). Nhờ vậy lần pick đang chạy
+      // phải xong trước, và assignment đọc bên dưới đã gồm cả unit vừa pick.
+      if (pointer.inventoryTaskViaOrderId)
+        await tx.$queryRaw`SELECT id FROM inventory_tasks WHERE id = ${pointer.inventoryTaskViaOrderId.id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${command.orderId}::uuid FOR UPDATE`
       const order = await tx.rentalOrder.findUnique({
         where: { id: command.orderId },
         include: {
+          ...warehouseReleaseOrderInclude,
           rentalPolicy: true,
-          rentalOrderLinesViaOrderId: { select: { id: true } },
-          inventoryTaskViaOrderId: true,
           rentalHandoverViaOrderId: true,
           invoicesViaRentalOrderId: {
             orderBy: { createdAt: 'asc' },
@@ -698,8 +746,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       }
       if (([RentalOrderStatus.CANCELLED, RentalOrderStatus.EXPIRED] as string[]).includes(order.status))
         throw AppError.fromCode(RT.INVALID_RENTAL_STATE)
-      if (order.inventoryTaskViaOrderId?.status === 'TRANSFERRED')
-        throw AppError.fromCode(RT.CANCELLATION_REQUIRES_CUSTODY_RETURN)
+      if (isWithDeliveryStaff(order)) throw AppError.fromCode(RT.CANCELLATION_REQUIRES_CUSTODY_RETURN)
       // Applied extension fees are charged through separate invoicesViaRentalOrderId. Automatic cancellation must NOT
       // refund the combined fee from only the original payment. Require reconciled multi-payment refund flow.
       const appliedExtensions = await tx.rentalExtensionRequest.count({
@@ -721,13 +768,32 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         where: { orderLineId: { in: lineIds }, status: { in: [ReservationStatus.HELD, ReservationStatus.CONFIRMED] } },
         data: { status: ReservationStatus.RELEASED, releasedAt: command.now, version: { increment: 1 } },
       })
-      if (
-        order.inventoryTaskViaOrderId &&
-        ['OPEN', 'PICKING', 'CONDITION_CAPTURED'].includes(order.inventoryTaskViaOrderId.status)
-      ) {
-        await tx.inventoryTask.update({
-          where: { id: order.inventoryTaskViaOrderId.id },
-          data: { status: 'CANCELLED', version: { increment: 1 } },
+      await tx.rentalPickupCode.updateMany({
+        where: { orderId: order.id, usedAt: null, revokedAt: null },
+        data: { revokedAt: command.now },
+      })
+      // Trả unit đã pick/đóng gói về kho, đóng task/kiện/lượt giao. Kho chính chỉ cần khi có unit phải trả.
+      const primaryLocationId = hasActiveAssignments(order) ? await resolveActivePrimaryRentalLocation(tx) : null
+      const warehouse = await releaseWarehouseCustodyWithTx(tx, order, primaryLocationId, command.now, {
+        closedTaskStatus: InventoryTaskStatus.CANCELLED,
+      })
+      if (warehouse.unsafeUnits.length > 0) {
+        await tx.rentalOutboxEvent.upsert({
+          where: { deduplicationKey: `rental-action-required:unsafe-units:user-cancel:${order.id}` },
+          update: {},
+          create: {
+            deduplicationKey: `rental-action-required:unsafe-units:user-cancel:${order.id}`,
+            eventType: 'RENTAL_ACTION_REQUIRED',
+            aggregateType: 'RentalOrder',
+            aggregateId: order.id,
+            payload: jsonValue({
+              orderId: order.id,
+              tripId: order.tripId,
+              reason: 'UNSAFE_CUSTODY_UNIT_ON_CANCELLATION',
+              unsafeUnits: warehouse.unsafeUnits,
+              status: RentalOrderStatus.CANCELLED,
+            }),
+          },
         })
       }
 
@@ -775,6 +841,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
             : order.status === RentalOrderStatus.PENDING_PAYMENT
               ? RentalFinancialStatus.UNPAID
               : order.financialStatus,
+          ...(warehouse.unsafeUnits.length > 0 ? { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED } : {}),
           cancelledAt: command.now,
           version: { increment: 1 },
         },
@@ -1259,11 +1326,43 @@ function buildTimeline(order: {
   cancelledAt: Date | null
   completedAt: Date | null
   status: unknown
+  rentalOrderLinesViaOrderId: Array<{
+    quantity: number
+    rentalUnitAssignmentsViaOrderLineId: Array<{
+      status: string
+      packedAt: Date | null
+      handedOverAt: Date | null
+      returnedAt: Date | null
+      closedAt: Date | null
+    }>
+  }>
 }) {
   const timeline: Array<{ type: string; at: string }> = [{ type: 'ORDER_CREATED', at: order.createdAt.toISOString() }]
   if (order.paidAt) timeline.push({ type: 'PAID', at: order.paidAt.toISOString() })
+  const lines = order.rentalOrderLinesViaOrderId.map((line) => ({
+    quantity: line.quantity,
+    assignments: line.rentalUnitAssignmentsViaOrderLineId.filter(
+      (assignment) => !['REPLACED', 'UNASSIGNED'].includes(assignment.status),
+    ),
+  }))
+  const assignments = lines.flatMap((line) => line.assignments)
+  const allAssigned = lines.length > 0 && lines.every((line) => line.assignments.length === line.quantity)
+  for (const [type, field] of [
+    ['PACKED', 'packedAt'],
+    ['HANDED_OVER', 'handedOverAt'],
+    ['RETURNED', 'returnedAt'],
+    ['CLOSED', 'closedAt'],
+  ] as const) {
+    const dates = assignments.map((assignment) => assignment[field]).filter((date): date is Date => date != null)
+    // Return processing starts at the first scan; other milestones represent all units.
+    if (dates.length && (type === 'RETURNED' || (allAssigned && dates.length === assignments.length))) {
+      const time = type === 'RETURNED' ? Math.min(...dates.map(Number)) : Math.max(...dates.map(Number))
+      timeline.push({ type, at: new Date(time).toISOString() })
+    }
+  }
   if (order.cancelledAt) timeline.push({ type: 'CANCELLED', at: order.cancelledAt.toISOString() })
   if (order.completedAt) timeline.push({ type: 'COMPLETED', at: order.completedAt.toISOString() })
+  timeline.sort((a, b) => a.at.localeCompare(b.at))
   return timeline
 }
 
@@ -1350,4 +1449,9 @@ function buildAllowedActions(
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
 }

@@ -2982,7 +2982,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     })
     if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND)
 
-    if (!canActorAccessRentalDocuments(order, query.actorUserId, query.actorRole)) {
+    const access = rentalDocumentAccess(order, query.actorUserId, query.actorRole)
+    if (!access) {
       throw AppError.fromCode(RR.FORBIDDEN, {
         details: { reason: 'UNAUTHORIZED_DOCUMENT_ACCESS', orderId: query.orderId, actorUserId: query.actorUserId },
       })
@@ -2990,9 +2991,13 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
 
     const page = Math.max(1, query.page || 1)
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 20))
+    const visibleTypes =
+      access === 'RECIPIENT'
+        ? RECIPIENT_VISIBLE_DOCUMENT_TYPES.filter((type) => !query.type || type === query.type)
+        : null
     const where: Prisma.RentalDocumentWhereInput = {
       orderId: query.orderId,
-      ...(query.type ? { documentType: query.type } : {}),
+      ...(visibleTypes ? { documentType: { in: visibleTypes } } : query.type ? { documentType: query.type } : {}),
     }
 
     const [total, docs] = await Promise.all([
@@ -3062,7 +3067,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       })
     }
 
-    if (!canActorAccessRentalDocuments(doc.order, query.actorUserId, query.actorRole)) {
+    const access = rentalDocumentAccess(doc.order, query.actorUserId, query.actorRole)
+    if (!access || (access === 'RECIPIENT' && !RECIPIENT_VISIBLE_DOCUMENT_TYPES.includes(doc.documentType))) {
       throw AppError.fromCode(RR.FORBIDDEN, {
         details: {
           reason: 'UNAUTHORIZED_DOCUMENT_ACCESS',
@@ -3150,26 +3156,40 @@ const orderIncludeForDocumentAccess = {
   inventoryTaskViaOrderId: { select: { staffId: true } },
 } as const
 
-function canActorAccessRentalDocuments(
+/**
+ * Chứng từ người nhận hộ được xem: không chứa tiền. HANDOVER (tiền thuê/cọc), EXTENSION_APPENDIX (phí gia hạn)
+ * và CORRECTION_NOTICE (có thể đính chính các chứng từ đó) chỉ dành cho người đặt — người nhận không thấy tiền.
+ */
+const RECIPIENT_VISIBLE_DOCUMENT_TYPES: RentalDocumentType[] = [
+  RentalDocumentType.RETURN_RECEIPT,
+  RentalDocumentType.SCHEDULE_NOTICE,
+]
+
+/** FULL: mọi chứng từ của đơn; RECIPIENT: chỉ RECIPIENT_VISIBLE_DOCUMENT_TYPES; null: không có quyền. */
+function rentalDocumentAccess(
   order: {
     userId: string
+    recipientUserId?: string | null
+    recipientSnapshot?: Prisma.JsonValue
     deliveryTasksViaOrderId?: Array<{ staffId: string | null; taskType: DeliveryTaskType }>
     inventoryTaskViaOrderId?: { staffId: string | null } | null
   },
   actorUserId: string,
   actorRole?: string,
-): boolean {
-  if (actorRole === UserRole.ADMIN) return true
-  if (order.userId === actorUserId) return true
+): 'FULL' | 'RECIPIENT' | null {
+  if (actorRole === UserRole.ADMIN) return 'FULL'
+  if (order.userId === actorUserId) return 'FULL'
   if (actorRole === UserRole.STAFF_DELIVERY) {
-    return (order.deliveryTasksViaOrderId || []).some(
-      (t) => t.taskType === DeliveryTaskType.RETURN && t.staffId === actorUserId,
-    )
+    // Nhân viên giao (HANDOVER) lẫn nhân viên nhận trả (RETURN) của chính đơn này.
+    return (order.deliveryTasksViaOrderId || []).some((t) => t.staffId === actorUserId) ? 'FULL' : null
   }
   if (actorRole === UserRole.STAFF_INVENTORY) {
-    return order.inventoryTaskViaOrderId?.staffId === actorUserId
+    return order.inventoryTaskViaOrderId?.staffId === actorUserId ? 'FULL' : null
   }
-  return false
+  const isRecipient =
+    order.recipientUserId === actorUserId ||
+    (order.recipientSnapshot != null && recipientMatches(order.recipientSnapshot, actorUserId))
+  return isRecipient ? 'RECIPIENT' : null
 }
 
 const returnOrderInclude = {

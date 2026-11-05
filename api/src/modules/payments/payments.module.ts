@@ -38,6 +38,7 @@ import { RentalRefundsService } from './rental-refunds.service'
 import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
 import { PaymentHistoryService } from './payment-history.service'
 import { UserTransactionsController } from './user-transactions.controller'
+import { AdminCashflowController } from './admin-cashflow.controller'
 
 @Module({
   imports: [BookingsModule],
@@ -55,6 +56,7 @@ import { UserTransactionsController } from './user-transactions.controller'
     RentalPaymentsController,
     RentalExtensionPaymentsController,
     UserTransactionsController,
+    AdminCashflowController,
     PayosOperationsController,
     ManualRefundsController,
     AdminManualRefundsController,
@@ -99,4 +101,4 @@ import { UserTransactionsController } from './user-transactions.controller'
   ],
   exports: [PaymentsService, PaymentsPort, PaymentHistoryService],
 })
-export class PaymentsModule {}
+export class PaymentsModule { }

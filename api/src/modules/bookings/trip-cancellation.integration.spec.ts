@@ -18,6 +18,11 @@ import { BookingCancellationService } from './booking-cancellation.service'
 import { BookingPaymentConsumer } from './booking-payment.consumer'
 import { RentalPaymentConsumer } from '../rental/payments/rental-payment.consumer'
 import { TechnicalReversalWorker } from '../payments/technical-reversal.worker'
+import { SharedPaymentsPort } from '../payments/payments.port'
+import { SandboxRefundSimulationService } from '../payments/sandbox-refund-simulation.service'
+import { PaymentHistoryService } from '../payments/payment-history.service'
+import { PaymentRecoveryService } from '../payments/payment-recovery.service'
+import { PaymentProvider } from '../payments/payment-provider.port'
 import { PaymentsPort } from '../payments/payments.port'
 import { RefundsService } from '../payments/refunds.service'
 import { RentalRefundsService } from '../payments/rental-refunds.service'
@@ -732,5 +737,151 @@ suite('Trip cancellation: PostgreSQL business rules and durable workers', () => 
         randomUUID(),
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  describe('automatic VNPay sandbox booking refunds', () => {
+    const originalEnv = { ...process.env }
+    const simulation = new SandboxRefundSimulationService(prism, refunds)
+    const history = new PaymentHistoryService(prism)
+    const port = new SharedPaymentsPort(refunds, {} as any, {} as any, history, simulation)
+    const automatic = new BookingCancellationService(prism, port)
+    beforeEach(() => {
+      process.env.PAYMENT_PROVIDER_ENVIRONMENT = 'SANDBOX'
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
+    })
+    afterEach(() => { process.env = { ...originalEnv } })
+    async function paidBooking(percent = 70) {
+      const f = await trip()
+      const buyer = await booking(f.t.id, true, percent)
+      const invoice = await db.invoice.findFirstOrThrow({ where: { bookingId: buyer.b.id } })
+      const p = await db.payment.findFirstOrThrow({ where: { invoiceId: invoice.id } })
+      await db.payment.update({ where: { id: p.id }, data: {
+        paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX', merchantAccountKey: 'TEST1234',
+        merchantRequestRef: 'payment:' + p.id, transactionRef: 'sandbox:' + p.id,
+      } })
+      return { ...buyer, invoice, paymentId: p.id, trip: f }
+    }
+    const cancelInput = (f: Awaited<ReturnType<typeof paidBooking>>, key = randomUUID()) => ({
+      bookingId: f.b.id, actorId: f.user.id, actorRole: 'USER', idempotencyKey: key, reason: 'Changed plans',
+    })
+    it.each(['development', 'production'])('settles automatically in %s and exposes truthful admin/user history', async (runtime) => {
+      process.env.NODE_ENV = runtime
+      const f = await paidBooking()
+      const result = await automatic.cancel(cancelInput(f))
+      expect(result.refundProcessingStatus).toBe('COMPLETED')
+      expect(result.refund).toMatchObject({ amount: '700', status: 'SUCCEEDED', executionMode: 'SANDBOX_SIMULATED', confirmationSource: 'SANDBOX_SIMULATION' })
+      expect((await db.invoice.findUniqueOrThrow({ where: { id: f.invoice.id } })).status).toBe('PARTIALLY_REFUNDED')
+      const detail = await history.getAdminRefundDetail({ refundId: result.refund!.refundId })
+      expect(detail.owner.id).toBe(f.user.id)
+      expect(detail.warnings).toContain('NO_REAL_MONEY_RETURNED')
+      const user = await history.getUserTransactions({ actorUserId: f.user.id, query: { page: 1, pageSize: 20, kind: 'REFUND' } })
+      expect(user.items.find(r => r.refundId === result.refund!.refundId)).toMatchObject({ confirmationSource: 'SANDBOX_SIMULATION', settlementMode: 'SANDBOX_SIMULATED' })
+      const row = await db.refund.findUniqueOrThrow({ where: { id: result.refund!.refundId } })
+      expect((row.providerPayload as any).sandboxSimulation).toMatchObject({ trigger: 'BOOKING_AUTOMATIC', actorAdminId: null, beneficiaryUserId: f.user.id })
+    })
+    it('concurrent retries settle once and the recovery worker never calls the provider', async () => {
+      const f = await paidBooking(100), input = cancelInput(f)
+      const results = await Promise.all([automatic.cancel(input), automatic.cancel(input)])
+      expect(results[0].refund!.refundId).toBe(results[1].refund!.refundId)
+      expect(await db.refund.count({ where: { paymentId: f.paymentId } })).toBe(1)
+      expect(await db.paymentOutboxEvent.count({ where: { aggregateId: results[0].refund!.refundId, eventType: 'REFUND_SUCCEEDED' } })).toBe(1)
+      const provider: any = { scopes: [{ gateway: 'vnpay', environment: 'SANDBOX', merchantAccountKey: 'TEST1234' }], queryRefund: jest.fn(), refund: jest.fn() }
+      const recovery = new PaymentRecoveryService(prism, provider as PaymentProvider, {} as any, refunds)
+      expect(await recovery.reconcileRefund(results[0].refund!.refundId)).toBe(false)
+      expect(provider.queryRefund).not.toHaveBeenCalled()
+      expect(provider.refund).not.toHaveBeenCalled()
+      expect((await db.invoice.findUniqueOrThrow({ where: { id: f.invoice.id } })).status).toBe('REFUNDED')
+    })
+    it('keeps a disabled simulation pending and replays locally after configuration is fixed', async () => {
+      const f = await paidBooking()
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'false'
+      const input = cancelInput(f), pending = await automatic.cancel(input)
+      expect(pending.refundProcessingStatus).toBe('PENDING')
+      expect(pending.refund).toMatchObject({ status: 'PENDING', executionMode: 'SANDBOX_SIMULATED', confirmationSource: null })
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
+      const replay = await automatic.cancel(input)
+      expect(replay.refund!.status).toBe('SUCCEEDED')
+      expect(replay.refund!.refundId).toBe(pending.refund!.refundId)
+    })
+    it('does not create a refund for 0 percent or an unpaid booking', async () => {
+      const f = await paidBooking(0)
+      expect(await automatic.cancel(cancelInput(f))).toMatchObject({ refund: null, refundProcessingStatus: 'NOT_REQUIRED' })
+      const unpaid = await booking((await trip()).t.id, false)
+      expect(await automatic.cancel({ bookingId: unpaid.b.id, actorId: unpaid.user.id, actorRole: 'USER', idempotencyKey: randomUUID(), reason: 'Changed plans' }))
+        .toMatchObject({ refund: null, refundProcessingStatus: 'NOT_REQUIRED' })
+      expect(await db.refund.count({ where: { paymentId: f.paymentId } })).toBe(0)
+    })
+    it('keeps two buyers on the same sandbox merchant separate', async () => {
+      const first = await paidBooking(), second = await paidBooking()
+      const a = await automatic.cancel(cancelInput(first)), b = await automatic.cancel(cancelInput(second))
+      expect(a.refund!.refundId).not.toBe(b.refund!.refundId)
+      expect((await history.getAdminRefundDetail({ refundId: a.refund!.refundId })).owner.id).toBe(first.user.id)
+      expect((await history.getAdminRefundDetail({ refundId: b.refund!.refundId })).owner.id).toBe(second.user.id)
+      const user = await history.getUserTransactions({ actorUserId: first.user.id, query: { page: 1, pageSize: 100 } })
+      expect(user.items.some(r => r.paymentId === second.paymentId)).toBe(false)
+    })
+    it('does not simulate a production payment or adopt legacy provider refunds', async () => {
+      const f = await paidBooking()
+      await db.payment.update({ where: { id: f.paymentId }, data: { providerEnvironment: 'PRODUCTION' } })
+      const result = await automatic.cancel(cancelInput(f))
+      expect(result.refund!.executionMode).toBe('PROVIDER_API')
+      await expect(simulation.simulateRefundSettlement({ refundId: result.refund!.refundId, actorUserId: admin.id, idempotencyKey: randomUUID(),
+        body: { expectedProviderStatus: 'PENDING', acknowledgeSandboxSimulation: true, reason: 'Try production refund' } }))
+        .rejects.toMatchObject({ code: 'SANDBOX_SIMULATION_INVALID_REFUND' })
+      const legacy = await paidBooking(), pending = await automatic.cancel(cancelInput(legacy))
+      await db.refund.update({ where: { id: pending.refund!.refundId }, data: { executionMode: 'PROVIDER_API' } })
+      expect((await simulation.settleAutomaticBookingRefund(pending.refund!.refundId)).executionMode).toBe('PROVIDER_API')
+    })
+    it('automatically refunds the full amount when trip cancellation is approved', async () => {
+      const f = await paidBooking(70)
+      await approve(f.trip)
+      const tripService = new TripCancellationService(prism, automatic, deliveries)
+      const event = await db.bookingOutboxEvent.findUniqueOrThrow({ where: { deduplicationKey: `trip-cancellation:${f.trip.req.id}:approved` } })
+      await tripService.handle(event as CancellationEvent)
+      const child = await db.bookingOutboxEvent.findUniqueOrThrow({ where: { deduplicationKey: `trip-cancellation:${f.trip.req.id}:booking:${f.b.id}` } })
+      await tripService.handle(child as CancellationEvent)
+      const refund = await db.refund.findFirstOrThrow({ where: { paymentId: f.paymentId } })
+      expect(refund.status).toBe('SUCCEEDED')
+      expect(refund.amount.toFixed()).toBe('1000')
+    })
+    it('uses the same sandbox scope for real SQL summary, list, count and detail', async () => {
+      const before = await history.getAdminCashflowSummary({ query: { gateway: 'BOTH', source: 'BOOKING' } })
+      const f = await paidBooking(70), result = await automatic.cancel(cancelInput(f))
+      const production = await paidBooking(70)
+      await db.payment.update({ where: { id: production.paymentId }, data: { providerEnvironment: 'PRODUCTION' } })
+      await automatic.cancel(cancelInput(production))
+      const after = await history.getAdminCashflowSummary({ query: { gateway: 'BOTH', source: 'BOOKING' } })
+      expect(new Prisma.Decimal(after.totals.totalInflowAmount).minus(before.totals.totalInflowAmount).toFixed()).toBe('1000')
+      expect(new Prisma.Decimal(after.totals.totalOutflowAmount).minus(before.totals.totalOutflowAmount).toFixed()).toBe('700')
+      expect(after.byGateway.map(g => g.gateway)).toEqual(['vnpay'])
+      const transactions = await history.getAdminTransactions({ query: { page: 1, pageSize: 100, gateway: 'BOTH', userId: f.user.id } })
+      expect(transactions.pagination.total).toBe(2)
+      expect(transactions.items.find(r => r.kind === 'REFUND')).toMatchObject({ refundId: result.refund!.refundId, settlementMode: 'SANDBOX_SIMULATED' })
+      const excluded = await history.getAdminTransactions({ query: { page: 1, pageSize: 100, gateway: 'BOTH', userId: production.user.id } })
+      expect(excluded.pagination.total).toBe(0)
+      await expect(history.getAdminPaymentDetail({ paymentId: production.paymentId })).rejects.toMatchObject({ code: 'PAYMENT_NOT_FOUND' })
+      const row = await db.refund.findUniqueOrThrow({ where: { id: result.refund!.refundId }, include: { payment: true } })
+      expect(await refunds.applyEvent({ kind: 'REFUND', gateway: 'vnpay', environment: 'SANDBOX', merchantAccountKey: 'TEST1234',
+        merchantRequestRef: row.payment.merchantRequestRef!, merchantRefundRef: row.merchantRefundRef!, providerEventId: 'unexpected-provider-callback',
+        transactionRef: row.payment.transactionRef, refundTransactionRef: row.refundTransactionRef, status: 'FAILED', amount: '700', currency: 'VND', occurredAt: new Date().toISOString() })).toBe(false)
+      expect((await db.refund.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('SUCCEEDED')
+    })
+    it('auto-settles a booking technical reversal without overwriting another applied payment invoice', async () => {
+      const f = await paidBooking()
+      const duplicate = await db.payment.create({ data: {
+        invoiceId: f.invoice.id, amount: 1000, status: 'SUCCEEDED', paidAt: new Date(), paymentGateway: 'vnpay', paymentMethod: 'REDIRECT',
+        providerEnvironment: 'SANDBOX', merchantAccountKey: 'TEST1234', merchantRequestRef: 'payment:' + randomUUID(),
+        requestHash: 'b'.repeat(64), requestHashVersion: 1, idempotencyKey: randomUUID(),
+        application: { create: { status: 'REJECTED', reasonCode: 'DUPLICATE_PAYMENT', decidedAt: new Date() } },
+      } })
+      await db.paymentOutboxEvent.create({ data: { deduplicationKey: 'payment:' + duplicate.id + ':technical-reversal-requested:v1',
+        eventType: 'TECHNICAL_REVERSAL_REQUESTED', aggregateType: 'Payment', aggregateId: duplicate.id,
+        payload: { schemaVersion: 1, paymentId: duplicate.id, invoiceId: f.invoice.id, reasonCode: 'DUPLICATE_PAYMENT' },
+      } })
+      const result = await port.requestRefund({ paymentId: duplicate.id, businessActionId: 'payment:' + duplicate.id + ':technical-reversal:v1',
+        purpose: 'TECHNICAL_REVERSAL', reasonCode: 'DUPLICATE_PAYMENT', amount: '1000', idempotencyKey: randomUUID(), source: {} })
+      expect(result).toMatchObject({ status: 'SUCCEEDED', executionMode: 'SANDBOX_SIMULATED' })
+      expect((await db.invoice.findUniqueOrThrow({ where: { id: f.invoice.id } })).status).toBe('PAID')
+    })
   })
 })

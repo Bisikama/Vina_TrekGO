@@ -197,12 +197,12 @@ export function buildTripRequirements(
   }
   if (tripContext.temp_min_c <= 10) {
     jacketConstraints.push(
-      createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c, '°C', `R03: Nhiệt độ thấp (<=10°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c}°C`),
+      createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c, 'C', `R03: Nhiệt độ thấp (<=10°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c}°C`),
     );
   }
   if (tripContext.temp_min_c <= 15) {
     jacketConstraints.push(
-      createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c + 5, '°C', `R04: Trời lạnh (<=15°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c + 5}°C`),
+      createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c + 5, 'C', `R04: Trời lạnh (<=15°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c + 5}°C`),
     );
   }
 
@@ -261,15 +261,15 @@ export function buildTripRequirements(
   const backpackConstraints: PlanConstraint[] = [];
   if (tripContext.days === 1) {
     backpackConstraints.push(
-      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 15, 'lít', 'R15: Chuyến 1 ngày yêu cầu balo tối thiểu 15L'),
+      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 15, 'L', 'R15: Chuyến 1 ngày yêu cầu balo tối thiểu 15L'),
     );
   } else if (tripContext.days >= 2 && tripContext.days <= 3) {
     backpackConstraints.push(
-      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 35, 'lít', 'R16: Chuyến 2-3 ngày yêu cầu balo tối thiểu 35L'),
+      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 35, 'L', 'R16: Chuyến 2-3 ngày yêu cầu balo tối thiểu 35L'),
     );
   } else if (tripContext.days >= 4) {
     backpackConstraints.push(
-      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 50, 'lít', 'R17: Chuyến từ 4 ngày trở lên yêu cầu balo tối thiểu 50L'),
+      createPlanConstraint('req_backpack', 'BACKPACK', 'capacity_l', 'GTE', 50, 'L', 'R17: Chuyến từ 4 ngày trở lên yêu cầu balo tối thiểu 50L'),
     );
   }
   if (tripContext.rain_prob_pct >= 50) {

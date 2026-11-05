@@ -100,6 +100,10 @@ const envConfigSchema = z
       .transform((val) => val === 'true'),
     RENTAL_DOCUMENT_BUCKET: z.string().default('rental-documents'),
     RENTAL_PDF_FONT_PATH: z.string().optional(),
+    // Link ảnh bằng chứng trong PDF: URL gốc API mà người xem PDF truy cập được (vd. http://192.168.1.10:3000)
+    // và secret ký HMAC. Thiếu một trong hai thì PDF không có link.
+    RENTAL_DOCUMENT_LINK_BASE_URL: z.string().url().optional(),
+    RENTAL_DOCUMENT_LINK_SECRET: z.string().min(32).optional(),
 
     // SHARED PAYMENTS, GATEWAYS (MOCK / VNPAY / MOMO) & WORKERS
     PAYMENT_PROVIDER: z.enum(['mock', 'momo', 'vnpay']).default('mock'),

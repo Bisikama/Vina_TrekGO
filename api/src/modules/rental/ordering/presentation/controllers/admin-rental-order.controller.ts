@@ -162,6 +162,8 @@ Hỗ trợ lọc linh hoạt theo \`tripId\`, \`userId\`, \`status\`, \`financia
               quoteId: { type: 'string', format: 'uuid' },
               userId: { type: 'string', format: 'uuid' },
               tripId: { type: 'string', format: 'uuid' },
+              tripTitle: { type: 'string', description: 'Tên chuyến đi' },
+              customerName: { type: 'string', description: 'Tên chủ đơn thuê' },
               bookingId: { type: 'string', format: 'uuid', nullable: true },
               status: { type: 'string' },
               financialStatus: { type: 'string' },
@@ -211,6 +213,8 @@ Hỗ trợ lọc linh hoạt theo \`tripId\`, \`userId\`, \`status\`, \`financia
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         include: {
+          trip: { select: { title: true } },
+          user: { select: { fullName: true } },
           rentalOrderLinesViaOrderId: {
             select: { id: true },
           },
@@ -224,6 +228,8 @@ Hỗ trợ lọc linh hoạt theo \`tripId\`, \`userId\`, \`status\`, \`financia
         quoteId: o.quoteId,
         userId: o.userId,
         tripId: o.tripId,
+        tripTitle: o.trip.title,
+        customerName: o.user.fullName,
         bookingId: o.bookingId,
         status: o.status,
         financialStatus: o.financialStatus,
