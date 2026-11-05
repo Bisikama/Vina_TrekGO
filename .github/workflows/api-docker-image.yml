@@ -11,7 +11,16 @@
 #   - DOCKERHUB_TOKEN (hoac DOCKERHUB_PASSWORD): Access Token, tao o
 #                          hub.docker.com > Account settings > Personal access tokens
 #                          (quyen Read & Write)
-#   - TREKGO_ENV         : chua dung o workflow nay (de danh cho buoc deploy VPS)
+#   - TREKGO_ENV         : TOAN BO noi dung file .env DANH CHO VPS (host postgres/mongo/redis).
+#                          Moi lan deploy se GHI DE ~/trekgo/.env tren VPS (ban cu luu .env.bak).
+#                          De trong = giu nguyen .env dang co tren VPS.
+#   - VPS_HOST           : IP VPS (vd 160.30.161.237)
+#   - VPS_PORT           : cong SSH (vd 8686)
+#   - VPS_USER           : user SSH (vd luatng304)
+#   - VPS_PASSWORD       : mat khau SSH cua VPS_USER
+#
+# Job deploy: sau khi build xong → SSH vao VPS → cap nhat docker-compose.yml
+# (tu api/docker-compose.vps.yml) + .env (tu TREKGO_ENV) → pull image moi → up -d.
 # =============================================================================
 
 name: Docker Image - TrekGO API
@@ -84,3 +93,67 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # JOB 2: Deploy len VPS (chi chay khi build & push thanh cong)
+  # ===========================================================================
+  deploy:
+    name: "Deploy to VPS"
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Step 1 - Checkout source code"
+        uses: actions/checkout@v4
+
+      # Ma hoa base64 de chuyen file nhieu dong (.env, compose) qua SSH an toan,
+      # khong bi loi dau nhay / ky tu dac biet. Gia tri duoc mask, khong hien trong log.
+      - name: "Step 2 - Prepare files"
+        env:
+          TREKGO_ENV: ${{ secrets.TREKGO_ENV }}
+        run: |
+          ENV_B64=$(printf '%s\n' "$TREKGO_ENV" | tr -d '\r' | base64 -w0)
+          if [ -z "$TREKGO_ENV" ]; then ENV_B64=""; fi
+          echo "::add-mask::$ENV_B64"
+          echo "ENV_B64=$ENV_B64" >> "$GITHUB_ENV"
+          echo "COMPOSE_B64=$(base64 -w0 api/docker-compose.vps.yml)" >> "$GITHUB_ENV"
+
+      - name: "Step 3 - SSH & redeploy"
+        uses: appleboy/ssh-action@v1
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN || secrets.DOCKERHUB_PASSWORD }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          envs: ENV_B64,COMPOSE_B64,DH_USER,DH_TOKEN
+          script_stop: true
+          script: |
+            set -e
+            mkdir -p ~/trekgo && cd ~/trekgo
+
+            # 1. Cap nhat docker-compose.yml tu repo
+            echo "$COMPOSE_B64" | base64 -d > docker-compose.yml
+
+            # 2. Ghi de .env tu secret TREKGO_ENV (giu ban cu o .env.bak)
+            if [ -n "$ENV_B64" ]; then
+              [ -f .env ] && cp .env .env.bak
+              echo "$ENV_B64" | base64 -d > .env
+              chmod 600 .env
+              echo ".env updated from TREKGO_ENV"
+            else
+              echo "TREKGO_ENV empty -> keep existing .env"
+            fi
+
+            # 3. Dang nhap Docker Hub (can neu repo private), pull image moi, chay lai
+            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+            docker compose pull api
+            docker compose up -d
+            docker image prune -f
+
+            # 4. Kiem tra
+            sleep 15
+            docker compose ps
+            docker compose logs --tail 30 api

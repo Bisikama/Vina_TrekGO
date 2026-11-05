@@ -168,6 +168,42 @@ docker compose up -d
 
 Migration mới (nếu có) tự chạy khi container khởi động.
 
+### Image tự build bằng GitHub Actions
+
+Workflow `.github/workflows/api-docker-image.yml` tự build và đẩy image lên Docker Hub khi push code vào nhánh `deploy/docker` **và** có thay đổi trong `api/`. Sửa `web/` hay `mobile/` thì không chạy. Image chỉ chứa code `api/` và **không chứa env**.
+
+Mỗi lần chạy xong sẽ có 2 tag:
+
+| Tag | Ý nghĩa |
+| --- | --- |
+| `latest` | Bị **thay thế** mỗi lần: luôn là bản mới nhất. |
+| `sha-xxxxxxx` | **Tạo mới** mỗi commit (7 ký tự đầu commit hash), dùng để quay lại bản cũ. |
+
+Secrets cần có trong repo GitHub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (hoặc `DOCKERHUB_PASSWORD`, giá trị là Access Token của Docker Hub).
+
+### Lấy image mới nhất từ Docker Hub về máy và chạy
+
+Không cần sửa `docker-compose.yml`. Trong thư mục `api/` (cần có file `.env` / `.env.docker`, xem bước 2):
+
+```bash
+# 1. Tải image mới nhất
+docker pull <dockerhub-user>/trekgo-api:latest
+
+# 2. Đặt lại tên thành "trekgo-api" (tên mà docker-compose.yml đang dùng)
+docker tag <dockerhub-user>/trekgo-api:latest trekgo-api
+
+# 3. Chạy - KHÔNG thêm --build (nếu thêm sẽ build lại từ code trên máy, ghi đè image vừa tải)
+docker compose up -d
+
+# 4. Xem log
+docker compose logs -f api
+```
+
+- Container tự chạy migration rồi mới chạy API: http://localhost:3000/docs.
+- Nếu compose không thay container cũ: `docker compose up -d --force-recreate api`.
+- Lần sau cập nhật: chạy lại bước 1 → 3.
+- Quay lại bản cũ khi bản mới lỗi: thay `latest` bằng tag cũ, ví dụ `docker pull <dockerhub-user>/trekgo-api:sha-9f8e7d6` và `docker tag <dockerhub-user>/trekgo-api:sha-9f8e7d6 trekgo-api`, rồi `docker compose up -d`.
+
 ## 7. Deploy lên VPS
 
 1. Đưa source lên VPS: `git clone` repo, rồi `cd api`.
