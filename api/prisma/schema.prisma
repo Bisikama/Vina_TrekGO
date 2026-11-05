@@ -3519,6 +3519,7 @@ model Refund {
 }
 
 enum RefundExecutionMode {
+  SANDBOX_SIMULATED
   PROVIDER_API
   MANUAL_BANK_TRANSFER
   @@map("refund_execution_mode")

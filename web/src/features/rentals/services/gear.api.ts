@@ -112,6 +112,13 @@ export async function getGearCapabilities() {
   return unwrap(response.data);
 }
 
+export type GearExtractionQuota = { limit: number; used: number; remaining: number; resetAt: string; timezone: string };
+
+export async function getGearExtractionQuota() {
+  const response = await apiClient.get<Envelope<GearExtractionQuota>>("/api/v1/gear/extractions/quota");
+  return unwrap(response.data);
+}
+
 async function resolvePhoto(item: UserGearItem): Promise<UserGearItem> {
   if (!item.photoRef) return item;
   try {

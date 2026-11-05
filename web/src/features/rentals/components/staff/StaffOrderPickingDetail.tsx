@@ -122,6 +122,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
     return <main className="p-8"><p className="rounded-xl bg-red-50 p-4 text-sm text-red-800">{error ?? "Không tìm thấy task."}</p></main>;
   }
 
+  const isCancelled = detail.task.status === "CANCELLED";
   const allPicked = detail.progress.picked === detail.progress.required && detail.progress.required > 0;
   const evidenceComplete = detail.progress.evidenceComplete ?? 0;
   const allEvidence = allPicked && evidenceComplete === detail.progress.picked;
@@ -135,10 +136,20 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
             <h1 className="mt-2 text-3xl font-bold">Soạn & kiểm tra thiết bị</h1>
             <p className="mt-2 text-sm text-slate-600">Task {detail.task.id} · Order {detail.task.orderId}</p>
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-900">{detail.task.status}</span>
+          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+            isCancelled ? "bg-red-100 text-red-900" : "bg-emerald-100 text-emerald-900"
+          }`}>
+            {isCancelled ? "ĐÃ HỦY" : detail.task.status}
+          </span>
         </div>
 
         {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
+
+        {isCancelled && (
+          <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900">
+            Đơn thuê này đã bị hủy. Nhiệm vụ kho đã đóng và không thể thao tác soạn hàng.
+          </div>
+        )}
 
         <section className="mt-5 grid gap-4 md:grid-cols-3">
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Điểm nhận</p><p className="mt-2 font-bold">{detail.pickupContext.name}</p></article>
@@ -146,7 +157,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Đã có ảnh</p><p className="mt-2 text-2xl font-bold">{evidenceComplete}/{detail.progress.picked}</p></article>
         </section>
 
-        {detail.task.status === "OPEN" && !detail.task.assignee && (
+        {!isCancelled && detail.task.status === "OPEN" && !detail.task.assignee && (
           <section className="mt-5 rounded-xl border border-orange-200 bg-orange-50 p-5">
             <h2 className="font-bold">Bước 1 · Nhận task</h2>
             <p className="mt-1 text-sm text-slate-600">Task chưa được gán. Nhận task trước khi quét thiết bị.</p>
@@ -187,7 +198,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
               {detail.pickedUnits.map((unit) => (
                 <article key={unit.unitId} className="rounded-xl bg-[#edf3ff] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{unit.assetCode}</strong><p className="text-xs text-slate-500">{unit.physicalStatus}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${unit.evidenceCaptured ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{unit.evidenceCaptured ? "Đã lưu ảnh" : "Chưa có ảnh"}</span></div>
-                  {!unit.evidenceCaptured && (
+                  {!unit.evidenceCaptured && !isCancelled && (
                     <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_1fr_auto]">
                       <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition}>{condition}</option>)}</select>
                       <input type="file" accept="image/*" capture="environment" onChange={(event) => setFiles((current) => ({ ...current, [unit.unitId]: event.target.files?.[0] }))} className="rounded-lg bg-white px-3 py-2 text-xs" />
@@ -201,13 +212,15 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           </section>
         )}
 
-        <div className="mt-5 flex justify-end">
-          {allEvidence ? (
-            <Link href={`/staff/orders/${encodeURIComponent(taskId)}/packing`} className="rounded-lg bg-[#0d5b3a] px-5 py-3 text-sm font-bold text-white">Tiếp tục đóng gói →</Link>
-          ) : (
-            <p className="rounded-lg bg-orange-50 px-4 py-3 text-sm text-orange-800">Cần pick đủ và chụp ảnh đủ trước khi đóng gói.</p>
-          )}
-        </div>
+        {!isCancelled && (
+          <div className="mt-5 flex justify-end">
+            {allEvidence ? (
+              <Link href={`/staff/orders/${encodeURIComponent(taskId)}/packing`} className="rounded-lg bg-[#0d5b3a] px-5 py-3 text-sm font-bold text-white">Tiếp tục đóng gói →</Link>
+            ) : (
+              <p className="rounded-lg bg-orange-50 px-4 py-3 text-sm text-orange-800">Cần pick đủ và chụp ảnh đủ trước khi đóng gói.</p>
+            )}
+          </div>
+        )}
       </div>
     </main>
   );

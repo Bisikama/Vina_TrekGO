@@ -3,9 +3,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { InfoBanner } from "@/components/ui";
 
 import { bookingApi } from "@/features/bookings/booking.api";
-import { getRentalApiErrorMessage, getRentalProduct } from "@/features/rentals/services/rental.api";
+import {
+  getRentalApiErrorMessage,
+  getRentalProduct,
+} from "@/features/rentals/services/rental.api";
 import {
   getMyRentalOrder,
   getRentalDeposit,
@@ -15,10 +19,17 @@ import {
 } from "@/features/rentals/services/user-rental.api";
 import { privateTripsApi } from "@/features/trips/services/private-trips.api";
 
-import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
+import {
+  dateTime,
+  money,
+  RentalPageHeader,
+  shortCode,
+} from "./RentalSectionNav";
 
 import { RentalCancellation } from "./RentalCancellation";
 import { DeductionReviewPanel } from "./DeductionReviewPanel";
+import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
+import { GradeBadge } from "./GradeBadge";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -51,12 +62,17 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
 // Tên sản phẩm có hạng thường kèm hậu tố ("– Rất mới"); nhãn hạng đã hiển thị riêng.
 function stripGradeSuffix(name: string) {
   return name
-    .replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "")
+    .replace(
+      /\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i,
+      "",
+    )
     .trim();
 }
 
 function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
-  const times = new Map((detail.timeline ?? []).map((event) => [event.type, event.at]));
+  const times = new Map(
+    (detail.timeline ?? []).map((event) => [event.type, event.at]),
+  );
   const status = detail.order.status;
   const current = ORDER_STEPS.findIndex((step) => step.status === status);
   const cancelledAt = times.get("CANCELLED");
@@ -64,8 +80,12 @@ function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
   return (
     <section className="mt-6 rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-black text-gray-900">Tiến trình đơn thuê</h2>
-        <p className="text-xs font-semibold text-gray-400">Trạng thái do hệ thống và nhân viên cập nhật</p>
+        <h2 className="text-xl font-black text-gray-900">
+          Tiến trình đơn thuê
+        </h2>
+        <p className="text-xs font-semibold text-gray-400">
+          Trạng thái do hệ thống và nhân viên cập nhật
+        </p>
       </div>
       {status === "CANCELLED" || status === "EXPIRED" ? (
         <p className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm font-semibold text-gray-600">
@@ -80,10 +100,24 @@ function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
             const at = step.event ? times.get(step.event) : undefined;
             let note: { text: string; planned: boolean } | null = null;
             if (complete && at) note = { text: dateTime(at), planned: false };
-            else if (!complete && step.status === "ACTIVE" && detail.trip?.rentalStartAt)
-              note = { text: `Dự kiến ${dateTime(detail.trip.rentalStartAt)}`, planned: true };
-            else if (!complete && step.status === "RETURN_PENDING" && detail.trip?.dueAt)
-              note = { text: `Hạn trả ${dateTime(detail.trip.dueAt)}`, planned: true };
+            else if (
+              !complete &&
+              step.status === "ACTIVE" &&
+              detail.trip?.rentalStartAt
+            )
+              note = {
+                text: `Dự kiến ${dateTime(detail.trip.rentalStartAt)}`,
+                planned: true,
+              };
+            else if (
+              !complete &&
+              step.status === "RETURN_PENDING" &&
+              detail.trip?.dueAt
+            )
+              note = {
+                text: `Hạn trả ${dateTime(detail.trip.dueAt)}`,
+                planned: true,
+              };
             return (
               <li key={step.status} className="relative flex gap-3 sm:block">
                 <div className="flex items-center sm:mb-2">
@@ -105,13 +139,23 @@ function OrderProgress({ detail }: { detail: RentalOrderDetail }) {
                   )}
                 </div>
                 <div className="min-w-0 sm:pr-2">
-                  <p className={`text-xs font-bold ${complete ? "text-gray-900" : "text-gray-400"}`}>{step.label}</p>
+                  <p
+                    className={`text-xs font-bold ${complete ? "text-gray-900" : "text-gray-400"}`}
+                  >
+                    {step.label}
+                  </p>
                   {note && (
-                    <p className={`mt-0.5 text-[11px] leading-4 ${note.planned ? "italic text-gray-400" : "text-gray-500"}`}>
+                    <p
+                      className={`mt-0.5 text-[11px] leading-4 ${note.planned ? "italic text-gray-400" : "text-gray-500"}`}
+                    >
                       {note.text}
                     </p>
                   )}
-                  {active && <p className="mt-0.5 text-[10px] font-bold text-[#2F6B4F]">Hiện tại</p>}
+                  {active && (
+                    <p className="mt-0.5 text-[10px] font-bold text-[#2F6B4F]">
+                      Hiện tại
+                    </p>
+                  )}
                 </div>
               </li>
             );
@@ -149,7 +193,8 @@ const depositReasonLabels: Record<string, string> = {
   FINAL_PASS_AWAIT_GROUPED_REFUND: "Kiểm định đạt · chờ hoàn cọc",
   INVENTORY_FINAL_PASS: "Kiểm định đạt · đang hoàn cọc",
   DEDUCTION_REVIEW_REQUIRED: "Kiểm định ghi nhận hư hại",
-  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE:
+    "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
   REFUND_REVIEW_REQUIRED: "Hoàn cọc đang được đối soát",
   POLICY_OR_INVENTORY_REVIEW_REQUIRED: "Đang được kiểm tra thêm",
   MISSING_PENDING_REVIEW: "Thiết bị chưa được nhận lại · đang xác minh",
@@ -165,13 +210,28 @@ function depositReasonText(reason?: string | null) {
 /** Nhãn trạng thái từng món: món đã duyệt trừ nhưng chưa quyết toán thì nói rõ đang ở giai đoạn nào. */
 function depositBadge(item: RentalDepositItem) {
   const pendingDeduction =
-    (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
+    (item.approvedDeduction ?? 0) > 0 &&
+    !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
   if (pendingDeduction) {
-    if (item.reviewStatus === "SUBMITTED") return { label: "Đang xử lý phản đối", tone: "border-amber-200 bg-amber-50 text-amber-800" };
-    if (item.canSubmitReview) return { label: "Có khoản trừ · chờ hết hạn phản đối", tone: "border-red-200 bg-red-50 text-red-700" };
-    return { label: "Có khoản trừ · chờ quyết toán", tone: "border-red-200 bg-red-50 text-red-700" };
+    if (item.reviewStatus === "SUBMITTED")
+      return {
+        label: "Đang xử lý phản đối",
+        tone: "border-amber-200 bg-amber-50 text-amber-800",
+      };
+    if (item.canSubmitReview)
+      return {
+        label: "Có khoản trừ · chờ hết hạn phản đối",
+        tone: "border-red-200 bg-red-50 text-red-700",
+      };
+    return {
+      label: "Có khoản trừ · chờ quyết toán",
+      tone: "border-red-200 bg-red-50 text-red-700",
+    };
   }
-  return { label: labelOf(depositStatusLabels, item.status), tone: depositTone(item) };
+  return {
+    label: labelOf(depositStatusLabels, item.status),
+    tone: depositTone(item),
+  };
 }
 
 function depositTone(item: RentalDepositItem) {
@@ -204,7 +264,10 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
       setDeposit(await getRentalDeposit(orderId));
     } catch (reason) {
       setDepositError(
-        getRentalApiErrorMessage(reason, "Không thể tải trạng thái quyết toán cọc."),
+        getRentalApiErrorMessage(
+          reason,
+          "Không thể tải trạng thái quyết toán cọc.",
+        ),
       );
     } finally {
       setDepositLoading(false);
@@ -227,18 +290,31 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
           ),
         ]);
         if (!active) return;
-        const booking = bookings?.items.find((item) => item.trip.id === value.order.tripId);
-        const privateTrip = privateTrips.find((item) => item.id === value.order.tripId);
-        setTripName(booking?.trip.title || privateTrip?.title || "Chuyến trekking của bạn");
+        const booking = bookings?.items.find(
+          (item) => item.trip.id === value.order.tripId,
+        );
+        const privateTrip = privateTrips.find(
+          (item) => item.id === value.order.tripId,
+        );
+        setTripName(
+          booking?.trip.title ||
+            privateTrip?.title ||
+            "Chuyến trekking của bạn",
+        );
         setVisuals(
           Object.fromEntries(
             productResults.flatMap((result) =>
               result.status === "fulfilled"
-                ? [[result.value.id, {
-                    name: result.value.name,
-                    sku: result.value.sku,
-                    imageUrl: result.value.imageUrls[0],
-                  }]]
+                ? [
+                    [
+                      result.value.id,
+                      {
+                        name: result.value.name,
+                        sku: result.value.sku,
+                        imageUrl: result.value.imageUrls[0],
+                      },
+                    ],
+                  ]
                 : [],
             ),
           ),
@@ -246,7 +322,12 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
       })
       .catch((reason) => {
         if (active) {
-          setError(getRentalApiErrorMessage(reason, "Không thể tải chi tiết đơn thuê."));
+          setError(
+            getRentalApiErrorMessage(
+              reason,
+              "Không thể tải chi tiết đơn thuê.",
+            ),
+          );
         }
       })
       .finally(() => {
@@ -266,7 +347,10 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
       .catch((reason) => {
         if (active) {
           setDepositError(
-            getRentalApiErrorMessage(reason, "Không thể tải trạng thái quyết toán cọc."),
+            getRentalApiErrorMessage(
+              reason,
+              "Không thể tải trạng thái quyết toán cọc.",
+            ),
           );
         }
       })
@@ -294,14 +378,30 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
           <State text={error || "Không tìm thấy đơn thuê."} />
         ) : (
           <>
-            <RentalCancellation orderId={orderId} status={detail.order.status} onCancelled={async () => { setDetail(await getMyRentalOrder(orderId)); await loadDeposit(); }} />
+            <RentalCancellation
+              orderId={orderId}
+              status={detail.order.status}
+              onCancelled={async () => {
+                setDetail(await getMyRentalOrder(orderId));
+                await loadDeposit();
+              }}
+            />
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <Info label="Trạng thái" value={ORDER_STATUS_LABELS[detail.order.status] ?? detail.order.status.replaceAll("_", " ")} />
+              <Info
+                label="Trạng thái"
+                value={
+                  ORDER_STATUS_LABELS[detail.order.status] ??
+                  detail.order.status.replaceAll("_", " ")
+                }
+              />
               <Info
                 label="Tổng thanh toán"
                 value={money(detail.order.totalAmount, detail.order.currency)}
               />
-              <Info label="Hạn trả thiết bị" value={dateTime(detail.order.dueAt)} />
+              <Info
+                label="Hạn trả thiết bị"
+                value={dateTime(detail.order.dueAt)}
+              />
             </div>
 
             <OrderProgress detail={detail} />
@@ -311,12 +411,17 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
             ) : null}
 
             <section className="mt-6">
-              <h2 className="text-xl font-black text-gray-900">Thiết bị trong đơn</h2>
+              <h2 className="text-xl font-black text-gray-900">
+                Thiết bị trong đơn
+              </h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 {detail.items.map((item) => {
                   const visual = visuals[item.product.id] || item.product;
                   return (
-                    <article key={item.id} className="flex gap-4 rounded-2xl bg-white p-4 shadow-sm">
+                    <article
+                      key={item.id}
+                      className="flex gap-4 rounded-2xl bg-white p-4 shadow-sm"
+                    >
                       {visual.imageUrl ? (
                         <img
                           src={visual.imageUrl}
@@ -335,28 +440,37 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                           </p>
                         ) : null}
                         <h3 className="mt-1 font-black text-gray-900">
-                          {item.product.grade ? stripGradeSuffix(visual.name) : visual.name}
+                          {item.product.grade
+                            ? stripGradeSuffix(visual.name)
+                            : visual.name}
                         </h3>
                         <p className="mt-2 text-xs text-gray-500">
                           Số lượng: {item.quantity}
                           {item.product.grade ? (
-                            <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              {item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
-                            </span>
+                            <GradeBadge grade={item.product.grade} className="ml-2" />
                           ) : null}
                         </p>
                         <p className="mt-1 text-sm font-extrabold text-gray-900">
-                          Phí thuê {money(item.feeAmount, detail.order.currency)}
+                          Phí thuê{" "}
+                          {money(item.feeAmount, detail.order.currency)}
                         </p>
                         {typeof item.depositPerUnit === "number" ? (
                           <p className="mt-1 text-xs text-gray-500">
-                            Cọc {money(item.depositPerUnit, detail.order.currency)}/món × {item.quantity} ={" "}
+                            Cọc{" "}
+                            {money(item.depositPerUnit, detail.order.currency)}
+                            /món × {item.quantity} ={" "}
                             <span className="font-bold text-gray-700">
                               {money(item.depositAmount, detail.order.currency)}
                             </span>
-                            {typeof item.depositExplanation?.percentageOfReplacementValue === "number" ? (
+                            {typeof item.depositExplanation
+                              ?.percentageOfReplacementValue === "number" ? (
                               <span className="text-gray-400">
-                                {" "}· ≈ {item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế
+                                {" "}
+                                · ≈{" "}
+                                {item.depositExplanation.percentageOfReplacementValue.toLocaleString(
+                                  "vi-VN",
+                                )}
+                                % giá trị thay thế
                               </span>
                             ) : null}
                           </p>
@@ -372,6 +486,34 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               <Location title="Điểm nhận" point={detail.pickupPoint} />
               <Location title="Điểm trả" point={detail.returnPoint} />
             </div>
+
+            <RentalDocumentsPanel orderId={orderId} />
+
+            {detail.order.status === "CANCELLED" &&
+            detail.cancellationRefunds?.length ? (
+              <InfoBanner
+                className="mt-6"
+                tone="warning"
+                title="Hoàn tiền khi hủy đơn"
+              >
+                {detail.cancellationRefunds.map((refund) => (
+                  <div key={refund.refundId} className="mt-2">
+                    <p>
+                      {money(refund.amount, refund.currency)} ·{" "}
+                      {refund.settlementMode === "SANDBOX_SIMULATED"
+                        ? "Hoàn tiền"
+                        : labelOf(refundStatusLabels, refund.status)}
+                    </p>
+                    {refund.settlementMode === "SANDBOX_SIMULATED" && (
+                      <p className="mt-1 text-xs text-amber-900">
+                        Kết quả phục vụ kiểm thử; không có tiền thật được chuyển
+                        về tài khoản.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </InfoBanner>
+            ) : null}
 
             <DepositSettlementPanel
               orderId={orderId}
@@ -434,7 +576,8 @@ function DepositSettlementPanel({
           </p>
           <h2 className="mt-1 text-xl font-black">Quyết toán cọc</h2>
           <p className="mt-1 text-xs leading-5 text-emerald-100/80">
-            Quyết toán xác định khoản giữ, khấu trừ và phải hoàn. Hoàn tiền là bước riêng qua cổng thanh toán.
+            Quyết toán xác định khoản giữ, khấu trừ và phải hoàn. Hoàn tiền là
+            bước riêng qua cổng thanh toán.
           </p>
         </div>
         <button
@@ -450,7 +593,11 @@ function DepositSettlementPanel({
       {error ? (
         <div className="m-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <span>{error}</span>
-          <button type="button" onClick={onRetry} className="font-bold underline">
+          <button
+            type="button"
+            onClick={onRetry}
+            className="font-bold underline"
+          >
             Thử lại
           </button>
         </div>
@@ -465,8 +612,16 @@ function DepositSettlementPanel({
       {!error && deposit ? (
         <div className="p-5 sm:p-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <DepositAmount label="Đã thu" value={deposit.collectedAmount} currency={currency} />
-            <DepositAmount label="Đang giữ" value={deposit.heldAmount} currency={currency} />
+            <DepositAmount
+              label="Đã thu"
+              value={deposit.collectedAmount}
+              currency={currency}
+            />
+            <DepositAmount
+              label="Đang giữ"
+              value={deposit.heldAmount}
+              currency={currency}
+            />
             <DepositAmount
               label="Chờ hoàn"
               value={deposit.refundPendingAmount}
@@ -489,24 +644,31 @@ function DepositSettlementPanel({
 
           {(() => {
             const pending = deposit.items
-              .filter((item) => (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status))
+              .filter(
+                (item) =>
+                  (item.approvedDeduction ?? 0) > 0 &&
+                  !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status),
+              )
               .reduce((sum, item) => sum + (item.approvedDeduction ?? 0), 0);
             return pending > 0 ? (
               <p className="mt-4 rounded-xl border border-red-100 bg-red-50/60 p-3 text-xs leading-5 text-red-800">
-                Có {money(pending, currency)} khoản trừ đã duyệt nhưng chưa quyết toán, nên chưa tính vào ô “Khấu trừ”. Số này chỉ được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
+                Có {money(pending, currency)} khoản trừ đã duyệt nhưng chưa
+                quyết toán, nên chưa tính vào ô “Khấu trừ”. Số này chỉ được trừ
+                khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
               </p>
             ) : null;
           })()}
 
           {deposit.refundPendingAmount > 0 ? (
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-              Khoản “Chờ hoàn” mới là yêu cầu đang xử lý. Chỉ khi cổng thanh toán trả trạng thái thành công, số tiền mới chuyển sang “Đã hoàn”.
+              Khoản “Chờ hoàn” mới là yêu cầu đang xử lý. Chỉ khi cổng thanh
+              toán trả trạng thái thành công, số tiền mới chuyển sang “Đã hoàn”.
             </p>
           ) : null}
 
           {deposit.settlementMode === "SANDBOX_SIMULATED" ? (
             <p className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs leading-5 text-violet-800">
-              {deposit.notice || "Đây là kết quả mô phỏng sandbox, không phải bằng chứng tiền thật đã về tài khoản."}
+              Đây là kết quả hoàn cọc.
             </p>
           ) : null}
 
@@ -514,48 +676,57 @@ function DepositSettlementPanel({
             <div className="mt-5 space-y-3">
               {deposit.items.map((item) => (
                 <div key={item.unitId}>
-                <article
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4"
-                >
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                      Thiết bị {item.assetCode || shortCode(item.unitId)}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
-                      Cọc {money(item.depositAmount ?? item.amount ?? 0, currency)}
-                    </p>
-                    {depositReasonText(item.reason) ? (
-                      <p className="mt-1 text-xs text-slate-500">{depositReasonText(item.reason)}</p>
-                    ) : null}
-                  </div>
-                  <div className="text-right">
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositBadge(item).tone}`}>
-                      {depositBadge(item).label}
-                    </span>
-                    {item.refundStatus ? (
-                      <p className="mt-2 text-xs text-slate-500">
-                        {labelOf(refundStatusLabels, item.refundStatus)}
-                        {item.refundAmount ? ` · ${money(item.refundAmount, currency)}` : ""}
+                  <article className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                        Thiết bị {item.assetCode || shortCode(item.unitId)}
                       </p>
-                    ) : item.deduction ? (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Khấu trừ {money(item.deduction, currency)}
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        Cọc{" "}
+                        {money(
+                          item.depositAmount ?? item.amount ?? 0,
+                          currency,
+                        )}
                       </p>
-                    ) : null}
-                  </div>
-                </article>
-                <DeductionReviewPanel
-                  orderId={orderId}
-                  item={item}
-                  currency={currency}
-                  onChanged={onRetry}
-                />
+                      {depositReasonText(item.reason) ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {depositReasonText(item.reason)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositBadge(item).tone}`}
+                      >
+                        {depositBadge(item).label}
+                      </span>
+                      {item.refundStatus ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          {labelOf(refundStatusLabels, item.refundStatus)}
+                          {item.refundAmount
+                            ? ` · ${money(item.refundAmount, currency)}`
+                            : ""}
+                        </p>
+                      ) : item.deduction ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Khấu trừ {money(item.deduction, currency)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </article>
+                  <DeductionReviewPanel
+                    orderId={orderId}
+                    item={item}
+                    currency={currency}
+                    onChanged={onRetry}
+                  />
                 </div>
               ))}
             </div>
           ) : (
             <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-              Chưa phát sinh quyết toán theo thiết bị. Tiền cọc sẽ được theo dõi tại đây sau khi thiết bị được bàn giao và hoàn trả.
+              Chưa phát sinh quyết toán theo thiết bị. Tiền cọc sẽ được theo dõi
+              tại đây sau khi thiết bị được bàn giao và hoàn trả.
             </p>
           )}
         </div>
@@ -583,7 +754,9 @@ function DepositAmount({
   };
   return (
     <div className={`rounded-2xl p-4 ${tones[tone]}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wide opacity-60">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wide opacity-60">
+        {label}
+      </p>
       <p className="mt-1 text-base font-black">{money(value, currency)}</p>
     </div>
   );
@@ -607,8 +780,12 @@ function Location({
 }) {
   return (
     <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
-      <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">{title}</p>
-      <p className="mt-2 font-black text-gray-900">{point?.name || "Chưa cập nhật"}</p>
+      <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-700">
+        {title}
+      </p>
+      <p className="mt-2 font-black text-gray-900">
+        {point?.name || "Chưa cập nhật"}
+      </p>
       <p className="mt-1 text-sm text-gray-600">{point?.address}</p>
     </div>
   );
@@ -625,7 +802,8 @@ function State({ text }: { text: string }) {
 function PaymentCountdown({ expiresAt }: { expiresAt: string }) {
   const [remaining, setRemaining] = useState(0);
   useEffect(() => {
-    const tick = () => setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
+    const tick = () =>
+      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);

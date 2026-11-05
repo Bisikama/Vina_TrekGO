@@ -162,6 +162,7 @@ describe('PrismaRentalContextAdapter (Polymorphic Context Resolution)', () => {
     expect(context?.membershipRole).toBe('MEMBER');
     expect(context?.membershipStatus).toBe('ACTIVE');
     expect(context?.trip.tripType).toBe('PRIVATE');
+    expect(context?.trip).toMatchObject({ weatherSummary: 'Trời quang mây tạnh', rainProbabilityPercent: 5 });
     expect(context?.recipientOptions).toHaveLength(1);
     expect(prismaMock.rentalOrder.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

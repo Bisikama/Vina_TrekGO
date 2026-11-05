@@ -3,8 +3,8 @@ import type { FinancialEffect, TransactionKind, TransactionSource } from './user
 
 const ISO_8601_REGEX = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}(:?\d{2})?)?)?$/
 
-export type AdminGatewayFilter = 'BOTH' | 'vnpay' | 'payos'
-export type SupportedAdminGateway = 'vnpay' | 'payos'
+export type AdminGatewayFilter = 'BOTH' | 'vnpay'
+export type SupportedAdminGateway = 'vnpay'
 export type AdminTransactionDirection = 'CASH_IN' | 'CASH_OUT'
 
 export type AdminTransactionCategory =
@@ -31,20 +31,17 @@ export const AdminTransactionCategoryEnum = [
 ] as const
 
 export const AdminGatewayFilterSchema = z
-  .enum(['ALL', 'BOTH', 'all', 'both', 'vnpay', 'VNPAY', 'payos', 'PAYOS', 'PayOS'])
+  .enum(['ALL', 'BOTH', 'all', 'both', 'vnpay', 'VNPAY'])
   .optional()
-  .default('BOTH')
+  .default('vnpay')
   .transform((val): AdminGatewayFilter => {
     const normalized = val.toLowerCase()
     if (normalized === 'vnpay') return 'vnpay'
-    if (normalized === 'payos') return 'payos'
     return 'BOTH'
   })
 
-export function resolveAllowedGateways(filter: AdminGatewayFilter = 'BOTH'): SupportedAdminGateway[] {
-  if (filter === 'vnpay') return ['vnpay']
-  if (filter === 'payos') return ['payos']
-  return ['vnpay', 'payos']
+export function resolveAllowedGateways(filter: AdminGatewayFilter = 'vnpay'): SupportedAdminGateway[] {
+  return ['vnpay']
 }
 
 export const AdminTransactionsQuerySchema = z
@@ -58,7 +55,7 @@ export const AdminTransactionsQuerySchema = z
     category: z.enum(AdminTransactionCategoryEnum).optional(),
     status: z.enum(['PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED']).optional(),
     reconcileStatus: z.enum(['IDLE', 'SCHEDULED', 'RUNNING', 'NEEDS_REVIEW', 'RESOLVED']).optional(),
-    executionMode: z.enum(['PROVIDER_API', 'MANUAL_BANK_TRANSFER']).optional(),
+    executionMode: z.enum(['PROVIDER_API', 'MANUAL_BANK_TRANSFER', 'SANDBOX_SIMULATED']).optional(),
     manualStatus: z
       .enum(['AWAITING_RECIPIENT', 'READY', 'PROCESSING', 'NEEDS_REVIEW', 'COMPLETED'])
       .optional(),
@@ -165,6 +162,8 @@ export interface AdminTransactionBreakdownDto {
 }
 
 export interface AdminTransactionItemDto {
+  settlementMode?: 'SANDBOX_SIMULATED' | null
+  warnings?: string[]
   id: string
   kind: TransactionKind
   direction: AdminTransactionDirection
@@ -244,6 +243,8 @@ export interface AdminCashflowBreakdownByGatewayDto {
 }
 
 export interface AdminCashflowSummaryResponseDto {
+  settlementMode?: 'SANDBOX_SIMULATED'
+  warnings?: string[]
   appliedFilters?: {
     gateway: AdminGatewayFilter
     gatewaysIncluded: SupportedAdminGateway[]
@@ -341,6 +342,8 @@ export interface AdminPaymentDetailResponseDto {
 }
 
 export interface AdminRefundDetailResponseDto {
+  settlementMode?: 'SANDBOX_SIMULATED' | null
+  warnings?: string[]
   refundId: string
   paymentId: string
   invoiceId: string

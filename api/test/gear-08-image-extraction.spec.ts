@@ -258,7 +258,9 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
           return { ...d };
         }),
         findMany: jest.fn(async ({ where }: any) => {
-          return Array.from(drafts.values()).filter((d) => d.userId === where.userId);
+          return Array.from(drafts.values()).filter((d) => d.userId === where.userId
+            && (!where.createdAt?.gte || d.createdAt >= where.createdAt.gte)
+            && (!where.status?.in || where.status.in.includes(d.status)));
         }),
         count: jest.fn(async () => draftCounterToday),
         updateMany: jest.fn(async ({ where, data }: any) => {
@@ -355,6 +357,45 @@ describe('Gear Advisor V3.1.5 — Phase 08 Image Extraction HTTP Pipeline (/api/
 
   afterAll(async () => {
     await app.close();
+  });
+
+  describe('GET /api/v1/gear/extractions/quota', () => {
+    it('requires auth and counts only the current user’s chargeable drafts for the current Vietnam day', async () => {
+      const previousLimit = process.env.GEAR_EXTRACTION_DAILY_QUOTA;
+      process.env.GEAR_EXTRACTION_DAILY_QUOTA = '3';
+      drafts.clear();
+      const now = new Date();
+      const add = (userId: string, status: GearExtractionDraftDomain['status'], extractedData: any, createdAt: Date) => {
+        const id = randomUUID();
+        drafts.set(id, { id, userId, sourceType: 'IMAGE', sourceHash: id, status, extractedData,
+          confirmedItemId: null, confirmationPayloadHash: null, version: 1,
+          expiresAt: new Date(now.getTime() + 86400000), createdAt, updatedAt: createdAt });
+      };
+      try {
+        add(aliceId, 'READY', {}, now);
+        add(aliceId, 'CONFIRMED', {}, now);
+        add(aliceId, 'PENDING', null, now);
+        add(aliceId, 'READY', { _cacheHit: true }, now);
+        add(aliceId, 'READY', { _manualEntry: true }, now);
+        add(aliceId, 'FAILED', {}, now);
+        add(aliceId, 'PENDING', null, new Date(now.getTime() - 3 * 60 * 1000));
+        add(aliceId, 'READY', {}, new Date(now.getTime() - 48 * 60 * 60 * 1000));
+        add(bobId, 'READY', {}, now);
+        await request(app.getHttpServer()).get('/api/v1/gear/extractions/quota').expect(401);
+        const alice = await request(app.getHttpServer()).get('/api/v1/gear/extractions/quota').set('Authorization', aliceToken).expect(200);
+        expect(alice.headers['cache-control']).toBe('no-store');
+        expect(alice.body).toMatchObject({ limit: 3, used: 3, remaining: 0, timezone: 'Asia/Ho_Chi_Minh' });
+        const reset = new Date(alice.body.resetAt);
+        expect(reset.getTime()).toBeGreaterThan(now.getTime());
+        expect(reset.getUTCHours()).toBe(17);
+        const bob = await request(app.getHttpServer()).get('/api/v1/gear/extractions/quota').set('Authorization', bobToken).expect(200);
+        expect(bob.body).toMatchObject({ limit: 3, used: 1, remaining: 2 });
+      } finally {
+        drafts.clear();
+        if (previousLimit === undefined) delete process.env.GEAR_EXTRACTION_DAILY_QUOTA;
+        else process.env.GEAR_EXTRACTION_DAILY_QUOTA = previousLimit;
+      }
+    });
   });
 
   describe('Route 1: POST /api/v1/gear/extractions (source = IMAGE)', () => {

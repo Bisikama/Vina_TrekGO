@@ -116,6 +116,7 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
     evidenceComplete === detail.progress.picked &&
     !detail.package;
   const isReady = detail.task.status === "READY" || detail.task.status === "TRANSFERRED";
+  const isCancelled = detail.task.status === "CANCELLED";
 
   return (
     <main className="px-6 py-5">
@@ -126,10 +127,20 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
             <h1 className="text-3xl font-bold">Đóng gói & bàn giao vận chuyển</h1>
             <p className="mt-2 text-sm text-slate-600">Task {detail.task.id} · {detail.pickupContext.name}</p>
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-900">{detail.task.status}</span>
+          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+            isCancelled ? "bg-red-100 text-red-900" : "bg-emerald-100 text-emerald-900"
+          }`}>
+            {isCancelled ? "ĐÃ HỦY" : detail.task.status}
+          </span>
         </div>
 
         {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
+
+        {isCancelled && (
+          <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900">
+            Đơn thuê này đã bị hủy. Kiện hàng và nhiệm vụ kho đã đóng, không thể tiếp tục bàn giao.
+          </div>
+        )}
 
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-bold">Thiết bị trong kiện</h2>
@@ -156,7 +167,7 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
           )}
 
           {!canPack && !detail.package && (
-            <p className="mt-3 text-xs text-orange-800">Backend chỉ cho đóng gói khi đã pick đủ và mọi unit đều có ảnh tình trạng.</p>
+            <p className="mt-3 text-xs text-orange-800">Hệ thống chỉ cho phép đóng gói khi đã chọn đủ thiết bị và mọi thiết bị đều có ảnh tình trạng.</p>
           )}
         </section>
 
@@ -177,7 +188,7 @@ export function StaffPackingDetail({ orderId: taskId }: { orderId: string }) {
           </section>
         )}
 
-        {isReady && (
+        {!isCancelled && isReady && (
           <section className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
             <h2 className="font-bold text-emerald-900">Đã sẵn sàng giao</h2>
             <p className="mt-2 text-sm text-emerald-800">Backend đã tạo task outbound cho Staff Delivery{deliveryTaskId ? `: ${deliveryTaskId}` : "."}</p>

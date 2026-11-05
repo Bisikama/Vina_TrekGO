@@ -36,9 +36,9 @@ export const GEAR_ATTRIBUTES: Record<GearCategory, [string, string, string][]> =
 
 export const ATTRIBUTE_SOURCE_LABELS: Record<string, string> = {
   USER: "Bạn nhập",
-  AI_IMAGE: "AI đọc ảnh",
-  AI_LINK: "AI đọc link",
-  VERIFIED_CATALOG: "Danh mục đã duyệt",
+  AI_IMAGE: "Đọc từ ảnh",
+  AI_LINK: "Đọc từ đường dẫn",
+  VERIFIED_CATALOG: "Từ danh mục",
 };
 
 export const categoryInfo = (category: GearCategory) =>
@@ -48,7 +48,7 @@ export const conditionLabel = (condition: string) =>
   GEAR_CONDITIONS.find((entry) => entry.value === String(condition).toLowerCase())?.label ?? condition;
 
 export const sourceLabel = (source: GearSource | string) =>
-  source === "ai_image" ? "AI đọc ảnh" : source === "ai_link" ? "AI đọc link" : "Nhập tay";
+  source === "ai_image" ? "Từ ảnh" : source === "ai_link" ? "Từ đường dẫn" : "Tự nhập";
 
 export function formatGearAttribute(value: unknown, unit: string) {
   if (value === true) return "Có";

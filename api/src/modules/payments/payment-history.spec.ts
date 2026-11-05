@@ -13,6 +13,7 @@ import { RentalPaymentsController } from '../rental/payments/rental-payments.con
 import { UserTransactionsController } from './user-transactions.controller'
 import { PaymentsPort, SharedPaymentsPort } from './payments.port'
 import { PaymentsService } from './payments.service'
+import { SandboxRefundSimulationService } from './sandbox-refund-simulation.service'
 import { RefundsService } from './refunds.service'
 import { PaymentRecoveryService } from './payment-recovery.service'
 import { REQUEST_USER_KEY } from '../../shared/constants/auth.constant'
@@ -57,6 +58,7 @@ describe('Payment History & User Transactions APIs', () => {
         PaymentHistoryService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: RefundsService, useValue: {} },
+        { provide: SandboxRefundSimulationService, useValue: {} },
         { provide: PaymentRecoveryService, useValue: {} },
         { provide: PaymentsService, useValue: paymentsMock },
         { provide: PaymentsPort, useClass: SharedPaymentsPort },
@@ -1013,6 +1015,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
         PaymentHistoryService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: RefundsService, useValue: {} },
+        { provide: SandboxRefundSimulationService, useValue: {} },
         { provide: PaymentRecoveryService, useValue: {} },
         { provide: PaymentsService, useValue: {} },
         { provide: PaymentsPort, useClass: SharedPaymentsPort },
@@ -1215,6 +1218,8 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
           purpose: 'BOOKING_CANCELLATION',
           reconcileStatus: 'RESOLVED',
           executionMode: 'PROVIDER_API',
+          paymentGateway: 'vnpay',
+          providerEnvironment: 'SANDBOX',
           providerPayload: { sandboxSimulation: { status: 'SUCCEEDED' } },
           refundTransactionRef: 'SIM-01E76D7F',
           createdAt: new Date('2026-10-31T10:00:00.000Z'),
@@ -1238,62 +1243,22 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
     expect(raw).not.toContain('DONT_LEAK')
   })
 
-  it('25. Bộ lọc gateway hỗ trợ BOTH/ALL (vnpay + payos), chỉ vnpay, chỉ payos và từ chối cổng mock/momo với 400 VALIDATION_ERROR', async () => {
-    // 1. Mặc định (không truyền gateway -> BOTH = ['vnpay', 'payos'])
-    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
-    const resBoth = await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(200)
-    expect(resBoth.body.appliedFilters).toEqual({
-      gateway: 'BOTH',
-      gatewaysIncluded: ['vnpay', 'payos'],
-      source: null,
-      kind: null,
-      category: null,
-      status: null,
-    })
-
-    // 2. Chỉ lọc riêng PayOS (gateway=payos)
-    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
-    const resPayos = await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions?gateway=payos')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(200)
-    expect(resPayos.body.appliedFilters).toEqual({
-      gateway: 'payos',
-      gatewaysIncluded: ['payos'],
-      source: null,
-      kind: null,
-      category: null,
-      status: null,
-    })
-
-    // 3. Chỉ lọc riêng VNPay (gateway=vnpay)
-    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
-    const resVnpay = await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions?gateway=vnpay')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(200)
-    expect(resVnpay.body.appliedFilters).toEqual({
-      gateway: 'vnpay',
-      gatewaysIncluded: ['vnpay'],
-      source: null,
-      kind: null,
-      category: null,
-      status: null,
-    })
-
-    // 4. Từ chối cổng giả lập mock và momo
-    await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions?gateway=mock')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(400)
-
-    await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions?gateway=momo')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(400)
+  it('25. defaults and ALL/BOTH aliases only include VNPay; other gateways use the global validation envelope', async () => {
+    for (const gateway of ['', 'ALL', 'BOTH', 'vnpay']) {
+      prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
+      const res = await request(app.getHttpServer()).get('/api/v1/admin/transactions' + (gateway ? '?gateway=' + gateway : ''))
+        .set('Authorization', 'Bearer admin-token').expect(200)
+      expect(res.body.appliedFilters.gatewaysIncluded).toEqual(['vnpay'])
+      const sql = prismaMock.$queryRaw.mock.calls.at(-1)[0].sql
+      expect(sql).toContain("p.provider_environment = 'SANDBOX'")
+      expect(sql).toContain("r.execution_mode::text = 'SANDBOX_SIMULATED'")
+    }
+    for (const gateway of ['payos', 'momo', 'mock']) {
+      const res = await request(app.getHttpServer()).get('/api/v1/admin/transactions?gateway=' + gateway)
+        .set('Authorization', 'Bearer admin-token').expect(400)
+      expect(res.body.error.code).toBe('VALIDATION_ERROR')
+      expect(res.body.meta.contractVersion).toBeDefined()
+    }
   })
 
   it('26. GET /api/v1/admin/transactions bóc tách đúng breakdown (phí thuê, tiền cọc, tiền khấu trừ cọc) và lọc theo direction/category', async () => {
@@ -1314,11 +1279,11 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
           currency: 'VND',
           status: 'PENDING',
           financialEffect: 'NONE',
-          paymentGateway: 'payos',
-          providerEnvironment: 'PRODUCTION',
+          paymentGateway: 'vnpay',
+          providerEnvironment: 'SANDBOX',
           paymentMethod: 'QR',
           transactionRef: null,
-          payosOrderCode: '1730366400',
+          payosOrderCode: null,
           reconcileStatus: 'IDLE',
           reconciliationRequired: true,
           createdAt: new Date('2026-10-31T10:00:00.000Z'),
@@ -1326,9 +1291,9 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
           invoiceNo: 'INV-RT-20261031-002',
           revisionNo: 1,
           refundPurpose: 'DEPOSIT',
-          executionMode: 'MANUAL_BANK_TRANSFER',
-          confirmationSource: 'MANUAL_PROOF',
-          manualRefundStatus: 'PENDING',
+          executionMode: 'PROVIDER_API',
+          confirmationSource: null,
+          manualRefundStatus: null,
           isExtension: false,
           serviceFeeAmount: '0',
           rentalFeeAmount: '0',
@@ -1339,7 +1304,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       .mockResolvedValueOnce([{ total: 1 }])
 
     const res = await request(app.getHttpServer())
-      .get('/api/v1/admin/transactions?gateway=payos&direction=CASH_OUT&category=DEPOSIT_REFUND')
+      .get('/api/v1/admin/transactions?gateway=vnpay&direction=CASH_OUT&category=DEPOSIT_REFUND')
       .set('Authorization', 'Bearer admin-token')
       .expect(200)
 
@@ -1348,10 +1313,10 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       direction: 'CASH_OUT',
       source: 'RENTAL',
       category: 'DEPOSIT_REFUND',
-      paymentGateway: 'payos',
-      payosOrderCode: '1730366400',
-      manualRefundStatus: 'PENDING',
-      canSimulateSandbox: false,
+      paymentGateway: 'vnpay',
+      payosOrderCode: null,
+      manualRefundStatus: null,
+      canSimulateSandbox: true,
       breakdown: {
         serviceFeeAmount: '0.00',
         rentalFeeAmount: '0.00',
@@ -1385,7 +1350,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
           rentalCancellationOutflowAmount: '500000',
           technicalReversalOutflowAmount: '0',
           retainedDepositDeductionAmount: '500000',
-          payosManualRefundPendingCount: 3,
+          payosManualRefundPendingCount: 0,
           vnpaySandboxPendingRefundCount: 1,
         },
       ])
@@ -1399,7 +1364,7 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
 
     expect(res.body.appliedFilters).toEqual({
       gateway: 'BOTH',
-      gatewaysIncluded: ['vnpay', 'payos'],
+      gatewaysIncluded: ['vnpay'],
       source: null,
     })
     expect(res.body.totals).toMatchObject({
@@ -1413,121 +1378,21 @@ describe('Admin Cashflow & System-Wide Transaction Ledger APIs', () => {
       depositOutflowAmount: '4500000.00',
       retainedDepositDeductionAmount: '500000.00',
       activeDepositHeldAmount: '0.00',
-      payosManualRefundPendingCount: 3,
+      payosManualRefundPendingCount: 0,
       vnpaySandboxPendingRefundCount: 1,
     })
   })
 
-  it('28. GET /api/v1/admin/refunds/:id trả chi tiết hoàn tiền PayOS kèm VietQR, khấu trừ cọc và chặn cổng mock', async () => {
-    ; (prismaMock as any).refund = {
-      findUnique: jest.fn().mockResolvedValueOnce({
-        id: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
-        paymentId,
-        invoiceId: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
-        rentalOrderId: '88888888-8888-4888-a888-888888888888',
-        trailAccessId: null,
-        amount: new Prisma.Decimal(900000),
-        currency: 'VND',
-        status: 'PENDING',
-        purpose: 'DEPOSIT',
-        reason: 'Hoàn cọc sau khi khấu trừ hư hỏng nhẹ',
-        reasonCode: 'DAMAGED_GEAR',
-        paymentGateway: 'payos',
-        providerEnvironment: 'PRODUCTION',
-        executionMode: 'MANUAL_BANK_TRANSFER',
-        providerPayload: null,
-        refundTransactionRef: null,
-        merchantRefundRef: 'REF-01E76D7F',
-        reconcileStatus: 'IDLE',
-        retryCount: 0,
-        lastCheckedAt: null,
-        lastErrorCode: null,
-        createdAt: new Date('2026-10-31T10:00:00.000Z'),
-        refundedAt: null,
-        depositSettlement: {
-          totalDeposit: new Prisma.Decimal(1000000),
-          totalDeduction: new Prisma.Decimal(100000),
-        },
-        depositSettlementItem: null,
-        payment: {
-          id: paymentId,
-          amount: new Prisma.Decimal(1500000),
-          status: 'SUCCEEDED',
-          paymentGateway: 'payos',
-          paymentMethod: 'QR',
-          providerEnvironment: 'PRODUCTION',
-          transactionRef: 'PAYOS-TX-01',
-          paidAt: new Date('2026-10-30T08:00:00.000Z'),
-          payosCheckout: {
-            orderCode: BigInt(1730366400),
-          },
-          invoice: {
-            id: 'e99bc2e5-462b-4630-92e6-226a15f6f20f',
-            invoiceNo: 'INV-RT-20261031-002',
-            status: 'PAID',
-            invoiceType: 'RENTAL',
-            bookingId: null,
-            rentalOrderId: '88888888-8888-4888-a888-888888888888',
-            trailAccessId: null,
-            user: {
-              id: customerId,
-              fullName: 'Nguyễn Văn A',
-              email: 'nguyenvana@example.com',
-            },
-          },
-        },
-        allocations: [
-          {
-            id: 'alloc-ref-1',
-            paymentAllocationId: 'alloc-pay-2',
-            paymentAllocation: { component: 'RENTAL_DEPOSIT' },
-            amount: new Prisma.Decimal(900000),
-          },
-        ],
-        manualRefund: {
-          status: 'AWAITING_TRANSFER',
-          version: 1,
-          assignedAdminId: adminId,
-          claimedAt: new Date('2026-10-31T10:01:00.000Z'),
-          bankBin: '970422',
-          accountNumber: '0123456789',
-          accountHolderName: 'NGUYEN VAN A',
-          ownershipConfirmedAt: new Date('2026-10-31T10:00:30.000Z'),
-          bankTransactionRef: null,
-          transferredAt: null,
-          confirmedBy: null,
-          evidenceMediaId: null,
-          note: 'Chờ kế toán chuyển khoản',
-        },
-      }),
+  it('28. rejects PayOS and production payment/refund detail outside the sandbox report', async () => {
+    ;(prismaMock as any).refund = { findUnique: jest.fn() }
+    for (const paymentGateway of ['payos', 'momo', 'vnpay']) {
+      const payment = { paymentGateway, providerEnvironment: 'PRODUCTION' }
+      prismaMock.payment.findUnique.mockResolvedValue(payment)
+      await request(app.getHttpServer()).get('/api/v1/admin/payments/' + paymentId)
+        .set('Authorization', 'Bearer admin-token').expect(404)
+      ;(prismaMock as any).refund.findUnique.mockResolvedValue({ ...payment, payment, executionMode: 'PROVIDER_API' })
+      await request(app.getHttpServer()).get('/api/v1/admin/refunds/' + paymentId)
+        .set('Authorization', 'Bearer admin-token').expect(404)
     }
-
-    const res = await request(app.getHttpServer())
-      .get('/api/v1/admin/refunds/01e76d7f-e0a7-4b0a-9633-d0e13bd20436')
-      .set('Authorization', 'Bearer admin-token')
-      .expect(200)
-
-    expect(res.body).toMatchObject({
-      refundId: '01e76d7f-e0a7-4b0a-9633-d0e13bd20436',
-      purpose: 'DEPOSIT',
-      paymentGateway: 'payos',
-      executionMode: 'MANUAL_BANK_TRANSFER',
-      canSimulateSandbox: false,
-      breakdown: {
-        serviceFeeAmount: '0.00',
-        rentalFeeAmount: '0.00',
-        depositAmount: '1000000.00',
-        deductionAmount: '100000.00',
-        isExtension: false,
-      },
-      sourcePayment: {
-        paymentId,
-        payosOrderCode: '1730366400',
-      },
-    })
-    expect(res.body.manualRefund.recipient.vietQrImageUrl).toContain(
-      'https://img.vietqr.io/image/970422-0123456789-compact2.png',
-    )
-    expect(res.body.manualRefund.recipient.vietQrImageUrl).toContain('amount=900000')
   })
 })

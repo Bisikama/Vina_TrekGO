@@ -7,6 +7,7 @@ import { PrismaService } from '../../shared/services/prisma.service'
 import { AppError, BOOKING_ERROR_CODES as B, PAYMENT_ERROR_CODES as E } from '../../shared/errors'
 import { PaymentsPort } from '../payments/payments.port'
 import { paymentHash } from '../payments/payment-utils'
+import { refundSummary } from '../payments/refunds.service'
 import { databaseTime, expireTripHolds, syncTripRegistrationState } from './booking-capacity'
 
 @Injectable()
@@ -267,12 +268,28 @@ export class BookingCancellationService {
       return record
     })
     if (!cancellation) throw AppError.fromCode(B.BOOKING_HOLD_EXPIRED)
+    let refund: Awaited<ReturnType<PaymentsPort['requestRefund']>> | null = null
+    if (!cancellation.refundableAmount.isZero()) {
+      try {
+        refund = await this.dispatch(cancellation.id)
+      } catch {
+        // Cancellation is already committed. Leave the durable event pending for replay.
+        this.logger.warn(`Booking refund deferred for cancellation ${cancellation.id}`)
+        const pending = await this.db.refund.findFirst({
+          where: { bookingCancellationId: cancellation.id }, orderBy: { createdAt: 'desc' },
+        })
+        refund = pending ? refundSummary(pending) : null
+      }
+    }
     return {
       bookingId: cancellation.bookingId,
       cancellationId: cancellation.id,
       status: 'CANCELLED',
       refundableAmount: cancellation.refundableAmount.toFixed(),
       currency: 'VND',
+      refund,
+      refundProcessingStatus: cancellation.refundableAmount.isZero() ? 'NOT_REQUIRED' :
+        refund?.status === 'SUCCEEDED' ? 'COMPLETED' : 'PENDING',
     }
   }
 

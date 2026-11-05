@@ -9,6 +9,9 @@ import { RENTAL_RETURN_ERROR_CODES as RR } from '../../../../shared/errors/codes
 
 type Tx = Prisma.TransactionClient;
 
+/** Phiên bản mẫu PDF ghi lên chứng từ mới phát hành (1.4.0: bố cục có logo, ô tóm tắt, bảng thiết bị). */
+export const RENTAL_DOCUMENT_TEMPLATE_VERSION = '1.4.0';
+
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
   if (value && typeof value === 'object') {
@@ -40,7 +43,7 @@ async function insertEventDocument(tx: Tx, input: {
     snapshotHash: snapshotHash(input.snapshot),
     sourceVersion: input.sourceVersion ?? 1,
     policyVersion: input.policyVersion ?? '1.5.2',
-    templateVersion: input.templateVersion ?? '1.3.2',
+    templateVersion: input.templateVersion ?? RENTAL_DOCUMENT_TEMPLATE_VERSION,
     issuedAt: input.issuedAt,
   }});
   await tx.rentalOutboxEvent.upsert({
@@ -290,7 +293,7 @@ export async function issueReturnReceiptTx(
     issuedAt: at,
     rootDocumentId: root.id,
     policyVersion,
-    templateVersion: '1.3.2',
+    templateVersion: RENTAL_DOCUMENT_TEMPLATE_VERSION,
     snapshot: {
       kind: 'RETURN_RECEIPT',
       documentNo: docNo,
@@ -307,7 +310,7 @@ export async function issueReturnReceiptTx(
       failureEvidenceId,
       evidenceIds,
       policyVersion,
-      templateVersion: '1.3.2',
+      templateVersion: RENTAL_DOCUMENT_TEMPLATE_VERSION,
       outcomeNote: 'Outcome ISSUE remains preliminary; settlement is independent.',
       originalDocumentUnchanged: true,
     },

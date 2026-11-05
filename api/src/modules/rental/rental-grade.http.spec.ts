@@ -165,6 +165,28 @@ describe('Rental grade HTTP contract (guards + GlobalErrorFilter)', () => {
     await app.close()
   })
 
+  it('trả tên chuyến và chủ đơn trong danh sách đơn quản trị', async () => {
+    const at = new Date('2026-11-01T00:00:00Z')
+    fakePrisma.rentalOrder = {
+      count: jest.fn().mockResolvedValue(1),
+      findMany: jest.fn().mockResolvedValue([{
+        id: ORDER_ID, quoteId: ORDER_ID, userId: ACTOR_ID, tripId: ORDER_ID, bookingId: null,
+        status: 'PAID', financialStatus: 'PAID', exceptionStatus: 'NONE',
+        rentalFee: 100, totalDeposit: 200, totalAmount: 300, currency: 'VND',
+        rentalStartAt: at, rentalEndAt: at, paymentExpiresAt: at, paidAt: at,
+        cancelledAt: null, completedAt: null, version: 1, createdAt: at, updatedAt: at,
+        trip: { title: 'Núi Dinh' }, user: { fullName: 'Người đặt' }, rentalOrderLinesViaOrderId: [{ id: 'line' }],
+      }]),
+    }
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/admin/rental-orders').set('Authorization', 'Bearer ADMIN').expect(200)
+    expect(response.body.items[0]).toMatchObject({ tripTitle: 'Núi Dinh', customerName: 'Người đặt', linesCount: 1 })
+    expect(fakePrisma.rentalOrder.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ trip: { select: { title: true } }, user: { select: { fullName: true } } }),
+    }))
+    await request(app.getHttpServer()).get('/api/v1/admin/rental-orders').set('Authorization', 'Bearer USER').expect(403)
+  })
+
   const http = () => request(app.getHttpServer())
   const expectEnvelope = (body: any, code: string) => {
     expect(body.error.code).toBe(code)

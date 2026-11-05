@@ -1,5 +1,10 @@
 import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
 
+const sandboxDisclosureProperties: Record<string, SchemaObject> = {
+  settlementMode: { type: 'string', enum: ['SANDBOX_SIMULATED'], nullable: true },
+  warnings: { type: 'array', items: { type: 'string' }, example: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'] },
+}
+
 const paymentStatusEnum = ['PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED']
 const invoiceStatusEnum = [
   'DRAFT',
@@ -369,6 +374,9 @@ export const USER_TRANSACTIONS_RESPONSE_SCHEMA: SchemaObject = {
           currency: { type: 'string', example: 'VND' },
           status: { type: 'string' },
           financialEffect: { type: 'string', enum: ['DEBIT', 'CREDIT', 'NONE'] },
+          executionMode: { type: 'string', nullable: true },
+          confirmationSource: { type: 'string', nullable: true },
+          ...sandboxDisclosureProperties,
           description: { type: 'string', example: 'Thanh toán đơn thuê thiết bị' },
           paymentMethod: { type: 'string', nullable: true, example: 'QR' },
           createdAt: { type: 'string', format: 'date-time' },
@@ -529,7 +537,7 @@ export const ADMIN_TRANSACTIONS_RESPONSE_SCHEMA: SchemaObject = {
           },
           status: { type: 'string', example: 'SUCCEEDED' },
           financialEffect: { type: 'string', enum: ['DEBIT', 'CREDIT', 'NONE'] },
-          paymentGateway: { type: 'string', enum: ['vnpay', 'payos'], nullable: true, example: 'vnpay' },
+          paymentGateway: { type: 'string', enum: ['vnpay'], nullable: true, example: 'vnpay' },
           providerEnvironment: {
             type: 'string',
             enum: ['MOCK', 'SANDBOX', 'PRODUCTION'],
@@ -538,11 +546,12 @@ export const ADMIN_TRANSACTIONS_RESPONSE_SCHEMA: SchemaObject = {
           },
           paymentMethod: { type: 'string', nullable: true, example: 'REDIRECT' },
           transactionRef: { type: 'string', nullable: true, example: '15721162' },
-          payosOrderCode: { type: 'string', nullable: true, example: null },
+          payosOrderCode: { deprecated: true, type: 'string', nullable: true, example: null },
           reconcileStatus: { type: 'string', enum: reconciliationStatusEnum, example: 'RESOLVED' },
           reconciliationRequired: { type: 'boolean', example: false },
-          executionMode: { type: 'string', nullable: true, example: 'PROVIDER_API' },
-          confirmationSource: { type: 'string', nullable: true, example: 'PROVIDER' },
+          executionMode: { type: 'string', nullable: true, example: 'SANDBOX_SIMULATED' },
+          ...sandboxDisclosureProperties,
+          confirmationSource: { type: 'string', nullable: true, example: 'SANDBOX_SIMULATION' },
           manualRefundStatus: {
             type: 'string',
             enum: ['PENDING_PROOF', 'CONFIRMED', 'FAILED', 'CANCELLED'],
@@ -559,13 +568,13 @@ export const ADMIN_TRANSACTIONS_RESPONSE_SCHEMA: SchemaObject = {
     },
     appliedFilters: {
       type: 'object',
-      required: ['gateway', 'allowedGateways'],
+      required: ['gateway', 'gatewaysIncluded'],
       properties: {
-        gateway: { type: 'string', enum: ['BOTH', 'vnpay', 'payos'], example: 'BOTH' },
-        allowedGateways: {
+        gateway: { type: 'string', enum: ['BOTH', 'vnpay'], example: 'vnpay' },
+        gatewaysIncluded: {
           type: 'array',
-          items: { type: 'string', enum: ['vnpay', 'payos'] },
-          example: ['vnpay', 'payos'],
+          items: { type: 'string', enum: ['vnpay'] },
+          example: ['vnpay'],
         },
       },
     },
@@ -626,6 +635,7 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
   type: 'object',
   required: ['currency', 'period', 'appliedFilters', 'totals', 'bySource', 'byGateway'],
   properties: {
+    ...sandboxDisclosureProperties,
     currency: { type: 'string', example: 'VND' },
     period: {
       type: 'object',
@@ -637,13 +647,13 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
     },
     appliedFilters: {
       type: 'object',
-      required: ['gateway', 'allowedGateways', 'source'],
+      required: ['gateway', 'gatewaysIncluded', 'source'],
       properties: {
-        gateway: { type: 'string', enum: ['BOTH', 'vnpay', 'payos'], example: 'BOTH' },
-        allowedGateways: {
+        gateway: { type: 'string', enum: ['BOTH', 'vnpay'], example: 'vnpay' },
+        gatewaysIncluded: {
           type: 'array',
-          items: { type: 'string', enum: ['vnpay', 'payos'] },
-          example: ['vnpay', 'payos'],
+          items: { type: 'string', enum: ['vnpay'] },
+          example: ['vnpay'],
         },
         source: { type: 'string', enum: ['RENTAL', 'BOOKING', 'TRAIL_ACCESS'], nullable: true, example: null },
       },
@@ -685,7 +695,7 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
         technicalReversalOutflowAmount: { type: 'string', example: '0.00' },
         retainedDepositDeductionAmount: { type: 'string', example: '500000.00' },
         activeDepositHeldAmount: { type: 'string', example: '0.00' },
-        payosManualRefundPendingCount: { type: 'integer', example: 1 },
+        payosManualRefundPendingCount: { deprecated: true, type: 'integer', example: 0 },
         vnpaySandboxPendingRefundCount: { type: 'integer', example: 1 },
       },
     },
@@ -710,7 +720,7 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
         type: 'object',
         required: ['gateway', 'inflowAmount', 'inflowCount', 'outflowAmount', 'outflowCount', 'netAmount'],
         properties: {
-          gateway: { type: 'string', enum: ['vnpay', 'payos'], example: 'vnpay' },
+          gateway: { type: 'string', enum: ['vnpay'], example: 'vnpay' },
           inflowAmount: { type: 'string', example: '35000000.00' },
           inflowCount: { type: 'integer', example: 18 },
           outflowAmount: { type: 'string', example: '6500000.00' },
@@ -728,7 +738,7 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
     },
     appliedFilters: {
       gateway: 'BOTH',
-      allowedGateways: ['vnpay', 'payos'],
+      gatewaysIncluded: ['vnpay'],
       source: null,
     },
     totals: {
@@ -754,7 +764,7 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
       technicalReversalOutflowAmount: '0.00',
       retainedDepositDeductionAmount: '500000.00',
       activeDepositHeldAmount: '0.00',
-      payosManualRefundPendingCount: 1,
+      payosManualRefundPendingCount: 0,
       vnpaySandboxPendingRefundCount: 1,
     },
     bySource: [
@@ -786,20 +796,13 @@ export const ADMIN_CASHFLOW_SUMMARY_RESPONSE_SCHEMA: SchemaObject = {
     byGateway: [
       {
         gateway: 'vnpay',
-        inflowAmount: '35000000.00',
-        inflowCount: 18,
-        outflowAmount: '6500000.00',
-        outflowCount: 6,
-        netAmount: '28500000.00',
+        inflowAmount: '45000000.00',
+        inflowCount: 25,
+        outflowAmount: '8500000.00',
+        outflowCount: 8,
+        netAmount: '36500000.00',
       },
-      {
-        gateway: 'payos',
-        inflowAmount: '10000000.00',
-        inflowCount: 7,
-        outflowAmount: '2000000.00',
-        outflowCount: 2,
-        netAmount: '8000000.00',
-      },
+
     ],
   },
 }
@@ -873,13 +876,13 @@ export const ADMIN_PAYMENT_DETAIL_RESPONSE_SCHEMA: SchemaObject = {
       },
     },
     status: { type: 'string', enum: paymentStatusEnum },
-    paymentGateway: { type: 'string', enum: ['vnpay', 'payos'], example: 'vnpay' },
+    paymentGateway: { type: 'string', enum: ['vnpay'], example: 'vnpay' },
     providerEnvironment: { type: 'string', enum: ['MOCK', 'SANDBOX', 'PRODUCTION'], nullable: true },
     paymentMethod: { type: 'string', nullable: true, example: 'REDIRECT' },
     transactionRef: { type: 'string', nullable: true, example: '15721162' },
     merchantRequestRef: { type: 'string', nullable: true },
-    payosOrderCode: { type: 'string', nullable: true, example: null },
-    payosPaymentLinkId: { type: 'string', nullable: true, example: null },
+    payosOrderCode: { deprecated: true, type: 'string', nullable: true, example: null },
+    payosPaymentLinkId: { deprecated: true, type: 'string', nullable: true, example: null },
     applicationStatus: { type: 'string', enum: applicationStatusEnum, nullable: true },
     applicationReasonCode: { type: 'string', nullable: true },
     reconcileStatus: { type: 'string', enum: reconciliationStatusEnum },
@@ -930,7 +933,8 @@ export const ADMIN_PAYMENT_DETAIL_RESPONSE_SCHEMA: SchemaObject = {
           purpose: { type: 'string', example: 'BOOKING_CANCELLATION' },
           reconcileStatus: { type: 'string', enum: reconciliationStatusEnum },
           reconciliationRequired: { type: 'boolean' },
-          executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER'] },
+          executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER', 'SANDBOX_SIMULATED'] },
+          ...sandboxDisclosureProperties,
           confirmationSource: { type: 'string', nullable: true },
           manualRefundStatus: {
             type: 'string',
@@ -993,7 +997,7 @@ export const ADMIN_PAYMENT_DETAIL_RESPONSE_SCHEMA: SchemaObject = {
         purpose: 'BOOKING_CANCELLATION',
         reconcileStatus: 'RESOLVED',
         reconciliationRequired: false,
-        executionMode: 'PROVIDER_API',
+        executionMode: 'SANDBOX_SIMULATED',
         confirmationSource: 'SANDBOX_SIMULATION',
         manualRefundStatus: null,
         canSimulateSandbox: false,
@@ -1089,9 +1093,10 @@ export const ADMIN_REFUND_DETAIL_RESPONSE_SCHEMA: SchemaObject = {
     status: { type: 'string', enum: ['PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED'] },
     purpose: { type: 'string', example: 'RENTAL_DEPOSIT_RETURN' },
     reason: { type: 'string', nullable: true },
-    paymentGateway: { type: 'string', enum: ['vnpay', 'payos'], example: 'payos' },
+    paymentGateway: { type: 'string', enum: ['vnpay'], example: 'vnpay' },
     providerEnvironment: { type: 'string', enum: ['MOCK', 'SANDBOX', 'PRODUCTION'], nullable: true },
-    executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER'] },
+    executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER', 'SANDBOX_SIMULATED'] },
+    ...sandboxDisclosureProperties,
     confirmationSource: { type: 'string', nullable: true },
     canSimulateSandbox: { type: 'boolean', example: false },
     refundTransactionRef: { type: 'string', nullable: true },
@@ -1110,7 +1115,7 @@ export const ADMIN_REFUND_DETAIL_RESPONSE_SCHEMA: SchemaObject = {
         amount: { type: 'string', example: '1500000.00' },
         status: { type: 'string', enum: paymentStatusEnum },
         transactionRef: { type: 'string', nullable: true },
-        payosOrderCode: { type: 'string', nullable: true },
+        payosOrderCode: { deprecated: true, type: 'string', nullable: true },
         paidAt: { type: 'string', format: 'date-time', nullable: true },
       },
     },

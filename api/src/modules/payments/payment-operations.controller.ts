@@ -79,7 +79,7 @@ export class PaymentOperationsController {
   @ApiOperation({
     summary: 'Đối soát hoàn tiền thủ công (Admin Refund Reconcile)',
     description:
-      'Dành cho Admin đối soát lại lệnh hoàn tiền với cổng thanh toán để đảm bảo tiền đã hoàn về tài khoản khách.',
+      'Refund booking SANDBOX_SIMULATED được phục hồi bằng settlement mô phỏng nội bộ, không gọi VNPay. Các mode khác giữ cơ chế đối soát hiện có.',
   })
   @ApiParam({
     name: 'id',
@@ -107,18 +107,21 @@ export class PaymentOperationsController {
   @ApiResponse({ status: 202, description: 'Yêu cầu đối soát hoàn tiền đã được lên lịch' })
   @ApiResponse({ status: 401, description: 'Chưa xác thực' })
   @ApiResponse({ status: 403, description: 'Chỉ Admin mới có quyền thực hiện' })
-  refund(
+  async refund(
     @Param('id', new ZodValidationPipe(z.string().uuid())) id: string,
     @Body(new ZodValidationPipe(reasonSchema)) body: { reason: string },
     @ActiveUser('id') actorId: string,
   ) {
+    const refund = await this.simulation.settleAutomaticBookingRefund(id)
+    if (refund.executionMode === 'SANDBOX_SIMULATED')
+      return { refundId: id, reconcileStatus: 'RESOLVED', refund }
     return this.recovery.schedule('refund', id, actorId, body.reason)
   }
 
   @Post('payment-refunds/:refundId/sandbox-simulate-settlement')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Xác nhận hoàn tiền booking hoặc hoàn cọc mô phỏng VNPay Sandbox (TEST ONLY)',
+    summary: 'Mô phỏng hoàn tiền hủy booking, hủy đơn thuê hoặc hoàn cọc VNPay Sandbox (TEST ONLY)',
     description:
       'Chỉ dành cho môi trường TEST/DEMO cô lập khi VNPay Sandbox kẹt ở 05/06 PROCESSING hoặc không có API refund. ' +
       'API ghi nhận một kết quả provider SUCCEEDED giả lập qua Shared Payment; Rental chỉ cập nhật settlement bằng outbox worker. ' +
@@ -138,7 +141,7 @@ export class PaymentOperationsController {
   @ApiResponse({ status: 401, description: 'Chưa xác thực' })
   @ApiResponse({
     status: 403,
-    description: 'Bị cấm trong môi trường production / database dùng chung hoặc không có quyền Admin',
+    description: 'Simulation chưa bật, payment không thuộc SANDBOX, database chưa được cho phép hoặc không có quyền Admin. NODE_ENV=production hỗ trợ booking mode SANDBOX_SIMULATED.',
   })
   @ApiResponse({
     status: 409,

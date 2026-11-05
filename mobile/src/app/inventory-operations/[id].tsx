@@ -55,6 +55,8 @@ export default function InventoryTaskDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [evidenceDrafts, setEvidenceDrafts] = useState<Record<string, EvidenceDraft>>({});
 
+  const isCancelled = detail?.task.status === "CANCELLED";
+
   const remainingLine = useMemo(
     () => detail?.requiredLines.find((line) => line.remainingQty > 0),
     [detail],
@@ -164,8 +166,8 @@ export default function InventoryTaskDetailScreen() {
   async function saveEvidence(unitId: string) {
     if (!detail || !accessToken) return;
     const draft = evidenceDrafts[unitId] ?? { imageIds: [], videoIds: [] };
-    if (!draft.imageIds.length || !draft.videoIds.length) {
-      setError("Mỗi thiết bị cần ít nhất 1 ảnh và 1 video tình trạng.");
+    if (!draft.imageIds.length) {
+      setError("Mỗi thiết bị cần ít nhất 1 ảnh tình trạng; video không bắt buộc.");
       return;
     }
     await run("evidence", async () => {
@@ -174,7 +176,7 @@ export default function InventoryTaskDetailScreen() {
         {
           unitId,
           condition: "GOOD",
-          notes: "Ảnh và video tình trạng trước bàn giao",
+          notes: "Bằng chứng tình trạng trước bàn giao",
           evidenceIds: [...draft.imageIds, ...draft.videoIds],
           expectedVersion: detail.version,
         },
@@ -243,6 +245,15 @@ export default function InventoryTaskDetailScreen() {
 
         {error && <Text style={styles.errorBanner}>{error}</Text>}
 
+        {isCancelled && (
+          <View style={styles.cancelledBanner}>
+            <Ionicons name="alert-circle" size={20} color={Colors.error} />
+            <Text style={styles.cancelledBannerText}>
+              Đơn thuê này đã bị hủy. Nhiệm vụ kho đã đóng và không thể thao tác.
+            </Text>
+          </View>
+        )}
+
         {busy ? (
           <TrekkingLoader
             label={
@@ -258,7 +269,7 @@ export default function InventoryTaskDetailScreen() {
           />
         ) : null}
 
-        {!detail.task.assignee && detail.task.status === "OPEN" && (
+        {!isCancelled && !detail.task.assignee && detail.task.status === "OPEN" && (
           <ActionButton
             label={busy === "claim" ? "Đang nhận việc..." : "Nhận nhiệm vụ kho"}
             disabled={Boolean(busy)}
@@ -291,7 +302,7 @@ export default function InventoryTaskDetailScreen() {
           ))}
         </View>
 
-        {remainingLine && (
+        {!isCancelled && remainingLine && (
           <>
             <SectionTitle title={`2. Chọn thiết bị cho ${remainingLine.productName}`} />
             <View style={styles.card}>
@@ -335,7 +346,7 @@ export default function InventoryTaskDetailScreen() {
             <View style={styles.card}>
               {detail.pickedUnits.map((unit) => {
                 const draft = evidenceDrafts[unit.unitId] ?? { imageIds: [], videoIds: [] };
-                const readyToSave = draft.imageIds.length > 0 && draft.videoIds.length > 0;
+                const readyToSave = draft.imageIds.length > 0;
                 return (
                 <View key={unit.unitId} style={styles.evidenceRow}>
                   <View style={styles.flex}>
@@ -343,7 +354,7 @@ export default function InventoryTaskDetailScreen() {
                     <Text style={styles.rowMeta}>
                       {unit.evidenceCaptured
                         ? "Đã lưu bằng chứng tình trạng"
-                        : `Ảnh ${draft.imageIds.length}/1 · Video ${draft.videoIds.length}/1`}
+                        : `Ảnh ${draft.imageIds.length}/1 · Video ${draft.videoIds.length} (tùy chọn)`}
                     </Text>
                   </View>
                   {unit.evidenceCaptured ? (
@@ -403,7 +414,7 @@ export default function InventoryTaskDetailScreen() {
           />
         )}
 
-        {detail.package?.status === "READY" && !detail.pendingTransfer && (
+        {!isCancelled && detail.package?.status === "READY" && !detail.pendingTransfer && (
           <>
             <SectionTitle title="5. Bàn giao gói cho nhân viên giao nhận" />
             <View style={styles.card}>
@@ -512,6 +523,23 @@ const styles = StyleSheet.create({
   heroMeta: { color: "#bed0bb", fontSize: 12, marginTop: 7 },
   heroStatus: { color: Colors.primary, fontSize: 12, fontWeight: "600", marginTop: 12 },
   error: { color: Colors.error, textAlign: "center" },
+  cancelledBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    padding: 12,
+    borderRadius: Radius.md,
+    marginTop: 12,
+  },
+  cancelledBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#991B1B",
+    fontWeight: "600",
+  },
   errorBanner: {
     color: Colors.error,
     backgroundColor: "#ffe8e5",

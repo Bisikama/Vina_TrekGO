@@ -49,7 +49,10 @@ Ví dụ cập nhật một món giày đã được người dùng chọn, vớ
 
 ## Ảnh, link và thuê
 
+- `GET /gear/attribute-schema` không bắt buộc đăng nhập, trả `categories[]` gồm `category`, `label`, `attributes[]`. Mỗi thuộc tính có `key`, `label`, `unit`, `schema` JSON Schema; thuộc tính enum có `options[]` gồm `value` và `label`. `rules` mô tả các ràng buộc liên trường, nếu có. Giá trị null hoặc trường bỏ qua biểu thị chưa biết.
+- `GET /gear/extractions/quota` cần Bearer token và trả `{ limit, used, remaining, resetAt, timezone }` cho tài khoản hiện tại. Ảnh và link dùng chung hạn mức; `resetAt` là 00:00 giờ Việt Nam. Lượt đang xử lý tạm tính; cache và bản nháp nhập tay không tính. Làm mới sau khi trích xuất; đây là ảnh chụp tại thời điểm đọc, backend vẫn kiểm tra hạn mức khi nhận yêu cầu.
 - `GET /gear/capabilities` cho biết tiện ích nào được bật/đã cấu hình. `POST /gear/extractions` tạo bản nháp từ ảnh/link; người dùng kiểm tra và gọi `POST /gear/extractions/{draftId}/confirm` trước khi lưu. `extractionFieldProvenance` mô tả từng thuộc tính trong bản nháp là `FOUND`/`MISSING`; `null` khi bản nháp không xác định danh mục hoặc khi xác nhận đổi danh mục. Chỉ dấu này mô tả nội dung trích xuất, không xác minh nguồn hay tính đúng đắn của giá trị người dùng chỉnh sửa. Nếu không đọc được có thể nhận `manualEntry.required`; hãy cho nhập tay. Ảnh cần media asset hợp lệ đã hoàn tất upload. AI trích xuất là gợi ý, không phải xác minh thực tế.
+- `extractionFieldProvenance` có dạng mảng `[{ "field": "waterproof_mm", "extractionStatus": "FOUND" }]`, không phải object keyed theo tên trường. `attributeProvenance` của món đã lưu là object keyed theo tên trường; hai cấu trúc có mục đích khác nhau.
 - Nếu muốn thuê đồ còn thiếu, backend hiện có `POST /gear/plans/{id}/options`, `POST /gear/plans/{id}/advice`, `POST /gear/plans/{id}/quote-intents`, sau đó gửi `prefillRentalQuote` sang `POST /rentals/quote`. Phương án/ý định báo giá chưa tạo đơn hoặc giữ hàng. Xem mô tả request/response trong Swagger.
 - Đọc lỗi theo `response.data.error`; các trường version cần lấy từ phản hồi thực tế, không cố định theo ví dụ. Màn hình và bộ UI dùng chuẩn chung của dự án Frontend.
 

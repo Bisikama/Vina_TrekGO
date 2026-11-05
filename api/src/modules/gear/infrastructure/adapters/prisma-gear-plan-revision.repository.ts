@@ -59,7 +59,7 @@ export class PrismaGearPlanRevisionRepository implements GearPlanRevisionReposit
           contentHash: input.contentHash,
           inputSnapshot: input.inputSnapshot as any,
           resultSnapshot: input.resultSnapshot as any,
-          contextVersion: input.contextVersion,
+          contextVersion: (input.contextVersion || '3.1.5').slice(0, 20),
           ruleVersions: (input.ruleVersions ?? {}) as any,
         },
       })

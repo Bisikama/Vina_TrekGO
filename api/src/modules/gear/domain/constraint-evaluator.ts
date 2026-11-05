@@ -6,6 +6,16 @@
 
 import { GearCategory } from './gear.types'
 
+export function normalizeCanonicalUnit(unit: string): string {
+  const u = unit.trim().toLowerCase()
+  if (u === 'l' || u === 'lít' || u === 'lit' || u === 'liter' || u === 'liters') return 'l'
+  if (u === 'c' || u === '°c' || u === 'degc' || u === '°' || u === 'oc') return 'c'
+  if (u === 'mm' || u === 'milimet' || u === 'millimeter') return 'mm'
+  if (u === 'g' || u === 'gram' || u === 'grams') return 'g'
+  if (u === 'cm' || u === 'centimet' || u === 'centimeter') return 'cm'
+  return u
+}
+
 export type ConstraintOperator = 'GTE' | 'LTE' | 'EQ'
 
 export type ConstraintEvaluationStatus = 'SATISFIED' | 'NOT_SATISFIED' | 'UNKNOWN'
@@ -326,7 +336,7 @@ export function validateConstraintConfiguration(
   // 6. Validate canonical unit compatibility
   if (fieldDef.canonicalUnit) {
     if (constraint.unit) {
-      if (constraint.unit.trim().toLowerCase() !== fieldDef.canonicalUnit.toLowerCase()) {
+      if (normalizeCanonicalUnit(constraint.unit) !== normalizeCanonicalUnit(fieldDef.canonicalUnit)) {
         throw new ConstraintValidationError(
           `Unit mismatch for field '${constraint.field}': constraint specifies '${constraint.unit}', but canonical unit is '${fieldDef.canonicalUnit}'.`,
         )
