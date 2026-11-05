@@ -95,6 +95,8 @@ Thông tin VPS hiện tại:
 | | Giá trị |
 | --- | --- |
 | IP | `160.30.161.237` |
+| Tên miền API | **`https://api.trekgo.website`** (DNS `A api → 160.30.161.237`, HTTPS bằng Let's Encrypt) |
+| Swagger | https://api.trekgo.website/docs |
 | Cổng SSH | `8686` (không phải 22) |
 | User | `luatng304` |
 | Thư mục chạy | `~/trekgo` (chứa `docker-compose.yml` và `.env`) |
@@ -143,7 +145,7 @@ Tạo từ `.env.docker` (hoặc `.env.docker.example`), rồi sửa các dòng 
 - `POSTGRES_PASSWORD`: mật khẩu mạnh. Sửa luôn mật khẩu trong `DATABASE_URL` và `DIRECT_URL` cho khớp.
 - Host: `postgres`, `mongo`, `redis` (không dùng `localhost`).
 - `VNPAY_SANDBOX_API_IP=160.30.161.237`
-- `MOMO_SANDBOX_IPN_URL`: cần https, xem mục B6.
+- `MOMO_SANDBOX_IPN_URL=https://api.trekgo.website/api/v1/payments/webhooks/momo`
 - `VNPAY_SANDBOX_RETURN_URL`, `MOMO_SANDBOX_REDIRECT_URL`, `WEB_APP_ORIGIN`: FE vẫn chạy local thì **giữ `http://localhost:5000...`**. Không đặt `http://<ip>` vì code chỉ chấp nhận `https://` hoặc `http://localhost`.
 
 Lấy `.env` đang có trên VPS về máy để copy vào secret (Git Bash, trong `api/`):
@@ -155,6 +157,11 @@ scp -P 8686 luatng304@160.30.161.237:~/trekgo/.env ./.env.vps
 Mở `.env.vps`, copy toàn bộ, dán vào secret `TREKGO_ENV`, rồi xoá file `.env.vps`.
 
 > ⚠️ Từ khi có `TREKGO_ENV`, **sửa env thì sửa secret**, không sửa trực tiếp `~/trekgo/.env` trên VPS vì lần deploy sau sẽ ghi đè. Để `TREKGO_ENV` trống thì workflow giữ nguyên `.env` trên VPS.
+
+**Sửa secret xong, env mới chưa có tác dụng ngay.** Workflow chỉ ghi `.env` lên VPS khi job deploy chạy. Có 2 cách áp dụng:
+
+- **Nhanh:** sửa cùng dòng đó trong `~/trekgo/.env` trên VPS, rồi `cd ~/trekgo && docker compose up -d`. Kiểm tra: `docker compose exec api printenv <TEN_BIEN>`.
+- **Qua workflow:** tab **Actions** → **Docker Image - TrekGO API** → **Run workflow** (nhánh `deploy/docker`). Cách này build lại image nên lâu hơn.
 
 ## B3. Deploy hằng ngày (tự động)
 
@@ -210,7 +217,7 @@ docker compose logs --since 30m api       # log 30 phút gần nhất
 curl -I http://localhost:3000/docs        # HTTP/1.1 200 OK là API đang chạy
 ```
 
-Từ máy bạn: http://160.30.161.237/docs (qua Nginx; cổng 3000 chỉ mở cho chính VPS)
+Từ máy bạn: https://api.trekgo.website/docs (qua Nginx + HTTPS; cổng 3000 chỉ mở cho chính VPS)
 
 > Mọi lệnh `docker compose ...` phải chạy **trong `~/trekgo`**, nếu không sẽ báo `no configuration file provided`. Muốn SSH vào là đứng sẵn ở đó: `echo 'cd ~/trekgo' >> ~/.bashrc`.
 
@@ -222,16 +229,17 @@ Từ máy bạn: http://160.30.161.237/docs (qua Nginx; cổng 3000 chỉ mở c
 | IPN VNPAY | VNPAY → VPS (báo kết quả thanh toán) | **VNPAY Sandbox Merchant Portal** (không nằm trong env) |
 | `MOMO_SANDBOX_IPN_URL` | MoMo → VPS | `TREKGO_ENV`, **bắt buộc https** |
 
-- Trên VPS **không cần ngrok**, vì VPS đã có IP public.
-- IPN VNPAY đặt trên Merchant Portal: `http://160.30.161.237/api/v1/payments/webhooks/vnpay`, hoặc `https://<domain>/api/v1/payments/webhooks/vnpay` nếu VNPAY không nhận http.
+- **Không cần ngrok** nữa: VPS đã có tên miền + HTTPS.
+- IPN VNPAY (đặt trên Merchant Portal): `https://api.trekgo.website/api/v1/payments/webhooks/vnpay`
+- IPN MoMo (`MOMO_SANDBOX_IPN_URL` trong `TREKGO_ENV`): `https://api.trekgo.website/api/v1/payments/webhooks/momo`
 - Kể cả khi IPN chưa về, `PaymentRecoveryService` vẫn tự hỏi lại VNPAY và có thể xác nhận thanh toán, chỉ chậm hơn.
-- MoMo chỉ chạy được khi có **domain + HTTPS** (Nginx đã cài sẵn, chỉ cần thêm certbot - xem mục B8).
-- Kiểm tra IPN có về không: `docker compose logs -f api | grep -i webhook`.
+- **Kiểm tra IPN có về không:** chạy `sudo tail -f /var/log/nginx/access.log | grep webhooks` trong lúc thanh toán thử. Thấy dòng `GET /api/v1/payments/webhooks/vnpay?...` (hoặc `POST .../momo`) với mã `200` là IPN đã tới API. Webhook hợp lệ được lưu vào bảng `payment_webhook_events`.
+- `docker compose logs api | grep -i webhook` lúc khởi động chỉ in các dòng `Mapped {/api/v1/payments/webhooks/...}`: đó là route đã đăng ký, **chưa phải** IPN gọi tới.
 
 ## B7. Web / mobile local gọi API trên VPS
 
-- Web: `web/.env.local` → `NEXT_PUBLIC_API_URL=http://160.30.161.237` (không thêm `/api/v1`), rồi chạy lại `npm run dev`.
-- Mobile: `mobile/.env` → `EXPO_PUBLIC_API_URL=http://160.30.161.237`, rồi `npx expo start -c`.
+- Web: `web/.env.local` → `NEXT_PUBLIC_API_URL=https://api.trekgo.website` (không thêm `/api/v1`), rồi chạy lại `npm run dev`.
+- Mobile: `mobile/.env` → `EXPO_PUBLIC_API_URL=https://api.trekgo.website`, rồi `npx expo start -c`. Có HTTPS nên bản build APK/iOS cũng gọi được (không bị chặn `http://`).
 - CORS ở API đã mở cho mọi origin nên không cần sửa gì thêm.
 
 ## B8. Nginx (reverse proxy) và HTTPS
@@ -250,7 +258,7 @@ sudo apt-get update && sudo apt-get install -y nginx
 sudo tee /etc/nginx/sites-available/trekgo > /dev/null << 'EOF'
 server {
     listen 80;
-    server_name _;                 # có domain thì thay bằng api.<domain>
+    server_name api.trekgo.website;   # chưa có tên miền thì để "_"
     client_max_body_size 110m;     # upload tối đa (video 100 MB)
 
     location / {
@@ -284,16 +292,28 @@ sudo nginx -t && sudo systemctl reload nginx
 | Log lỗi | `sudo tail -50 /var/log/nginx/error.log` |
 | Log truy cập | `sudo tail -f /var/log/nginx/access.log` |
 
-**HTTPS (cần domain).** Let's Encrypt không cấp chứng chỉ cho IP trần:
+**HTTPS (đã làm, tên miền `trekgo.website`).** Let's Encrypt không cấp chứng chỉ cho IP trần, nên cần tên miền:
 
-1. Tạo bản ghi DNS **A**: `api.<domain>` → `160.30.161.237`.
-2. Đổi `server_name _;` thành `server_name api.<domain>;` trong `/etc/nginx/sites-available/trekgo`, rồi `sudo nginx -t && sudo systemctl reload nginx`.
-3. Cấp chứng chỉ (tự gia hạn):
+1. Ở trang quản lý tên miền → **DNS** → thêm bản ghi: Host `api`, Loại `A`, Giá trị `160.30.161.237`, TTL `3600` → **Lưu cấu hình**.
+2. Kiểm tra DNS (trên máy): `nslookup api.trekgo.website 8.8.8.8` phải ra `Address: 160.30.161.237`.
+3. Đặt tên miền cho Nginx (trên VPS, đứng đâu cũng được):
+   ```bash
+   sudo sed -i 's/server_name _;/server_name api.trekgo.website;/' /etc/nginx/sites-available/trekgo
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+4. Cấp chứng chỉ. Certbot hỏi email và điều khoản (gõ `Y`), rồi tự cấu hình 443 và chuyển `http` sang `https`:
    ```bash
    sudo apt install -y certbot python3-certbot-nginx
-   sudo certbot --nginx -d api.<domain>
+   sudo certbot --nginx -d api.trekgo.website
    ```
-4. Đổi `MOMO_SANDBOX_IPN_URL` (trong `TREKGO_ENV`), IPN VNPAY, và URL API của web/mobile sang `https://api.<domain>`.
+5. Kiểm tra:
+   ```bash
+   curl -I https://api.trekgo.website/docs     # 200 OK + X-Powered-By: Express
+   sudo certbot renew --dry-run                 # "all simulated renewals succeeded"
+   ```
+6. Đổi `MOMO_SANDBOX_IPN_URL` (trong `TREKGO_ENV` **và** `~/trekgo/.env`), IPN VNPAY, và URL API của web/mobile sang `https://api.trekgo.website`.
+
+Chứng chỉ hết hạn sau 90 ngày và **tự gia hạn** (certbot cài sẵn timer). Thêm tên miền khác: `sudo certbot --nginx -d <ten-mien-moi>`.
 
 **Firewall:** `ufw` hiện đang tắt. Nếu bật, **phải mở cổng SSH trước** để khỏi tự khoá mình ngoài VPS: `sudo ufw allow 8686/tcp && sudo ufw allow 'Nginx Full' && sudo ufw enable`. Cổng Docker publish đi vòng qua `ufw`, nên việc chặn `:3000` là do `127.0.0.1:3000:3000` trong compose, không phải do `ufw`.
 
@@ -334,9 +354,16 @@ Seed xong thì đóng terminal, để `npm run start:dev` quay lại dùng `.env
 
 ## C2. Truy cập database trên VPS
 
-Postgres chỉ mở cho `127.0.0.1` của VPS. **Không** mở thẳng ra internet.
+Có 2 đường vào Postgres trên VPS:
 
-- **DBeaver:** kết nối PostgreSQL tới `localhost:5433`, DB `trekGo`. Ở tab **SSH**, bật tunnel: host `160.30.161.237`, port `8686`, user `luatng304`.
+| Đường | Host:Port | Ghi chú |
+| --- | --- | --- |
+| SSH tunnel | `localhost:5433` (nhìn từ VPS) | An toàn, cần tài khoản SSH |
+| Internet (mục C4) | `160.30.161.237:54329` | Chỉ cần chuỗi kết nối, mật khẩu là lớp bảo vệ duy nhất |
+
+- **DBeaver (SSH tunnel):** Main: Host `localhost`, Port `5433`, DB `trekGo`. Tab **SSH**: host `160.30.161.237`, port `8686`, user `luatng304`.
+- **DBeaver (internet):** Host `160.30.161.237`, Port `54329`, DB `trekGo`, không bật SSH.
+- DBeaver mặc định mở database `postgres` (trống). Phải chọn **`trekGo`**, rồi mở **Schemas → public → Tables** (nhấn `F5` để refresh). Prisma Studio **không** hiện bảng `_prisma_migrations` vì đó không phải model.
 - **Prisma Studio:** mở tunnel như mục C1, rồi chạy `$env:DATABASE_URL = "...@localhost:5434/trekGo?schema=public"; npx prisma studio`.
 - **psql trên VPS:** `cd ~/trekgo && docker compose exec postgres psql -U <POSTGRES_USER> -d trekGo`. Gõ `\dt` để xem bảng, `\q` để thoát.
 - **Mongo trên VPS:** `docker compose exec mongo mongo vina_trekgo_notifications` (VPS dùng `mongo:4.4` nên lệnh là `mongo`; ở local `mongo:7` dùng `mongosh`).
@@ -354,9 +381,29 @@ docker compose restart api
 
 ## C4. Mở Postgres ra internet cho team
 
-`docker-compose.vps.yml` mở Postgres ở cổng **`54329`** (ngoài cổng `127.0.0.1:5433` cho SSH tunnel). Docker **đi vòng qua `ufw`**, nên bắt buộc phải chặn bằng iptables `DOCKER-USER`, chỉ cho IP của team. **Làm bước 1 trước khi deploy** bản compose mở cổng.
+`docker-compose.vps.yml` mở Postgres ở cổng **`54329`** cho **mọi IP** (ngoài cổng `127.0.0.1:5433` cho SSH tunnel). Ai có chuỗi kết nối là vào được với **toàn quyền** (user `postgres`), nên **mật khẩu là lớp bảo vệ duy nhất**.
 
-**1. Chỉ cho IP của team** (trên VPS; xem IP của mỗi người tại https://ifconfig.me):
+**1. Đặt mật khẩu `postgres` thật mạnh** (trên VPS, làm theo đúng thứ tự):
+
+```bash
+openssl rand -hex 16            # tạo mật khẩu 32 ký tự, lưu lại; KHÔNG dán vào chat / commit
+```
+
+1. Cập nhật 3 dòng trong secret `TREKGO_ENV` **và** `~/trekgo/.env` sang mật khẩu mới (host vẫn là `postgres:5432`, đây là kết nối nội bộ Docker của API):
+   ```
+   POSTGRES_PASSWORD=<mat-khau-moi>
+   DATABASE_URL=postgresql://postgres:<mat-khau-moi>@postgres:5432/trekGo?schema=public
+   DIRECT_URL=postgresql://postgres:<mat-khau-moi>@postgres:5432/trekGo?schema=public
+   ```
+2. Đổi mật khẩu trong Postgres, dùng `\password` để **không** lưu mật khẩu vào lịch sử lệnh:
+   ```bash
+   cd ~/trekgo
+   docker compose exec postgres psql -U postgres
+   # trong psql:  \password postgres   (nhập 2 lần)   rồi  \q
+   docker compose up -d               # API nhận .env mới
+   ```
+
+**2. (Tuỳ chọn) Chỉ cho một số IP kết nối.** An toàn hơn nhưng IP nhà/4G thay đổi thì phải thêm lại rule. Docker **đi vòng qua `ufw`**, nên phải dùng iptables `DOCKER-USER` (xem IP tại https://ifconfig.me):
 
 ```bash
 IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')    # card mạng ra internet, vd eth0
@@ -378,31 +425,38 @@ sudo netfilter-persistent save
 - Xem rule hiện có: `sudo iptables -L DOCKER-USER -n -v --line-numbers`.
 - IP của ai đó thay đổi: thêm dòng `ACCEPT` mới bằng `-I` (chèn lên đầu), rồi `sudo netfilter-persistent save`. Xoá rule cũ: `sudo iptables -D DOCKER-USER <số-dòng>`.
 
-**2. Deploy** `docker-compose.vps.yml` (push lên `deploy/docker`, hoặc chạy tay trên VPS `docker compose up -d postgres`).
+**3. Deploy** `docker-compose.vps.yml` (push lên `deploy/docker`, hoặc chạy tay trên VPS `docker compose up -d postgres`).
 
-**3. Kiểm tra:**
+**4. Kiểm tra:**
 
 ```bash
 # Trên VPS: phải thấy 0.0.0.0:54329->5432
 docker compose ps postgres
 ```
 
-Từ máy được phép (PowerShell): `Test-NetConnection 160.30.161.237 -Port 54329` phải ra `TcpTestSucceeded : True`. Từ IP không được phép (ví dụ 4G điện thoại) thì phải **không** kết nối được.
+Từ máy (PowerShell): `Test-NetConnection 160.30.161.237 -Port 54329` phải ra `TcpTestSucceeded : True`. Nếu có làm bước 2, từ IP không được phép thì phải **không** kết nối được.
 
-**4. Chuỗi kết nối** cho `.env` của từng người:
+**5. Chuỗi kết nối** cho `.env` **trên máy** của từng người (khác với chuỗi `postgres:5432` dùng trên VPS):
 
 ```
 DATABASE_URL=postgresql://postgres:<POSTGRES_PASSWORD>@160.30.161.237:54329/trekGo?schema=public
 DIRECT_URL=postgresql://postgres:<POSTGRES_PASSWORD>@160.30.161.237:54329/trekGo?schema=public
 ```
 
-Mật khẩu có ký tự đặc biệt phải mã hoá URL (`@` → `%40`, `#` → `%23`, `/` → `%2F`). Gửi chuỗi này qua kênh riêng.
+Mật khẩu có ký tự đặc biệt phải mã hoá URL (`@` → `%40`, `#` → `%23`, `/` → `%2F`). Mật khẩu tạo bằng `openssl rand -hex` chỉ có chữ và số nên không cần mã hoá. Gửi chuỗi này qua kênh riêng.
+
+| Dùng ở đâu | Host:Port trong `DATABASE_URL` |
+| --- | --- |
+| `.env` trên VPS / secret `TREKGO_ENV` (API trong Docker) | `postgres:5432` |
+| `.env` trên máy dev / Prisma Studio / DBeaver | `160.30.161.237:54329` |
+
+Dùng `postgres:5432` trên máy Windows sẽ lỗi, vì tên `postgres` chỉ tồn tại trong mạng Docker trên VPS.
 
 **Quy tắc khi dùng chung DB này:**
 
 - **Không** chạy `prisma migrate dev`, `migrate reset`, `db push` vào DB này. Migration chỉ được áp qua deploy (container `api` tự chạy `migrate deploy`).
 - API chạy local trỏ vào DB này nên tắt worker: `PAYMENT_EVENTS_WORKER_ENABLED=false`, `PAYMENT_RECOVERY_WORKER_ENABLED=false`, `BOOKING_EXPIRY_WORKER_ENABLED=false`, `NOTIFICATION_CONSUMER_ENABLED=false`, `RENTAL_DOCUMENT_WORKER_ENABLED=false`.
-- Mật khẩu `postgres` phải mạnh (24+ ký tự ngẫu nhiên). Đổi mật khẩu thì phải sửa cả `POSTGRES_PASSWORD`, `DATABASE_URL`, `DIRECT_URL` trong `TREKGO_ENV`.
+- Chuỗi kết nối bị lộ (chat nhóm, ảnh chụp, commit nhầm `.env`) thì **đổi mật khẩu ngay** theo bước 1 rồi gửi chuỗi mới cho team.
 - Postgres trong image không bật SSL: dữ liệu truyền qua internet **không được mã hoá**.
 
 **Đóng lại:** xoá dòng `"54329:5432"` trong `docker-compose.vps.yml` rồi deploy.
@@ -444,7 +498,10 @@ Mật khẩu có ký tự đặc biệt phải mã hoá URL (`@` → `%40`, `#` 
 | Job **Deploy to VPS** lỗi đăng nhập SSH | Kiểm tra `VPS_HOST`, `VPS_PORT=8686`, `VPS_USER`, `VPS_PASSWORD`. |
 | Job deploy lỗi `pull access denied` | Sai `DOCKERHUB_USERNAME` / token, hoặc repo private mà token không có quyền. |
 | Code mới không có tác dụng | Local: thiếu `--build`. VPS: xem tab Actions đã chạy xong chưa, hoặc chạy tay `docker compose pull api && docker compose up -d`. |
-| Gọi `http://160.30.161.237:3000` không được nữa | Đúng như thiết kế: cổng 3000 chỉ mở cho chính VPS. Dùng `http://160.30.161.237` (qua Nginx). |
+| Gọi `http://160.30.161.237:3000` không được nữa | Đúng như thiết kế: cổng 3000 chỉ mở cho chính VPS. Dùng `https://api.trekgo.website`. |
+| Prisma Studio / API local lỗi kết nối khi trỏ DB VPS | `.env` máy đang dùng host `postgres:5432` (chỉ đúng trong Docker). Đổi sang `160.30.161.237:54329`. |
+| Sửa `TREKGO_ENV` nhưng API vẫn dùng giá trị cũ | Secret chỉ được ghi lên VPS khi job deploy chạy. Sửa `~/trekgo/.env` + `docker compose up -d`, hoặc **Run workflow**. |
+| `certbot` báo `Timeout during connect` | Cổng 80/443 bị chặn, hoặc DNS chưa trỏ đúng (`nslookup api.trekgo.website 8.8.8.8`). Kiểm tra firewall trên trang quản lý VPS. |
 | `502 Bad Gateway` từ Nginx | Container `api` chưa chạy hoặc đang khởi động lại. Xem `docker compose ps` và log `api`. |
 | `413 Request Entity Too Large` | File upload vượt `client_max_body_size` trong cấu hình Nginx. |
 | Màn hình kẹt ở `lines 1-22/22 (END)` | Đang ở chế độ xem trang. Nhấn `q` để thoát. |
