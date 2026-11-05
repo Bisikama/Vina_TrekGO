@@ -80,7 +80,7 @@ export const CANONICAL_SAMPLE_GEAR_ITEMS = [
   {
     name: 'Giày trekking chưa rõ thông số (Cần bổ sung thông tin)',
     category: GearCategory.FOOTWEAR,
-    brand: 'Demo',
+    brand: 'Không rõ',
     condition: GearCondition.GOOD,
     attributes: { weight_g: 600 },
   },
@@ -154,37 +154,69 @@ export async function seedGearDemo(client: PrismaClient, userId: string, tripId?
   if (!user || user.status !== 'ACTIVE') throw new Error('Không tìm thấy tài khoản ACTIVE với userId đã chỉ định.')
   if (tripId) {
     const context = await new PrismaTripContextReadAdapter(client as PrismaService).getTripContext(tripId, userId)
-    console.log('Chuyến hợp lệ:', context.tripId, 'số ngày:', context.days, 'độ khó:', context.difficulty, 'địa hình:', context.terrain.join(', '))
+    console.log(
+      'Chuyến hợp lệ:',
+      context.tripId,
+      'số ngày:',
+      context.days,
+      'độ khó:',
+      context.difficulty,
+      'địa hình:',
+      context.terrain.join(', '),
+    )
   }
   const existingRules = await client.gearRequirementRule.findMany()
   const canonical = new Map(GEAR_RULE_METADATA_REGISTRY.map((rule) => [rule.id, rule]))
   const conflicts = existingRules.filter((rule) => {
     const expected = canonical.get(rule.id)
     if (!expected) return rule.isActive
-    return rule.isActive !== expected.isActive || rule.category !== expected.category ||
-      rule.defaultVerdict !== expected.defaultVerdict || rule.templateVi !== expected.templateVi ||
+    return (
+      rule.isActive !== expected.isActive ||
+      rule.category !== expected.category ||
+      rule.defaultVerdict !== expected.defaultVerdict ||
+      rule.templateVi !== expected.templateVi ||
       rule.ruleVersion !== expected.ruleVersion
+    )
   })
   if (conflicts.length) {
-    throw new Error('Quy tắc Gear không khớp cấu hình chuẩn: ' + conflicts.map((rule) => rule.id).join(', ') + '. Kiểm tra cấu hình trước khi seed; script không ghi đè quy tắc.')
+    throw new Error(
+      'Quy tắc Gear không khớp cấu hình chuẩn: ' +
+        conflicts.map((rule) => rule.id).join(', ') +
+        '. Kiểm tra cấu hình trước khi seed; script không ghi đè quy tắc.',
+    )
   }
   const result = await client.$transaction(async (tx) => {
     const rules = await tx.gearRequirementRule.createMany({
       data: GEAR_RULE_METADATA_REGISTRY.map((rule) => ({
-        id: rule.id, category: rule.category as any, defaultVerdict: rule.defaultVerdict as any,
-        templateVi: rule.templateVi, isActive: rule.isActive, ruleVersion: rule.ruleVersion,
+        id: rule.id,
+        category: rule.category as any,
+        defaultVerdict: rule.defaultVerdict as any,
+        templateVi: rule.templateVi,
+        isActive: rule.isActive,
+        ruleVersion: rule.ruleVersion,
       })),
       skipDuplicates: true,
     })
     let created = 0
     for (const item of CANONICAL_SAMPLE_GEAR_ITEMS) {
-      const name = '[DEMO] ' + item.name
-      const existing = await tx.userGearItem.findFirst({ where: { userId, name }, select: { id: true } })
+      const name = item.name
+      // Nhận diện cả tên của các lần seed cũ để không tạo bản sao trong tủ đồ.
+      const existing = await tx.userGearItem.findFirst({
+        where: { userId, name: { in: [name, `[DEMO] ${name}`] } },
+        select: { id: true },
+      })
       if (existing) continue
-      await tx.userGearItem.create({ data: {
-        userId, name, category: item.category, brand: item.brand,
-        condition: item.condition, attributes: item.attributes, source: GearItemSource.MANUAL,
-      } })
+      await tx.userGearItem.create({
+        data: {
+          userId,
+          name,
+          category: item.category,
+          brand: item.brand,
+          condition: item.condition,
+          attributes: item.attributes,
+          source: GearItemSource.MANUAL,
+        },
+      })
       created++
     }
     return { rules: rules.count, items: created }
@@ -196,7 +228,8 @@ export async function seedGearDemo(client: PrismaClient, userId: string, tripId?
 }
 
 if (require.main === module) {
-  const argument = (name: string) => process.argv.find((arg) => arg.startsWith('--' + name + '='))?.slice(name.length + 3)
+  const argument = (name: string) =>
+    process.argv.find((arg) => arg.startsWith('--' + name + '='))?.slice(name.length + 3)
   const userId = argument('userId')
   const tripId = argument('tripId')
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -205,7 +238,12 @@ if (require.main === module) {
     process.exitCode = 1
   } else {
     seedGearDemo(prisma, userId, tripId)
-      .catch((error) => { console.error('Không thể seed Gear demo:', error.message); process.exitCode = 1 })
-      .finally(async () => { await prisma.$disconnect() })
+      .catch((error) => {
+        console.error('Không thể seed Gear demo:', error.message)
+        process.exitCode = 1
+      })
+      .finally(async () => {
+        await prisma.$disconnect()
+      })
   }
 }

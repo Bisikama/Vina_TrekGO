@@ -17,8 +17,13 @@ describe('gear demo seed', () => {
         }),
       },
       userGearItem: {
-        findFirst: jest.fn(async ({ where }) => items.find((i) => i.userId === where.userId && i.name === where.name)),
-        create: jest.fn(async ({ data }) => { items.push(data); return data }),
+        findFirst: jest.fn(async ({ where }) =>
+          items.find((i) => i.userId === where.userId && where.name.in.includes(i.name)),
+        ),
+        create: jest.fn(async ({ data }) => {
+          items.push(data)
+          return data
+        }),
       },
     }
     const client: any = {
@@ -34,11 +39,22 @@ describe('gear demo seed', () => {
       expect(CATEGORY_ATTRIBUTE_SCHEMAS[item.category].safeParse(item.attributes).success).toBe(true)
     }
     const { client, items } = setup()
-    expect(await seedGearDemo(client, 'user')).toEqual({ rules: GEAR_RULE_METADATA_REGISTRY.length, items: CANONICAL_SAMPLE_GEAR_ITEMS.length })
+    expect(await seedGearDemo(client, 'user')).toEqual({
+      rules: GEAR_RULE_METADATA_REGISTRY.length,
+      items: CANONICAL_SAMPLE_GEAR_ITEMS.length,
+    })
     items[0].attributes = { edited: true }
     expect(await seedGearDemo(client, 'user')).toEqual({ rules: 0, items: 0 })
     expect(items[0].attributes).toEqual({ edited: true })
-    expect(items.every((item) => item.userId === 'user' && item.name.startsWith('[DEMO] '))).toBe(true)
+    expect(items.every((item) => item.userId === 'user' && !item.name.includes('[DEMO]'))).toBe(true)
+  })
+
+  it('nhận diện món có tiền tố cũ mà không ghi đè hoặc tạo bản sao', async () => {
+    const { client, items } = setup()
+    items.push({ userId: 'user', name: `[DEMO] ${CANONICAL_SAMPLE_GEAR_ITEMS[0].name}`, attributes: { edited: true } })
+    expect((await seedGearDemo(client, 'user')).items).toBe(CANONICAL_SAMPLE_GEAR_ITEMS.length - 1)
+    expect(items[0].attributes).toEqual({ edited: true })
+    expect(items.filter((item) => item.name.includes(CANONICAL_SAMPLE_GEAR_ITEMS[0].name))).toHaveLength(1)
   })
 
   it('dừng trước khi ghi khi quy tắc hiện có không tương thích', async () => {
@@ -75,7 +91,9 @@ describe('gear demo seed', () => {
 
   it('không ghi nếu chuyến đi không đủ quyền hoặc dữ kiện', async () => {
     const { client } = setup()
-    const check = jest.spyOn(PrismaTripContextReadAdapter.prototype, 'getTripContext').mockRejectedValueOnce(new Error('Chuyến không hợp lệ'))
+    const check = jest
+      .spyOn(PrismaTripContextReadAdapter.prototype, 'getTripContext')
+      .mockRejectedValueOnce(new Error('Chuyến không hợp lệ'))
     await expect(seedGearDemo(client, 'user', 'trip')).rejects.toThrow('Chuyến không hợp lệ')
     expect(client.$transaction).not.toHaveBeenCalled()
     check.mockRestore()
