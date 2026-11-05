@@ -55,6 +55,9 @@ describe('Rental product grade seed', () => {
       expect(pair).toHaveLength(2)
       expect(rentalSeedImage(pair[0].sku)).toBe(rentalSeedImage(pair[1].sku))
     }
+    for (const product of graded) {
+      expect(product.description).toContain(product.grade === 'LIKE_NEW' ? 'Hạng Như mới' : 'Hạng Sử dụng tốt')
+    }
   })
 
   it('rejects a pair where LIKE_NEW is not strictly more expensive', () => {
