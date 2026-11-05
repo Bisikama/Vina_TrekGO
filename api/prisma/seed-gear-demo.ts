@@ -80,7 +80,7 @@ export const CANONICAL_SAMPLE_GEAR_ITEMS = [
   {
     name: 'Giày trekking chưa rõ thông số (Cần bổ sung thông tin)',
     category: GearCategory.FOOTWEAR,
-    brand: 'Demo',
+    brand: 'Không rõ',
     condition: GearCondition.GOOD,
     attributes: { weight_g: 600 },
   },
@@ -178,8 +178,11 @@ export async function seedGearDemo(client: PrismaClient, userId: string, tripId?
     })
     let created = 0
     for (const item of CANONICAL_SAMPLE_GEAR_ITEMS) {
-      const name = '[DEMO] ' + item.name
-      const existing = await tx.userGearItem.findFirst({ where: { userId, name }, select: { id: true } })
+      const name = item.name
+      // Nhận diện cả tên của các lần seed cũ để không tạo bản sao trong tủ đồ.
+      const existing = await tx.userGearItem.findFirst({
+        where: { userId, name: { in: [name, `[DEMO] ${name}`] } }, select: { id: true },
+      })
       if (existing) continue
       await tx.userGearItem.create({ data: {
         userId, name, category: item.category, brand: item.brand,

@@ -17,7 +17,7 @@ describe('gear demo seed', () => {
         }),
       },
       userGearItem: {
-        findFirst: jest.fn(async ({ where }) => items.find((i) => i.userId === where.userId && i.name === where.name)),
+        findFirst: jest.fn(async ({ where }) => items.find((i) => i.userId === where.userId && where.name.in.includes(i.name))),
         create: jest.fn(async ({ data }) => { items.push(data); return data }),
       },
     }
@@ -38,7 +38,15 @@ describe('gear demo seed', () => {
     items[0].attributes = { edited: true }
     expect(await seedGearDemo(client, 'user')).toEqual({ rules: 0, items: 0 })
     expect(items[0].attributes).toEqual({ edited: true })
-    expect(items.every((item) => item.userId === 'user' && item.name.startsWith('[DEMO] '))).toBe(true)
+    expect(items.every((item) => item.userId === 'user' && !item.name.includes('[DEMO]'))).toBe(true)
+  })
+
+  it('nhận diện món có tiền tố cũ mà không ghi đè hoặc tạo bản sao', async () => {
+    const { client, items } = setup()
+    items.push({ userId: 'user', name: `[DEMO] ${CANONICAL_SAMPLE_GEAR_ITEMS[0].name}`, attributes: { edited: true } })
+    expect((await seedGearDemo(client, 'user')).items).toBe(CANONICAL_SAMPLE_GEAR_ITEMS.length - 1)
+    expect(items[0].attributes).toEqual({ edited: true })
+    expect(items.filter((item) => item.name.includes(CANONICAL_SAMPLE_GEAR_ITEMS[0].name))).toHaveLength(1)
   })
 
   it('dừng trước khi ghi khi quy tắc hiện có không tương thích', async () => {
