@@ -117,10 +117,11 @@ const shortAssetCode = (value?: string) => {
     .toUpperCase();
 };
 
+// Cùng quy ước với web: 6 ký tự cuối của mã đơn.
 const shortOrderId = (value: string) =>
   value
     .replace(/[^a-z0-9]/gi, "")
-    .slice(0, 6)
+    .slice(-6)
     .toUpperCase();
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -753,7 +754,7 @@ export default function RentalOrderDetailScreen() {
               {tripTitle || "Chuyến đi của bạn"}
             </Text>
             {order.orderCode ? (
-              <Text style={styles.tripName}>Mã đơn {order.orderCode}</Text>
+              <Text style={styles.tripName}>Mã đơn #{shortOrderId(order.id)}</Text>
             ) : null}
           </View>
           <View style={styles.statusBadge}>
@@ -951,7 +952,7 @@ export default function RentalOrderDetailScreen() {
               giao dịch.
             </Text>
           )}
-          {order.paymentExpiresAt && (
+          {order.paymentExpiresAt && order.status === "PENDING_PAYMENT" && (
             <Text style={styles.deadline}>
               Hạn thanh toán: {dateTime(order.paymentExpiresAt)}
             </Text>

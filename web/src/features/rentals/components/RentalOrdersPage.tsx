@@ -9,10 +9,19 @@ import { listMyRentalOrders } from "@/features/rentals/services/user-rental.api"
 import type { RentalOrderSummary } from "@/features/rentals/types/rental";
 import { dateTime, money, RentalPageHeader, shortCode } from "./RentalSectionNav";
 
-const labels: Record<string, string> = {
-  PENDING_PAYMENT: "Chờ thanh toán", PAID: "Đã thanh toán", PREPARING: "Đang chuẩn bị",
-  READY_FOR_HANDOVER: "Sẵn sàng giao", ACTIVE: "Đang thuê", RETURN_PENDING: "Chờ trả đồ",
-  RETURN_PROCESSING: "Đang kiểm tra", COMPLETED: "Hoàn tất", CANCELLED: "Đã hủy", EXPIRED: "Hết hạn",
+// Mỗi nhóm trạng thái một màu: chờ thanh toán (cam), đang xử lý (xanh dương), đang thuê (xanh lá),
+// trả đồ (tím), hoàn tất (xám xanh), hủy/hết hạn (đỏ nhạt / xám).
+const STATUS: Record<string, { label: string; tone: string }> = {
+  PENDING_PAYMENT: { label: "Chờ thanh toán", tone: "bg-amber-50 text-amber-800 ring-amber-200" },
+  PAID: { label: "Đã thanh toán", tone: "bg-sky-50 text-sky-800 ring-sky-200" },
+  PREPARING: { label: "Đang chuẩn bị", tone: "bg-sky-50 text-sky-800 ring-sky-200" },
+  READY_FOR_HANDOVER: { label: "Sẵn sàng giao", tone: "bg-sky-50 text-sky-800 ring-sky-200" },
+  ACTIVE: { label: "Đang thuê", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  RETURN_PENDING: { label: "Chờ trả đồ", tone: "bg-violet-50 text-violet-800 ring-violet-200" },
+  RETURN_PROCESSING: { label: "Đang kiểm tra", tone: "bg-violet-50 text-violet-800 ring-violet-200" },
+  COMPLETED: { label: "Hoàn tất", tone: "bg-teal-50 text-teal-800 ring-teal-200" },
+  CANCELLED: { label: "Đã hủy", tone: "bg-red-50 text-red-700 ring-red-200" },
+  EXPIRED: { label: "Hết hạn", tone: "bg-gray-100 text-gray-600 ring-gray-200" },
 };
 
 export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean }) {
@@ -35,6 +44,18 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
       if (bookings.status === "fulfilled") bookings.value.items.forEach((item) => { names[item.trip.id] = item.trip.title; });
       if (privateTrips.status === "fulfilled") privateTrips.value.forEach((item) => { names[item.id] = item.title; });
       setTripNames(names);
+      // Chuyến không nằm trong trang booking đầu tiên: lấy tên trực tiếp theo tripId.
+      const missing = [...new Set((result.items ?? []).map((order) => order.tripId))].filter((id) => id && !names[id]);
+      if (missing.length) {
+        void Promise.allSettled(missing.map((id) => bookingApi.trip(id))).then((trips) => {
+          if (!active) return;
+          const found: Record<string, string> = {};
+          trips.forEach((trip, index) => {
+            if (trip.status === "fulfilled" && trip.value?.title) found[missing[index]] = trip.value.title;
+          });
+          if (Object.keys(found).length) setTripNames((current) => ({ ...current, ...found }));
+        });
+      }
     }).catch((reason) => setError(getRentalApiErrorMessage(reason, "Không thể tải danh sách đơn thuê.")))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -59,6 +80,9 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             {visible.map((order) => {
+              const status = STATUS[order.status] ?? { label: order.status, tone: "bg-gray-100 text-gray-600 ring-gray-200" };
+              const awaitingPayment =
+                order.status === "PENDING_PAYMENT" && new Date(order.paymentExpiresAt).getTime() > Date.now();
               const reviewAllowed = order.status === "COMPLETED" && order.financialStatus === "SETTLED";
               const reviewMessage = order.status !== "COMPLETED"
                 ? "Đơn vẫn đang trong quy trình sử dụng hoặc hoàn trả."
@@ -69,15 +93,19 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
               return (
               <article key={order.id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-700">Đơn #{shortCode(order.id)}</p>
-                    <h2 className="mt-2 text-lg font-black text-gray-900">{tripNames[order.tripId] || "Chuyến trekking của bạn"}</h2>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Đơn #{shortCode(order.id)}</p>
+                    <h2 className="mt-2 text-lg font-semibold text-gray-900">{tripNames[order.tripId] || "Chuyến đi của bạn"}</h2>
                   </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">{labels[order.status] || order.status}</span>
+                  <span className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${status.tone}`}>{status.label}</span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#F7F8F5] p-4 text-sm">
-                  <div><p className="text-xs text-gray-500">Tổng thanh toán</p><p className="mt-1 font-extrabold text-gray-900">{money(order.totalAmount, order.currency)}</p></div>
-                  <div><p className="text-xs text-gray-500">Hạn trả</p><p className="mt-1 font-bold text-gray-800">{dateTime(order.dueAt)}</p></div>
+                  <div><p className="text-xs text-gray-500">Tổng thanh toán</p><p className="mt-1 font-semibold text-gray-900">{money(order.totalAmount, order.currency)}</p></div>
+                  {order.status === "PENDING_PAYMENT" ? (
+                    <div><p className="text-xs text-gray-500">Hạn thanh toán</p><p className={`mt-1 font-semibold ${awaitingPayment ? "text-amber-800" : "text-gray-500"}`}>{dateTime(order.paymentExpiresAt)}</p></div>
+                  ) : (
+                    <div><p className="text-xs text-gray-500">Hạn trả</p><p className="mt-1 font-semibold text-gray-800">{dateTime(order.dueAt)}</p></div>
+                  )}
                 </div>
                 {reviewMode ? (
                   <>
@@ -93,9 +121,16 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
                     )}
                   </>
                 ) : (
-                  <Link href={`/rentals/orders/${order.id}`} className="mt-4 inline-flex rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-extrabold text-white">
-                    Xem chi tiết
-                  </Link>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {awaitingPayment ? (
+                      <Link href={`/rentals/orders/${order.id}#thanh-toan`} className="inline-flex rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-amber-700">
+                        Thanh toán tiếp
+                      </Link>
+                    ) : null}
+                    <Link href={`/rentals/orders/${order.id}`} className="inline-flex rounded-xl bg-[#1B5E41] px-4 py-2.5 text-xs font-semibold text-white">
+                      Xem chi tiết
+                    </Link>
+                  </div>
                 )}
               </article>
               );

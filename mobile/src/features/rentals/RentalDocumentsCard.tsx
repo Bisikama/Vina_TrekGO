@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } 
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { rentalApi } from "@/features/rentals/api";
 import type { RentalDocumentSummary, RentalDocumentVerification } from "@/features/rentals/types";
+import { shortDocumentNo } from "@/features/rentals/display";
 
 // Chứng từ của đơn thuê: biên bản bàn giao, phụ lục gia hạn, biên nhận trả đồ...
 // Danh sách: GET /rental-orders/:id/documents; tải PDF: /rental-documents/:id/download (đường dẫn ký 10 phút);
@@ -114,9 +115,8 @@ export function RentalDocumentsCard({ orderId, accessToken }: { orderId: string;
               <View style={styles.flexOne}>
                 <Text style={styles.docName}>{TYPE_LABELS[document.type] ?? document.type}</Text>
                 <Text style={styles.docMeta}>
-                  Số {document.documentNo}
+                  Số {shortDocumentNo(document.documentNo, document.type)}
                   {document.issuedAt ? ` · ${formatDate(document.issuedAt)}` : ""}
-                  {document.rootDocumentId ? " · bản đính chính" : ""}
                 </Text>
                 {document.renderStatus === "PENDING_RENDER" ? (
                   <Text style={[styles.docMeta, styles.pending]}>Đang tạo PDF</Text>

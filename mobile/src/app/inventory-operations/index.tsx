@@ -19,6 +19,7 @@ import {
   PreparationTaskSummary,
   staffInventoryApi,
 } from "@/features/rentals/staff-inventory-api";
+import { orderShortCode, productLabel } from "@/features/rentals/display";
 
 const TASK_STATUS_LABEL: Record<string, string> = {
   OPEN: "Mới",
@@ -26,10 +27,24 @@ const TASK_STATUS_LABEL: Record<string, string> = {
   CONDITION_CAPTURED: "Đã chụp tình trạng",
   PACKED: "Đã đóng gói",
   READY: "Sẵn sàng bàn giao",
-  TRANSFERRED: "Đã chuyển giao nhận",
+  TRANSFERRED: "Đã giao cho giao hàng",
   BLOCKED: "Cần xử lý",
   CANCELLED: "Đã hủy",
 };
+
+const STATUS_TONE: Record<string, { bg: string; text: string }> = {
+  OPEN: { bg: "#e8f1ff", text: "#1d4ed8" },
+  PICKING: { bg: "#fff4dc", text: "#9b6700" },
+  CONDITION_CAPTURED: { bg: "#fff4dc", text: "#9b6700" },
+  PACKED: { bg: "#efe9ff", text: "#6d28d9" },
+  READY: { bg: "#e4f4db", text: "#2f6b1a" },
+  TRANSFERRED: { bg: "#eef0ee", text: "#4b5563" },
+  BLOCKED: { bg: "#fde8e8", text: "#b42318" },
+  CANCELLED: { bg: "#eef0ee", text: "#6b7280" },
+};
+
+// Đơn đã chuyển cho nhân viên giao hàng (hoặc đã hủy) không còn là việc kho cần chuẩn bị.
+const isFinished = (status: string) => status === "TRANSFERRED" || status === "CANCELLED";
 
 const FILTERS: {
   label: string;
@@ -40,6 +55,7 @@ const FILTERS: {
   { label: "Đang soạn", value: "PICKING" },
   { label: "Đã đóng", value: "PACKED" },
   { label: "Sẵn sàng", value: "READY" },
+  { label: "Đã giao", value: "TRANSFERRED" },
 ];
 
 export default function InventoryQueueScreen() {
@@ -59,7 +75,12 @@ export default function InventoryQueueScreen() {
       setError(null);
       try {
         const result = await staffInventoryApi.listTasks(accessToken, filter);
-        setTasks(result.items);
+        // Việc còn phải làm lên trước, đơn đã giao xuống cuối.
+        setTasks(
+          [...result.items].sort(
+            (a, b) => Number(isFinished(a.status)) - Number(isFinished(b.status)),
+          ),
+        );
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -79,6 +100,8 @@ export default function InventoryQueueScreen() {
       void load();
     }, [load]),
   );
+
+  const activeCount = tasks.filter((task) => !isFinished(task.status)).length;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -113,7 +136,7 @@ export default function InventoryQueueScreen() {
           <View style={styles.flex}>
             <Text style={styles.bannerTitle}>Hàng đợi chuẩn bị đơn thuê</Text>
             <Text style={styles.bannerCopy}>
-              {tasks.length} đơn đang cần kho theo dõi
+              {activeCount} đơn đang cần kho chuẩn bị
             </Text>
           </View>
           <TouchableOpacity onPress={() => void load(true)}>
@@ -129,7 +152,7 @@ export default function InventoryQueueScreen() {
             </View>
             <Text style={styles.operationTitle}>Chuẩn bị giao</Text>
             <Text style={styles.operationCopy}>Soạn, chụp tình trạng và đóng gói</Text>
-            <Text style={styles.operationCount}>{tasks.length} đơn</Text>
+            <Text style={styles.operationCount}>{activeCount} đơn</Text>
           </View>
           <TouchableOpacity
             style={styles.operationCard}
@@ -153,7 +176,7 @@ export default function InventoryQueueScreen() {
             <Text style={styles.sectionCaption}>Lọc theo tiến độ xử lý</Text>
           </View>
           <View style={styles.queueCountPill}>
-            <Text style={styles.queueCountText}>{tasks.length} đơn</Text>
+            <Text style={styles.queueCountText}>{filter ? tasks.length : activeCount} đơn</Text>
           </View>
         </View>
 
@@ -230,15 +253,27 @@ function TaskCard({
     ? Math.round((task.progress.picked / task.progress.required) * 100)
     : 0;
   const productSummary = task.requiredLineSummary
-    .map((line) => `${line.productName} ×${line.quantity}`)
-    .join(" · ");
+    .map((line) => `${productLabel(line.productName)} ×${line.quantity}`)
+    .join("\n");
+  const tone = STATUS_TONE[task.status] ?? STATUS_TONE.OPEN;
+  const finished = isFinished(task.status);
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.82}>
+    <TouchableOpacity
+      style={[styles.card, finished && styles.cardFinished]}
+      onPress={onPress}
+      activeOpacity={0.82}
+    >
       <View style={styles.cardTop}>
-        <Text style={styles.orderCode}>CHUẨN BỊ GIAO</Text>
-        <Text style={styles.status}>{TASK_STATUS_LABEL[task.status] ?? "Đang cập nhật"}</Text>
+        <Text style={styles.orderCode}>
+          ĐƠN {orderShortCode(task.orderId)}
+        </Text>
+        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.status, { color: tone.text }]}>
+            {TASK_STATUS_LABEL[task.status] ?? "Đang cập nhật"}
+          </Text>
+        </View>
       </View>
-      <Text style={styles.cardTitle} numberOfLines={2}>{productSummary || "Thiết bị thuê"}</Text>
+      <Text style={styles.cardTitle} numberOfLines={3}>{productSummary || "Thiết bị thuê"}</Text>
       <View style={styles.tripRow}>
         <Ionicons name="trail-sign-outline" size={14} color={Colors.primaryDark} />
         <Text style={styles.tripName} numberOfLines={1}>
@@ -246,17 +281,33 @@ function TaskCard({
         </Text>
       </View>
       <Text style={styles.meta}>{task.inventoryLocation.name}</Text>
-      <View style={styles.progressHeader}>
-        <Text style={styles.progressText}>Đã pick</Text>
-        <Text style={styles.progressText}>
-          {task.progress.picked}/{task.progress.required}
-        </Text>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${percent}%` }]} />
-      </View>
+      {task.status === "TRANSFERRED" ? (
+        <View style={styles.doneRow}>
+          <Ionicons name="checkmark-circle" size={16} color="#2f6b1a" />
+          <Text style={styles.doneText}>
+            Đã soạn đủ {task.progress.required} thiết bị và giao cho nhân viên giao hàng
+          </Text>
+        </View>
+      ) : task.status === "CANCELLED" ? (
+        <View style={styles.doneRow}>
+          <Ionicons name="close-circle-outline" size={16} color="#6b7280" />
+          <Text style={[styles.doneText, styles.mutedText]}>Đơn đã hủy, không cần chuẩn bị</Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressText}>Đã soạn</Text>
+            <Text style={styles.progressText}>
+              {task.progress.picked}/{task.progress.required}
+            </Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${percent}%` }]} />
+          </View>
+        </>
+      )}
       <View style={styles.openRow}>
-        <Text style={styles.openText}>Mở quy trình chuẩn bị</Text>
+        <Text style={styles.openText}>{finished ? "Xem lại" : "Mở quy trình chuẩn bị"}</Text>
         <Ionicons name="arrow-forward" size={18} color={Colors.primaryDark} />
       </View>
     </TouchableOpacity>
@@ -339,10 +390,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     ...Shadows.card,
   },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  orderCode: { flex: 1, color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
-  status: { color: "#9b6700", fontSize: 10, fontWeight: "600" },
-  cardTitle: { color: Colors.ink, fontSize: 20, lineHeight: 25, fontWeight: "700", marginTop: 10, letterSpacing: -0.25 },
+  cardFinished: { opacity: 0.78 },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  orderCode: { flex: 1, color: Colors.primaryDark, fontSize: 11, fontWeight: "600", letterSpacing: 0.4 },
+  statusPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  status: { fontSize: 10, fontWeight: "600" },
+  cardTitle: { color: Colors.ink, fontSize: 15, lineHeight: 21, fontWeight: "600", marginTop: 10 },
+  doneRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14, borderRadius: Radius.sm, backgroundColor: "#f1f7ec", paddingHorizontal: 10, paddingVertical: 8 },
+  doneText: { flex: 1, color: "#2f6b1a", fontSize: 12, lineHeight: 17, fontWeight: "500" },
+  mutedText: { color: "#6b7280" },
   tripRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
   tripName: { flex: 1, color: Colors.primaryDark, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   meta: { color: Colors.body, fontSize: 12, lineHeight: 17, marginTop: 5 },

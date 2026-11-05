@@ -23,6 +23,7 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { rentalApi } from "@/features/rentals/api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
+import { orderShortCode } from "@/features/rentals/display";
 import {
   calculateProductDeposit,
   RentalAvailability,
@@ -475,7 +476,7 @@ export default function RentalScreen() {
                 </View>
                 <View style={styles.flexOne}>
                   <Text style={styles.orderCode}>
-                    {order.orderCode ? `ĐƠN THUÊ · ${order.orderCode}` : "ĐƠN THUÊ THIẾT BỊ"}
+                    {order.id ? `ĐƠN THUÊ · ${orderShortCode(order.id)}` : "ĐƠN THUÊ THIẾT BỊ"}
                   </Text>
                   <Text style={styles.orderTrip} numberOfLines={1}>
                     {order.trip?.title || "Chuyến đi của bạn"}

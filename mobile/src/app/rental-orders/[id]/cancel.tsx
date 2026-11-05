@@ -23,6 +23,7 @@ import {
   RentalOrderDetail,
 } from "@/features/rentals/types";
 import { ApiError } from "@/lib/api-client";
+import { orderShortCode } from "@/features/rentals/display";
 
 const REASONS = [
   "Thay đổi kế hoạch chuyến đi",
@@ -200,7 +201,7 @@ export default function RentalCancellationScreen() {
                 {order.order.trip?.title || "Chuyến đi của bạn"}
               </Text>
               <Text style={styles.orderCode}>
-                {order.order.orderCode ? `Mã đơn ${order.order.orderCode}` : `Mã ${(orderId ?? "").slice(-8).toUpperCase()}`}
+                {`Mã đơn ${orderShortCode(order.order.id ?? orderId)}`}
               </Text>
             </View>
 
