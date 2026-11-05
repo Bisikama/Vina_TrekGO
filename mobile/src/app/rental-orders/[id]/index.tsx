@@ -21,6 +21,7 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebViewModal";
 import { rentalApi } from "@/features/rentals/api";
 import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
+import { StatusSign } from "@/features/rentals/StatusSign";
 import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { ApiError } from "@/lib/api-client";
@@ -757,11 +758,10 @@ export default function RentalOrderDetailScreen() {
               <Text style={styles.tripName}>Mã đơn #{shortOrderId(order.id)}</Text>
             ) : null}
           </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>
-              {STEP_LABELS[order.status] || order.status.replaceAll("_", " ")}
-            </Text>
-          </View>
+          <StatusSign
+            status={order.status}
+            label={STEP_LABELS[order.status] || order.status.replaceAll("_", " ")}
+          />
         </View>
 
         {order.exceptionStatus && order.exceptionStatus !== "NONE" && (
