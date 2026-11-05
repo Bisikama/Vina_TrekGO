@@ -179,6 +179,8 @@ export class RentalOrderController {
 - Trả về đầy đủ: thông tin đơn, danh sách sản phẩm, reservation, payment, invoice.
 - \`items[].product\` có \`grade\` (LIKE_NEW | GOOD_USED | null) và \`gradeGroupId\`.
 - Sau khi kho pick: \`assignedUnits[]\` gồm \`assetCode\`, \`condition\`, \`assignmentStatus\`, \`physicalStatus\`, \`productName\`, \`grade\` (hạng khách đã thuê theo dòng đơn).
+- Mỗi thiết bị có \`packedAt\`, \`handedOverAt\`, \`returnedAt\`, \`closedAt\` (ISO 8601 hoặc null).
+- \`timeline\` có PACKED, HANDED_OVER và CLOSED khi tất cả thiết bị hiện hành đạt mốc, lấy giờ muộn nhất; RETURNED là giờ quét trả đầu tiên. Các mốc chưa có dữ liệu được bỏ qua.
 `,
   })
   @ApiParam({

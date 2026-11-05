@@ -21,6 +21,8 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { PaymentWebViewModal } from "@/features/bookings/components/PaymentWebViewModal";
 import { rentalApi } from "@/features/rentals/api";
 import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
+import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -77,7 +79,12 @@ const STEP_EVENT: Record<string, string> = {
 };
 
 const stripGradeSuffix = (name: string) =>
-  name.replace(/\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i, "").trim();
+  name
+    .replace(
+      /\s*[-–—:]\s*(rất mới|như mới|mới|đã sử dụng tốt|sử dụng tốt|đã qua sử dụng)\s*$/i,
+      "",
+    )
+    .trim();
 
 const EXCEPTION_LABELS: Record<string, string> = {
   ACTION_REQUIRED: "TrekGo đang kiểm tra đơn của bạn",
@@ -104,11 +111,17 @@ const dateTime = (value?: string | null) => {
 
 const shortAssetCode = (value?: string) => {
   if (!value) return "Đang cập nhật";
-  return value.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase();
+  return value
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(-6)
+    .toUpperCase();
 };
 
 const shortOrderId = (value: string) =>
-  value.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase();
+  value
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 6)
+    .toUpperCase();
 
 const PAYMENT_LABELS: Record<string, string> = {
   NOT_STARTED: "Chưa thanh toán",
@@ -125,6 +138,20 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 const paymentLabel = (status?: string | null) =>
   status ? PAYMENT_LABELS[status] || "Đang cập nhật" : "Chưa cập nhật";
+
+const cancellationRefundLabel = (status: string, settlementMode: string) => {
+  if (status === "SUCCEEDED" && settlementMode === "SANDBOX_SIMULATED") {
+    return "Hoàn tiền";
+  }
+  const labels: Record<string, string> = {
+    PENDING: "Đang chờ hoàn tiền",
+    PROCESSING: "Đang xử lý hoàn tiền",
+    SUCCEEDED: "Hoàn tiền thành công",
+    FAILED: "Hoàn tiền chưa thành công",
+    CANCELLED: "Giao dịch hoàn tiền đã hủy",
+  };
+  return labels[status] || "Đang cập nhật trạng thái hoàn tiền";
+};
 
 const conditionLabel = (condition: string) => {
   const labels: Record<string, string> = {
@@ -153,7 +180,8 @@ const DEPOSIT_REASON_LABELS: Record<string, string> = {
   FINAL_PASS_AWAIT_GROUPED_REFUND: "Kiểm định đạt · chờ hoàn cọc",
   INVENTORY_FINAL_PASS: "Kiểm định đạt · đang hoàn cọc",
   DEDUCTION_REVIEW_REQUIRED: "Kiểm định ghi nhận hư hại",
-  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE: "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
+  DAMAGE_EXCEEDS_DEPOSIT_MANUAL_CASE:
+    "Hư hại vượt mức cọc · TrekGo đang xử lý riêng",
   REFUND_REVIEW_REQUIRED: "Hoàn cọc đang được đối soát",
   POLICY_OR_INVENTORY_REVIEW_REQUIRED: "Đang được kiểm tra thêm",
   MISSING_PENDING_REVIEW: "Thiết bị chưa được nhận lại · đang xác minh",
@@ -168,12 +196,15 @@ const depositReasonText = (reason?: string | null) => {
 };
 
 const isPendingDeduction = (item: RentalDepositStatus["items"][number]) =>
-  (item.approvedDeduction ?? 0) > 0 && !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
+  (item.approvedDeduction ?? 0) > 0 &&
+  !["DEDUCTED", "SETTLED", "REFUNDED"].includes(item.status);
 
 const depositBadgeLabel = (item: RentalDepositStatus["items"][number]) => {
   if (isPendingDeduction(item)) {
     if (item.reviewStatus === "SUBMITTED") return "Đang xử lý phản đối";
-    return item.canSubmitReview ? "Có khoản trừ · chờ hết hạn phản đối" : "Có khoản trừ · chờ quyết toán";
+    return item.canSubmitReview
+      ? "Có khoản trừ · chờ hết hạn phản đối"
+      : "Có khoản trừ · chờ quyết toán";
   }
   return depositItemLabel(item.status);
 };
@@ -181,18 +212,12 @@ const depositBadgeLabel = (item: RentalDepositStatus["items"][number]) => {
 const gatewayLabel = (gateway: RentalPaymentGateway) =>
   gateway === "vnpay" ? "VNPay" : "MoMo";
 
-const TERMINAL_PAYMENT_STATUSES = new Set([
-  "FAILED",
-  "CANCELLED",
-  "EXPIRED",
-]);
+const TERMINAL_PAYMENT_STATUSES = new Set(["FAILED", "CANCELLED", "EXPIRED"]);
 const PAYMENT_POLL_INTERVAL_MS = 1_500;
 const PAYMENT_POLL_TIMEOUT_MS = 60_000;
 
-const paymentStorageKey = (
-  orderId: string,
-  gateway: RentalPaymentGateway,
-) => `rental-payment:${orderId}:${gateway}`;
+const paymentStorageKey = (orderId: string, gateway: RentalPaymentGateway) =>
+  `rental-payment:${orderId}:${gateway}`;
 
 async function getOrCreatePaymentKey(
   orderId: string,
@@ -287,12 +312,12 @@ export default function RentalOrderDetailScreen() {
         setPayment(
           paymentResult.status === "fulfilled"
             ? paymentResult.value
-            : orderDetail.payment ?? undefined,
+            : (orderDetail.payment ?? undefined),
         );
         setDeposit(
           depositResult.status === "fulfilled"
             ? depositResult.value
-            : orderDetail.deposit ?? undefined,
+            : (orderDetail.deposit ?? undefined),
         );
         setHandover(
           handoverResult.status === "fulfilled"
@@ -427,8 +452,15 @@ export default function RentalOrderDetailScreen() {
   );
 
   useEffect(() => {
-    if (!detail?.order.paymentExpiresAt || detail.order.status !== "PENDING_PAYMENT") return;
-    const interval = setInterval(() => setClockTick((value) => value + 1), 1000);
+    if (
+      !detail?.order.paymentExpiresAt ||
+      detail.order.status !== "PENDING_PAYMENT"
+    )
+      return;
+    const interval = setInterval(
+      () => setClockTick((value) => value + 1),
+      1000,
+    );
     return () => clearInterval(interval);
   }, [detail?.order.paymentExpiresAt, detail?.order.status]);
 
@@ -514,7 +546,9 @@ export default function RentalOrderDetailScreen() {
     setPaymentError(undefined);
     setPaymentNotice(undefined);
     if (["FAILED", "CANCELLED", "EXPIRED"].includes(payment?.status || "")) {
-      await AsyncStorage.removeItem(paymentStorageKey(orderId, selectedGateway));
+      await AsyncStorage.removeItem(
+        paymentStorageKey(orderId, selectedGateway),
+      );
     }
 
     try {
@@ -530,10 +564,7 @@ export default function RentalOrderDetailScreen() {
       );
 
       const checkoutUrl = checkout.checkout?.url;
-      if (
-        checkoutUrl &&
-        ["PENDING", "PROCESSING"].includes(checkout.status)
-      ) {
+      if (checkoutUrl && ["PENDING", "PROCESSING"].includes(checkout.status)) {
         awaitingPaymentReturn.current = true;
         setPaymentCheckoutUrl(checkoutUrl);
       } else {
@@ -609,10 +640,17 @@ export default function RentalOrderDetailScreen() {
       <SafeAreaView style={styles.safeArea}>
         <Header onBack={() => router.back()} />
         <View style={styles.centerState}>
-          <Ionicons name="cloud-offline-outline" size={52} color={Colors.primaryDark} />
+          <Ionicons
+            name="cloud-offline-outline"
+            size={52}
+            color={Colors.primaryDark}
+          />
           <Text style={styles.emptyTitle}>Chưa tải được đơn thuê</Text>
           <Text style={styles.mutedText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => void loadOrder()}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => void loadOrder()}
+          >
             <Text style={styles.retryText}>Thử lại</Text>
           </TouchableOpacity>
         </View>
@@ -620,7 +658,13 @@ export default function RentalOrderDetailScreen() {
     );
   }
 
-  const { order, items, assignedUnits = [], timeline = [] } = detail;
+  const {
+    order,
+    items,
+    assignedUnits = [],
+    timeline = [],
+    cancellationRefunds = [],
+  } = detail;
   const eventTimes = new Map<string, string>();
   timeline.forEach((event) => {
     const key = event.type || event.status;
@@ -628,13 +672,25 @@ export default function RentalOrderDetailScreen() {
     if (key && at) eventTimes.set(key, at);
   });
   const stepTime = (step: string, complete: boolean) => {
-    const eventAt = STEP_EVENT[step] ? eventTimes.get(STEP_EVENT[step]) : undefined;
+    const eventAt = STEP_EVENT[step]
+      ? eventTimes.get(STEP_EVENT[step])
+      : undefined;
     if (complete && eventAt) return { text: dateTime(eventAt), planned: false };
     if (!complete && step === "ACTIVE" && detail.trip?.rentalStartAt) {
-      return { text: `Dự kiến nhận: ${dateTime(detail.trip.rentalStartAt)}`, planned: true };
+      return {
+        text: `Dự kiến nhận: ${dateTime(detail.trip.rentalStartAt)}`,
+        planned: true,
+      };
     }
-    if (!complete && step === "RETURN_PENDING" && (detail.trip?.dueAt || order.dueAt)) {
-      return { text: `Hạn trả: ${dateTime(detail.trip?.dueAt || order.dueAt)}`, planned: true };
+    if (
+      !complete &&
+      step === "RETURN_PENDING" &&
+      (detail.trip?.dueAt || order.dueAt)
+    ) {
+      return {
+        text: `Hạn trả: ${dateTime(detail.trip?.dueAt || order.dueAt)}`,
+        planned: true,
+      };
     }
     return null;
   };
@@ -663,7 +719,10 @@ export default function RentalOrderDetailScreen() {
     order.status === "PENDING_PAYMENT" &&
     ["PENDING", "PROCESSING", "SUCCEEDED"].includes(payment?.status || "");
   const paymentBusy =
-    paying || pollingPayment || paymentNeedsConfirmation || Boolean(paymentCheckoutUrl);
+    paying ||
+    pollingPayment ||
+    paymentNeedsConfirmation ||
+    Boolean(paymentCheckoutUrl);
   void clockTick;
 
   return (
@@ -682,12 +741,20 @@ export default function RentalOrderDetailScreen() {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroIcon}>
-            <Ionicons name="bag-check-outline" size={24} color={Colors.primaryDark} />
+            <Ionicons
+              name="bag-check-outline"
+              size={24}
+              color={Colors.primaryDark}
+            />
           </View>
           <View style={styles.flexOne}>
             <Text style={styles.eyebrow}>ĐƠN THUÊ THIẾT BỊ</Text>
-            <Text style={styles.orderId}>{tripTitle || "Chuyến đi của bạn"}</Text>
-            {order.orderCode ? <Text style={styles.tripName}>Mã đơn {order.orderCode}</Text> : null}
+            <Text style={styles.orderId}>
+              {tripTitle || "Chuyến đi của bạn"}
+            </Text>
+            {order.orderCode ? (
+              <Text style={styles.tripName}>Mã đơn {order.orderCode}</Text>
+            ) : null}
           </View>
           <View style={styles.statusBadge}>
             <Text style={styles.statusBadgeText}>
@@ -700,8 +767,17 @@ export default function RentalOrderDetailScreen() {
           <InfoBanner
             tone="warning"
             icon="warning-outline"
-            title={EXCEPTION_LABELS[order.exceptionStatus] || "Đơn cần được kiểm tra"}
-            description="Hệ thống hoặc nhân viên đang tiếp tục xử lý trạng thái này."
+            title={
+              EXCEPTION_LABELS[order.exceptionStatus] || "Đơn cần được kiểm tra"
+            }
+            description={
+              order.status === "CANCELLED" &&
+              cancellationRefunds.some(
+                (refund) => refund.status === "SUCCEEDED",
+              )
+                ? "Đây là cảnh báo của đơn; xem trạng thái giao dịch hoàn tiền bên dưới."
+                : "Hệ thống hoặc nhân viên đang tiếp tục xử lý trạng thái này."
+            }
           />
         )}
 
@@ -724,23 +800,44 @@ export default function RentalOrderDetailScreen() {
                     ]}
                   >
                     {complete && (
-                      <Ionicons name="checkmark" size={12} color={Colors.onPrimary} />
+                      <Ionicons
+                        name="checkmark"
+                        size={12}
+                        color={Colors.onPrimary}
+                      />
                     )}
                   </View>
                   {index < ORDER_STEPS.length - 1 && (
-                    <View style={[styles.stepLine, complete && styles.stepLineComplete]} />
+                    <View
+                      style={[
+                        styles.stepLine,
+                        complete && styles.stepLineComplete,
+                      ]}
+                    />
                   )}
                 </View>
                 <View style={styles.stepTextWrap}>
-                  <Text style={[styles.stepTitle, complete && styles.stepTitleComplete]}>
+                  <Text
+                    style={[
+                      styles.stepTitle,
+                      complete && styles.stepTitleComplete,
+                    ]}
+                  >
                     {STEP_LABELS[step]}
                   </Text>
                   {time ? (
-                    <Text style={[styles.stepTime, time.planned && styles.stepTimePlanned]}>
+                    <Text
+                      style={[
+                        styles.stepTime,
+                        time.planned && styles.stepTimePlanned,
+                      ]}
+                    >
                       {time.text}
                     </Text>
                   ) : null}
-                  {active && <Text style={styles.stepCurrent}>Trạng thái hiện tại</Text>}
+                  {active && (
+                    <Text style={styles.stepCurrent}>Trạng thái hiện tại</Text>
+                  )}
                 </View>
               </View>
             );
@@ -754,28 +851,40 @@ export default function RentalOrderDetailScreen() {
           {items.map((item) => (
             <View key={item.id} style={styles.lineItem}>
               {item.imageUrl || item.product?.imageUrl ? (
-                <Image source={{ uri: item.imageUrl || item.product?.imageUrl }} style={styles.lineImage} />
+                <Image
+                  source={{ uri: item.imageUrl || item.product?.imageUrl }}
+                  style={styles.lineImage}
+                />
               ) : (
                 <View style={styles.lineIcon}>
-                  <Ionicons name="cube-outline" size={18} color={Colors.primaryDark} />
+                  <Ionicons
+                    name="cube-outline"
+                    size={18}
+                    color={Colors.primaryDark}
+                  />
                 </View>
               )}
               <View style={styles.flexOne}>
                 <Text style={styles.lineName}>
                   {item.product?.grade
-                    ? stripGradeSuffix(item.name || item.product?.name || "Thiết bị thuê")
+                    ? stripGradeSuffix(
+                        item.name || item.product?.name || "Thiết bị thuê",
+                      )
                     : item.name || item.product?.name || "Thiết bị thuê"}
                 </Text>
+                {item.product?.grade ? <GradeBadge grade={item.product.grade} style={styles.lineGrade} /> : null}
                 <Text style={styles.lineMeta}>
                   Số lượng: {item.quantity}
                   {(item.sku || item.product?.sku) ? ` · SKU ${item.sku || item.product?.sku}` : ""}
-                  {item.product?.grade ? ` · ${item.product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}` : ""}
                 </Text>
-                {typeof item.depositPerUnit === "number" && typeof item.depositAmount === "number" ? (
+                {typeof item.depositPerUnit === "number" &&
+                typeof item.depositAmount === "number" ? (
                   <Text style={styles.lineMeta}>
-                    Cọc {money(item.depositPerUnit, order.currency)}/món × {item.quantity} ={" "}
+                    Cọc {money(item.depositPerUnit, order.currency)}/món ×{" "}
+                    {item.quantity} ={" "}
                     {money(item.depositAmount, order.currency)}
-                    {typeof item.depositExplanation?.percentageOfReplacementValue === "number"
+                    {typeof item.depositExplanation
+                      ?.percentageOfReplacementValue === "number"
                       ? ` · ≈ ${item.depositExplanation.percentageOfReplacementValue.toLocaleString("vi-VN")}% giá trị thay thế`
                       : ""}
                   </Text>
@@ -790,7 +899,10 @@ export default function RentalOrderDetailScreen() {
             <View style={styles.unitWrap}>
               <Text style={styles.subheading}>Thiết bị vật lý đã gán</Text>
               {assignedUnits.map((unit, index) => (
-                <Text key={`${unit.id ?? unit.unitId ?? unit.assetCode ?? "unit"}-${index}`} style={styles.unitText}>
+                <Text
+                  key={`${unit.id ?? unit.unitId ?? unit.assetCode ?? "unit"}-${index}`}
+                  style={styles.unitText}
+                >
                   • {unit.productName ? `${unit.productName} · ` : ""}
                   Mã {shortAssetCode(unit.assetCode)}
                   {unit.condition ? ` · ${conditionLabel(unit.condition)}` : ""}
@@ -800,41 +912,77 @@ export default function RentalOrderDetailScreen() {
           )}
         </Section>
 
-        <Section title="Thanh toán" subtitle="Theo dõi giao dịch an toàn, không thanh toán lặp lại">
-          <MoneyRow label="Phí thuê" value={order.rentalFee} currency={order.currency} />
-          <MoneyRow label="Tiền cọc" value={order.totalDeposit} currency={order.currency} />
+        <Section
+          title="Thanh toán"
+          subtitle="Theo dõi giao dịch an toàn, không thanh toán lặp lại"
+        >
+          <MoneyRow
+            label="Phí thuê"
+            value={order.rentalFee}
+            currency={order.currency}
+          />
+          <MoneyRow
+            label="Tiền cọc"
+            value={order.totalDeposit}
+            currency={order.currency}
+          />
           <View style={styles.totalDivider} />
-          <MoneyRow label="Tổng cộng" value={order.totalAmount} currency={order.currency} strong />
+          <MoneyRow
+            label="Tổng cộng"
+            value={order.totalAmount}
+            currency={order.currency}
+            strong
+          />
           <Text style={styles.paymentStatus}>
             {paymentLabel(payment?.status || order.financialStatus)}
           </Text>
           {payment?.status === "SUCCEEDED" &&
             payment.applicationStatus !== "APPLIED" && (
               <Text style={styles.readOnlyNote}>
-                Cổng thanh toán đã ghi nhận tiền. Hệ thống vẫn đang xác nhận đơn thuê;
-                chưa chuyển sang bước chuẩn bị thiết bị.
+                Cổng thanh toán đã ghi nhận tiền. Hệ thống vẫn đang xác nhận đơn
+                thuê; chưa chuyển sang bước chuẩn bị thiết bị.
               </Text>
             )}
           {(payment?.applicationStatus === "REJECTED" ||
             payment?.reconciliationStatus === "NEEDS_REVIEW" ||
             payment?.reconciliationRequired) && (
-              <Text style={styles.inlineError}>
-                Giao dịch cần hỗ trợ đối soát. Không thanh toán lại để tránh trùng giao dịch.
-              </Text>
-            )}
+            <Text style={styles.inlineError}>
+              Giao dịch cần hỗ trợ đối soát. Không thanh toán lại để tránh trùng
+              giao dịch.
+            </Text>
+          )}
           {order.paymentExpiresAt && (
-            <Text style={styles.deadline}>Hạn thanh toán: {dateTime(order.paymentExpiresAt)}</Text>
+            <Text style={styles.deadline}>
+              Hạn thanh toán: {dateTime(order.paymentExpiresAt)}
+            </Text>
           )}
           {order.status === "PENDING_PAYMENT" && paymentCountdown && (
-            <View style={[styles.countdownCard, paymentCountdown.expired && styles.countdownExpired]}>
+            <View
+              style={[
+                styles.countdownCard,
+                paymentCountdown.expired && styles.countdownExpired,
+              ]}
+            >
               <View style={styles.countdownIcon}>
-                <Ionicons name="time-outline" size={21} color={paymentCountdown.expired ? Colors.error : Colors.inkDeep} />
+                <Ionicons
+                  name="time-outline"
+                  size={21}
+                  color={
+                    paymentCountdown.expired ? Colors.error : Colors.inkDeep
+                  }
+                />
               </View>
               <View style={styles.flexOne}>
                 <Text style={styles.countdownLabel}>
-                  {paymentCountdown.expired ? "Phiên thanh toán đã hết hạn" : "Thời gian còn lại để chuyển khoản"}
+                  {paymentCountdown.expired
+                    ? "Phiên thanh toán đã hết hạn"
+                    : "Thời gian còn lại để chuyển khoản"}
                 </Text>
-                {!paymentCountdown.expired && <Text style={styles.countdownValue}>{paymentCountdown.label}</Text>}
+                {!paymentCountdown.expired && (
+                  <Text style={styles.countdownValue}>
+                    {paymentCountdown.label}
+                  </Text>
+                )}
               </View>
             </View>
           )}
@@ -843,13 +991,23 @@ export default function RentalOrderDetailScreen() {
               style={styles.payButton}
               onPress={() => router.replace("/(tabs)/rental")}
             >
-              <Ionicons name="refresh-outline" size={18} color={Colors.onPrimary} />
-              <Text style={styles.payButtonText}>Chọn lại thiết bị và tạo đơn mới</Text>
+              <Ionicons
+                name="refresh-outline"
+                size={18}
+                color={Colors.onPrimary}
+              />
+              <Text style={styles.payButtonText}>
+                Chọn lại thiết bị và tạo đơn mới
+              </Text>
             </TouchableOpacity>
           )}
           {paymentBusy ? (
             <TrekkingLoader
-              label={payment?.status === "SUCCEEDED" ? "Đang đưa thanh toán về đích..." : "Đang dò tín hiệu thanh toán..."}
+              label={
+                payment?.status === "SUCCEEDED"
+                  ? "Đang đưa thanh toán về đích..."
+                  : "Đang dò tín hiệu thanh toán..."
+              }
               compact
             />
           ) : canStartPayment ? (
@@ -888,26 +1046,69 @@ export default function RentalOrderDetailScreen() {
                 disabled={!selectedGateway}
                 onPress={() => void startPayment()}
               >
-                <Ionicons name="card-outline" size={18} color={Colors.onPrimary} />
+                <Ionicons
+                  name="card-outline"
+                  size={18}
+                  color={Colors.onPrimary}
+                />
                 <Text style={styles.payButtonText}>Thanh toán ngay</Text>
               </TouchableOpacity>
               {paymentGateways.length === 0 && !paymentError && (
-                <Text style={styles.readOnlyNote}>Đang chuẩn bị phương thức thanh toán...</Text>
+                <Text style={styles.readOnlyNote}>
+                  Đang chuẩn bị phương thức thanh toán...
+                </Text>
               )}
             </>
           ) : null}
           {paymentNotice && (
             <Text style={styles.paymentNotice}>{paymentNotice}</Text>
           )}
-          {paymentError && <Text style={styles.inlineError}>{paymentError}</Text>}
+          {paymentError && (
+            <Text style={styles.inlineError}>{paymentError}</Text>
+          )}
         </Section>
 
+        {order.status === "CANCELLED" && cancellationRefunds.length > 0 && (
+          <Section
+            title="Hoàn tiền khi hủy đơn"
+            subtitle="Trạng thái của từng giao dịch hoàn tiền"
+          >
+            {cancellationRefunds.map((refund) => (
+              <View key={refund.refundId} style={styles.depositItem}>
+                <View style={styles.flexOne}>
+                  <Text style={styles.lineName}>
+                    {cancellationRefundLabel(
+                      refund.status,
+                      refund.settlementMode,
+                    )}
+                  </Text>
+                  {refund.status === "SUCCEEDED" &&
+                    refund.settlementMode === "SANDBOX_SIMULATED" && (
+                      <Text style={styles.lineMeta}>
+                        Kết quả mô phỏng để kiểm thử, không xác nhận tiền đã về
+                        tài khoản.
+                      </Text>
+                    )}
+                </View>
+                <Text style={styles.lineAmount}>
+                  {money(refund.amount, refund.currency)}
+                </Text>
+              </View>
+            ))}
+          </Section>
+        )}
+
         {canShowPickupCode && (
-          <Section title="Mã nhận thiết bị" subtitle="Chỉ đưa mã này cho nhân viên giao nhận tại điểm nhận">
+          <Section
+            title="Mã nhận thiết bị"
+            subtitle="Chỉ đưa mã này cho nhân viên giao nhận tại điểm nhận"
+          >
             {pickupCode ? (
               <View style={styles.codeBox}>
                 <Text style={styles.codeValue}>{pickupCode.pickupCode}</Text>
-                <Text style={styles.codeExpiry}>Hết hạn: {dateTime(pickupCode.expiresAt)}</Text>
+                <Text style={styles.codeExpiry}>
+                  Hết hạn: {dateTime(pickupCode.expiresAt)}
+                </Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -919,7 +1120,11 @@ export default function RentalOrderDetailScreen() {
                   <ActivityIndicator color={Colors.onPrimary} />
                 ) : (
                   <>
-                    <Ionicons name="eye-outline" size={18} color={Colors.onPrimary} />
+                    <Ionicons
+                      name="eye-outline"
+                      size={18}
+                      color={Colors.onPrimary}
+                    />
                     <Text style={styles.revealText}>Hiển thị mã nhận</Text>
                   </>
                 )}
@@ -928,82 +1133,133 @@ export default function RentalOrderDetailScreen() {
             {codeError && <Text style={styles.inlineError}>{codeError}</Text>}
             {handover?.conditionSnapshots?.length ? (
               <Text style={styles.readOnlyNote}>
-                Có {handover.conditionSnapshots.length} bản ghi tình trạng trước giao. Bạn kiểm tra trực tiếp và báo Staff nếu có sai lệch.
+                Có {handover.conditionSnapshots.length} bản ghi tình trạng trước
+                giao. Bạn kiểm tra trực tiếp và báo Staff nếu có sai lệch.
               </Text>
             ) : null}
           </Section>
         )}
 
-        {deposit && (
-          <Section title="Theo dõi tiền cọc" subtitle="Cọc được xử lý riêng theo từng thiết bị">
-            <MoneyRow label="Đã thu" value={deposit.collectedAmount} currency={order.currency} />
-            <MoneyRow label="Đang giữ" value={deposit.heldAmount} currency={order.currency} />
-            <MoneyRow
-              label="Đang chờ hoàn"
-              value={deposit.refundPendingAmount}
-              currency={order.currency}
-            />
-            <MoneyRow label="Đã hoàn" value={deposit.refundedAmount} currency={order.currency} />
-            <MoneyRow label="Khấu trừ" value={deposit.deductionAmount} currency={order.currency} />
-            {(() => {
-              const pending = deposit.items
-                .filter(isPendingDeduction)
-                .reduce((sum, item) => sum + (item.approvedDeduction ?? 0), 0);
-              return pending > 0 ? (
-                <Text style={styles.readOnlyNote}>
-                  Có {money(pending, order.currency)} khoản trừ đã duyệt nhưng chưa quyết toán, nên chưa tính vào “Khấu trừ”. Số này chỉ được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã được xử lý.
-                </Text>
-              ) : null;
-            })()}
-            {deposit.items.map((item) => (
-              <View key={item.unitId}>
-              <View style={styles.depositItem}>
-                <View style={styles.flexOne}>
-                  <Text style={styles.lineName}>Mã thiết bị {shortAssetCode(item.assetCode)}</Text>
-                  <Text style={styles.lineMeta}>{depositBadgeLabel(item)}</Text>
-                  {depositReasonText(item.reason) ? (
-                    <Text style={styles.lineMeta}>{depositReasonText(item.reason)}</Text>
+        {orderId ? <RentalDocumentsCard orderId={orderId} accessToken={accessToken} /> : null}
+
+        {deposit &&
+          (order.status !== "CANCELLED" ||
+            cancellationRefunds.length === 0 ||
+            deposit.items.length > 0) && (
+            <Section
+              title="Theo dõi tiền cọc"
+              subtitle="Cọc được xử lý riêng theo từng thiết bị"
+            >
+              <MoneyRow
+                label="Đã thu"
+                value={deposit.collectedAmount}
+                currency={order.currency}
+              />
+              <MoneyRow
+                label="Đang giữ"
+                value={deposit.heldAmount}
+                currency={order.currency}
+              />
+              <MoneyRow
+                label="Đang chờ hoàn"
+                value={deposit.refundPendingAmount}
+                currency={order.currency}
+              />
+              <MoneyRow
+                label="Đã hoàn"
+                value={deposit.refundedAmount}
+                currency={order.currency}
+              />
+              <MoneyRow
+                label="Khấu trừ"
+                value={deposit.deductionAmount}
+                currency={order.currency}
+              />
+              {(() => {
+                const pending = deposit.items
+                  .filter(isPendingDeduction)
+                  .reduce(
+                    (sum, item) => sum + (item.approvedDeduction ?? 0),
+                    0,
+                  );
+                return pending > 0 ? (
+                  <Text style={styles.readOnlyNote}>
+                    Có {money(pending, order.currency)} khoản trừ đã duyệt nhưng
+                    chưa quyết toán, nên chưa tính vào “Khấu trừ”. Số này chỉ
+                    được trừ khi hết hạn phản đối hoặc khi phản đối của bạn đã
+                    được xử lý.
+                  </Text>
+                ) : null;
+              })()}
+              {deposit.items.map((item) => (
+                <View key={item.unitId}>
+                  <View style={styles.depositItem}>
+                    <View style={styles.flexOne}>
+                      <Text style={styles.lineName}>
+                        Mã thiết bị {shortAssetCode(item.assetCode)}
+                      </Text>
+                      <Text style={styles.lineMeta}>
+                        {depositBadgeLabel(item)}
+                      </Text>
+                      {depositReasonText(item.reason) ? (
+                        <Text style={styles.lineMeta}>
+                          {depositReasonText(item.reason)}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.lineAmount}>
+                      {money(item.depositAmount ?? item.amount, order.currency)}
+                    </Text>
+                  </View>
+                  {orderId ? (
+                    <DeductionReviewCard
+                      orderId={orderId}
+                      item={item}
+                      currency={order.currency}
+                      accessToken={accessToken}
+                      onChanged={() => loadOrder(true)}
+                    />
                   ) : null}
                 </View>
-                <Text style={styles.lineAmount}>
-                  {money(item.depositAmount ?? item.amount, order.currency)}
+              ))}
+              {deposit.items.some(
+                (item) =>
+                  item.status === "REVIEW_REQUIRED" ||
+                  item.heldReason === "FINAL_PASS_AWAIT_GROUPED_REFUND",
+              ) && (
+                <Text style={styles.readOnlyNote}>
+                  Đang chờ xử lý hoàn cọc. Đây chưa phải trạng thái đã hoàn
+                  tiền; nếu kéo dài, vui lòng liên hệ hỗ trợ.
                 </Text>
-              </View>
-              {orderId ? (
-                <DeductionReviewCard
-                  orderId={orderId}
-                  item={item}
-                  currency={order.currency}
-                  accessToken={accessToken}
-                  onChanged={() => loadOrder(true)}
-                />
-              ) : null}
-              </View>
-            ))}
-            {deposit.items.some(
-              (item) =>
-                item.status === "REVIEW_REQUIRED" ||
-                item.heldReason === "FINAL_PASS_AWAIT_GROUPED_REFUND",
-            ) && (
-              <Text style={styles.readOnlyNote}>
-                Đang chờ xử lý hoàn cọc. Đây chưa phải trạng thái đã hoàn tiền; nếu kéo
-                dài, vui lòng liên hệ hỗ trợ.
-              </Text>
-            )}
-          </Section>
-        )}
+              )}
+            </Section>
+          )}
 
         {timeline.length > 0 && (
           <Section title="Lịch sử cập nhật">
             {timeline.map((event, index) => (
-              <View key={event.id || `${event.type || event.status}-${index}`} style={styles.historyRow}>
-                <Ionicons name="time-outline" size={17} color={Colors.primaryDark} />
+              <View
+                key={event.id || `${event.type || event.status}-${index}`}
+                style={styles.historyRow}
+              >
+                <Ionicons
+                  name="time-outline"
+                  size={17}
+                  color={Colors.primaryDark}
+                />
                 <View style={styles.flexOne}>
                   <Text style={styles.historyTitle}>
-                    {event.title || TIMELINE_LABELS[event.type || ""] || event.status || "Cập nhật đơn"}
+                    {event.title ||
+                      TIMELINE_LABELS[event.type || ""] ||
+                      event.status ||
+                      "Cập nhật đơn"}
                   </Text>
-                  {event.description ? <Text style={styles.lineMeta}>{event.description}</Text> : null}
-                  <Text style={styles.historyTime}>{dateTime(event.at || event.occurredAt || event.createdAt)}</Text>
+                  {event.description ? (
+                    <Text style={styles.lineMeta}>{event.description}</Text>
+                  ) : null}
+                  <Text style={styles.historyTime}>
+                    {dateTime(event.at || event.occurredAt || event.createdAt)}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -1018,7 +1274,11 @@ export default function RentalOrderDetailScreen() {
               router.push(`/rental-orders/${orderId}/cancel` as Href)
             }
           >
-            <Ionicons name="close-circle-outline" size={21} color={Colors.error} />
+            <Ionicons
+              name="close-circle-outline"
+              size={21}
+              color={Colors.error}
+            />
             <View style={styles.flexOne}>
               <Text style={styles.cancelOrderTitle}>Hủy đơn thuê</Text>
               <Text style={styles.cancelOrderDescription}>
@@ -1053,7 +1313,7 @@ export default function RentalOrderDetailScreen() {
             awaitingPaymentReturn.current = false;
             setPaymentNotice(
               result.message ??
-              "Đã nhận kết quả từ cổng thanh toán. Giao dịch đang được xác nhận.",
+                "Đã nhận kết quả từ cổng thanh toán. Giao dịch đang được xác nhận.",
             );
             void pollPaymentUntilApplied();
           }}
@@ -1111,7 +1371,9 @@ function MoneyRow({
 }) {
   return (
     <View style={styles.moneyRow}>
-      <Text style={[styles.moneyLabel, strong && styles.moneyStrong]}>{label}</Text>
+      <Text style={[styles.moneyLabel, strong && styles.moneyStrong]}>
+        {label}
+      </Text>
       <Text style={[styles.moneyValue, strong && styles.moneyStrong]}>
         {money(value, currency)}
       </Text>
@@ -1131,14 +1393,20 @@ function InfoBanner({
   tone?: "normal" | "warning";
 }) {
   return (
-    <View style={[styles.infoBanner, tone === "warning" && styles.warningBanner]}>
+    <View
+      style={[styles.infoBanner, tone === "warning" && styles.warningBanner]}
+    >
       <Ionicons
         name={icon}
         size={22}
         color={tone === "warning" ? "#A32020" : Colors.primaryDark}
       />
       <View style={styles.flexOne}>
-        <Text style={[styles.infoTitle, tone === "warning" && styles.warningText]}>{title}</Text>
+        <Text
+          style={[styles.infoTitle, tone === "warning" && styles.warningText]}
+        >
+          {title}
+        </Text>
         <Text style={styles.infoDescription}>{description}</Text>
       </View>
     </View>
@@ -1188,88 +1456,390 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.surfaceContainer,
   },
-  eyebrow: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600", letterSpacing: 1 },
-  headerTitle: { marginTop: 2, color: Colors.onSurface, fontSize: 20, fontWeight: "600" },
+  eyebrow: {
+    color: Colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    marginTop: 2,
+    color: Colors.onSurface,
+    fontSize: 20,
+    fontWeight: "600",
+  },
   content: { padding: 16, gap: 14, paddingBottom: 48 },
-  centerState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 28 },
-  emptyTitle: { color: Colors.onSurface, fontSize: 20, fontWeight: "600", textAlign: "center" },
-  mutedText: { color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18, textAlign: "center" },
-  retryButton: { marginTop: 8, paddingHorizontal: 22, paddingVertical: 12, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 28,
+  },
+  emptyTitle: {
+    color: Colors.onSurface,
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  mutedText: {
+    color: Colors.onSurfaceVariant,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryDark,
+  },
   retryText: { color: Colors.onPrimaryDark, fontWeight: "600" },
-  heroCard: { padding: 16, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: Radius.xl, backgroundColor: Colors.inkDeep, ...Shadows.tactical },
-  heroIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.primary },
-  orderId: { marginTop: 3, color: Colors.onPrimaryDark, fontSize: 17, lineHeight: 22, fontWeight: "600" },
+  heroCard: {
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.inkDeep,
+    ...Shadows.tactical,
+  },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  orderId: {
+    marginTop: 3,
+    color: Colors.onPrimaryDark,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "600",
+  },
   tripName: { marginTop: 4, color: Colors.primaryNeutral, fontSize: 11 },
-  statusBadge: { maxWidth: 112, paddingHorizontal: 9, paddingVertical: 7, borderRadius: Radius.full, backgroundColor: Colors.primary },
-  statusBadgeText: { color: Colors.onPrimary, fontSize: 9, fontWeight: "600", textAlign: "center" },
-  section: { padding: 16, borderRadius: Radius.xl, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
+  statusBadge: {
+    maxWidth: 112,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  statusBadgeText: {
+    color: Colors.onPrimary,
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  section: {
+    padding: 16,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.surfaceContainerLowest,
+    ...Shadows.card,
+  },
   sectionTitle: { color: Colors.onSurface, fontSize: 17, fontWeight: "600" },
-  sectionSubtitle: { marginTop: 4, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 15 },
+  sectionSubtitle: {
+    marginTop: 4,
+    color: Colors.onSurfaceVariant,
+    fontSize: 10,
+    lineHeight: 15,
+  },
   sectionBody: { marginTop: 14 },
   stepRow: { minHeight: 48, flexDirection: "row", gap: 10 },
   stepRail: { width: 22, alignItems: "center" },
-  stepDot: { width: 18, height: 18, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, borderWidth: 2, borderColor: Colors.surfaceContainerHighest, backgroundColor: Colors.surfaceContainerLowest },
-  stepDotComplete: { borderColor: Colors.primaryDark, backgroundColor: Colors.primaryDark },
-  stepDotActive: { borderWidth: 4, borderColor: Colors.primary, backgroundColor: Colors.primaryDark },
-  stepLine: { flex: 1, width: 2, backgroundColor: Colors.surfaceContainerHighest },
+  stepDot: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    borderWidth: 2,
+    borderColor: Colors.surfaceContainerHighest,
+    backgroundColor: Colors.surfaceContainerLowest,
+  },
+  stepDotComplete: {
+    borderColor: Colors.primaryDark,
+    backgroundColor: Colors.primaryDark,
+  },
+  stepDotActive: {
+    borderWidth: 4,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryDark,
+  },
+  stepLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: Colors.surfaceContainerHighest,
+  },
   stepLineComplete: { backgroundColor: Colors.primaryDark },
   stepTextWrap: { flex: 1, paddingBottom: 12 },
   stepTitle: { color: Colors.onSurfaceMuted, fontSize: 12, fontWeight: "500" },
   stepTitleComplete: { color: Colors.onSurface, fontWeight: "600" },
-  stepCurrent: { marginTop: 3, color: Colors.primaryDark, fontSize: 9, fontWeight: "600" },
+  stepCurrent: {
+    marginTop: 3,
+    color: Colors.primaryDark,
+    fontSize: 9,
+    fontWeight: "600",
+  },
   stepTime: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
   stepTimePlanned: { color: Colors.onSurfaceMuted, fontStyle: "italic" },
-  lineItem: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
-  lineIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
-  lineImage: { width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainer },
-  lineName: { color: Colors.onSurface, fontSize: 14, lineHeight: 19, fontWeight: "700" },
+  lineItem: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceContainer,
+  },
+  lineIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryPale,
+  },
+  lineImage: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surfaceContainer,
+  },
+  lineName: {
+    color: Colors.onSurface,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "700",
+  },
+  lineGrade: { marginTop: 4 },
   lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10 },
   lineAmount: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
-  unitWrap: { marginTop: 12, padding: 12, borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
-  subheading: { marginBottom: 6, color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
+  unitWrap: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryPale,
+  },
+  subheading: {
+    marginBottom: 6,
+    color: Colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "600",
+  },
   unitText: { color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 17 },
-  moneyRow: { minHeight: 30, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  moneyRow: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   moneyLabel: { color: Colors.onSurfaceVariant, fontSize: 11 },
   moneyValue: { color: Colors.onSurface, fontSize: 11, fontWeight: "600" },
   moneyStrong: { color: Colors.primaryDark, fontSize: 14, fontWeight: "600" },
-  totalDivider: { height: 1, marginVertical: 8, backgroundColor: Colors.surfaceContainer },
-  paymentStatus: { marginTop: 12, color: Colors.onSurface, fontSize: 10, fontWeight: "600" },
+  totalDivider: {
+    height: 1,
+    marginVertical: 8,
+    backgroundColor: Colors.surfaceContainer,
+  },
+  paymentStatus: {
+    marginTop: 12,
+    color: Colors.onSurface,
+    fontSize: 10,
+    fontWeight: "600",
+  },
   deadline: { marginTop: 4, color: "#A32020", fontSize: 10 },
-  countdownCard: { marginTop: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: Colors.primaryNeutral, borderRadius: Radius.lg, backgroundColor: Colors.primaryPale },
+  countdownCard: {
+    marginTop: 12,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Colors.primaryNeutral,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryPale,
+  },
   countdownExpired: { borderColor: "#F3AAA7", backgroundColor: "#FFE5E2" },
-  countdownIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: "#fff" },
-  countdownLabel: { color: Colors.onSurfaceVariant, fontSize: 11, lineHeight: 16, fontWeight: "600" },
-  countdownValue: { marginTop: 2, color: Colors.inkDeep, fontSize: 25, lineHeight: 30, fontWeight: "700", letterSpacing: 1.5 },
+  countdownIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: "#fff",
+  },
+  countdownLabel: {
+    color: Colors.onSurfaceVariant,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  countdownValue: {
+    marginTop: 2,
+    color: Colors.inkDeep,
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+  },
   gatewayRow: { marginTop: 14, flexDirection: "row", gap: 8 },
-  gatewayButton: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, backgroundColor: Colors.surfaceContainerLowest },
-  gatewayButtonSelected: { borderColor: Colors.primaryDark, backgroundColor: Colors.primaryPale },
-  gatewayText: { color: Colors.onSurfaceVariant, fontSize: 11, fontWeight: "600" },
+  gatewayButton: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.surfaceContainerHighest,
+    backgroundColor: Colors.surfaceContainerLowest,
+  },
+  gatewayButtonSelected: {
+    borderColor: Colors.primaryDark,
+    backgroundColor: Colors.primaryPale,
+  },
+  gatewayText: {
+    color: Colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: "600",
+  },
   gatewayTextSelected: { color: Colors.primaryDark },
-  payButton: { marginTop: 10, minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
+  payButton: {
+    marginTop: 10,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryDark,
+  },
   payButtonText: { color: Colors.onPrimary, fontWeight: "600" },
   buttonDisabled: { opacity: 0.55 },
-  checkPaymentButton: { marginTop: 12, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.primaryDark },
-  checkPaymentText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
-  paymentNotice: { marginTop: 9, color: Colors.primaryDark, fontSize: 10, lineHeight: 16, textAlign: "center" },
-  paymentProgress: { marginTop: 14, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.primaryNeutral, backgroundColor: Colors.primaryPale },
-  paymentProgressIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.surfaceContainerLowest },
-  paymentProgressTitle: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },
-  paymentProgressDescription: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 15 },
-  codeBox: { padding: 18, alignItems: "center", borderRadius: Radius.lg, backgroundColor: Colors.inkDeep },
-  codeValue: { color: Colors.primary, fontSize: 30, fontWeight: "600", letterSpacing: 5 },
+  checkPaymentButton: {
+    marginTop: 12,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.primaryDark,
+  },
+  checkPaymentText: {
+    color: Colors.primaryDark,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  paymentNotice: {
+    marginTop: 9,
+    color: Colors.primaryDark,
+    fontSize: 10,
+    lineHeight: 16,
+    textAlign: "center",
+  },
+  paymentProgress: {
+    marginTop: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.primaryNeutral,
+    backgroundColor: Colors.primaryPale,
+  },
+  paymentProgressIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceContainerLowest,
+  },
+  paymentProgressTitle: {
+    color: Colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  paymentProgressDescription: {
+    marginTop: 3,
+    color: Colors.onSurfaceVariant,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  codeBox: {
+    padding: 18,
+    alignItems: "center",
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.inkDeep,
+  },
+  codeValue: {
+    color: Colors.primary,
+    fontSize: 30,
+    fontWeight: "600",
+    letterSpacing: 5,
+  },
   codeExpiry: { marginTop: 6, color: Colors.primaryNeutral, fontSize: 10 },
-  revealButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
+  revealButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryDark,
+  },
   revealText: { color: Colors.onPrimaryDark, fontWeight: "600" },
-  inlineError: { marginTop: 8, color: "#A32020", fontSize: 10, textAlign: "center" },
-  readOnlyNote: { marginTop: 10, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 16 },
-  depositItem: { marginTop: 10, paddingTop: 10, flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: Colors.surfaceContainer },
+  inlineError: {
+    marginTop: 8,
+    color: "#A32020",
+    fontSize: 10,
+    textAlign: "center",
+  },
+  readOnlyNote: {
+    marginTop: 10,
+    color: Colors.onSurfaceVariant,
+    fontSize: 10,
+    lineHeight: 16,
+  },
+  depositItem: {
+    marginTop: 10,
+    paddingTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceContainer,
+  },
   reasonText: { marginTop: 3, color: "#A32020", fontSize: 9 },
-  historyRow: { paddingVertical: 9, flexDirection: "row", gap: 9, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
+  historyRow: {
+    paddingVertical: 9,
+    flexDirection: "row",
+    gap: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceContainer,
+  },
   historyTitle: { color: Colors.onSurface, fontSize: 11, fontWeight: "600" },
   historyTime: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 9 },
-  infoBanner: { padding: 14, flexDirection: "row", gap: 10, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.primaryNeutral, backgroundColor: Colors.primaryPale },
+  infoBanner: {
+    padding: 14,
+    flexDirection: "row",
+    gap: 10,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.primaryNeutral,
+    backgroundColor: Colors.primaryPale,
+  },
   warningBanner: { borderColor: "#F3AAA7", backgroundColor: "#FFE5E2" },
   infoTitle: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
   warningText: { color: "#A32020" },
-  infoDescription: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 16 },
+  infoDescription: {
+    marginTop: 3,
+    color: Colors.onSurfaceVariant,
+    fontSize: 10,
+    lineHeight: 16,
+  },
 });

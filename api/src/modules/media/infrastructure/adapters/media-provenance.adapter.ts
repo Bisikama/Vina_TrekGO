@@ -15,6 +15,17 @@ import type {
 import { MEDIA_ASSET_PORT } from '../../application/ports/media-asset.port';
 import envConfig from '../../../../shared/config';
 
+const SHA256_MAX_ATTEMPTS = 3;
+const SHA256_RETRY_BASE_DELAY_MS = 300;
+const TRANSIENT_NETWORK_ERROR = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|EAI_AGAIN|socket hang up|aborted|HTTP 5\d\d/i;
+
+/** Lỗi mạng/CDN tạm thời đáng thử lại. Lỗi khác (HTTP 4xx, sai cấu hình) ném ngay. */
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as NodeJS.ErrnoException).code;
+  return TRANSIENT_NETWORK_ERROR.test(`${typeof code === 'string' ? code : ''} ${err.message}`);
+}
+
 @Injectable()
 export class MediaProvenanceAdapter implements MediaProvenancePort {
   private readonly logger = new Logger(MediaProvenanceAdapter.name);
@@ -39,13 +50,11 @@ export class MediaProvenanceAdapter implements MediaProvenancePort {
     // 1. Compute SHA-256 using original stream
     if (asset.providerPublicId && asset.deliveryType) {
       try {
-        const streamResult = await this.mediaStoragePort.openOriginalStream({
+        sha256 = await this.computeOriginalSha256(asset.id, {
           providerPublicId: asset.providerPublicId,
           resourceType: asset.resourceType,
           deliveryType: asset.deliveryType,
         });
-
-        sha256 = await this.computeStreamSha256(streamResult.stream);
         reasons.push('SHA256_COMPUTED');
 
         // Check for duplicates
@@ -189,6 +198,25 @@ export class MediaProvenanceAdapter implements MediaProvenancePort {
       provenanceStatus,
       provenanceReasons: reasons,
     };
+  }
+
+  /** Mở lại stream gốc và băm lại từ đầu khi lỗi mạng tạm thời (ECONNRESET thường xảy ra lúc đang đọc). */
+  private async computeOriginalSha256(
+    assetId: string,
+    input: Parameters<MediaStoragePort['openOriginalStream']>[0],
+  ): Promise<string> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { stream } = await this.mediaStoragePort.openOriginalStream(input);
+        return await this.computeStreamSha256(stream);
+      } catch (err) {
+        if (attempt >= SHA256_MAX_ATTEMPTS || !isTransientNetworkError(err)) throw err;
+        this.logger.warn(
+          `SHA256 attempt ${attempt}/${SHA256_MAX_ATTEMPTS} failed for asset ${assetId}, retrying. Context: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, SHA256_RETRY_BASE_DELAY_MS * attempt));
+      }
+    }
   }
 
   private computeStreamSha256(stream: NodeJS.ReadableStream): Promise<string> {

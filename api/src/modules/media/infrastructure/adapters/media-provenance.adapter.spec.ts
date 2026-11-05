@@ -128,6 +128,45 @@ describe('MediaProvenanceAdapter', () => {
     ).rejects.toThrow('Stream failed');
   });
 
+  const resetStream = () =>
+    new Readable({
+      read() {
+        this.destroy(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+      },
+    });
+
+  it('reopens the original stream and retries when the read is reset mid-way', async () => {
+    mockStoragePort.openOriginalStream
+      .mockResolvedValueOnce({ stream: resetStream() })
+      .mockResolvedValueOnce({ stream: createMockStream('test-data') });
+    mockAssetPort.findEvidenceBySha256.mockResolvedValue(null);
+    mockStoragePort.getImageAnalysis.mockResolvedValue({});
+
+    const result = await adapter.analyzeEvidence({ asset: mockAsset, providerUploadedAt: new Date() });
+
+    expect(mockStoragePort.openOriginalStream).toHaveBeenCalledTimes(2);
+    expect(result.provenanceReasons).toContain('SHA256_COMPUTED');
+  });
+
+  it('gives up after 3 attempts of transient network errors', async () => {
+    mockStoragePort.openOriginalStream.mockImplementation(async () => ({ stream: resetStream() }));
+
+    await expect(
+      adapter.analyzeEvidence({ asset: mockAsset, providerUploadedAt: new Date() }),
+    ).rejects.toThrow('ECONNRESET');
+    expect(mockStoragePort.openOriginalStream).toHaveBeenCalledTimes(3);
+    expect(mockAssetPort.saveProvenanceResult).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a non-transient provider error', async () => {
+    mockStoragePort.openOriginalStream.mockRejectedValue(new Error('Failed to open stream: HTTP 404'));
+
+    await expect(
+      adapter.analyzeEvidence({ asset: mockAsset, providerUploadedAt: new Date() }),
+    ).rejects.toThrow('HTTP 404');
+    expect(mockStoragePort.openOriginalStream).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle missing EXIF data and missing provider time gracefully', async () => {
     mockStoragePort.openOriginalStream.mockResolvedValue({ stream: createMockStream('test-data') });
     mockAssetPort.findEvidenceBySha256.mockResolvedValue(null);

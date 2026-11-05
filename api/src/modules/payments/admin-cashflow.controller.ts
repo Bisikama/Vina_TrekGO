@@ -39,7 +39,7 @@ export class AdminCashflowController {
   @Get(['cashflow/summary', 'transactions/summary'])
   @ApiOperation({
     operationId: 'getAdminCashflowSummary',
-    summary: 'Tổng quan dòng tiền & đối soát toàn hệ thống theo cổng VNPay / PayOS (Admin Cashflow Summary)',
+    summary: 'Tổng quan dòng tiền VNPay Sandbox và hoàn mô phỏng (Admin Cashflow Summary)',
     description: `Báo cáo demo: thu từ payment VNPay SANDBOX thành công; chi từ refund mô phỏng thành công. Khoản chờ không tính vào tổng đã hoàn tất. ALL/BOTH là alias của VNPay sandbox. Không phải số dư ngân hàng; không gồm PayOS, MoMo, production.`,
   })
   @ApiQuery({
@@ -233,7 +233,7 @@ export class AdminCashflowController {
   @Get(['refunds/:id', 'transactions/refunds/:id'])
   @ApiOperation({
     operationId: 'getAdminRefundDetail',
-    summary: 'Xem chi tiết giao dịch hoàn tiền, khấu trừ cọc & VietQR PayOS (Admin Refund Detail)',
+    summary: 'Xem chi tiết giao dịch hoàn mô phỏng VNPay Sandbox (Admin Refund Detail)',
     description: `Chi tiết refund mô phỏng của payment VNPay SANDBOX. Booking tự hoàn khi hủy; API admin dùng kiểm thử/phục hồi: POST /api/v1/admin/payment-refunds/:refundId/sandbox-simulate-settlement. Không chứng minh tiền thật đã về tài khoản.`,
   })
   @ApiParam({

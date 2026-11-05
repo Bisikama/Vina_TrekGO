@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
+import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { rentalApi } from "@/features/rentals/api";
 import { rentalReviewApi, type ProductReviewList } from "@/features/rentals/review-api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
@@ -171,14 +172,7 @@ export default function RentalProductDetailScreen() {
             </Text>
             {product.sku ? <Text style={styles.sku}>SKU: {product.sku}</Text> : null}
             {product.grade ? (
-              <Text
-                style={[
-                  styles.gradeBadge,
-                  product.grade === "GOOD_USED" && styles.gradeBadgeUsed,
-                ]}
-              >
-                {product.grade === "LIKE_NEW" ? "Như mới" : "Sử dụng tốt"}
-              </Text>
+              <GradeBadge grade={product.grade} style={styles.gradeBadge} />
             ) : null}
           </View>
           {(product.imageUrls?.length ?? 0) > 1 && (
@@ -623,19 +617,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   depositRatio: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
-  gradeBadgeUsed: { backgroundColor: "#FFF6E0", color: "#8A5A00" },
-  gradeBadge: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.92)",
-    color: Colors.primaryDark,
-    fontSize: 10,
-    fontWeight: "800",
-  },
+  gradeBadge: { marginTop: 6 },
   sectionCard: {
     padding: 16,
     borderRadius: Radius.lg,

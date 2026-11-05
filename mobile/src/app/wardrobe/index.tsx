@@ -227,12 +227,12 @@ export default function WardrobeScreen() {
         contentContainerStyle={styles.content}
       >
         <View style={styles.actionGrid}>
-          <ActionButton icon="sparkles-outline" label={aiBusy === "IMAGE" ? "Đang phân tích..." : "Ảnh tem bằng AI"} disabled={full || Boolean(aiBusy)} onPress={() => void analyzeImage()} />
-          <ActionButton icon="link-outline" label={aiBusy === "LINK" ? "Đang đọc link..." : "Dán link sản phẩm"} disabled={full || Boolean(aiBusy)} onPress={() => setLinkOpen(true)} />
-          <ActionButton icon="ribbon-outline" label="Danh mục đã duyệt" disabled={full || Boolean(aiBusy)} onPress={() => setCatalogOpen(true)} />
-          <ActionButton icon="add-circle-outline" label="Nhập tay" primary disabled={full} onPress={() => setEditor({})} />
+          <ActionButton icon="sparkles-outline" label={aiBusy === "IMAGE" ? "Đang đọc ảnh..." : "Chụp nhãn"} disabled={full || Boolean(aiBusy)} onPress={() => void analyzeImage()} />
+          <ActionButton icon="link-outline" label={aiBusy === "LINK" ? "Đang đọc link..." : "Từ đường dẫn"} disabled={full || Boolean(aiBusy)} onPress={() => setLinkOpen(true)} />
+          <ActionButton icon="ribbon-outline" label="Chọn có sẵn" disabled={full || Boolean(aiBusy)} onPress={() => setCatalogOpen(true)} />
+          <ActionButton icon="add-circle-outline" label="Tự nhập" primary disabled={full} onPress={() => setEditor({})} />
         </View>
-        <Text style={styles.quotaNote}>✦ AI tối đa 20 lượt trích xuất/ngày · tủ tối đa {MAX_ITEMS} món</Text>
+        <Text style={styles.quotaNote}>Đọc ảnh và đường dẫn tự động: tối đa 20 lượt/ngày · tủ tối đa {MAX_ITEMS} món</Text>
 
         {aiBusy ? (
           <View style={styles.progressCard}>
@@ -268,8 +268,8 @@ export default function WardrobeScreen() {
           <StateCard
             icon="bag-add-outline"
             title={items.length ? "Không có món thuộc loại này" : "Tủ đồ đang trống"}
-            description={items.length ? "Chọn loại khác để xem." : "Thêm món đầu tiên bằng ảnh AI, link sản phẩm, danh mục đã duyệt hoặc nhập tay."}
-            actionLabel={items.length ? "Xem tất cả" : "Nhập tay"}
+            description={items.length ? "Chọn loại khác để xem." : "Thêm món đầu tiên bằng cách chụp nhãn, dán đường dẫn, chọn có sẵn hoặc tự nhập."}
+            actionLabel={items.length ? "Xem tất cả" : "Tự nhập"}
             onAction={() => (items.length ? setFilter("ALL") : setEditor({}))}
           />
         ) : (
@@ -335,15 +335,15 @@ function Banner({ tone, text, onClose }: { tone: "warn" | "error"; text: string;
 function CapabilityPanel({ capabilities, onOpenAdvisor }: { capabilities: GearCapabilities | null; onOpenAdvisor: () => void }) {
   const [open, setOpen] = useState(false);
   const rows: { label: string; status?: GearCapabilityStatus; hint: string; onHint?: () => void }[] = [
-    { label: "Đọc từ ảnh tem/mác", status: capabilities?.imageExtraction, hint: "Dùng nút “Ảnh tem bằng AI” ở trên" },
-    { label: "Đọc từ link sản phẩm", status: capabilities?.linkExtraction, hint: "Dùng nút “Dán link sản phẩm” ở trên" },
+    { label: "Đọc từ ảnh tem/mác", status: capabilities?.imageExtraction, hint: "Nút “Chụp nhãn” ở trên" },
+    { label: "Đọc từ đường dẫn", status: capabilities?.linkExtraction, hint: "Nút “Từ đường dẫn” ở trên" },
     { label: "Tư vấn theo bộ quy tắc", status: capabilities?.ruleBasedAdvice, hint: "Dùng trong Kế hoạch đồ ›", onHint: onOpenAdvisor },
     { label: "Tư vấn bổ sung bằng AI", status: capabilities?.aiAdvice, hint: "Trong Kế hoạch đồ → phương án thuê ›", onHint: onOpenAdvisor },
   ];
   return (
     <View style={styles.panel}>
       <TouchableOpacity style={styles.panelHead} onPress={() => setOpen((value) => !value)}>
-        <Text style={styles.panelTitle}>Cách TrekGo đọc thông số (AI là tuỳ chọn)</Text>
+        <Text style={styles.panelTitle}>Mẹo thêm đồ nhanh và đúng thông số</Text>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={Colors.onSurfaceVariant} />
       </TouchableOpacity>
       {open ? (
@@ -412,7 +412,7 @@ function GearCard({ item, onPress }: { item: UserGearItem; onPress: () => void }
           ))}
         </View>
       ) : (
-        <Text style={styles.missingStats}>⚠ Chưa có thông số kỹ thuật · chạm để bổ sung</Text>
+        <Text style={styles.missingStats}>Chưa có thông số kỹ thuật · chạm để bổ sung</Text>
       )}
     </TouchableOpacity>
   );
@@ -547,7 +547,7 @@ function GearEditorModal({
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 20 }}>
             {manualEntry ? <Text style={styles.draftNote}>{manualEntry.messageVi} Bạn có thể nhập tay các thông số.</Text> : null}
             {context.draft?.extractedData._cacheHit ? <Text style={styles.hint}>Dùng lại kết quả đọc trước đó, không tính thêm lượt AI.</Text> : null}
-            {warnings.map((warning) => <Text key={warning} style={styles.draftNote}>⚠ {warning}</Text>)}
+            {warnings.map((warning) => <Text key={warning} style={styles.draftNote}>{warning}</Text>)}
             {context.draft ? <Text style={styles.hint}>AI chỉ gợi ý. Hãy kiểm tra và sửa trước khi lưu.</Text> : null}
 
             <Text style={styles.fieldLabel}>Tên món đồ</Text>
@@ -628,8 +628,8 @@ function LinkModal({ visible, busy, onClose, onSubmit }: { visible: boolean; bus
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.centerBackdrop}>
         <View style={styles.dialog}>
-          <Text style={styles.modalTitle}>Nạp thông số từ link</Text>
-          <Text style={styles.hint}>Dán đường dẫn trang sản phẩm có bảng thông số. Bạn sẽ kiểm tra bản nháp trước khi lưu.</Text>
+          <Text style={styles.modalTitle}>Đọc từ đường dẫn</Text>
+          <Text style={styles.hint}>Dán một đường dẫn sản phẩm trekking. Bạn luôn được xem và sửa bản nháp trước khi lưu.</Text>
           <TextInput value={url} onChangeText={setUrl} autoCapitalize="none" keyboardType="url" placeholder="https://..." placeholderTextColor={Colors.onSurfaceMuted} style={[styles.input, { marginTop: 14 }]} />
           <View style={styles.dialogActions}>
             <TouchableOpacity style={styles.ghostButton} onPress={onClose}><Text style={styles.ghostButtonText}>Huỷ</Text></TouchableOpacity>
@@ -898,14 +898,14 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
   headerCopy: { flex: 1 },
   headerButton: { width: 42, height: 42, borderRadius: Radius.full, backgroundColor: Colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center" },
-  counter: { color: Colors.primaryDark, fontSize: 13, fontWeight: "800" },
-  eyebrow: { color: Colors.primaryDark, fontSize: 10, fontWeight: "700", letterSpacing: 0.7 },
-  title: { marginTop: 2, color: Colors.onSurface, fontSize: 22, fontWeight: "800" },
+  counter: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
+  eyebrow: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600", letterSpacing: 0.7 },
+  title: { marginTop: 2, color: Colors.onSurface, fontSize: 22, fontWeight: "600" },
   content: { padding: 16, paddingBottom: 48 },
   actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   actionButton: { flexBasis: "48%", flexGrow: 1, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.primaryNeutral, backgroundColor: Colors.surfaceContainerLowest },
   actionButtonPrimary: { borderColor: Colors.primaryDark, backgroundColor: Colors.primaryDark },
-  actionText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "700" },
+  actionText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },
   actionTextPrimary: { color: Colors.onPrimary },
   quotaNote: { marginTop: 8, color: Colors.onSurfaceMuted, fontSize: 10 },
   progressCard: { marginTop: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
@@ -916,16 +916,16 @@ const styles = StyleSheet.create({
   bannerText: { flex: 1, color: "#7A4B00", fontSize: 12, lineHeight: 17 },
   panel: { marginTop: 14, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, backgroundColor: Colors.surfaceContainerLowest },
   panelHead: { padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  panelTitle: { flex: 1, color: Colors.onSurface, fontSize: 13, fontWeight: "800" },
+  panelTitle: { flex: 1, color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
   panelBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
   capabilityRow: { padding: 10, gap: 4, borderRadius: Radius.md, backgroundColor: Colors.surface },
   capabilityHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  capabilityLabel: { flex: 1, color: Colors.onSurface, fontSize: 12, fontWeight: "700" },
+  capabilityLabel: { flex: 1, color: Colors.onSurface, fontSize: 12, fontWeight: "600" },
   capabilityState: { flexDirection: "row", alignItems: "center", gap: 5 },
   capabilityStateText: { color: Colors.onSurfaceVariant, fontSize: 11 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   hint: { color: Colors.onSurfaceVariant, fontSize: 11, lineHeight: 16 },
-  link: { color: Colors.primaryDark, fontWeight: "700" },
+  link: { color: Colors.primaryDark, fontWeight: "600" },
   errorText: { color: Colors.error, fontSize: 12 },
   filterRow: { marginTop: 16, flexGrow: 0 },
   chipRow: { gap: 8, paddingRight: 20 },
@@ -940,44 +940,44 @@ const styles = StyleSheet.create({
   itemTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   itemIcon: { width: 52, height: 52, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
   itemPhoto: { width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainer },
-  itemCategory: { color: Colors.primaryDark, fontSize: 9, fontWeight: "700", letterSpacing: 0.5 },
-  itemName: { marginTop: 3, color: Colors.onSurface, fontSize: 14, fontWeight: "700" },
+  itemCategory: { color: Colors.primaryDark, fontSize: 9, fontWeight: "600", letterSpacing: 0.5 },
+  itemName: { marginTop: 3, color: Colors.onSurface, fontSize: 14, fontWeight: "600" },
   itemMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 11 },
   statRow: { flexDirection: "row", gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer },
   stat: { flex: 1, minWidth: 0 },
-  statLabel: { color: Colors.onSurfaceMuted, fontSize: 9, fontWeight: "700" },
-  statValue: { marginTop: 2, color: Colors.onSurface, fontSize: 12, fontWeight: "800" },
+  statLabel: { color: Colors.onSurfaceMuted, fontSize: 9, fontWeight: "600" },
+  statValue: { marginTop: 2, color: Colors.onSurface, fontSize: 12, fontWeight: "600" },
   statSource: { marginTop: 1, color: Colors.onSurfaceMuted, fontSize: 9 },
   missingStats: { color: "#8A5A00", fontSize: 11 },
   stateCard: { marginTop: 18, padding: 24, alignItems: "center", borderRadius: Radius.xl, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
   stateIcon: { width: 66, height: 66, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.primaryPale },
-  stateTitle: { marginTop: 15, color: Colors.onSurface, fontSize: 17, fontWeight: "800" },
+  stateTitle: { marginTop: 15, color: Colors.onSurface, fontSize: 17, fontWeight: "600" },
   stateDescription: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18, textAlign: "center" },
   stateButton: { marginTop: 18, paddingHorizontal: 22, paddingVertical: 12, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
-  stateButtonText: { color: Colors.onPrimary, fontSize: 12, fontWeight: "700" },
+  stateButtonText: { color: Colors.onPrimary, fontSize: 12, fontWeight: "600" },
   modalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(14,15,12,0.45)" },
   modalCard: { maxHeight: "92%", padding: 20, paddingBottom: 24, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, backgroundColor: Colors.surface },
   modalHandle: { width: 42, height: 4, alignSelf: "center", marginBottom: 14, borderRadius: Radius.full, backgroundColor: Colors.surfaceContainerHighest },
   modalTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6 },
-  modalTitle: { marginTop: 2, color: Colors.onSurface, fontSize: 20, fontWeight: "800" },
+  modalTitle: { marginTop: 2, color: Colors.onSurface, fontSize: 20, fontWeight: "600" },
   draftNote: { marginTop: 8, padding: 10, borderRadius: Radius.md, backgroundColor: "#FFF6E0", color: "#7A4B00", fontSize: 12, lineHeight: 17 },
-  fieldLabel: { marginTop: 16, marginBottom: 7, color: Colors.onSurface, fontSize: 12, fontWeight: "700" },
+  fieldLabel: { marginTop: 16, marginBottom: 7, color: Colors.onSurface, fontSize: 12, fontWeight: "600" },
   input: { minHeight: 46, paddingHorizontal: 14, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: Radius.md, color: Colors.onSurface, backgroundColor: Colors.surfaceContainerLowest },
   attrRow: { marginTop: 10, gap: 6 },
   attrHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   attrLabel: { color: Colors.onSurface, fontSize: 12 },
-  attrBadge: { color: Colors.primaryDark, fontSize: 10, fontWeight: "700" },
+  attrBadge: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
   saveButton: { minHeight: 50, marginTop: 22, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
-  saveButtonText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "800" },
+  saveButtonText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "600" },
   deleteLink: { marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  deleteLinkText: { color: Colors.error, fontSize: 12, fontWeight: "700" },
+  deleteLinkText: { color: Colors.error, fontSize: 12, fontWeight: "600" },
   centerBackdrop: { flex: 1, padding: 24, justifyContent: "center", backgroundColor: "rgba(14,15,12,0.45)" },
   dialog: { padding: 20, borderRadius: Radius.xl, backgroundColor: Colors.surface, gap: 6 },
   dialogActions: { marginTop: 16, flexDirection: "row", justifyContent: "flex-end", gap: 10 },
   ghostButton: { paddingHorizontal: 16, paddingVertical: 10, alignItems: "center", borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.surfaceContainerHighest },
-  ghostButtonText: { color: Colors.onSurface, fontSize: 12, fontWeight: "700" },
+  ghostButtonText: { color: Colors.onSurface, fontSize: 12, fontWeight: "600" },
   smallPrimary: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
-  smallPrimaryText: { color: Colors.onPrimary, fontSize: 12, fontWeight: "800" },
+  smallPrimaryText: { color: Colors.onPrimary, fontSize: 12, fontWeight: "600" },
   searchRow: { marginTop: 8, flexDirection: "row", gap: 8 },
   searchButton: { width: 46, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryDark },
   catalogCard: { padding: 12, gap: 2, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, backgroundColor: Colors.surfaceContainerLowest },
@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
   tripCard: { padding: 12, gap: 6, borderRadius: Radius.md, backgroundColor: Colors.surface },
   tripItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   tripItemName: { flex: 1, color: Colors.onSurface, fontSize: 12 },
-  tripStatus: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full, fontSize: 10, fontWeight: "700", overflow: "hidden" },
+  tripStatus: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full, fontSize: 10, fontWeight: "600", overflow: "hidden" },
   toneOk: { color: "#1E6B3F", backgroundColor: "#E2F4E8" },
   toneWarn: { color: "#8C1D18", backgroundColor: "#FDE7E5" },
   toneInfo: { color: "#7A4B00", backgroundColor: "#FFF3D6" },

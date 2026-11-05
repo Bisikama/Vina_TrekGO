@@ -68,6 +68,7 @@
       "estimated_duration_minutes": 240,
       "route_geojson": {
         "type": "LineString",
+        "terrain": ["mountain", "rocky"],
         "coordinates": [
           [
             107.118466,

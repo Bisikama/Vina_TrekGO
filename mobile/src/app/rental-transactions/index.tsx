@@ -27,62 +27,76 @@ export default function RentalTransactionsScreen() {
   const router = useRouter();
   const { accessToken } = useAuth();
   const [transactions, setTransactions] = useState<RentalTransaction[]>([]);
-  const [ordersById, setOrdersById] = useState<Record<string, RentalOrderSummary>>({});
+  const [ordersById, setOrdersById] = useState<
+    Record<string, RentalOrderSummary>
+  >({});
   const [kind, setKind] = useState<KindFilter>("ALL");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string>();
 
-  const loadTransactions = useCallback(async (isRefresh = false) => {
-    if (!accessToken) {
-      setError("Phiên đăng nhập không hợp lệ.");
-      setLoading(false);
-      return;
-    }
-
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(undefined);
-
-    try {
-      const [transactionResult, orderResult] = await Promise.allSettled([
-        rentalTransactionsApi.list(accessToken, { page: 1, pageSize: 100 }),
-        rentalApi.listOrders(accessToken, { page: 1, pageSize: 100 }),
-      ]);
-
-      if (transactionResult.status === "rejected") throw transactionResult.reason;
-      setTransactions(transactionResult.value.items);
-
-      if (orderResult.status === "fulfilled") {
-        setOrdersById(
-          Object.fromEntries(orderResult.value.items.map((order) => [order.id, order])),
-        );
+  const loadTransactions = useCallback(
+    async (isRefresh = false) => {
+      if (!accessToken) {
+        setError("Phiên đăng nhập không hợp lệ.");
+        setLoading(false);
+        return;
       }
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Không tải được lịch sử giao dịch.",
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [accessToken]);
+
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError(undefined);
+
+      try {
+        const [transactionResult, orderResult] = await Promise.allSettled([
+          rentalTransactionsApi.list(accessToken, { page: 1, pageSize: 100 }),
+          rentalApi.listOrders(accessToken, { page: 1, pageSize: 100 }),
+        ]);
+
+        if (transactionResult.status === "rejected")
+          throw transactionResult.reason;
+        setTransactions(transactionResult.value.items);
+
+        if (orderResult.status === "fulfilled") {
+          setOrdersById(
+            Object.fromEntries(
+              orderResult.value.items.map((order) => [order.id, order]),
+            ),
+          );
+        }
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Không tải được lịch sử giao dịch.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [accessToken],
+  );
 
   useEffect(() => {
     void loadTransactions();
   }, [loadTransactions]);
 
   const visibleTransactions = useMemo(
-    () => transactions.filter((transaction) => kind === "ALL" || transaction.kind === kind),
+    () =>
+      transactions.filter(
+        (transaction) => kind === "ALL" || transaction.kind === kind,
+      ),
     [kind, transactions],
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={21} color={Colors.onSurface} />
         </TouchableOpacity>
         <View style={styles.flexOne}>
@@ -102,16 +116,32 @@ export default function RentalTransactionsScreen() {
         }
       >
         <View style={styles.infoCard}>
-          <Ionicons name="shield-checkmark-outline" size={22} color={Colors.primaryDark} />
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={22}
+            color={Colors.primaryDark}
+          />
           <Text style={styles.infoText}>
             Chỉ hiển thị thanh toán và hoàn tiền thuộc dịch vụ thuê thiết bị.
           </Text>
         </View>
 
         <View style={styles.filters}>
-          <FilterButton label="Tất cả" active={kind === "ALL"} onPress={() => setKind("ALL")} />
-          <FilterButton label="Thanh toán" active={kind === "PAYMENT"} onPress={() => setKind("PAYMENT")} />
-          <FilterButton label="Hoàn tiền" active={kind === "REFUND"} onPress={() => setKind("REFUND")} />
+          <FilterButton
+            label="Tất cả"
+            active={kind === "ALL"}
+            onPress={() => setKind("ALL")}
+          />
+          <FilterButton
+            label="Thanh toán"
+            active={kind === "PAYMENT"}
+            onPress={() => setKind("PAYMENT")}
+          />
+          <FilterButton
+            label="Hoàn tiền"
+            active={kind === "REFUND"}
+            onPress={() => setKind("REFUND")}
+          />
         </View>
 
         {loading ? (
@@ -131,7 +161,11 @@ export default function RentalTransactionsScreen() {
           <StateCard
             icon="receipt-outline"
             title="Chưa có giao dịch"
-            description={kind === "ALL" ? "Các khoản thanh toán và hoàn tiền thuê thiết bị sẽ xuất hiện tại đây." : "Không có giao dịch phù hợp với bộ lọc này."}
+            description={
+              kind === "ALL"
+                ? "Các khoản thanh toán và hoàn tiền thuê thiết bị sẽ xuất hiện tại đây."
+                : "Không có giao dịch phù hợp với bộ lọc này."
+            }
           />
         ) : (
           <View style={styles.list}>
@@ -139,7 +173,11 @@ export default function RentalTransactionsScreen() {
               <TransactionCard
                 key={transaction.id}
                 transaction={transaction}
-                order={transaction.orderId ? ordersById[transaction.orderId] : undefined}
+                order={
+                  transaction.orderId
+                    ? ordersById[transaction.orderId]
+                    : undefined
+                }
               />
             ))}
           </View>
@@ -157,8 +195,20 @@ function TransactionCard({
   order?: RentalOrderSummary;
 }) {
   const isRefund = transaction.kind === "REFUND";
-  const status = transactionStatus(transaction.status);
-  const effective = transaction.status === "SUCCEEDED";
+  const simulated =
+    isRefund && transaction.confirmationSource === "SANDBOX_SIMULATION";
+  const status = simulated
+    ? {
+        label: "Đã Hoàn",
+        color: "#8A5A00",
+        backgroundColor: "#FFF1C2",
+      }
+    : transactionStatus(transaction.status);
+  const showRefundCredit =
+    transaction.status === "SUCCEEDED" &&
+    (simulated ||
+      !transaction.financialEffect ||
+      transaction.financialEffect === "CREDIT");
 
   return (
     <View style={styles.transactionCard}>
@@ -171,21 +221,43 @@ function TransactionCard({
       </View>
       <View style={styles.flexOne}>
         <View style={styles.transactionTopRow}>
-          <Text style={styles.transactionTitle}>{isRefund ? "Hoàn tiền cọc" : "Thanh toán đơn thuê"}</Text>
-          <Text style={[styles.amount, isRefund && effective && styles.refundAmount]}>
-            {isRefund && effective ? "+" : isRefund ? "" : "−"}{formatCurrency(transaction.amount, transaction.currency)}
+          <Text style={styles.transactionTitle}>
+            {isRefund ? "Hoàn tiền thuê" : "Thanh toán đơn thuê"}
+          </Text>
+          <Text
+            style={[
+              styles.amount,
+              isRefund && showRefundCredit && styles.refundAmount,
+            ]}
+          >
+            {isRefund && showRefundCredit ? "+" : isRefund ? "" : "−"}
+            {formatCurrency(transaction.amount, transaction.currency)}
           </Text>
         </View>
+        {simulated && <Text style={styles.simulationNote}>Hoàn Tiền</Text>}
         <View style={styles.metaRow}>
-          <View style={[styles.statusBadge, { backgroundColor: status.backgroundColor }]}>
-            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: status.backgroundColor },
+            ]}
+          >
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.label}
+            </Text>
           </View>
-          <Text style={styles.dateText}>{formatDate(transaction.createdAt)}</Text>
+          <Text style={styles.dateText}>
+            {formatDate(transaction.createdAt)}
+          </Text>
         </View>
         {order ? (
           <View style={styles.tripInfo}>
             <View style={styles.tripTitleRow}>
-              <Ionicons name="map-outline" size={14} color={Colors.primaryDark} />
+              <Ionicons
+                name="map-outline"
+                size={14}
+                color={Colors.primaryDark}
+              />
               <Text style={styles.tripTitle} numberOfLines={1}>
                 {order.trip?.title || "Chuyến đi của bạn"}
               </Text>
@@ -198,23 +270,48 @@ function TransactionCard({
             </Text>
           </View>
         ) : transaction.purpose ? (
-          <Text style={styles.detailText}>{purposeLabel(transaction.purpose)}</Text>
+          <Text style={styles.detailText}>
+            {purposeLabel(transaction.purpose)}
+          </Text>
         ) : null}
-        {transaction.reference ? <Text style={styles.referenceText}>Mã GD: {shortReference(transaction.reference)}</Text> : null}
+        {transaction.reference ? (
+          <Text style={styles.referenceText}>
+            Mã GD: {shortReference(transaction.reference)}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
 }
 
-function FilterButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function FilterButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
-    <TouchableOpacity style={[styles.filterButton, active && styles.filterButtonActive]} onPress={onPress}>
-      <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
+    <TouchableOpacity
+      style={[styles.filterButton, active && styles.filterButtonActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.filterText, active && styles.filterTextActive]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
 
-function StateCard({ icon, title, description, actionLabel, onAction }: {
+function StateCard({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
@@ -238,15 +335,48 @@ function StateCard({ icon, title, description, actionLabel, onAction }: {
 }
 
 function transactionStatus(status: string) {
-  const statuses: Record<string, { label: string; color: string; backgroundColor: string }> = {
-    SUCCEEDED: { label: "Thành công", color: "#226600", backgroundColor: "#E0F5D3" },
-    PENDING: { label: "Đang chờ", color: "#8A5A00", backgroundColor: "#FFF1C2" },
-    PROCESSING: { label: "Đang xử lý", color: "#245F73", backgroundColor: "#DDF3F8" },
-    FAILED: { label: "Thất bại", color: Colors.onErrorContainer, backgroundColor: Colors.errorContainer },
-    CANCELLED: { label: "Đã hủy", color: Colors.onErrorContainer, backgroundColor: Colors.errorContainer },
-    EXPIRED: { label: "Hết hạn", color: Colors.onSurfaceVariant, backgroundColor: Colors.surfaceContainer },
+  const statuses: Record<
+    string,
+    { label: string; color: string; backgroundColor: string }
+  > = {
+    SUCCEEDED: {
+      label: "Thành công",
+      color: "#226600",
+      backgroundColor: "#E0F5D3",
+    },
+    PENDING: {
+      label: "Đang chờ",
+      color: "#8A5A00",
+      backgroundColor: "#FFF1C2",
+    },
+    PROCESSING: {
+      label: "Đang xử lý",
+      color: "#245F73",
+      backgroundColor: "#DDF3F8",
+    },
+    FAILED: {
+      label: "Thất bại",
+      color: Colors.onErrorContainer,
+      backgroundColor: Colors.errorContainer,
+    },
+    CANCELLED: {
+      label: "Đã hủy",
+      color: Colors.onErrorContainer,
+      backgroundColor: Colors.errorContainer,
+    },
+    EXPIRED: {
+      label: "Hết hạn",
+      color: Colors.onSurfaceVariant,
+      backgroundColor: Colors.surfaceContainer,
+    },
   };
-  return statuses[status] || { label: status.replaceAll("_", " "), color: Colors.onSurfaceVariant, backgroundColor: Colors.surfaceContainer };
+  return (
+    statuses[status] || {
+      label: status.replaceAll("_", " "),
+      color: Colors.onSurfaceVariant,
+      backgroundColor: Colors.surfaceContainer,
+    }
+  );
 }
 
 function purposeLabel(value: string) {
@@ -296,41 +426,166 @@ function formatDate(value: string) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: Colors.surface },
   flexOne: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
-  headerButton: { width: 42, height: 42, borderRadius: Radius.full, backgroundColor: Colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center" },
-  eyebrow: { color: Colors.primaryDark, fontSize: 10, fontWeight: "700", letterSpacing: 0.7 },
-  title: { marginTop: 2, color: Colors.onSurface, fontSize: 22, fontWeight: "800" },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerButton: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceContainerLowest,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eyebrow: {
+    color: Colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+  title: {
+    marginTop: 2,
+    color: Colors.onSurface,
+    fontSize: 22,
+    fontWeight: "800",
+  },
   content: { padding: 16, paddingBottom: 48 },
-  infoCard: { padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10, borderRadius: Radius.lg, backgroundColor: Colors.primaryPale, borderWidth: 1, borderColor: Colors.primaryNeutral },
-  infoText: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18 },
+  infoCard: {
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryPale,
+    borderWidth: 1,
+    borderColor: Colors.primaryNeutral,
+  },
+  infoText: {
+    flex: 1,
+    color: Colors.onSurfaceVariant,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   filters: { marginTop: 14, flexDirection: "row", gap: 8 },
-  filterButton: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.surfaceContainer },
+  filterButton: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceContainer,
+  },
   filterButtonActive: { backgroundColor: Colors.primaryContainer },
-  filterText: { color: Colors.onSurfaceVariant, fontSize: 11, fontWeight: "600" },
+  filterText: {
+    color: Colors.onSurfaceVariant,
+    fontSize: 11,
+    fontWeight: "600",
+  },
   filterTextActive: { color: Colors.onPrimary, fontWeight: "700" },
   centerState: { paddingVertical: 70, alignItems: "center", gap: 12 },
   list: { marginTop: 16, gap: 10 },
-  transactionCard: { padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 12, borderRadius: Radius.lg, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
-  transactionIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: "#FFF1C2" },
+  transactionCard: {
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surfaceContainerLowest,
+    ...Shadows.card,
+  },
+  transactionIcon: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: "#FFF1C2",
+  },
   refundIcon: { backgroundColor: Colors.primaryPale },
   transactionTopRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  transactionTitle: { flex: 1, color: Colors.onSurface, fontSize: 13, fontWeight: "700" },
+  transactionTitle: {
+    flex: 1,
+    color: Colors.onSurface,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   amount: { color: Colors.onSurface, fontSize: 14, fontWeight: "800" },
   refundAmount: { color: Colors.primaryDark },
   metaRow: { marginTop: 7, flexDirection: "row", alignItems: "center", gap: 8 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.full },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
   statusText: { fontSize: 9, fontWeight: "700" },
   dateText: { flex: 1, color: Colors.onSurfaceMuted, fontSize: 10 },
   detailText: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 11 },
-  tripInfo: { marginTop: 9, paddingTop: 9, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer },
+  simulationNote: {
+    marginTop: 7,
+    color: "#8A5A00",
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  tripInfo: {
+    marginTop: 9,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceContainer,
+  },
   tripTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  tripTitle: { flex: 1, color: Colors.onSurface, fontSize: 11, fontWeight: "700" },
+  tripTitle: {
+    flex: 1,
+    color: Colors.onSurface,
+    fontSize: 11,
+    fontWeight: "700",
+  },
   tripMeta: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9 },
   referenceText: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9 },
-  stateCard: { marginTop: 24, padding: 24, alignItems: "center", borderRadius: Radius.xl, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
-  stateIcon: { width: 66, height: 66, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.primaryPale },
-  stateTitle: { marginTop: 15, color: Colors.onSurface, fontSize: 17, fontWeight: "800" },
-  stateDescription: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18, textAlign: "center" },
-  stateButton: { marginTop: 16, minHeight: 42, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", borderRadius: Radius.full, backgroundColor: Colors.primaryDark },
-  stateButtonText: { color: Colors.onPrimaryDark, fontSize: 12, fontWeight: "700" },
+  stateCard: {
+    marginTop: 24,
+    padding: 24,
+    alignItems: "center",
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.surfaceContainerLowest,
+    ...Shadows.card,
+  },
+  stateIcon: {
+    width: 66,
+    height: 66,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryPale,
+  },
+  stateTitle: {
+    marginTop: 15,
+    color: Colors.onSurface,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  stateDescription: {
+    marginTop: 7,
+    color: Colors.onSurfaceVariant,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  stateButton: {
+    marginTop: 16,
+    minHeight: 42,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryDark,
+  },
+  stateButtonText: {
+    color: Colors.onPrimaryDark,
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

@@ -5,6 +5,8 @@ import {
   seedEquipmentUnits,
 } from '../prisma/seeds/equipment-unit.seed'
 import { RENTAL_PRODUCT_SEEDS, assertGradeSeedPairs, rentalSeedImage, seedRentalProducts } from '../prisma/seeds/rental-product.seed'
+import { seedProductTechnicalProfiles } from '../prisma/seeds/product-technical-profile.seed'
+import { solveDeterministicPlannerOption } from '../src/modules/gear/domain/pure-planner'
 
 describe('Local rental catalog replacement', () => {
   const originalDirectUrl = process.env.DIRECT_URL
@@ -45,6 +47,36 @@ describe('Local rental catalog replacement', () => {
 describe('Rental product grade seed', () => {
   const graded = RENTAL_PRODUCT_SEEDS.filter((p) => p.gradeGroupId)
 
+  it('seed balo rẻ và balo nhẹ tạo ra hai lựa chọn khác nhau', async () => {
+    const products = ['PACK-003-GU', 'PACK-004-GU'].map((sku) => {
+      const seed = RENTAL_PRODUCT_SEEDS.find((product) => product.sku === sku)!
+      return { ...seed, id: sku, category: { slug: seed.categorySlug }, technicalProfile: null }
+    })
+    const created: any[] = []
+    const prisma = {
+      rentalProduct: { findMany: jest.fn().mockResolvedValue(products) },
+      productTechnicalProfile: { create: jest.fn(async ({ data }) => { created.push(data) }) },
+    }
+    await seedProductTechnicalProfiles(prisma as unknown as PrismaClient)
+    const candidates = products.map((product) => {
+      const profile = created.find((entry) => entry.productId === product.id)
+      return {
+        id: product.id, name: product.name, category: 'BACKPACK' as const,
+        dailyPrice: product.dailyPrice, rentalFee: product.dailyPrice, deposit: product.depositValue,
+        availableCount: 5, weight_g: profile.attributes.weight_g, attributes: profile.attributes,
+      }
+    })
+    const input = {
+      ownedAssignments: [],
+      uncoveredNeeds: [{ requirementId: 'pack', category: 'BACKPACK' as const, priority: 'REQUIRED' as const, quantity: 1, constraints: [] }],
+      candidatesPerCategory: new Map([['BACKPACK', candidates]]),
+      tripContext: { temp_min_c: 20, temp_max_c: 30, temp_min_night_c: 20, rain_prob_pct: 60, difficulty: 3, days: 1, terrain: ['rocky'] },
+    }
+    expect(solveDeterministicPlannerOption(input, 'MIN_RENTAL_FEE').rentalLines[0].productId).toBe('PACK-003-GU')
+    expect(solveDeterministicPlannerOption(input, 'MIN_KNOWN_TOTAL_WEIGHT').rentalLines[0].productId).toBe('PACK-004-GU')
+    expect(candidates.map((candidate) => candidate.weight_g)).toEqual([750, 600])
+  })
+
   it('seeds complete LIKE_NEW / GOOD_USED pairs that satisfy the catalog grade rules', () => {
     expect(graded).toHaveLength(RENTAL_PRODUCT_SEEDS.length)
     expect(new Set(graded.map((product) => product.sku)).size).toBe(graded.length)
@@ -54,6 +86,9 @@ describe('Rental product grade seed', () => {
     for (const pair of groups.values()) {
       expect(pair).toHaveLength(2)
       expect(rentalSeedImage(pair[0].sku)).toBe(rentalSeedImage(pair[1].sku))
+    }
+    for (const product of graded) {
+      expect(product.description).toContain(product.grade === 'LIKE_NEW' ? 'Hạng Như mới' : 'Hạng Sử dụng tốt')
     }
   })
 

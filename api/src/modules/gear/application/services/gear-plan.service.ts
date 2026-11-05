@@ -980,10 +980,18 @@ export class GearPlanService {
         }
       }
 
+      const matchingProducts = products.filter((product) => {
+        const profileCat = (product.technicalProfile as any)?.category
+        if (profileCat && profileCat !== catKey) {
+          return false
+        }
+        return true
+      })
+
       // Kiểm sức chứa song song theo lô nhỏ (mỗi sản phẩm 2 query chỉ đọc) để không làm cạn connection pool.
       const candidateList: CandidateProduct[] = []
-      for (let i = 0; i < products.length; i += CAPACITY_CHECK_BATCH_SIZE) {
-        const batch = products.slice(i, i + CAPACITY_CHECK_BATCH_SIZE)
+      for (let i = 0; i < matchingProducts.length; i += CAPACITY_CHECK_BATCH_SIZE) {
+        const batch = matchingProducts.slice(i, i + CAPACITY_CHECK_BATCH_SIZE)
         candidateList.push(...(await Promise.all(batch.map(toCandidate))))
       }
 

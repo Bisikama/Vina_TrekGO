@@ -110,7 +110,7 @@ export class GearExtractionService {
    * B03 Quota Accounting: Enforces configurable extractions/user/day in Asia/Saigon timezone.
    * Cache-hits do NOT count toward this quota.
    */
-  async checkDailyQuota(userId: string): Promise<void> {
+  async getDailyQuota(userId: string): Promise<{ limit: number; used: number; remaining: number; resetAt: string; timezone: string }> {
     const dailyLimit = readGearRuntimeConfig().dailyQuota
     const startOfDay = getStartOfDaySaigon()
 
@@ -131,11 +131,21 @@ export class GearExtractionService {
       },
     })
 
-    const chargedCount = chargedDrafts.filter((d) => isChargedDraft(d, staleThreshold)).length
+    const used = chargedDrafts.filter((d) => isChargedDraft(d, staleThreshold)).length
+    return {
+      limit: dailyLimit,
+      used,
+      remaining: Math.max(0, dailyLimit - used),
+      resetAt: new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      timezone: 'Asia/Ho_Chi_Minh',
+    }
+  }
 
-    if (chargedCount >= dailyLimit) {
+  async checkDailyQuota(userId: string): Promise<void> {
+    const { used, limit } = await this.getDailyQuota(userId)
+    if (used >= limit) {
       throw AppError.fromCode(GEAR_ERROR_CODES.GEAR_EXTRACTION_QUOTA_EXCEEDED, {
-        message: `Bạn đã sử dụng hết hạn mức ${dailyLimit} lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.`,
+        message: `Bạn đã sử dụng hết hạn mức ${limit} lượt trích xuất hôm nay (múi giờ Asia/Saigon). Vui lòng thử lại vào ngày mai.`,
       })
     }
   }
