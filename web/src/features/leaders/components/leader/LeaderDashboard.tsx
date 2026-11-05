@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLeaderPublicTrips } from "../../hooks/useLeaderPublicTrips";
 import { apiClient } from "@/lib/axios";
 import { useAuthStore } from "@/features/auth";
+import { LeaderTripCancellation } from "./LeaderTripCancellation";
 
 function Metric({
   title,
@@ -58,7 +59,7 @@ export function LeaderDashboard() {
   const user = useAuthStore((state) => state.user);
   const displayName = user?.fullName || user?.email?.split("@")[0] || "Leader";
 
-  const { trips: apiTrips, isLoading } = useLeaderPublicTrips({ page: 1, pageSize: 20 });
+  const { trips: apiTrips, isLoading, refetch } = useLeaderPublicTrips({ page: 1, pageSize: 20 });
   const [slotsMap, setSlotsMap] = useState<Record<string, { capacity: number; remainingSlots: number }>>({});
 
   useEffect(() => {
@@ -219,6 +220,7 @@ export function LeaderDashboard() {
                 CLOSED: "Đã đóng",
                 IN_PROGRESS: "Đang diễn ra",
                 COMPLETED: "Đã hoàn thành",
+                CANCEL_PENDING: "Chờ duyệt hủy",
                 CANCELLED: "Đã hủy",
               };
               const isNotOpenYet =
@@ -320,6 +322,7 @@ export function LeaderDashboard() {
                         </Link>
                       </>
                     )}
+                    <LeaderTripCancellation trip={trip} onRequested={() => { void refetch(); }} />
                   </div>
                 </article>
               );

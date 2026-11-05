@@ -35,7 +35,6 @@ export function BookingPaymentMethods({ options, value, onChange, disabled, load
         <span className="min-w-0 flex-1">
           <span className="block font-semibold text-[#1F2937]">{paymentGatewayLabels[option.gateway]}</span>
           <span className="mt-1 block text-xs leading-relaxed text-[#6B7280]">{descriptions[option.gateway]}</span>
-          {option.environment === 'SANDBOX' && <span className="mt-2 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Thử nghiệm Sandbox</span>}
         </span>
       </label>)}
     </fieldset>

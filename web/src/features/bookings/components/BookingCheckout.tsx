@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/features/auth';
 import { bookingApi, bookingError, dateTime, money, statusLabels } from '../booking.api';
@@ -12,12 +12,19 @@ import { BookingPaymentMethods, paymentGatewayLabels } from './BookingPaymentMet
 import { rememberPayosBookingCheckout } from '../payos-checkout';
 import { BookingSignIn } from './BookingSignIn';
 import { BookingCancellation } from './BookingCancellation';
+import { BookingRefunds } from './BookingRefunds';
+import type { CancelBookingResponse } from '../types/booking.types';
+import { isTripRegistrationPaused, needsTripCancellationRefresh, TripCancellationNotice } from './TripCancellationNotice';
+import { useRefreshOnReturn } from '../hooks/useRefreshOnReturn';
+import { REFUND_POLL_INTERVAL, REFUND_POLL_LIMIT } from '../refund.utils';
 
 const gatewayLabels: Record<string, string> = paymentGatewayLabels;
 
 export function BookingCheckout({ bookingId }: { bookingId: string }) {
   const { accessToken } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [cancellation, setCancellation] = useState<CancelBookingResponse | null>(null);
+  const currentCancellation = cancellation?.bookingId === bookingId ? cancellation : null;
   const { options, loading: optionsLoading, error: optionsError, retry: retryOptions } = useBookingPaymentOptions(Boolean(accessToken));
   const [gateway, setGateway] = useState<PaymentGateway>('vnpay');
   const selectedGateway = options.find((option) => option.gateway === gateway)?.gateway ?? options[0]?.gateway;
@@ -25,6 +32,8 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
   const [retry, setRetry] = useState(0);
+  const refreshOnReturn = useCallback(() => setRetry((value) => value + 1), []);
+  useRefreshOnReturn(refreshOnReturn, !!accessToken);
   const submitting = useRef(false);
 
   // States cho modal QR & lời mời vé
@@ -60,22 +69,27 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
   useEffect(() => {
     if (!accessToken) return;
     let active = true;
+    const controller = new AbortController();
+    let tripStatusReads = 0;
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
       try {
-        const next = await bookingApi.detail(bookingId);
+        const next = await bookingApi.detail(bookingId, controller.signal);
         if (!active) return;
         setBooking(next);
+        setError('');
         setExpired(new Date(next.expiresAt).getTime() <= Date.now());
-        if (next.status === 'PENDING_PAYMENT') timer = setTimeout(refresh, 3500);
+        if (needsTripCancellationRefresh(next)) {
+          if (++tripStatusReads < REFUND_POLL_LIMIT) timer = setTimeout(refresh, REFUND_POLL_INTERVAL);
+        } else if (next.status === 'PENDING_PAYMENT') timer = setTimeout(refresh, 3500);
       } catch (e) { if (active) setError(bookingError(e).message); }
     };
     void refresh();
-    return () => { active = false; clearTimeout(timer); };
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [accessToken, bookingId, retry]);
 
   const pay = async () => {
-    if (!booking || !selectedGateway || submitting.current) return;
+    if (!booking || !selectedGateway || submitting.current || isTripRegistrationPaused(booking.trip.status)) return;
     submitting.current = true;
     setBusy(true); setError('');
     try {
@@ -156,7 +170,7 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
   const payment = booking?.paymentSummary;
   const pending = !!payment && ['PENDING', 'PROCESSING'].includes(payment.status);
   const paid = payment?.status === 'SUCCEEDED';
-  const canPay = booking?.status === 'PENDING_PAYMENT' && !expired && !pending && !paid;
+  const canPay = booking?.status === 'PENDING_PAYMENT' && !expired && !pending && !paid && !isTripRegistrationPaused(booking.trip.status);
   
   // Xác nhận đơn: bao gồm cả khi bắt đầu check-in hoặc đã hoàn thành
   const confirmed = ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED'].includes(booking?.status ?? '');
@@ -202,7 +216,9 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
         <BookingSignIn />
       ) : (
         <>
-          {booking && ['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status) && <BookingCancellation bookingId={booking.id} onCancelled={() => { setRetry(v => v + 1); }} />}
+          {booking && <TripCancellationNotice status={booking.trip.status} bookingStatus={booking.status} onRefresh={refreshOnReturn} />}
+          {booking && ['PENDING_PAYMENT', 'CONFIRMED'].includes(booking.status) && !currentCancellation && <BookingCancellation bookingId={booking.id} onRefresh={() => setRetry(v => v + 1)} onCancelled={(result) => { setCancellation(result); setRetry(v => v + 1); }} />}
+          {booking && <BookingRefunds key={booking.id} bookingId={booking.id} booking={booking} cancellation={currentCancellation} />}
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50/90 p-4 text-xs font-medium text-red-700 shadow-xs">
               {error}
@@ -411,7 +427,7 @@ export function BookingCheckout({ bookingId }: { bookingId: string }) {
               )}
 
               {/* Phần thanh toán cho trạng thái PENDING */}
-              {!confirmed && (
+              {!confirmed && booking.status !== 'CANCELLED' && !currentCancellation && (
                 <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm border border-gray-100" aria-live="polite">
                   {!confirmed && paid && <p>{payment?.applicationStatus === 'REJECTED' ? 'Đã nhận thanh toán nhưng đặt chỗ không thể xác nhận. Vui lòng liên hệ hỗ trợ để kiểm tra giao dịch.' : 'Đã nhận thanh toán. Server đang kiểm tra và xác nhận đặt chỗ.'}</p>}
                   {pending && (

@@ -67,7 +67,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
 
   return <PageShell maxWidth="full" withTopOffset={false}>
     <PageHeader eyebrow="Quản trị · Booking & chuyến đi" title="Dòng tiền & giao dịch"
-      description="Theo dõi khoản thu và hoàn tiền từ đặt chỗ chuyến đi, mua quyền sử dụng cung đường."
+      description="Theo dõi khoản thu, khoản hoàn và trạng thái xử lý theo nguồn giao dịch."
       actions={<Button variant="outline" loading={refreshing} onClick={() => void Promise.allSettled([summary.mutate(), ledger.mutate()])}>Làm mới dữ liệu</Button>} />
 
     <SurfaceCard>
@@ -78,7 +78,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
             <option value="BOOKING">Đặt chỗ chuyến đi</option><option value="TRAIL_ACCESS">Mua quyền cung đường</option>
           </Select></FormField>
           <FormField label="Cổng thanh toán"><Select aria-label="Cổng thanh toán" value={draft.gateway} onChange={(event) => updateDraft('gateway', event.target.value as CashflowFilters['gateway'])}>
-            <option value="BOTH">VNPay & PayOS</option><option value="vnpay">VNPay</option><option value="payos">PayOS</option>
+            <option value="vnpay">VNPay</option>
           </Select></FormField>
           <FormField label="Từ ngày tạo"><Input aria-label="Từ ngày tạo" type="date" value={draft.fromDate} max={draft.toDate || undefined} onChange={(event) => updateDraft('fromDate', event.target.value)} /></FormField>
           <FormField label="Đến ngày tạo"><Input aria-label="Đến ngày tạo" type="date" value={draft.toDate} min={draft.fromDate || undefined} onChange={(event) => updateDraft('toDate', event.target.value)} /></FormField>
@@ -100,8 +100,8 @@ function AdminCashflowView({ userId }: { userId: string }) {
       </form>
     </SurfaceCard>
 
-    <InfoBanner tone="warning" title="Phân biệt giao dịch thử nghiệm và tiền thật">
-      Tổng quan có thể bao gồm giao dịch Sandbox của VNPay. Mở chi tiết giao dịch để kiểm tra môi trường trước khi đối chiếu tiền thực tế. Khoản đang chờ không được cộng vào tổng thu hoặc tổng hoàn.
+    <InfoBanner title="Cách tính số liệu">
+      Tổng thu và tổng hoàn chỉ tính các giao dịch thành công. Các khoản đang chờ được thống kê riêng.
     </InfoBanner>
 
     <section aria-label="Tổng quan dòng tiền" className="space-y-4">
@@ -126,7 +126,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
           <tbody className="divide-y divide-[#E5E7EB]">{ledger.data.items.map((item) => <tr key={`${item.kind}:${item.id}`} className="align-top hover:bg-[#F7F7F4]/60">
             <td className="whitespace-nowrap px-5 py-4 text-xs text-[#6B7280]">{formatCashflowDate(item.createdAt)}</td>
             <td className="max-w-64 px-5 py-4"><p className="break-words font-semibold">{item.user.fullName?.trim() || 'Chưa có tên khách hàng'}</p><p className="mt-1 truncate text-xs text-[#6B7280]" title={item.user.email}>{item.user.email}</p></td>
-            <td className="max-w-56 px-5 py-4"><StatusBadge status={item.kind === 'PAYMENT' ? 'OPEN' : 'PENDING'} customLabel={item.kind === 'PAYMENT' ? 'Thu tiền' : 'Hoàn tiền'} /><p className="mt-2 text-xs text-[#6B7280]">{item.description}</p>{item.confirmationSource && <p className="mt-1 text-[11px] text-[#6B7280]">{confirmationLabels[item.confirmationSource] ?? item.confirmationSource}</p>}</td>
+            <td className="max-w-56 px-5 py-4"><StatusBadge status={item.kind === 'PAYMENT' ? 'OPEN' : 'PENDING'} customLabel={item.kind === 'PAYMENT' ? 'Thu tiền' : 'Khoản hoàn'} /><p className="mt-2 text-xs text-[#6B7280]">{item.description}</p>{item.confirmationSource && <p className="mt-1 text-[11px] text-[#6B7280]">{confirmationLabels[item.confirmationSource] ?? item.confirmationSource}</p>}</td>
             <td className="space-y-2 px-5 py-4"><p className="font-semibold">{gatewayLabels[item.paymentGateway ?? ''] ?? item.paymentGateway ?? '—'}</p><StatusBadge status="EXPIRED" customLabel={paymentMethodLabel(item)} showDot={false} /></td>
             <td className="px-5 py-4"><TransactionAmount item={item} /></td>
             <td className="space-y-2 px-5 py-4"><PaymentStatusBadge status={item.status} kind={item.kind} /><p className={`text-xs ${item.reconciliationRequired ? 'font-semibold text-amber-800' : 'text-[#6B7280]'}`}>{reconcileLabels[item.reconcileStatus] ?? item.reconcileStatus}</p></td>

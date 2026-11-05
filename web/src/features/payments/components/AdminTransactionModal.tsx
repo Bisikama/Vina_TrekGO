@@ -7,7 +7,8 @@ import { Button, EmptyState, ErrorAlert, InfoBanner, LoadingState, Modal, Status
 import { cashflowErrorMessage, getAdminTransactionDetail } from '../services/admin-cashflow.api';
 import { confirmationLabels, formatCashflowDate, formatCashflowMoney, gatewayLabels, manualRefundLabels, purposeLabels, reconcileLabels, sourceLabels } from '../cashflow.utils';
 import type { AdminPaymentDetail, AdminRefundDetail, AdminTransaction } from '../types/admin-cashflow.types';
-import { PaymentEnvironmentBadge, PaymentStatusBadge } from './CashflowBadges';
+import { PaymentStatusBadge } from './CashflowBadges';
+import { isSimulatedRefund } from '@/features/bookings/refund.utils';
 
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0"><dt className="text-xs text-[#6B7280]">{label}</dt><dd className="mt-1 break-words text-sm font-medium">{children ?? '—'}</dd></div>;
@@ -19,7 +20,6 @@ function PaymentFields({ detail }: { detail: AdminPaymentDetail }) {
     {detail.status === 'SUCCEEDED' && detail.applicationStatus === 'REJECTED' && <InfoBanner tone="warning" title="Đã nhận tiền, đơn chưa được xác nhận">Giao dịch thu thành công nhưng chưa áp dụng được vào đơn. Cần kiểm tra trạng thái xử lý riêng.</InfoBanner>}
     <dl className="grid gap-4 sm:grid-cols-2">
       <DetailField label="Mã giao dịch cổng">{detail.transactionRef}</DetailField>
-      <DetailField label="Mã đơn PayOS">{detail.payosOrderCode}</DetailField>
       <DetailField label="Thời điểm thu thành công">{formatCashflowDate(detail.paidAt)}</DetailField>
       <DetailField label="Áp dụng vào đơn">{detail.applicationStatus ? applicationLabels[detail.applicationStatus] ?? detail.applicationStatus : '—'}</DetailField>
       <DetailField label="Lần kiểm tra gần nhất">{formatCashflowDate(detail.lastCheckedAt)}</DetailField>
@@ -41,11 +41,12 @@ function PaymentFields({ detail }: { detail: AdminPaymentDetail }) {
 
 function RefundFields({ detail }: { detail: AdminRefundDetail }) {
   const evidenceUrl = detail.manualRefund?.evidenceMediaUrl;
+  const simulated = isSimulatedRefund(detail);
   return <>
     {detail.status !== 'SUCCEEDED' && <InfoBanner title="Khoản hoàn chưa hoàn tất">Lệnh hoàn đang chờ hoặc chưa thành công. Số tiền này chưa được tính là đã hoàn.</InfoBanner>}
     <dl className="grid gap-4 sm:grid-cols-2">
       <DetailField label="Mục đích hoàn">{purposeLabels[detail.purpose] ?? detail.purpose}</DetailField>
-      <DetailField label="Hình thức hoàn">{detail.executionMode === 'MANUAL_BANK_TRANSFER' ? 'Chuyển khoản thủ công' : 'Qua cổng thanh toán'}</DetailField>
+      <DetailField label="Hình thức hoàn">{simulated ? 'Hệ thống xử lý' : detail.executionMode === 'MANUAL_BANK_TRANSFER' ? 'Chuyển khoản thủ công' : 'Qua cổng thanh toán'}</DetailField>
       <DetailField label="Nguồn xác nhận">{detail.confirmationSource ? confirmationLabels[detail.confirmationSource] ?? detail.confirmationSource : 'Chưa có xác nhận'}</DetailField>
       <DetailField label="Thời điểm hoàn thành">{formatCashflowDate(detail.refundedAt)}</DetailField>
       <DetailField label="Mã giao dịch hoàn">{detail.refundTransactionRef}</DetailField>
@@ -99,7 +100,7 @@ export function AdminTransactionModal({ transaction, userId, onClose }: { transa
       {isLoading && <LoadingState message="Đang tải chi tiết giao dịch..." />}
       {error && <ErrorAlert message={cashflowErrorMessage(error)} onRetry={() => void mutate()} />}
       {detail && !error && <>
-        <div className="flex flex-wrap items-center gap-2"><PaymentStatusBadge status={detail.status} kind={transaction.kind} /><PaymentEnvironmentBadge environment={detail.providerEnvironment} confirmationSource={result.kind === 'REFUND' ? result.data.confirmationSource : undefined} />{detail.reconciliationRequired && <StatusBadge status="PENDING" customLabel="Cần theo dõi đối soát" />}</div>
+        <div className="flex flex-wrap items-center gap-2"><PaymentStatusBadge status={detail.status} kind={transaction.kind} />{detail.reconciliationRequired && <StatusBadge status="PENDING" customLabel="Cần theo dõi đối soát" />}</div>
         <div className="rounded-xl bg-[#F7F7F4] p-4"><p className="text-xs text-[#6B7280]">Số tiền giao dịch</p><p className="mt-1 text-3xl font-bold tabular-nums text-[#125238]">{formatCashflowMoney(detail.amount, detail.currency)}</p></div>
         <dl className="grid gap-4 sm:grid-cols-2">
           <DetailField label="Khách hàng">{detail.owner.fullName ?? 'Chưa có tên'}</DetailField>

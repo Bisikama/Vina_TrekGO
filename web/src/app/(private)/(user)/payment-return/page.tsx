@@ -3,11 +3,13 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { bookingApi, dateTime, money } from '@/features/bookings/booking.api';
+import { bookingApi, bookingError, dateTime, money } from '@/features/bookings/booking.api';
 import type { Booking } from '@/features/bookings/booking.api';
 import { apiClient } from '@/lib/axios';
 import { useStaticDataStore } from '@/lib/staticDataStore';
 import { PayosBookingReturn } from '@/features/bookings/components/PayosBookingReturn';
+import { BookingPaymentResult } from '@/features/bookings/components/BookingPaymentResult';
+import { BOOKING_POLL_TIMEOUT, bookingPaymentState, REFUND_POLL_INTERVAL, REFUND_POLL_LIMIT } from '@/features/bookings/refund.utils';
 
 function getVnpayErrorMessage(code: string | null): string {
   switch (code) {
@@ -120,6 +122,9 @@ function PaymentReturnContent() {
 
   // Load thông tin chi tiết đơn đặt chỗ và chuyến đi (hoặc cung đường vừa mua)
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [bookingChecking, setBookingChecking] = useState(true);
+  const [bookingLoadError, setBookingLoadError] = useState('');
+  const [bookingReload, setBookingReload] = useState(0);
 
   const [trailPurchase] = useState<{
     trailId: string;
@@ -163,6 +168,9 @@ function PaymentReturnContent() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    let bookingTimer: ReturnType<typeof setTimeout>;
+    let bookingDeadline: ReturnType<typeof setTimeout>;
 
     async function syncAndLoad() {
       // Chuyển tiếp chữ ký vnp_* từ Return URL sang webhook VNPAY của Backend
@@ -184,10 +192,34 @@ function PaymentReturnContent() {
       }
 
       if (rawBookingId) {
-        try {
-          const data = await bookingApi.detail(rawBookingId);
-          if (active) setBooking(data);
-        } catch {}
+        if (!active) return;
+        setBookingChecking(true);
+        setBookingLoadError('');
+        let reads = 0;
+        bookingDeadline = setTimeout(() => {
+          controller.abort(); clearTimeout(bookingTimer);
+          if (active) setBookingChecking(false);
+        }, BOOKING_POLL_TIMEOUT);
+        const readBooking = async () => {
+          try {
+            const data = await bookingApi.detail(rawBookingId, controller.signal);
+            if (!active || controller.signal.aborted) return;
+            setBooking(data);
+            reads++;
+            if (bookingPaymentState(data) === 'VERIFYING' && reads < REFUND_POLL_LIMIT) {
+              bookingTimer = setTimeout(readBooking, REFUND_POLL_INTERVAL);
+            } else {
+              clearTimeout(bookingDeadline);
+              setBookingChecking(false);
+            }
+          } catch (cause) {
+            if (!active || controller.signal.aborted) return;
+            clearTimeout(bookingDeadline);
+            setBookingLoadError(bookingError(cause).message);
+            setBookingChecking(false);
+          }
+        };
+        await readBooking();
         return;
       }
 
@@ -209,6 +241,9 @@ function PaymentReturnContent() {
 
     return () => {
       active = false;
+      clearTimeout(bookingTimer);
+      clearTimeout(bookingDeadline);
+      controller.abort();
     };
   }, [
     isVnpay,
@@ -217,6 +252,7 @@ function PaymentReturnContent() {
     trailPurchase,
     vnpResponseCode,
     momoResultCode,
+    bookingReload,
   ]);
 
 
@@ -266,6 +302,11 @@ function PaymentReturnContent() {
 
   // Lấy Trip ID để gắn vào nút "Xem chi tiết chuyến đi"
   const tripId = booking?.trip?.id;
+
+  if (rawBookingId || (!rentalContext && !trailPurchase)) return <BookingPaymentResult
+    key={rawBookingId ?? 'unknown'} bookingId={rawBookingId} booking={booking?.id === rawBookingId ? booking : null}
+    checking={bookingChecking} error={bookingLoadError} onReload={() => setBookingReload((value) => value + 1)}
+  />;
 
   return (
     <div className="min-h-screen bg-[#F7F7F4] flex items-center justify-center px-4 py-16">
@@ -404,7 +445,7 @@ function PaymentReturnContent() {
                   gatewayName === 'VNPAY' ? 'bg-[#005BAA]' : 'bg-[#A50064]'
                 }`}
               />
-              <span className="font-bold text-gray-800">{gatewayName} Sandbox</span>
+              <span className="font-bold text-gray-800">{gatewayName}</span>
             </div>
           </div>
 

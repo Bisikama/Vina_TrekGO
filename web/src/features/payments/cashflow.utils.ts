@@ -1,20 +1,21 @@
 import type { AdminTransaction, CashflowFilters, CashflowQuery, TransactionKind, TransactionsQuery } from './types/admin-cashflow.types';
+import { isSimulatedRefund } from '@/features/bookings/refund.utils';
 
 export const DEFAULT_CASHFLOW_FILTERS: CashflowFilters = {
-  source: 'BOOKING', gateway: 'BOTH', fromDate: '', toDate: '', kind: '', status: '', reconcileStatus: '', search: '',
+  source: 'BOOKING', gateway: 'vnpay', fromDate: '', toDate: '', kind: '', status: '', reconcileStatus: '', search: '',
 };
 
 export const sourceLabels: Record<string, string> = { BOOKING: 'Đặt chỗ chuyến đi', TRAIL_ACCESS: 'Mua quyền cung đường', RENTAL: 'Thuê thiết bị' };
-export const gatewayLabels: Record<string, string> = { vnpay: 'VNPay', payos: 'PayOS', BOTH: 'VNPay & PayOS' };
+export const gatewayLabels: Record<string, string> = { vnpay: 'VNPay', BOTH: 'VNPay' };
 export const reconcileLabels: Record<string, string> = { IDLE: 'Chưa cần đối soát', SCHEDULED: 'Đã lên lịch', RUNNING: 'Đang đối soát', NEEDS_REVIEW: 'Cần kiểm tra', RESOLVED: 'Đã đối soát' };
 export const manualRefundLabels: Record<string, string> = { AWAITING_RECIPIENT: 'Chờ tài khoản nhận', READY: 'Chờ admin xử lý', PROCESSING: 'Đang chuyển khoản', NEEDS_REVIEW: 'Cần kiểm tra', COMPLETED: 'Admin đã xác nhận chuyển' };
-export const confirmationLabels: Record<string, string> = { PROVIDER: 'Cổng thanh toán xác nhận', ADMIN_MANUAL: 'Admin xác nhận chuyển khoản', SANDBOX_SIMULATION: 'Mô phỏng Sandbox' };
+export const confirmationLabels: Record<string, string> = { PROVIDER: 'Cổng thanh toán xác nhận', ADMIN_MANUAL: 'Admin xác nhận chuyển khoản', SANDBOX_SIMULATION: 'Hệ thống ghi nhận' };
 export const purposeLabels: Record<string, string> = { BOOKING_CANCELLATION: 'Hoàn do hủy đặt chỗ', TRAIL_ACCESS: 'Hoàn quyền cung đường', TECHNICAL_REVERSAL: 'Hoàn giao dịch kỹ thuật', DEPOSIT: 'Hoàn cọc', RENTAL_CANCELLATION: 'Hoàn do hủy thuê' };
 
 export function paymentMethodLabel(item: Pick<AdminTransaction, 'kind' | 'paymentGateway' | 'paymentMethod' | 'executionMode'>): string {
+  if (item.kind === 'REFUND' && isSimulatedRefund(item)) return 'Hệ thống xử lý';
   if (item.kind === 'REFUND' && item.executionMode === 'MANUAL_BANK_TRANSFER') return 'Chuyển khoản thủ công';
   if (item.kind === 'REFUND' && item.executionMode === 'PROVIDER_API') return 'Hoàn qua cổng thanh toán';
-  if (item.paymentGateway?.toLowerCase() === 'payos') return 'Chuyển khoản VietQR';
   if (item.paymentMethod === 'QR') return 'Quét mã QR';
   if (item.paymentMethod === 'REDIRECT') return 'Thanh toán trực tuyến';
   return item.paymentMethod || 'Chưa có thông tin phương thức';
@@ -49,7 +50,7 @@ export function transactionMoneyEffect(item: Pick<AdminTransaction, 'status' | '
 }
 
 export function transactionStatusLabel(status: string, kind: TransactionKind): string {
-  if (status === 'SUCCEEDED') return kind === 'PAYMENT' ? 'Đã thu' : 'Đã hoàn';
+  if (status === 'SUCCEEDED') return kind === 'PAYMENT' ? 'Đã ghi nhận thu' : 'Đã ghi nhận hoàn';
   return ({ PENDING: 'Đang chờ', PROCESSING: 'Đang xử lý', FAILED: 'Thất bại', CANCELLED: 'Đã hủy', EXPIRED: 'Hết hạn' } as Record<string, string>)[status] ?? status;
 }
 

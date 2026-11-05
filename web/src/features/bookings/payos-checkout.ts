@@ -3,9 +3,9 @@ const CONTEXT_TTL_MS = 60 * 60 * 1000;
 
 export function getPayosBookingPaymentState(booking: {
   status: string;
-  paymentSummary: { status: string } | null;
+  paymentSummary: { status: string; applicationStatus?: string | null } | null;
 } | null): 'CONFIRMED' | 'PAID' | 'FAILED' | 'PENDING' {
-  if (booking && ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'].includes(booking.status)) return 'CONFIRMED';
+  if (booking?.status !== 'CANCELLED' && booking?.paymentSummary?.status === 'SUCCEEDED' && booking.paymentSummary.applicationStatus === 'APPLIED' && ['CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'].includes(booking.status)) return 'CONFIRMED';
   if (booking?.paymentSummary?.status === 'SUCCEEDED') return 'PAID';
   if (['FAILED', 'CANCELLED', 'EXPIRED'].includes(booking?.paymentSummary?.status ?? '')) return 'FAILED';
   return 'PENDING';

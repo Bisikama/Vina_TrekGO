@@ -1,6 +1,6 @@
 export type TransactionSource = 'BOOKING' | 'TRAIL_ACCESS' | 'RENTAL';
 export type CashflowSource = Exclude<TransactionSource, 'RENTAL'>;
-export type AdminGateway = 'BOTH' | 'vnpay' | 'payos';
+export type AdminGateway = 'BOTH' | 'vnpay';
 export type TransactionKind = 'PAYMENT' | 'REFUND';
 export type TransactionStatus = 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
 export type ReconcileStatus = 'IDLE' | 'SCHEDULED' | 'RUNNING' | 'NEEDS_REVIEW' | 'RESOLVED';
@@ -55,6 +55,8 @@ interface Owner { id: string; fullName: string | null; email: string }
 interface Breakdown { serviceFeeAmount: string; rentalFeeAmount: string; depositAmount: string; deductionAmount: string; isExtension: boolean }
 
 export interface AdminTransaction {
+  settlementMode?: string | null;
+  warnings?: string[];
   id: string;
   kind: TransactionKind;
   direction: 'CASH_IN' | 'CASH_OUT';
@@ -131,6 +133,8 @@ export interface AdminPaymentDetail extends TransactionDetail {
     status: TransactionStatus;
     purpose: string;
     executionMode: string;
+    settlementMode?: string | null;
+    warnings?: string[];
     confirmationSource: string | null;
     refundTransactionRef: string | null;
     createdAt: string;
@@ -139,6 +143,8 @@ export interface AdminPaymentDetail extends TransactionDetail {
 }
 
 export interface AdminRefundDetail extends TransactionDetail {
+  settlementMode?: string | null;
+  warnings?: string[];
   refundId: string;
   purpose: string;
   reason: string | null;
