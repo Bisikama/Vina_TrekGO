@@ -72,6 +72,9 @@ jest_output.txt
 /docs/area-b
 
 /docs/*
+!/docs/BOOKING_SANDBOX_REFUND_DEMO.md
+!/docs/VNPAY_SANDBOX_REFUND_FRONTEND_HANDOFF.md
+!/docs/BOOKING_AUTO_REFUND_FE_IMPLEMENTATION.md
 !/docs/trip-gps.contract.ts
 !/docs/GPS_IN_TRIP.md
 !/docs/TRIP_GPS_OFFLINE_SYNC_V2.md

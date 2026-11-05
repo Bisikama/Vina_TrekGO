@@ -40,24 +40,15 @@ export class AdminCashflowController {
   @ApiOperation({
     operationId: 'getAdminCashflowSummary',
     summary: 'Tổng quan dòng tiền & đối soát toàn hệ thống theo cổng VNPay / PayOS (Admin Cashflow Summary)',
-    description: `
-- Tổng hợp dòng tiền vào (Inflow: \`PAYMENT SUCCEEDED\`), dòng tiền ra (Outflow: \`REFUND SUCCEEDED\`), và dòng tiền ròng (\`netCashflowAmount = totalInflowAmount - totalOutflowAmount\`).
-- Phân tách chi tiết doanh thu dịch vụ (\`serviceRevenueAmount\`), tiền thuê đồ (\`rentalFeeInflowAmount\`, \`rentalExtensionInflowAmount\`), tiền đặt cọc thuê đồ (\`rentalDepositInflowAmount\`), hoàn cọc (\`depositOutflowAmount\`), tiền khấu trừ cọc giữ lại (\`retainedDepositDeductionAmount\`), và tiền cọc đang tạm giữ (\`activeDepositHeldAmount\`).
-- Thống kê các khoản đang chờ xử lý (\`PENDING\` / \`PROCESSING\`), số lượng giao dịch cần đối soát (\`reconciliationRequiredCount\`), hàng đợi hoàn tiền thủ công PayOS (\`payosManualRefundPendingCount\`), và hàng đợi giả lập hoàn tiền VNPay Sandbox (\`vnpaySandboxPendingRefundCount\`).
-- Bộ lọc cổng thanh toán (\`gateway\`):
-  - \`BOTH\` hoặc \`ALL\` (mặc định): Lấy tổng hợp của **cả 2 cổng \`vnpay\` và \`payos\`** (loại bỏ hoàn toàn cổng giả lập \`mock\` và \`momo\`).
-  - \`vnpay\`: Chỉ thống kê riêng cổng **VNPay**.
-  - \`payos\`: Chỉ thống kê riêng cổng **PayOS**.
-- Hỗ trợ lọc theo khoảng thời gian (\`from\`, \`to\`) và nguồn nghiệp vụ (\`source\`: \`BOOKING\`, \`RENTAL\`, \`TRAIL_ACCESS\`).
-`,
+    description: `Báo cáo demo: thu từ payment VNPay SANDBOX thành công; chi từ refund mô phỏng thành công. Khoản chờ không tính vào tổng đã hoàn tất. ALL/BOTH là alias của VNPay sandbox. Không phải số dư ngân hàng; không gồm PayOS, MoMo, production.`,
   })
   @ApiQuery({
     name: 'gateway',
     required: false,
-    enum: ['BOTH', 'ALL', 'vnpay', 'payos'],
-    example: 'BOTH',
+    enum: ['BOTH', 'ALL', 'vnpay'],
+    example: 'vnpay',
     description:
-      'Lọc theo cổng thanh toán: BOTH/ALL (cả VNPay + PayOS, mặc định), vnpay (chỉ VNPay), hoặc payos (chỉ PayOS)',
+      'VNPay SANDBOX (mặc định); BOTH/ALL là alias. PayOS/MoMo không thuộc báo cáo.',
   })
   @ApiQuery({
     name: 'source',
@@ -97,16 +88,7 @@ export class AdminCashflowController {
   @ApiOperation({
     operationId: 'getAdminTransactions',
     summary: 'Sổ cái giao dịch thanh toán & hoàn tiền toàn hệ thống (Admin Transaction Ledger)',
-    description: `
-- Hiển thị lịch sử \`PAYMENT\` (Tiền thu vào - \`CASH_IN\`) và \`REFUND\` (Tiền hoàn ra - \`CASH_OUT\`) trên toàn hệ thống (\`BOOKING\`, \`RENTAL\`, \`TRAIL_ACCESS\`).
-- Bộ lọc cổng thanh toán (\`gateway\`):
-  - \`BOTH\` hoặc \`ALL\` (mặc định): Hiển thị **cả 2 cổng \`vnpay\` và \`payos\`** (loại bỏ hoàn toàn dữ liệu cổng \`mock\` và \`momo\`).
-  - \`vnpay\`: Chỉ hiển thị giao dịch của cổng **VNPay**.
-  - \`payos\`: Chỉ hiển thị giao dịch của cổng **PayOS**.
-- Kèm theo bóc tách tài chính (\`breakdown\`): \`serviceFeeAmount\`, \`rentalFeeAmount\`, \`depositAmount\`, \`deductionAmount\`, \`isExtension\`, danh mục nghiệp vụ (\`category\`), mã đơn PayOS (\`payosOrderCode\`), trạng thái hoàn tiền thủ công (\`manualRefundStatus\`), và cờ cho phép giả lập hoàn tiền VNPay Sandbox (\`canSimulateSandbox\`).
-- Sắp xếp theo \`createdAt DESC\`, tie-break bằng \`id DESC\`.
-- Hỗ trợ tìm kiếm nhanh (\`search\`) theo mã hóa đơn (\`invoiceNo\`), mã giao dịch cổng (\`transactionRef\`), mã đơn PayOS (\`orderCode\`), tên hoặc email khách hàng.
-`,
+    description: `Danh sách dòng tiền VNPay SANDBOX và refund mô phỏng, cùng phạm vi với summary và phân trang. CASH_IN là payment, CASH_OUT là refund. Có chủ giao dịch, executionMode, confirmationSource, settlementMode và cảnh báo TEST_ONLY.`,
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1, description: 'Số trang (mặc định 1)' })
   @ApiQuery({
@@ -119,10 +101,10 @@ export class AdminCashflowController {
   @ApiQuery({
     name: 'gateway',
     required: false,
-    enum: ['BOTH', 'ALL', 'vnpay', 'payos'],
-    example: 'BOTH',
+    enum: ['BOTH', 'ALL', 'vnpay'],
+    example: 'vnpay',
     description:
-      'Lọc theo cổng thanh toán: BOTH/ALL (cả VNPay + PayOS, mặc định), vnpay (chỉ VNPay), hoặc payos (chỉ PayOS)',
+      'VNPay SANDBOX (mặc định); BOTH/ALL là alias. PayOS/MoMo không thuộc báo cáo.',
   })
   @ApiQuery({
     name: 'source',
@@ -173,8 +155,8 @@ export class AdminCashflowController {
   @ApiQuery({
     name: 'executionMode',
     required: false,
-    enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER'],
-    description: 'Lọc theo phương thức thực thi hoàn tiền (PROVIDER_API cho VNPay, MANUAL_BANK_TRANSFER cho PayOS)',
+    enum: ['SANDBOX_SIMULATED', 'PROVIDER_API', 'MANUAL_BANK_TRANSFER'],
+    description: 'SANDBOX_SIMULATED cho booking mới; PROVIDER_API chỉ gồm dữ liệu cũ có dấu vết giả lập; MANUAL_BANK_TRANSFER trả rỗng.',
   })
   @ApiQuery({
     name: 'manualStatus',
@@ -228,10 +210,7 @@ export class AdminCashflowController {
   @ApiOperation({
     operationId: 'getAdminPaymentDetail',
     summary: 'Xem chi tiết giao dịch thanh toán & bóc tách phí/cọc (Admin Payment Detail)',
-    description: `
-- Trả về thông tin chi tiết của một \`Payment\` thuộc cổng \`vnpay\` hoặc \`payos\` kèm hóa đơn (\`invoiceNo\`, \`invoiceStatus\`), chủ hóa đơn (\`owner\`), bóc tách tiền dịch vụ / tiền thuê / tiền cọc (\`breakdown\`), phân bổ theo dòng đơn thuê (\`allocations\`), mã đơn PayOS (\`payosOrderCode\`), và danh sách các lệnh hoàn tiền (\`refunds\`) gắn với giao dịch đó.
-- Dùng cho Drawer/Modal chi tiết giao dịch trên trang Quản trị dòng tiền trước khi Admin thực hiện đối soát (\`POST /api/v1/admin/payments/:id/reconcile\`).
-`,
+    description: `Chi tiết payment VNPay SANDBOX và refund mô phỏng liên quan. PayOS và payment production không thuộc báo cáo. Các trường payosOrderCode/payosPaymentLinkId là deprecated và trả null.`,
   })
   @ApiParam({
     name: 'id',
@@ -255,12 +234,7 @@ export class AdminCashflowController {
   @ApiOperation({
     operationId: 'getAdminRefundDetail',
     summary: 'Xem chi tiết giao dịch hoàn tiền, khấu trừ cọc & VietQR PayOS (Admin Refund Detail)',
-    description: `
-- Trả về thông tin chi tiết của một lệnh hoàn tiền (\`Refund\`) thuộc cổng \`vnpay\` hoặc \`payos\`.
-- Bao gồm bóc tách tài chính (\`breakdown\`: số tiền hoàn thực tế, tiền khấu trừ cọc giữ lại \`deductionAmount\` khi đồ thuê hư hỏng/trễ hạn), giao dịch gốc (\`sourcePayment\`), phân bổ hoàn tiền theo từng món đồ thuê (\`allocations\`).
-- Đối với hoàn tiền **PayOS** (\`executionMode = MANUAL_BANK_TRANSFER\`): trả về đầy đủ thông tin tài khoản ngân hàng nhận tiền hoàn của khách, ảnh mã **VietQR tự động** (\`vietQrImageUrl\`) để Admin quét chuyển khoản, và ảnh biên lai chuyển khoản (\`evidenceMediaUrl\`).
-- Đối với hoàn tiền **VNPay Sandbox** (\`executionMode = PROVIDER_API\`): trả về cờ \`canSimulateSandbox\` để UI hiển thị nút giả lập kết quả hoàn tiền (\`POST /api/v1/admin/refunds/:id/simulate-sandbox\`).
-`,
+    description: `Chi tiết refund mô phỏng của payment VNPay SANDBOX. Booking tự hoàn khi hủy; API admin dùng kiểm thử/phục hồi: POST /api/v1/admin/payment-refunds/:refundId/sandbox-simulate-settlement. Không chứng minh tiền thật đã về tài khoản.`,
   })
   @ApiParam({
     name: 'id',

@@ -16,6 +16,7 @@ import { PaymentsController, PaymentOptionsController } from '../src/modules/pay
 import { PaymentsService } from '../src/modules/payments/payments.service'
 import { PaymentWebhooksController } from '../src/modules/payments/payment-webhooks.controller'
 import { PaymentWebhooksService } from '../src/modules/payments/payment-webhooks.service'
+import { SandboxRefundSimulationService } from '../src/modules/payments/sandbox-refund-simulation.service'
 import { RefundsService } from '../src/modules/payments/refunds.service'
 import { RentalCheckoutService } from '../src/modules/rental/payments/rental-checkout.service'
 import { PaymentRecoveryService } from '../src/modules/payments/payment-recovery.service'
@@ -531,6 +532,7 @@ describe('VNPAY collection and concurrent gateway routing', () => {
         { provide: PaymentProvider, useValue: router },
         { provide: PrismaService, useValue: db },
         { provide: RefundsService, useValue: {} },
+        { provide: SandboxRefundSimulationService, useValue: {} },
         { provide: RentalCheckoutService, useValue: { reserve: jest.fn(), reserveExtension: jest.fn() } },
       ],
     }).compile()

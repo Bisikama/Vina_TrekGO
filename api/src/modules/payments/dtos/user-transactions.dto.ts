@@ -54,6 +54,8 @@ export type TransactionSource = 'RENTAL' | 'BOOKING' | 'TRAIL_ACCESS'
 export type FinancialEffect = 'DEBIT' | 'CREDIT' | 'NONE'
 
 export interface UserTransactionItemDto {
+  settlementMode?: 'SANDBOX_SIMULATED' | null
+  warnings?: string[]
   executionMode?: string | null
   confirmationSource?: string | null
   id: string
