@@ -592,13 +592,23 @@ export const InventoryManagement = () => {
                 <EmptyRow text={orderTab === "outbound" ? "Không có đơn chờ xuất." : "Không có đơn chờ nhận trả."} />
               ) : (
                 orders.map((order) => (
-                  <div key={order.id} className="rounded-xl border border-slate-200 p-3">
+                  <Link
+                    key={order.id}
+                    href={`/admin/rental-orders/${order.id}`}
+                    className="block rounded-xl border border-slate-200 p-3 transition hover:border-[#1B5E41]/40 hover:bg-slate-50"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-xs font-medium text-slate-900">{orderCode(order.id)}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         {ORDER_STATUS_LABELS[order.status] ?? order.status}
                       </span>
                     </div>
+                    {order.tripTitle || order.customerName ? (
+                      <p className="mt-2 truncate text-sm text-slate-900">
+                        {order.tripTitle ?? "Chuyến đi"}
+                        {order.customerName ? <span className="text-slate-500"> · {order.customerName}</span> : null}
+                      </p>
+                    ) : null}
                     <p className="mt-2 text-xs text-slate-600">
                       {orderTab === "outbound" ? "Bắt đầu thuê" : "Hạn trả"}:{" "}
                       <span className="font-medium text-slate-800">{formatDate(orderTab === "outbound" ? order.rentalStartAt : order.rentalEndAt)}</span>
@@ -606,7 +616,7 @@ export const InventoryManagement = () => {
                     <p className="mt-0.5 text-xs text-slate-500">
                       {order.linesCount} dòng thiết bị · {formatMoney(order.totalAmount, order.currency)}
                     </p>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>

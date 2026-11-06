@@ -7,12 +7,17 @@ import {
   searchGearCatalog, updateMyGear, uploadUserGearPhoto, type GearCapabilities, type GearCatalogEntry, type GearCategory, type GearCondition,
   type GearExtractionDraft, type GearExtractionQuota, type GearItemInput, type UserGearItem,
 } from "@/features/rentals/services/gear.api";
-import { Button, ErrorAlert } from "@/components/ui";
+import { ErrorAlert } from "@/components/ui";
 import {
   getGearPlanGuidance, listGearPlans, listGearTripCandidates, type GearPlan, type PlanGuidance,
 } from "@/features/rentals/services/gear-advisor.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
+import { gearAttributes, loadGearAttributeSchema } from "@/features/rentals/services/gear-attribute-schema";
+import { useAuthStore } from "@/features/auth/store/authStore";
 import { RentalPageHeader } from "./RentalSectionNav";
+import {
+  AddGearMenu, CATEGORY_ORDER, ChecklistGroup, PackingProgress, printPackingList, usePackedItems,
+} from "./wardrobe/WardrobeChecklist";
 
 const categories: Array<[GearCategory, string]> = [
   ["JACKET", "Áo khoác"], ["FOOTWEAR", "Giày"], ["PANTS", "Quần"],
@@ -20,23 +25,14 @@ const categories: Array<[GearCategory, string]> = [
   ["TREKKING_POLE", "Gậy trekking"], ["RAIN_GEAR", "Đồ đi mưa"],
 ];
 const conditions: Array<[GearCondition, string]> = [["new", "Mới"], ["good", "Tốt"], ["worn", "Đã dùng"], ["poor", "Cũ/kém"]];
-const attributeConfig: Record<GearCategory, Array<[string, string, string]>> = {
-  JACKET: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["weight_g", "Trọng lượng", "g"], ["windproof", "Cản gió", "bool"]],
-  FOOTWEAR: [["waterproof", "Chống nước", "bool"], ["ankle_support", "Hỗ trợ cổ chân", "bool"], ["grip_level", "Độ bám", "/5"], ["weight_g", "Trọng lượng", "g"]],
-  PANTS: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["insulated", "Giữ nhiệt", "bool"]],
-  BACKPACK: [["capacity_l", "Dung tích", "L"], ["rain_cover", "Áo trùm mưa", "bool"], ["waterproof", "Chống nước", "bool"], ["weight_g", "Trọng lượng", "g"]],
-  SLEEPING_BAG: [["temp_rating_c", "Nhiệt độ", "°C"], ["weight_g", "Trọng lượng", "g"]],
-  TENT: [["sleeping_places", "Sức chứa", "người"], ["flysheet_waterproof_mm", "Chống nước mái", "mm"], ["floor_waterproof_mm", "Chống nước đáy", "mm"], ["weight_g", "Trọng lượng", "g"]],
-  TREKKING_POLE: [["adjustable", "Điều chỉnh", "bool"], ["length_min_cm", "Dài tối thiểu", "cm"], ["length_max_cm", "Dài tối đa", "cm"], ["weight_g", "Trọng lượng", "g"]],
-  RAIN_GEAR: [["waterproof_mm", "Chống nước", "mm"], ["coverage", "Phạm vi che", "coverage"], ["weight_g", "Trọng lượng", "g"]],
-};
+// Bộ thông số theo loại đồ lấy từ GET /gear/attribute-schema (gearAttributes), dự phòng bằng bảng cục bộ.
 
 const BASE_FIELD_LABELS: Record<string, string> = { name: "Tên món đồ", brand: "Thương hiệu", category: "Loại đồ", condition: "Tình trạng" };
 // Nhãn tiếng Việt cho field AI trả về; field ngoài bảng thông số (ví dụ attributes.gender) giữ nguyên tên kỹ thuật.
 function fieldLabel(path: string) {
   if (BASE_FIELD_LABELS[path]) return BASE_FIELD_LABELS[path];
   const key = path.replace(/^attributes\./, "");
-  for (const rows of Object.values(attributeConfig)) {
+  for (const rows of categories.map(([category]) => gearAttributes(category))) {
     const row = rows.find(([attr]) => attr === key);
     if (row) return row[1];
   }
@@ -44,7 +40,6 @@ function fieldLabel(path: string) {
 }
 const safeHttpUrl = (value: string | null | undefined) => (value && /^https?:\/\//i.test(value) ? value : null);
 const categoryLabel = (key: GearCategory) => categories.find(([value]) => value === key)?.[1] ?? key;
-const conditionLabel = (key: GearCondition) => conditions.find(([value]) => value === key)?.[1] ?? key;
 // Nguồn từng thông số (Gear phase 2). Chỉ là dấu vết dữ liệu, không phải xác minh.
 const attributeSourceLabel: Record<string, string> = {
   USER: "Bạn nhập",
@@ -52,7 +47,6 @@ const attributeSourceLabel: Record<string, string> = {
   AI_LINK: "AI đọc link",
   VERIFIED_CATALOG: "Từ danh mục",
 };
-const sourceLabel = (source: UserGearItem["source"]) => source === "ai_image" ? "Từ ảnh" : source === "ai_link" ? "Từ đường dẫn" : "Tự nhập";
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-[#27735a] focus:ring-2 focus:ring-emerald-100";
 
 function issueOf(reason: unknown) {
@@ -84,7 +78,9 @@ export function RentalWardrobePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<GearCategory | "ALL">("ALL");
+  const [filter, setFilter] = useState<GearCategory | "ALL" | "UNPACKED">("ALL");
+  const [, setSchemaTick] = useState(0);
+  const userKey = useAuthStore((state) => state.user?.id ?? "guest");
   const [query, setQuery] = useState("");
   const [editor, setEditor] = useState<{ item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string } | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -151,11 +147,24 @@ export function RentalWardrobePage() {
     return () => { active = false; };
   }, []);
 
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const { packed, toggle: togglePacked, clear: clearPacked } = usePackedItems(userKey, loading ? [] : itemIds);
+  const packedCount = items.filter((item) => packed.has(item.id)).length;
+
+  // Thông số theo loại đồ lấy từ backend; lỗi thì giữ bảng dự phòng.
+  useEffect(() => {
+    const controller = new AbortController();
+    loadGearAttributeSchema(controller.signal)
+      .then((updated) => { if (updated) setSchemaTick((tick) => tick + 1); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
   const visibleItems = useMemo(() => items.filter((item) => {
-    const matchCategory = filter === "ALL" || item.category === filter;
+    const matchCategory = filter === "ALL" || (filter === "UNPACKED" ? !packed.has(item.id) : item.category === filter);
     const needle = query.trim().toLocaleLowerCase("vi");
     return matchCategory && (!needle || `${item.name} ${item.brand ?? ""}`.toLocaleLowerCase("vi").includes(needle));
-  }), [filter, items, query]);
+  }), [filter, items, packed, query]);
 
   async function save(input: GearItemInput, context = editor, acknowledgeDuplicate = false) {
     setBusy(true); setError(null);
@@ -224,41 +233,30 @@ export function RentalWardrobePage() {
 
   return <main className="min-h-[700px] bg-[#f4f7fb] px-4 py-8 sm:px-6 lg:px-8">
     <section className="mx-auto max-w-7xl">
-      <RentalPageHeader eyebrow="Chuẩn bị hành trang" title="Tủ đồ cá nhân" description="Quản lý trang bị thật của bạn, kiểm tra thông số và chuẩn bị chính xác cho từng chuyến đi." active="/rentals/wardrobe" />
+      <RentalPageHeader eyebrow="Tủ đồ của bạn" title="Danh sách đồ mang theo" description="Tích những món đã cho vào balo. Tải danh sách về để soạn đồ ngay cả khi không có mạng." active="/rentals/wardrobe" />
 
-      <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,.05)]">
-        <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <p className="text-sm text-slate-500">Đồ của bạn</p>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-4xl font-semibold tracking-tight text-slate-900">{items.length}</span>
-              <span className="text-sm text-slate-500">/ 50 món</span>
-            </div>
-            <div className="mt-3 h-1.5 max-w-sm overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#2f8a63] to-[#165c45] transition-all" style={{ width: `${Math.min(items.length * 2, 100)}%` }} /></div>
-            <p className="mt-2 text-xs text-slate-500">Còn trống {Math.max(50 - items.length, 0)} chỗ. Xoá món không làm mất lịch sử kiểm tra theo chuyến.</p>
-          </div>
-          <div className="lg:text-right">
-            <p className="text-xs font-medium text-slate-500">Thêm đồ vào tủ</p>
-            <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) fileRef.current?.click(); }} className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-[#165c45]/40 hover:bg-emerald-50/60 disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "IMAGE" ? "Đang đọc ảnh..." : "Chụp nhãn"}</button>
-              <button disabled={busy || Boolean(aiProgress)} onClick={() => { if (!aiRequestLock.current) setLinkOpen(true); }} className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-[#165c45]/40 hover:bg-emerald-50/60 disabled:cursor-wait disabled:opacity-60">{aiProgress?.source === "LINK" ? "Đang đọc link..." : "Từ đường dẫn"}</button>
-              <button disabled={busy || Boolean(aiProgress)} onClick={() => setCatalogOpen(true)} className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-[#165c45]/40 hover:bg-emerald-50/60 disabled:cursor-wait disabled:opacity-60">Chọn có sẵn</button>
-              <button onClick={() => setEditor({})} className="flex items-center justify-center rounded-xl bg-[#165c45] px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#124b39]">Tự nhập</button>
-            </div>
-            <div className="mt-2 text-xs text-slate-600" aria-live="polite">
-              {quota ? <p>Đọc ảnh và đường dẫn hôm nay: <strong className="tabular-nums">đã dùng {quota.used}/{quota.limit} lượt · còn {quota.remaining} lượt</strong>. Làm mới lúc 00:00 giờ Việt Nam.</p> : quotaLoading ? <p>Đang tải số lượt AI...</p> : null}
-              {quota && <p className="mt-1 text-slate-500">Kết quả có sẵn trong cache và bản nháp nhập tay không tính lượt.</p>}
-              {quotaError && <ErrorAlert className="mt-2 text-left" message="Không tải được số lượt AI." onRetry={() => void refreshQuota()} />}
-              {quota && <Button type="button" variant="ghost" size="sm" onClick={() => void refreshQuota()} disabled={quotaLoading}>Cập nhật số lượt</Button>}
-            </div>
-            {(imageNotice || linkNotice) && <div className="mt-2 space-y-1 text-xs leading-5 text-amber-700">
-              {imageNotice && <p>Ảnh: {imageNotice}</p>}
-              {linkNotice && <p>Đường dẫn: {linkNotice}</p>}
-            </div>}
-          </div>
-        </div>
-      </div>
+      <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
+      <PackingProgress
+        packedCount={packedCount}
+        total={items.length}
+        onClear={clearPacked}
+        onPrint={() => {
+          if (!printPackingList(items, packed)) setNotice("Trình duyệt đã chặn cửa sổ in. Hãy cho phép cửa sổ bật lên rồi bấm lại.");
+        }}
+        addMenu={<AddGearMenu
+          disabled={busy || Boolean(aiProgress)}
+          quotaText={quota ? `Lượt AI hôm nay: còn ${quota.remaining}/${quota.limit}, làm mới lúc 00:00.` : quotaLoading ? "Đang tải số lượt AI..." : null}
+          onImage={() => { if (!aiRequestLock.current) fileRef.current?.click(); }}
+          onLink={() => { if (!aiRequestLock.current) setLinkOpen(true); }}
+          onCatalog={() => setCatalogOpen(true)}
+          onManual={() => setEditor({})}
+        />}
+      />
+      {quotaError && <ErrorAlert className="mt-3" message="Không tải được số lượt AI." onRetry={() => void refreshQuota()} />}
+      {(imageNotice || linkNotice) && <div className="mt-3 space-y-1 text-xs leading-5 text-amber-700">
+        {imageNotice && <p>Ảnh: {imageNotice}</p>}
+        {linkNotice && <p>Đường dẫn: {linkNotice}</p>}
+      </div>}
 
       <ExtractionGuide capabilities={capabilities} />
 
@@ -271,14 +269,18 @@ export function RentalWardrobePage() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex gap-2 overflow-x-auto pb-1">
             <Filter active={filter === "ALL"} onClick={() => setFilter("ALL")}>Tất cả <b>{items.length}</b></Filter>
-            {categories.map(([value, label]) => <Filter key={value} active={filter === value} onClick={() => setFilter(value)}>{label} <b>{items.filter((item) => item.category === value).length}</b></Filter>)}
+            {CATEGORY_ORDER.filter(([value]) => items.some((item) => item.category === value)).map(([value, label]) => <Filter key={value} active={filter === value} onClick={() => setFilter(value)}>{label} <b>{items.filter((item) => item.category === value).length}</b></Filter>)}
+            <Filter active={filter === "UNPACKED"} onClick={() => setFilter("UNPACKED")}>Chưa soạn <b>{items.length - packedCount}</b></Filter>
           </div>
           <label className="flex min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-slate-900 outline-none" placeholder="Tìm tên hoặc thương hiệu..." /></label>
         </div>
       </div>
 
       {loading ? <State title="Đang mở tủ đồ..." description="TrekGo đang kiểm tra trang bị của bạn." /> : visibleItems.length === 0 ? <State title={items.length ? "Không có món phù hợp bộ lọc" : "Tủ đồ đang trống"} description={items.length ? "Thử chọn danh mục khác hoặc xóa từ khóa tìm kiếm." : "Thêm món đầu tiên: chụp nhãn, dán đường dẫn, chọn món có sẵn hoặc tự nhập."} /> :
-        <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{visibleItems.map((item) => <GearCard key={item.id} item={item} onEdit={() => setEditor({ item })} onDelete={() => setPendingDelete(item)} />)}</div>}
+        <div className="mt-5 gap-4 lg:columns-2">{CATEGORY_ORDER.map(([value, label]) => {
+          const groupItems = visibleItems.filter((item) => item.category === value);
+          return groupItems.length ? <ChecklistGroup key={value} label={label} items={groupItems} packed={packed} onToggle={togglePacked} onEdit={(item) => setEditor({ item })} /> : null;
+        })}</div>}
 
       <TripReviewSection items={items} />
     </section>
@@ -299,7 +301,7 @@ export function RentalWardrobePage() {
       onConfirm={() => void removePending()}
     />}
 
-    {editor && <GearEditor context={editor} busy={busy} onClose={() => setEditor(null)} onSave={(input) => void save(input)} />}
+    {editor && <GearEditor context={editor} busy={busy} onClose={() => setEditor(null)} onSave={(input) => void save(input)} onDelete={editor.item ? () => { const target = editor.item as UserGearItem; setEditor(null); setPendingDelete(target); } : undefined} />}
     {linkOpen && <LinkDialog busy={busy} onClose={() => { if (!aiRequestLock.current) setLinkOpen(false); }} onSubmit={async (url) => {
       if (aiRequestLock.current) return;
       aiRequestLock.current = true;
@@ -359,23 +361,7 @@ function Filter({ active, onClick, children }: { active: boolean; onClick: () =>
   return <button onClick={onClick} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${active ? "bg-[#123f32] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{children}</button>;
 }
 
-function GearCard({ item, onEdit, onDelete }: { item: UserGearItem; onEdit: () => void; onDelete: () => void }) {
-  const stats = attributeConfig[item.category].filter(([key]) => item.attributes?.[key] !== null && item.attributes?.[key] !== undefined).slice(0, 3);
-  return <article className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_28px_rgba(15,23,42,.05)] transition hover:-translate-y-1 hover:shadow-lg">
-    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-[#dcebe5] to-[#eef4fb]" style={item.photoUrl ? { backgroundImage: `url(${item.photoUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}>
-      {!item.photoUrl && <div className="grid h-full place-items-center text-xs font-medium uppercase tracking-[0.2em] text-[#165c45]/45">{categoryLabel(item.category)}</div>}
-      <span className="absolute right-3 top-3 rounded-lg bg-white/90 px-2.5 py-1 text-[10px] font-medium text-[#165c45]">{sourceLabel(item.source)}</span>
-    </div>
-    <div className="p-4"><div className="flex items-center justify-between gap-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[#27735a]">{categoryLabel(item.category)}</p><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800">● {conditionLabel(item.condition)}</span></div>
-      <h3 className="mt-2 line-clamp-2 min-h-12 text-lg font-bold leading-6 text-slate-950">{item.name}</h3>
-      <p className="mt-1 text-xs text-slate-500">{item.brand || "Chưa khai thương hiệu"}</p>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-100 py-3">{stats.length ? stats.map(([key, label, unit]) => <div key={key} className="min-w-0"><p className="truncate text-[9px] font-semibold uppercase text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-bold text-slate-800">{formatAttribute(item.attributes[key], unit)}</p>{item.attributeProvenance?.[key]?.source ? <p className="mt-0.5 truncate text-[9px] text-slate-400">{attributeSourceLabel[item.attributeProvenance[key].source] ?? item.attributeProvenance[key].source}</p> : null}</div>) : <p className="col-span-3 text-xs text-amber-700">Chưa có thông số kỹ thuật</p>}</div>
-      <div className="mt-4 flex items-center justify-between"><button onClick={onDelete} className="rounded-lg px-2 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">Gỡ bỏ</button><button onClick={onEdit} className="rounded-xl bg-[#e8f0ff] px-4 py-2.5 text-xs font-bold text-slate-900">Xem & sửa</button></div>
-    </div>
-  </article>;
-}
-
-function GearEditor({ context, busy, onClose, onSave }: { context: { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string }; busy: boolean; onClose: () => void; onSave: (input: GearItemInput) => void }) {
+function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string }; busy: boolean; onClose: () => void; onSave: (input: GearItemInput) => void; onDelete?: () => void }) {
   const seed = context.item ?? context.draft?.extractedData;
   // Không đoán loại đồ: AI không nhận ra (category null) hoặc nhập tay mới thì người dùng phải tự chọn.
   const [category, setCategory] = useState<GearCategory | "">(seed?.category ?? "");
@@ -393,7 +379,7 @@ function GearEditor({ context, busy, onClose, onSave }: { context: { item?: User
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!category) return;
     const form = new FormData(event.currentTarget); const parsed: Record<string, unknown> = {};
-    attributeConfig[category].forEach(([key, , unit]) => { const raw = String(form.get(`attr_${key}`) ?? ""); if (!raw) parsed[key] = null; else if (unit === "bool") parsed[key] = raw === "true"; else if (unit === "coverage") parsed[key] = raw; else parsed[key] = Number(raw); });
+    gearAttributes(category).forEach(([key, , unit]) => { const raw = String(form.get(`attr_${key}`) ?? ""); if (!raw) parsed[key] = null; else if (unit === "bool") parsed[key] = raw === "true"; else if (unit === "coverage") parsed[key] = raw; else parsed[key] = Number(raw); });
     onSave({ name: String(form.get("name") ?? "").trim(), brand: String(form.get("brand") ?? "").trim() || null, category, condition: String(form.get("condition")) as GearCondition, attributes: parsed, photoRef: context.photoRef ?? context.item?.photoRef ?? null });
   }
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
@@ -404,7 +390,7 @@ function GearEditor({ context, busy, onClose, onSave }: { context: { item?: User
       {context.draft && <p className="sm:col-span-2 text-[11px] text-slate-500">
         Nguồn: <b>{context.draft.sourceType === "LINK" ? "Link sản phẩm" : "Ảnh tem/mác"}</b>
         {" · "}Bản nháp hiệu lực đến <b>{formatDateTime(context.draft.expiresAt)}</b> (24 giờ kể từ khi tạo)
-        {manualEntry ? <> · Mã lý do: <code className="rounded bg-slate-100 px-1">{manualEntry.reasonCode}</code> · không tính vào lượt AI</> : null}
+        {manualEntry ? <> · không tính vào lượt AI</> : null}
       </p>}
       {context.draft && !manualEntry && <DraftSourceDetails data={context.draft.extractedData} />}
       {categoryUnknown && <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">AI chưa xác định được loại đồ. Hãy chọn đúng loại đồ trước khi nhập thông số.</div>}
@@ -415,9 +401,9 @@ function GearEditor({ context, busy, onClose, onSave }: { context: { item?: User
       <Field label="Tình trạng"><select name="condition" defaultValue={(seed?.condition as GearCondition) ?? "good"} className={inputClass}>{conditions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
       <div className="sm:col-span-2 mt-2"><p className="text-sm font-bold text-slate-900">Thông số kỹ thuật</p><p className="mt-1 text-xs text-slate-500">Để trống nếu chưa biết, TrekGo không tự biến thành 0.</p></div>
       {!category && <p className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500">Chọn loại đồ để hiện các thông số kỹ thuật tương ứng.</p>}
-      {category && attributeConfig[category].map(([key, label, unit]) => <Field key={key} label={`${label}${!["bool", "coverage"].includes(unit) ? ` (${unit})` : ""}${fieldStatus(key) === "FOUND" ? " · AI đọc được" : fieldStatus(key) === "MISSING" ? " · AI không thấy" : itemSource(key) ? ` · ${attributeSourceLabel[itemSource(key) as string] ?? itemSource(key)}` : ""}`}>{unit === "bool" ? <select name={`attr_${key}`} defaultValue={attributes[key] === true ? "true" : attributes[key] === false ? "false" : ""} className={inputClass}><option value="">Chưa biết</option><option value="true">Có</option><option value="false">Không</option></select> : unit === "coverage" ? <select name={`attr_${key}`} defaultValue={String(attributes[key] ?? "")} className={inputClass}><option value="">Chưa biết</option><option value="UPPER_BODY">Thân trên</option><option value="FULL_BODY">Toàn thân</option></select> : <input name={`attr_${key}`} type="number" defaultValue={typeof attributes[key] === "number" ? String(attributes[key]) : ""} className={inputClass} placeholder="Chưa biết" />}</Field>)}
+      {category && gearAttributes(category).map(([key, label, unit]) => <Field key={key} label={`${label}${!["bool", "coverage"].includes(unit) ? ` (${unit})` : ""}${fieldStatus(key) === "FOUND" ? " · AI đọc được" : fieldStatus(key) === "MISSING" ? " · AI không thấy" : itemSource(key) ? ` · ${attributeSourceLabel[itemSource(key) as string] ?? itemSource(key)}` : ""}`}>{unit === "bool" ? <select name={`attr_${key}`} defaultValue={attributes[key] === true ? "true" : attributes[key] === false ? "false" : ""} className={inputClass}><option value="">Chưa biết</option><option value="true">Có</option><option value="false">Không</option></select> : unit === "coverage" ? <select name={`attr_${key}`} defaultValue={String(attributes[key] ?? "")} className={inputClass}><option value="">Chưa biết</option><option value="UPPER_BODY">Thân trên</option><option value="FULL_BODY">Toàn thân</option></select> : <input name={`attr_${key}`} type="number" defaultValue={typeof attributes[key] === "number" ? String(attributes[key]) : ""} className={inputClass} placeholder="Chưa biết" />}</Field>)}
     </div>
-    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4"><button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold">Hủy</button><button disabled={busy || !category} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
+    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4">{onDelete && <button type="button" onClick={onDelete} className="mr-auto rounded-xl px-3 py-3 text-sm font-medium text-red-600 hover:bg-red-50">Gỡ khỏi tủ</button>}<button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold">Hủy</button><button disabled={busy || !category} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
   </form></div>;
 }
 
@@ -618,7 +604,7 @@ function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (it
     } finally { setAdding(false); }
   }
 
-  const fieldsOf = (entry: GearCatalogEntry) => attributeConfig[entry.category].filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
+  const fieldsOf = (entry: GearCatalogEntry) => gearAttributes(entry.category).filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
 
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4">
     {duplicateDetails && <DuplicateDialog data={duplicateDetails} busy={adding} onBack={() => setDuplicateDetails(null)} onConfirm={() => { setDuplicateDetails(null); void add(true); }} />}

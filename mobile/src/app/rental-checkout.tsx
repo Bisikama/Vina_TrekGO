@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { reasonText } from "@/features/rentals/display";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { useApp } from "@/context/AppContext";
@@ -108,8 +109,7 @@ export default function RentalCheckoutScreen() {
 
       if (!eligibility.eligible) {
         throw new Error(
-          eligibility.reason ||
-            "Chuyến đi không còn đủ điều kiện thuê thiết bị.",
+          reasonText(eligibility.reason, "Chuyến đi không còn đủ điều kiện thuê thiết bị."),
         );
       }
 
@@ -197,8 +197,7 @@ export default function RentalCheckoutScreen() {
     if (!eligibility.eligible) {
       setQuote(undefined);
       setError(
-        eligibility.reason ||
-          "Thông tin chuyến đi đã thay đổi và hiện chưa đủ điều kiện thuê thiết bị.",
+        reasonText(eligibility.reason, "Thông tin chuyến đi đã thay đổi và hiện chưa đủ điều kiện thuê thiết bị."),
       );
       return;
     }

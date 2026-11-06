@@ -12,6 +12,13 @@ import {
   uploadConditionEvidence,
 } from "@/features/rentals/services/staff-preparation.api";
 import { getStaffInventoryErrorMessage } from "@/features/rentals/services/staff-inventory.api";
+import {
+  CONDITION_LABELS,
+  orderShortCode,
+  PREPARATION_STATUS,
+  productLabel,
+  shortId,
+} from "@/features/rentals/services/rental-display";
 import type {
   EquipmentCondition,
   PreparationCandidate,
@@ -134,12 +141,10 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           <div>
             <Link href="/staff/work-queue" className="text-xs font-semibold text-emerald-800">← Hàng đợi kho</Link>
             <h1 className="mt-2 text-3xl font-bold">Soạn & kiểm tra thiết bị</h1>
-            <p className="mt-2 text-sm text-slate-600">Task {detail.task.id} · Order {detail.task.orderId}</p>
+            <p className="mt-2 text-sm text-slate-600">Đơn {orderShortCode(detail.task.orderId)} · {detail.pickupContext.name}</p>
           </div>
-          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-            isCancelled ? "bg-red-100 text-red-900" : "bg-emerald-100 text-emerald-900"
-          }`}>
-            {isCancelled ? "ĐÃ HỦY" : detail.task.status}
+          <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${(PREPARATION_STATUS[detail.task.status] ?? PREPARATION_STATUS.OPEN).tone}`}>
+            {(PREPARATION_STATUS[detail.task.status] ?? { label: "Đang cập nhật" }).label}
           </span>
         </div>
 
@@ -153,15 +158,15 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
 
         <section className="mt-5 grid gap-4 md:grid-cols-3">
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Điểm nhận</p><p className="mt-2 font-bold">{detail.pickupContext.name}</p></article>
-          <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Đã pick</p><p className="mt-2 text-2xl font-bold">{detail.progress.picked}/{detail.progress.required}</p></article>
+          <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Đã soạn</p><p className="mt-2 text-2xl font-bold">{detail.progress.picked}/{detail.progress.required}</p></article>
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Đã có ảnh</p><p className="mt-2 text-2xl font-bold">{evidenceComplete}/{detail.progress.picked}</p></article>
         </section>
 
         {!isCancelled && detail.task.status === "OPEN" && !detail.task.assignee && (
           <section className="mt-5 rounded-xl border border-orange-200 bg-orange-50 p-5">
-            <h2 className="font-bold">Bước 1 · Nhận task</h2>
-            <p className="mt-1 text-sm text-slate-600">Task chưa được gán. Nhận task trước khi quét thiết bị.</p>
-            <button type="button" disabled={Boolean(busyAction)} onClick={() => void run("claim", () => claimPreparationTask(taskId, detail.task.version).then(() => undefined))} className="mt-4 rounded-lg bg-[#0d5b3a] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busyAction === "claim" ? "Đang nhận..." : "Nhận task"}</button>
+            <h2 className="font-bold">Bước 1 · Nhận việc</h2>
+            <p className="mt-1 text-sm text-slate-600">Việc này chưa có người nhận. Nhận việc trước khi chọn thiết bị.</p>
+            <button type="button" disabled={Boolean(busyAction)} onClick={() => void run("claim", () => claimPreparationTask(taskId, detail.task.version).then(() => undefined))} className="mt-4 rounded-lg bg-[#0d5b3a] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busyAction === "claim" ? "Đang nhận..." : "Nhận việc"}</button>
           </section>
         )}
 
@@ -169,24 +174,24 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
           ["OPEN", "PICKING", "CONDITION_CAPTURED"].includes(detail.task.status) &&
           !allPicked && (
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="font-bold">Bước 2 · Chọn asset còn khả dụng</h2>
+            <h2 className="font-bold">Bước 2 · Chọn thiết bị còn trong kho</h2>
             <div className="mt-4 space-y-4">
               {detail.requiredLines.map((line) => (
                 <div key={line.orderLineId} className="rounded-xl bg-[#edf3ff] p-4">
-                  <div className="flex justify-between gap-3 text-sm"><strong>{line.productName}</strong><span>Còn {line.remainingQty} cần pick</span></div>
+                  <div className="flex justify-between gap-3 text-sm"><strong>{productLabel(line.productName)}</strong><span>Còn {line.remainingQty} cần chọn</span></div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {candidates.filter((candidate) => candidate.productId === line.productId).map((candidate) => (
                       <label key={candidate.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white p-3 text-xs">
                         <input type="checkbox" checked={selectedCodes.includes(candidate.assetCode)} onChange={() => toggleCandidate(candidate)} className="h-4 w-4 accent-emerald-800" />
-                        <span><strong>{candidate.assetCode}</strong><br /><span className="text-slate-500">{candidate.condition} · {candidate.location ?? "Kho chính"}</span></span>
+                        <span><strong>Mã {shortId(candidate.assetCode)}</strong><br /><span className="text-slate-500">{CONDITION_LABELS[candidate.condition] ?? candidate.condition} · {candidate.location ?? "Kho chính"}</span></span>
                       </label>
                     ))}
-                    {candidates.filter((candidate) => candidate.productId === line.productId).length === 0 && <p className="text-xs text-orange-800">Không có unit khả dụng cho sản phẩm này.</p>}
+                    {candidates.filter((candidate) => candidate.productId === line.productId).length === 0 && <p className="text-xs text-orange-800">Không còn thiết bị khả dụng cho sản phẩm này.</p>}
                   </div>
                 </div>
               ))}
             </div>
-            <button type="button" disabled={selectedCodes.length === 0 || Boolean(busyAction)} onClick={() => void run("pick", () => pickPreparationUnits(taskId, { assetCodes: selectedCodes, expectedVersion: detail.task.version }).then(() => undefined))} className="mt-4 rounded-lg bg-[#0d5b3a] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busyAction === "pick" ? "Đang ghi nhận..." : `Xác nhận pick ${selectedCodes.length} thiết bị`}</button>
+            <button type="button" disabled={selectedCodes.length === 0 || Boolean(busyAction)} onClick={() => void run("pick", () => pickPreparationUnits(taskId, { assetCodes: selectedCodes, expectedVersion: detail.task.version }).then(() => undefined))} className="mt-4 rounded-lg bg-[#0d5b3a] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busyAction === "pick" ? "Đang ghi nhận..." : `Xác nhận chọn ${selectedCodes.length} thiết bị`}</button>
           </section>
         )}
 
@@ -197,10 +202,10 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
             <div className="mt-4 space-y-3">
               {detail.pickedUnits.map((unit) => (
                 <article key={unit.unitId} className="rounded-xl bg-[#edf3ff] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{unit.assetCode}</strong><p className="text-xs text-slate-500">{unit.physicalStatus}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${unit.evidenceCaptured ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{unit.evidenceCaptured ? "Đã lưu ảnh" : "Chưa có ảnh"}</span></div>
+                  <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{productLabel(detail.requiredLines.find((line) => line.productId === unit.productId)?.productName ?? "Thiết bị")}</strong><p className="text-xs text-slate-500">Mã {shortId(unit.assetCode)}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${unit.evidenceCaptured ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{unit.evidenceCaptured ? "Đã lưu ảnh" : "Chưa có ảnh"}</span></div>
                   {!unit.evidenceCaptured && !isCancelled && (
                     <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_1fr_auto]">
-                      <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition}>{condition}</option>)}</select>
+                      <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition] ?? condition}</option>)}</select>
                       <input type="file" accept="image/*" capture="environment" onChange={(event) => setFiles((current) => ({ ...current, [unit.unitId]: event.target.files?.[0] }))} className="rounded-lg bg-white px-3 py-2 text-xs" />
                       <input value={notes[unit.unitId] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [unit.unitId]: event.target.value }))} placeholder="Ghi chú ngoại quan" className="rounded-lg border bg-white px-3 py-2 text-xs" />
                       <button type="button" disabled={!files[unit.unitId] || Boolean(busyAction)} onClick={() => void captureEvidence(unit)} className="rounded-lg bg-[#0d5b3a] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyAction === `evidence-${unit.unitId}` ? "Đang tải..." : "Lưu"}</button>
