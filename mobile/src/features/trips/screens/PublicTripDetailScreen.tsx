@@ -45,12 +45,22 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TripShareButton } from "@/features/trip-gps";
+import { TripCancellationNotice } from '@/features/bookings/components/TripCancellationNotice';
+import { isTripPaused } from '@/features/bookings/refund.utils';
+import { BookingFlowButton } from '@/features/bookings/components/BookingFlowUI';
 
 export interface PublicTripDetailScreenProps {
   tripId: string;
 }
 
 export function PublicTripDetailScreen({
+  ...props
+}: PublicTripDetailScreenProps) {
+  const { user } = useAuth();
+  return <PublicTripDetailContent key={(user?.id ?? 'public') + ':' + props.tripId} {...props} />;
+}
+
+function PublicTripDetailContent({
   tripId,
 }: PublicTripDetailScreenProps) {
   const router = useRouter();
@@ -76,7 +86,7 @@ export function PublicTripDetailScreen({
       Promise.all([
         bookingApiService.listMyBookings({ pageSize: 50 }).catch(() => ({ items: [] })),
         invitationsApiService.fetchMyTickets({ pageSize: 50 }).catch(() => ({ items: [] })),
-      ]).then(([bookingRes, ticketRes]) => {
+      ]).then(async ([bookingRes, ticketRes]) => {
         if (!active) return;
         const matchedBooking = bookingRes.items?.find(
           (b) =>
@@ -84,12 +94,18 @@ export function PublicTripDetailScreen({
             b.status !== "CANCELLED" &&
             b.status !== "EXPIRED",
         );
-        setExistingBooking(matchedBooking ?? null);
+        const related = matchedBooking ?? bookingRes.items?.find((b) => b.trip?.id === tripId && b.status === 'CANCELLED');
+        let fullBooking: BookingDetail | null = null;
+        if (related) {
+          try { fullBooking = await bookingApiService.getBookingDetail(related.id, accessToken, 8000); } catch { /* Keep the existing public context. */ }
+        }
+        if (!active) return;
+        setExistingBooking(fullBooking ?? related ?? null);
 
         const matchedTicket = ticketRes.items?.find(
           (t) => t.trip?.id === tripId && t.bookingStatus !== "CANCELLED",
         );
-        setExistingTicket(matchedTicket ?? null);
+        setExistingTicket(matchedTicket ?? ticketRes.items?.find((t) => t.trip?.id === tripId && isTripPaused(t.trip.status)) ?? null);
       });
 
       return () => {
@@ -109,6 +125,13 @@ export function PublicTripDetailScreen({
     },
     [refetch, router],
   );
+
+  async function refreshCancellationContext() {
+    void refetch();
+    if (existingBooking && accessToken) {
+      try { setExistingBooking(await bookingApiService.getBookingDetail(existingBooking.id, accessToken, 8000)); } catch { /* Keep the last known state until a successful refresh. */ }
+    }
+  }
 
   if (loading) {
     return (
@@ -130,6 +153,14 @@ export function PublicTripDetailScreen({
   };
 
   if (error || !trip) {
+    const relatedStatus = existingBooking?.trip.status ?? existingTicket?.trip.status;
+    if (isTripPaused(relatedStatus)) return <SafeAreaView style={styles.safeArea}>
+      <ScreenHeader onBack={handleSafeBack} title={existingBooking?.trip.title ?? existingTicket?.trip.title ?? 'Thông tin chuyến đi'} />
+      <View style={styles.errorWrap}>
+        <TripCancellationNotice status={relatedStatus} activeBooking={!!existingBooking && !['CANCELLED', 'EXPIRED'].includes(existingBooking.status)} onRefresh={() => void refreshCancellationContext()} />
+        <BookingFlowButton label={existingBooking ? 'Xem đặt chỗ và khoản hoàn' : 'Vé tham gia của tôi'} onPress={() => existingBooking ? router.push({ pathname: '/bookings/[id]', params: { id: existingBooking.id } } as any) : router.push('/(tabs)/trips' as any)} fullWidth style={{ marginTop: 16 }} />
+      </View>
+    </SafeAreaView>;
     return (
       <SafeAreaView style={styles.safeArea}>
         <ScreenHeader onBack={handleSafeBack} title="Chi tiết chuyến" />
@@ -153,7 +184,7 @@ export function PublicTripDetailScreen({
 
   const registrationNotOpen = isRegistrationNotOpenYet(trip);
   const isBookable =
-    trip.status === "OPEN" && trip.remainingSlots > 0 && !registrationNotOpen;
+    trip.status === "OPEN" && trip.remainingSlots > 0 && !registrationNotOpen && !isTripPaused(existingBooking?.trip.status ?? existingTicket?.trip.status);
   const isConfirmedBooking =
     existingBooking &&
     ["CONFIRMED", "PARTIAL_CHECKIN", "CHECKED_IN", "COMPLETED"].includes(
@@ -169,6 +200,7 @@ export function PublicTripDetailScreen({
       >
         {/* Top Navigation Bar */}
         <ScreenHeader onBack={handleSafeBack} title="Chi tiết chuyến" />
+        <TripCancellationNotice status={isTripPaused(trip.status) ? trip.status : existingBooking?.trip.status ?? existingTicket?.trip.status} activeBooking={!!existingBooking && !['CANCELLED', 'EXPIRED'].includes(existingBooking.status)} onRefresh={() => void refreshCancellationContext()} />
 
         {/* 1. Hero Section */}
         <TripHeroSection trip={trip} />
@@ -295,7 +327,7 @@ export function PublicTripDetailScreen({
             activeOpacity={0.85}
           >
             <Ionicons name="card-outline" size={18} color="#ffffff" />
-            <Text style={styles.bookingBtnText}>Tiếp tục thanh toán</Text>
+            <Text style={styles.bookingBtnText}>{isTripPaused(existingBooking.trip.status) ? 'Xem trạng thái đặt chỗ' : 'Tiếp tục thanh toán'}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -325,7 +357,7 @@ export function PublicTripDetailScreen({
       </View>
 
       {/* Booking Modal */}
-      {accessToken && bookingVisible && (
+      {accessToken && bookingVisible && isBookable && (
         <BookingParticipantsModal
           visible={bookingVisible}
           trip={trip as any}

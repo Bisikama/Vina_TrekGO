@@ -11,6 +11,8 @@ import {
   type RentalDocumentVerification,
 } from "@/features/rentals/services/user-rental.api";
 
+import { shortDocumentNo } from "@/features/rentals/services/rental-display";
+
 import { dateTime } from "./RentalSectionNav";
 
 // Chứng từ của đơn thuê: biên bản bàn giao, phụ lục gia hạn, biên nhận trả đồ...
@@ -119,9 +121,8 @@ export function RentalDocumentsPanel({ orderId }: { orderId: string }) {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">{TYPE_LABELS[document.type] ?? document.type}</p>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    Số <span className="font-mono">{document.documentNo}</span>
+                    Số <span className="font-mono" title={document.documentNo}>{shortDocumentNo(document.documentNo, document.type)}</span>
                     {document.issuedAt ? ` · ${dateTime(document.issuedAt)}` : ""}
-                    {document.rootDocumentId ? " · bản đính chính" : ""}
                   </p>
                   {verifyLabel ? <p className={`mt-1 text-xs ${verifyLabel.tone}`}>{verifyLabel.text}</p> : null}
                 </div>

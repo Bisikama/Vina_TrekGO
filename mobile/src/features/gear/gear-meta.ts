@@ -1,5 +1,7 @@
 import type { Ionicons } from "@expo/vector-icons";
 
+import { apiRequest } from "@/lib/api-client";
+
 import type { GearCategory, GearCondition, GearSource } from "@/features/gear/types";
 
 // Cùng bảng thông số với web (RentalWardrobePage) để hai nền tảng hiển thị giống nhau.
@@ -22,8 +24,10 @@ export const GEAR_CONDITIONS: { value: GearCondition; label: string }[] = [
   { value: "poor", label: "Cũ/kém" },
 ];
 
-/** [key, nhãn, đơn vị]; đơn vị "bool" = có/không, "coverage" = phạm vi che, còn lại là số. */
-export const GEAR_ATTRIBUTES: Record<GearCategory, [string, string, string][]> = {
+export type AttributeTuple = [key: string, label: string, unit: string];
+
+/** Dự phòng khi chưa tải được GET /gear/attribute-schema. [key, nhãn, đơn vị]; "bool" = có/không, "coverage" = phạm vi che. */
+export const GEAR_ATTRIBUTES: Record<GearCategory, AttributeTuple[]> = {
   JACKET: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["weight_g", "Trọng lượng", "g"], ["windproof", "Cản gió", "bool"]],
   FOOTWEAR: [["waterproof", "Chống nước", "bool"], ["ankle_support", "Hỗ trợ cổ chân", "bool"], ["grip_level", "Độ bám", "/5"], ["weight_g", "Trọng lượng", "g"]],
   PANTS: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["insulated", "Giữ nhiệt", "bool"]],
@@ -33,6 +37,54 @@ export const GEAR_ATTRIBUTES: Record<GearCategory, [string, string, string][]> =
   TREKKING_POLE: [["adjustable", "Điều chỉnh", "bool"], ["length_min_cm", "Dài tối thiểu", "cm"], ["length_max_cm", "Dài tối đa", "cm"], ["weight_g", "Trọng lượng", "g"]],
   RAIN_GEAR: [["waterproof_mm", "Chống nước", "mm"], ["coverage", "Phạm vi che", "coverage"], ["weight_g", "Trọng lượng", "g"]],
 };
+
+type SchemaNode = { type?: string | string[]; enum?: string[]; anyOf?: SchemaNode[] };
+type SchemaAttribute = {
+  key: string;
+  label?: string;
+  unit?: string | null;
+  schema?: SchemaNode;
+  options?: { value: string; label: string }[];
+};
+
+let attributeTable: Record<GearCategory, AttributeTuple[]> = GEAR_ATTRIBUTES;
+
+/** Bộ thông số hiện dùng cho loại đồ (từ backend nếu đã tải, nếu không là bảng dự phòng). */
+export const gearAttributes = (category: GearCategory): AttributeTuple[] => attributeTable[category] ?? [];
+
+// Chuyển một thuộc tính của GET /gear/attribute-schema thành bộ [key, nhãn, đơn vị] dùng chung trong giao diện.
+// Đơn vị đặc biệt: "bool" (có/không) và "coverage" (lựa chọn phạm vi che).
+function toAttributeTuple(attribute: SchemaAttribute): AttributeTuple | null {
+  const schema = attribute.schema ?? {};
+  const variants = schema.anyOf ?? [schema];
+  const types = variants.flatMap((node) => (Array.isArray(node.type) ? node.type : node.type ? [node.type] : []));
+  const label = attribute.label ?? attribute.key;
+  if (types.includes("boolean")) return [attribute.key, label, "bool"];
+  if (attribute.options?.length || variants.some((node) => Array.isArray(node.enum))) {
+    return attribute.key === "coverage" ? [attribute.key, label, "coverage"] : null;
+  }
+  return [attribute.key, label, attribute.unit ?? ""];
+}
+
+/** Tải bộ thông số từ backend; trả true khi đã cập nhật để màn hình vẽ lại. */
+export async function loadGearAttributeSchema(): Promise<boolean> {
+  const payload = await apiRequest<{ data?: { categories?: unknown }; categories?: unknown }>("/api/v1/gear/attribute-schema", {
+    method: "GET",
+  });
+  const categories = (payload?.data?.categories ?? payload?.categories ?? []) as {
+    category: GearCategory;
+    attributes?: SchemaAttribute[];
+  }[];
+  if (!Array.isArray(categories) || categories.length === 0) return false;
+  const next = { ...GEAR_ATTRIBUTES };
+  for (const entry of categories) {
+    if (!(entry.category in next) || !entry.attributes?.length) continue;
+    const tuples = entry.attributes.map(toAttributeTuple).filter((tuple): tuple is AttributeTuple => tuple !== null);
+    if (tuples.length) next[entry.category] = tuples;
+  }
+  attributeTable = next;
+  return true;
+}
 
 export const ATTRIBUTE_SOURCE_LABELS: Record<string, string> = {
   USER: "Bạn nhập",

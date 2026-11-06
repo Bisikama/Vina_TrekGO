@@ -9,6 +9,7 @@ import { TripCostBreakdown } from "./TripCostBreakdown";
 import { BookingSidebar } from "./BookingSidebar";
 import { TripRouteReviewMap } from "@/features/leaders/components/leader/TripRouteReviewMap";
 import { SurfaceCard } from "@/components/ui";
+import { isTripRegistrationPaused, TripCancellationNotice } from "@/features/bookings/components/TripCancellationNotice";
 import type { SystemTrailDetail } from "@/features/leaders/components/leader/StepTwoOverviewMap";
 
 const stripEmojis = (text: string) =>
@@ -43,6 +44,7 @@ export const TripDetailClient = ({
       <TripHeader trip={enrichedTrip} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {isTripRegistrationPaused(enrichedTrip.rawStatus) && <div className="mb-6"><TripCancellationNotice status={enrichedTrip.rawStatus} /></div>}
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Main Content Column */}
           <div className="flex-1 lg:max-w-[700px] xl:max-w-[800px] space-y-8">

@@ -96,7 +96,7 @@ export function LeaderTripList({
       setCancelReason("");
       Alert.alert(
         "Thành công",
-        "Yêu cầu hủy chuyến đã được gửi lên hệ thống (CANCEL_PENDING).",
+        "Đã gửi yêu cầu hủy chuyến. Vui lòng chờ Admin xem xét. Chuyến chưa bị hủy ở bước này.",
       );
     } catch (err: any) {
       Alert.alert("Lỗi", err?.message || "Không thể gửi yêu cầu hủy chuyến.");

@@ -23,6 +23,7 @@ import {
   RentalOrderDetail,
 } from "@/features/rentals/types";
 import { ApiError } from "@/lib/api-client";
+import { orderShortCode, reasonText } from "@/features/rentals/display";
 
 const REASONS = [
   "Thay đổi kế hoạch chuyến đi",
@@ -200,7 +201,7 @@ export default function RentalCancellationScreen() {
                 {order.order.trip?.title || "Chuyến đi của bạn"}
               </Text>
               <Text style={styles.orderCode}>
-                {order.order.orderCode ? `Mã đơn ${order.order.orderCode}` : `Mã ${(orderId ?? "").slice(-8).toUpperCase()}`}
+                {`Mã đơn ${orderShortCode(order.order.id ?? orderId)}`}
               </Text>
             </View>
 
@@ -212,7 +213,7 @@ export default function RentalCancellationScreen() {
               <MoneyRow label="Tổng tiền hoàn" value={refundTotal} currency={order.order.currency} strong />
               <View style={styles.policyBox}>
                 <Ionicons name="information-circle-outline" size={21} color={Colors.primaryDark} />
-                <Text style={styles.policyText}>{preview.reason}</Text>
+                <Text style={styles.policyText}>{reasonText(preview.reason, "Số tiền hoàn được tính theo chính sách hủy đơn thuê.")}</Text>
               </View>
               <Text style={styles.pendingNote}>
                 Tiền hoàn có thể cần thêm thời gian xử lý sau khi đơn được hủy.

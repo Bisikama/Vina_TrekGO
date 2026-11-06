@@ -24,6 +24,8 @@ function toDateTimeLocalValue(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
+// Các giá trị min/max/mặc định tính theo giờ hiện tại nên server và trình duyệt có thể lệch 1 phút;
+// các ô ngày giờ dùng suppressHydrationWarning để không báo lỗi hydration vì độ lệch này.
 function getMinNowDateTimeLocal() {
   return toDateTimeLocalValue(new Date());
 }
@@ -666,6 +668,7 @@ export function LeaderCreateTripStepOne() {
                     type="date"
                     className={inputClass}
                     value={startDate}
+                    suppressHydrationWarning
                     min={getMinTripStartDate(3)}
                     onChange={(event) => {
                       const nextStartDate = event.target.value;
@@ -692,6 +695,7 @@ export function LeaderCreateTripStepOne() {
                     type="date"
                     className={inputClass}
                     value={endDate}
+                    suppressHydrationWarning
                     min={startDate || getMinTripStartDate(3)}
                     onChange={(event) => {
                       const nextEndDate = event.target.value;
@@ -714,6 +718,7 @@ export function LeaderCreateTripStepOne() {
                     type="time"
                     className={inputClass}
                     value={meetingTime}
+                    suppressHydrationWarning
                     onChange={(event) => {
                       setMeetingTime(event.target.value);
                       setDateError("");
@@ -778,6 +783,7 @@ export function LeaderCreateTripStepOne() {
                         type="datetime-local"
                         className={inputClass}
                         value={registrationOpenLocal}
+                        suppressHydrationWarning
                         min={minNowLocal}
                         max={registrationDeadlineLocal || maxAllowedDeadlineLocal}
                         onChange={(e) => {
@@ -801,6 +807,7 @@ export function LeaderCreateTripStepOne() {
                         type="datetime-local"
                         className={inputClass}
                         value={registrationDeadlineLocal}
+                        suppressHydrationWarning
                         min={registrationOpenLocal || minNowLocal}
                         max={maxAllowedDeadlineLocal}
                         onChange={(e) => {

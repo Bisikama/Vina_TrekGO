@@ -41,6 +41,11 @@ const navigation = [
     icon: "badge",
   },
   {
+    href: "/staff/product-profiles",
+    label: "Thông số sản phẩm",
+    icon: "spec",
+  },
+  {
     href: "/staff/schedule",
     label: "Lịch phân ca & Điều phối",
     icon: "calendar",
@@ -68,6 +73,8 @@ function NavIcon({ type }: { type: string }) {
       "M20 21a8 8 0 0 0-16 0m8-9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
     badge:
       "M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Zm-3 9 2 2 4-4",
+    spec:
+      "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M14 4v4M8 10v4M16 16v4",
   };
 
   return (

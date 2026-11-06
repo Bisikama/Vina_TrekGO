@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/lib/axios";
 import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
+import { LeaderTripCancellation } from "./LeaderTripCancellation";
 import {
   getLeaderTripParticipants,
   getLeaderTripErrorMessage,
@@ -156,6 +157,8 @@ export function LeaderTripDetail({ tripId }: { tripId: string }) {
       ? "Đang diễn ra (IN_PROGRESS)"
       : trip?.status === "COMPLETED"
       ? "Đã hoàn thành"
+      : trip?.status === "CANCEL_PENDING"
+      ? "Chờ Admin duyệt hủy"
       : trip?.status === "CANCELLED"
       ? "Đã hủy"
       : "Chuyến đi";
@@ -193,6 +196,7 @@ export function LeaderTripDetail({ tripId }: { tripId: string }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {trip && <LeaderTripCancellation key={trip.id} trip={trip} size="md" disabled={isSubmitting} onRequested={() => { void refetchTrip(); }} />}
           {trip?.status === "DRAFT" && (
             <>
               <Link

@@ -31,6 +31,17 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+const TRIP_TYPE_LABELS: Record<string, string> = { PUBLIC: "Chuyến công khai", PRIVATE: "Chuyến riêng tư" };
+const TRIP_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Nháp",
+  OPEN: "Đang mở",
+  FULL: "Đã đủ người",
+  CLOSED: "Đã chốt danh sách",
+  IN_PROGRESS: "Đang diễn ra",
+  COMPLETED: "Đã kết thúc",
+  CANCELLED: "Đã hủy",
+};
+
 export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [privateTrips, setPrivateTrips] = useState<PrivateTrip[]>([]);
@@ -168,7 +179,7 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
-                      {trip.type} · {trip.status}
+                      {TRIP_TYPE_LABELS[trip.type] ?? "Chuyến đi"} · {TRIP_STATUS_LABELS[trip.status] ?? "Đang cập nhật"}
                     </span>
                     <h2 className="mt-3 text-xl font-extrabold text-gray-900">
                       {trip.title}

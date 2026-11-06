@@ -77,7 +77,19 @@ export type PublicTrip = PublicBookingTrip;
 export type PaymentMethod = 'QR' | 'REDIRECT';
 
 
-export type PaymentGateway = 'momo' | 'vnpay';
+export type PaymentGateway = 'momo' | 'vnpay' | 'payos';
+
+export interface PaymentOption {
+  gateway: PaymentGateway;
+  environment: string;
+  methods: PaymentMethod[];
+  refundMode?: 'MANUAL_BANK_TRANSFER';
+}
+
+export interface PaymentOptionsResponse {
+  defaultGateway: PaymentGateway | null;
+  gateways: PaymentOption[];
+}
 
 export interface Checkout {
   type: PaymentMethod;
@@ -95,10 +107,59 @@ export interface PaymentSummary {
   providerEnvironment: string | null;
 }
 
-export interface RefundItem {
+export interface BookingRefund {
   refundId: string;
+  paymentId: string;
+  purpose: string;
   status: string;
   amount: string;
+  currency: string;
+  executionMode: string;
+  confirmationSource: string | null;
+  refundedAt: string | null;
+  reconciliationRequired: boolean;
+  reasonCode?: string | null;
+  settlementMode?: string | null;
+  warnings?: string[];
+}
+
+export type RefundItem = BookingRefund;
+
+export interface CancelBookingResponse {
+  bookingId: string;
+  cancellationId: string;
+  status: 'CANCELLED';
+  refundableAmount: string;
+  currency: string;
+  refundProcessingStatus: 'COMPLETED' | 'PENDING' | 'NOT_REQUIRED';
+  refund: BookingRefund | null;
+}
+
+export interface BookingTransaction {
+  id: string;
+  kind: 'PAYMENT' | 'REFUND';
+  source: 'BOOKING';
+  sourceId: string | null;
+  paymentId: string;
+  refundId: string | null;
+  invoiceId: string;
+  amount: string;
+  currency: string;
+  status: string;
+  financialEffect: 'DEBIT' | 'CREDIT' | 'NONE';
+  executionMode?: string | null;
+  confirmationSource?: string | null;
+  settlementMode?: string | null;
+  warnings?: string[];
+  description: string;
+  paymentMethod: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BookingTransactionsResponse {
+  items: BookingTransaction[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
 export interface BookingDetail {

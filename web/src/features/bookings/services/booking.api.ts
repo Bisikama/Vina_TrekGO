@@ -1,9 +1,12 @@
 import axios from 'axios';
 import { apiClient } from '@/lib/axios';
+import { useAuthStore } from '@/features/auth';
 import type {
   BookingDetail,
   BookingListQuery,
   BookingSummary,
+  BookingTransactionsResponse,
+  CancelBookingResponse,
   PageResponse,
   Participant,
   PaymentCheckoutResponse,
@@ -256,12 +259,19 @@ export const bookingApiService = {
     bookingId: string,
     reason: string,
     idempotencyKey: string
-  ): Promise<{ status: string; refundableAmount: string }> => {
-    const response = await apiClient.post<{ status: string; refundableAmount: string }>(
-      `/api/v1/bookings/${bookingId}/cancellations`,
+  ): Promise<CancelBookingResponse> => {
+    const response = await apiClient.post<CancelBookingResponse>(
+      `/api/v1/bookings/${encodeURIComponent(bookingId)}/cancellations`,
       { reason },
       headers(idempotencyKey)
     );
+    return response.data;
+  },
+
+  listBookingTransactions: async (page = 1, pageSize = 20): Promise<BookingTransactionsResponse> => {
+    const response = await apiClient.get<BookingTransactionsResponse>('/api/v1/user/transactions', {
+      ...config, params: { source: 'BOOKING', page, pageSize },
+    });
     return response.data;
   },
 
@@ -334,6 +344,82 @@ export const bookingApiService = {
     return response.data;
   },
 };
+
+export interface MyTripContext {
+  trip: BookingDetail['trip'];
+  bookingId?: string;
+  bookingStatus: string;
+}
+
+function readForViewer(viewerId: string | undefined) {
+  return async <T>(request: () => Promise<T>): Promise<T> => {
+    const checkViewer = () => {
+      if (useAuthStore.getState().user?.id !== viewerId) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng cập nhật lại trạng thái.');
+    };
+    checkViewer();
+    const result = await request();
+    checkViewer();
+    return result;
+  };
+}
+
+/** Restore paused upcoming trips from the current user's sources, without changing public discovery totals. */
+export async function listMyTripCancellationContexts(signal?: AbortSignal, viewerId = useAuthStore.getState().user?.id): Promise<MyTripContext[]> {
+  const read = readForViewer(viewerId);
+  const pageSize = 50;
+  const now = Date.now();
+  const candidates = new Map<string, BookingSummary>();
+  const contexts = new Map<string, MyTripContext>();
+  const active = (status: string) => ['PENDING_PAYMENT', 'CONFIRMED', 'PARTIAL_CHECKIN', 'CHECKED_IN'].includes(status);
+  for (let page = 1; ; page++) {
+    const result = await read(() => bookingApiService.listMyBookings({ page, pageSize }, signal));
+    for (const booking of result.items) {
+      if (booking.status === 'EXPIRED' || new Date(booking.trip.endAt).getTime() <= now) continue;
+      const previous = candidates.get(booking.trip.id);
+      if (!previous || (!active(previous.status) && active(booking.status))) candidates.set(booking.trip.id, booking);
+    }
+    if (!result.items.length || page * pageSize >= result.total) break;
+  }
+  const bookings = [...candidates.values()];
+  for (let offset = 0; offset < bookings.length; offset += 4) {
+    const details = await Promise.all(bookings.slice(offset, offset + 4).map((booking) => read(() => bookingApiService.getBookingDetail(booking.id, signal))));
+    for (const detail of details) {
+      if (['CANCEL_PENDING', 'CANCELLED'].includes(detail.trip.status)) contexts.set(detail.trip.id, { trip: detail.trip, bookingId: detail.id, bookingStatus: detail.status });
+    }
+  }
+  for (let page = 1; ; page++) {
+    const result = await read(() => bookingApiService.listMyTickets({ page, pageSize }, signal));
+    for (const ticket of result.items) {
+      if (new Date(ticket.trip.endAt).getTime() > now && ['CANCEL_PENDING', 'CANCELLED'].includes(ticket.trip.status) && !contexts.has(ticket.trip.id)) {
+        contexts.set(ticket.trip.id, { trip: ticket.trip, bookingStatus: ticket.bookingStatus });
+      }
+    }
+    if (!result.items.length || page * pageSize >= result.total) break;
+  }
+  return [...contexts.values()].sort((a, b) => a.trip.startAt.localeCompare(b.trip.startAt) || a.trip.id.localeCompare(b.trip.id));
+}
+
+/** Public discovery hides cancelled/pending trips. Read only the signed-in user's own sources. */
+export async function getMyTripContext(tripId: string, signal?: AbortSignal, viewerId = useAuthStore.getState().user?.id): Promise<MyTripContext | null> {
+  const read = readForViewer(viewerId);
+  const pageSize = 50;
+  for (let page = 1; ; page++) {
+    const result = await read(() => bookingApiService.listMyBookings({ page, pageSize }, signal));
+    const owned = result.items.find((booking) => booking.trip.id === tripId);
+    if (owned) {
+      const detail = await read(() => bookingApiService.getBookingDetail(owned.id, signal));
+      return { trip: detail.trip, bookingId: detail.id, bookingStatus: detail.status };
+    }
+    if (!result.items.length || page * pageSize >= result.total) break;
+  }
+  for (let page = 1; ; page++) {
+    const result = await read(() => bookingApiService.listMyTickets({ page, pageSize }, signal));
+    const ticket = result.items.find((item) => item.trip.id === tripId);
+    if (ticket) return { trip: ticket.trip, bookingStatus: ticket.bookingStatus };
+    if (!result.items.length || page * pageSize >= result.total) break;
+  }
+  return null;
+}
 
 /**
  * Tuân thủ quy chuẩn lỗi CF01 & Booking: Đọc response.data.error thay vì giả định top-level message.

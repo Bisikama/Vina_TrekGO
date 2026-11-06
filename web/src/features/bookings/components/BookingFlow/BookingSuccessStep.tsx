@@ -45,6 +45,7 @@ export const BookingSuccessStep = ({
   const paymentLabelMap: Record<string, string> = {
     vnpay: "VNPAY-QR (Ngân hàng / Ví điện tử)",
     momo: "Ví điện tử MoMo",
+    payos: "Chuyển khoản VietQR (PayOS)",
     card: "Thẻ thanh toán Quốc tế (Visa/Master/JCB)",
     vietqr: "Chuyển khoản Ngân hàng (VietQR 24/7)",
   };

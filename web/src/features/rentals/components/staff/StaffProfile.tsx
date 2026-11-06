@@ -1,5 +1,6 @@
 "use client";
 
+import { orderShortCode } from "@/features/rentals/services/rental-display";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -192,7 +193,7 @@ export function StaffProfile() {
                     className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 hover:bg-emerald-50/40"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">#{task.orderCode}</p>
+                      <p className="text-sm font-semibold text-slate-900">Đơn {orderShortCode(task.orderId)}</p>
                       <p className="mt-0.5 text-[11px] text-slate-500">
                         Hạn {formatDate(task.deadline)} · {task.progress.picked}/{task.progress.required} món
                       </p>

@@ -2,7 +2,7 @@ import { apiRequest } from "@/lib/api-client";
 
 // ─── Public Trip Types ────────────────────────────────────────────────────────
 
-export type PublicTripStatus = "DRAFT" | "OPEN" | "FULL" | "CLOSED";
+export type PublicTripStatus = "DRAFT" | "OPEN" | "FULL" | "CLOSED" | "CANCEL_PENDING" | "CANCELLED";
 
 export interface PublicTripDestination {
   id: string;

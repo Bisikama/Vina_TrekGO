@@ -21,6 +21,11 @@ const leaderItems: NavItem[] = [
     icon: "♙",
   },
   {
+    label: "Theo dõi hủy chuyến",
+    href: "/leader/trip-cancellation-requests",
+    icon: "⊗",
+  },
+  {
     label: "Tạo chuyến đi mới",
     href: "/leader/create-trip",
     icon: "⊕",
