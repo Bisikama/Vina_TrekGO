@@ -27,6 +27,9 @@ export type AdminRentalOrderStatus =
 export type AdminRentalOrderSummary = {
   id: string;
   tripId: string;
+  /** Tên chuyến và tên chủ đơn (có từ #163). */
+  tripTitle?: string | null;
+  customerName?: string | null;
   bookingId: string | null;
   status: AdminRentalOrderStatus;
   financialStatus: string;
