@@ -138,3 +138,4 @@ Nếu trong quá trình phát triển, bạn chỉ muốn nạp lại một ph�
      npx prisma migrate reset --skip-seed
      ```
    * *Lưu ý: Lệnh này sẽ xóa toàn bộ dữ liệu trong database local trước khi chạy lại migrations. Sau khi reset, bạn chạy lại từ **Bước 3 ở Mục 2** để nạp dữ liệu.*
+   predploy
