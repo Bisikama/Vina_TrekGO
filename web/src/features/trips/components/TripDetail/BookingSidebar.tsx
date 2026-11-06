@@ -11,6 +11,7 @@ import {
   type PersonalTicket,
 } from "@/features/bookings/services/booking.api";
 import type { BookingSummary } from "@/features/bookings/types/booking.types";
+import { isTripRegistrationPaused } from "@/features/bookings/components/TripCancellationNotice";
 
 export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const { accessToken } = useAuth();
@@ -29,6 +30,7 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
   const isNotOpenYet = openAtMs !== null && Number.isFinite(openAtMs) && nowMs < openAtMs;
   const isPastDeadline = deadlineMs !== null && Number.isFinite(deadlineMs) && nowMs >= deadlineMs;
   const isClosedStatus =
+    isTripRegistrationPaused(trip.rawStatus) ||
     trip.rawStatus === "CLOSED" ||
     trip.rawStatus === "IN_PROGRESS" ||
     trip.rawStatus === "COMPLETED" ||
@@ -196,13 +198,13 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                     Bạn đang có đơn giữ chỗ chờ thanh toán ({myPendingHold.participantCount} chỗ)
                   </p>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
-                    Đơn giữ chỗ của bạn vẫn được phép hoàn tất thanh toán ngay cả khi form đăng ký đã đóng, miễn là còn trong thời gian giữ chỗ.
+                    {isTripRegistrationPaused(trip.rawStatus) ? 'Chuyến đang tạm ngừng nhận đăng ký. Mở booking để kiểm tra trạng thái trước khi tiếp tục.' : 'Đơn giữ chỗ của bạn vẫn được phép hoàn tất thanh toán ngay cả khi form đăng ký đã đóng, miễn là còn trong thời gian giữ chỗ.'}
                   </p>
                   <Link
                     href={`/bookings/${myPendingHold.id}`}
                     className="inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 transition"
                   >
-                    Tiếp tục thanh toán đơn giữ chỗ →
+                    {isTripRegistrationPaused(trip.rawStatus) ? 'Xem đơn giữ chỗ →' : 'Tiếp tục thanh toán đơn giữ chỗ →'}
                   </Link>
                 </div>
               )}
@@ -323,19 +325,24 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
               {/* Trust Badges */}
               <div className="mt-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                 <div className="text-[11px] leading-tight text-emerald-800">
-                  Giữ chỗ ưu tiên khi tạo đơn. Khi đến hạn đóng form, các đơn giữ chỗ đã tạo trước đó vẫn được phép thanh toán đến hết thời gian giữ chỗ.
+                  {isTripRegistrationPaused(trip.rawStatus) ? 'Chuyến hiện không nhận đăng ký. Vui lòng kiểm tra lại trạng thái trước khi đặt chỗ.' : 'Giữ chỗ ưu tiên khi tạo đơn. Khi đến hạn đóng form, các đơn giữ chỗ đã tạo trước đó vẫn được phép thanh toán đến hết thời gian giữ chỗ.'}
                 </div>
               </div>
 
               <Link
                 href={`/bookings/${trip.id}?participants=${participants}`}
+                aria-disabled={isBookingDisabled}
+                tabIndex={isBookingDisabled ? -1 : undefined}
+                onClick={(event) => { if (isBookingDisabled) event.preventDefault(); }}
                 className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold transition-colors ${
                   isBookingDisabled
                     ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400"
                     : "bg-[#1B5E41] text-white shadow-md shadow-emerald-900/10 hover:bg-[#154B36]"
                 }`}
               >
-                {isNotOpenYet
+                {trip.rawStatus === 'CANCEL_PENDING'
+                  ? 'Đang chờ duyệt hủy — tạm ngừng đăng ký'
+                  : isNotOpenYet
                   ? "Chưa tới giờ mở đăng ký"
                   : isClosedStatus
                   ? "Đã đóng form đăng ký"

@@ -14,8 +14,12 @@ export function useBookingDetail(
   const [isLoading, setIsLoading] = useState<boolean>(Boolean(bookingId));
   const [error, setError] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  const active = useRef(true);
+  const generation = useRef(0);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
   const fetchDetail = useCallback(async () => {
+    const request = ++generation.current;
     if (!bookingId) {
       setBooking(null);
       setIsLoading(false);
@@ -24,10 +28,12 @@ export function useBookingDetail(
 
     try {
       const result = await bookingApiService.getBookingDetail(bookingId);
+      if (!active.current || request !== generation.current) return;
       setBooking(result);
       setError(null);
       return result;
     } catch (err: unknown) {
+      if (!active.current || request !== generation.current) return;
       const errInfo = getBookingErrorMessage(
         err,
         "Không thể tải thông tin đặt chỗ.",
@@ -35,7 +41,7 @@ export function useBookingDetail(
       setError(errInfo.message);
       return undefined;
     } finally {
-      setIsLoading(false);
+      if (active.current && request === generation.current) setIsLoading(false);
     }
   }, [bookingId]);
 
@@ -81,7 +87,7 @@ export function useBookingDetail(
   useEffect(() => {
     if (!enablePolling || !bookingId) return;
 
-    if (booking?.status === "PENDING_PAYMENT") {
+    if (booking?.status === "PENDING_PAYMENT" && booking.trip.status !== 'CANCEL_PENDING') {
       const expiresTime = booking.expiresAt
         ? new Date(booking.expiresAt).getTime()
         : Infinity;
@@ -96,7 +102,7 @@ export function useBookingDetail(
 
       return () => clearInterval(interval);
     }
-  }, [booking?.status, booking?.expiresAt, bookingId, enablePolling, fetchDetail]);
+  }, [booking?.status, booking?.trip.status, booking?.expiresAt, bookingId, enablePolling, fetchDetail]);
 
   return {
     booking,

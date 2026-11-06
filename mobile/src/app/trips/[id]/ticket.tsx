@@ -21,6 +21,8 @@ import {
   PersonalTicket,
 } from "@/features/invitations/services/invitations.api";
 import { Colors, Shadows } from "@/constants/theme";
+import { Button, ScreenHeader } from '@/components/ui';
+import { TripCancellationNotice } from '@/features/bookings/components/TripCancellationNotice';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -118,6 +120,11 @@ export default function TripTicketScreen() {
       </SafeAreaView>
     );
   }
+
+  if (ticket?.bookingStatus === 'CANCELLED' || ticket?.trip.status === 'CANCELLED' || ticket?.participantStatus === 'CANCELLED') return <SafeAreaView style={styles.safeArea}>
+    <ScreenHeader title="Vé không còn hiệu lực" onBack={() => router.back()} />
+    <View style={{ padding: 24, gap: 16 }}><TripCancellationNotice status="CANCELLED" /><Text style={{ fontSize: 16, lineHeight: 24, color: Colors.ink }}>Vé này không còn dùng để điểm danh. Người mua có thể xem khoản hoàn trong chi tiết đặt chỗ.</Text><Button label="Chuyến đi của tôi" variant="secondary" style={{ backgroundColor: Colors.primary, borderRadius: 24 }} onPress={() => router.replace('/(tabs)/trips')} /></View>
+  </SafeAreaView>;
 
   // Dữ liệu hợp nhất (Ưu tiên API Ticket -> fallback Context Trip)
   const tripTitle = ticket?.trip?.title || fallbackTrip?.name || "Chuyến Trekking TrekGo";

@@ -3,8 +3,8 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { BookingCard } from "@/features/bookings/components";
 import { useMyBookings } from "@/features/bookings/hooks";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React from "react";
+import { useNavigation, useRouter } from "expo-router";
+import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -26,6 +26,7 @@ const STATUS_FILTERS = [
 
 export function MyBookingsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { isAuthenticated } = useAuth();
 
   const {
@@ -37,6 +38,7 @@ export function MyBookingsScreen() {
     setStatus,
     refetch,
   } = useMyBookings();
+  useEffect(() => navigation.addListener('focus', () => void refetch()), [navigation, refetch]);
 
   if (!isAuthenticated) {
     return (
@@ -70,6 +72,7 @@ export function MyBookingsScreen() {
           <Ionicons name="arrow-back" size={20} color={Colors.onSurface} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Đặt chỗ của tôi</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Lịch sử giao dịch đặt chỗ" style={{ padding: 10, borderRadius: 24, backgroundColor: '#e2f6d5' }} onPress={() => router.push('/bookings/transactions' as any)}><Ionicons name="receipt-outline" size={20} color={Colors.ink} /></TouchableOpacity>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.push("/(tabs)/explore" as any)}

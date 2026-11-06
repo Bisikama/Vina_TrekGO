@@ -1,5 +1,7 @@
 import { Colors, Radius } from "@/constants/theme";
 import { API_BASE_URL } from "@/lib/api-client";
+import { isPayosReturnUrl } from '../payment-gateways';
+import type { PaymentGateway } from '../types';
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useRef, useState } from "react";
 import {
@@ -18,6 +20,7 @@ import { WebView, type WebViewNavigation } from "react-native-webview";
 
 export interface PaymentCompleteResult {
   success: boolean;
+  requiresVerification?: boolean;
   responseCode?: string;
   message?: string;
   rawUrl?: string;
@@ -26,6 +29,7 @@ export interface PaymentCompleteResult {
 export interface PaymentWebViewModalProps {
   visible: boolean;
   url: string;
+  gateway?: PaymentGateway;
   title?: string;
   onClose: () => void;
   onPaymentComplete: (result: PaymentCompleteResult) => void;
@@ -34,6 +38,7 @@ export interface PaymentWebViewModalProps {
 export function PaymentWebViewModal({
   visible,
   url,
+  gateway,
   title = "Thanh toán an toàn",
   onClose,
   onPaymentComplete,
@@ -144,6 +149,17 @@ export function PaymentWebViewModal({
     }
 
     if (completedRef.current) return false;
+
+    if (gateway === 'payos' && isPayosReturnUrl(navUrl)) {
+      completedRef.current = true;
+      onPaymentComplete({
+        success: false,
+        requiresVerification: true,
+        message: 'Đang kiểm tra thanh toán với máy chủ.',
+        rawUrl: navUrl,
+      });
+      return false;
+    }
 
     // 1. VNPAY detection
     if (navUrl.includes("vnp_ResponseCode")) {
