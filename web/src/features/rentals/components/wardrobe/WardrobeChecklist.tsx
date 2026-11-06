@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { GearCategory, GearCondition, UserGearItem } from "@/features/rentals/services/gear.api";
 import { gearAttributes } from "@/features/rentals/services/gear-attribute-schema";
+import { downloadPackingChecklist } from "../gear-checklist-template";
 
 // Tủ đồ dạng danh sách đồ mang theo: đồ chia nhóm theo loại, mỗi món có ô tích "đã soạn vào balo".
 // Dấu tích chỉ lưu trên trình duyệt này (backend chưa có API lưu trạng thái soạn đồ).
@@ -283,60 +284,13 @@ export function ChecklistGroup({
   );
 }
 
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string);
-
-/** Mở bản in trắng đen trong tab mới; người dùng chọn "Lưu thành PDF" hoặc in ra giấy. */
-export function printPackingList(items: UserGearItem[], packed: Set<string>) {
+/** Tải PDF tủ đồ theo nhóm, giữ các dấu tích trên trình duyệt tại thời điểm xuất. */
+export async function printPackingList(items: UserGearItem[], packed: Set<string>) {
   const today = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short" }).format(new Date());
-  const sections = CATEGORY_ORDER.map(([category, label]) => {
-    const rows = items.filter((item) => item.category === category);
-    if (!rows.length) return "";
-    const lines = rows
-      .map((item) => {
-        const specs = specSummary(item);
-        const mark = packed.has(item.id) ? "✓" : "";
-        return `<li><span class="box">${mark}</span><span><b>${escapeHtml(item.name)}</b>${
-          item.brand ? ` · ${escapeHtml(item.brand)}` : ""
-        }${specs ? `<small> — ${escapeHtml(specs)}</small>` : ""}</span></li>`;
-      })
-      .join("");
-    return `<section><h3>${label} <span>(${rows.length})</span></h3><ul>${lines}</ul></section>`;
-  }).join("");
-
-  const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Danh sách đồ mang theo - TrekGo</title>
-<style>
-  @page { size: A4; margin: 16mm 16mm 18mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "Segoe UI", Inter, Arial, sans-serif; color: #111; margin: 0; }
-  .brand { font-size: 10px; letter-spacing: .2em; color: #444; font-weight: 600; }
-  h1 { font-size: 22px; margin: 4px 0 2px; font-weight: 600; }
-  .meta { font-size: 12px; color: #444; }
-  .fill { margin-top: 10px; font-size: 12px; color: #333; }
-  section { break-inside: avoid; margin-top: 16px; }
-  h3 { font-size: 13px; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid #222; font-weight: 600; }
-  h3 span { font-weight: 400; color: #555; }
-  ul { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; padding: 5px 0; }
-  li b { font-weight: 600; }
-  li small { color: #555; font-size: 11.5px; }
-  .box { width: 13px; height: 13px; border: 1.3px solid #222; border-radius: 2px; flex-shrink: 0; margin-top: 2px;
-         font-size: 11px; line-height: 11px; text-align: center; }
-  .note { margin-top: 22px; font-size: 11px; color: #555; }
-</style></head><body>
-<div class="brand">VINA TREKGO</div>
-<h1>Danh sách đồ mang theo</h1>
-<div class="meta">In ngày ${today} · ${items.length} món · đã soạn ${[...packed].filter((id) => items.some((item) => item.id === id)).length}</div>
-<div class="fill">Chuyến: ______________________________ &nbsp; Ngày đi: ______________</div>
-${sections}
-<p class="note">Ghi chú thêm: ________________________________________________________________</p>
-<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 150); });</script>
-</body></html>`;
-
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) return false;
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
-  return true;
+  const checklist = CATEGORY_ORDER.flatMap(([category, label]) => items.filter((item) => item.category === category).map((item) => ({
+    requirementId: item.id, category, title: item.name, priority: "WARDROBE", quantity: 1,
+    remainingQuantity: 0, status: "", assignedItemIds: [], exportSection: label,
+    exportDetail: [item.brand, specSummary(item)].filter(Boolean).join(" · "),
+  })));
+  await downloadPackingChecklist("", today, 0, checklist, checklist.map((item) => ({ requirementId: item.requirementId, isChecked: packed.has(item.requirementId) })), {}, { kind: "wardrobe" });
 }

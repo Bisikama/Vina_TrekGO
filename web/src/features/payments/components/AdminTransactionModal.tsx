@@ -111,6 +111,10 @@ export function AdminTransactionModal({ transaction, userId, onClose }: { transa
           <DetailField label="Ngày tạo">{formatCashflowDate(detail.createdAt)}</DetailField>
           <DetailField label="Đối soát">{reconcileLabels[detail.reconcileStatus] ?? detail.reconcileStatus}</DetailField>
           <DetailField label="Mã giao dịch">{result.kind === 'PAYMENT' ? detail.paymentId : result.data.refundId}</DetailField>
+          {detail.source === 'RENTAL' && <>
+            <DetailField label={detail.breakdown.isExtension ? 'Phí gia hạn' : 'Tiền thuê thiết bị'}>{formatCashflowMoney(detail.breakdown.rentalFeeAmount, detail.currency)}</DetailField>
+            <DetailField label="Tiền cọc">{formatCashflowMoney(detail.breakdown.depositAmount, detail.currency)}</DetailField>
+          </>}
           {Number(detail.breakdown.deductionAmount) > 0 && <DetailField label="Khoản khấu trừ / giữ lại">{formatCashflowMoney(detail.breakdown.deductionAmount, detail.currency)}</DetailField>}
         </dl>
         {result.kind === 'PAYMENT' ? <PaymentFields detail={result.data} /> : <RefundFields detail={result.data} />}

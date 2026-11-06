@@ -7,6 +7,17 @@ import {
   ErrorAlert,
   LoadingState,
   EmptyState,
+  PageShell,
+  PageHeader,
+  SurfaceCard,
+  SurfaceSectionHeader,
+  FormField,
+  Input,
+  Select,
+  Textarea,
+  PaginationBar,
+  StatusBadge,
+  InfoBanner,
 } from "@/components/ui";
 
 import {
@@ -22,6 +33,7 @@ import {
   type RentalExceptionSummary,
   type AdminRentalRefundInfo,
 } from "@/features/rentals/services/staff-returns.api";
+import { getEvidenceMedia } from "@/features/rentals/services/deduction-review.api";
 
 type ExceptionDecision =
   | "APPROVE_DEDUCTION"
@@ -131,6 +143,26 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function EvidenceList({ ids }: { ids: string[] }) {
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const [failed, setFailed] = useState<string[]>([]);
+  async function loadEvidence(id: string) {
+    try {
+      const media = await getEvidenceMedia(id);
+      setLinks((current) => ({ ...current, [id]: media.url }));
+      setFailed((current) => current.filter((value) => value !== id));
+    } catch {
+      setFailed((current) => [...current, id]);
+    }
+  }
+  if (!ids.length) return <p className="text-xs text-slate-500">Không có chứng cứ đính kèm.</p>;
+  return <ul className="space-y-2">{ids.map((id) => <li key={id} className="flex flex-wrap items-center gap-2 text-xs">
+    <span className="break-all font-mono text-slate-500">{id}</span>
+    {links[id] ? <a href={links[id]} target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline">Mở chứng cứ</a> : <Button size="sm" variant="outline" onClick={() => void loadEvidence(id)}>Tải chứng cứ</Button>}
+    {failed.includes(id) && <span className="text-red-700">Không tải được chứng cứ; hãy thử lại.</span>}
+  </li>)}</ul>;
+}
+
 export function AdminRentalReturnExceptions() {
   const [items, setItems] = useState<RentalExceptionSummary[]>([]);
   const [detail, setDetail] = useState<RentalExceptionDetail>();
@@ -141,16 +173,28 @@ export function AdminRentalReturnExceptions() {
   const [listLoading, setListLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [refundInfo, setRefundInfo] = useState<AdminRentalRefundInfo>();
-  const [refundInfoError, setRefundInfoError] = useState(false);
+  const [refundInfoError, setRefundInfoError] = useState<string>();
   const [refundInfoRevision, setRefundInfoRevision] = useState(0);
   const [showSimulationConfirm, setShowSimulationConfirm] = useState(false);
+  const [draftFilters, setDraftFilters] = useState({ type: "", status: "", assignee: "" });
+  const [filters, setFilters] = useState({ type: "", status: "", assignee: "" });
+  const [filterError, setFilterError] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
+
+  const refreshList = useCallback(async () => {
+    const result = await listRentalExceptions({ page, pageSize, type: filters.type || undefined, status: filters.status || undefined, assignee: filters.assignee || undefined });
+    setItems(result.items);
+    setTotal(result.pagination.totalItems);
+    if (page > 1 && page > Math.max(1, result.pagination.totalPages)) setPage(Math.max(1, result.pagination.totalPages));
+  }, [page, filters]);
 
   const load = useCallback(async () => {
     setError(undefined);
     setListLoading(true);
     try {
-      const result = await listRentalExceptions();
-      setItems(result.items);
+      await refreshList();
       if (detail) {
         setDetail(await getRentalException(detail.case.id));
         setRefundInfo(undefined);
@@ -161,13 +205,13 @@ export function AdminRentalReturnExceptions() {
     } finally {
       setListLoading(false);
     }
-  }, [detail]);
+  }, [detail, refreshList]);
 
   useEffect(() => {
     let active = true;
-    void listRentalExceptions()
+    void listRentalExceptions({ page, pageSize, type: filters.type || undefined, status: filters.status || undefined, assignee: filters.assignee || undefined })
       .then((result) => {
-        if (active) setItems(result.items);
+        if (active) { setItems(result.items); setTotal(result.pagination.totalItems); }
       })
       .catch((loadError) => {
         if (active) setError(getStaffReturnErrorMessage(loadError));
@@ -178,7 +222,7 @@ export function AdminRentalReturnExceptions() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [page, filters]); // Filters are applied together by the form.
 
   const refundId =
     detail?.case.type === "REFUND_FAILURE" ? detail.refund?.id : undefined;
@@ -189,13 +233,13 @@ export function AdminRentalReturnExceptions() {
       .then((result) => {
         if (active) {
           setRefundInfo(result);
-          setRefundInfoError(false);
+          setRefundInfoError(undefined);
         }
       })
-      .catch(() => {
+      .catch((requestError) => {
         if (active) {
           setRefundInfo(undefined);
-          setRefundInfoError(true);
+          setRefundInfoError(getStaffReturnErrorMessage(requestError));
         }
       });
     return () => {
@@ -208,7 +252,7 @@ export function AdminRentalReturnExceptions() {
     setNotice(undefined);
     setDetail(undefined);
     setRefundInfo(undefined);
-    setRefundInfoError(false);
+    setRefundInfoError(undefined);
     setReason("");
     setDetailLoading(true);
     try {
@@ -294,7 +338,7 @@ export function AdminRentalReturnExceptions() {
       setDetail(await getRentalException(detail.case.id));
       setRefundInfo(undefined);
       setRefundInfoRevision((current) => current + 1);
-      setItems((await listRentalExceptions()).items);
+      await refreshList();
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
     } finally {
@@ -356,7 +400,8 @@ export function AdminRentalReturnExceptions() {
       !detail?.refund ||
       refundInfo?.refundId !== detail.refund.id ||
       !["DEPOSIT", "RENTAL_CANCELLATION"].includes(refundInfo.purpose) ||
-      !refundInfo.canSimulateSandbox ||
+      refundInfo.source !== "RENTAL" || refundInfo.sourceId !== detail.case.orderId ||
+      !refundInfo.canAttemptSandboxSimulation ||
       reason.trim().length < 5 ||
       busy
     )
@@ -386,7 +431,7 @@ export function AdminRentalReturnExceptions() {
       setDetail(await getRentalException(detail.case.id));
       setRefundInfo(undefined);
       setRefundInfoRevision((current) => current + 1);
-      setItems((await listRentalExceptions()).items);
+      await refreshList();
     } catch (requestError) {
       setError(getStaffReturnErrorMessage(requestError));
     } finally {
@@ -397,7 +442,7 @@ export function AdminRentalReturnExceptions() {
 
   const isRefundFailure = detail?.case.type === "REFUND_FAILURE";
   const currentRefundInfo =
-    refundInfo?.refundId === detail?.refund?.id ? refundInfo : undefined;
+    refundInfo && detail?.refund && refundInfo.refundId === detail.refund.id && refundInfo.source === "RENTAL" && refundInfo.sourceId === detail.case.orderId ? refundInfo : undefined;
   const refundPurposeLabels: Record<string, string> = {
     RENTAL_CANCELLATION: "Hoàn tiền do hủy đơn thuê",
     DEPOSIT: "Hoàn cọc sau trả thiết bị",
@@ -409,14 +454,16 @@ export function AdminRentalReturnExceptions() {
     : "Giao dịch hoàn tiền";
   const canReconcile =
     currentRefundInfo?.executionMode === "PROVIDER_API" &&
-    currentRefundInfo.paymentGateway !== "payos" &&
-    ["PENDING", "PROCESSING"].includes(detail?.refund?.status ?? "");
+    !!currentRefundInfo.paymentGateway && currentRefundInfo.paymentGateway.toLowerCase() !== "payos" &&
+    currentRefundInfo.status === detail?.refund?.status &&
+    ["PENDING", "PROCESSING"].includes(currentRefundInfo.status);
   const canSimulate =
     process.env.NODE_ENV !== "production" &&
     !!currentRefundInfo &&
     ["DEPOSIT", "RENTAL_CANCELLATION"].includes(currentRefundInfo.purpose) &&
-    currentRefundInfo.canSimulateSandbox &&
-    ["PENDING", "PROCESSING"].includes(detail?.refund?.status ?? "");
+    currentRefundInfo.canAttemptSandboxSimulation &&
+    currentRefundInfo.status === detail?.refund?.status &&
+    ["PENDING", "PROCESSING"].includes(currentRefundInfo.status);
   const isCustodyIncident =
     detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
   const caseOpen = detail
@@ -424,46 +471,50 @@ export function AdminRentalReturnExceptions() {
     : false;
 
   return (
-    <main className="min-h-screen bg-[#f7f8f5] px-4 py-6 text-slate-900 sm:px-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-700">
-              Quản trị thuê thiết bị
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-              Ngoại lệ hoàn trả và quyết toán cọc
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Theo dõi kiểm định, khấu trừ và các giao dịch hoàn tiền cần xử lý.
-            </p>
-          </div>
-          <Button
+    <PageShell maxWidth="full" withTopOffset={false}>
+        <PageHeader eyebrow="Quản trị thuê thiết bị" title="Ngoại lệ hoàn trả và quyết toán cọc"
+          description="Theo dõi kiểm định, phản hồi của khách, khấu trừ và các giao dịch hoàn tiền."
+          actions={<Button
             type="button"
             disabled={listLoading || detailLoading || busy}
             onClick={() => void load()}
           >
             Làm mới dữ liệu
-          </Button>
-        </div>
+          </Button>} />
 
         {error ? (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
+          <ErrorAlert message={error} />
         ) : null}
         {notice ? (
-          <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            {notice}
-          </div>
+          <InfoBanner title="Kết quả xử lý">{notice}</InfoBanner>
         ) : null}
 
-        <div className="mt-6 grid items-start gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <SurfaceCard>
+          <SurfaceSectionHeader title="Bộ lọc hồ sơ" subtitle="Lọc toàn bộ hồ sơ theo loại, trạng thái hoặc mã nhân viên được giao." />
+          <form className="mt-4 grid gap-4 md:grid-cols-3" onSubmit={(event) => {
+            event.preventDefault();
+            const assignee = draftFilters.assignee.trim();
+            if (assignee && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignee)) { setFilterError("Mã nhân viên phải là UUID hợp lệ."); return; }
+            setFilterError(""); setError(undefined); setListLoading(true); setPage(1); setFilters({ ...draftFilters, assignee });
+          }}>
+            <FormField label="Loại ngoại lệ"><Select aria-label="Loại ngoại lệ" value={draftFilters.type} onChange={(event) => setDraftFilters({ ...draftFilters, type: event.target.value })}>
+              <option value="">Tất cả loại</option>{["DAMAGE_DISPUTE", "OVERDUE", "RETURN_INCOMPLETE", "PAYMENT_MISMATCH", "REFUND_FAILURE", "OTHER"].map((type) => <option key={type} value={type}>{exceptionLabels[type]}</option>)}
+            </Select></FormField>
+            <FormField label="Trạng thái"><Select aria-label="Trạng thái" value={draftFilters.status} onChange={(event) => setDraftFilters({ ...draftFilters, status: event.target.value })}>
+              <option value="">Tất cả trạng thái</option>{Object.entries(caseStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select></FormField>
+            <FormField label="Mã nhân viên được giao"><Input aria-label="Mã nhân viên được giao" value={draftFilters.assignee} onChange={(event) => setDraftFilters({ ...draftFilters, assignee: event.target.value })} placeholder="UUID nhân viên" /></FormField>
+            {filterError && <div className="md:col-span-3"><ErrorAlert message={filterError} /></div>}
+            <div className="flex gap-3 md:col-span-3"><Button type="submit">Áp dụng bộ lọc</Button><Button type="button" variant="ghost" onClick={() => { const empty = { type: "", status: "", assignee: "" }; setDraftFilters(empty); setFilters(empty); setFilterError(""); setError(undefined); setListLoading(true); setPage(1); }}>Đặt lại</Button></div>
+          </form>
+        </SurfaceCard>
+
+        <div className="grid items-start gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <SurfaceCard padding="sm">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Hồ sơ cần theo dõi</h2>
+              <h2 className="font-semibold">Danh sách hồ sơ</h2>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                {items.length}
+                {total}
               </span>
             </div>
             <div className="mt-4 space-y-2.5">
@@ -471,16 +522,17 @@ export function AdminRentalReturnExceptions() {
               {!listLoading && !items.length && !error && (
                 <EmptyState
                   title="Không có hồ sơ"
-                  description="Hiện không có hồ sơ để hiển thị."
+                  description="Không có hồ sơ phù hợp với bộ lọc."
                 />
               )}
-              {items.map((item) => {
+              {!listLoading && items.map((item) => {
                 const selected = detail?.case.id === item.id;
                 return (
                   <button
                     type="button"
                     key={item.id}
                     disabled={detailLoading || busy}
+                    aria-pressed={selected}
                     onClick={() => void selectException(item.id)}
                     className={`w-full rounded-xl border p-4 text-left transition ${
                       selected
@@ -492,9 +544,7 @@ export function AdminRentalReturnExceptions() {
                       <p className="font-semibold leading-5 text-slate-900">
                         {item.order.tripTitle}
                       </p>
-                      <span className="shrink-0 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-medium text-orange-700">
-                        {labelFor(caseStatusLabels, item.status)}
-                      </span>
+                      <StatusBadge status={item.status === "OPEN" || item.status === "UNDER_REVIEW" ? "PENDING" : "COMPLETED"} customLabel={labelFor(caseStatusLabels, item.status)} />
                     </div>
                     <p className="mt-1 text-sm text-slate-600">
                       {item.order.customerName}
@@ -516,9 +566,10 @@ export function AdminRentalReturnExceptions() {
                 );
               })}
             </div>
-          </aside>
+            <PaginationBar page={page} pageSize={pageSize} total={total} onPageChange={(nextPage) => { setListLoading(true); setError(undefined); setPage(nextPage); }} itemLabel="hồ sơ" disabled={listLoading || busy} />
+          </SurfaceCard>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <SurfaceCard>
             {detailLoading ? (
               <LoadingState message="Đang tải chi tiết hồ sơ..." />
             ) : !detail ? (
@@ -546,9 +597,7 @@ export function AdminRentalReturnExceptions() {
                       Hồ sơ {shortCode(detail.case.id)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-orange-100 px-3 py-1.5 text-xs font-medium text-orange-800">
-                    {labelFor(caseStatusLabels, detail.case.status)}
-                  </span>
+                  <StatusBadge status={caseOpen ? "PENDING" : "COMPLETED"} customLabel={labelFor(caseStatusLabels, detail.case.status)} />
                 </div>
 
                 <div className="mt-5 rounded-xl bg-slate-50 p-4">
@@ -580,7 +629,7 @@ export function AdminRentalReturnExceptions() {
                     </div>
                     {currentRefundInfo && (
                       <p className="mt-3 text-xs text-amber-900">
-                        Cổng: {currentRefundInfo.paymentGateway.toUpperCase()} ·
+                        Cổng: {currentRefundInfo.paymentGateway?.toUpperCase() ?? "Chưa xác định"} ·
                         Môi trường:{" "}
                         {currentRefundInfo.providerEnvironment ??
                           "Chưa xác định"}{" "}
@@ -594,10 +643,10 @@ export function AdminRentalReturnExceptions() {
                     {currentRefundInfo?.confirmationSource ===
                       "SANDBOX_SIMULATION" && (
                       <p className="mt-2 rounded-lg bg-amber-100 p-3 text-xs font-semibold text-amber-900">
-                        Kết quả Hoàn Tiền.
+                        Kết quả hoàn tiền được mô phỏng trên sandbox, không xác nhận tiền đã được chuyển.
                       </p>
                     )}
-                    {!currentRefundInfo && !refundInfoError && (
+                    {!refundInfo && !refundInfoError && (
                       <p className="mt-3 text-xs text-slate-500">
                         Đang tải thông tin giao dịch...
                       </p>
@@ -605,13 +654,15 @@ export function AdminRentalReturnExceptions() {
                     {refundInfoError && (
                       <ErrorAlert
                         className="mt-3"
-                        message="Không tải được loại giao dịch; các thao tác hoàn tiền tạm ẩn."
+                        message={`Không tải được thông tin khoản hoàn: ${refundInfoError}. Các thao tác tạm ẩn.`}
                         onRetry={() => {
-                          setRefundInfoError(false);
+                          setRefundInfoError(undefined);
                           setRefundInfoRevision((current) => current + 1);
                         }}
                       />
                     )}
+                    {refundInfo && !currentRefundInfo && <ErrorAlert className="mt-3" message="Khoản hoàn không thuộc đơn thuê này; các thao tác tạm ẩn. Vui lòng kiểm tra dữ liệu." />}
+                    {currentRefundInfo && currentRefundInfo.status !== detail.refund.status && <ErrorAlert className="mt-3" message="Trạng thái khoản hoàn vừa thay đổi. Hãy làm mới dữ liệu trước khi xử lý." />}
                     <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                       <div>
                         <dt className="text-xs text-slate-500">
@@ -688,6 +739,17 @@ export function AdminRentalReturnExceptions() {
                   </div>
                 ) : null}
 
+                <div className="mt-5 space-y-4 rounded-xl border border-slate-200 p-4">
+                  <div><h3 className="font-semibold">Chứng cứ hồ sơ</h3><div className="mt-2"><EvidenceList key={detail.case.id} ids={detail.evidence} /></div></div>
+                  <div><h3 className="font-semibold">Phản hồi của khách ({detail.reviews.length})</h3>
+                    {detail.reviews.length ? detail.reviews.map((review) => <div key={review.id} className="mt-3 rounded-lg bg-slate-50 p-3 text-sm"><p>{review.reason}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(review.createdAt)}</p><div className="mt-2"><EvidenceList ids={review.evidenceIds} /></div></div>) : <p className="mt-2 text-xs text-slate-500">Chưa có phản hồi.</p>}
+                  </div>
+                  <div><h3 className="font-semibold">Lịch sử xử lý</h3>
+                    {detail.case.resolution && <p className="mt-2 text-sm">Quyết định: {labelFor({ APPROVE_DEDUCTION: "Duyệt khấu trừ", REJECT_DEDUCTION: "Không khấu trừ", CONFIRM_LOST: "Xác nhận thất lạc", CLOSE_NO_ACTION: "Đóng không xử lý" }, detail.case.resolution)}</p>}
+                    {detail.history.length ? <ul className="mt-2 space-y-2">{detail.history.map((entry, index) => <li key={`${entry.createdAt}-${index}`} className="text-xs text-slate-600">{formatDateTime(entry.createdAt)} · {entry.action} · {entry.userId}</li>)}</ul> : <p className="mt-2 text-xs text-slate-500">Chưa có lịch sử.</p>}
+                  </div>
+                </div>
+
                 {detail.case.status === "RESOLVED" &&
                 detail.case.approvalRef &&
                 detail.assessment ? (
@@ -704,7 +766,7 @@ export function AdminRentalReturnExceptions() {
                   (!isRefundFailure && caseOpen)) && (
                   <label className="mt-5 block text-sm font-medium text-slate-700">
                     Ghi chú xử lý
-                    <textarea
+                    <Textarea
                       value={reason}
                       onChange={(event) => setReason(event.target.value)}
                       placeholder={
@@ -712,7 +774,7 @@ export function AdminRentalReturnExceptions() {
                           ? "Nhập ghi chú xử lý hoặc lý do hoàn tiền..."
                           : "Nhập lý do cho quyết định"
                       }
-                      className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-normal outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white"
+                      className="mt-2 min-h-24 font-normal"
                     />
                   </label>
                 )}
@@ -776,51 +838,46 @@ export function AdminRentalReturnExceptions() {
                       chuyển toàn bộ cọc của món này sang chờ hoàn qua cổng
                       thanh toán.
                     </p>
-                    <button
-                      disabled={busy || reason.trim().length < 3}
+                    <Button
+                      disabled={busy || reason.trim().length < 3 || !detail.allowedActions.includes("CLOSE_NO_ACTION")}
                       onClick={() => void decide("CLOSE_NO_ACTION")}
-                      className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+                      className="mt-3" fullWidth
                     >
                       Xác nhận lỗi custody — hoàn đủ cọc cho khách
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <button
-                      disabled={busy || reason.trim().length < 3}
+                    <Button variant="danger"
+                      disabled={busy || reason.trim().length < 3 || !detail.allowedActions.includes("APPROVE_DEDUCTION")}
                       onClick={() => void decide("APPROVE_DEDUCTION")}
-                      className="rounded-xl bg-red-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
                     >
                       Duyệt đề xuất khấu trừ
-                    </button>
-                    <button
-                      disabled={busy || reason.trim().length < 3}
+                    </Button>
+                    <Button
+                      disabled={busy || reason.trim().length < 3 || !detail.allowedActions.includes("REJECT_DEDUCTION")}
                       onClick={() => void decide("REJECT_DEDUCTION")}
-                      className="rounded-xl bg-emerald-700 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
                     >
                       Không khấu trừ và quyết toán
-                    </button>
-                    <button
-                      disabled={busy || reason.trim().length < 3}
+                    </Button>
+                    <Button variant="secondary"
+                      disabled={busy || reason.trim().length < 3 || !detail.allowedActions.includes("CONFIRM_LOST")}
                       onClick={() => void decide("CONFIRM_LOST")}
-                      className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
                     >
                       Xác nhận thất lạc
-                    </button>
-                    <button
-                      disabled={busy || reason.trim().length < 3}
+                    </Button>
+                    <Button variant="outline"
+                      disabled={busy || reason.trim().length < 3 || !detail.allowedActions.includes("CLOSE_NO_ACTION")}
                       onClick={() => void decide("CLOSE_NO_ACTION")}
-                      className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-50"
                     >
                       Đóng không xử lý
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
             )}
-          </section>
+          </SurfaceCard>
         </div>
-      </div>
       <ConfirmModal
         isOpen={showSimulationConfirm}
         onClose={() => setShowSimulationConfirm(false)}
@@ -830,6 +887,6 @@ export function AdminRentalReturnExceptions() {
         confirmLabel="Xác nhận mô phỏng"
         loading={busy}
       />
-    </main>
+    </PageShell>
   );
 }

@@ -1,5 +1,5 @@
 export type TransactionSource = 'BOOKING' | 'TRAIL_ACCESS' | 'RENTAL';
-export type CashflowSource = Exclude<TransactionSource, 'RENTAL'>;
+export type CashflowSource = TransactionSource;
 export type AdminGateway = 'BOTH' | 'vnpay';
 export type TransactionKind = 'PAYMENT' | 'REFUND';
 export type TransactionStatus = 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';

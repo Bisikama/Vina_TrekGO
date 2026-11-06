@@ -138,6 +138,20 @@ export class ManualRefundsService {
     const result = {
       ...this.view(row, actor, true),
       settlementProcessingStatus: row.purpose === 'DEPOSIT' ? (application?.status ?? 'PENDING') : null,
+      ...(actor.role === 'ADMIN' ? {
+        paymentGateway: row.paymentGateway,
+        providerEnvironment: row.providerEnvironment,
+        // This is an initial UI eligibility check; simulation performs the authoritative
+        // environment, provenance, allocation and concurrency checks under lock.
+        canAttemptSandboxSimulation:
+          row.payment.invoice.invoiceType === 'RENTAL' &&
+          ['DEPOSIT', 'RENTAL_CANCELLATION'].includes(row.purpose) &&
+          row.paymentGateway === 'vnpay' && row.providerEnvironment === 'SANDBOX' &&
+          row.payment.paymentGateway === 'vnpay' && row.payment.providerEnvironment === 'SANDBOX' &&
+          row.payment.status === 'SUCCEEDED' &&
+          ['PROVIDER_API', 'SANDBOX_SIMULATED'].includes(row.executionMode) &&
+          ['PENDING', 'PROCESSING'].includes(row.status),
+      } : {}),
     }
     if (!admin) return result
     const [actions, allocations, owner] = await Promise.all([
