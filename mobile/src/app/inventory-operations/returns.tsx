@@ -27,6 +27,7 @@ import {
   StaffReturnSummary,
   staffReturnsApi,
 } from "@/features/rentals/staff-returns-api";
+import { productLabel, splitGradeName } from "@/features/rentals/display";
 
 type Condition = FinalInspectionInput["condition"];
 type Draft = {
@@ -111,6 +112,16 @@ export default function InventoryReturnsScreen() {
   // Thiết bị thuộc sản phẩm có hạng: server trả RENTAL_GRADE_DECISION_REQUIRED, khi đó mở ô phân hạng.
   const [gradeRequiredUnits, setGradeRequiredUnits] = useState<string[]>([]);
   const [gradeDrafts, setGradeDrafts] = useState<Record<string, GradeDraft>>({});
+  // Sản phẩm đoán là có hạng (theo tên) nhưng server báo không áp dụng phân hạng.
+  const [ungradedUnits, setUngradedUnits] = useState<string[]>([]);
+
+  // Thiết bị có hạng: tên sản phẩm mang hạng, hoặc server đã yêu cầu quyết định hạng.
+  function gradeOf(unitId: string, productName?: string) {
+    if (ungradedUnits.includes(unitId)) return null;
+    const grade = productName ? splitGradeName(productName).grade : null;
+    if (grade) return grade;
+    return gradeRequiredUnits.includes(unitId) ? "Như mới" : null;
+  }
 
   const loadList = useCallback(
     async (silent = false) => {
@@ -244,11 +255,23 @@ export default function InventoryReturnsScreen() {
     }
   }
 
-  async function markReady(unitId: string, assetCode: string, inspectionId: string, expectedVersion: number) {
+  async function markReady(
+    unitId: string,
+    assetCode: string,
+    inspectionId: string,
+    expectedVersion: number,
+    productName?: string,
+  ) {
     if (!accessToken) return;
-    const needsGrade = gradeRequiredUnits.includes(unitId);
-    const grade: GradeDraft = gradeDrafts[unitId] ?? { decision: "KEEP", reason: "" };
-    if (needsGrade && grade.decision === "DOWNGRADE" && grade.reason.trim().length < 3) {
+    const currentGrade = gradeOf(unitId, productName);
+    // Hạng "Sử dụng tốt" không hạ được nữa nên mặc định giữ hạng.
+    const grade: GradeDraft | undefined =
+      gradeDrafts[unitId] ?? (currentGrade === "Sử dụng tốt" ? { decision: "KEEP", reason: "" } : undefined);
+    if (currentGrade && !grade) {
+      setError("Chọn Giữ hạng hoặc Hạ xuống Sử dụng tốt trước.");
+      return;
+    }
+    if (grade?.decision === "DOWNGRADE" && grade.reason.trim().length < 3) {
       setError("Nhập lý do hạ hạng (tối thiểu 3 ký tự).");
       return;
     }
@@ -257,32 +280,41 @@ export default function InventoryReturnsScreen() {
     await run(
       `ready-${unitId}`,
       async () => {
-        try {
-          const result = await staffReturnsApi.markReady(
+        const send = (withGrade: boolean) =>
+          staffReturnsApi.markReady(
             {
               unitId,
               inspectionId,
               expectedVersion,
-              gradeDecision: needsGrade
-                ? grade.decision === "DOWNGRADE"
-                  ? { decision: "DOWNGRADE", reason: grade.reason.trim() }
-                  : { decision: "KEEP" }
-                : undefined,
+              gradeDecision:
+                withGrade && grade
+                  ? grade.decision === "DOWNGRADE"
+                    ? { decision: "DOWNGRADE", reason: grade.reason.trim() }
+                    : { decision: "KEEP" }
+                  : undefined,
             },
             accessToken,
           );
-          shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
-          downgraded = result?.gradeReview?.decision === "DOWNGRADE";
+        let result;
+        try {
+          result = await send(Boolean(currentGrade));
         } catch (requestError) {
-          if (requestError instanceof ApiError && requestError.code === "RENTAL_GRADE_DECISION_REQUIRED") {
+          if (requestError instanceof ApiError && requestError.code === "RENTAL_GRADE_DECISION_NOT_APPLICABLE") {
+            // Tên có hạng nhưng sản phẩm không phân hạng: gửi lại không kèm quyết định hạng.
+            setUngradedUnits((current) => (current.includes(unitId) ? current : [...current, unitId]));
+            result = await send(false);
+          } else if (requestError instanceof ApiError && requestError.code === "RENTAL_GRADE_DECISION_REQUIRED") {
             setGradeRequiredUnits((current) => (current.includes(unitId) ? current : [...current, unitId]));
-            throw new Error(`Mã ${shortAssetCode(assetCode)} thuộc sản phẩm có hạng. Chọn Giữ hạng hoặc Hạ hạng rồi bấm lại.`);
+            throw new Error(`Mã ${shortAssetCode(assetCode)} có phân hạng. Chọn hạng bên dưới rồi bấm lại.`);
+          } else {
+            throw requestError;
           }
-          throw requestError;
         }
+        shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
+        downgraded = result?.gradeReview?.decision === "DOWNGRADE";
       },
       () =>
-        `${assetCode} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
+        `${shortAssetCode(assetCode)} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
         (shortageCount > 0 ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn; các đơn này đã được đánh dấu cần xử lý.` : ""),
     );
   }
@@ -395,7 +427,7 @@ export default function InventoryReturnsScreen() {
                     <TouchableOpacity key={unitId} style={styles.unitRow} onPress={() => toggleScan(unitId)}>
                       <Ionicons name={selected ? "checkbox" : "square-outline"} size={25} color={selected ? Colors.primaryDark : Colors.onSurfaceMuted} />
                       <View style={styles.flex}>
-                        <Text style={styles.unitTitle}>{unit?.productName ?? "Thiết bị"}</Text>
+                        <Text style={styles.unitTitle}>{unit?.productName ? productLabel(unit.productName) : "Thiết bị"}</Text>
                         <Text style={styles.asset}>{unit?.assetCode ? `Mã ${shortAssetCode(unit.assetCode)}` : "Chưa có mã thiết bị"}</Text>
                       </View>
                     </TouchableOpacity>
@@ -432,7 +464,7 @@ export default function InventoryReturnsScreen() {
               <View key={received.unitId} style={styles.card}>
                 <View style={styles.rowBetween}>
                   <View style={styles.flex}>
-                    <Text style={styles.unitTitle}>{expected?.productName ?? received.assetCode}</Text>
+                    <Text style={styles.unitTitle}>{expected?.productName ? productLabel(expected.productName) : received.assetCode}</Text>
                     <Text style={styles.asset}>Mã {shortAssetCode(received.assetCode)}</Text>
                   </View>
                   <Text style={final ? styles.donePill : styles.waitPill}>
@@ -480,45 +512,69 @@ export default function InventoryReturnsScreen() {
                     </View>
                   </>
                 ) : final.outcome === "NORMAL" && expected?.unitStatus === "CLEANING" ? (
-                  <>
-                    {gradeRequiredUnits.includes(received.unitId) ? (
-                      <View style={styles.gradeBox}>
-                        <Text style={styles.unitTitle}>Phân hạng sau khi trả</Text>
-                        <View style={styles.choiceRow}>
-                          {(["KEEP", "DOWNGRADE"] as const).map((decision) => {
-                            const grade: GradeDraft = gradeDrafts[received.unitId] ?? { decision: "KEEP", reason: "" };
-                            const active = grade.decision === decision;
-                            return (
-                              <TouchableOpacity
-                                key={decision}
-                                style={[styles.choice, active && styles.choiceActive]}
-                                onPress={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...grade, decision } }))}
-                              >
-                                <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
-                                  {decision === "KEEP" ? "Giữ hạng" : "Hạ xuống Sử dụng tốt"}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                        {gradeDrafts[received.unitId]?.decision === "DOWNGRADE" ? (
-                          <TextInput
-                            value={gradeDrafts[received.unitId]?.reason ?? ""}
-                            onChangeText={(reason) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { decision: "DOWNGRADE", reason } }))}
-                            placeholder="Lý do hạ hạng (bắt buộc)"
-                            placeholderTextColor={Colors.onSurfaceMuted}
-                            style={styles.input}
-                          />
+                  (() => {
+                    const currentGrade = gradeOf(received.unitId, expected.productName);
+                    const chosen: GradeDraft | undefined =
+                      gradeDrafts[received.unitId] ??
+                      (currentGrade === "Sử dụng tốt" ? { decision: "KEEP", reason: "" } : undefined);
+                    const decisions = currentGrade === "Sử dụng tốt" ? (["KEEP"] as const) : (["KEEP", "DOWNGRADE"] as const);
+                    const waitingGrade = Boolean(currentGrade) && !chosen;
+                    return (
+                      <>
+                        {currentGrade ? (
+                          <View style={styles.gradeBox}>
+                            <Text style={styles.gradeStep}>Bước 1 · Phân hạng sau khi trả</Text>
+                            <Text style={styles.meta}>Hạng hiện tại: {currentGrade}</Text>
+                            <View style={styles.choiceRow}>
+                              {decisions.map((decision) => {
+                                const active = chosen?.decision === decision;
+                                return (
+                                  <TouchableOpacity
+                                    key={decision}
+                                    style={[styles.choice, active && styles.choiceActive]}
+                                    onPress={() =>
+                                      setGradeDrafts((current) => ({
+                                        ...current,
+                                        [received.unitId]: { decision, reason: current[received.unitId]?.reason ?? "" },
+                                      }))
+                                    }
+                                  >
+                                    <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
+                                      {decision === "KEEP" ? `Giữ ${currentGrade}` : "Hạ xuống Sử dụng tốt"}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                            {chosen?.decision === "DOWNGRADE" ? (
+                              <TextInput
+                                value={chosen.reason}
+                                onChangeText={(reason) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { decision: "DOWNGRADE", reason } }))}
+                                placeholder="Lý do hạ hạng (bắt buộc)"
+                                placeholderTextColor={Colors.onSurfaceMuted}
+                                style={styles.input}
+                              />
+                            ) : null}
+                            <Text style={styles.meta}>Phân hạng không ảnh hưởng tiền cọc của khách vừa trả.</Text>
+                            <Text style={[styles.gradeStep, styles.gradeStepNext]}>Bước 2 · Xác nhận vệ sinh</Text>
+                          </View>
                         ) : null}
-                        <Text style={styles.meta}>Phân hạng không ảnh hưởng tiền cọc của khách vừa trả.</Text>
-                      </View>
-                    ) : null}
-                    <Action
-                      label="ĐÃ VỆ SINH, ĐỦ PHỤ KIỆN — SẴN SÀNG CHO THUÊ"
-                      disabled={Boolean(busy)}
-                      onPress={() => void markReady(received.unitId, received.assetCode, final.id, expected.unitVersion)}
-                    />
-                  </>
+                        <Action
+                          label={
+                            busy === `ready-${received.unitId}`
+                              ? "ĐANG CẬP NHẬT..."
+                              : waitingGrade
+                                ? "CHỌN HẠNG Ở BƯỚC 1 TRƯỚC"
+                                : "ĐÃ VỆ SINH, ĐỦ PHỤ KIỆN — SẴN SÀNG CHO THUÊ"
+                          }
+                          disabled={Boolean(busy) || waitingGrade}
+                          onPress={() =>
+                            void markReady(received.unitId, received.assetCode, final.id, expected.unitVersion, expected.productName)
+                          }
+                        />
+                      </>
+                    );
+                  })()
                 ) : final.outcome !== "NORMAL" ? (
                   <Text style={styles.warning}>Thiết bị có vấn đề đang chờ Admin xử lý ngoại lệ.</Text>
                 ) : null}
@@ -624,6 +680,8 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: Colors.primaryDark, borderRadius: Radius.xl, padding: 15, alignItems: "center", marginBottom: 14 },
   primaryText: { color: "#fff", fontSize: 12, fontWeight: "600", textAlign: "center" },
   disabled: { opacity: 0.5 },
+  gradeStep: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600", letterSpacing: 0.3 },
+  gradeStepNext: { marginTop: 12 },
   gradeBox: { marginTop: 12, marginBottom: 10, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: Radius.md, padding: 12 },
   warning: { color: "#9b6700", backgroundColor: "#fff5d7", borderRadius: 8, padding: 11, fontSize: 11, marginTop: 12 },
   errorBanner: { color: Colors.error, backgroundColor: "#ffe8e5", borderRadius: 9, padding: 12, marginBottom: 12 },

@@ -29,6 +29,7 @@ import {
 import { RentalCancellation } from "./RentalCancellation";
 import { DeductionReviewPanel } from "./DeductionReviewPanel";
 import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
+import { RentalResumePayment } from "./RentalResumePayment";
 import { GradeBadge } from "./GradeBadge";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
@@ -249,7 +250,7 @@ function depositTone(item: RentalDepositItem) {
 
 export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
   const [detail, setDetail] = useState<RentalOrderDetail | null>(null);
-  const [tripName, setTripName] = useState("Chuyến trekking của bạn");
+  const [tripName, setTripName] = useState("Chuyến đi của bạn");
   const [visuals, setVisuals] = useState<Record<string, ProductVisual>>({});
   const [deposit, setDeposit] = useState<RentalDepositStatus>();
   const [depositError, setDepositError] = useState<string>();
@@ -296,10 +297,19 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
         const privateTrip = privateTrips.find(
           (item) => item.id === value.order.tripId,
         );
+        const fallbackTitle =
+          booking?.trip.title || privateTrip?.title
+            ? null
+            : await bookingApi
+                .trip(value.order.tripId)
+                .then((trip) => trip.title)
+                .catch(() => null);
+        if (!active) return;
         setTripName(
           booking?.trip.title ||
             privateTrip?.title ||
-            "Chuyến trekking của bạn",
+            fallbackTitle ||
+            "Chuyến đi của bạn",
         );
         setVisuals(
           Object.fromEntries(
@@ -407,7 +417,14 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
             <OrderProgress detail={detail} />
 
             {detail.order.status === "PENDING_PAYMENT" ? (
-              <PaymentCountdown expiresAt={detail.order.paymentExpiresAt} />
+              <>
+                <PaymentCountdown expiresAt={detail.order.paymentExpiresAt} />
+                <RentalResumePayment
+                  orderId={detail.order.id}
+                  bookingId={detail.order.bookingId}
+                  expiresAt={detail.order.paymentExpiresAt}
+                />
+              </>
             ) : null}
 
             <section className="mt-6">

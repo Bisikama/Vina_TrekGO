@@ -391,13 +391,10 @@ function PaymentReturnContent() {
               Đơn thuê thiết bị
             </span>
             <p className="mt-2 text-xs text-gray-600">
-              Mã đơn: <strong className="text-gray-900">{rentalContext.orderId}</strong>
-            </p>
-            <p className="mt-1 text-xs text-gray-600">
-              Mã thanh toán: <strong className="text-gray-900">{rentalContext.paymentId}</strong>
+              Mã đơn: <strong className="text-gray-900">#{rentalContext.orderId.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}</strong>
             </p>
             <p className="mt-3 text-xs leading-5 text-amber-800">
-              Kết quả trên trình duyệt chưa phải bằng chứng PAID. Trạng thái cuối cùng do Backend nhận webhook và đối soát.
+              Hệ thống đang đối soát với cổng thanh toán. Trạng thái đơn sẽ tự cập nhật sau ít phút, bạn có thể theo dõi trong mục Đơn thuê.
             </p>
           </div>
         )}
@@ -503,9 +500,7 @@ function PaymentReturnContent() {
           {isSuccess && rentalContext ? (
             <>
               <Link
-                href={`/rentals?bookingId=${encodeURIComponent(
-                  rentalContext.bookingId,
-                )}`}
+                href={`/rentals/orders/${encodeURIComponent(rentalContext.orderId)}`}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-[#125238] px-6 py-3.5 text-xs font-bold text-white shadow-md shadow-emerald-900/15 transition hover:bg-[#2f6b4f]"
               >
                 Theo dõi đơn thuê

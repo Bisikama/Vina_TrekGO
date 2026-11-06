@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { reasonText } from "@/features/rentals/display";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
@@ -90,7 +91,7 @@ export default function RentalTripSelectScreen() {
           <Ionicons name="arrow-back" size={20} color={Colors.onSurface} />
         </TouchableOpacity>
         <View style={styles.flexOne}>
-          <Text style={styles.eyebrow}>RENTAL CONTEXT</Text>
+          <Text style={styles.eyebrow}>THUÊ THIẾT BỊ</Text>
           <Text style={styles.headerTitle}>Chọn chuyến đi</Text>
         </View>
         <View style={styles.headerIcon}>
@@ -105,8 +106,8 @@ export default function RentalTripSelectScreen() {
         <View style={styles.explanationCard}>
           <Ionicons name="information-circle" size={21} color={Colors.primaryDark} />
           <Text style={styles.explanationText}>
-            Catalog có thể xem trước. Để kiểm tra tồn kho, báo giá và tạo đơn,
-            TrekGo yêu cầu bạn là thành viên hợp lệ của chuyến đi.
+            Bạn có thể xem danh mục thiết bị trước. Để xem còn hàng, báo giá và đặt thuê,
+            bạn cần là thành viên đã xác nhận của chuyến đi.
           </Text>
         </View>
 
@@ -178,7 +179,7 @@ export default function RentalTripSelectScreen() {
                         ]}
                       >
                         <Text style={styles.typeBadgeText}>
-                          {trip.type === "PUBLIC" ? "PUBLIC TRIP" : "PRIVATE TRIP"}
+                          {trip.type === "PUBLIC" ? "CHUYẾN CÔNG KHAI" : "CHUYẾN RIÊNG TƯ"}
                         </Text>
                       </View>
                       <View
@@ -229,8 +230,7 @@ export default function RentalTripSelectScreen() {
                       </View>
                     ) : (
                       <Text style={styles.reasonText}>
-                        {trip.eligibilityReason ||
-                          "API xác nhận chuyến chưa đủ điều kiện thuê."}
+                        {reasonText(trip.eligibilityReason, "Chuyến đi chưa đủ điều kiện thuê thiết bị.")}
                       </Text>
                     )}
                   </TouchableOpacity>
