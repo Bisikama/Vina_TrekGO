@@ -31,6 +31,7 @@ import { DeductionReviewPanel } from "./DeductionReviewPanel";
 import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
 import { RentalResumePayment } from "./RentalResumePayment";
 import { GradeBadge } from "./GradeBadge";
+import { EarlyReturnPanel } from "./EarlyReturnPanel";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -415,6 +416,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
             </div>
 
             <OrderProgress detail={detail} />
+            <EarlyReturnPanel orderId={orderId} orderStatus={detail.order.status} dueAt={detail.order.dueAt} />
 
             {detail.order.status === "PENDING_PAYMENT" ? (
               <>

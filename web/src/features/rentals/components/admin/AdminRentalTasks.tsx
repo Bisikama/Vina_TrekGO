@@ -28,6 +28,7 @@ import {
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
 import { getRentalAssignees } from "@/features/rentals/services/staff-overview.api";
 import type { RentalAssignee } from "@/features/rentals/services/staff-preparation.api";
+import { AdminEarlyReturns } from "./AdminEarlyReturns";
 import {
   orderCode,
   taskStatusBadge,
@@ -108,6 +109,7 @@ export function AdminRentalTasks() {
         }
       />
 
+      <AdminEarlyReturns />
       <SurfaceCard padding="sm">
         <div className="grid gap-3 sm:grid-cols-3">
           <FormField label="Loại việc">
