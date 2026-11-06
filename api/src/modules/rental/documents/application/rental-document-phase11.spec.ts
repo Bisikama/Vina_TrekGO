@@ -298,6 +298,12 @@ describe('Rental Phase 11 documents (pure mock)', () => {
         snapshotHash: snapshotHash(linkedSnapshot) } as any, evidence);
       const raw = pdf.toString('latin1');
       expect(raw).toContain('/Subtype /FileAttachment');
+      const attachmentRect = raw.match(/\/Subtype \/FileAttachment \/Rect \[([^\]]+)\]/);
+      expect(attachmentRect).not.toBeNull();
+      const [left, bottom, right, top] = attachmentRect![1].split(' ').map(Number);
+      expect(right - left).toBe(16);
+      expect(top - bottom).toBe(16);
+      expect(raw).toContain('/Name /Paperclip');
       expect(raw).toContain('/EmbeddedFiles');
       expect(raw).toContain(`/evidence-${mediaId}.png`.slice(1));
       expect(raw).toContain('/Evidence1');

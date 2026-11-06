@@ -763,8 +763,9 @@ export class RentalPdfRenderer {
         const width = image.dimensions.width * scale, height = image.dimensions.height * scale
         units.push({ height: height + 42, draw: (top, links) => {
           const bottom = top - height - 24
-          links.push({ rect: [ML, bottom, ML + width, bottom + height], attachmentId: image.id })
-          return [text(`Ảnh ${ref(image.id)} — mở tệp đính kèm để xem ảnh gốc`, ML, top - 13, 9, C.text),
+          const iconX = ML + width + 10
+          links.push({ rect: [iconX, bottom + height - 18, iconX + 16, bottom + height - 2], attachmentId: image.id })
+          return [text(`Ảnh ${ref(image.id)} — bấm biểu tượng bên cạnh để mở ảnh gốc`, ML, top - 13, 9, C.text),
             `q ${n(width)} 0 0 ${n(height)} ${n(ML)} ${n(bottom)} cm /${image.name} Do Q`].join('\n')
         } })
       }
@@ -916,7 +917,7 @@ export class RentalPdfRenderer {
       const imageRefs = [...imageIds].map(([name, id]) => `/${name} ${id} 0 R`).join(' ')
       const xobject = logoId || imageRefs ? ` /XObject << ${logoId ? `/Im1 ${logoId} 0 R` : ''} ${imageRefs} >>` : ''
       const annotIds = pageLinks[index].map((link) =>
-        'attachmentId' in link ? add(`<< /Type /Annot /Subtype /FileAttachment /Rect [${link.rect.map(n).join(' ')}] /FS ${attachmentIds.get(link.attachmentId)} 0 R /Name /PushPin /Contents (Open original image attachment) >>`) : add(
+        'attachmentId' in link ? add(`<< /Type /Annot /Subtype /FileAttachment /Rect [${link.rect.map(n).join(' ')}] /FS ${attachmentIds.get(link.attachmentId)} 0 R /Name /Paperclip /Contents (Open original image attachment) >>`) : add(
           `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(n).join(' ')}] /Border [0 0 0] /A << /S /URI /URI (${pdfString(link.uri)}) >> >>`,
         ),
       )
