@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiClient } from '@/lib/axios';
+import type { BookingRefund, CancelBookingResponse, PaymentGateway, PaymentOptionsResponse } from './types/booking.types';
 
 export type Participant = {
   id?: string;
@@ -31,8 +32,7 @@ export type PublicTrip = {
   transportAvailable: boolean; transport: { vehicleType: string }[];
 };
 export type Checkout = { type: 'QR' | 'REDIRECT'; url: string | null; qrData: string | null };
-export type PaymentGateway = 'momo' | 'vnpay';
-export type PaymentOption = { gateway: PaymentGateway; environment: string };
+export type { PaymentGateway, PaymentOption } from './types/booking.types';
 export type Booking = {
   id: string; status: string; version: number; participantCount: number; expiresAt: string; confirmedAt: string | null;
   pricePerPax: string; totalAmount: string; currency: string; canEditParticipants: boolean; canCancel: boolean; rentalEligible: boolean;
@@ -40,7 +40,7 @@ export type Booking = {
   pickup: { id: string; name: string; address: string }; participants: Participant[];
   transport: { vehicleType: string; plateNumber?: string | null; driverName?: string | null; driverPhone?: string | null; meetingAt?: string }[];
   paymentSummary: { paymentId: string; status: string; applicationStatus: string | null; applicationReasonCode: string | null; reconciliationRequired: boolean; checkout: Checkout | null; providerEnvironment: string | null; gateway: string | null } | null;
-  refunds: { refundId: string; status: string; amount: string }[];
+  refunds: BookingRefund[];
 };
 export type BookingSummary = Pick<Booking, 'id' | 'status' | 'participantCount' | 'totalAmount' | 'currency' | 'expiresAt' | 'trip'>;
 export type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
@@ -56,12 +56,12 @@ export const bookingApi = {
   trips: async (params: Record<string, string | number> = {}) => (await apiClient.get<Page<PublicTrip>>('/api/v1/trips', { ...config, params })).data,
   trip: async (id: string) => (await apiClient.get<PublicTrip>(`/api/v1/trips/${id}`, config)).data,
   create: async (tripId: string, participants: Participant[], key: string) => (await apiClient.post<Booking>(`/api/v1/trips/${tripId}/bookings`, input(participants), headers(key))).data,
-  detail: async (id: string) => (await apiClient.get<Booking>(`/api/v1/bookings/${id}`, config)).data,
+  detail: async (id: string, signal?: AbortSignal) => (await apiClient.get<Booking>(`/api/v1/bookings/${id}`, { ...config, signal })).data,
   list: async (page: number, status: string) => (await apiClient.get<Page<BookingSummary>>('/api/v1/bookings', { ...config, params: { page, ...(status ? { status } : {}) } })).data,
   update: async (booking: Booking, participants: Participant[]) => (await apiClient.patch<Booking>(`/api/v1/bookings/${booking.id}/participants`, { ...input(participants), expectedVersion: booking.version }, config)).data,
-  paymentOptions: async () => (await apiClient.get<{ gateways: PaymentOption[] }>('/api/v1/payments/options', config)).data,
+  paymentOptions: async () => (await apiClient.get<PaymentOptionsResponse>('/api/v1/payments/options', config)).data,
   pay: async (id: string, key: string, gateway: PaymentGateway) => (await apiClient.post<{ checkout: Checkout | null; status: string; providerEnvironment: string; gateway: string }>(`/api/v1/bookings/${id}/payments`, { paymentMethod: 'REDIRECT', gateway }, headers(key))).data,
-  cancel: async (id: string, reason: string, key: string) => (await apiClient.post(`/api/v1/bookings/${id}/cancel`, { reason }, headers(key))).data,
+  cancel: async (id: string, reason: string, key: string): Promise<CancelBookingResponse> => (await apiClient.post<CancelBookingResponse>(`/api/v1/bookings/${id}/cancel`, { reason }, headers(key))).data,
   selfClaim: async (bookingId: string, participantId: string) => (await apiClient.post(`/api/v1/bookings/${bookingId}/participants/${participantId}/self-claim`, { confirmParticipantIdentity: true }, config)).data,
   invite: async (bookingId: string, participantId: string, recipientEmail: string, key = (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))) => (await apiClient.post(`/api/v1/bookings/${bookingId}/participants/${participantId}/invitations`, { recipientEmail }, headers(key))).data,
   revokeInvitation: async (invitationId: string) => (await apiClient.post(`/api/v1/booking-participant-invitations/${invitationId}/revoke`, {}, config)).data,

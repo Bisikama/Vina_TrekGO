@@ -4,6 +4,7 @@ import Link from "next/link";
 import { TripPricingManager } from "../pricing/TripPricingManager";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
+import { LeaderTripCancellation } from "./LeaderTripCancellation";
 
 type LeaderTripEditProps = {
   tripId: string;
@@ -101,7 +102,7 @@ const inputClass =
 export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
   const cleanTripId = tripId.replace(/^#/, "");
   const { trip, refetch: refetchTrip } = useLeaderTripDetail({ tripId: cleanTripId });
-  const { updateTrip, cancelTrip, isSubmitting } = useLeaderTripMutations();
+  const { updateTrip, isSubmitting } = useLeaderTripMutations();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -122,7 +123,6 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
   }, [startDate, endDate]);
 
   const [savedMessage, setSavedMessage] = useState("");
-  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     if (trip) {
@@ -210,22 +210,6 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
     }
   }
 
-  async function handleCancelTrip() {
-    setShowCancelModal(false);
-    if (trip) {
-      try {
-        await cancelTrip(cleanTripId, {
-          expectedVersion: trip.version,
-          reason: "Leader yêu cầu hủy chuyến đi",
-        });
-        await refetchTrip();
-        showTemporaryMessage("Đã ghi nhận yêu cầu hủy chuyến đi.");
-      } catch (err: unknown) {
-        showTemporaryMessage(err instanceof Error ? err.message : "Lỗi hủy chuyến đi.");
-      }
-    }
-  }
-
   const tripDisplayTitle = trip?.title || title || "Chỉnh sửa chuyến đi";
 
   return (
@@ -288,14 +272,7 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
                 ◉ Xem quản lý đoàn &amp; Timeline
               </Link>
 
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setShowCancelModal(true)}
-                className="h-11 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-              >
-                ⊗ Hủy chuyến
-              </button>
+              {trip && <LeaderTripCancellation key={trip.id} trip={trip} size="md" disabled={isSubmitting} onRequested={() => { void refetchTrip(); }} />}
 
               <button
                 type="button"
@@ -554,41 +531,6 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
         </div>
       )}
 
-      {showCancelModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-5 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-xl text-red-700">
-              !
-            </div>
-
-            <h2 className="mt-4 text-xl font-bold text-slate-950">
-              Xác nhận hủy chuyến đi?
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Hệ thống sẽ gửi thông báo và bắt đầu quy trình hoàn tiền theo chính sách hiện hành.
-            </p>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCancelModal(false)}
-                className="h-11 rounded-xl bg-slate-100 px-5 text-sm font-bold text-slate-700"
-              >
-                Quay lại
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCancelTrip}
-                className="h-11 rounded-xl bg-red-600 px-5 text-sm font-bold text-white hover:bg-red-700"
-              >
-                Xác nhận hủy chuyến
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

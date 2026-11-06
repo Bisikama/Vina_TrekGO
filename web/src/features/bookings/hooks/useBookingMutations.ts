@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { bookingApiService, getBookingErrorMessage } from '../services/booking.api';
 import type {
   BookingDetail,
+  CancelBookingResponse,
   Participant,
   PaymentCheckoutResponse,
   PaymentGateway,
@@ -111,7 +112,7 @@ export function useBookingMutations() {
       bookingId: string,
       reason: string,
       customKey?: string
-    ): Promise<{ status: string }> => {
+    ): Promise<CancelBookingResponse> => {
       setIsSubmitting(true);
       setError(null);
       try {

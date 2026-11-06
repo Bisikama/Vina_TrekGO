@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TopHeader } from "@/components/TopHeader";
-import { EmptyState, LoadingState } from "@/components/ui";
+import { EmptyState, LoadingState, StatusBadge, SurfaceCard } from "@/components/ui";
+import { BookingFlowButton, flowStyles } from "@/features/bookings/components/BookingFlowUI";
+import { MyTripFilters, MY_TRIP_DESCRIPTIONS, MY_TRIP_LABELS } from "@/features/trips/components/MyTripFilters";
+import { TripParticipationCard } from "@/features/trips/components/TripParticipationCard";
+import { buildTripParticipations, selectTripParticipations, type MyTripFilter, type MyTripSource, type TripParticipation } from "@/features/trips/trip-groups";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -32,7 +37,7 @@ import { useMyTickets } from "@/features/invitations";
 import { useLeaderTrips } from "@/features/leaders/hooks";
 
 type MainTab = "MY_TRIPS" | "PUBLIC_TRIPS";
-type TripFilter = "UPCOMING" | "PENDING" | "HISTORY" | "PRIVATE" | "INVITATIONS";
+
 
 const DIFFICULTY_OPTIONS = ["Tất cả", "EASY", "MEDIUM", "HARD", "EXTREME"];
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -52,6 +57,9 @@ export default function TripsScreen() {
   const isLeader = authUser?.role === "LEADER" || user?.role === "LEADER";
 
   const [mainTab, setMainTab] = useState<MainTab>("MY_TRIPS");
+  const [activeFilter, setActiveFilter] = useState<MyTripFilter>("UPCOMING");
+  const [tripSource, setTripSource] = useState<MyTripSource>("ALL");
+  const [invitationView, setInvitationView] = useState<"PENDING" | "HANDLED">("PENDING");
   const [publicSearch, setPublicSearch] = useState("");
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("Tất cả");
 
@@ -160,15 +168,11 @@ export default function TripsScreen() {
     }
 
     if (params.filter === "PRIVATE") {
-      setActiveFilter("PRIVATE");
-    } else if (params.filter === "INVITATIONS") {
-      setActiveFilter("INVITATIONS");
-    } else if (params.filter === "UPCOMING") {
+      setTripSource("PRIVATE");
       setActiveFilter("UPCOMING");
-    } else if (params.filter === "PENDING") {
-      setActiveFilter("PENDING");
-    } else if (params.filter === "HISTORY") {
-      setActiveFilter("HISTORY");
+    } else if (["UPCOMING", "PENDING", "HISTORY", "CANCELLED", "INACTIVE", "INVITATIONS"].includes(params.filter ?? "")) {
+      setTripSource("ALL");
+      setActiveFilter(params.filter as MyTripFilter);
     }
   }, [params.tab, params.filter]);
 
@@ -179,17 +183,7 @@ export default function TripsScreen() {
       void refetchPrivateTrips();
       void refetchInvitations();
       void refetchTickets();
-      if (params.tab === "PUBLIC_TRIPS") {
-        setMainTab("PUBLIC_TRIPS");
-      } else if (params.tab === "MY_TRIPS") {
-        setMainTab("MY_TRIPS");
-      }
-      if (params.filter === "PRIVATE") {
-        setActiveFilter("PRIVATE");
-      } else if (params.filter === "INVITATIONS") {
-        setActiveFilter("INVITATIONS");
-      }
-    }, [refetchBookings, refetchPrivateTrips, refetchInvitations, refetchTickets, params.tab, params.filter]),
+    }, [refetchBookings, refetchPrivateTrips, refetchInvitations, refetchTickets]),
   );
 
   const displayedPublicTrips = useMemo(() => {
@@ -238,132 +232,23 @@ export default function TripsScreen() {
     });
   }, [bookings, tripStatusMap]);
 
-  // Split bookings by status
-  const pendingBookings = useMemo(
-    () => enrichedBookings.filter((b) => b.status === "PENDING_PAYMENT"),
-    [enrichedBookings],
-  );
+  const enrichedTickets = useMemo(() => myTickets.map((ticket) => {
+    const status = ticket.trip.status || tripStatusMap.get(ticket.trip.id);
+    return status && status !== ticket.trip.status ? { ...ticket, trip: { ...ticket.trip, status } } : ticket;
+  }), [myTickets, tripStatusMap]);
 
-  const confirmedBookings = useMemo(
-    () =>
-      enrichedBookings.filter((b) => {
-        const endAt = b.trip?.endAt ? new Date(b.trip.endAt) : null;
-        const isPast = endAt && !isNaN(endAt.getTime()) && endAt < new Date();
-        const isTripCompleted =
-          (b.trip?.status || "").toUpperCase() === "COMPLETED" || Boolean(isPast);
-        return (
-          ["CONFIRMED", "CHECKED_IN", "PARTIAL_CHECKIN"].includes(b.status) &&
-          !isTripCompleted
-        );
-      }),
-    [enrichedBookings],
-  );
-
-  const historyBookings = useMemo(() => {
-    // Nếu cùng 1 tripId mà có cả booking tham gia (đã hoàn thành) lẫn booking bị hủy trước đó,
-    // ưu tiên hiển thị booking hoàn thành để tránh hiển thị nhãn "Đã hủy" gây hiểu nhầm
-    const completedTripIds = new Set(
-      enrichedBookings
-        .filter((b) => {
-          const isCompleted =
-            (b.trip?.status || "").toUpperCase() === "COMPLETED";
-          return (
-            isCompleted &&
-            ["CONFIRMED", "CHECKED_IN", "PARTIAL_CHECKIN", "COMPLETED"].includes(
-              b.status,
-            )
-          );
-        })
-        .map((b) => b.trip?.id || (b as any).tripId)
-        .filter(Boolean),
-    );
-
-    return enrichedBookings.filter((b) => {
-      const tripId = b.trip?.id || (b as any).tripId;
-      const endAt = b.trip?.endAt ? new Date(b.trip.endAt) : null;
-      const isPast = endAt && !isNaN(endAt.getTime()) && endAt < new Date();
-      const isTripCompleted =
-        (b.trip?.status || "").toUpperCase() === "COMPLETED" || Boolean(isPast);
-
-      // Bỏ qua bản ghi hủy cũ nếu chuyến đi đó user đã có đơn tham gia thành công & hoàn thành
-      if (b.status === "CANCELLED" && tripId && completedTripIds.has(tripId)) {
-        return false;
-      }
-
-      return (
-        ["COMPLETED", "CANCELLED", "EXPIRED", "NO_SHOW"].includes(b.status) ||
-        isTripCompleted
-      );
-    });
-  }, [enrichedBookings]);
-
-  // Vé cá nhân nhận từ người khác hoặc tự claim (loại trừ nếu chính user là buyer của booking đó để tránh trùng lặp)
-  const companionTickets = useMemo(() => {
-    return myTickets.filter((ticket) => {
-      const tripId = ticket.trip?.id;
-      const alreadyInBookings = enrichedBookings.some(
-        (b) => (b.trip?.id || (b as any).tripId) === tripId,
-      );
-      const isCancelled = ticket.bookingStatus === "CANCELLED";
-      return !alreadyInBookings && !isCancelled;
-    });
-  }, [myTickets, enrichedBookings]);
-
-  const upcomingTickets = useMemo(() => {
-    const now = new Date();
-    return companionTickets.filter((t) => {
-      const tripId = t.trip?.id;
-      const statusFromMap = tripId ? tripStatusMap.get(tripId) : undefined;
-      const effectiveTripStatus = (t.trip?.status || statusFromMap || "").toUpperCase();
-      const endAt = t.trip?.endAt ? new Date(t.trip.endAt) : null;
-      const isPast = endAt && !isNaN(endAt.getTime()) && endAt < now;
-      const isTripCompleted = effectiveTripStatus === "COMPLETED";
-      return !isPast && t.bookingStatus !== "COMPLETED" && !isTripCompleted;
-    });
-  }, [companionTickets, tripStatusMap]);
-
-  const historyTickets = useMemo(() => {
-    return companionTickets.filter((t) => !upcomingTickets.includes(t));
-  }, [companionTickets, upcomingTickets]);
-
-  // Leader public trips có trạng thái COMPLETED (nếu user là Leader)
-  const completedLeaderTrips = useMemo(() => {
-    if (!isLeader) return [];
-    return leaderTrips.filter(
-      (t) => (t.status || "").toUpperCase() === "COMPLETED",
-    );
-  }, [isLeader, leaderTrips]);
-
-  // Private trips lấy trực tiếp từ backend API (bỏ merge mock từ AppContext)
-  const privateTrips = backendPrivateTrips;
-
-  // Split private trips by status (Tất cả chuyến riêng chưa hoàn thành/chưa hủy đều thuộc chuyến sắp tới)
-  const upcomingPrivateTrips = useMemo(
-    () =>
-      privateTrips.filter((t) => {
-        const s = (t.status || "").toUpperCase();
-        return s !== "COMPLETED" && s !== "CANCELLED";
-      }),
-    [privateTrips],
-  );
-
-  const historyPrivateTrips = useMemo(
-    () =>
-      privateTrips.filter((t) => {
-        const s = (t.status || "").toUpperCase();
-        return s === "COMPLETED" || s === "CANCELLED";
-      }),
-    [privateTrips],
-  );
-
-  const pendingInvitations = useMemo(
-    () => receivedInvitations.filter((inv) => inv.status === "PENDING"),
-    [receivedInvitations],
-  );
-
-  const [activeFilter, setActiveFilter] = useState<TripFilter>(
-    pendingBookings.length > 0 ? "PENDING" : "UPCOMING",
-  );
+  // Reclassify only the presentation; booking and invitation APIs remain unchanged.
+  const participations = buildTripParticipations({
+    bookings: enrichedBookings,
+    tickets: enrichedTickets,
+    privateTrips: backendPrivateTrips,
+    leaderTrips: isLeader ? leaderTrips : [],
+  });
+  const selectedTrips = selectTripParticipations(participations, tripSource);
+  const visibleTrips = selectedTrips.entries.filter((entry) => entry.group === activeFilter);
+  const listLoading = (tripSource !== "PRIVATE" && (loadingBookings || loadingTickets || (isLeader && loadingLeaderTrips)))
+    || (tripSource !== "PUBLIC" && loadingPrivateTrips);
+  const pendingInvitations = receivedInvitations.filter((inv) => inv.status === "PENDING");
 
   function openTripDetail(tripId: string) {
     router.push({
@@ -375,528 +260,61 @@ export default function TripsScreen() {
   }
 
   function renderFilters() {
-    return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.subFilterRow}
-      >
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            activeFilter === "UPCOMING" && styles.subFilterChipActive,
-          ]}
-          onPress={() => setActiveFilter("UPCOMING")}
-        >
-          <Text
-            style={[
-              styles.subFilterText,
-              activeFilter === "UPCOMING" && styles.subFilterTextActive,
-            ]}
-          >
-            Sắp tới
-          </Text>
-
-          {confirmedBookings.length + upcomingTickets.length + upcomingPrivateTrips.length > 0 && (
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>
-                {confirmedBookings.length + upcomingTickets.length + upcomingPrivateTrips.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            activeFilter === "PENDING" && styles.subFilterChipActive,
-            pendingBookings.length > 0 && { borderColor: "#D97706", borderWidth: 1 },
-          ]}
-          onPress={() => setActiveFilter("PENDING")}
-        >
-          <Text
-            style={[
-              styles.subFilterText,
-              activeFilter === "PENDING" && styles.subFilterTextActive,
-            ]}
-          >
-            Chờ thanh toán
-          </Text>
-
-          {pendingBookings.length > 0 && (
-            <View style={styles.pendingCountBadge}>
-              <Text style={styles.pendingCountBadgeText}>
-                {pendingBookings.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            { backgroundColor: "#E0F2F1", borderColor: "#80CBC4", borderWidth: 1, gap: 5 },
-          ]}
-          onPress={() => router.push("/invitations" as any)}
-        >
-          <Ionicons name="mail-unread-outline" size={14} color={Colors.primary} />
-          <Text style={[styles.subFilterText, { color: Colors.primary, fontWeight: "800" }]}>
-            Lời mời vé
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            { backgroundColor: Colors.primaryPale, gap: 5 },
-          ]}
-          onPress={() => setMainTab("PUBLIC_TRIPS")}
-        >
-          <Ionicons
-            name="compass"
-            size={14}
-            color={Colors.primaryDark}
-          />
-          <Text
-            style={[
-              styles.subFilterText,
-              { color: Colors.primaryDark, fontWeight: "700" },
-            ]}
-          >
-            Khám phá Public Trip
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            activeFilter === "HISTORY" && styles.subFilterChipActive,
-          ]}
-          onPress={() => setActiveFilter("HISTORY")}
-        >
-          <Text
-            style={[
-              styles.subFilterText,
-              activeFilter === "HISTORY" && styles.subFilterTextActive,
-            ]}
-          >
-            Lịch sử đã đi
-          </Text>
-
-          {historyBookings.length + historyTickets.length + historyPrivateTrips.length + completedLeaderTrips.length > 0 && (
-            <View style={styles.historyCountBadge}>
-              <Text style={styles.historyCountBadgeText}>
-                {historyBookings.length + historyTickets.length + historyPrivateTrips.length + completedLeaderTrips.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            activeFilter === "PRIVATE" && styles.subFilterChipActive,
-            activeFilter !== "PRIVATE" && { backgroundColor: Colors.tertiaryFixed },
-            { gap: 5 },
-          ]}
-          onPress={() => setActiveFilter("PRIVATE")}
-        >
-          <Ionicons
-            name="lock-closed"
-            size={13}
-            color={activeFilter === "PRIVATE" ? Colors.onPrimary : "#564500"}
-          />
-          <Text
-            style={[
-              styles.subFilterText,
-              activeFilter === "PRIVATE" && styles.subFilterTextActive,
-              activeFilter !== "PRIVATE" && { color: "#564500", fontWeight: "700" },
-            ]}
-          >
-            Chuyến riêng
-          </Text>
-          {privateTrips.length > 0 && (
-            <View
-              style={[
-                styles.countBadge,
-                {
-                  backgroundColor:
-                    activeFilter === "PRIVATE"
-                      ? "rgba(255,255,255,0.3)"
-                      : "#564500",
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: 4,
-                },
-              ]}
-            >
-              <Text style={[styles.countBadgeText, { fontSize: 10 }]}>
-                {privateTrips.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            activeFilter === "INVITATIONS" && styles.subFilterChipActive,
-            activeFilter !== "INVITATIONS" && { backgroundColor: Colors.secondaryContainer },
-            pendingInvitations.length > 0 && { borderColor: Colors.secondary, borderWidth: 1 },
-            { gap: 5 },
-          ]}
-          onPress={() => setActiveFilter("INVITATIONS")}
-        >
-          <Ionicons
-            name="mail"
-            size={13}
-            color={activeFilter === "INVITATIONS" ? Colors.onPrimary : Colors.secondary}
-          />
-          <Text
-            style={[
-              styles.subFilterText,
-              activeFilter === "INVITATIONS" && styles.subFilterTextActive,
-              activeFilter !== "INVITATIONS" && { color: Colors.secondary, fontWeight: "700" },
-            ]}
-          >
-            Hộp thư mời
-          </Text>
-          {pendingInvitations.length > 0 && (
-            <View
-              style={[
-                styles.countBadge,
-                {
-                  backgroundColor:
-                    activeFilter === "INVITATIONS"
-                      ? "rgba(255,255,255,0.3)"
-                      : Colors.secondary,
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: 4,
-                },
-              ]}
-            >
-              <Text style={[styles.countBadgeText, { fontSize: 10 }]}>
-                {pendingInvitations.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.subFilterChip,
-            { backgroundColor: Colors.surfaceContainer, gap: 5 },
-          ]}
-          onPress={() => router.push("/bookings" as any)}
-        >
-          <Ionicons name="ticket" size={13} color={Colors.primaryDark} />
-          <Text style={[styles.subFilterText, { color: Colors.primaryDark, fontWeight: "700" }]}>
-            Tất cả vé
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    );
+    return <MyTripFilters selected={activeFilter} source={tripSource} counts={selectedTrips.counts}
+      onSelect={setActiveFilter} onSource={setTripSource}
+      onBookings={() => router.push("/bookings" as Href)}
+      onTransactions={() => router.push("/bookings/transactions" as Href)} />;
   }
 
-  function renderUpcomingTrips() {
-    const hasUpcoming =
-      confirmedBookings.length > 0 ||
-      upcomingTickets.length > 0 ||
-      upcomingPrivateTrips.length > 0;
-
-    if (!hasUpcoming) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="calendar-outline"
-              size={34}
-              color={Colors.primaryDark}
-            />
-          </View>
-
-          <Text style={styles.emptyTitle}>Chưa có chuyến đi sắp tới</Text>
-
-          <Text style={styles.emptyDescription}>
-            Hãy khám phá các chuyến đi công khai đang mở bán hoặc tổ chức chuyến đi riêng cùng bạn bè!
-          </Text>
-
-          <TouchableOpacity
-            style={styles.emptyButton}
-            onPress={() => setMainTab("PUBLIC_TRIPS")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.emptyButtonText}>Khám phá chuyến mở bán</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.createTripBanner, { marginTop: 24 }]}
-            onPress={() => router.push("/private-trips/create" as any)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.createTripIcon}>
-              <Ionicons name="add" size={24} color={Colors.onPrimary} />
-            </View>
-
-            <View style={styles.flexOne}>
-              <Text style={styles.createTripTitle}>Tổ chức chuyến đi riêng</Text>
-
-              <Text style={styles.createTripSub}>
-                Chọn cung đường và tạo mã mời riêng tư cho nhóm bạn
-              </Text>
-            </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={Colors.primaryDark}
-            />
-          </TouchableOpacity>
+  function renderParticipation(entry: TripParticipation) {
+    if (entry.kind === "booking") return <View key={entry.key}>
+      <BookingCard booking={entry.data} onPress={() => {
+        if (["UPCOMING", "HISTORY"].includes(entry.group) && entry.data.trip?.id) {
+          openTripDetail(entry.data.trip.id);
+        } else {
+          router.push({ pathname: "/bookings/[id]", params: { id: entry.data.id } });
+        }
+      }} />
+    </View>;
+    if (entry.kind === "private") {
+      const trip = entry.data;
+      const membershipLabel = trip.viewer?.membershipStatus === "LEFT" ? "Đã rời nhóm" : trip.viewer?.membershipStatus === "REMOVED" ? "Không còn trong nhóm" : "Vắng mặt";
+      return <View key={entry.key} style={{ marginBottom: 12 }}>
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 6 }}>
+          <StatusBadge label="Chuyến riêng" tone="neutral" size="sm" />
+          {entry.group === "INACTIVE" && <StatusBadge label={membershipLabel} tone="neutral" size="sm" />}
         </View>
-      );
+        <PrivateTripCard trip={trip} onPress={() => {
+          if (trip.id.startsWith("trip-")) openTripDetail(trip.id);
+          else router.push({ pathname: "/private-trips/[id]", params: { id: trip.id } } as Href);
+        }} />
+      </View>;
     }
-
-    return (
-      <View style={{ paddingHorizontal: 16 }}>
-        {/* Nhóm Chuyến đi công khai (Public Trips & Vé tham gia) */}
-        {(confirmedBookings.length > 0 || upcomingTickets.length > 0) && (
-          <View style={{ marginBottom: 16 }}>
-            {upcomingPrivateTrips.length > 0 && (
-              <View style={styles.upcomingSectionHeader}>
-                <Ionicons name="compass-outline" size={16} color={Colors.primaryDark} />
-                <Text style={styles.upcomingSectionTitle}>Chuyến đi công khai</Text>
-                <View style={styles.upcomingSectionBadge}>
-                  <Text style={styles.upcomingSectionBadgeText}>
-                    {confirmedBookings.length + upcomingTickets.length}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* 1. Các đơn đặt chỗ chính chủ (Buyer) */}
-            {confirmedBookings.map((b) => {
-              const tripId = b.trip?.id || (b as any).tripId;
-              return (
-                <View key={b.id} style={{ marginBottom: 14 }}>
-                  <BookingCard
-                    booking={b}
-                    onPress={() => {
-                      if (tripId) {
-                        router.push({
-                          pathname: "/trips/[id]",
-                          params: { id: tripId },
-                        } as any);
-                      } else {
-                        router.push({
-                          pathname: "/bookings/[id]",
-                          params: { id: b.id },
-                        } as any);
-                      }
-                    }}
-                  />
-                </View>
-              );
-            })}
-
-            {/* 2. Các vé tham gia được bạn bè mời & đã chấp nhận (Companion) */}
-            {upcomingTickets.map((ticket) => {
-              const trip = ticket.trip;
-              const tripId = trip?.id;
-              const startDate = trip?.startAt ? new Date(trip.startAt) : null;
-              const formattedDate =
-                startDate && !isNaN(startDate.getTime())
-                  ? startDate.toLocaleDateString("vi-VN", {
-                      weekday: "short",
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })
-                  : "Chưa xác định";
-
-              return (
-                <TouchableOpacity
-                  key={`ticket-${ticket.id}`}
-                  style={[styles.companionTicketCard, Shadows.card]}
-                  activeOpacity={0.88}
-                  onPress={() => {
-                    router.push({
-                      pathname: "/trips/[id]/ticket",
-                      params: { id: ticket.id },
-                    } as any);
-                  }}
-                >
-                  <View style={styles.ticketCardHeader}>
-                    <View style={styles.ticketBadge}>
-                      <Ionicons name="ticket" size={13} color="#00796B" />
-                      <Text style={styles.ticketBadgeText}>VÉ THAM GIA · ĐƯỢC MỜI</Text>
-                    </View>
-                    <View style={styles.ticketStatusBadge}>
-                      <Ionicons
-                        name={ticket.checkinStatus === "CHECKED_IN" ? "checkmark-circle" : "qr-code"}
-                        size={12}
-                        color={ticket.checkinStatus === "CHECKED_IN" ? "#16A34A" : Colors.primaryDark}
-                      />
-                      <Text
-                        style={[
-                          styles.ticketStatusText,
-                          ticket.checkinStatus === "CHECKED_IN" && { color: "#16A34A" },
-                        ]}
-                      >
-                        {ticket.checkinStatus === "CHECKED_IN" ? "Đã điểm danh" : "Sẵn sàng QR"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.ticketTripTitle} numberOfLines={2}>
-                    {trip?.title || "Chuyến đi công khai"}
-                  </Text>
-
-                  <View style={styles.ticketMetaRow}>
-                    <Ionicons name="calendar-outline" size={14} color={Colors.primaryDark} />
-                    <Text style={styles.ticketMetaText}>{formattedDate}</Text>
-                  </View>
-
-                  {trip?.destination?.name ? (
-                    <View style={styles.ticketMetaRow}>
-                      <Ionicons name="location-outline" size={14} color={Colors.primaryDark} />
-                      <Text style={styles.ticketMetaText} numberOfLines={1}>
-                        {trip.destination.name}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.ticketCardFooter}>
-                    <Text style={styles.ticketMemberLabel}>
-                      Thành viên: <Text style={styles.ticketMemberName}>{ticket.participantName || "Bạn"}</Text>
-                    </Text>
-                    <View style={styles.ticketViewAction}>
-                      <Text style={styles.ticketViewActionText}>Mở vé & QR điểm danh</Text>
-                      <Ionicons name="chevron-forward" size={14} color={Colors.primaryDark} />
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Nhóm Chuyến đi riêng tư (Private Trips) */}
-        {upcomingPrivateTrips.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            {confirmedBookings.length > 0 && (
-              <View style={styles.upcomingSectionHeader}>
-                <Ionicons name="lock-closed" size={15} color="#854d0e" />
-                <Text style={[styles.upcomingSectionTitle, { color: "#854d0e" }]}>
-                  Chuyến đi riêng tư
-                </Text>
-                <View style={[styles.upcomingSectionBadge, { backgroundColor: "#fef9c3" }]}>
-                  <Text style={[styles.upcomingSectionBadgeText, { color: "#854d0e" }]}>
-                    {upcomingPrivateTrips.length}
-                  </Text>
-                </View>
-              </View>
-            )}
-            {upcomingPrivateTrips.map((pt) => (
-              <View key={pt.id} style={{ marginBottom: 14 }}>
-                <PrivateTripCard
-                  trip={pt}
-                  onPress={() => {
-                    if (pt.id.startsWith("trip-")) {
-                      openTripDetail(pt.id);
-                    } else {
-                      router.push({
-                        pathname: "/private-trips/[id]",
-                        params: { id: pt.id },
-                      } as any);
-                    }
-                  }}
-                />
-              </View>
-            ))}
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={styles.createTripBanner}
-          onPress={() => router.push("/private-trips/create" as any)}
-          activeOpacity={0.85}
-        >
-          <View style={styles.createTripIcon}>
-            <Ionicons name="add" size={24} color={Colors.onPrimary} />
-          </View>
-
-          <View style={styles.flexOne}>
-            <Text style={styles.createTripTitle}>Tổ chức chuyến đi riêng</Text>
-
-            <Text style={styles.createTripSub}>
-              Chọn cung đường và tạo mã mời riêng tư cho nhóm bạn
-            </Text>
-          </View>
-
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={Colors.primaryDark}
-          />
-        </TouchableOpacity>
-      </View>
-    );
+    return <TripParticipationCard key={entry.key} entry={entry} onPress={() => {
+      if (entry.kind === "ticket") router.push({ pathname: "/trips/[id]/ticket", params: { id: entry.data.id } });
+      else router.push({ pathname: "/field-operations/leader-trip-detail", params: { id: entry.data.id } } as Href);
+    }} />;
   }
 
-  function renderPendingTrips() {
-    if (pendingBookings.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="time-outline"
-              size={34}
-              color={Colors.primaryDark}
-            />
-          </View>
-
-          <Text style={styles.emptyTitle}>Không có đơn chờ thanh toán</Text>
-
-          <Text style={styles.emptyDescription}>
-            Tất cả các đơn đặt chỗ của bạn đã được thanh toán hoặc chưa có đơn giữ chỗ nào.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.emptyButton}
-            onPress={() => setMainTab("PUBLIC_TRIPS")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.emptyButtonText}>Khám phá chuyến mở bán</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <View style={{ paddingHorizontal: 16 }}>
-        <View style={styles.pendingHeaderNotice}>
-          <Ionicons name="alert-circle" size={18} color="#D97706" />
-          <Text style={styles.pendingHeaderNoticeText}>
-            Bạn có {pendingBookings.length} đơn giữ chỗ đang chờ thanh toán. Vui lòng hoàn tất thanh toán trước khi hết hạn!
-          </Text>
-        </View>
-
-        {pendingBookings.map((b) => (
-          <View key={b.id} style={{ marginBottom: 14 }}>
-            <BookingCard
-              booking={b}
-              onPress={() =>
-                router.push({
-                  pathname: "/bookings/[id]",
-                  params: { id: b.id },
-                } as any)
-              }
-            />
-          </View>
-        ))}
+  function renderParticipationList() {
+    const canManagePrivate = activeFilter === "UPCOMING" && tripSource !== "PUBLIC";
+    return <View style={{ paddingHorizontal: 16, gap: 12 }}>
+      <View style={{ gap: 6, paddingTop: 8 }}>
+        <Text style={flowStyles.heading}>{MY_TRIP_LABELS[activeFilter]} · {visibleTrips.length}</Text>
+        <Text style={flowStyles.muted}>{MY_TRIP_DESCRIPTIONS[activeFilter]}</Text>
       </View>
-    );
+      {listLoading && visibleTrips.length === 0 ? <LoadingState message="Đang tải chuyến đi..." />
+        : visibleTrips.length === 0 ? <SurfaceCard style={flowStyles.card}>
+          <EmptyState title="Chưa có chuyến trong nhóm này" description="Thử chọn trạng thái hoặc loại chuyến khác." />
+          {activeFilter === "UPCOMING" && <BookingFlowButton label="Khám phá chuyến đi" onPress={() => setMainTab("PUBLIC_TRIPS")} />}
+        </SurfaceCard>
+        : <View>{visibleTrips.map(renderParticipation)}</View>}
+      {canManagePrivate && <SurfaceCard style={flowStyles.card}>
+        <Text style={flowStyles.heading}>Đi cùng nhóm riêng</Text>
+        <BookingFlowButton label="Tạo chuyến đi riêng" onPress={() => router.push("/private-trips/create" as Href)} />
+        <BookingFlowButton label="Quét mã / Nhập mã mời" appearance="outline" onPress={() => router.push("/private-trips" as Href)} />
+      </SurfaceCard>}
+    </View>;
   }
 
   function renderPublicTripsTab() {
@@ -1044,308 +462,28 @@ export default function TripsScreen() {
     );
   }
 
-  function renderHistory() {
-    const hasHistory =
-      historyBookings.length > 0 ||
-      historyTickets.length > 0 ||
-      completedLeaderTrips.length > 0 ||
-      historyPrivateTrips.length > 0;
-
-    if (!hasHistory) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="file-tray-outline"
-              size={34}
-              color={Colors.primaryDark}
-            />
-          </View>
-
-          <Text style={styles.emptyTitle}>Chưa có lịch sử chuyến đi</Text>
-
-          <Text style={styles.emptyDescription}>
-            Các chuyến đi đã hoàn thành hoặc đã hủy sẽ được lưu trữ tại đây.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.emptyButton}
-            onPress={() => setMainTab("PUBLIC_TRIPS")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.emptyButtonText}>Khám phá chuyến mở bán</Text>
-          </TouchableOpacity>
+  function renderMyInvitations() {
+    return <>
+      <View style={{ marginHorizontal: 16, marginVertical: 12, gap: 12 }}>
+        <Text style={flowStyles.heading}>Lời mời tham gia</Text>
+        <Text style={flowStyles.muted}>{MY_TRIP_DESCRIPTIONS.INVITATIONS}</Text>
+        <SurfaceCard style={flowStyles.card}>
+          <Ionicons name="ticket-outline" size={24} color={Colors.ink} />
+          <Text style={flowStyles.heading}>Vé được gửi cho bạn</Text>
+          <Text style={flowStyles.body}>Xem và trả lời lời mời nhận vé chuyến công khai.</Text>
+          <BookingFlowButton label="Mở lời mời vé" onPress={() => router.push("/invitations" as Href)} />
+        </SurfaceCard>
+        <Text style={flowStyles.heading}>Lời mời chuyến riêng</Text>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {([['PENDING', `Chờ trả lời (${pendingInvitations.length})`], ['HANDLED', 'Đã xử lý']] as const).map(([value, label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: invitationView === value }} onPress={() => setInvitationView(value)} style={{ flex: 1, minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: invitationView === value ? '#9fe870' : '#ffffff' }}><Text style={{ fontSize: 13, fontWeight: '700', color: '#0e0f0c' }}>{label}</Text></Pressable>)}
         </View>
-      );
-    }
-
-    return (
-      <View style={{ paddingHorizontal: 16 }}>
-        {historyBookings.map((b) => {
-          const tripId = b.trip?.id || (b as any).tripId;
-          return (
-            <View key={b.id} style={{ marginBottom: 14 }}>
-              <BookingCard
-                booking={b}
-                onPress={() => {
-                  if (tripId) {
-                    router.push({
-                      pathname: "/trips/[id]",
-                      params: { id: tripId },
-                    } as any);
-                  } else {
-                    router.push({
-                      pathname: "/bookings/[id]",
-                      params: { id: b.id },
-                    } as any);
-                  }
-                }}
-              />
-            </View>
-          );
-        })}
-
-        {historyTickets.map((ticket) => (
-          <TouchableOpacity
-            key={`ticket-hist-${ticket.id}`}
-            style={[styles.companionTicketCard, { borderColor: Colors.surfaceContainerHigh }]}
-            activeOpacity={0.88}
-            onPress={() => {
-              router.push({
-                pathname: "/trips/[id]/ticket",
-                params: { id: ticket.id },
-              } as any);
-            }}
-          >
-            <View style={styles.ticketCardHeader}>
-              <View style={[styles.ticketBadge, { backgroundColor: Colors.surfaceContainerLow }]}>
-                <Ionicons name="ticket" size={13} color={Colors.onSurfaceVariant} />
-                <Text style={[styles.ticketBadgeText, { color: Colors.onSurfaceVariant }]}>
-                  VÉ THAM GIA
-                </Text>
-              </View>
-              <Text style={[styles.ticketStatusText, { color: Colors.mute }]}>
-                {ticket.checkinStatus === "CHECKED_IN" ? "Đã đi" : "Đã kết thúc"}
-              </Text>
-            </View>
-            <Text style={styles.ticketTripTitle} numberOfLines={2}>
-              {ticket.trip?.title || "Chuyến đi công khai"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-
-        {completedLeaderTrips.map((lt) => {
-          const startDate = lt.startAt ? new Date(lt.startAt) : null;
-          const formattedDate =
-            startDate && !isNaN(startDate.getTime())
-              ? startDate.toLocaleDateString("vi-VN", {
-                  weekday: "short",
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })
-              : "Chưa xác định";
-
-          return (
-            <TouchableOpacity
-              key={`leader-hist-${lt.id}`}
-              style={[styles.leaderCompletedCard, Shadows.card]}
-              activeOpacity={0.88}
-              onPress={() => {
-                router.push({
-                  pathname: "/field-operations/leader-trip-detail" as any,
-                  params: { id: lt.id },
-                });
-              }}
-            >
-              <View style={styles.ticketCardHeader}>
-                <View style={[styles.ticketBadge, { backgroundColor: "#E8F5E9" }]}>
-                  <Ionicons name="compass-outline" size={13} color="#2E7D32" />
-                  <Text style={[styles.ticketBadgeText, { color: "#2E7D32" }]}>
-                    CHUYẾN DẪN TOUR
-                  </Text>
-                </View>
-                <View style={[styles.ticketBadge, { backgroundColor: "#E8F5E9" }]}>
-                  <Text style={[styles.ticketBadgeText, { color: "#2E7D32" }]}>
-                    ĐÃ HOÀN THÀNH
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.ticketTripTitle} numberOfLines={2}>
-                {lt.title}
-              </Text>
-
-              {lt.destination?.name && (
-                <View style={styles.ticketMetaRow}>
-                  <Ionicons name="location-outline" size={14} color={Colors.onSurfaceVariant} />
-                  <Text style={styles.ticketMetaText} numberOfLines={1}>
-                    {lt.destination.name}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.ticketMetaRow}>
-                <Ionicons name="calendar-outline" size={14} color={Colors.onSurfaceVariant} />
-                <Text style={styles.ticketMetaText}>{formattedDate}</Text>
-              </View>
-
-              <View style={styles.ticketCardFooter}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="people-outline" size={14} color={Colors.onSurfaceVariant} />
-                  <Text style={styles.ticketMetaText}>
-                    Sức chứa: {lt.capacity} khách
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: Colors.primaryDark }}>
-                    Quản lý chuyến
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={Colors.primaryDark} />
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {historyPrivateTrips.map((pt) => (
-          <View key={pt.id} style={{ marginBottom: 14 }}>
-            <PrivateTripCard
-              trip={pt}
-              onPress={() => {
-                if (pt.id.startsWith("trip-")) {
-                  openTripDetail(pt.id);
-                } else {
-                  router.push({
-                    pathname: "/private-trips/[id]",
-                    params: { id: pt.id },
-                  } as any);
-                }
-              }}
-            />
-          </View>
-        ))}
       </View>
-    );
-  }
-
-  function renderPrivateTrips() {
-    if (privateTrips.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={34}
-              color={Colors.primaryDark}
-            />
-          </View>
-
-          <Text style={styles.emptyTitle}>Chưa có chuyến đi riêng</Text>
-
-          <Text style={styles.emptyDescription}>
-            Tổ chức chuyến đi riêng cùng bạn bè hoặc quét mã QR/nhập mã mời để tham gia nhóm!
-          </Text>
-
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push("/private-trips/create" as any)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.emptyButtonText}>Tạo chuyến đi riêng</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.emptyButton,
-                { backgroundColor: Colors.surfaceContainerHigh },
-              ]}
-              onPress={() => router.push("/private-trips" as any)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.emptyButtonText, { color: Colors.onSurface }]}>
-                Quét QR / Nhập mã
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={{ paddingHorizontal: 16 }}>
-        {/* Pending Invitations Banner shortcut */}
-        {pendingInvitations.length > 0 && (
-          <TouchableOpacity
-            style={styles.invitationBanner}
-            onPress={() => setActiveFilter("INVITATIONS")}
-            activeOpacity={0.88}
-          >
-            <View style={styles.invitationBannerIcon}>
-              <Ionicons name="mail-unread" size={18} color={Colors.primaryDark} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.invitationBannerTitle}>
-                Bạn có {pendingInvitations.length} lời mời tham gia chuyến riêng
-              </Text>
-              <Text style={styles.invitationBannerSub}>
-                Bấm vào để xem và phản hồi tham gia ngay
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.primaryDark} />
-          </TouchableOpacity>
-        )}
-
-        {/* Quick Action Bar for Private Trips */}
-        <View style={styles.privateActionBar}>
-          <TouchableOpacity
-            style={styles.privateActionBtn}
-            onPress={() => router.push("/private-trips/create" as any)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add-circle" size={18} color={Colors.onPrimary} />
-            <Text style={styles.privateActionBtnText}>Tạo chuyến mới</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.privateSecondaryBtn}
-            onPress={() => router.push("/private-trips" as any)}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name="qr-code-outline"
-              size={16}
-              color={Colors.primaryDark}
-            />
-            <Text style={styles.privateSecondaryBtnText}>
-              Quét QR / Nhập mã
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {privateTrips.map((pt) => (
-          <View key={pt.id} style={{ marginBottom: 14 }}>
-            <PrivateTripCard
-              trip={pt}
-              onPress={() => {
-                if (pt.id.startsWith("trip-")) {
-                  openTripDetail(pt.id);
-                } else {
-                  router.push({
-                    pathname: "/private-trips/[id]",
-                    params: { id: pt.id },
-                  } as any);
-                }
-              }}
-            />
-          </View>
-        ))}
-      </View>
-    );
+      {renderInvitationsInbox()}
+    </>;
   }
 
   function renderInvitationsInbox() {
+    const visibleInvitations = receivedInvitations.filter((inv) => invitationView === "PENDING" ? inv.status === "PENDING" : inv.status !== "PENDING");
     if (loadingInvitations && receivedInvitations.length === 0) {
       return (
         <View style={[styles.emptyState, { paddingVertical: 40 }]}>
@@ -1357,7 +495,7 @@ export default function TripsScreen() {
       );
     }
 
-    if (receivedInvitations.length === 0) {
+    if (visibleInvitations.length === 0) {
       return (
         <View style={styles.emptyState}>
           <View style={styles.emptyIcon}>
@@ -1367,9 +505,9 @@ export default function TripsScreen() {
               color={Colors.primaryDark}
             />
           </View>
-          <Text style={styles.emptyTitle}>Hộp thư lời mời trống</Text>
+          <Text style={styles.emptyTitle}>{invitationView === "PENDING" ? "Không có lời mời chờ trả lời" : "Chưa có lời mời đã xử lý"}</Text>
           <Text style={styles.emptyDescription}>
-            Khi bạn bè hoặc Host gửi lời mời tham gia chuyến đi riêng tư đến email của bạn, lời mời sẽ hiển thị tại đây.
+            {invitationView === "PENDING" ? "Lời mời chuyến riêng mới sẽ xuất hiện ở đây." : "Lời mời đã nhận, từ chối hoặc hết hạn sẽ xuất hiện ở đây."}
           </Text>
         </View>
       );
@@ -1377,7 +515,7 @@ export default function TripsScreen() {
 
     return (
       <View style={{ paddingHorizontal: 16 }}>
-        {pendingInvitations.length > 0 && (
+        {invitationView === "PENDING" && pendingInvitations.length > 0 && (
           <View style={styles.invitationInboxNotice}>
             <Ionicons name="mail-unread-outline" size={16} color={Colors.primaryDark} />
             <Text style={styles.invitationInboxNoticeText}>
@@ -1386,7 +524,7 @@ export default function TripsScreen() {
           </View>
         )}
 
-        {receivedInvitations.map((inv) => (
+        {visibleInvitations.map((inv) => (
           <DirectInviteCard
             key={inv.id}
             invitation={inv}
@@ -1418,7 +556,7 @@ export default function TripsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <TopHeader subtitle="Trips" />
+      <TopHeader subtitle="Chuyến đi" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1449,7 +587,7 @@ export default function TripsScreen() {
                 size={16}
                 color={
                   mainTab === "MY_TRIPS"
-                    ? Colors.onPrimary
+                    ? Colors.ink
                     : Colors.onSurfaceVariant
                 }
               />
@@ -1477,7 +615,7 @@ export default function TripsScreen() {
                 size={16}
                 color={
                   mainTab === "PUBLIC_TRIPS"
-                    ? Colors.onPrimary
+                    ? Colors.ink
                     : Colors.onSurfaceVariant
                 }
               />
@@ -1488,7 +626,7 @@ export default function TripsScreen() {
                     : styles.segmentBtnText
                 }
               >
-                Public Trips
+                Khám phá
               </Text>
             </TouchableOpacity>
           </View>
@@ -1497,11 +635,7 @@ export default function TripsScreen() {
         {mainTab === "MY_TRIPS" ? (
           <>
             {renderFilters()}
-            {activeFilter === "UPCOMING" && renderUpcomingTrips()}
-            {activeFilter === "PRIVATE" && renderPrivateTrips()}
-            {activeFilter === "INVITATIONS" && renderInvitationsInbox()}
-            {activeFilter === "PENDING" && renderPendingTrips()}
-            {activeFilter === "HISTORY" && renderHistory()}
+            {activeFilter === "INVITATIONS" ? renderMyInvitations() : renderParticipationList()}
           </>
         ) : (
           renderPublicTripsTab()
@@ -1516,7 +650,7 @@ export default function TripsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: "#e8ebe6",
   },
   flexOne: {
     flex: 1,
@@ -1537,6 +671,7 @@ const styles = StyleSheet.create({
   },
   segmentBtn: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
@@ -1554,528 +689,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   segmentBtnTextActive: {
-    color: Colors.onPrimary,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  subFilterRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    flexDirection: "row",
-    gap: 8,
-  },
-  subFilterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceContainer,
-  },
-  subFilterChipActive: {
-    backgroundColor: Colors.ink,
-  },
-  subFilterText: {
-    color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  subFilterTextActive: {
-    color: Colors.inverseOnSurface,
-    fontWeight: "700",
-  },
-  countBadge: {
-    width: 17,
-    height: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
-  },
-  countBadgeText: {
-    color: Colors.onPrimary,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  privateActionBar: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-  privateActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: Colors.primaryContainer,
-    paddingVertical: 12,
-    borderRadius: Radius.lg,
-    ...Shadows.card,
-  },
-  privateActionBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.onPrimary,
-  },
-  privateSecondaryBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: Colors.surfaceContainerLow,
-    paddingVertical: 12,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.surfaceContainerHigh,
-  },
-  privateSecondaryBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.onSurface,
-  },
-  pendingCountBadge: {
-    width: 17,
-    height: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: "#F59E0B",
-  },
-  pendingCountBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  historyCountBadge: {
-    minWidth: 17,
-    height: 17,
-    paddingHorizontal: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceContainerHighest,
-  },
-  historyCountBadgeText: {
-    color: Colors.onSurface,
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  pendingHeaderNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: Radius.lg,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  pendingHeaderNoticeText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#92400E",
-    lineHeight: 17,
-  },
-  tripCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceContainerLowest,
-    ...Shadows.hover,
-  },
-  tripCardTop: {
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  leaderBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.secondaryContainer,
-  },
-  leaderBadgeText: {
-    color: "#0C2000",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  confirmedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryContainer,
-  },
-  confirmedText: {
-    color: Colors.onPrimaryContainer,
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  tripDetails: {
-    marginBottom: 12,
-  },
-  tripTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  tripTitle: {
-    flex: 1,
-    color: Colors.onSurface,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  tripTimeRow: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  tripTimeText: {
-    flex: 1,
-    color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  logisticsBox: {
-    marginBottom: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  busIconBox: {
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: Colors.secondaryContainer,
-  },
-  logisticsTitle: {
-    color: Colors.onSurface,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  logisticsSub: {
-    marginTop: 1,
-    color: Colors.onSurfaceVariant,
-    fontSize: 11,
-  },
-  quickGrid: {
-    marginBottom: 14,
-    flexDirection: "row",
-    gap: 8,
-  },
-  quickTile: {
-    flex: 1,
-    minWidth: 0,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  quickTileLabel: {
-    color: Colors.onSurfaceVariant,
-    fontSize: 10,
-  },
-  quickTileVal: {
-    color: Colors.onSurface,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  quickRentalValue: {
-    color: Colors.primaryDark,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  ticketBtn: {
-    minHeight: 58,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.primaryDark,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLowest,
-  },
-  ticketIconBox: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primaryPale,
-  },
-  ticketBtnText: {
-    color: Colors.primaryDark,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  ticketBtnSubtext: {
-    marginTop: 2,
-    color: Colors.onSurfaceVariant,
-    fontSize: 10,
-  },
-  cardActionsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  prepBtn: {
-    flex: 3,
-    height: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.inverseSurface,
-  },
-  prepBtnText: {
-    color: Colors.inverseOnSurface,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  gpsLiveBtn: {
-    flex: 2,
-    height: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryContainer,
-  },
-  gpsLiveBtnText: {
-    color: Colors.onPrimary,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  privateTripCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceContainerLowest,
-    ...Shadows.card,
-  },
-  privateTop: {
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  privatePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.tertiaryFixed,
-  },
-  privatePillText: {
-    color: "#564500",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  hostText: {
-    color: Colors.primaryDark,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  privateTitle: {
-    color: Colors.onSurface,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  privateSub: {
-    marginTop: 2,
-    marginBottom: 12,
-    color: Colors.onSurfaceVariant,
-    fontSize: 12,
-  },
-  participantsBox: {
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  avatarStack: {
-    flexDirection: "row",
-  },
-  avatarCircle: {
-    width: 28,
-    height: 28,
-    marginRight: -8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.surfaceContainerLowest,
-    borderRadius: Radius.full,
-  },
-  avatarGreen: {
-    backgroundColor: "#47672D",
-  },
-  avatarDarkGreen: {
-    backgroundColor: "#2F6C00",
-  },
-  avatarGold: {
-    backgroundColor: "#725C00",
-  },
-  avatarMore: {
-    backgroundColor: Colors.surfaceContainerHighest,
-  },
-  avatarLetter: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  avatarMoreText: {
-    color: Colors.onSurface,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  inviteBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceContainerLowest,
-  },
-  inviteBtnText: {
-    color: Colors.primaryDark,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  createTripBanner: {
-    marginHorizontal: 16,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.primaryPale,
-    ...Shadows.card,
-  },
-  createTripIcon: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryContainer,
-  },
-  createTripTitle: {
-    color: Colors.inkDeep,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  createTripSub: {
-    marginTop: 2,
-    color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  pendingCard: {
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceContainerLowest,
-    ...Shadows.card,
-  },
-  pendingCardTop: {
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  pendingStatusPill: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: Radius.full,
-    backgroundColor: "#FFF1BF",
-  },
-  pendingStatusText: {
-    color: "#7A5700",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  pendingPrice: {
-    color: Colors.primaryDark,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  pendingTripName: {
-    marginBottom: 10,
-    color: Colors.onSurface,
-    fontSize: 19,
-    fontWeight: "900",
-  },
-  infoRow: {
-    marginTop: 7,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  infoText: {
-    flex: 1,
-    color: Colors.onSurfaceVariant,
-    fontSize: 12,
-  },
-  pendingNotice: {
-    marginTop: 14,
-    padding: 11,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    borderRadius: Radius.md,
-    backgroundColor: "#FFF7D6",
-  },
-  pendingNoticeText: {
-    flex: 1,
-    color: "#6B5200",
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  outlineButton: {
-    minHeight: 46,
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: Colors.primaryDark,
-    borderRadius: Radius.full,
-  },
-  outlineButtonText: {
-    color: Colors.primaryDark,
+    color: Colors.ink,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -2109,161 +723,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
-  },
-  emptyButton: {
-    minHeight: 44,
-    marginTop: 18,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryDark,
-  },
-  emptyButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  historyCard: {
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceContainerLowest,
-    ...Shadows.hover,
-  },
-  historyTop: {
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  completedPill: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: Radius.full,
-    backgroundColor: "#DFF4E7",
-  },
-  completedText: {
-    color: "#1B4332",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  historyDate: {
-    color: Colors.onSurfaceVariant,
-    fontSize: 10,
-  },
-  historyTripName: {
-    color: Colors.onSurface,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  historyDestination: {
-    marginTop: 4,
-    color: Colors.onSurfaceVariant,
-    fontSize: 12,
-  },
-  historyStats: {
-    marginTop: 16,
-    paddingVertical: 12,
-    flexDirection: "row",
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  historyStat: {
-    flex: 1,
-    alignItems: "center",
-  },
-  historyStatValue: {
-    marginTop: 4,
-    color: Colors.onSurface,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  historyStatLabel: {
-    marginTop: 2,
-    color: Colors.onSurfaceVariant,
-    fontSize: 9,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.surfaceContainerHighest,
-  },
-  leaderSummary: {
-    marginTop: 14,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  leaderAvatar: {
-    width: 38,
-    height: 38,
-    marginRight: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 19,
-    backgroundColor: Colors.primaryDark,
-  },
-  leaderAvatarText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  leaderLabel: {
-    color: Colors.onSurfaceVariant,
-    fontSize: 9,
-  },
-  leaderName: {
-    marginTop: 2,
-    color: Colors.onSurface,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  ratingSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  ratingSummaryText: {
-    color: Colors.onSurface,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  reviewButton: {
-    minHeight: 50,
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primaryDark,
-  },
-  reviewButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  cancelBookingButton: {
-    minHeight: 44,
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
-    borderRadius: Radius.full,
-    backgroundColor: "#FEF2F2",
-  },
-  cancelBookingButtonText: {
-    color: "#B91C1C",
-    fontSize: 11,
-    fontWeight: "900",
   },
   searchSection: {
     paddingHorizontal: 16,
@@ -2360,35 +819,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 15,
   },
-  invitationBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.secondaryContainer,
-    borderRadius: Radius.lg,
-    padding: 12,
-    marginBottom: 12,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.secondaryFixed,
-  },
-  invitationBannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceContainerLowest,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  invitationBannerTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Colors.secondary,
-  },
-  invitationBannerSub: {
-    fontSize: 11,
-    color: Colors.onSurfaceVariant,
-    marginTop: 1,
-  },
   invitationInboxNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -2404,120 +834,5 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
     fontWeight: "500",
     flex: 1,
-  },
-  upcomingSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  upcomingSectionTitle: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: Colors.onSurface,
-  },
-  upcomingSectionBadge: {
-    backgroundColor: Colors.primaryPale,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-  },
-  upcomingSectionBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Colors.primaryDark,
-  },
-  leaderCompletedCard: {
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: Radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#C5EDAB",
-    marginBottom: 14,
-  },
-  companionTicketCard: {
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: Radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#B2DFDB",
-    marginBottom: 14,
-  },
-  ticketCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  ticketBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#E0F2F1",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  ticketBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#00796B",
-    letterSpacing: 0.5,
-  },
-  ticketStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  ticketStatusText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.primaryDark,
-  },
-  ticketTripTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Colors.onSurface,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  ticketMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 5,
-  },
-  ticketMetaText: {
-    fontSize: 12.5,
-    color: Colors.onSurfaceVariant,
-    fontWeight: "500",
-  },
-  ticketCardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.surfaceContainerLow,
-  },
-  ticketMemberLabel: {
-    fontSize: 12,
-    color: Colors.onSurfaceVariant,
-  },
-  ticketMemberName: {
-    fontWeight: "700",
-    color: Colors.onSurface,
-  },
-  ticketViewAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  ticketViewActionText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Colors.primaryDark,
   },
 });

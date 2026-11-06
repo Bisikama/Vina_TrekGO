@@ -1,12 +1,16 @@
 "use client";
 import Link from "next/link";
+import axios from 'axios';
+import { useSWRConfig } from 'swr';
 import { useRef, useState } from "react";
+import { useAuth } from '@/features/auth';
 import {
   Button,
   SurfaceCard,
   ErrorAlert,
   Textarea,
   FormField,
+  InfoBanner,
 } from "@/components/ui";
 import {
   bookingApiService,
@@ -14,20 +18,28 @@ import {
   formatMoneyVND,
   type CancellationPreview,
 } from "../services/booking.api";
+import type { CancelBookingResponse } from '../types/booking.types';
+import { BookingCancellationResult } from './BookingCancellationResult';
 
 export function BookingCancellation({
   bookingId,
   onCancelled,
+  onRefresh,
 }: {
   bookingId: string;
-  onCancelled: () => void;
+  onCancelled: (result: CancelBookingResponse) => void;
+  onRefresh?: () => void;
 }) {
+  const { user } = useAuth();
+  const { mutate } = useSWRConfig();
   const [preview, setPreview] = useState<CancellationPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<CancelBookingResponse | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   const key = useRef<string | null>(null);
+  const submittedReason = useRef<string | null>(null);
   const pending = useRef(false);
   async function check() {
     if (pending.current) return;
@@ -50,18 +62,30 @@ export function BookingCancellation({
     setError("");
     try {
       key.current ??= crypto.randomUUID();
+      submittedReason.current ??= reason.trim();
       const value = await bookingApiService.cancelBooking(
         bookingId,
-        reason.trim(),
+        submittedReason.current,
         key.current,
       );
-      setResult(value.refundableAmount);
+      setResult(value);
+      setUncertain(false);
       setPreview(null);
-      onCancelled();
+      void mutate((cacheKey) => Array.isArray(cacheKey) && (cacheKey[0] === 'my-bookings' || (cacheKey[0] === 'booking-transactions' && cacheKey[1] === user?.id)));
+      onCancelled(value);
     } catch (e) {
       setError(getBookingErrorMessage(e).message);
-      // Require a fresh preview after a conflict; keep the key for ambiguous network outcomes.
-      setPreview(null);
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      if (status && status >= 400 && status < 500) {
+        onRefresh?.();
+        setPreview(null);
+        setUncertain(false);
+        key.current = null;
+        submittedReason.current = null;
+        if ([400, 409, 422].includes(status)) {
+          try { setPreview(await bookingApiService.cancellationPreview(bookingId)); } catch { /* A fresh preview is required before starting another cancellation. */ }
+        }
+      } else setUncertain(true);
     } finally {
       pending.current = false;
       setBusy(false);
@@ -70,20 +94,21 @@ export function BookingCancellation({
   return (
     <SurfaceCard className="w-full space-y-3">
       {result !== null ? (
-        <p role="status">
-          Đã hủy đặt chỗ. Khoản hoàn {formatMoneyVND(result)} được xử lý riêng
-          qua cổng thanh toán.
-        </p>
+        <BookingCancellationResult result={result} />
       ) : (
         <>
           <Button
             variant="danger"
             size="sm"
             loading={busy}
+            disabled={uncertain}
             onClick={() => void check()}
           >
             {preview ? "Kiểm tra lại đơn thuê và tiền hoàn" : "Hủy đặt chỗ"}
           </Button>
+          {uncertain && <InfoBanner tone="warning">Chưa nhận được kết quả hủy. Giữ nguyên lý do để thử lại cùng yêu cầu.
+            <Button className="mt-2" size="sm" variant="outline" loading={busy} onClick={() => void cancel()}>Thử lại cùng yêu cầu hủy</Button>
+          </InfoBanner>}
           {preview && (
             <>
               {preview.tripCancellationPending && (
@@ -139,17 +164,18 @@ export function BookingCancellation({
                     <Textarea
                       maxLength={500}
                       value={reason}
-                      disabled={busy}
+                      disabled={busy || uncertain}
                       onChange={(e) => {
                         setReason(e.target.value);
                         key.current = null;
+                        submittedReason.current = null;
                       }}
                     />
                   </FormField>
                   <Button
                     variant="danger"
                     loading={busy}
-                    disabled={!reason.trim()}
+                    disabled={!reason.trim() || uncertain}
                     onClick={() => void cancel()}
                   >
                     Xác nhận hủy toàn bộ đặt chỗ
@@ -158,7 +184,7 @@ export function BookingCancellation({
               )}
               <Button
                 variant="ghost"
-                disabled={busy}
+                disabled={busy || uncertain}
                 onClick={() => setPreview(null)}
               >
                 Đóng

@@ -27,7 +27,7 @@ export function useMyBookings(initialStatus?: BookingStatus | string) {
       // Tải chi tiết cho các booking active/checked-in để lấy trip.status thực tế từ backend
       const enrichedItems = await Promise.all(
         rawItems.map(async (b) => {
-          if (["CONFIRMED", "CHECKED_IN", "PARTIAL_CHECKIN"].includes(b.status)) {
+          if (["PENDING_PAYMENT", "CONFIRMED", "CHECKED_IN", "PARTIAL_CHECKIN"].includes(b.status)) {
             try {
               const detail = await bookingApiService.getBookingDetail(b.id);
               if (detail?.trip?.status) {
