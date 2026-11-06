@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { reasonText } from "@/features/rentals/services/rental-display";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -570,8 +571,7 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
             Chuyến đi chưa thể thuê thiết bị
           </h1>
           <p className="mt-3 text-sm text-gray-600">
-            {data.eligibility.reason ??
-              "Chuyến đi hiện chưa đủ điều kiện thuê đồ."}
+            {reasonText(data.eligibility.reason, "Chuyến đi hiện chưa đủ điều kiện thuê đồ.")}
           </p>
           <Link
             href="/my-trips"

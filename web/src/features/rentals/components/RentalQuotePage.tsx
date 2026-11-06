@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { reasonText } from "@/features/rentals/services/rental-display";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -400,8 +401,7 @@ export function RentalQuotePage({
       orderKeyRef.current = null;
       paymentKeyRef.current = null;
       setError(
-        eligibility.reason ??
-          "Thông tin chuyến đi đã thay đổi và hiện chưa đủ điều kiện thuê thiết bị.",
+        reasonText(eligibility.reason, "Thông tin chuyến đi đã thay đổi và hiện chưa đủ điều kiện thuê thiết bị."),
       );
       return;
     }
@@ -994,7 +994,7 @@ export function RentalQuotePage({
             </dl>
             {!eligibility.eligible && (
               <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-xs font-medium text-amber-100">
-                {eligibility.reason ?? "Chuyến đi chưa đủ điều kiện thuê."}
+                {reasonText(eligibility.reason, "Chuyến đi chưa đủ điều kiện thuê.")}
               </p>
             )}
             {shortages.length > 0 && (

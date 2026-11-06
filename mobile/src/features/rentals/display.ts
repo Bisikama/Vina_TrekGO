@@ -45,3 +45,22 @@ export function shortDocumentNo(documentNo: string, type?: string) {
   const prefix = DOCUMENT_PREFIX[type ?? match[1].toUpperCase()] ?? DOCUMENT_PREFIX[match[1].toUpperCase()] ?? "CT";
   return `TG-${prefix}-${match[2].slice(0, 6).toUpperCase()}`;
 }
+
+// Mã lý do backend trả trong dữ liệu (không phải lỗi) như eligibility.reason, cancellation preview reason.
+// Đổi sang câu tiếng Việt cho người dùng; mã lạ dạng CHỮ_HOA thì dùng câu dự phòng, không hiện mã thô.
+const REASON_TEXT: Record<string, string> = {
+  TRIP_MEMBERSHIP_NOT_ELIGIBLE: "Bạn cần là thành viên đã xác nhận của chuyến (đặt chỗ đã thanh toán) và chuyến còn đang mở để thuê thiết bị.",
+  TRIP_MEMBERSHIP_NOT_FOUND: "Bạn chưa tham gia chuyến đi này nên chưa thể thuê thiết bị.",
+  TRIP_TERMINAL: "Chuyến đi đã kết thúc hoặc đã bị hủy nên không thể thuê thiết bị.",
+  TRIP_NOT_FOUND: "Không tìm thấy chuyến đi.",
+  RENTAL_CUTOFF_PASSED: "Đã qua hạn đặt thuê thiết bị cho chuyến đi này.",
+  OPEN_ORDER_EXISTS: "Bạn đã có một đơn thuê đang mở cho chuyến này.",
+  BEFORE_FREE_CANCELLATION_DEADLINE: "Bạn hủy trước hạn hủy miễn phí nên được hoàn phí thuê và tiền cọc.",
+  AFTER_FREE_CANCELLATION_DEADLINE: "Đã qua hạn hủy miễn phí nên phí thuê không được hoàn. Tiền cọc vẫn được hoàn theo số tiền bên trên.",
+};
+
+export function reasonText(reason: string | null | undefined, fallback: string) {
+  if (!reason) return fallback;
+  if (REASON_TEXT[reason]) return REASON_TEXT[reason];
+  return /^[A-Z0-9_]+$/.test(reason) ? fallback : reason;
+}
