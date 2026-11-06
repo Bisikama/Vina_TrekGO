@@ -315,6 +315,24 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Chứng chỉ hết hạn sau 90 ngày và **tự gia hạn** (certbot cài sẵn timer). Thêm tên miền khác: `sudo certbot --nginx -d <ten-mien-moi>`.
 
+**HTTP/2 (đã bật).** Làm **sau** khi certbot đã tạo khối HTTPS (cổng 443). Nginx 1.18 dùng cú pháp `listen 443 ssl http2;`:
+
+```bash
+sudo cp /etc/nginx/sites-available/trekgo /etc/nginx/sites-available/trekgo.bak
+sudo sed -i 's/listen 443 ssl;/listen 443 ssl http2;/; s/listen \[::\]:443 ssl;/listen [::]:443 ssl http2;/' /etc/nginx/sites-available/trekgo
+grep -n "listen" /etc/nginx/sites-available/trekgo     # phải thấy: listen 443 ssl http2; # managed by Certbot
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Kiểm tra: `curl -sI --http2 https://api.trekgo.website/docs | head -1` phải ra `HTTP/2 200`. Trên trình duyệt: `F12` → **Network** → bật cột **Protocol** sẽ thấy `h2`.
+
+Nếu `nginx -t` báo lỗi, khôi phục: `sudo cp /etc/nginx/sites-available/trekgo.bak /etc/nginx/sites-available/trekgo && sudo systemctl reload nginx`.
+
+- HTTP/2 chỉ áp dụng cho HTTPS (443). `http://` đã được certbot chuyển sang `https://`.
+- Nginx vẫn gọi về API bằng HTTP/1.1 (`proxy_http_version 1.1`), như vậy là đúng; NestJS không cần sửa gì.
+- Socket.IO / WebSocket vẫn chạy: trình duyệt tự mở kết nối HTTP/1.1 riêng cho WebSocket.
+- Chạy lại `certbot` (thêm tên miền) có thể ghi đè dòng `listen 443`. Kiểm tra lại `http2` sau mỗi lần chạy certbot.
+
 **Firewall:** `ufw` hiện đang tắt. Nếu bật, **phải mở cổng SSH trước** để khỏi tự khoá mình ngoài VPS: `sudo ufw allow 8686/tcp && sudo ufw allow 'Nginx Full' && sudo ufw enable`. Cổng Docker publish đi vòng qua `ufw`, nên việc chặn `:3000` là do `127.0.0.1:3000:3000` trong compose, không phải do `ufw`.
 
 ---
@@ -501,6 +519,7 @@ Dùng `postgres:5432` trên máy Windows sẽ lỗi, vì tên `postgres` chỉ t
 | Gọi `http://160.30.161.237:3000` không được nữa | Đúng như thiết kế: cổng 3000 chỉ mở cho chính VPS. Dùng `https://api.trekgo.website`. |
 | Prisma Studio / API local lỗi kết nối khi trỏ DB VPS | `.env` máy đang dùng host `postgres:5432` (chỉ đúng trong Docker). Đổi sang `160.30.161.237:54329`. |
 | Sửa `TREKGO_ENV` nhưng API vẫn dùng giá trị cũ | Secret chỉ được ghi lên VPS khi job deploy chạy. Sửa `~/trekgo/.env` + `docker compose up -d`, hoặc **Run workflow**. |
+| `curl --http2` vẫn ra `HTTP/1.1` | Dòng `listen 443` chưa có `http2` (hoặc certbot vừa ghi đè). Xem `grep -n listen /etc/nginx/sites-available/trekgo` rồi làm lại bước bật HTTP/2 ở B8. |
 | `certbot` báo `Timeout during connect` | Cổng 80/443 bị chặn, hoặc DNS chưa trỏ đúng (`nslookup api.trekgo.website 8.8.8.8`). Kiểm tra firewall trên trang quản lý VPS. |
 | `502 Bad Gateway` từ Nginx | Container `api` chưa chạy hoặc đang khởi động lại. Xem `docker compose ps` và log `api`. |
 | `413 Request Entity Too Large` | File upload vượt `client_max_body_size` trong cấu hình Nginx. |
