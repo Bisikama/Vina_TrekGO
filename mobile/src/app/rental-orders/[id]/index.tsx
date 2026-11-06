@@ -24,6 +24,7 @@ import { DeductionReviewCard } from "@/features/rentals/DeductionReviewCard";
 import { StatusSign } from "@/features/rentals/StatusSign";
 import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
+import { EarlyReturnCard } from "@/features/rentals/EarlyReturnCard";
 import { ApiError } from "@/lib/api-client";
 import {
   RentalDepositStatus,
@@ -764,6 +765,12 @@ export default function RentalOrderDetailScreen() {
           />
         </View>
 
+        <EarlyReturnCard
+          orderId={order.id}
+          accessToken={accessToken}
+          orderStatus={order.status}
+          dueAt={detail.trip?.dueAt || order.dueAt}
+        />
         {order.exceptionStatus && order.exceptionStatus !== "NONE" && (
           <InfoBanner
             tone="warning"
