@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   RefreshControl,
 
   ScrollView,
@@ -21,8 +22,10 @@ import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
+import { StatusSign } from "@/features/rentals/StatusSign";
 import { rentalApi } from "@/features/rentals/api";
 import { useRentalSelection } from "@/features/rentals/RentalSelectionContext";
+import { orderShortCode } from "@/features/rentals/display";
 import {
   calculateProductDeposit,
   RentalAvailability,
@@ -459,10 +462,9 @@ export default function RentalScreen() {
         {orders.map((order) => {
           const status = rentalOrderStatus(order.status);
           return (
-            <TouchableOpacity
+            <Pressable
               key={order.id}
-              style={styles.orderCard}
-              activeOpacity={0.85}
+              style={({ pressed }) => [styles.orderCard, pressed && styles.orderCardPressed]}
               onPress={() => router.push(`/rental-orders/${order.id}` as Href)}
             >
               <View style={styles.orderTopRow}>
@@ -475,7 +477,7 @@ export default function RentalScreen() {
                 </View>
                 <View style={styles.flexOne}>
                   <Text style={styles.orderCode}>
-                    {order.orderCode ? `ĐƠN THUÊ · ${order.orderCode}` : "ĐƠN THUÊ THIẾT BỊ"}
+                    {order.id ? `ĐƠN THUÊ · ${orderShortCode(order.id)}` : "ĐƠN THUÊ THIẾT BỊ"}
                   </Text>
                   <Text style={styles.orderTrip} numberOfLines={1}>
                     {order.trip?.title || "Chuyến đi của bạn"}
@@ -485,11 +487,7 @@ export default function RentalScreen() {
                     {order.trip?.startAt && order.trip?.endAt ? ` · ${formatTripWindow(order.trip.startAt, order.trip.endAt)}` : ""}
                   </Text>
                 </View>
-                <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-                  <Text style={[styles.statusText, { color: status.color }]}>
-                    {status.label}
-                  </Text>
-                </View>
+                <StatusSign status={order.status} label={status.label} />
               </View>
 
               <View style={styles.orderDivider} />
@@ -516,7 +514,7 @@ export default function RentalScreen() {
                   {rentalExceptionLabel(order.exceptionStatus)}
                 </Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -1290,6 +1288,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceContainerLowest,
     ...Shadows.card,
+  },
+  // Chạm giữ thẻ: lún nhẹ và đổ bóng xanh rừng (thay cho hiệu ứng di chuột bên web).
+  orderCardPressed: {
+    transform: [{ scale: 0.985 }],
+    shadowColor: "#173B2F",
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   orderTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   orderIcon: {

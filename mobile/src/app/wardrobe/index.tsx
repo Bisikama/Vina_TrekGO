@@ -27,7 +27,8 @@ import {
   conditionLabel,
   DISPLAY_STATUS_LABELS,
   formatGearAttribute,
-  GEAR_ATTRIBUTES,
+  gearAttributes,
+  loadGearAttributeSchema,
   GEAR_CATEGORIES,
   GEAR_CONDITIONS,
   sourceLabel,
@@ -88,6 +89,20 @@ export default function WardrobeScreen() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState<"IMAGE" | "LINK" | null>(null);
   const aiLock = useRef(false);
+  const [, setSchemaTick] = useState(0);
+
+  // Bộ thông số lấy từ backend (GET /gear/attribute-schema); lỗi thì giữ bộ dự phòng.
+  useEffect(() => {
+    let active = true;
+    loadGearAttributeSchema()
+      .then((updated) => {
+        if (updated && active) setSchemaTick((tick) => tick + 1);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadItems = useCallback(async (isRefresh = false) => {
     if (!accessToken) {
@@ -379,7 +394,7 @@ function CapabilityPanel({ capabilities, onOpenAdvisor }: { capabilities: GearCa
 
 function GearCard({ item, onPress }: { item: UserGearItem; onPress: () => void }) {
   const category = categoryInfo(item.category);
-  const stats = GEAR_ATTRIBUTES[item.category]
+  const stats = gearAttributes(item.category)
     .filter(([key]) => item.attributes?.[key] !== null && item.attributes?.[key] !== undefined)
     .slice(0, 3);
   return (
@@ -466,7 +481,7 @@ function GearEditorModal({
   function buildAttributes() {
     if (!category) return {};
     const result: Record<string, unknown> = {};
-    for (const [key, , unit] of GEAR_ATTRIBUTES[category]) {
+    for (const [key, , unit] of gearAttributes(category)) {
       const raw = values[key];
       if (raw === undefined || raw === "") {
         // Sửa món: gửi null để xoá giá trị cũ; thêm mới thì bỏ trống.
@@ -571,7 +586,7 @@ function GearEditorModal({
             {category ? (
               <>
                 <Text style={styles.fieldLabel}>Thông số kỹ thuật (để trống nếu không biết)</Text>
-                {GEAR_ATTRIBUTES[category].map(([key, label, unit]) => (
+                {gearAttributes(category).map(([key, label, unit]) => (
                   <View key={key} style={styles.attrRow}>
                     <View style={styles.attrHead}>
                       <Text style={styles.attrLabel}>{label}{unit !== "bool" && unit !== "coverage" ? ` (${unit})` : ""}</Text>
@@ -760,7 +775,7 @@ function CatalogModal({ accessToken, onClose, onAdded }: { accessToken: string; 
 }
 
 function CatalogEntryView({ entry, expanded }: { entry: GearCatalogEntry; expanded?: boolean }) {
-  const fields = GEAR_ATTRIBUTES[entry.category].filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
+  const fields = gearAttributes(entry.category).filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined);
   return (
     <View style={styles.catalogCard}>
       <Text style={styles.itemCategory}>{categoryInfo(entry.category).label.toUpperCase()} · ĐÃ KIỂM DUYỆT</Text>

@@ -13,6 +13,7 @@ import {
   type GearCategory,
 } from "@/features/rentals/services/gear.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
+import { gearAttributes, loadGearAttributeSchema } from "@/features/rentals/services/gear-attribute-schema";
 
 // Danh mục đồ cá nhân đã kiểm duyệt (staff tạo, admin duyệt).
 // Staff kho / Admin tạo + sửa bản nháp; chỉ Admin công bố (verify) và thu hồi (revoke).
@@ -22,16 +23,6 @@ const CATEGORIES: [GearCategory, string][] = [
   ["JACKET", "Áo khoác"], ["FOOTWEAR", "Giày"], ["PANTS", "Quần"], ["BACKPACK", "Balo"],
   ["SLEEPING_BAG", "Túi ngủ"], ["TENT", "Lều"], ["TREKKING_POLE", "Gậy trekking"], ["RAIN_GEAR", "Đồ đi mưa"],
 ];
-const ATTRIBUTES: Record<GearCategory, [string, string, string][]> = {
-  JACKET: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["weight_g", "Trọng lượng", "g"], ["windproof", "Cản gió", "bool"]],
-  FOOTWEAR: [["waterproof", "Chống nước", "bool"], ["ankle_support", "Hỗ trợ cổ chân", "bool"], ["grip_level", "Độ bám", "/5"], ["weight_g", "Trọng lượng", "g"]],
-  PANTS: [["waterproof_mm", "Chống nước", "mm"], ["temp_rating_c", "Chịu lạnh", "°C"], ["insulated", "Giữ nhiệt", "bool"]],
-  BACKPACK: [["capacity_l", "Dung tích", "L"], ["rain_cover", "Áo trùm mưa", "bool"], ["waterproof", "Chống nước", "bool"], ["weight_g", "Trọng lượng", "g"]],
-  SLEEPING_BAG: [["temp_rating_c", "Nhiệt độ", "°C"], ["weight_g", "Trọng lượng", "g"]],
-  TENT: [["sleeping_places", "Sức chứa", "người"], ["flysheet_waterproof_mm", "Chống nước mái", "mm"], ["floor_waterproof_mm", "Chống nước đáy", "mm"], ["weight_g", "Trọng lượng", "g"]],
-  TREKKING_POLE: [["adjustable", "Điều chỉnh", "bool"], ["length_min_cm", "Dài tối thiểu", "cm"], ["length_max_cm", "Dài tối đa", "cm"], ["weight_g", "Trọng lượng", "g"]],
-  RAIN_GEAR: [["waterproof_mm", "Chống nước", "mm"], ["coverage", "Phạm vi che", "coverage"], ["weight_g", "Trọng lượng", "g"]],
-};
 const categoryLabel = (value: GearCategory) => CATEGORIES.find(([key]) => key === value)?.[1] ?? value;
 const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#27735a] focus:ring-2 focus:ring-emerald-100";
 
@@ -104,6 +95,18 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
     void load();
   }, [load]);
 
+  // Bộ thông số lấy từ backend; lỗi thì giữ bộ dự phòng.
+  const [, setSchemaTick] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadGearAttributeSchema(controller.signal)
+      .then((updated) => {
+        if (updated && !controller.signal.aborted) setSchemaTick((tick) => tick + 1);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
   async function save() {
     if (!form) return;
     if (!form.name.trim()) {
@@ -112,7 +115,7 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
     }
     const attributes: Record<string, unknown> = {};
     const evidence: Record<string, string> = {};
-    for (const [key, label, unit] of ATTRIBUTES[form.category]) {
+    for (const [key, label, unit] of gearAttributes(form.category)) {
       const raw = (form.values[key] ?? "").trim();
       if (!raw) continue;
       if (unit === "bool") attributes[key] = raw === "true";
@@ -227,7 +230,7 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
                   </span>
                 </div>
                 <ul className="mt-3 space-y-1.5 text-sm">
-                  {ATTRIBUTES[entry.category]
+                  {gearAttributes(entry.category)
                     .filter(([key]) => entry.attributes?.[key] !== null && entry.attributes?.[key] !== undefined)
                     .map(([key, label, unit]) => (
                       <li key={key}>
@@ -272,7 +275,7 @@ export function GearCatalogManager({ mode }: { mode: "staff" | "admin" }) {
                   {CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
-              {ATTRIBUTES[form.category].map(([key, label, unit]) => (
+              {gearAttributes(form.category).map(([key, label, unit]) => (
                 <div key={key} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[180px_1fr]">
                   <label className="text-xs font-semibold text-slate-700">
                     {label}{unit !== "bool" && unit !== "coverage" ? ` (${unit})` : ""}

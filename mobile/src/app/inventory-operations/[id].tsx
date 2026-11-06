@@ -22,6 +22,7 @@ import {
   staffInventoryApi,
   uploadInventoryEvidence,
 } from "@/features/rentals/staff-inventory-api";
+import { orderShortCode, productLabel } from "@/features/rentals/display";
 
 type BusyAction = "claim" | "pick" | "evidence" | "pack" | "ready" | "transfer";
 type EvidenceKind = "image" | "video";
@@ -31,6 +32,21 @@ function shortAssetCode(value?: string | null) {
   const compact = (value ?? "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   return compact.slice(-6).padStart(6, "0");
 }
+
+const CONDITION_LABEL: Record<string, string> = {
+  NEW: "Mới",
+  GOOD: "Tốt",
+  FAIR: "Có hao mòn",
+  DAMAGED: "Hư hỏng",
+  LOST: "Thất lạc",
+};
+
+const TRANSFER_STATUS_LABEL: Record<string, string> = {
+  PENDING_RECEIPT: "Chờ nhân viên giao hàng quét nhận",
+  RECEIVED: "Nhân viên giao hàng đã nhận",
+  CANCELLED: "Đã hủy bàn giao",
+  EXPIRED: "Yêu cầu bàn giao đã hết hạn",
+};
 
 const TASK_STATUS_LABEL: Record<string, string> = {
   OPEN: "Chờ nhận việc",
@@ -233,7 +249,7 @@ export default function InventoryTaskDetailScreen() {
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.heroCode}>ĐƠN THUÊ · CHUẨN BỊ THIẾT BỊ</Text>
+          <Text style={styles.heroCode}>ĐƠN {orderShortCode(detail.task.orderId)} · CHUẨN BỊ THIẾT BỊ</Text>
           <Text style={styles.heroTitle}>{detail.pickupContext.name}</Text>
           <Text style={styles.heroMeta}>
             {new Date(detail.pickupContext.scheduledAt).toLocaleString("vi-VN")}
@@ -290,7 +306,7 @@ export default function InventoryTaskDetailScreen() {
           {detail.requiredLines.map((line) => (
             <View key={line.orderLineId} style={styles.row}>
               <View style={styles.flex}>
-                <Text style={styles.rowTitle}>{line.productName}</Text>
+                <Text style={styles.rowTitle}>{productLabel(line.productName)}</Text>
                 <Text style={styles.rowMeta}>
                   Đã chọn {line.pickedQty} / {line.requiredQty} thiết bị
                 </Text>
@@ -304,7 +320,7 @@ export default function InventoryTaskDetailScreen() {
 
         {!isCancelled && remainingLine && (
           <>
-            <SectionTitle title={`2. Chọn thiết bị cho ${remainingLine.productName}`} />
+            <SectionTitle title={`2. Chọn thiết bị cho ${productLabel(remainingLine.productName)}`} />
             <View style={styles.card}>
               {candidates.length === 0 ? (
                 <Text style={styles.muted}>Không có thiết bị khả dụng tại kho.</Text>
@@ -314,7 +330,7 @@ export default function InventoryTaskDetailScreen() {
                     <View style={styles.flex}>
                       <Text style={styles.rowTitle}>Mã {shortAssetCode(candidate.assetCode)}</Text>
                       <Text style={styles.rowMeta}>
-                        {candidate.condition} · {candidate.location || "Chưa có vị trí"}
+                        {CONDITION_LABEL[candidate.condition] ?? candidate.condition} · {candidate.location || "Chưa có vị trí"}
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -457,9 +473,9 @@ export default function InventoryTaskDetailScreen() {
           <View style={styles.successCard}>
             <Ionicons name="checkmark-circle" size={28} color={Colors.primaryDark} />
             <View style={styles.flex}>
-              <Text style={styles.successTitle}>Đã tạo yêu cầu bàn giao</Text>
+              <Text style={styles.successTitle}>Đã giao cho {detail.pendingTransfer.toStaff.displayName}</Text>
               <Text style={styles.rowMeta}>
-                {detail.pendingTransfer.toStaff.displayName} · {detail.pendingTransfer.status}
+                {TRANSFER_STATUS_LABEL[detail.pendingTransfer.status] ?? "Đang chờ xác nhận"}
               </Text>
             </View>
           </View>

@@ -1,5 +1,6 @@
 "use client";
 
+import { orderShortCode } from "@/features/rentals/services/rental-display";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -104,7 +105,7 @@ function ItemCard({ item, now, myId }: { item: ScheduleItem; now: Date; myId?: s
             <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               Chuẩn bị đơn {item.at ? `· hạn ${time(item.at)}` : ""}
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">#{item.task.orderCode}</p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">Đơn {orderShortCode(item.task.orderId)}</p>
           </div>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${overdue ? "bg-red-50 text-red-700" : status.tone}`}>
             {overdue ? "Quá hạn" : status.label}
