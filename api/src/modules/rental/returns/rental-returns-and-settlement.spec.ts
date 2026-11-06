@@ -864,6 +864,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         amount: new Prisma.Decimal(2000000),
         application: { status: 'APPLIED' },
         reconcileStatus: 'IDLE',
+        paymentGateway: 'vnpay',
         providerEnvironment: 'SANDBOX',
         merchantAccountKey: 'ACCT-1',
         merchantRequestRef: 'REQ-1',
@@ -896,6 +897,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       });
 
       expect(refund).toBeDefined();
+      expect(refund.executionMode).toBe('SANDBOX_SIMULATED');
       expect(mockTx.refund.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

@@ -112,7 +112,7 @@ export class PaymentOperationsController {
     @Body(new ZodValidationPipe(reasonSchema)) body: { reason: string },
     @ActiveUser('id') actorId: string,
   ) {
-    const refund = await this.simulation.settleAutomaticBookingRefund(id)
+    const refund = await this.simulation.settleAutomaticRefund(id)
     if (refund.executionMode === 'SANDBOX_SIMULATED')
       return { refundId: id, reconcileStatus: 'RESOLVED', refund }
     return this.recovery.schedule('refund', id, actorId, body.reason)

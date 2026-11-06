@@ -1503,7 +1503,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       const grouped = item.depositRefundAllocations[0]
       const refund = grouped?.refund ?? item.refundViaDepositSettlementItemId
       const simulation = (refund?.providerPayload as any)?.sandboxSimulation
-      const settlementMode = simulation
+      const settlementMode = simulation || refund?.executionMode === 'SANDBOX_SIMULATED'
         ? 'SANDBOX_SIMULATED'
         : refund?.executionMode === 'MANUAL_BANK_TRANSFER' ? 'MANUAL_BANK_TRANSFER' : ((item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD')
       const itemRefundAmount = grouped ? decimalToInteger(grouped.amount) : decimalToInteger(item.refundAmount)
@@ -1511,7 +1511,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const existing = refundById.get(refund.id) ?? {
           refundRef: refund.id,
           executionMode: refund.executionMode ?? 'PROVIDER_API',
-          confirmationSource: refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
+          confirmationSource: refund.status === RefundStatus.SUCCEEDED && simulation ? 'SANDBOX_SIMULATION' : refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
           status: refund.status,
           amount: 0,
           itemIds: [],
@@ -1570,7 +1570,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         refundRef: refund?.id ?? null,
         refundStatus: refund?.status ?? null,
         executionMode: refund?.executionMode ?? 'PROVIDER_API',
-        confirmationSource: refund?.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
+        confirmationSource: refund?.status === RefundStatus.SUCCEEDED && simulation ? 'SANDBOX_SIMULATION' : refund?.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
         manualStatus: refund?.manualRefund?.status ?? null,
         heldReason: item.reason ?? null,
         deduction: decimalToInteger(item.deductionAmount),
@@ -1615,9 +1615,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       items,
       groupedRefunds: [...refundById.values()],
       financialTruth: {
-        providerRefundedAmount: refundedAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && item.refundStatus === RefundStatus.SUCCEEDED).reduce((sum, item) => sum + item.refundAmount, 0),
+        providerRefundedAmount: items.filter(item => item.refundStatus === RefundStatus.SUCCEEDED && item.executionMode !== 'MANUAL_BANK_TRANSFER' && item.settlementMode !== 'SANDBOX_SIMULATED').reduce((sum, item) => sum + item.refundAmount, 0),
         adminConfirmedRefundedAmount: items.filter(item => item.confirmationSource === 'ADMIN_MANUAL').reduce((sum, item) => sum + item.refundAmount, 0),
-        providerRefundPendingAmount: refundPendingAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && [RefundStatus.PENDING, RefundStatus.PROCESSING].includes(item.refundStatus as any)).reduce((sum, item) => sum + item.refundAmount, 0),
+        providerRefundPendingAmount: items.filter(item => item.executionMode !== 'MANUAL_BANK_TRANSFER' && item.settlementMode !== 'SANDBOX_SIMULATED' && [RefundStatus.PENDING, RefundStatus.PROCESSING].includes(item.refundStatus as any)).reduce((sum, item) => sum + item.refundAmount, 0),
         realMoneyReturned: items.some(
           (item) => item.refundStatus === RefundStatus.SUCCEEDED && item.settlementMode !== 'SANDBOX_SIMULATED' && item.executionMode !== 'MANUAL_BANK_TRANSFER',
         ),

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
+import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../shared/services/prisma.service'
 import envconfig from '../../shared/config'
@@ -26,12 +27,15 @@ type PreparedSimulation = {
   currency: string
   actorUserId: string
   reason: string
-  trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
+  trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC' | 'RENTAL_AUTOMATIC'
   isRentalCancellation?: boolean
 }
 
 @Injectable()
 export class SandboxRefundSimulationService {
+  private readonly logger = new Logger(SandboxRefundSimulationService.name)
+  private rentalSimulationRunning = false
+  private rentalSimulationCursor: string | undefined
   constructor(
     private readonly db: PrismaService,
     private readonly refunds: RefundsService,
@@ -122,7 +126,7 @@ export class SandboxRefundSimulationService {
     const refund = await this.db.refund.findUniqueOrThrow({
       where: { id: refundId }, include: { payment: { include: { invoice: true } } },
     })
-    if (refund.executionMode !== 'SANDBOX_SIMULATED') return refundSummary(refund)
+    if (refund.executionMode !== 'SANDBOX_SIMULATED' || refund.payment.invoice.invoiceType !== 'BOOKING') return refundSummary(refund)
     const simulation = (refund.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation as Prisma.JsonObject | undefined
     if (refund.status === 'SUCCEEDED' && simulation?.status === 'SUCCEEDED') return refundSummary(refund)
     await this.simulateRefundSettlement({
@@ -135,17 +139,68 @@ export class SandboxRefundSimulationService {
     return refundSummary(await this.db.refund.findUniqueOrThrow({ where: { id: refundId } }))
   }
 
+  /** Rental cancellations are reserved inside their business transaction. Poll only
+   * committed simulated refunds so a restart or temporary failure can be retried. */
+  @Interval(5000)
+  async settlePendingRentalRefunds() {
+    if (this.rentalSimulationRunning || process.env.PAYMENT_RECOVERY_WORKER_ENABLED === 'false') return
+    try {
+      this.assertEnvironmentSafe()
+    } catch {
+      return
+    }
+    this.rentalSimulationRunning = true
+    try {
+      const rows = await this.db.refund.findMany({
+        where: { executionMode: 'SANDBOX_SIMULATED', paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX',
+          purpose: { in: ['DEPOSIT', 'RENTAL_CANCELLATION'] }, status: 'PENDING' },
+        orderBy: { id: 'asc' }, take: 20,
+        ...(this.rentalSimulationCursor ? { cursor: { id: this.rentalSimulationCursor }, skip: 1 } : {}),
+      })
+      if (!rows.length) { this.rentalSimulationCursor = undefined; return }
+      for (const row of rows) {
+        this.rentalSimulationCursor = row.id
+        try { await this.settleAutomaticRentalRefund(row.id) }
+        catch (error) { this.logger.warn(`Rental sandbox refund ${row.id} deferred: ${error instanceof Error ? error.message : 'unknown error'}`) }
+      }
+      if (rows.length < 20) this.rentalSimulationCursor = undefined
+    } finally { this.rentalSimulationRunning = false }
+  }
+
+  async settleAutomaticRentalRefund(refundId: string) {
+    const refund = await this.db.refund.findUniqueOrThrow({
+      where: { id: refundId }, include: { payment: { include: { invoice: true } } },
+    })
+    if (refund.executionMode !== 'SANDBOX_SIMULATED' || !['DEPOSIT', 'RENTAL_CANCELLATION'].includes(refund.purpose))
+      return refundSummary(refund)
+    const simulation = (refund.providerPayload as Prisma.JsonObject | null)?.sandboxSimulation as Prisma.JsonObject | undefined
+    if (refund.status === 'SUCCEEDED' && simulation?.status === 'SUCCEEDED') return refundSummary(refund)
+    await this.simulateRefundSettlement({ refundId, actorUserId: refund.payment.invoice.userId,
+      idempotencyKey: `rental-auto-refund:${refundId}`, trigger: 'RENTAL_AUTOMATIC',
+      body: { expectedProviderStatus: 'PENDING', acknowledgeSandboxSimulation: true,
+        reason: 'Automatic rental sandbox refund settlement' } })
+    return refundSummary(await this.db.refund.findUniqueOrThrow({ where: { id: refundId } }))
+  }
+
+  async settleAutomaticRefund(refundId: string) {
+    const row = await this.db.refund.findUniqueOrThrow({ where: { id: refundId } })
+    return ['DEPOSIT', 'RENTAL_CANCELLATION'].includes(row.purpose)
+      ? this.settleAutomaticRentalRefund(refundId)
+      : this.settleAutomaticBookingRefund(refundId)
+  }
+
   async simulateRefundSettlement(input: {
     refundId: string
     actorUserId: string
     idempotencyKey: string
     body: SandboxSimulateRefundBodyDto
-    trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
+    trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC' | 'RENTAL_AUTOMATIC'
   }): Promise<SandboxSimulateRefundResponseDto> {
     const row = await this.db.refund.findUnique({ where: { id: input.refundId } })
-    this.assertEnvironmentSafe(row?.executionMode === 'SANDBOX_SIMULATED')
+    this.assertEnvironmentSafe(row?.executionMode === 'SANDBOX_SIMULATED' &&
+      !['DEPOSIT', 'RENTAL_CANCELLATION'].includes(row.purpose))
 
-    const scope = `${input.trigger === 'BOOKING_AUTOMATIC' ? 'booking-auto-refund' : 'admin-simulate-refund'}:${input.refundId}`
+    const scope = `${input.trigger === 'BOOKING_AUTOMATIC' ? 'booking-auto-refund' : input.trigger === 'RENTAL_AUTOMATIC' ? 'rental-auto-refund' : 'admin-simulate-refund'}:${input.refundId}`
     const requestHash = paymentHash({ refundId: input.refundId, ...input.body })
     const prepared = await this.prepareSimulation(input, scope, requestHash)
     if (prepared.cachedResponse) return prepared.cachedResponse
@@ -168,7 +223,7 @@ export class SandboxRefundSimulationService {
       actorUserId: string
       idempotencyKey: string
       body: SandboxSimulateRefundBodyDto
-      trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC'
+      trigger?: 'ADMIN' | 'BOOKING_AUTOMATIC' | 'RENTAL_AUTOMATIC'
     },
     scope: string,
     requestHash: string,
@@ -224,7 +279,9 @@ export class SandboxRefundSimulationService {
       const isRentalCancellation = refund.purpose === 'RENTAL_CANCELLATION'
       const isBookingReversal = refund.purpose === 'TECHNICAL_REVERSAL' && refund.payment.invoice.invoiceType === 'BOOKING'
       const isBookingRefund = isBookingCancellation || isBookingReversal
-      if (refund.executionMode === 'SANDBOX_SIMULATED' && !isBookingRefund)
+      if (refund.executionMode === 'SANDBOX_SIMULATED' && !isBookingRefund && !isRentalCancellation && refund.purpose !== 'DEPOSIT')
+        throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
+      if (input.trigger === 'RENTAL_AUTOMATIC' && (!['DEPOSIT', 'RENTAL_CANCELLATION'].includes(refund.purpose) || refund.executionMode !== 'SANDBOX_SIMULATED'))
         throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
       if (isBookingCancellation) {
         const cancellation = refund.bookingCancellation
@@ -309,6 +366,10 @@ export class SandboxRefundSimulationService {
             message: 'Only DEPOSIT refunds can be simulated by this operation',
           })
         }
+        if (refund.payment.invoice.invoiceType !== 'RENTAL' || refund.payment.application?.status !== 'APPLIED' ||
+            refund.payment.paymentGateway !== refund.paymentGateway || refund.payment.providerEnvironment !== refund.providerEnvironment ||
+            refund.payment.merchantAccountKey !== refund.merchantAccountKey || refund.amount.lte(0) || refund.amount.gt(refund.payment.amount))
+          throw AppError.fromCode(P.REFUND_SOURCE_INVALID)
       }
       if (refund.paymentGateway !== 'vnpay' || refund.providerEnvironment !== 'SANDBOX') {
         throw AppError.fromCode(P.SANDBOX_SIMULATION_INVALID_REFUND, {
@@ -404,13 +465,13 @@ export class SandboxRefundSimulationService {
                 providerEventId,
                 refundTransactionRef,
                 requestedAt,
-                actorAdminId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
-                actorUserId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
+                actorAdminId: input.trigger === 'ADMIN' || !input.trigger ? input.actorUserId : null,
+                actorUserId: input.trigger === 'ADMIN' || !input.trigger ? input.actorUserId : null,
                 beneficiaryUserId: refund.payment.invoice.userId,
                 trigger: input.trigger ?? 'ADMIN',
                 reason: input.body.reason,
                 testEvidenceRef: input.body.testEvidenceRef ?? null,
-                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
+                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : input.trigger === 'RENTAL_AUTOMATIC' ? 'RENTAL_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
                 environment: 'SANDBOX',
                 ...(isBookingCancellation
                   ? {
@@ -429,8 +490,8 @@ export class SandboxRefundSimulationService {
         if (!existingSimulation) {
           await tx.auditLog.create({
             data: {
-              userId: input.trigger === 'BOOKING_AUTOMATIC' ? null : input.actorUserId,
-              action: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_REFUND_SIMULATION_REQUESTED' : 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
+              userId: input.trigger === 'ADMIN' || !input.trigger ? input.actorUserId : null,
+              action: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_REFUND_SIMULATION_REQUESTED' : input.trigger === 'RENTAL_AUTOMATIC' ? 'RENTAL_SANDBOX_REFUND_SIMULATION_REQUESTED' : 'ADMIN_SANDBOX_REFUND_SIMULATION_REQUESTED',
               entityType: 'Refund',
               entityId: refund.id,
               newValues: {
@@ -440,7 +501,7 @@ export class SandboxRefundSimulationService {
                 depositSettlementId: refund.depositSettlementId,
                 paymentId: refund.paymentId,
                 environment: 'SANDBOX',
-                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
+                origin: input.trigger === 'BOOKING_AUTOMATIC' ? 'BOOKING_SANDBOX_SIMULATION' : input.trigger === 'RENTAL_AUTOMATIC' ? 'RENTAL_SANDBOX_SIMULATION' : 'ADMIN_SANDBOX_SIMULATION',
                 providerConfirmation,
                 warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],
               },
@@ -599,7 +660,7 @@ export class SandboxRefundSimulationService {
           // projection-scoped fact proving that the worker transaction committed.
           settlementProcessingStatus: prepared.bookingId || prepared.isRentalCancellation || successOutbox.receipts.length > 0 ? 'APPLIED' : 'PENDING',
           simulatedAt: refund.refundedAt.toISOString(),
-          actorAdminId: prepared.trigger === 'BOOKING_AUTOMATIC' ? null : prepared.actorUserId,
+          actorAdminId: prepared.trigger === 'ADMIN' || !prepared.trigger ? prepared.actorUserId : null,
           trigger: prepared.trigger ?? 'ADMIN',
           reason: prepared.reason,
           warnings: ['TEST_ONLY', 'NO_REAL_MONEY_RETURNED'],

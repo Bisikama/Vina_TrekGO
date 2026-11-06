@@ -264,7 +264,7 @@ export function AdminRentalReturnExceptions() {
       }
       if (settlementResult?.refundRef) {
         setNotice(
-          `Đã chốt quyết toán cọc. Khoản ${formatMoney(settlementResult.refundAmount, "VND")} đang được gửi sang cổng thanh toán; đây chưa phải trạng thái đã hoàn tiền.`,
+          `Đã chốt quyết toán cọc. Khoản ${formatMoney(settlementResult.refundAmount, "VND")} đang chờ xử lý hoàn tiền; đây chưa phải trạng thái đã hoàn tiền.`,
         );
       } else if (settlementResult) {
         setNotice(
