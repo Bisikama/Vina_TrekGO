@@ -3,6 +3,9 @@ jest.mock('@nestjs/schedule', () => ({
 }));
 
 import { existsSync } from 'node:fs';
+import { Readable } from 'node:stream';
+import sharp from 'sharp';
+import envconfig from 'src/shared/config';
 import { inflateSync } from 'node:zlib';
 import { RentalDocumentRenderStatus, RentalDocumentType } from '@prisma/client';
 import { RentalDocumentService } from './rental-document.service';
@@ -202,6 +205,22 @@ describe('Rental Phase 11 documents (pure mock)', () => {
     expect(worker.metrics.processed).toBe(0);
   });
 
+  it('renders Vietnamese using the bundled font without environment configuration', async () => {
+    const previousEnv = process.env.RENTAL_PDF_FONT_PATH;
+    const previousConfig = envconfig.RENTAL_PDF_FONT_PATH;
+    delete process.env.RENTAL_PDF_FONT_PATH;
+    delete envconfig.RENTAL_PDF_FONT_PATH;
+    try {
+      const value = { ...snapshot, recipientNotes: 'Đã nhận đủ thiết bị tiếng Việt' };
+      const bytes = await new RentalPdfRenderer().render({ ...doc(), snapshotJson: value,
+        snapshotHash: snapshotHash(value) } as any);
+      expect(pdfPageText(bytes).join(' ')).toContain('Đã nhận đủ thiết bị tiếng Việt');
+    } finally {
+      if (previousEnv !== undefined) process.env.RENTAL_PDF_FONT_PATH = previousEnv;
+      envconfig.RENTAL_PDF_FONT_PATH = previousConfig;
+    }
+  });
+
   const localFont = process.env.RENTAL_PDF_FONT_PATH || 'C:/Windows/Fonts/arial.ttf';
   (existsSync(localFont) ? it : it.skip)('renders Unicode Vietnamese from a configured local font', async () => {
     const previous = process.env.RENTAL_PDF_FONT_PATH;
@@ -263,6 +282,31 @@ describe('Rental Phase 11 documents (pure mock)', () => {
     const mediaId = '7c1e0a2b-1f3d-4b8e-9a6c-0d2e4f6a8b00';
     const otherMedia = '7c1e0a2b-1f3d-4b8e-9a6c-0d2e4f6a8b99';
     const linkedSnapshot = { kind: 'HANDOVER', units: [{ assetCode: 'TENT-001', condition: 'GOOD', evidenceIds: [mediaId] }] };
+    it('embeds the original evidence and a clickable preview without link settings', async () => {
+      delete process.env.RENTAL_DOCUMENT_LINK_SECRET;
+      delete process.env.RENTAL_DOCUMENT_LINK_BASE_URL;
+      const original = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#b54a32' } }).png().toBuffer();
+      const asset = { id: mediaId, status: 'READY', scope: 'CONDITION_EVIDENCE', resourceType: 'IMAGE',
+        providerPublicId: 'evidence/abc', providerAssetId: null, deliveryType: 'authenticated' };
+      const prisma: any = { mediaAsset: { findMany: jest.fn().mockResolvedValue([asset]) } };
+      const media: any = { openOriginalStream: jest.fn().mockResolvedValue({ stream: Readable.from([original]) }) };
+      const worker = new RentalDocumentRenderWorker(prisma, {} as any, new MemoryDocumentStorage(), media);
+      const evidence = await (worker as any).evidenceImages(linkedSnapshot);
+      expect(evidence).toHaveLength(1);
+      expect(evidence[0].bytes.equals(original)).toBe(true);
+      const pdf = await new RentalPdfRenderer().render({ ...doc(), snapshotJson: linkedSnapshot,
+        snapshotHash: snapshotHash(linkedSnapshot) } as any, evidence);
+      const raw = pdf.toString('latin1');
+      expect(raw).toContain('/Subtype /FileAttachment');
+      expect(raw).toContain('/EmbeddedFiles');
+      expect(raw).toContain(`/evidence-${mediaId}.png`.slice(1));
+      expect(raw).toContain('/Evidence1');
+      expect(raw).not.toContain('/Subtype /Link');
+      expect(pdf.includes(original)).toBe(true);
+      expect(media.openOriginalStream).toHaveBeenCalledTimes(1);
+      prisma.mediaAsset.findMany.mockResolvedValueOnce([{ ...asset, status: 'DELETED' }]);
+      await expect((worker as any).evidenceImages(linkedSnapshot)).rejects.toThrow('PDF_EVIDENCE_UNAVAILABLE');
+    });
     const saved: Record<string, string | undefined> = {};
     beforeEach(() => {
       for (const key of ['RENTAL_DOCUMENT_LINK_SECRET', 'RENTAL_DOCUMENT_LINK_BASE_URL']) saved[key] = process.env[key];

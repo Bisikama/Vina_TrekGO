@@ -10,6 +10,7 @@ import { rentalEvidenceLink } from '../application/rental-evidence-link'
 /** Chứng từ mẫu 1.3.2 phát hành trước đây vẫn render được, dùng bố cục mới. */
 const SUPPORTED_TEMPLATE_VERSIONS = new Set(['1.3.2', RENTAL_DOCUMENT_TEMPLATE_VERSION])
 const LOGO_PATH = join(__dirname, '..', 'assets', 'vina-trekgo-logo.jpg')
+const DEFAULT_FONT_PATH = join(__dirname, '..', 'assets', 'Lato-Regular.ttf')
 
 const headings: Record<RentalDocumentType, string> = {
   HANDOVER: 'BIÊN BẢN BÀN GIAO THIẾT BỊ',
@@ -499,7 +500,8 @@ const toneBar = (tone?: Tone): Rgb => (tone === 'accent' ? C.orange : tone === '
 const n = (v: number) => (Math.round(v * 100) / 100).toString()
 
 /** Vùng bấm (toạ độ PDF) và URL cho annotation /Link của trang. */
-type PdfLink = { rect: [number, number, number, number]; uri: string }
+type PdfLink = { rect: [number, number, number, number]; uri: string } | { rect: [number, number, number, number]; attachmentId: string }
+export type RentalPdfEvidence = { id: string; bytes: Buffer; preview: Buffer; extension: string }
 type Seg = { text: string; uri: string | null; dx: number; width: number }
 type Unit = {
   height: number
@@ -525,13 +527,17 @@ async function loadLogo(): Promise<{ bytes: Buffer; width: number; height: numbe
 
 @Injectable()
 export class RentalPdfRenderer {
-  async render(doc: RentalDocument): Promise<Buffer> {
+  async render(doc: RentalDocument, evidence: RentalPdfEvidence[] = []): Promise<Buffer> {
     if (!SUPPORTED_TEMPLATE_VERSIONS.has(doc.templateVersion) || snapshotHash(doc.snapshotJson) !== doc.snapshotHash)
       throw new Error('PDF_SNAPSHOT_INTEGRITY_OR_TEMPLATE_FAILED')
-    const fontPath = envconfig.RENTAL_PDF_FONT_PATH ?? process.env.RENTAL_PDF_FONT_PATH
-    if (!fontPath) throw new Error('RENTAL_PDF_FONT_PATH_REQUIRED')
+    const fontPath = envconfig.RENTAL_PDF_FONT_PATH ?? process.env.RENTAL_PDF_FONT_PATH ?? DEFAULT_FONT_PATH
     const font = parseFont(await readFile(fontPath))
     const logo = await loadLogo()
+    const images = evidence.map((item, index) => {
+      const dimensions = parseJpeg(item.preview)
+      if (!dimensions) throw new Error('PDF_EVIDENCE_PREVIEW_INVALID')
+      return { ...item, dimensions, name: `Evidence${index + 1}` }
+    })
     const content = documentContent(doc)
 
     // --- đo chữ ---------------------------------------------------------
@@ -749,6 +755,21 @@ export class RentalPdfRenderer {
       }
     }
 
+    if (images.length) {
+      units.push({ height: 34, keepWithNext: true, draw: top =>
+        [rect(ML, top - 30, 3.5, 12, C.orange), text('ẢNH BẰNG CHỨNG', ML + 10, top - 28.5, 10.5, C.green, true), hline(ML, MR, top - 34, C.border)].join('\n') })
+      for (const image of images) {
+        const scale = Math.min(210 / image.dimensions.width, 160 / image.dimensions.height)
+        const width = image.dimensions.width * scale, height = image.dimensions.height * scale
+        units.push({ height: height + 42, draw: (top, links) => {
+          const bottom = top - height - 24
+          links.push({ rect: [ML, bottom, ML + width, bottom + height], attachmentId: image.id })
+          return [text(`Ảnh ${ref(image.id)} — mở tệp đính kèm để xem ảnh gốc`, ML, top - 13, 9, C.text),
+            `q ${n(width)} 0 0 ${n(height)} ${n(ML)} ${n(bottom)} cm /${image.name} Do Q`].join('\n')
+        } })
+      }
+    }
+
     // --- dàn trang -------------------------------------------------------
     const firstTop = 724
     const nextTop = 784
@@ -876,14 +897,26 @@ export class RentalPdfRenderer {
           ]),
         )
       : null
+    const imageIds = new Map<string, number>()
+    const attachmentIds = new Map<string, number>()
+    for (const item of images) {
+      imageIds.set(item.name, add(Buffer.concat([
+        Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${item.dimensions.width} /Height ${item.dimensions.height} /ColorSpace /${item.dimensions.components === 1 ? 'DeviceGray' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${item.preview.length} >>\nstream\n`),
+        item.preview, Buffer.from('\nendstream'),
+      ])))
+      const embeddedId = add(Buffer.concat([Buffer.from(`<< /Type /EmbeddedFile /Length ${item.bytes.length} >>\nstream\n`), item.bytes, Buffer.from('\nendstream')]))
+      const filename = `evidence-${item.id}.${item.extension}`
+      attachmentIds.set(item.id, add(`<< /Type /Filespec /F (${filename}) /UF (${filename}) /EF << /F ${embeddedId} 0 R >> >>`))
+    }
     const pagesId = reserve()
     // URL chỉ gồm ký tự an toàn của URL; vẫn escape ký tự đặc biệt của chuỗi PDF cho chắc.
     const pdfString = (value: string) => value.replace(/[\\()]/g, (ch) => `\\${ch}`)
     const pageIds = pageStreams.map((ops, index) => {
       const contentId = stream(Buffer.from(ops, 'ascii'))
-      const xobject = logoId ? ` /XObject << /Im1 ${logoId} 0 R >>` : ''
+      const imageRefs = [...imageIds].map(([name, id]) => `/${name} ${id} 0 R`).join(' ')
+      const xobject = logoId || imageRefs ? ` /XObject << ${logoId ? `/Im1 ${logoId} 0 R` : ''} ${imageRefs} >>` : ''
       const annotIds = pageLinks[index].map((link) =>
-        add(
+        'attachmentId' in link ? add(`<< /Type /Annot /Subtype /FileAttachment /Rect [${link.rect.map(n).join(' ')}] /FS ${attachmentIds.get(link.attachmentId)} 0 R /Name /PushPin /Contents (Open original image attachment) >>`) : add(
           `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(n).join(' ')}] /Border [0 0 0] /A << /S /URI /URI (${pdfString(link.uri)}) >> >>`,
         ),
       )
@@ -893,7 +926,8 @@ export class RentalPdfRenderer {
       )
     })
     set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`)
-    const catalog = add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`)
+    const names = images.length ? ` /Names << /EmbeddedFiles << /Names [${[...images].sort((a, b) => a.id.localeCompare(b.id)).map(item => `(evidence-${item.id}.${item.extension}) ${attachmentIds.get(item.id)} 0 R`).join(' ')}] >> >>` : ''
+    const catalog = add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names} >>`)
     const chunks: Buffer[] = [Buffer.from('%PDF-1.7\n%\xE2\xE3\xCF\xD3\n', 'binary')]
     const offsets = [0]
     let byteOffset = chunks[0].length
