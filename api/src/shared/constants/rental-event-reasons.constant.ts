@@ -21,3 +21,15 @@ export const CUSTODY_PRESERVED_REASONS = {
 
 /** Nguồn huỷ ghi trong payload RENTAL_ORDER_CANCELLED của lifecycle. */
 export type RentalCancellationSource = 'TRIP' | 'BOOKING' | 'MEMBERSHIP'
+
+/** Event outbox khi yêu cầu trả sớm đổi trạng thái; `status` trong payload là một trong EARLY_RETURN_EVENT_STATUSES. */
+export const EARLY_RETURN_EVENT_TYPE = 'RENTAL_EARLY_RETURN_UPDATED'
+export const EARLY_RETURN_EVENT_STATUSES = [
+  'REQUESTED',
+  'CONFIRMED',
+  'REJECTED',
+  'EXPIRED',
+  'CANCELLED',
+  'RECONFIRM_REQUIRED',
+] as const
+export type EarlyReturnEventStatus = (typeof EARLY_RETURN_EVENT_STATUSES)[number]

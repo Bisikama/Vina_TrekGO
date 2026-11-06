@@ -1,4 +1,6 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
+import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
+import { EARLY_RETURN_SCAN_TOLERANCE_MINUTES, earlyReturnScanAllowed } from '../../application/early-return-scan.policy'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
 import { deductionReviewGate } from '../../application/deduction-review-gate'
@@ -140,6 +142,21 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           })
         }
 
+        const early = await tx.rentalEarlyReturnRequest.findFirst({
+          where: { orderId: order.id, taskId: task.id }, orderBy: { createdAt: 'desc' },
+        })
+        if (early && !earlyReturnScanAllowed(early, task.scheduledAt, effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt), command.now))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            message: 'Lịch trả sớm chưa được xác nhận hoặc chưa đến thời gian thu hồi.',
+            details: {
+              earlyReturnStatus: early.status,
+              allowedFrom:
+                early.status === 'CONFIRMED' && early.confirmedSlotAt
+                  ? new Date(early.confirmedSlotAt.getTime() - EARLY_RETURN_SCAN_TOLERANCE_MINUTES * 60_000).toISOString()
+                  : effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt).toISOString(),
+            },
+          })
+
         const assignments = order.rentalOrderLinesViaOrderId.flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
         const byCode = new Map(assignments.map((assignment) => [assignment.equipmentUnit.assetCode, assignment]))
         const uniqueCodes = [...new Set(command.assetCodes)]
@@ -214,6 +231,15 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             exceptionStatus: order.exceptionStatus,
             version: { increment: 1 },
           },
+        })
+        // Chỉ lịch đã xác nhận mới là "trả sớm hoàn tất"; yêu cầu chưa xác nhận bị lần thu hồi này thay thế.
+        await tx.rentalEarlyReturnRequest.updateMany({
+          where: { orderId: order.id, status: 'CONFIRMED' },
+          data: { status: 'COMPLETED', version: { increment: 1 } },
+        })
+        await tx.rentalEarlyReturnRequest.updateMany({
+          where: { orderId: order.id, status: 'PENDING' },
+          data: { status: 'SUPERSEDED', supersededAt: command.now, version: { increment: 1 } },
         })
         if (order.packageViaOrderId && order.packageViaOrderId.status !== PackageStatus.RETURNING) {
           await tx.package.update({

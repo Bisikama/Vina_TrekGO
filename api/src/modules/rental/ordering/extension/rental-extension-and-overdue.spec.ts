@@ -36,6 +36,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
 
     mockTx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
+      rentalEarlyReturnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
       rentalOrder: {
         findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
@@ -117,6 +118,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
 
     mockPrisma = {
       $transaction: jest.fn(async (cb: (tx: any) => Promise<any>) => cb(mockTx)),
+      rentalEarlyReturnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
       rentalOrder: {
         findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -217,6 +219,12 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
   };
 
   describe('1. Extension Conditions & Guard Rules', () => {
+    it('rejects a new extension while an early-return request is active', async () => {
+      mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
+      mockPrisma.rentalEarlyReturnRequest.findFirst.mockResolvedValueOnce({ id: 'early-request' });
+      await expect(extensionService.quote('user-1', 'order-ext-1', new Date('2026-10-26T18:00:00Z'), 'RETURN_POINT_1', new Date('2026-10-24T10:00:00Z')))
+        .rejects.toMatchObject({ code: 'OPERATION_CONFLICT' });
+    });
     it('REJECTS extension quote if order is not ACTIVE', async () => {
       mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce({
         ...baseOrder,
