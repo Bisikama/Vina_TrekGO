@@ -34,6 +34,7 @@ import type { GearAiPort } from '../ports/gear-ai.port'
 import { TRIP_FORECAST_PORT } from '../ports/trip-forecast.port'
 import type { TripForecastPort } from '../ports/trip-forecast.port'
 import { buildContextQuestions, buildGearGuidance, withDisplayGuidance } from '../../domain/gear-guidance'
+import { buildTripEssentials } from '../../domain/trip-essentials'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { GearRuleService, summarizeRuleSet } from './gear-rule.service'
 import type {
@@ -82,6 +83,9 @@ type ClimateSuggestion = {
 }
 const FORECAST_NOTE_VI =
   'Dự báo tại tâm điểm đến, chưa hiệu chỉnh theo độ cao. Vui lòng kiểm tra lại trước khi xác nhận.'
+/** Dự báo gọi tại điểm cao nhất của cung: Open-Meteo tự hiệu chỉnh nhiệt độ theo địa hình tại điểm đó. */
+const forecastAtSummitNoteVi = (elevationM: number) =>
+  `Dự báo tại điểm cao nhất của cung (khoảng ${elevationM.toLocaleString('vi-VN')} m), nơi thường lạnh và nhiều gió nhất. Vui lòng kiểm tra lại trước khi xác nhận.`
 
 function canonicalStringify(obj: any): string {
   if (obj === null || typeof obj !== 'object') {
@@ -92,6 +96,11 @@ function canonicalStringify(obj: any): string {
   }
   const keys = Object.keys(obj).sort()
   return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalStringify(obj[k])).join(',') + '}'
+}
+
+function readSelfProvidedRequirementIds(preferences: unknown): string[] {
+  const raw = (preferences as { selfProvidedRequirementIds?: unknown } | null)?.selfProvidedRequirementIds
+  return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []
 }
 
 @Injectable()
@@ -157,6 +166,7 @@ export class GearPlanService {
       days: facts.days,
       difficulty: facts.difficulty,
       terrain: facts.terrain,
+      highestElevationM: facts.highestPoint?.elevationM ?? null,
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
       suggestedClimate,
@@ -177,6 +187,7 @@ export class GearPlanService {
       startAt?: Date | null
       endAt?: Date | null
       coordinates?: { lat: number; lng: number } | null
+      highestPoint?: { lat: number; lng: number; elevationM: number } | null
     } | null,
   ): Promise<{ suggestedClimate: ClimateSuggestion | null; forecastClimate: ClimateSuggestion | null }> {
     if (!facts) return { suggestedClimate: null, forecastClimate: null }
@@ -202,15 +213,20 @@ export class GearPlanService {
       : null
 
     let forecastClimate: ClimateSuggestion | null = null
-    if (this.forecastPort && facts.coordinates && facts.startAt && facts.endAt) {
+    // Ưu tiên điểm cao nhất của cung: đồ cần đủ cho chỗ lạnh nhất, không phải tâm điểm đến.
+    const summit = facts.highestPoint ?? null
+    const forecastAt = summit ?? facts.coordinates ?? null
+    if (this.forecastPort && forecastAt && facts.startAt && facts.endAt) {
       const forecast = await this.forecastPort.getForecastClimate({
-        lat: facts.coordinates.lat,
-        lng: facts.coordinates.lng,
+        lat: forecastAt.lat,
+        lng: forecastAt.lng,
         startAt: new Date(facts.startAt),
         endAt: new Date(facts.endAt),
       })
       if (forecast) {
-        forecastClimate = { ...forecast, noteVi: FORECAST_NOTE_VI }
+        forecastClimate = summit
+          ? { ...forecast, atElevationM: summit.elevationM, noteVi: forecastAtSummitNoteVi(summit.elevationM) }
+          : { ...forecast, noteVi: FORECAST_NOTE_VI }
       }
     }
 
@@ -359,9 +375,18 @@ export class GearPlanService {
       }
     }
 
+    // preferences được ghi đè cả object; selfProvidedRequirementIds chỉ thay khoá của nó.
+    let preferences = input.preferences
+    if (input.selfProvidedRequirementIds !== undefined) {
+      preferences = {
+        ...(preferences ?? plan.preferences ?? {}),
+        selfProvidedRequirementIds: [...input.selfProvidedRequirementIds].sort(),
+      }
+    }
+
     return this.gearPlanRepo.updateSemanticCAS(id, userId, input.expectedInputRevision, {
       title: input.title,
-      preferences: input.preferences,
+      preferences,
       selectedItemIds: input.selectedItemIds,
     })
   }
@@ -399,6 +424,10 @@ export class GearPlanService {
         for (const c of (latestRev.resultSnapshot as any).checklist) {
           if (c.requirementId) validRequirementIds.add(c.requirementId)
         }
+      }
+      // Đồ thiết yếu (đèn đầu, nước, sơ cứu...) cũng đánh dấu được khi đóng gói.
+      for (const essential of (latestRev?.resultSnapshot as any)?.essentials ?? []) {
+        if (essential?.id) validRequirementIds.add(essential.id)
       }
     } else {
       // Before first evaluation, only mandatory baseline requirement IDs (R26) are eligible
@@ -511,7 +540,9 @@ export class GearPlanService {
       ? (plan.preferences as any).explicitNeeds
       : undefined
     const requirements = buildTripRequirements(tripContext, explicitNeeds)
-    const coverageResult: PlanCoverageResult = resolvePlanCoverage(coreInputs, requirements, tripContext)
+    const coverageResult: PlanCoverageResult = resolvePlanCoverage(coreInputs, requirements, tripContext, {
+      selfProvidedRequirementIds: readSelfProvidedRequirementIds(plan.preferences),
+    })
 
     // 7. Run Core Engine evaluation for core categories (preserve per-item verdicts and gaps)
     const coreInputsForEngine: CoreGearItemInput[] = items
@@ -524,6 +555,7 @@ export class GearPlanService {
       }))
 
     const coreCheckResult = evaluateGearCheck(coreInputsForEngine, tripContext)
+    const essentials = buildTripEssentials(tripContext)
 
     // Merge user packing checklist progress for display
     const rawProgress = plan.progressJson
@@ -571,7 +603,7 @@ export class GearPlanService {
 
     let contentHash = crypto
       .createHash('sha256')
-      .update(canonicalStringify({ inputSnapshot, coverage: technicalCoverage }))
+      .update(canonicalStringify({ inputSnapshot, coverage: technicalCoverage, essentials }))
       .digest('hex')
 
     // 9. Idempotency check: if revision with identical content hash already saved, replay safely
@@ -592,7 +624,7 @@ export class GearPlanService {
       inputSnapshot.inputRevision = targetRevision
       contentHash = crypto
         .createHash('sha256')
-        .update(canonicalStringify({ inputSnapshot, coverage: technicalCoverage }))
+        .update(canonicalStringify({ inputSnapshot, coverage: technicalCoverage, essentials }))
         .digest('hex')
     }
 
@@ -603,6 +635,7 @@ export class GearPlanService {
       coverage: coverageResult,
       summary: coverageResult.summary,
       checklist: coverageResult.checklist,
+      essentials,
       itemVerdicts: coreCheckResult.items.map((i) => ({
         itemId: i.itemId,
         category: i.category,
@@ -817,7 +850,9 @@ export class GearPlanService {
     const trip = await this.tripContextPort.getTripContext(tripId, userId)
 
     // 1. Check if rental items are actually needed to cover missing checklist items
-    const needsRental = checklist.some((req: any) => req.status !== 'COVERED_BY_OWNED')
+    const needsRental = checklist.some(
+      (req: any) => req.status !== 'COVERED_BY_OWNED' && req.status !== 'USER_DECLARED_PROVISION',
+    )
 
     // 2. Canonical active rental policy resolution
     const now = new Date()
@@ -899,7 +934,7 @@ export class GearPlanService {
     const candidatesPerCategory = new Map<string, CandidateProduct[]>()
 
     for (const req of checklist) {
-      if (req.status === 'COVERED_BY_OWNED') continue
+      if (req.status === 'COVERED_BY_OWNED' || req.status === 'USER_DECLARED_PROVISION') continue
 
       const catKey = req.category
       if (candidatesPerCategory.has(catKey)) continue

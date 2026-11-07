@@ -11,6 +11,8 @@ export interface TripContextFactData {
   destination?: string;
   /** Toạ độ đại diện của chuyến (tâm điểm đến, nếu thiếu thì checkpoint đầu tiên); null khi không có. */
   coordinates?: { lat: number; lng: number } | null;
+  /** Điểm cao nhất của cung (từ toạ độ 3D trong geojson); null khi geojson không có độ cao. */
+  highestPoint?: { lat: number; lng: number; elevationM: number } | null;
   contextVersion?: string;
   sourceReferences?: {
     tripId: string;
