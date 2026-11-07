@@ -12,7 +12,7 @@ import {
   type PrivateTrip,
 } from "@/features/trips/services/private-trips.api";
 import { RentalCatalogPage } from "@/features/rentals/components/RentalCatalogPage";
-import { RentalSectionNav } from "@/features/rentals/components/RentalSectionNav";
+import { RentalPageHeader } from "@/features/rentals/components/RentalSectionNav";
 
 type RentalEntryPageProps = {
   tripId?: string;
@@ -109,22 +109,15 @@ export function RentalEntryPage({ tripId }: RentalEntryPageProps) {
 
   return (
     <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-12 sm:px-6 lg:px-8">
-      <section className="mx-auto max-w-5xl">
-        <div className="rounded-3xl bg-[#153E2E] p-7 text-white shadow-sm sm:p-9">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
-            Rental context
-          </p>
-          <h1 className="mt-3 text-3xl font-black">
-            Chọn chuyến đi để thuê thiết bị
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50/80">
-            TrekGo sẽ kiểm tra tư cách thành viên, hạn thuê và tồn kho theo chuyến bạn chọn.
-          </p>
-        </div>
-
-        <div className="mt-5">
-          <RentalSectionNav active="/rentals" />
-        </div>
+      <section className="mx-auto max-w-7xl">
+        <RentalPageHeader
+          eyebrow="Thuê thiết bị"
+          title="Chọn chuyến đi"
+          highlight="để thuê đúng đồ cần mang."
+          description="TrekGo sẽ kiểm tra tư cách thành viên, hạn thuê và tồn kho theo chuyến bạn chọn."
+          action={{ href: "/rentals/gear-advisor", label: "Kiểm tra đồ cần mang" }}
+          active="/rentals"
+        />
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
