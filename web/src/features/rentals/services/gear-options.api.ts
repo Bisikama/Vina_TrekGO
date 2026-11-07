@@ -23,14 +23,28 @@ export type GearRentalLine = {
   depositPerUnit?: number;
   replacementValue?: number;
   depositExplanation?: { percentageOfReplacementValue: number | null; formula?: string } | null;
+  weight_g?: number | null;
   availableCount?: number;
   grade?: "LIKE_NEW" | "GOOD_USED" | null;
 };
 
+export type GearOptionSummary = {
+  totalRentalFee?: number;
+  totalDeposit?: number;
+  totalEstimatedUpfront?: number;
+  totalKnownWeightG?: number;
+  weightStatus?: "EXACT" | "PARTIAL" | "UNKNOWN";
+  /** requirementId của các yêu cầu chưa tìm được đồ thuê phù hợp. */
+  missingRequirements?: string[];
+  isComplete?: boolean;
+  searchStatus?: "OPTIMAL_WITHIN_SEARCH_SCOPE" | "BOUNDED_RECOMMENDATION" | "INFEASIBLE";
+};
+
 export type GearRentalOption = {
   id: string;
+  label?: string;
   rentalLines: GearRentalLine[];
-  summary?: Record<string, unknown>;
+  summary?: GearOptionSummary;
 };
 
 export type GearRentalOptionSet = {
@@ -40,13 +54,47 @@ export type GearRentalOptionSet = {
   options: GearRentalOption[];
 };
 
+export type GearPlanAdvice = {
+  id: string;
+  source: "AI" | "RULE_FALLBACK" | string;
+  narrativeVi: string;
+  disclaimerVi?: string;
+  createdAt?: string;
+};
+
+export type GearQuoteIntent = {
+  tripId: string;
+  validUntil?: string;
+  lines: Array<{ productId: string; productName: string; quantity: number }>;
+  prefillRentalQuote: { tripId: string; items: Array<{ productId: string; quantity: number }> };
+};
+
 export const lineDepositAmount = (line: GearRentalLine) =>
   typeof line.depositAmount === "number" ? line.depositAmount : typeof line.deposit === "number" ? line.deposit : null;
 
-export async function generateGearRentalOptions(planId: string, expectedRevision: number) {
+export async function generateGearRentalOptions(planId: string, expectedRevision: number, budgetLimit?: number) {
   const response = await apiClient.post<Envelope<GearRentalOptionSet>>(
     `/api/v1/gear/plans/${encodeURIComponent(planId)}/options`,
-    { expectedRevision, objective: "BALANCED" },
+    { expectedRevision, objective: "BALANCED", ...(budgetLimit !== undefined ? { budgetLimit } : {}) },
+  );
+  return unwrap(response.data);
+}
+
+/** Lời khuyên cho một phương án. Backend luôn trả lời khuyên (theo bộ quy tắc khi AI tắt hoặc lỗi). */
+export async function generateGearAdvice(planId: string, expectedRevision: number, optionRef: { setId: string; optionId: string }) {
+  const response = await apiClient.post<Envelope<GearPlanAdvice>>(
+    `/api/v1/gear/plans/${encodeURIComponent(planId)}/advice`,
+    { expectedRevision, optionRef },
+    { timeout: 60_000 },
+  );
+  return unwrap(response.data);
+}
+
+/** Kiểm phương án còn hiệu lực và lấy danh sách món để đưa vào giỏ thuê. */
+export async function createGearQuoteIntent(planId: string, expectedRevision: number, optionRef: { setId: string; optionId: string }) {
+  const response = await apiClient.post<Envelope<GearQuoteIntent>>(
+    `/api/v1/gear/plans/${encodeURIComponent(planId)}/quote-intents`,
+    { expectedRevision, optionRef },
   );
   return unwrap(response.data);
 }
