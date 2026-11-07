@@ -129,7 +129,9 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           envs: ENV_B64,COMPOSE_B64,DH_USER,DH_TOKEN
-          script_stop: true
+          # Thoi gian cho ket noi SSH (mac dinh 30s); script tu dung khi loi nho "set -e"
+          timeout: 60s
+          command_timeout: 15m
           script: |
             set -e
             mkdir -p ~/trekgo && cd ~/trekgo
