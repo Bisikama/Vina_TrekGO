@@ -602,7 +602,7 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       deposit: mapDepositLifecycle(order),
       cancellationRefunds: (order.refundsViaRentalOrderId ?? []).map((refund) => {
         const simulation = jsonObject(refund.providerPayload).sandboxSimulation as Record<string, unknown> | undefined
-        const simulated = refund.status === 'SUCCEEDED' && simulation?.origin === 'ADMIN_SANDBOX_SIMULATION'
+        const simulated = refund.status === 'SUCCEEDED' && Boolean(simulation)
         return {
           refundId: refund.id,
           amount: decimalVndToApiInteger(refund.amount.toString()),

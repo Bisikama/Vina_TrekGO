@@ -193,6 +193,7 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       adapter = new PrismaTripLifecycleAdapter(mockPrisma);
 
       mockTx = {
+        rentalEarlyReturnRequest: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
         trip: { findUnique: jest.fn().mockResolvedValue({ id: 'trip-1', status: 'CANCELLED', version: 2 }) },
         bookingParticipant: { findMany: jest.fn().mockResolvedValue([]) },
         inventoryLocation: {
@@ -732,8 +733,20 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
         },
       };
 
+      mockTx.rentalEarlyReturnRequest.findMany = jest.fn().mockResolvedValue([
+        { id: 'early-1', orderId: 'order-active-1', status: 'CONFIRMED', requestedSlotAt: new Date('2026-10-20T10:00:00Z') },
+      ]);
+      mockTx.rentalEarlyReturnRequest.update = jest.fn().mockResolvedValue({ id: 'early-1', version: 3 });
+      mockTx.auditLog = { create: jest.fn() };
       const result = await adapter.processTripRescheduled(cmd);
       expect(result.scheduleNoticesIssued.length).toBe(1);
+      expect(mockTx.rentalEarlyReturnRequest.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'early-1' },
+        data: expect.objectContaining({ status: 'PENDING' }),
+      }));
+      expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        where: { deduplicationKey: 'rental-early-return:early-1:RECONFIRM_REQUIRED:3' },
+      }));
 
       // Verify active user's actual occupation is updated and extended
       expect(mockTx.rentalQuantityReservation.update).toHaveBeenCalledWith(

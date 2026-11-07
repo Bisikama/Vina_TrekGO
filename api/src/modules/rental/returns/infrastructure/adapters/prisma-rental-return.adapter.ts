@@ -1,4 +1,6 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
+import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
+import { EARLY_RETURN_SCAN_TOLERANCE_MINUTES, earlyReturnScanAllowed } from '../../application/early-return-scan.policy'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
 import { deductionReviewGate } from '../../application/deduction-review-gate'
@@ -140,6 +142,21 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           })
         }
 
+        const early = await tx.rentalEarlyReturnRequest.findFirst({
+          where: { orderId: order.id, taskId: task.id }, orderBy: { createdAt: 'desc' },
+        })
+        if (early && !earlyReturnScanAllowed(early, task.scheduledAt, effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt), command.now))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            message: 'Lịch trả sớm chưa được xác nhận hoặc chưa đến thời gian thu hồi.',
+            details: {
+              earlyReturnStatus: early.status,
+              allowedFrom:
+                early.status === 'CONFIRMED' && early.confirmedSlotAt
+                  ? new Date(early.confirmedSlotAt.getTime() - EARLY_RETURN_SCAN_TOLERANCE_MINUTES * 60_000).toISOString()
+                  : effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt).toISOString(),
+            },
+          })
+
         const assignments = order.rentalOrderLinesViaOrderId.flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
         const byCode = new Map(assignments.map((assignment) => [assignment.equipmentUnit.assetCode, assignment]))
         const uniqueCodes = [...new Set(command.assetCodes)]
@@ -214,6 +231,15 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             exceptionStatus: order.exceptionStatus,
             version: { increment: 1 },
           },
+        })
+        // Chỉ lịch đã xác nhận mới là "trả sớm hoàn tất"; yêu cầu chưa xác nhận bị lần thu hồi này thay thế.
+        await tx.rentalEarlyReturnRequest.updateMany({
+          where: { orderId: order.id, status: 'CONFIRMED' },
+          data: { status: 'COMPLETED', version: { increment: 1 } },
+        })
+        await tx.rentalEarlyReturnRequest.updateMany({
+          where: { orderId: order.id, status: 'PENDING' },
+          data: { status: 'SUPERSEDED', supersededAt: command.now, version: { increment: 1 } },
         })
         if (order.packageViaOrderId && order.packageViaOrderId.status !== PackageStatus.RETURNING) {
           await tx.package.update({
@@ -1503,7 +1529,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       const grouped = item.depositRefundAllocations[0]
       const refund = grouped?.refund ?? item.refundViaDepositSettlementItemId
       const simulation = (refund?.providerPayload as any)?.sandboxSimulation
-      const settlementMode = simulation
+      const settlementMode = simulation || refund?.executionMode === 'SANDBOX_SIMULATED'
         ? 'SANDBOX_SIMULATED'
         : refund?.executionMode === 'MANUAL_BANK_TRANSFER' ? 'MANUAL_BANK_TRANSFER' : ((item.decisionSnapshot as any)?.settlementMode ?? 'STANDARD')
       const itemRefundAmount = grouped ? decimalToInteger(grouped.amount) : decimalToInteger(item.refundAmount)
@@ -1511,7 +1537,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const existing = refundById.get(refund.id) ?? {
           refundRef: refund.id,
           executionMode: refund.executionMode ?? 'PROVIDER_API',
-          confirmationSource: refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
+          confirmationSource: refund.status === RefundStatus.SUCCEEDED && simulation ? 'SANDBOX_SIMULATION' : refund.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
           status: refund.status,
           amount: 0,
           itemIds: [],
@@ -1570,7 +1596,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         refundRef: refund?.id ?? null,
         refundStatus: refund?.status ?? null,
         executionMode: refund?.executionMode ?? 'PROVIDER_API',
-        confirmationSource: refund?.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
+        confirmationSource: refund?.status === RefundStatus.SUCCEEDED && simulation ? 'SANDBOX_SIMULATION' : refund?.executionMode === 'MANUAL_BANK_TRANSFER' && refund.status === RefundStatus.SUCCEEDED ? 'ADMIN_MANUAL' : null,
         manualStatus: refund?.manualRefund?.status ?? null,
         heldReason: item.reason ?? null,
         deduction: decimalToInteger(item.deductionAmount),
@@ -1615,9 +1641,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       items,
       groupedRefunds: [...refundById.values()],
       financialTruth: {
-        providerRefundedAmount: refundedAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && item.refundStatus === RefundStatus.SUCCEEDED).reduce((sum, item) => sum + item.refundAmount, 0),
+        providerRefundedAmount: items.filter(item => item.refundStatus === RefundStatus.SUCCEEDED && item.executionMode !== 'MANUAL_BANK_TRANSFER' && item.settlementMode !== 'SANDBOX_SIMULATED').reduce((sum, item) => sum + item.refundAmount, 0),
         adminConfirmedRefundedAmount: items.filter(item => item.confirmationSource === 'ADMIN_MANUAL').reduce((sum, item) => sum + item.refundAmount, 0),
-        providerRefundPendingAmount: refundPendingAmount - items.filter(item => item.executionMode === 'MANUAL_BANK_TRANSFER' && [RefundStatus.PENDING, RefundStatus.PROCESSING].includes(item.refundStatus as any)).reduce((sum, item) => sum + item.refundAmount, 0),
+        providerRefundPendingAmount: items.filter(item => item.executionMode !== 'MANUAL_BANK_TRANSFER' && item.settlementMode !== 'SANDBOX_SIMULATED' && [RefundStatus.PENDING, RefundStatus.PROCESSING].includes(item.refundStatus as any)).reduce((sum, item) => sum + item.refundAmount, 0),
         realMoneyReturned: items.some(
           (item) => item.refundStatus === RefundStatus.SUCCEEDED && item.settlementMode !== 'SANDBOX_SIMULATED' && item.executionMode !== 'MANUAL_BANK_TRANSFER',
         ),

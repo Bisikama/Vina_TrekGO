@@ -12,6 +12,14 @@
       {
         "include": "modules/rental/documents/assets/*.jpg",
         "outDir": "dist/src"
+      },
+      {
+        "include": "modules/rental/documents/assets/*.ttf",
+        "outDir": "dist/src"
+      },
+      {
+        "include": "modules/rental/documents/assets/*-OFL.txt",
+        "outDir": "dist/src"
       }
     ]
   }

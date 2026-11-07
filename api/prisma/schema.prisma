@@ -861,6 +861,9 @@ model MediaAsset {
 // =========================================================
 
 model User {
+  earlyReturnRequests            RentalEarlyReturnRequest[] @relation("EarlyReturnRequester")
+  confirmedEarlyReturnRequests   RentalEarlyReturnRequest[] @relation("EarlyReturnConfirmer")
+  rejectedEarlyReturnRequests    RentalEarlyReturnRequest[] @relation("EarlyReturnRejecter")
   custodyTransfersViaFromStaffId CustodyTransfer[]      @relation("R_CustodyTransfer_from_staff_id")
   custodyTransfersViaToStaffId   CustodyTransfer[]      @relation("R_CustodyTransfer_to_staff_id")
   trailPurchaseRequests          TrailPurchaseRequest[]
@@ -2359,6 +2362,7 @@ model RentalOrder {
 
   rentalDocumentsViaOrderId         RentalDocument[]
   rentalReturnSessionsViaOrderId    RentalReturnSession[]
+  earlyReturnRequests               RentalEarlyReturnRequest[]
   rentalExtensionRequestsViaOrderId RentalExtensionRequest[] @relation("R_RentalExtensionRequest_order_id")
   rentalOrderLinesViaOrderId        RentalOrderLine[]        @relation("R_RentalOrderLine_order_id")
   packageViaOrderId                 Package?                 @relation("R_Package_order_id")
@@ -2390,6 +2394,37 @@ model RentalOrder {
   @@index([returnPointId])
   @@index([paymentExpiresAt])
   @@map("rental_orders")
+}
+
+model RentalEarlyReturnRequest {
+  id                 String      @id @default(uuid()) @db.Uuid
+  orderId            String      @map("order_id") @db.Uuid
+  userId             String      @map("user_id") @db.Uuid
+  status             String      @db.VarChar(24)
+  requestedAt        DateTime    @map("requested_at") @db.Timestamptz(6)
+  requestedSlotAt    DateTime    @map("requested_slot_at") @db.Timestamptz(6)
+  confirmedSlotAt    DateTime?   @map("confirmed_slot_at") @db.Timestamptz(6)
+  confirmedBy        String?     @map("confirmed_by") @db.Uuid
+  confirmedAt        DateTime?   @map("confirmed_at") @db.Timestamptz(6)
+  taskId             String?     @map("task_id") @db.Uuid
+  previousTaskAt     DateTime?   @map("previous_task_at") @db.Timestamptz(6)
+  supersededAt       DateTime?   @map("superseded_at") @db.Timestamptz(6)
+  rejectedBy         String?     @map("rejected_by") @db.Uuid
+  rejectedAt         DateTime?   @map("rejected_at") @db.Timestamptz(6)
+  rejectionReason    String?     @map("rejection_reason") @db.VarChar(500)
+  expiredAt          DateTime?   @map("expired_at") @db.Timestamptz(6)
+  version            Int         @default(1)
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order              RentalOrder @relation(fields: [orderId], references: [id])
+  requester          User        @relation("EarlyReturnRequester", fields: [userId], references: [id])
+  confirmer          User?       @relation("EarlyReturnConfirmer", fields: [confirmedBy], references: [id])
+  rejecter           User?       @relation("EarlyReturnRejecter", fields: [rejectedBy], references: [id])
+  task               DeliveryTask? @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, status])
+  @@index([status, requestedAt])
+  @@map("rental_early_return_requests")
 }
 
 model RentalOrderLine {
@@ -2553,6 +2588,7 @@ model InventoryTask {
 }
 
 model DeliveryTask {
+  earlyReturnRequests               RentalEarlyReturnRequest[]
   exceptionNotes                    String?            @map("exception_notes")
   exceptionEvidenceIds              Json?              @map("exception_evidence_ids")
   exceptionAt                       DateTime?          @map("exception_at") @db.Timestamptz(6)

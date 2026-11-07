@@ -415,7 +415,7 @@ export class PaymentHistoryService {
         r.amount::text AS amount,
         r.currency AS currency,
         r.status::text AS status,
-        CASE WHEN r.status = 'SUCCEEDED' AND COALESCE(r.provider_payload->'sandboxSimulation'->>'origin', '') <> 'ADMIN_SANDBOX_SIMULATION' THEN 'CREDIT' ELSE 'NONE' END AS "financialEffect",
+        CASE WHEN r.status = 'SUCCEEDED' AND (r.provider_payload->'sandboxSimulation') IS NULL THEN 'CREDIT' ELSE 'NONE' END AS "financialEffect",
         p.payment_method AS "paymentMethod",
         r.created_at AS "createdAt",
         r.refunded_at AS "completedAt",

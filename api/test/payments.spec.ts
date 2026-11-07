@@ -22,6 +22,8 @@ import { TechnicalReversalWorker } from '../src/modules/payments/technical-rever
 import { ApplyTrailPaymentUseCase } from '../src/modules/system-trail/application/use-cases/apply-trail-payment.use-case'
 import { RentalPaymentConsumer } from '../src/modules/rental/payments/rental-payment.consumer'
 import { RentalDepositWorker } from '../src/modules/rental/payments/rental-deposit.worker'
+import { ManualRefundsService } from '../src/modules/payments/manual-refunds.service'
+import { Prisma } from '@prisma/client'
 
 const url = process.env.PAYMENT_TEST_DATABASE_URL
 if (url) {
@@ -1996,5 +1998,44 @@ describe('Payment diagnostic privacy', () => {
       errorCode: undefined,
       stack: undefined,
     })
+  })
+})
+
+describe('Operational refund detail', () => {
+  const actor = { id: 'admin', authUserId: 'auth', email: 'admin@example.com', role: 'ADMIN', status: 'ACTIVE' }
+  const makeRefund = (overrides: Record<string, unknown> = {}) => ({
+    id: 'refund', paymentId: 'payment', purpose: 'RENTAL_CANCELLATION', reasonCode: null,
+    amount: new Prisma.Decimal(100), currency: 'VND', status: 'PROCESSING',
+    executionMode: 'PROVIDER_API', paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX',
+    providerPayload: null, refundedAt: null, reconcileStatus: 'NEEDS_REVIEW', manualRefund: null,
+    payment: { status: 'SUCCEEDED', paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX',
+      invoice: { invoiceType: 'RENTAL', userId: 'customer', bookingId: null, rentalOrderId: 'order', trailAccessId: null } },
+    ...overrides,
+  })
+  const run = async (row: ReturnType<typeof makeRefund>, user = actor) => {
+    const findFirst = jest.fn().mockResolvedValue(row)
+    const db = { refund: { findFirst }, paymentOutboxEvent: { findUnique: jest.fn() } }
+    const service = new ManualRefundsService(db as unknown as PrismaService)
+    return { result: await service.detail('refund', user), findFirst }
+  }
+
+  it('exposes pending provider refunds to admins before a simulation exists', async () => {
+    const { result } = await run(makeRefund())
+    expect(result).toMatchObject({ refundId: 'refund', source: 'RENTAL', sourceId: 'order',
+      paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX', canAttemptSandboxSimulation: true })
+  })
+
+  it('does not offer sandbox simulation for completed or non-sandbox refunds', async () => {
+    for (const overrides of [{ status: 'SUCCEEDED' }, { providerEnvironment: 'PRODUCTION' }, { executionMode: 'MANUAL_BANK_TRANSFER' }]) {
+      const { result } = await run(makeRefund(overrides))
+      expect(result).toMatchObject({ canAttemptSandboxSimulation: false })
+    }
+  })
+
+  it('keeps owner authorization and admin operational metadata separate', async () => {
+    const { result, findFirst } = await run(makeRefund(), { ...actor, id: 'customer', role: 'USER' })
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'refund', payment: { invoice: { userId: 'customer' } } } }))
+    expect(result).not.toHaveProperty('canAttemptSandboxSimulation')
+    expect(result).not.toHaveProperty('providerEnvironment')
   })
 })

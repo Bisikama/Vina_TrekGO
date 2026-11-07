@@ -221,6 +221,9 @@ export class RentalRefundsService {
           reconcileStatus: 'SCHEDULED',
           nextRetryAt: now,
           ...manualRefundReservation(payment.paymentGateway),
+          ...(payment.paymentGateway === 'vnpay' && payment.providerEnvironment === 'SANDBOX'
+            ? { executionMode: 'SANDBOX_SIMULATED' as const }
+            : {}),
           allocations: {
             create: input.allocations.map((a) => ({
               paymentAllocationId: a.paymentAllocationId,

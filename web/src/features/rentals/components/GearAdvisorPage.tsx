@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Button, EmptyState, ErrorAlert, InfoBanner, Input, LoadingState, Select, SurfaceCard } from "@/components/ui";
 
 import {
   listMyGear,
@@ -17,6 +18,7 @@ import {
   getGearItemVersion,
   getGearPlan,
   getGearPlanGuidance,
+  getGearPlanChecklist,
   getGearPlanPrefill,
   getPreparationSelections,
   listGearPlans,
@@ -31,9 +33,11 @@ import {
   type PlanGuidance,
   type PreparationSelections,
   type PreparationStatus,
+  type PackingChecklistItem,
 } from "@/features/rentals/services/gear-advisor.api";
 import { GearRentalOptions } from "./GearRentalOptions";
-import { RentalPageHeader } from "./RentalSectionNav";
+import { GearPackingChecklist } from "./GearPackingChecklist";
+import { RentalSectionNav } from "./RentalSectionNav";
 
 const CATEGORIES: Array<[GearCategory, string]> = [
   ["JACKET", "Áo khoác"],
@@ -87,12 +91,15 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
   const [trips, setTrips] = useState<GearTripCandidate[]>([]);
   const [tripId, setTripId] = useState(initialTripId ?? "");
   const [items, setItems] = useState<UserGearItem[]>([]);
+  const [gearSearch, setGearSearch] = useState("");
   const [plan, setPlan] = useState<GearPlan | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [climate, setClimate] = useState<ClimateDraft>({ temp_min_c: "", temp_max_c: "", temp_min_night_c: "", rain_prob_pct: "" });
   const [climateSuggested, setClimateSuggested] = useState(false);
   const [climateConfirmed, setClimateConfirmed] = useState(false);
   const [guidance, setGuidance] = useState<PlanGuidance | null>(null);
+  const [checklist, setChecklist] = useState<PackingChecklistItem[]>([]);
+  const [climateEdited, setClimateEdited] = useState(false);
   const [answers, setAnswers] = useState<AnswerDraft>({});
   const [selections, setSelections] = useState<PreparationSelections | null>(null);
   const [prepDraft, setPrepDraft] = useState<Partial<Record<GearCategory, PreparationStatus>>>({});
@@ -121,12 +128,15 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
 
   const loadGuidance = useCallback(async (planId: string) => {
     const latest = await getGearPlan(planId);
-    setPlan(latest);
     if (latest.evaluatedRevision) {
-      setGuidance(await getGearPlanGuidance(planId, latest.evaluatedRevision));
+      const [nextGuidance, nextChecklist] = await Promise.all([getGearPlanGuidance(planId, latest.evaluatedRevision), getGearPlanChecklist(planId, latest.evaluatedRevision)]);
+      setGuidance(nextGuidance);
+      setChecklist(nextChecklist);
     } else {
       setGuidance(null);
+      setChecklist([]);
     }
+    setPlan(latest);
     return latest;
   }, []);
 
@@ -136,6 +146,8 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
       setTripId(nextTripId);
       setPlan(null);
       setGuidance(null);
+      setChecklist([]);
+      setClimateEdited(false);
       setSelections(null);
       setPrepDraft({});
       setAnswers({});
@@ -196,9 +208,9 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
       CATEGORIES.map(([category, label]) => ({
         category,
         label,
-        items: items.filter((item) => item.category === category),
+        items: items.filter((item) => item.category === category && `${item.name} ${item.brand ?? ""}`.toLocaleLowerCase("vi-VN").includes(gearSearch.trim().toLocaleLowerCase("vi-VN"))),
       })).filter((group) => group.items.length > 0),
-    [items],
+    [items, gearSearch],
   );
 
   const climateValue: ConfirmedClimate | null = useMemo(() => {
@@ -212,6 +224,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
   const selectionChanged =
     plan !== null &&
     (selected.length !== plan.selectedItemIds.length || selected.some((id) => !plan.selectedItemIds.includes(id)));
+  const resultOutdated = selectionChanged || climateEdited || !!plan?.isStale || !!guidance?.needsReevaluation || (!!plan?.evaluatedRevision && plan.inputRevision !== plan.evaluatedRevision);
 
   async function savePlanAndEvaluate() {
     if (!tripId || !climateValue || !climateConfirmed) return;
@@ -226,11 +239,13 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
           tripId,
           selectedItemIds: selected,
         });
+        setPlan(current);
       } else if (selectionChanged) {
         current = await updateGearPlan(current.id, {
           expectedInputRevision: current.inputRevision,
           selectedItemIds: selected,
         });
+        setPlan(current);
       }
       await evaluateGearPlan(current.id, {
         expectedInputRevision: current.inputRevision,
@@ -238,6 +253,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
       });
       // evaluatedRevision thực tế lấy lại từ kế hoạch (đánh giá lại có thể tăng phiên bản).
       await loadGuidance(current.id);
+      setClimateEdited(false);
       if (!selections) {
         const prep = await getPreparationSelections(current.id);
         setSelections(prep);
@@ -338,37 +354,35 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
   }
 
   return (
-    <main className="min-h-[700px] bg-[#f4f7fb] px-4 py-8 sm:px-6 lg:px-8">
-      <section className="mx-auto max-w-6xl space-y-5">
-        <RentalPageHeader
-          eyebrow="Gear Advisor"
-          title="Kế hoạch chuẩn bị đồ"
-          description="Chọn chuyến đi, xác nhận thời tiết và đồ trong tủ. TrekGo kiểm tra từng món theo quy tắc an toàn và chỉ ra thông tin còn thiếu."
-          active="/rentals/gear-advisor"
-        />
+    <main className="min-h-[700px] bg-[#F7F7F4] px-4 py-8 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-[1440px] space-y-5">
+        <RentalSectionNav active="/rentals/gear-advisor" />
+        <header className="relative overflow-hidden rounded-[28px] bg-[#143f30] px-6 py-8 text-white sm:px-10 sm:py-10">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-48 h-[460px] w-[460px] rounded-full border border-white/10 shadow-[0_0_0_45px_rgba(255,255,255,0.025),0_0_0_90px_rgba(255,255,255,0.025),0_0_0_135px_rgba(255,255,255,0.02)]" />
+          <div className="relative max-w-2xl"><p className="text-xs font-bold uppercase tracking-[.22em] text-[#a8d9b8]">VinaTrekGO / Gear advisor</p><h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Sẵn sàng cho<br />chuyến đi tiếp theo.</h1><p className="mt-4 max-w-xl text-sm leading-6 text-emerald-50/80">Chọn chuyến, kiểm tra trang bị và sắp xếp hành lý với checklist dành riêng cho hành trình của bạn.</p><div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-emerald-50"><span className="h-2 w-2 rounded-full bg-[#9bd8a9]" />{selectedTrip ? `Đang chuẩn bị · ${selectedTrip.title}` : "Bắt đầu bằng cách chọn chuyến đi"}</div></div>
+        </header>
 
         {error ? (
-          <div className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span>{error}</span>
-            <button type="button" onClick={() => setError("")} className="font-bold">Đóng</button>
-          </div>
+          <ErrorAlert message={error} />
         ) : null}
         {notice ? (
-          <div className="flex items-start justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            <span>{notice}</span>
-            <button type="button" onClick={() => setNotice("")} className="font-bold">Đóng</button>
-          </div>
+          <InfoBanner title="Cập nhật kế hoạch">{notice}</InfoBanner>
         ) : null}
 
+        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="hidden lg:sticky lg:top-24 lg:block">
+          <div className="rounded-2xl border border-[#e0e9df] bg-white p-5"><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#8b9b90]">Hành trình chuẩn bị</p><nav aria-label="Các bước chuẩn bị" className="mt-4 space-y-1">{[["step-1", "01", "Chọn chuyến"], ["step-2", "02", "Thời tiết"], ["step-3", "03", "Đồ sẽ mang"], ["step-4", "04", "Kết quả đánh giá"], ["packing-checklist", "05", "Checklist đóng gói"]].map(([id, number, label]) => <a key={id} href={`#${id}`} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-[#52665a] transition hover:bg-[#f0f6f0] hover:text-[#174b36]"><span className="text-xs font-bold text-[#8aaa94]">{number}</span>{label}</a>)}</nav><div className="mt-4 border-t border-[#e8eee8] pt-4 text-xs leading-5 text-[#829188]">Đánh giá dựa trên thông tin chuyến và đồ bạn chọn.</div></div>
+        </aside>
+        <div className="min-w-0 space-y-5">
         {/* Bước 1: chuyến đi */}
         <Step number={1} title="Chọn chuyến đi">
           {loading ? (
-            <p className="text-sm text-slate-500">Đang tải...</p>
+            <LoadingState message="Đang tải chuyến đi và tủ đồ..." />
           ) : (
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <label className="block text-sm font-bold text-slate-700">
                 Chuyến đi
-                <select
+                <Select
                   value={tripId}
                   disabled={busy !== null}
                   onChange={(event) => void openTrip(event.target.value)}
@@ -381,7 +395,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                       {trip.startAt ? ` · ${formatDate(trip.startAt)}` : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               {plan ? (
                 <p className="text-xs text-slate-500">
@@ -401,9 +415,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
             </div>
           ) : null}
           {!loading && trips.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">
-              Chưa thấy chuyến nào. Bạn cần đặt vé hoặc tham gia một chuyến trước.
-            </p>
+            <EmptyState className="mt-3" title="Chưa có chuyến đi" description="Bạn cần đặt vé hoặc tham gia một chuyến trước." />
           ) : null}
         </Step>
 
@@ -416,17 +428,18 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                   ? "Số liệu dưới đây là gợi ý ước tính cho chuyến. Hãy kiểm tra lại với dự báo thực tế trước khi xác nhận."
                   : "Chưa có gợi ý thời tiết cho chuyến này. Hãy nhập theo dự báo bạn tham khảo — hệ thống không tự đoán."}
               </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {CLIMATE_FIELDS.map(([key, label, unit]) => (
                   <label key={key} className="block text-sm font-bold text-slate-700">
                     {label} ({unit})
-                    <input
+                    <Input
                       type="number"
                       inputMode="decimal"
                       value={climate[key]}
                       onChange={(event) => {
                         setClimate((current) => ({ ...current, [key]: event.target.value }));
                         setClimateConfirmed(false);
+                        setClimateEdited(true);
                       }}
                       className={`${inputClass} mt-2`}
                     />
@@ -438,7 +451,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                   Kiểm tra lại: nhiệt độ thấp nhất không được cao hơn cao nhất, khả năng mưa từ 0 đến 100%.
                 </p>
               ) : null}
-              <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+              <label className="mt-5 flex items-center gap-3 rounded-xl border border-[#dbe9dd] bg-[#f4f9f4] px-4 py-3 text-sm font-medium text-[#315543]">
                 <input
                   type="checkbox"
                   checked={climateConfirmed}
@@ -452,6 +465,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
 
             {/* Bước 3: chọn đồ */}
             <Step number={3} title="Chọn đồ bạn sẽ mang">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="max-w-xl text-sm leading-6 text-slate-500">Chọn những món trong Tủ đồ bạn dự định mang để hệ thống kiểm tra độ phù hợp.</p><span className="rounded-full bg-[#eaf4eb] px-3 py-1.5 text-xs font-bold text-[#2f6b4f]">{selected.length} món đã chọn</span></div>
               {items.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Tủ đồ đang trống.{" "}
@@ -461,17 +475,19 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                   trước, rồi quay lại đây.
                 </p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-2">
+                  <Input aria-label="Tìm đồ trong tủ" placeholder="Tìm theo tên hoặc thương hiệu..." value={gearSearch} onChange={(event) => setGearSearch(event.target.value)} className="mb-3" />
+                  {!itemsByCategory.length && <p className="py-4 text-sm text-slate-500">Không tìm thấy món đồ phù hợp.</p>}
                   {itemsByCategory.map((group) => (
-                    <div key={group.category}>
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{group.label}</p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <details key={group.category} open={gearSearch.trim() ? true : undefined} className="group rounded-2xl border border-[#e4eae4] bg-[#fbfcfa]">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4"><span className="font-semibold text-[#294436]">{group.label}</span><span className="flex items-center gap-3 text-xs text-[#819187]">{group.items.filter((item) => selected.includes(item.id)).length}/{group.items.length} đã chọn <span className="text-base transition group-open:rotate-180">⌄</span></span></summary>
+                      <div className="grid gap-2 border-t border-[#edf1ec] p-3 sm:grid-cols-2">
                         {group.items.map((item) => {
                           const checked = selected.includes(item.id);
                           return (
                             <label
                               key={item.id}
-                              className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${checked ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300"}`}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm transition ${checked ? "border-[#79ac87] bg-[#edf7ee]" : "border-[#e5ebe5] bg-white hover:border-[#9ec7a9]"}`}
                             >
                               <input
                                 type="checkbox"
@@ -481,32 +497,30 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                                     event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id),
                                   )
                                 }
-                                className="h-4 w-4 accent-emerald-700"
+                                className="mt-1 h-4 w-4 shrink-0 accent-emerald-700"
                               />
                               <span className="min-w-0">
-                                <span className="block truncate font-semibold text-slate-900">{item.name}</span>
+                                <span className="block break-words font-semibold text-slate-900">{item.name}</span>
                                 {item.brand ? <span className="block truncate text-xs text-slate-500">{item.brand}</span> : null}
                               </span>
                             </label>
                           );
                         })}
                       </div>
-                    </div>
+                    </details>
                   ))}
                   <p className="text-xs text-slate-500">
                     Thiếu món nào thì cứ để trống — kết quả sẽ chỉ ra loại đồ còn cần chuẩn bị.
                   </p>
                 </div>
               )}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
+              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[#edf1ec] pt-5">
+                <Button
                   disabled={!climateValue || !climateConfirmed || busy !== null}
                   onClick={() => void savePlanAndEvaluate()}
-                  className="h-11 rounded-xl bg-[#174B36] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#0F5A3B] disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {busy === "evaluate" ? "Đang đánh giá..." : guidance ? "Đánh giá lại" : "Đánh giá kế hoạch"}
-                </button>
+                </Button>
                 {!climateConfirmed ? (
                   <span className="text-xs text-slate-500">Cần xác nhận thời tiết ở bước 2.</span>
                 ) : null}
@@ -516,9 +530,9 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
             {/* Bước 4: kết quả */}
             {guidance ? (
               <Step number={4} title="Kết quả và hướng dẫn">
-                {guidance.needsReevaluation || plan?.isStale ? (
+                {resultOutdated ? (
                   <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Đồ hoặc thông tin chuyến đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để có kết quả hiện tại.
+                    Đầu vào hoặc thông tin chuyến đã thay đổi. Đây là kết quả của lần đánh giá trước; xác nhận thời tiết và bấm “Đánh giá lại” để cập nhật.
                   </p>
                 ) : null}
                 {guidance.isLatestEvaluation === false ? (
@@ -557,7 +571,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                           })}
                         </ul>
                       ) : (
-                        <p className="mt-2 text-sm text-slate-500">Chưa chọn món nào trong 5 nhóm đồ chính.</p>
+                        <p className="mt-2 text-sm text-slate-500">Lần đánh giá này chưa có món đồ cá nhân được chọn.</p>
                       )}
                     </div>
 
@@ -571,9 +585,9 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                                 <p className="font-semibold text-slate-900">{categoryLabel(String(requirement.category))}</p>
                                 {typeof requirement.remainingQuantity === "number" ? (
                                   <span
-                                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${requirement.remainingQuantity > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}
+                                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${requirement.remainingQuantity === 0 && requirement.status === "COVERED_BY_OWNED" ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
                                   >
-                                    {requirement.remainingQuantity > 0 ? `Còn thiếu ${requirement.remainingQuantity}` : "Đã đủ"}
+                                    {requirement.remainingQuantity > 0 ? `Còn thiếu ${requirement.remainingQuantity}` : requirement.status === "COVERED_BY_OWNED" ? "Đã đáp ứng" : "Xem chi tiết"}
                                   </span>
                                 ) : null}
                               </div>
@@ -596,7 +610,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
                         </ul>
                         {guidance.requirements.some((requirement) => (requirement.remainingQuantity ?? 0) > 0) &&
                         plan?.evaluatedRevision &&
-                        !guidance.needsReevaluation ? (
+                        !resultOutdated ? (
                           <div className="mt-4">
                             <GearRentalOptions planId={plan.id} evaluatedRevision={plan.evaluatedRevision} />
                           </div>
@@ -651,11 +665,13 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
               </Step>
             ) : null}
 
+            {plan && guidance?.available && checklist.length > 0 && <GearPackingChecklist key={`${plan.id}:${plan.evaluatedRevision}`} plan={plan} checklist={checklist} itemNames={Object.fromEntries(items.map((item) => [item.id, item.name]))} tripTitle={selectedTrip?.title ?? "Chuyến đi"} tripDate={formatDate(selectedTrip?.startAt)} stale={resultOutdated} onPlanChange={setPlan} />}
+
             {/* Bước 5: trạng thái chuẩn bị */}
             {plan && selections ? (
-              <Step number={5} title="Đánh dấu tình trạng chuẩn bị">
+              <Step number={5} title="Ghi chú theo nhóm đồ">
                 <p className="text-sm text-slate-500">
-                  Ghi chú cho riêng bạn theo từng loại đồ. Phần này không thay đổi kết quả đánh giá.
+                  Ghi nhớ bạn đã có, chưa có hoặc cần kiểm tra từng nhóm. Đây là ghi chú riêng, không phải checklist đóng gói và không thay đổi kết quả đánh giá.
                 </p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {CATEGORIES.map(([category, label]) => (
@@ -695,6 +711,7 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
           </>
         ) : null}
         {busy === "trip" ? <p className="text-sm text-slate-500">Đang tải thông tin chuyến...</p> : null}
+        </div></div>
       </section>
     </main>
   );
@@ -702,13 +719,13 @@ export function GearAdvisorPage({ initialTripId }: { initialTripId?: string }) {
 
 function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,.05)]">
-      <h2 className="flex items-center gap-3 text-lg font-bold text-slate-900">
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-[#174B36] text-sm font-bold text-white">{number}</span>
+    <SurfaceCard id={`step-${number}`} padding="lg" className="scroll-mt-24 rounded-2xl border-[#e2eae3] shadow-[0_8px_30px_rgba(26,59,39,.04)]">
+      <h2 className="flex items-center gap-3 text-lg font-bold tracking-tight text-[#203c2d]">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eaf4eb] text-sm font-bold text-[#2f6b4f]">{String(number).padStart(2, "0")}</span>
         {title}
       </h2>
-      <div className="mt-4">{children}</div>
-    </section>
+      <div className="mt-5">{children}</div>
+    </SurfaceCard>
   );
 }
 

@@ -26,6 +26,7 @@ import { PaymentProvider } from '../payments/payment-provider.port'
 import { PaymentsPort } from '../payments/payments.port'
 import { RefundsService } from '../payments/refunds.service'
 import { RentalRefundsService } from '../payments/rental-refunds.service'
+import { reserveRentalCancellationRefundWithTx } from '../rental/payments/rental-cancellation-refund'
 import { PrismaTripLifecycleAdapter } from '../rental/lifecycle/infrastructure/adapters/prisma-trip-lifecycle.adapter'
 import { BookingMembershipEventConsumer } from '../rental/lifecycle/infrastructure/consumers/booking-membership-event.consumer'
 import { HandleTripCancelledUseCase } from '../rental/lifecycle/application/use-cases/handle-trip-cancelled.use-case'
@@ -285,6 +286,40 @@ suite('Trip cancellation: PostgreSQL business rules and durable workers', () => 
     if (state !== 'PENDING_PAYMENT') await payment(invoice.id, 600, order.rentalOrderLinesViaOrderId[0].id)
     return order
   }
+  it('automatically settles a new rental cancellation in VNPay sandbox and retries idempotently', async () => {
+    const previous = { ...process.env }
+    try {
+      process.env.NODE_ENV = 'test'
+      process.env.PAYOS_ENABLED = 'false'
+      process.env.PAYMENT_PROVIDER_ENVIRONMENT = 'SANDBOX'
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
+      const buyer = await booking((await trip()).t.id)
+      const order = await rental(buyer)
+      const invoice = await db.invoice.findFirstOrThrow({ where: { rentalOrderId: order.id } })
+      const payment = await db.payment.findFirstOrThrow({ where: { invoiceId: invoice.id } })
+      await db.payment.update({ where: { id: payment.id }, data: {
+        paymentGateway: 'vnpay', providerEnvironment: 'SANDBOX', merchantAccountKey: 'TEST1234',
+        merchantRequestRef: `payment:${payment.id}`, transactionRef: `sandbox:${payment.id}`,
+      } })
+      const row = await db.$transaction(async tx => {
+        await tx.rentalOrder.update({ where: { id: order.id }, data: { status: 'CANCELLED', financialStatus: 'REFUND_PENDING' } })
+        return reserveRentalCancellationRefundWithTx(tx, { orderId: order.id, paymentId: payment.id,
+          amount: new Prisma.Decimal(500), reason: 'Cancellation', idempotencyKey: randomUUID(), now: new Date() })
+      })
+      expect(row.executionMode).toBe('SANDBOX_SIMULATED')
+      const simulation = new SandboxRefundSimulationService(prism, refunds)
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'false'
+      await simulation.settlePendingRentalRefunds()
+      expect((await db.refund.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('PENDING')
+      process.env.PAYMENT_SANDBOX_REFUND_SIMULATION_ENABLED = 'true'
+      await simulation.settlePendingRentalRefunds()
+      expect(await simulation.settleAutomaticRentalRefund(row.id)).toMatchObject({ status: 'SUCCEEDED', confirmationSource: 'SANDBOX_SIMULATION' })
+      const saved = await db.refund.findUniqueOrThrow({ where: { id: row.id } })
+      expect((saved.providerPayload as any).sandboxSimulation).toMatchObject({ origin: 'RENTAL_SANDBOX_SIMULATION', trigger: 'RENTAL_AUTOMATIC', actorAdminId: null })
+      expect(await db.paymentOutboxEvent.count({ where: { aggregateId: row.id, eventType: 'REFUND_SUCCEEDED' } })).toBe(1)
+      expect((await db.rentalOrder.findUniqueOrThrow({ where: { id: order.id } })).financialStatus).toBe('PARTIALLY_REFUNDED')
+    } finally { process.env = previous }
+  })
   it.each([0, 70, 100])(
     'keeps a voluntary %i percent refund unchanged and fully refunds only the live paid booking',
     async (percent) => {

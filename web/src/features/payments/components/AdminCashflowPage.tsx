@@ -66,7 +66,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
   }
 
   return <PageShell maxWidth="full" withTopOffset={false}>
-    <PageHeader eyebrow="Quản trị · Booking & chuyến đi" title="Dòng tiền & giao dịch"
+    <PageHeader eyebrow="Quản trị · Thanh toán" title="Dòng tiền & giao dịch"
       description="Theo dõi khoản thu, khoản hoàn và trạng thái xử lý theo nguồn giao dịch."
       actions={<Button variant="outline" loading={refreshing} onClick={() => void Promise.allSettled([summary.mutate(), ledger.mutate()])}>Làm mới dữ liệu</Button>} />
 
@@ -75,7 +75,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
       <form onSubmit={applyFilters} className="mt-5 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <FormField label="Nguồn giao dịch"><Select aria-label="Nguồn giao dịch" value={draft.source} onChange={(event) => updateDraft('source', event.target.value as CashflowFilters['source'])}>
-            <option value="BOOKING">Đặt chỗ chuyến đi</option><option value="TRAIL_ACCESS">Mua quyền cung đường</option>
+            <option value="BOOKING">Đặt chỗ chuyến đi</option><option value="TRAIL_ACCESS">Mua quyền cung đường</option><option value="RENTAL">Thuê thiết bị</option>
           </Select></FormField>
           <FormField label="Cổng thanh toán"><Select aria-label="Cổng thanh toán" value={draft.gateway} onChange={(event) => updateDraft('gateway', event.target.value as CashflowFilters['gateway'])}>
             <option value="vnpay">VNPay</option>
@@ -101,7 +101,7 @@ function AdminCashflowView({ userId }: { userId: string }) {
     </SurfaceCard>
 
     <InfoBanner title="Cách tính số liệu">
-      Tổng thu và tổng hoàn chỉ tính các giao dịch thành công. Các khoản đang chờ được thống kê riêng.
+      Dữ liệu hiện gồm các khoản thanh toán VNPay sandbox và khoản hoàn mô phỏng tương ứng. Tổng thu và tổng hoàn chỉ tính các giao dịch thành công; các khoản đang chờ được thống kê riêng.
     </InfoBanner>
 
     <section aria-label="Tổng quan dòng tiền" className="space-y-4">

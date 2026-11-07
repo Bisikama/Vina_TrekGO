@@ -39,6 +39,7 @@ describe('ReturnTask baseline 1.3.2 (pure mock)', () => {
   it('sự kiện sớm dùng lại task đã có và chỉ đưa lịch về sớm hơn', async () => {
     const tx = {
       rentalOrder: { findUnique: jest.fn().mockResolvedValue(order) },
+      rentalEarlyReturnRequest: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       deliveryTask: {
         findUnique: jest.fn().mockResolvedValue({ id: 'task-1', status: DeliveryTaskStatus.SCHEDULED,
           scheduledAt: new Date('2026-10-21T10:00:00.000Z') }),

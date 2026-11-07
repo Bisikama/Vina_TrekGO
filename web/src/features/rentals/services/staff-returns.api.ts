@@ -297,6 +297,8 @@ export type RentalExceptionSummary = {
   status: string;
   reason: string;
   dueAt: string | null;
+  assigneeId?: string | null;
+  createdAt?: string;
   version: number;
 };
 
@@ -315,30 +317,34 @@ export type RentalExceptionDetail = {
   } | null;
   evidence: string[];
   reviews: { id: string; reason: string; evidenceIds: string[]; createdAt: string }[];
+  history: { action: string; userId: string; createdAt: string }[];
+  allowedActions: string[];
 };
 
 export type AdminRentalRefundInfo = {
   refundId: string;
+  source: string;
+  sourceId: string | null;
   purpose: string;
-  paymentGateway: string;
+  paymentGateway: string | null;
   providerEnvironment: string | null;
   executionMode: string;
   confirmationSource: string | null;
   status: string;
-  canSimulateSandbox: boolean;
+  canAttemptSandboxSimulation: boolean;
 };
 
 export async function getAdminRentalRefundInfo(refundId: string) {
   const response = await apiClient.get<Envelope<AdminRentalRefundInfo>>(
-    `/api/v1/admin/refunds/${encodeURIComponent(refundId)}`,
+    `/api/v1/refunds/${encodeURIComponent(refundId)}`,
   );
   return unwrap(response.data);
 }
 
-export async function listRentalExceptions() {
+export async function listRentalExceptions(params: { page?: number; pageSize?: number; type?: string; status?: string; assignee?: string } = {}) {
   const response = await apiClient.get<Envelope<Paginated<RentalExceptionSummary>>>(
     "/api/v1/staff/rental-exceptions",
-    { params: { page: 1, pageSize: 100 } },
+    { params: { page: 1, pageSize: 100, ...params } },
   );
   return unwrap(response.data);
 }

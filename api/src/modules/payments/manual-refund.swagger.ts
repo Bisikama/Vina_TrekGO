@@ -28,7 +28,10 @@ export const MANUAL_REFUND_DETAIL_SCHEMA: SchemaObject = {
     refundedAt: timestamp,
     source: { type: 'string', enum: ['BOOKING', 'RENTAL', 'TRAIL_ACCESS'] },
     sourceId: nullableUuid,
-    executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER'] },
+    executionMode: { type: 'string', enum: ['PROVIDER_API', 'MANUAL_BANK_TRANSFER', 'SANDBOX_SIMULATED'] },
+    paymentGateway: { ...nullableText, description: 'Admin detail only: refund gateway.' },
+    providerEnvironment: { ...nullableText, description: 'Admin detail only: refund provider environment.' },
+    canAttemptSandboxSimulation: { type: 'boolean', description: 'Admin detail only: preliminary eligibility; the simulation endpoint validates all conditions.' },
     confirmationSource: {
       type: 'string',
       nullable: true,

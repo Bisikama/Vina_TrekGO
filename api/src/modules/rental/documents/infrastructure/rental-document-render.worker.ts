@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { RentalDocumentRenderStatus } from '@prisma/client';
 import envconfig from 'src/shared/config';
@@ -7,6 +7,9 @@ import { snapshotHash } from '../application/rental-document-events';
 import { DOCUMENT_STORAGE_PORT, documentObjectKey, pdfDigest } from './document-storage.port';
 import type { DocumentStoragePort } from './document-storage.port';
 import { RentalPdfRenderer } from './rental-pdf.renderer';
+import { MEDIA_STORAGE_PORT, type MediaStoragePort } from '../../../media/application/ports/media-storage.port';
+import { documentEvidenceIds } from '../application/rental-evidence-link';
+import sharp from 'sharp';
 
 type Claimed = { id: string; aggregate_id: string; published_at: Date };
 type ClaimResult = Claimed | 'SKIP_CURRENT_ITEM' | null;
@@ -16,7 +19,47 @@ export class RentalDocumentRenderWorker {
   private running = false;
   readonly metrics = { processed: 0, failed: 0, recovered: 0 };
   constructor(private readonly prisma: PrismaService, private readonly renderer: RentalPdfRenderer,
-    @Inject(DOCUMENT_STORAGE_PORT) private readonly storage: DocumentStoragePort) {}
+    @Inject(DOCUMENT_STORAGE_PORT) private readonly storage: DocumentStoragePort,
+    @Optional() @Inject(MEDIA_STORAGE_PORT) private readonly media?: MediaStoragePort) {}
+
+  private async evidenceImages(snapshot: unknown) {
+    const ids = [...documentEvidenceIds(snapshot)].sort();
+    if (!ids.length) return [];
+    if (!this.media) throw new Error('PDF_EVIDENCE_MEDIA_UNAVAILABLE');
+    const assets = await this.prisma.mediaAsset.findMany({ where: { id: { in: ids } } });
+    const images: Array<{ id: string; bytes: Buffer; preview: Buffer; extension: string }> = [];
+    let total = 0;
+    for (const id of ids) {
+      const asset = assets.find(a => a.id.toLowerCase() === id);
+      if (!asset || asset.status !== 'READY' || !asset.scope.includes('EVIDENCE') || !asset.providerPublicId ||
+          (asset.deliveryType !== 'authenticated' && asset.deliveryType !== 'upload'))
+        throw new Error('PDF_EVIDENCE_UNAVAILABLE');
+      if (asset.resourceType !== 'IMAGE') continue;
+      if (images.length >= 50) throw new Error('PDF_EVIDENCE_TOO_MANY');
+      const { stream } = await this.media.openOriginalStream({ providerPublicId: asset.providerPublicId,
+        providerAssetId: asset.providerAssetId ?? undefined, resourceType: asset.resourceType, deliveryType: asset.deliveryType });
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        const part = Buffer.from(chunk);
+        size += part.length;
+        if (size > 20 * 1024 * 1024 || total + size > 100 * 1024 * 1024) {
+          (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+          throw new Error('PDF_EVIDENCE_TOO_LARGE');
+        }
+        chunks.push(part);
+      }
+      total += size;
+      const bytes = Buffer.concat(chunks);
+      const metadata = await sharp(bytes, { limitInputPixels: 40000000 }).metadata();
+      const formats: Record<string, string> = { jpeg: 'jpg', png: 'png', webp: 'webp', gif: 'gif', tiff: 'tiff', heif: 'heic' };
+      const extension = formats[metadata.format ?? ''];
+      if (!extension) throw new Error('PDF_EVIDENCE_FORMAT_UNSUPPORTED');
+      const preview = await sharp(bytes, { limitInputPixels: 40000000 }).rotate().resize({ width: 900, height: 900, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toBuffer();
+      images.push({ id, bytes, preview, extension });
+    }
+    return images;
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
@@ -96,7 +139,8 @@ export class RentalDocumentRenderWorker {
     };
     try {
       if (snapshotHash(doc.snapshotJson) !== doc.snapshotHash) throw new Error('SNAPSHOT_HASH_MISMATCH');
-      const bytes = await this.renderer.render(doc);
+      const evidence = await this.evidenceImages(doc.snapshotJson);
+      const bytes = await this.renderer.render(doc, evidence);
       if (leaseLost) return;
       const digest = pdfDigest(bytes);
       const key = documentObjectKey(doc.id, doc.templateVersion, doc.snapshotHash);

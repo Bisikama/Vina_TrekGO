@@ -1,15 +1,25 @@
-import envconfig from 'src/shared/config';
+import envconfig from 'src/shared/config'
 import { Injectable, Logger } from '@nestjs/common'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { RentalDocument, RentalDocumentType } from '@prisma/client'
-import { RENTAL_DOCUMENT_TEMPLATE_VERSION, snapshotHash } from '../application/rental-document-events'
+import {
+  RENTAL_DOCUMENT_TEMPLATE_VERSION,
+  RENTAL_HANDOVER_TEMPLATE_VERSION,
+  snapshotHash,
+} from '../application/rental-document-events'
 import { rentalEvidenceLink } from '../application/rental-evidence-link'
 
 /** Chứng từ mẫu 1.3.2 phát hành trước đây vẫn render được, dùng bố cục mới. */
-const SUPPORTED_TEMPLATE_VERSIONS = new Set(['1.3.2', RENTAL_DOCUMENT_TEMPLATE_VERSION])
+const SUPPORTED_TEMPLATE_VERSIONS = new Set([
+  '1.3.2',
+  '1.4.0',
+  RENTAL_DOCUMENT_TEMPLATE_VERSION,
+  RENTAL_HANDOVER_TEMPLATE_VERSION,
+])
 const LOGO_PATH = join(__dirname, '..', 'assets', 'vina-trekgo-logo.jpg')
+const DEFAULT_FONT_PATH = join(__dirname, '..', 'assets', 'Lato-Regular.ttf')
 
 const headings: Record<RentalDocumentType, string> = {
   HANDOVER: 'BIÊN BẢN BÀN GIAO THIẾT BỊ',
@@ -227,6 +237,11 @@ const EVIDENCE_LABEL = 'Ảnh/bằng chứng: '
 const WARN_VALUES = new Set(['DAMAGED', 'LOST', 'ISSUE', 'OBSERVED_ISSUE'])
 const label = (map: Record<string, string>, value: unknown) => map[clean(value)] ?? clean(value)
 const toneOf = (value: unknown): Tone | undefined => (WARN_VALUES.has(clean(value)) ? 'warn' : undefined)
+const displayName = (value: unknown) => (hasText(value) && !UUID.test(clean(value)) ? clean(value) : 'Chưa ghi nhận')
+const place = (value: unknown) => {
+  const location = obj(value)
+  return [location.name, location.address].filter(hasText).map(clean).join(' — ') || 'Chưa ghi nhận'
+}
 
 export function documentContent(doc: RentalDocument): DocContent {
   const s = obj(doc.snapshotJson)
@@ -234,6 +249,7 @@ export function documentContent(doc: RentalDocument): DocContent {
   const section = (title: string) => blocks.push({ kind: 'section', title })
   const fields = (items: Field[]) => blocks.push({ kind: 'fields', items })
   const note = (text: string, tone?: Tone) => blocks.push({ kind: 'note', text, tone })
+  const descriptive = doc.templateVersion === RENTAL_HANDOVER_TEMPLATE_VERSION
 
   switch (doc.documentType) {
     case RentalDocumentType.HANDOVER: {
@@ -249,36 +265,83 @@ export function documentContent(doc: RentalDocument): DocContent {
         ],
       })
       section('Thông tin đơn thuê')
-      fields([
-        { label: 'Mã đơn thuê', value: ref(s.orderId) },
-        { label: 'Chuyến đi', value: ref(s.tripId) },
-        { label: 'Bắt đầu thuê', value: dateText(s.rentalStartAt) },
-        { label: 'Kết thúc thuê', value: dateText(s.rentalEndAt) },
-        { label: 'Phí thuê', value: amount(s.rentalFee) },
-        { label: 'Tổng tiền cọc', value: amount(s.totalDeposit) },
-        { label: 'Điểm nhận đồ', value: ref(s.pickupPointId) },
-      ])
+      fields(
+        descriptive
+          ? [
+              { label: 'Mã đơn thuê', value: ref(s.orderId) },
+              { label: 'Chuyến đi', value: displayName(s.tripTitle) },
+              { label: 'Bắt đầu thuê', value: dateText(s.rentalStartAt) },
+              { label: 'Kết thúc thuê', value: dateText(s.rentalEndAt) },
+              { label: 'Phí thuê', value: amount(s.rentalFee) },
+              { label: 'Tổng tiền cọc', value: amount(s.totalDeposit) },
+              { label: 'Điểm giao theo đơn', value: place(s.pickupPoint), wide: true },
+              { label: 'Điểm trả theo đơn', value: place(s.returnPoint), wide: true },
+            ]
+          : [
+              { label: 'Mã đơn thuê', value: ref(s.orderId) },
+              { label: 'Chuyến đi', value: ref(s.tripId) },
+              { label: 'Bắt đầu thuê', value: dateText(s.rentalStartAt) },
+              { label: 'Kết thúc thuê', value: dateText(s.rentalEndAt) },
+              { label: 'Phí thuê', value: amount(s.rentalFee) },
+              { label: 'Tổng tiền cọc', value: amount(s.totalDeposit) },
+              { label: 'Điểm nhận đồ', value: ref(s.pickupPointId) },
+            ],
+      )
       section('Bên giao và bên nhận')
-      fields([
-        { label: 'Người nhận', value: clean(recipient.displayName) },
-        { label: 'Số điện thoại', value: clean(recipient.phone) },
-        { label: 'Mã người nhận', value: ref(recipient.userId) },
-        { label: 'Nhân viên giao', value: ref(s.staffId) },
-      ])
-      note('Khách xác nhận nhận đồ bằng mã nhận do nhân viên kiểm tra tại chỗ. Chứng từ không ghi nhận chữ ký điện tử của khách.')
+      fields(
+        descriptive
+          ? [
+              { label: 'Người nhận thiết bị', value: displayName(recipient.displayName) },
+              { label: 'Số điện thoại', value: displayName(recipient.phone) },
+              { label: 'Nhân viên bàn giao', value: displayName(s.staffName) },
+            ]
+          : [
+              { label: 'Người nhận', value: clean(recipient.displayName) },
+              { label: 'Số điện thoại', value: clean(recipient.phone) },
+              { label: 'Mã người nhận', value: ref(recipient.userId) },
+              { label: 'Nhân viên giao', value: ref(s.staffId) },
+            ],
+      )
+      note(
+        'Khách xác nhận nhận đồ bằng mã nhận do nhân viên kiểm tra tại chỗ. Chứng từ không ghi nhận chữ ký điện tử của khách.',
+      )
       section(`Danh sách thiết bị bàn giao (${units.length})`)
       if (units.length) {
         blocks.push({
           kind: 'table',
-          columns: [
-            { title: 'STT', width: 32 },
-            { title: 'Mã tài sản', width: 140 },
-            { title: 'Tình trạng', width: 100 },
-            { title: 'Phụ kiện kèm theo', width: 0 },
-          ],
+          columns: descriptive
+            ? [
+                { title: 'STT', width: 30 },
+                { title: 'Thiết bị', width: 150 },
+                { title: 'Mã tài sản', width: 92 },
+                { title: 'Tình trạng', width: 75 },
+                { title: 'Phụ kiện kèm theo', width: 0 },
+              ]
+            : [
+                { title: 'STT', width: 32 },
+                { title: 'Mã tài sản', width: 140 },
+                { title: 'Tình trạng', width: 100 },
+                { title: 'Phụ kiện kèm theo', width: 0 },
+              ],
           rows: units.map((unit, i) => ({
-            cells: [String(i + 1), clean(unit.assetCode), label(CONDITION_LABELS, unit.condition), joined(unit.accessories)],
-            tones: [undefined, undefined, toneOf(unit.condition)],
+            cells: descriptive
+              ? [
+                  String(i + 1),
+                  displayName(unit.productName),
+                  displayName(unit.assetCode),
+                  label(CONDITION_LABELS, unit.condition),
+                  joined(unit.accessories),
+                ]
+              : [
+                  String(i + 1),
+                  clean(unit.assetCode),
+                  label(CONDITION_LABELS, unit.condition),
+                  joined(unit.accessories),
+                ],
+            tones: descriptive
+              ? [undefined, undefined, undefined, toneOf(unit.condition)]
+              : [undefined, undefined, toneOf(unit.condition)],
+            ...(descriptive && hasText(unit.notes) ? { details: [`Ghi chú tình trạng: ${clean(unit.notes)}`] } : {}),
             evidence: arr(unit.evidenceIds).map(clean),
           })),
         })
@@ -286,7 +349,8 @@ export function documentContent(doc: RentalDocument): DocContent {
       const issues = arr(s.reportedIssues).map(obj)
       if (hasText(s.recipientNotes) || issues.length) {
         section('Ghi nhận khi bàn giao')
-        if (hasText(s.recipientNotes)) fields([{ label: 'Ghi chú của người nhận', value: clean(s.recipientNotes), wide: true }])
+        if (hasText(s.recipientNotes))
+          fields([{ label: 'Ghi chú của người nhận', value: clean(s.recipientNotes), wide: true }])
         issues.forEach((issue, i) =>
           note(`Vấn đề ${i + 1}: ${clean(issue.type)} — ${clean(issue.description)}`, 'warn'),
         )
@@ -309,32 +373,54 @@ export function documentContent(doc: RentalDocument): DocContent {
         ],
       })
       section('Thông tin phiên nhận trả')
-      fields([
-        { label: 'Mã đơn thuê', value: ref(s.orderId) },
-        { label: 'Phiên nhận trả', value: ref(s.returnSessionId) },
-        { label: 'Điểm nhận trả', value: ref(s.returnLocationRef) },
-        { label: 'Nhân viên nhận', value: ref(s.staffId) },
-      ])
+      fields(
+        descriptive
+          ? [
+              { label: 'Mã đơn thuê', value: ref(s.orderId) },
+              { label: 'Chuyến đi', value: displayName(s.tripTitle) },
+              { label: 'Người thuê', value: displayName(obj(s.recipient).displayName) },
+              { label: 'Nhân viên nhận', value: displayName(s.staffName) },
+              { label: 'Điểm trả theo lịch', value: place(s.returnLocation), wide: true },
+            ]
+          : [
+              { label: 'Mã đơn thuê', value: ref(s.orderId) },
+              { label: 'Phiên nhận trả', value: ref(s.returnSessionId) },
+              { label: 'Điểm nhận trả', value: ref(s.returnLocationRef) },
+              { label: 'Nhân viên nhận', value: ref(s.staffId) },
+            ],
+      )
       section(`Thiết bị đã nhận (${received.length})`)
       if (received.length) {
         blocks.push({
           kind: 'table',
-          columns: [
-            { title: 'STT', width: 32 },
-            { title: 'Mã tài sản', width: 120 },
-            { title: 'Tình trạng sơ bộ', width: 95 },
-            { title: 'Kết quả sơ bộ', width: 90 },
-            { title: 'Phụ kiện', width: 0 },
-          ],
+          columns: descriptive
+            ? [
+                { title: 'STT', width: 30 },
+                { title: 'Thiết bị', width: 130 },
+                { title: 'Mã tài sản', width: 90 },
+                { title: 'Tình trạng', width: 75 },
+                { title: 'Kết quả sơ bộ', width: 80 },
+                { title: 'Phụ kiện', width: 0 },
+              ]
+            : [
+                { title: 'STT', width: 32 },
+                { title: 'Mã tài sản', width: 120 },
+                { title: 'Tình trạng sơ bộ', width: 95 },
+                { title: 'Kết quả sơ bộ', width: 90 },
+                { title: 'Phụ kiện', width: 0 },
+              ],
           rows: received.map((unit, i) => ({
             cells: [
               String(i + 1),
-              clean(unit.assetCode),
+              ...(descriptive ? [displayName(unit.productName)] : []),
+              descriptive ? displayName(unit.assetCode) : clean(unit.assetCode),
               label(CONDITION_LABELS, unit.condition),
               label(OUTCOME_LABELS, unit.outcome),
               joined(unit.accessories),
             ],
-            tones: [undefined, undefined, toneOf(unit.condition), toneOf(unit.outcome)],
+            tones: descriptive
+              ? [undefined, undefined, undefined, toneOf(unit.condition), toneOf(unit.outcome)]
+              : [undefined, undefined, toneOf(unit.condition), toneOf(unit.outcome)],
             details: [
               `Giờ quét: ${dateText(unit.receivedAt)}`,
               ...(hasText(unit.notes) ? [`Ghi chú: ${clean(unit.notes)}`] : []),
@@ -345,12 +431,35 @@ export function documentContent(doc: RentalDocument): DocContent {
       } else note('Không quét được thiết bị nào trong phiên này. Xem bằng chứng thu hồi thất bại bên dưới.', 'warn')
       if (missing.length) {
         section(`Thiết bị chưa trả (${missing.length})`)
-        note(missing.map(ref).join(', '), 'warn')
+        if (descriptive) {
+          const missingUnits = arr(s.notReturnedUnits).map(obj)
+          if (missingUnits.length)
+            blocks.push({
+              kind: 'table',
+              columns: [
+                { title: 'STT', width: 30 },
+                { title: 'Thiết bị', width: 220 },
+                { title: 'Mã tài sản', width: 0 },
+              ],
+              rows: missingUnits.map((unit, index) => ({
+                cells: [String(index + 1), displayName(unit.productName), displayName(unit.assetCode)],
+              })),
+            })
+          else note('Chưa có thông tin chi tiết về thiết bị chưa trả.', 'warn')
+        } else note(missing.map(ref).join(', '), 'warn')
       }
-      if (hasText(s.remarks) || hasText(s.failureEvidenceId) || arr(s.evidenceIds).length) {
+      if (
+        hasText(s.remarks) ||
+        (descriptive && hasText(s.userRemarks)) ||
+        hasText(s.failureEvidenceId) ||
+        arr(s.evidenceIds).length
+      ) {
         section('Ghi chú và bằng chứng')
         fields([
           ...(hasText(s.remarks) ? [{ label: 'Ghi chú phiên nhận', value: clean(s.remarks), wide: true }] : []),
+          ...(descriptive && hasText(s.userRemarks)
+            ? [{ label: 'Ghi chú của khách', value: clean(s.userRemarks), wide: true }]
+            : []),
           ...(hasText(s.failureEvidenceId)
             ? [{ label: 'Bằng chứng thu hồi thất bại', value: '', evidence: [clean(s.failureEvidenceId)], wide: true }]
             : []),
@@ -359,7 +468,9 @@ export function documentContent(doc: RentalDocument): DocContent {
             : []),
         ])
       }
-      note('Tình trạng ghi trên biên nhận là kết quả sơ bộ khi nhận đồ. Kết luận kiểm định và hoàn cọc sẽ được thông báo riêng.')
+      note(
+        'Tình trạng ghi trên biên nhận là kết quả sơ bộ khi nhận đồ. Kết luận kiểm định và hoàn cọc sẽ được thông báo riêng.',
+      )
       break
     }
     case RentalDocumentType.EXTENSION_APPENDIX: {
@@ -444,12 +555,16 @@ export function documentContent(doc: RentalDocument): DocContent {
 /** Văn bản thuần của chứng từ (để kiểm thử / tra cứu); cùng nội dung với PDF. */
 export function documentText(doc: RentalDocument): string {
   const content = documentContent(doc)
+  const evidenceNames = (ids: string[]) =>
+    doc.templateVersion === RENTAL_HANDOVER_TEMPLATE_VERSION
+      ? ids.map((_, index) => `Ảnh ${index + 1}`).join(', ')
+      : ids.map(ref).join(', ')
   const out: string[] = [content.title]
   for (const block of content.blocks) {
     if (block.kind === 'highlights') block.items.forEach((h) => out.push(`${h.label}: ${h.value}`))
     else if (block.kind === 'section') out.push(block.title)
     else if (block.kind === 'fields')
-      block.items.forEach((f) => out.push(`${f.label}: ${f.evidence ? f.evidence.map(ref).join(', ') : f.value}`))
+      block.items.forEach((f) => out.push(`${f.label}: ${f.evidence ? evidenceNames(f.evidence) : f.value}`))
     else if (block.kind === 'note') out.push(block.text)
     else {
       out.push(block.columns.map((c) => c.title).join(' | '))
@@ -457,7 +572,7 @@ export function documentText(doc: RentalDocument): string {
         out.push(
           r.cells.join(' | '),
           ...(r.details ?? []),
-          ...(r.evidence?.length ? [`${EVIDENCE_LABEL}${r.evidence.map(ref).join(', ')}`] : []),
+          ...(r.evidence?.length ? [`${EVIDENCE_LABEL}${evidenceNames(r.evidence)}`] : []),
         ),
       )
     }
@@ -493,13 +608,15 @@ const C = {
 }
 const toneColor = (tone?: Tone): Rgb =>
   tone === 'accent' ? C.orange : tone === 'warn' ? C.red : tone === 'success' ? C.green : C.text
-const toneSoft = (tone?: Tone): Rgb =>
-  tone === 'accent' ? C.orangeSoft : tone === 'warn' ? C.redSoft : C.greenSoft
+const toneSoft = (tone?: Tone): Rgb => (tone === 'accent' ? C.orangeSoft : tone === 'warn' ? C.redSoft : C.greenSoft)
 const toneBar = (tone?: Tone): Rgb => (tone === 'accent' ? C.orange : tone === 'warn' ? C.red : C.green)
 const n = (v: number) => (Math.round(v * 100) / 100).toString()
 
 /** Vùng bấm (toạ độ PDF) và URL cho annotation /Link của trang. */
-type PdfLink = { rect: [number, number, number, number]; uri: string }
+type PdfLink =
+  | { rect: [number, number, number, number]; uri: string }
+  | { rect: [number, number, number, number]; attachmentId: string }
+export type RentalPdfEvidence = { id: string; bytes: Buffer; preview: Buffer; extension: string }
 type Seg = { text: string; uri: string | null; dx: number; width: number }
 type Unit = {
   height: number
@@ -525,13 +642,17 @@ async function loadLogo(): Promise<{ bytes: Buffer; width: number; height: numbe
 
 @Injectable()
 export class RentalPdfRenderer {
-  async render(doc: RentalDocument): Promise<Buffer> {
+  async render(doc: RentalDocument, evidence: RentalPdfEvidence[] = []): Promise<Buffer> {
     if (!SUPPORTED_TEMPLATE_VERSIONS.has(doc.templateVersion) || snapshotHash(doc.snapshotJson) !== doc.snapshotHash)
       throw new Error('PDF_SNAPSHOT_INTEGRITY_OR_TEMPLATE_FAILED')
-    const fontPath = envconfig.RENTAL_PDF_FONT_PATH ?? process.env.RENTAL_PDF_FONT_PATH
-    if (!fontPath) throw new Error('RENTAL_PDF_FONT_PATH_REQUIRED')
+    const fontPath = envconfig.RENTAL_PDF_FONT_PATH ?? process.env.RENTAL_PDF_FONT_PATH ?? DEFAULT_FONT_PATH
     const font = parseFont(await readFile(fontPath))
     const logo = await loadLogo()
+    const images = evidence.map((item, index) => {
+      const dimensions = parseJpeg(item.preview)
+      if (!dimensions) throw new Error('PDF_EVIDENCE_PREVIEW_INVALID')
+      return { ...item, dimensions, name: `Evidence${index + 1}` }
+    })
     const content = documentContent(doc)
 
     // --- đo chữ ---------------------------------------------------------
@@ -592,7 +713,10 @@ export class RentalPdfRenderer {
     const evidenceLines = (prefix: string, ids: string[], size: number, max: number): Seg[][] => {
       const parts: Array<{ text: string; uri: string | null }> = prefix ? [{ text: prefix, uri: null }] : []
       ids.forEach((id, i) => {
-        parts.push({ text: ref(id), uri: rentalEvidenceLink(doc.id, id) })
+        parts.push({
+          text: doc.templateVersion === RENTAL_HANDOVER_TEMPLATE_VERSION ? `Ảnh ${i + 1}` : ref(id),
+          uri: rentalEvidenceLink(doc.id, id),
+        })
         if (i < ids.length - 1) parts.push({ text: ', ', uri: null })
       })
       const lines: Seg[][] = [[]]
@@ -609,8 +733,15 @@ export class RentalPdfRenderer {
       if (lines.length > 100) throw new Error('PDF_LAYOUT_TOO_LARGE')
       return lines
     }
-    const drawSegs = (lines: Seg[][], x: number, firstBaseline: number, step: number, size: number,
-      plain: Rgb, links: PdfLink[]) =>
+    const drawSegs = (
+      lines: Seg[][],
+      x: number,
+      firstBaseline: number,
+      step: number,
+      size: number,
+      plain: Rgb,
+      links: PdfLink[],
+    ) =>
       lines
         .flatMap((line, li) => {
           const baseline = firstBaseline - li * step
@@ -684,7 +815,9 @@ export class RentalPdfRenderer {
                   const fieldSegs = segs[i]
                   const value = fieldSegs
                     ? drawSegs(fieldSegs, x, top - 24, 13, 10, C.text, links)
-                    : (wrapped[i] ?? []).map((line, li) => text(line, x, top - 24 - li * 13, 10, toneColor(f.tone))).join('\n')
+                    : (wrapped[i] ?? [])
+                        .map((line, li) => text(line, x, top - 24 - li * 13, 10, toneColor(f.tone)))
+                        .join('\n')
                   return [text(f.label, x, top - 11, 7.5, C.muted), value].join('\n')
                 })
                 .join('\n'),
@@ -708,7 +841,7 @@ export class RentalPdfRenderer {
         })
       } else {
         const fixed = block.columns.reduce((sum, c) => sum + c.width, 0)
-        const widths = block.columns.map((c) => (c.width || CW - fixed))
+        const widths = block.columns.map((c) => c.width || CW - fixed)
         const xs = widths.map((_, i) => ML + widths.slice(0, i).reduce((a, b) => a + b, 0))
         const header: Unit = {
           height: 22,
@@ -723,7 +856,8 @@ export class RentalPdfRenderer {
           const cells = row.cells.map((cell, i) => wrap(cell, 9, widths[i] - 12))
           const details = (row.details ?? []).flatMap((d) => wrap(d, 7.5, CW - 44))
           const evidence = row.evidence?.length ? evidenceLines(EVIDENCE_LABEL, row.evidence, 7.5, CW - 44) : []
-          const height = 8 + Math.max(...cells.map((c) => c.length)) * 12 + (details.length + evidence.length) * 10.5 + 6
+          const height =
+            8 + Math.max(...cells.map((c) => c.length)) * 12 + (details.length + evidence.length) * 10.5 + 6
           units.push({
             height,
             tableHeader: header,
@@ -732,9 +866,7 @@ export class RentalPdfRenderer {
               if (index % 2 === 1) ops.push(rect(ML, top - height, CW, height, C.zebra))
               cells.forEach((lines, i) =>
                 lines.forEach((line, li) =>
-                  ops.push(
-                    text(line, xs[i] + 6, top - 15 - li * 12, 9, toneColor(row.tones?.[i]), i === 1),
-                  ),
+                  ops.push(text(line, xs[i] + 6, top - 15 - li * 12, 9, toneColor(row.tones?.[i]), i === 1)),
                 ),
               )
               const detailTop = top - 15 - (Math.max(...cells.map((c) => c.length)) - 1) * 12 - 12.5
@@ -745,6 +877,36 @@ export class RentalPdfRenderer {
               return ops.join('\n')
             },
           })
+        })
+      }
+    }
+
+    if (images.length) {
+      units.push({
+        height: 34,
+        keepWithNext: true,
+        draw: (top) =>
+          [
+            rect(ML, top - 30, 3.5, 12, C.orange),
+            text('ẢNH BẰNG CHỨNG', ML + 10, top - 28.5, 10.5, C.green, true),
+            hline(ML, MR, top - 34, C.border),
+          ].join('\n'),
+      })
+      for (const image of images) {
+        const scale = Math.min(210 / image.dimensions.width, 160 / image.dimensions.height)
+        const width = image.dimensions.width * scale,
+          height = image.dimensions.height * scale
+        units.push({
+          height: height + 42,
+          draw: (top, links) => {
+            const bottom = top - height - 24
+            const iconX = ML + width + 10
+            links.push({ rect: [iconX, bottom + height - 18, iconX + 16, bottom + height - 2], attachmentId: image.id })
+            return [
+              text(`Ảnh ${ref(image.id)} — bấm biểu tượng bên cạnh để mở ảnh gốc`, ML, top - 13, 9, C.text),
+              `q ${n(width)} 0 0 ${n(height)} ${n(ML)} ${n(bottom)} cm /${image.name} Do Q`,
+            ].join('\n')
+          },
         })
       }
     }
@@ -774,7 +936,8 @@ export class RentalPdfRenderer {
       }
       pages[pages.length - 1].push(unit.draw(y, pageLinks[pageLinks.length - 1]))
       y -= unit.height
-      lastHeader = unit.tableHeader ?? (unit.keepWithNext && units[i + 1]?.tableHeader ? units[i + 1].tableHeader : lastHeader)
+      lastHeader =
+        unit.tableHeader ?? (unit.keepWithNext && units[i + 1]?.tableHeader ? units[i + 1].tableHeader : lastHeader)
     }
     if (pages.length > 500) throw new Error('PDF_LAYOUT_TOO_LARGE')
 
@@ -800,7 +963,15 @@ export class RentalPdfRenderer {
     const footer = (index: number) =>
       [
         hline(ML, MR, 58, C.border),
-        text(`Mã xác thực (SHA-256): ${doc.snapshotHash}`, ML, 46, 6.8, C.muted),
+        text(
+          doc.templateVersion === RENTAL_HANDOVER_TEMPLATE_VERSION
+            ? 'Có thể xác thực chứng từ trên trang thông tin chứng từ.'
+            : `Mã xác thực (SHA-256): ${doc.snapshotHash}`,
+          ML,
+          46,
+          6.8,
+          C.muted,
+        ),
         textRight(`Trang ${index + 1}/${pages.length}`, MR, 46, 8, C.text, true),
         text(
           `Mẫu ${clean(doc.templateVersion)} · Chính sách ${clean(doc.policyVersion)} · Giờ Việt Nam (GMT+7) · Chứng từ lập tự động, không có chữ ký điện tử của khách.`,
@@ -876,16 +1047,49 @@ export class RentalPdfRenderer {
           ]),
         )
       : null
+    const imageIds = new Map<string, number>()
+    const attachmentIds = new Map<string, number>()
+    for (const item of images) {
+      imageIds.set(
+        item.name,
+        add(
+          Buffer.concat([
+            Buffer.from(
+              `<< /Type /XObject /Subtype /Image /Width ${item.dimensions.width} /Height ${item.dimensions.height} /ColorSpace /${item.dimensions.components === 1 ? 'DeviceGray' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${item.preview.length} >>\nstream\n`,
+            ),
+            item.preview,
+            Buffer.from('\nendstream'),
+          ]),
+        ),
+      )
+      const embeddedId = add(
+        Buffer.concat([
+          Buffer.from(`<< /Type /EmbeddedFile /Length ${item.bytes.length} >>\nstream\n`),
+          item.bytes,
+          Buffer.from('\nendstream'),
+        ]),
+      )
+      const filename = `evidence-${item.id}.${item.extension}`
+      attachmentIds.set(
+        item.id,
+        add(`<< /Type /Filespec /F (${filename}) /UF (${filename}) /EF << /F ${embeddedId} 0 R >> >>`),
+      )
+    }
     const pagesId = reserve()
     // URL chỉ gồm ký tự an toàn của URL; vẫn escape ký tự đặc biệt của chuỗi PDF cho chắc.
     const pdfString = (value: string) => value.replace(/[\\()]/g, (ch) => `\\${ch}`)
     const pageIds = pageStreams.map((ops, index) => {
       const contentId = stream(Buffer.from(ops, 'ascii'))
-      const xobject = logoId ? ` /XObject << /Im1 ${logoId} 0 R >>` : ''
+      const imageRefs = [...imageIds].map(([name, id]) => `/${name} ${id} 0 R`).join(' ')
+      const xobject = logoId || imageRefs ? ` /XObject << ${logoId ? `/Im1 ${logoId} 0 R` : ''} ${imageRefs} >>` : ''
       const annotIds = pageLinks[index].map((link) =>
-        add(
-          `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(n).join(' ')}] /Border [0 0 0] /A << /S /URI /URI (${pdfString(link.uri)}) >> >>`,
-        ),
+        'attachmentId' in link
+          ? add(
+              `<< /Type /Annot /Subtype /FileAttachment /Rect [${link.rect.map(n).join(' ')}] /FS ${attachmentIds.get(link.attachmentId)} 0 R /Name /Paperclip /Contents (Open original image attachment) >>`,
+            )
+          : add(
+              `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(n).join(' ')}] /Border [0 0 0] /A << /S /URI /URI (${pdfString(link.uri)}) >> >>`,
+            ),
       )
       const annots = annotIds.length ? ` /Annots [${annotIds.map((id) => `${id} 0 R`).join(' ')}]` : ''
       return add(
@@ -893,7 +1097,13 @@ export class RentalPdfRenderer {
       )
     })
     set(pagesId, `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`)
-    const catalog = add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`)
+    const names = images.length
+      ? ` /Names << /EmbeddedFiles << /Names [${[...images]
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((item) => `(evidence-${item.id}.${item.extension}) ${attachmentIds.get(item.id)} 0 R`)
+          .join(' ')}] >> >>`
+      : ''
+    const catalog = add(`<< /Type /Catalog /Pages ${pagesId} 0 R${names} >>`)
     const chunks: Buffer[] = [Buffer.from('%PDF-1.7\n%\xE2\xE3\xCF\xD3\n', 'binary')]
     const offsets = [0]
     let byteOffset = chunks[0].length
