@@ -24,6 +24,7 @@ import {
 } from '../../../payments/rental-cancellation-refund'
 import { releaseExtensionWithTx } from '../../../ordering/extension/rental-extension.service'
 import { ensureReturnTaskWithTx } from '../../application/services/rental-return-task'
+import { emitEarlyReturnEventTx } from '../../../returns/application/early-return-events'
 import type {
   TripLifecyclePort,
   TripRescheduledCommand,
@@ -406,6 +407,34 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 version: { increment: 1 },
               },
             })
+
+            // A changed trip invalidates a previously confirmed early slot.
+            // Retain the request and task, but require an explicit new confirmation.
+            const confirmedEarlyReturns = await tx.rentalEarlyReturnRequest.findMany({
+              where: { orderId: order.id, status: 'CONFIRMED' },
+            })
+            for (const early of confirmedEarlyReturns) {
+              const updated = await tx.rentalEarlyReturnRequest.update({
+                where: { id: early.id },
+                data: { status: 'PENDING', supersededAt: processingNow, version: { increment: 1 } },
+              })
+              await emitEarlyReturnEventTx(tx, {
+                requestId: early.id,
+                orderId: order.id,
+                status: 'RECONFIRM_REQUIRED',
+                version: updated.version,
+                slotAt: early.requestedSlotAt,
+              })
+            }
+            const earlyReturnsToReconfirm = { count: confirmedEarlyReturns.length }
+            await tx.rentalEarlyReturnRequest.updateMany({
+              where: { orderId: order.id, status: 'CANCELLED', taskId: { not: null }, supersededAt: null },
+              data: { supersededAt: processingNow, version: { increment: 1 } },
+            })
+            if (earlyReturnsToReconfirm.count) await tx.auditLog.create({ data: {
+              action: 'RENTAL_EARLY_RETURN_RECONFIRM_REQUIRED', entityType: 'RentalOrder', entityId: order.id,
+              newValues: { tripEventId: command.eventId, contextVersion: command.payload.contextVersion, count: earlyReturnsToReconfirm.count },
+            } })
 
             if (orderHasConflict) {
               conflicts.push({ orderId: order.id, reason: conflictReason })

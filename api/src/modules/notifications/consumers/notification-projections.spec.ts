@@ -105,6 +105,28 @@ describe('rentalNotificationProjection', () => {
     expect(d).toMatchObject({ audience: 'CUSTOMER', data: { notificationType: N.RENTAL_DAMAGE_REPORTED } })
     expect(() => rental('SOMETHING_ELSE', {})).toThrow('UNSUPPORTED_RENTAL_NOTIFICATION_EVENT')
   })
+
+  it('routes early-return updates to staff or customer by status', () => {
+    const early = (status: string, extra: Record<string, unknown> = {}) =>
+      rental('RENTAL_EARLY_RETURN_UPDATED', {
+        orderId: ORDER,
+        requestId: 'req-1',
+        status,
+        slotAt: '2026-11-08T03:00:00.000Z',
+        wasConfirmed: false,
+        ...extra,
+      })
+    expect(early('REQUESTED').map((d) => d.audience)).toEqual(['STAFF'])
+    expect(early('CONFIRMED')).toMatchObject([
+      { audience: 'CUSTOMER', data: { notificationType: N.RENTAL_SCHEDULE_CHANGED } },
+    ])
+    expect(early('REJECTED', { reason: 'Không có nhân viên' })[0].data.content).toMatch(/Không có nhân viên/)
+    expect(early('EXPIRED').map((d) => d.audience)).toEqual(['CUSTOMER'])
+    expect(early('CANCELLED')).toEqual([])
+    expect(early('CANCELLED', { wasConfirmed: true }).map((d) => d.audience)).toEqual(['STAFF'])
+    expect(early('RECONFIRM_REQUIRED').map((d) => d.audience)).toEqual(['CUSTOMER', 'STAFF'])
+    expect(() => early('UNKNOWN')).toThrow()
+  })
 })
 
 describe('paymentNotificationProjection', () => {

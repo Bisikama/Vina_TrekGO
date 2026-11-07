@@ -41,11 +41,15 @@ import { MediaModule } from '../../media/media.module';
 import { RentalEvidencePublicationWorker } from './infrastructure/integration/rental-evidence-publication.worker';
 import { RentalApprovedSettlementWorker } from './infrastructure/jobs/rental-approved-settlement.worker';
 import { RentalEvidenceReportController } from './presentation/controllers/rental-evidence-report.controller';
+import { EarlyReturnService } from './application/early-return.service';
+import { EarlyReturnController } from './presentation/controllers/early-return.controller';
+import { RentalEarlyReturnExpiryWorker } from './infrastructure/jobs/rental-early-return-expiry.worker';
 
 @Module({
   imports: [SharedModule, MediaModule],
   controllers: [
     RentalReturnController,
+    EarlyReturnController,
     RentalEvidenceReportController,
     DeliveryReturnController,
     StaffReturnController,
@@ -58,6 +62,8 @@ import { RentalEvidenceReportController } from './presentation/controllers/renta
   ],
   providers: [
     RentalOperationalEscalationScheduler,
+    EarlyReturnService,
+    RentalEarlyReturnExpiryWorker,
     RentalEvidenceAccessService,
     RentalEvidencePublicationWorker,
     RentalApprovedSettlementWorker,

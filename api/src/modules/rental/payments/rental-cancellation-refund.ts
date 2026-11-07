@@ -182,6 +182,9 @@ export async function reserveRentalCancellationRefundWithTx(
     merchantAccountKey: payment.merchantAccountKey, merchantRefundRef: `refund:${id}`,
     reconcileStatus: 'SCHEDULED', nextRetryAt: input.now,
     ...manualRefundReservation(payment.paymentGateway),
+    ...(payment.paymentGateway === 'vnpay' && payment.providerEnvironment === 'SANDBOX'
+      ? { executionMode: 'SANDBOX_SIMULATED' as const }
+      : {}),
     allocations: { create: selected },
   } });
 }

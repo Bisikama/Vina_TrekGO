@@ -87,14 +87,14 @@ export class SharedPaymentsPort extends PaymentsPort {
   async requestRefund(input: RefundCommand) {
     const refund = await this.refunds.requestRefund(input)
     return refund.executionMode === 'SANDBOX_SIMULATED'
-      ? this.simulation.settleAutomaticBookingRefund(refund.refundId)
+      ? this.simulation.settleAutomaticRefund(refund.refundId)
       : refund
   }
   reconcilePayment(id: string) {
     return this.recovery.reconcilePayment(id)
   }
   async reconcileRefund(id: string) {
-    const refund = await this.simulation.settleAutomaticBookingRefund(id)
+    const refund = await this.simulation.settleAutomaticRefund(id)
     return refund.executionMode === 'SANDBOX_SIMULATED' ? true : this.recovery.reconcileRefund(id)
   }
   getRentalOrderPaymentHistory(input: {

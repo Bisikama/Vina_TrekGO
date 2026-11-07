@@ -34,6 +34,8 @@ export class RentalExtensionService {
       },
     });
     if (!order || order.userId !== userId) throw AppError.fromCode('FORBIDDEN');
+    if (await this.prisma.rentalEarlyReturnRequest.findFirst({ where: { orderId, status: { in: ['PENDING', 'CONFIRMED'] } }, select: { id: true } }))
+      throw AppError.fromCode('OPERATION_CONFLICT', { message: 'Hãy hủy yêu cầu trả sớm trước khi gia hạn.' });
     checkExtendable(order, now);
     const context = await this.context.getByTripId(order.tripId, userId, now);
     const membershipMatches =
@@ -183,6 +185,8 @@ export class RentalExtensionService {
           },
         });
         if (!order || order.userId !== userId) throw AppError.fromCode('FORBIDDEN');
+        if (await tx.rentalEarlyReturnRequest.findFirst({ where: { orderId, status: { in: ['PENDING', 'CONFIRMED'] } }, select: { id: true } }))
+          throw AppError.fromCode('OPERATION_CONFLICT', { message: 'Hãy hủy yêu cầu trả sớm trước khi gia hạn.' });
         checkExtendable(order, now);
         if (order.version !== expectedVersion || raw.quotedOrderVersion !== order.version || raw.previousRentalEndAt.getTime() !== order.rentalEndAt.getTime()) throw error('VERSION_CONFLICT');
         if (raw.quoteExpiresAt <= now || raw.status !== RentalExtensionStatus.QUOTED) throw error('EXTENSION_QUOTE_EXPIRED');

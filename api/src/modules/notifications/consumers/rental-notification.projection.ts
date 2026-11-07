@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import {
   CUSTODY_PRESERVED_REASONS,
+  EARLY_RETURN_EVENT_STATUSES,
+  EARLY_RETURN_EVENT_TYPE,
   GRADE_DOWNGRADE_SHORTAGE_REASON,
   GRADE_SHORTAGE_HANDOVER_DEADLINE_KIND,
   SYSTEM_FAULT_CANCELLATION_REASON,
@@ -20,6 +22,8 @@ export const rentalNotificationEvents = [
   'RENTAL_ORDER_CANCELLED',
   'RENTAL_ACTION_REQUIRED',
   'RENTAL_SCHEDULE_NOTICE_ISSUED',
+  // Thêm sau migration backfill; event mới phát sau khi deploy nên không cần backfill.
+  EARLY_RETURN_EVENT_TYPE,
 ] as const
 
 /** CUSTOMER = chủ đơn; STAFF = mọi ADMIN + STAFF_INVENTORY đang hoạt động (consumer tự tra). */
@@ -55,6 +59,14 @@ const payloadSchema = z
     gradeReviewId: z.string().optional(),
   })
   .passthrough()
+
+const earlyReturnPayloadSchema = z.object({
+  requestId: z.string(),
+  status: z.enum(EARLY_RETURN_EVENT_STATUSES),
+  slotAt: z.string(),
+  reason: z.string().optional(),
+  wasConfirmed: z.boolean().optional(),
+})
 
 const CUSTODY_PRESERVED_INTRO: Record<string, string> = {
   [CUSTODY_PRESERVED_REASONS.TRIP]: 'Chuyến đi của bạn đã bị huỷ.',
@@ -222,6 +234,76 @@ export function rentalNotificationProjection(
           { operationalReturnDueAt: p.operationalReturnDueAt },
         ),
       ]
+    }
+    case EARLY_RETURN_EVENT_TYPE: {
+      const e = earlyReturnPayloadSchema.parse(raw ?? {})
+      const when = formatDateTimeVi(e.slotAt)
+      const meta = { requestId: e.requestId, earlyReturnStatus: e.status, slotAt: e.slotAt }
+      switch (e.status) {
+        case 'REQUESTED':
+          return [
+            staff(
+              `Yêu cầu trả đồ sớm đơn ${ref}`,
+              `Khách muốn trả đồ của đơn thuê ${ref} sớm, lúc ${when}. Hãy xác nhận hoặc từ chối lịch.`,
+              meta,
+            ),
+          ]
+        case 'CONFIRMED':
+          return [
+            customer(
+              N.RENTAL_SCHEDULE_CHANGED,
+              'Lịch trả đồ sớm đã được xác nhận',
+              `TrekGo đã xác nhận lịch nhận lại đồ của đơn thuê ${ref} lúc ${when}. Phí thuê và tiền cọc vẫn xử lý như khi trả đúng hạn.`,
+              meta,
+            ),
+          ]
+        case 'REJECTED':
+          return [
+            customer(
+              N.RENTAL_SCHEDULE_CHANGED,
+              'Lịch trả đồ sớm chưa được chấp nhận',
+              `TrekGo chưa thể nhận lại đồ của đơn thuê ${ref} lúc ${when}` +
+                (e.reason ? `: ${e.reason}` : '.') +
+                ' Bạn có thể chọn lịch khác hoặc trả đúng hạn.',
+              { ...meta, reason: e.reason },
+            ),
+          ]
+        case 'EXPIRED':
+          return [
+            customer(
+              N.RENTAL_SCHEDULE_CHANGED,
+              'Yêu cầu trả đồ sớm đã hết hạn',
+              `Yêu cầu trả đồ sớm lúc ${when} của đơn thuê ${ref} chưa kịp được xác nhận nên đã hết hạn. Bạn có thể gửi lịch mới hoặc trả đúng hạn.`,
+              meta,
+            ),
+          ]
+        case 'CANCELLED':
+          // Chỉ cần báo nhân viên khi lịch đã được xác nhận (đã có người chuẩn bị đi thu hồi).
+          return e.wasConfirmed
+            ? [
+                staff(
+                  `Khách huỷ lịch trả đồ sớm đơn ${ref}`,
+                  `Khách đã huỷ lịch trả đồ sớm lúc ${when} của đơn thuê ${ref}. Việc thu hồi quay về lịch thường.`,
+                  meta,
+                ),
+              ]
+            : []
+        case 'RECONFIRM_REQUIRED':
+          return [
+            customer(
+              N.RENTAL_SCHEDULE_CHANGED,
+              'Lịch trả đồ sớm cần xác nhận lại',
+              `Lịch chuyến đi thay đổi nên lịch trả đồ sớm lúc ${when} của đơn thuê ${ref} cần TrekGo xác nhận lại. Bạn sẽ nhận thông báo khi có kết quả.`,
+              meta,
+            ),
+            staff(
+              `Xác nhận lại lịch trả đồ sớm đơn ${ref}`,
+              `Chuyến đi đổi lịch nên lịch trả đồ sớm lúc ${when} của đơn thuê ${ref} cần được xác nhận lại hoặc từ chối.`,
+              meta,
+            ),
+          ]
+      }
+      return []
     }
     default:
       throw new Error('UNSUPPORTED_RENTAL_NOTIFICATION_EVENT')

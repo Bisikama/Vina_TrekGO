@@ -26,8 +26,36 @@ export type GearPlan = {
   inputRevision: number;
   evaluatedRevision: number | null;
   isStale?: boolean;
+  progressVersion: number;
+  progressJson: Array<{ requirementId: string; isChecked: boolean; note?: string }> | { items: Array<{ requirementId: string; isChecked: boolean; note?: string }> } | null;
   updatedAt?: string;
 };
+
+export type PackingChecklistItem = {
+  requirementId: string;
+  category: string;
+  title: string;
+  priority: string;
+  quantity: number;
+  remainingQuantity: number;
+  status: string;
+  assignedItemIds: string[];
+  exportSection?: string;
+  exportDetail?: string;
+  isChecked?: boolean;
+};
+
+export async function getGearPlanChecklist(planId: string, revision: number) {
+  const response = await apiClient.get<Envelope<{ resultSnapshot: { checklist?: PackingChecklistItem[] } }>>(
+    `/api/v1/gear/plans/${encodeURIComponent(planId)}/revisions/${revision}`,
+  );
+  return unwrap(response.data).resultSnapshot.checklist ?? [];
+}
+
+export async function saveChecklistProgress(planId: string, expectedProgressVersion: number, items: Array<{ requirementId: string; isChecked: boolean; note?: string }>) {
+  const response = await apiClient.put<Envelope<GearPlan>>(`/api/v1/gear/plans/${encodeURIComponent(planId)}/checklist-progress`, { expectedProgressVersion, items });
+  return unwrap(response.data);
+}
 
 export type GuidanceQuestion = {
   field: string;
@@ -136,6 +164,7 @@ export async function listGearTripCandidates(): Promise<GearTripCandidate[]> {
     ),
   ]);
   const result = new Map<string, GearTripCandidate>();
+  if (bookings.status === "rejected" && privateTrips.status === "rejected") throw bookings.reason;
   if (bookings.status === "fulfilled") {
     for (const booking of unwrap(bookings.value.data).items ?? []) {
       if (booking?.trip?.id) result.set(booking.trip.id, { ...booking.trip, type: "PUBLIC" });

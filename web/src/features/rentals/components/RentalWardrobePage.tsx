@@ -241,7 +241,7 @@ export function RentalWardrobePage() {
         total={items.length}
         onClear={clearPacked}
         onPrint={() => {
-          if (!printPackingList(items, packed)) setNotice("Trình duyệt đã chặn cửa sổ in. Hãy cho phép cửa sổ bật lên rồi bấm lại.");
+          void printPackingList(items, packed).catch((reason: unknown) => setError(getRentalApiErrorMessage(reason, "Không tạo được danh sách PDF. Vui lòng thử lại.")));
         }}
         addMenu={<AddGearMenu
           disabled={busy || Boolean(aiProgress)}

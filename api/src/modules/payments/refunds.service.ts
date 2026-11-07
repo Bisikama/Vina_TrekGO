@@ -344,7 +344,7 @@ export class RefundsService {
       const existingPayload = refund.providerPayload as Prisma.JsonObject | null
       const sandboxSimulation = existingPayload?.sandboxSimulation as Record<string, unknown> | undefined
       const isSandboxSimulationEvent =
-        ['ADMIN_SANDBOX_SIMULATION', 'BOOKING_SANDBOX_SIMULATION'].includes(String(sandboxSimulation?.origin)) &&
+        ['ADMIN_SANDBOX_SIMULATION', 'BOOKING_SANDBOX_SIMULATION', 'RENTAL_SANDBOX_SIMULATION'].includes(String(sandboxSimulation?.origin)) &&
         sandboxSimulation?.providerEventId === event.providerEventId
       // Internally simulated refunds must never be settled or corrected by provider callbacks.
       if (refund.executionMode === 'SANDBOX_SIMULATED' && (!isSandboxSimulationEvent || options.inboxId || options.lease)) return false
@@ -462,7 +462,9 @@ export class RefundsService {
               action: isSandboxSimulationEvent
                 ? sandboxSimulation?.origin === 'BOOKING_SANDBOX_SIMULATION'
                   ? 'BOOKING_SANDBOX_REFUND_SIMULATION_ACCEPTED'
-                  : 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED'
+                  : sandboxSimulation?.origin === 'RENTAL_SANDBOX_SIMULATION'
+                    ? 'RENTAL_SANDBOX_REFUND_SIMULATION_ACCEPTED'
+                    : 'ADMIN_SANDBOX_REFUND_SIMULATION_ACCEPTED'
                 : event.status === 'SUCCEEDED'
                   ? 'REAL_PROVIDER_REFUND_CONFIRMED_AFTER_SIMULATION'
                   : 'REAL_PROVIDER_REFUND_FAILED_AFTER_SIMULATION',

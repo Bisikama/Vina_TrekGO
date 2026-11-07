@@ -21,7 +21,7 @@ export async function ensureReturnTaskWithTx(
   tx: Prisma.TransactionClient,
   orderId: string,
   scheduledAt: Date,
-  reason: 'DUE' | 'TRIP_ENDED_EARLY' | 'BOOKING_CANCELLED_AFTER_HANDOVER' | 'MEMBERSHIP_REVOKED_AFTER_HANDOVER',
+  reason: 'DUE' | 'TRIP_ENDED_EARLY' | 'BOOKING_CANCELLED_AFTER_HANDOVER' | 'MEMBERSHIP_REVOKED_AFTER_HANDOVER' | 'USER_EARLY_RETURN',
 ): Promise<string | null> {
   const order = await tx.rentalOrder.findUnique({
     where: { id: orderId },
@@ -36,6 +36,23 @@ export async function ensureReturnTaskWithTx(
        order.status !== RentalOrderStatus.RETURN_PENDING &&
        order.status !== RentalOrderStatus.RETURN_PROCESSING))
     return null;
+
+  if (reason !== 'DUE' && reason !== 'USER_EARLY_RETURN') {
+    // A real lifecycle event is an independent reason to collect, even if the
+    // customer cancels or has not confirmed a voluntary early appointment.
+    const superseded = await tx.rentalEarlyReturnRequest.updateMany({
+      where: { orderId, status: { in: ['PENDING', 'CONFIRMED'] } },
+      data: { status: 'SUPERSEDED', supersededAt: scheduledAt, version: { increment: 1 } },
+    });
+    await tx.rentalEarlyReturnRequest.updateMany({
+      where: { orderId, status: 'CANCELLED', taskId: { not: null }, supersededAt: null },
+      data: { supersededAt: scheduledAt, version: { increment: 1 } },
+    });
+    if (superseded.count) await tx.auditLog.create({ data: {
+      action: 'RENTAL_EARLY_RETURN_SUPERSEDED', entityType: 'RentalOrder', entityId: orderId,
+      newValues: { reason, scheduledAt: scheduledAt.toISOString(), count: superseded.count },
+    } });
+  }
 
   const where = { orderId_taskType: { orderId, taskType: DeliveryTaskType.RETURN } } as const;
   const existing = await tx.deliveryTask.findUnique({ where });
