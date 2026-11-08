@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
-import { Prisma } from '@prisma/client'
 import envConfig from '../../../shared/config'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { NotificationsService } from '../notifications.service'
+import { drainNotificationOutbox, NOTIFICATION_OUTBOX_SOURCES, NotificationOutboxEvent } from './notification-outbox-drain'
 import {
   BookingNotificationContext,
   bookingCancelledByOthers,
@@ -12,7 +12,7 @@ import {
 } from './booking-notification.projection'
 
 const consumer = 'booking-notifications-v1'
-type Event = { id: string; eventType: string; payload: unknown }
+type Event = NotificationOutboxEvent
 @Injectable()
 export class BookingNotificationConsumer {
   private readonly logger = new Logger(BookingNotificationConsumer.name)
@@ -35,48 +35,35 @@ export class BookingNotificationConsumer {
     }
   }
 
-  async processBookingEvents() {
-    // Bounded work per tick. Receipts exclude delivered events so subsequent ticks drain the backlog.
-    for (let batch = 0; batch < 4; batch++) {
-      const events = await this.db.$queryRaw<Event[]>(Prisma.sql`
-        SELECT e.id, e.event_type AS "eventType", e.payload FROM booking_outbox_events e
-        LEFT JOIN booking_notification_receipts r ON r.event_id=e.id AND r.consumer=${consumer}
-        WHERE e.event_type IN (${Prisma.join(bookingNotificationEvents)})
-          AND r.completed_at IS NULL AND (r.next_attempt_at IS NULL OR r.next_attempt_at <= now())
-        ORDER BY e.created_at ASC, e.id ASC LIMIT 25
-      `)
-      if (!events.length) break
-      for (const event of events) {
-        try {
-          const context = await this.loadContext(event)
-          for (const delivery of bookingNotificationProjection(event.eventType, event.payload, context))
-            await this.notificationsService.deliverBookingEvent(event.id, delivery.semanticType, delivery.data)
-          // Mongo insert may succeed before this write. Unique delivery keys make replay safe.
-          await this.db
-            .$executeRaw`INSERT INTO booking_notification_receipts(event_id, consumer, completed_at, attempts)
-            VALUES (${event.id}::uuid, ${consumer}, now(), 1)
-            ON CONFLICT (event_id, consumer) DO UPDATE SET completed_at=now(), last_error=NULL,
-              attempts=booking_notification_receipts.attempts + 1
-            WHERE booking_notification_receipts.completed_at IS NULL`
-        } catch {
-          // No payload or driver errors in logs. A failed event does not block newer events.
-          await this.db
-            .$executeRaw`INSERT INTO booking_notification_receipts(event_id, consumer, attempts, next_attempt_at, last_error)
-            VALUES (${event.id}::uuid, ${consumer}, 1, now() + interval '3 seconds', 'DELIVERY_FAILED')
-            ON CONFLICT (event_id, consumer) DO UPDATE SET
-              attempts=booking_notification_receipts.attempts + 1,
-              next_attempt_at=now() + interval '1 second' * LEAST(300, 3 * power(2, LEAST(7, booking_notification_receipts.attempts))),
-              last_error='DELIVERY_FAILED'
-            WHERE booking_notification_receipts.completed_at IS NULL`
-          this.logger.warn(`Booking notification delivery pending retry: ${event.id}`)
-        }
-      }
-    }
+  /** Quét/retry/receipt dùng chung với rental và payment (notification-outbox-drain). */
+  processBookingEvents() {
+    return drainNotificationOutbox({
+      db: this.db,
+      source: NOTIFICATION_OUTBOX_SOURCES.booking,
+      consumer,
+      eventTypes: bookingNotificationEvents,
+      deliver: (event) => this.deliver(event),
+      logger: this.logger,
+    })
   }
 
-  /** Tra người nhận phụ; chỉ chạy cho các event cần (giữ nguyên chi phí cho event khác). */
+  private async deliver(event: Event) {
+    const context = await this.loadContext(event)
+    for (const delivery of bookingNotificationProjection(event.eventType, event.payload, context))
+      await this.notificationsService.deliverBookingEvent(event.id, delivery.semanticType, delivery.data)
+  }
+
+  /** Tên chuyến (mọi event) + người nhận phụ (chỉ event cần). */
   private async loadContext(event: Event): Promise<BookingNotificationContext> {
     const payload = (event.payload ?? {}) as Record<string, unknown>
+    const tripTitle =
+      typeof payload.tripId === 'string'
+        ? (await this.db.trip.findUnique({ where: { id: payload.tripId }, select: { title: true } }))?.title
+        : undefined
+    return { ...(await this.loadRecipients(event, payload)), tripTitle: tripTitle ?? undefined }
+  }
+
+  private async loadRecipients(event: Event, payload: Record<string, unknown>): Promise<BookingNotificationContext> {
     if (event.eventType === 'BOOKING_CANCELLED' && bookingCancelledByOthers(payload) && typeof payload.bookingId === 'string') {
       const participants = await this.db.bookingParticipant.findMany({
         // Huỷ booking chuyển participant ACTIVE → CANCELLED, nên chỉ loại người đã kết thúc vé trước đó.

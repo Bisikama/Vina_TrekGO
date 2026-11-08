@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import {
@@ -9,6 +9,27 @@ import {
 } from './schemas/notification.schema'
 import { AppError } from '../../shared/errors/app-error'
 import { NOTIFICATION_ERROR_CODES } from '../../shared/errors/codes/notification.error-codes'
+import { NOTIFICATION_SOCKET_EVENTS, NotificationGateway } from '../../websockets/notification.gateway'
+
+type NotificationRecord = Notification & { _id: { toString(): string } }
+
+/** Dạng trả về chung cho REST và socket. */
+function toNotificationView(item: NotificationRecord) {
+  return {
+    id: item._id.toString(),
+    userId: item.userId,
+    title: item.title,
+    content: item.content,
+    notificationType: item.notificationType,
+    referenceType: item.referenceType ?? null,
+    referenceId: item.referenceId ?? null,
+    status: item.status,
+    readAt: item.readAt ?? null,
+    metadata: item.metadata ?? {},
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }
+}
 
 @Injectable()
 export class NotificationsService {
@@ -16,6 +37,8 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    // Optional để test tích hợp khởi tạo service không cần socket.
+    @Optional() private readonly gateway?: NotificationGateway,
   ) {}
 
   // Require the additive unique index even when production disables autoIndex.
@@ -60,7 +83,7 @@ export class NotificationsService {
     if (legacy) return
     const deliveryKey = `${eventId}:${data.userId}:${semanticType}`
     try {
-      await this.notificationModel
+      const result = await this.notificationModel
         .updateOne(
           { deliveryKey },
           {
@@ -73,8 +96,20 @@ export class NotificationsService {
           { upsert: true, runValidators: true },
         )
         .exec()
+      // Chỉ đẩy realtime khi vừa tạo mới; lần gọi lại (retry/replay) không gửi trùng.
+      if (result.upsertedCount === 1 && this.gateway) await this.pushRealtime(deliveryKey)
     } catch (error) {
       if (error?.code !== 11000 || !(await this.notificationModel.exists({ deliveryKey }))) throw error
+    }
+  }
+
+  /** Lỗi khi đọc/emit không làm event bị retry: thông báo đã lưu, client vẫn thấy qua REST. */
+  private async pushRealtime(deliveryKey: string) {
+    try {
+      const saved = await this.notificationModel.findOne({ deliveryKey }).lean().exec()
+      if (saved) this.gateway!.emitToUser(saved.userId, NOTIFICATION_SOCKET_EVENTS.NEW, toNotificationView(saved))
+    } catch {
+      // bỏ qua
     }
   }
 
@@ -109,20 +144,7 @@ export class NotificationsService {
     ])
 
     return {
-      items: items.map((item) => ({
-        id: item._id.toString(),
-        userId: item.userId,
-        title: item.title,
-        content: item.content,
-        notificationType: item.notificationType,
-        referenceType: item.referenceType ?? null,
-        referenceId: item.referenceId ?? null,
-        status: item.status,
-        readAt: item.readAt ?? null,
-        metadata: item.metadata ?? {},
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      })),
+      items: items.map(toNotificationView),
       total,
       page,
       pageSize,
@@ -141,7 +163,7 @@ export class NotificationsService {
       .findOneAndUpdate(
         { _id: id, userId },
         { $set: { status: MongoNotificationStatus.READ, readAt: new Date() } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec()
@@ -174,7 +196,7 @@ export class NotificationsService {
   // Lưu trữ 1 thông báo
   async archive(id: string, userId: string) {
     const updated = await this.notificationModel
-      .findOneAndUpdate({ _id: id, userId }, { $set: { status: MongoNotificationStatus.ARCHIVED } }, { new: true })
+      .findOneAndUpdate({ _id: id, userId }, { $set: { status: MongoNotificationStatus.ARCHIVED } }, { returnDocument: 'after' })
       .lean()
       .exec()
 

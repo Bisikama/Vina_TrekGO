@@ -32,6 +32,20 @@ describe('NotificationGateway authentication', () => {
     expect(socket.data.userId).toBe('user-1')
   })
 
+  it('joins the user room and pushes only to that user', () => {
+    const gateway = new NotificationGateway({ verifyToken } as never, { user: { findUnique } } as never)
+    const join = jest.fn()
+    gateway.handleConnection({ data: { userId: 'user-1' }, join } as never)
+    expect(join).toHaveBeenCalledWith('user:user-1')
+
+    const emit = jest.fn()
+    const to = jest.fn(() => ({ emit }))
+    ;(gateway as any).server = { to }
+    gateway.emitToUser('user-1', 'receive-notifications', { id: 'n1' })
+    expect(to).toHaveBeenCalledWith('user:user-1')
+    expect(emit).toHaveBeenCalledWith('receive-notifications', { id: 'n1' })
+  })
+
   it('rejects invalid tokens', async () => {
     verifyToken.mockRejectedValue(new Error('invalid'))
     expect((await connect('bad-token')).error).toBeInstanceOf(Error)
