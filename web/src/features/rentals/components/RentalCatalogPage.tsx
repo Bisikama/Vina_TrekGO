@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { GradeBadge } from "@/features/rentals/components/GradeBadge";
+import { RentalPageHeader } from "@/features/rentals/components/RentalSectionNav";
 import { useRentalCart } from "@/features/rentals/hooks/useRentalCart";
 import { getRentalCatalog, getTripWeather, type TripWeather } from "@/features/rentals/services/rental.api";
 import type {
@@ -481,16 +482,17 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
     );
   }, [activeCategory, data, search]);
 
-  const [weather, setWeather] = useState<TripWeather | null>(null);
+  // Lưu kèm tripId: đổi chuyến thì thời tiết cũ tự bị bỏ qua, không cần xoá trong effect.
+  const [weatherState, setWeatherState] = useState<{ tripId: string; data: TripWeather | null } | null>(null);
+  const weather = weatherState?.tripId === bookingId ? weatherState.data : null;
   useEffect(() => {
     const controller = new AbortController();
-    setWeather(null);
     getTripWeather(bookingId, controller.signal)
       .then((result) => {
-        if (!controller.signal.aborted) setWeather(result);
+        if (!controller.signal.aborted) setWeatherState({ tripId: bookingId, data: result });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setWeather(null);
+        if (!controller.signal.aborted) setWeatherState({ tripId: bookingId, data: null });
       });
     return () => controller.abort();
   }, [bookingId]);
@@ -587,33 +589,28 @@ export function RentalCatalogPage({ bookingId }: RentalCatalogPageProps) {
 
   return (
     <div className="min-h-screen bg-[#F4F6F1] pb-28">
-      <section className="relative overflow-hidden bg-[#123D2C] text-white">
-        <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_80%_20%,#b9e769_0,transparent_28%),linear-gradient(120deg,transparent_55%,#2d7657_55%,transparent_75%)]" />
-        <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8 lg:py-12">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-lime-300">
-              TrekGo Gear Station
-            </p>
-            <h1 className="mt-3 max-w-2xl text-3xl font-bold leading-tight sm:text-4xl">
-              Chọn hành trang, sẵn sàng lên đường
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-emerald-50/75">
-              Thêm nhiều thiết bị vào cùng một giỏ thuê. TrekGo sẽ kiểm tra tồn
-              kho, tiền cọc và lịch nhận trả trước khi thanh toán.
-            </p>
-          </div>
-          <div className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-lime-300">
-              Chuyến đi đang chọn
-            </p>
-            <p className="mt-2 text-lg font-bold">
-              {data.eligibility.trip.name}
-            </p>
-            <p className="mt-3 text-xs leading-5 text-emerald-50/75">
-              Có thể thuê đến {formatDate(data.eligibility.rentalCutoffAt)}
-            </p>
-          </div>
-        </div>
+      <section className="mx-auto max-w-7xl px-4 pt-7 sm:px-6 lg:px-8">
+        <RentalPageHeader
+          eyebrow="TrekGo Gear Station"
+          title="Chọn hành trang,"
+          highlight="sẵn sàng lên đường."
+          description="Thêm nhiều thiết bị vào cùng một giỏ thuê. TrekGo sẽ kiểm tra tồn kho, tiền cọc và lịch nhận trả trước khi thanh toán."
+          active="/rentals"
+          aside={
+            <div className="min-w-[260px] max-w-sm rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#bfe9c9]">
+                Chuyến đi đang chọn
+              </p>
+              <p className="mt-2 text-lg font-bold">{data.eligibility.trip.name}</p>
+              <p className="mt-3 text-xs leading-5 text-emerald-50/75">
+                Có thể thuê đến {formatDate(data.eligibility.rentalCutoffAt)}
+              </p>
+              <Link href={`/rentals/gear-advisor?tripId=${encodeURIComponent(data.eligibility.trip.id)}`} className="mt-3 inline-flex text-xs font-bold text-[#fde68a] hover:underline">
+                Kiểm tra đồ cần mang cho chuyến này →
+              </Link>
+            </div>
+          }
+        />
       </section>
 
       <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">

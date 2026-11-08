@@ -20,6 +20,8 @@ export type ConfirmedClimate = {
   rain_prob_pct: number;
 };
 
+export type ChecklistProgressEntry = { requirementId: string; isChecked: boolean; note?: string };
+
 export type GearPlan = {
   id: string;
   title: string;
@@ -28,7 +30,35 @@ export type GearPlan = {
   inputRevision: number;
   evaluatedRevision: number | null;
   isStale?: boolean;
+  progressVersion?: number;
+  progressJson?: ChecklistProgressEntry[] | { items: ChecklistProgressEntry[] } | null;
+  preferences?: { selfProvidedRequirementIds?: string[]; [key: string]: unknown } | null;
+  /** Thời tiết đã xác nhận ở lần đánh giá gần nhất. */
+  canonicalContext?: { confirmedClimate?: ConfirmedClimate | null; [key: string]: unknown } | null;
   updatedAt?: string;
+};
+
+export type ClimateSuggestion = ConfirmedClimate & {
+  source: "CLIMATE_ESTIMATE" | "FORECAST";
+  /** Dự báo lấy tại điểm cao nhất của cung (m). */
+  atElevationM?: number;
+  sourceReference?: string;
+  noteVi?: string;
+};
+
+/** Dữ liệu chuyến dùng để gợi ý (GET /gear/plans/prefill). */
+export type GearPlanPrefill = {
+  tripId: string;
+  destination: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+  days?: number | null;
+  difficulty?: number | null;
+  terrain?: string[] | null;
+  /** Độ cao điểm cao nhất của cung (m); null khi cung không có dữ liệu độ cao. */
+  highestElevationM?: number | null;
+  suggestedClimate: ClimateSuggestion | null;
+  forecastClimate: ClimateSuggestion | null;
 };
 
 export type GuidanceQuestion = {
@@ -43,65 +73,106 @@ export type GuidanceQuestion = {
   options?: string[];
 };
 
+export type RequirementStatus =
+  | "COVERED_BY_OWNED"
+  | "USER_DECLARED_PROVISION"
+  | "PLANNED_RENTAL"
+  | "NEEDS_REPLACEMENT"
+  | "MISSING"
+  | "UNKNOWN";
+
+export type GuidanceRequirement = {
+  requirementId: string;
+  category: GearCategory | string;
+  priority?: string;
+  status?: RequirementStatus | string;
+  recommendedAction?: string;
+  quantity?: number;
+  remainingQuantity?: number;
+  assignedItemIds?: string[];
+  warnings?: string[];
+  /** Tiêu chí dạng đọc được; bản đánh giá cũ có thể chưa có. */
+  criteria?: { field: string; label: string; text: string; reason: string | null }[];
+  questions?: GuidanceQuestion[];
+};
+
+export type GuidanceItem = {
+  itemId: string;
+  nameAtEvaluation: string | null;
+  category: string;
+  verdict?: string | null;
+  displayStatus: string;
+  reasons?: string[];
+  questions: GuidanceQuestion[];
+};
+
 export type PlanGuidance = {
   available: boolean;
   message?: string;
   isLatestEvaluation?: boolean;
   needsReevaluation?: boolean;
-  items?: {
-    itemId: string;
-    nameAtEvaluation: string | null;
-    category: string;
-    displayStatus: string;
-    reasons?: string[];
-    questions: GuidanceQuestion[];
-  }[];
-  requirements?: {
-    requirementId: string;
-    category: string;
-    remainingQuantity?: number;
-    warnings?: string[];
-    questions?: GuidanceQuestion[];
-  }[];
+  isStale?: boolean;
+  items?: GuidanceItem[];
+  requirements?: GuidanceRequirement[];
   contextQuestions?: {
     available: boolean;
     items: { itemId: string; nameAtEvaluation: string | null; category: string; questions: GuidanceQuestion[] }[];
   };
 };
 
-export type PreparationStatus = "HAVE" | "NOT_HAVE" | "CHECK_LATER";
-export type PreparationSelections = {
-  planId: string;
-  choices: { category: GearCategory; status: PreparationStatus }[];
-  version: number;
-  updatedAt: string | null;
+export type PackingChecklistItem = {
+  requirementId: string;
+  category: string;
+  title: string;
+  priority: string;
+  quantity: number;
+  remainingQuantity: number;
+  status: string;
+  assignedItemIds: string[];
+  /** Đồ thiết yếu (status "ESSENTIAL"): lý do theo điều kiện chuyến. */
+  reason?: string;
 };
 
-export type GearTripCandidate = { id: string; title: string; startAt?: string; type: "PUBLIC" | "PRIVATE" };
+/** Đồ thiết yếu không có thông số (đèn đầu, nước, sơ cứu...), chỉ để đóng gói. Bản đánh giá cũ chưa có. */
+export type TripEssential = { id: string; title: string; priority: "REQUIRED" | "RECOMMENDED"; reason: string };
+
+export type GearTripCandidate = { id: string; title: string; startAt?: string; endAt?: string; type: "PUBLIC" | "PRIVATE" };
+
+export const selfProvidedOf = (plan: GearPlan | null) =>
+  Array.isArray(plan?.preferences?.selfProvidedRequirementIds) ? plan.preferences.selfProvidedRequirementIds : [];
+
+export const progressOf = (plan: GearPlan | null): ChecklistProgressEntry[] =>
+  !plan?.progressJson ? [] : Array.isArray(plan.progressJson) ? plan.progressJson : plan.progressJson.items ?? [];
 
 export function gearErrorCode(error: unknown) {
   return error instanceof ApiError ? error.code ?? null : null;
 }
 
 export function gearErrorMessage(error: unknown, fallback = "Không kết nối được Gear Advisor.") {
-  return error instanceof Error ? error.message : fallback;
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/** Booking dùng được cho Gear (cùng điều kiện với backend `hasPublicBookingAccess`). */
+const GEAR_BOOKING_STATUSES = new Set(["CONFIRMED", "PARTIAL_CHECKIN", "CHECKED_IN"]);
+
+const planPath = (planId: string) => `/api/v1/gear/plans/${encodeURIComponent(planId)}`;
+
 export const gearAdvisorApi = {
+  /** Ứng viên chuyến: vé còn hiệu lực + chuyến riêng. Backend (prefill) vẫn là nơi quyết định cuối. */
   async listTripCandidates(accessToken: string): Promise<GearTripCandidate[]> {
+    type TripRef = { id: string; title: string; startAt?: string; endAt?: string };
     const [bookings, privateTrips] = await Promise.allSettled([
-      apiRequest<Envelope<{ items: { trip: { id: string; title: string; startAt?: string } }[] }>>(
-        "/api/v1/bookings?page=1&pageSize=50",
-        { method: "GET", accessToken },
-      ),
-      apiRequest<Envelope<{ items: { id: string; title: string; startAt?: string }[] }>>(
-        "/api/v1/me/private-trips?page=1&pageSize=50",
-        { method: "GET", accessToken },
-      ),
+      apiRequest<Envelope<{ items: { status?: string; trip: TripRef }[] }>>("/api/v1/bookings?page=1&pageSize=50", {
+        method: "GET",
+        accessToken,
+      }),
+      apiRequest<Envelope<{ items: TripRef[] }>>("/api/v1/me/private-trips?page=1&pageSize=50", { method: "GET", accessToken }),
     ]);
+    if (bookings.status === "rejected" && privateTrips.status === "rejected") throw bookings.reason;
     const result = new Map<string, GearTripCandidate>();
     if (bookings.status === "fulfilled") {
       for (const booking of unwrap(bookings.value).items ?? []) {
+        if (booking?.status && !GEAR_BOOKING_STATUSES.has(booking.status)) continue;
         if (booking?.trip?.id) result.set(booking.trip.id, { ...booking.trip, type: "PUBLIC" });
       }
     }
@@ -115,10 +186,10 @@ export const gearAdvisorApi = {
 
   async prefill(tripId: string, accessToken: string) {
     return unwrap(
-      await apiRequest<Envelope<Record<string, unknown>>>(
-        `/api/v1/gear/plans/prefill?tripId=${encodeURIComponent(tripId)}`,
-        { method: "GET", accessToken },
-      ),
+      await apiRequest<Envelope<GearPlanPrefill>>(`/api/v1/gear/plans/prefill?tripId=${encodeURIComponent(tripId)}`, {
+        method: "GET",
+        accessToken,
+      }),
     );
   },
 
@@ -130,9 +201,7 @@ export const gearAdvisorApi = {
   },
 
   async getPlan(planId: string, accessToken: string) {
-    return unwrap(
-      await apiRequest<Envelope<GearPlan>>(`/api/v1/gear/plans/${encodeURIComponent(planId)}`, { method: "GET", accessToken }),
-    );
+    return unwrap(await apiRequest<Envelope<GearPlan>>(planPath(planId), { method: "GET", accessToken }));
   },
 
   async createPlan(input: { title: string; tripId: string; selectedItemIds: string[] }, accessToken: string) {
@@ -145,19 +214,19 @@ export const gearAdvisorApi = {
     );
   },
 
-  async updatePlan(planId: string, input: { expectedInputRevision: number; selectedItemIds: string[] }, accessToken: string) {
+  async updatePlan(
+    planId: string,
+    input: { expectedInputRevision: number; selectedItemIds?: string[]; selfProvidedRequirementIds?: string[] },
+    accessToken: string,
+  ) {
     return unwrap(
-      await apiRequest<Envelope<GearPlan>>(`/api/v1/gear/plans/${encodeURIComponent(planId)}`, {
-        method: "PATCH",
-        accessToken,
-        body: JSON.stringify(input),
-      }),
+      await apiRequest<Envelope<GearPlan>>(planPath(planId), { method: "PATCH", accessToken, body: JSON.stringify(input) }),
     );
   },
 
   async evaluate(planId: string, input: { expectedInputRevision: number; confirmedClimate: ConfirmedClimate }, accessToken: string) {
     return unwrap(
-      await apiRequest<Envelope<Record<string, unknown>>>(`/api/v1/gear/plans/${encodeURIComponent(planId)}/evaluate`, {
+      await apiRequest<Envelope<Record<string, unknown>>>(`${planPath(planId)}/evaluate`, {
         method: "POST",
         accessToken,
         body: JSON.stringify(input),
@@ -167,10 +236,41 @@ export const gearAdvisorApi = {
 
   async guidance(planId: string, revision: number, accessToken: string) {
     return unwrap(
-      await apiRequest<Envelope<PlanGuidance>>(
-        `/api/v1/gear/plans/${encodeURIComponent(planId)}/revisions/${revision}/guidance`,
+      await apiRequest<Envelope<PlanGuidance>>(`${planPath(planId)}/revisions/${revision}/guidance`, { method: "GET", accessToken }),
+    );
+  },
+
+  /** Checklist đóng gói: đồ theo yêu cầu, rồi tới đồ thiết yếu (mã `ess_*`). */
+  async checklist(planId: string, revision: number, accessToken: string): Promise<PackingChecklistItem[]> {
+    const data = unwrap(
+      await apiRequest<Envelope<{ resultSnapshot?: { checklist?: PackingChecklistItem[]; essentials?: TripEssential[] } }>>(
+        `${planPath(planId)}/revisions/${revision}`,
         { method: "GET", accessToken },
       ),
+    );
+    const essentials = (data?.resultSnapshot?.essentials ?? []).map(
+      (essential): PackingChecklistItem => ({
+        requirementId: essential.id,
+        category: "ESSENTIAL",
+        title: essential.title,
+        priority: essential.priority === "REQUIRED" ? "REQUIRED" : "OPTIONAL",
+        quantity: 1,
+        remainingQuantity: 0,
+        status: "ESSENTIAL",
+        assignedItemIds: [],
+        reason: essential.reason,
+      }),
+    );
+    return [...(data?.resultSnapshot?.checklist ?? []), ...essentials];
+  },
+
+  async saveChecklistProgress(planId: string, expectedProgressVersion: number, items: ChecklistProgressEntry[], accessToken: string) {
+    return unwrap(
+      await apiRequest<Envelope<GearPlan>>(`${planPath(planId)}/checklist-progress`, {
+        method: "PUT",
+        accessToken,
+        body: JSON.stringify({ expectedProgressVersion, items }),
+      }),
     );
   },
 
@@ -192,36 +292,4 @@ export const gearAdvisorApi = {
       }),
     );
   },
-
-  async getSelections(planId: string, accessToken: string) {
-    return unwrap(
-      await apiRequest<Envelope<PreparationSelections>>(
-        `/api/v1/gear/plans/${encodeURIComponent(planId)}/preparation-selections`,
-        { method: "GET", accessToken },
-      ),
-    );
-  },
-
-  async putSelections(planId: string, input: { expectedVersion: number; choices: PreparationSelections["choices"] }, accessToken: string) {
-    return unwrap(
-      await apiRequest<Envelope<PreparationSelections>>(
-        `/api/v1/gear/plans/${encodeURIComponent(planId)}/preparation-selections`,
-        { method: "PUT", accessToken, body: JSON.stringify(input) },
-      ),
-    );
-  },
 };
-
-/** Tìm trong phản hồi prefill một object có các trường khí hậu (cấu trúc có thể lồng nhau). */
-export function findSuggestedClimate(value: unknown, depth = 0): Partial<ConfirmedClimate> | null {
-  if (!value || typeof value !== "object" || depth > 4) return null;
-  const record = value as Record<string, unknown>;
-  const keys: (keyof ConfirmedClimate)[] = ["temp_min_c", "temp_max_c", "temp_min_night_c", "rain_prob_pct"];
-  const hits = keys.filter((key) => typeof record[key] === "number");
-  if (hits.length >= 2) return Object.fromEntries(hits.map((key) => [key, record[key] as number])) as Partial<ConfirmedClimate>;
-  for (const child of Object.values(record)) {
-    const found = findSuggestedClimate(child, depth + 1);
-    if (found) return found;
-  }
-  return null;
-}

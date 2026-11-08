@@ -1,6 +1,22 @@
 import type { GearItemEvaluationResult } from './pure-gear-engine'
-import type { PlanRequirementCoverage } from './plan-coverage-resolver'
+import type { PlanConstraint, PlanRequirementCoverage } from './plan-coverage-resolver'
 import { CANONICAL_FIELD_DEFINITIONS } from './constraint-evaluator'
+import { describeGearConstraint, gearAttributeLabel, humanizeConstraintRationale } from './gear-labels'
+
+const NOT_ASSESSED_REASON = 'Chuyến này chưa có tiêu chí cho loại đồ này. Bạn vẫn có thể mang theo nếu cần.'
+
+/** Tiêu chí của một yêu cầu ở dạng đọc được (vd. "Chống nước tối thiểu 5000 mm") kèm lý do theo chuyến. */
+function describeCriteria(constraints: PlanConstraint[] | undefined) {
+  if (!Array.isArray(constraints)) return []
+  return constraints
+    .filter((constraint) => constraint && typeof constraint.field === 'string')
+    .map((constraint) => ({
+      field: constraint.field,
+      label: gearAttributeLabel(constraint.field),
+      text: describeGearConstraint(constraint),
+      reason: humanizeConstraintRationale(constraint.rationale ?? constraint.reference),
+    }))
+}
 
 const QUESTIONS: Record<string, { question: string; valueType: 'number' | 'boolean' | 'enum'; unit?: string; options?: string[] }> = {
   waterproof_mm: { question: 'Độ chống nước của món đồ là bao nhiêu?', valueType: 'number', unit: 'mm' },
@@ -121,26 +137,56 @@ export function withDisplayGuidance(snapshot: Record<string, unknown>): Record<s
 /** Projection only: it never alters the stored verdict or invents a technical value. */
 export function buildGearGuidance(snapshot: unknown, inputSnapshot?: unknown) {
   const data = snapshot as { coreCheck?: { items?: GearItemEvaluationResult[] }; coverage?: { requirements?: PlanRequirementCoverage[] } } | null
-  const input = inputSnapshot as { items?: Array<{ id?: unknown; name?: unknown; version?: unknown }> } | null | undefined
+  const input = inputSnapshot as {
+    items?: Array<{ id?: unknown; name?: unknown; version?: unknown; category?: unknown }>
+  } | null | undefined
   const inputItems = Array.isArray(input?.items) ? input.items : []
   const itemById = new Map(inputItems.filter((item) => item && typeof item.id === 'string').map((item) => [item.id, item]))
   if (!Array.isArray(data?.coreCheck?.items)) {
     return { available: false, items: [], message: 'Phiên bản này không có dữ liệu đánh giá chi tiết để tạo hướng dẫn.' }
   }
+  const coverageRequirements = Array.isArray(data.coverage?.requirements) ? data.coverage.requirements : []
+  const coreItemIds = new Set(data.coreCheck.items.map((item) => item.itemId))
+  // Món ngoài 5 nhóm chính (lều, gậy, đồ đi mưa) không có trong coreCheck: suy ra từ kết quả phủ yêu cầu.
+  const extendedItems = inputItems
+    .filter((item): item is { id: string; name?: unknown; version?: unknown; category: string } =>
+      Boolean(item) && typeof item.id === 'string' && typeof item.category === 'string' && !coreItemIds.has(item.id))
+    .map((item) => {
+      const assigned = coverageRequirements.find((requirement) => requirement.assignedItemIds?.includes(item.id))
+      const sameCategory = coverageRequirements.find((requirement) => requirement.category === item.category)
+      const base = {
+        itemId: item.id,
+        nameAtEvaluation: typeof item.name === 'string' ? item.name : null,
+        versionAtEvaluation: typeof item.version === 'number' && Number.isInteger(item.version) && item.version > 0 ? item.version : null,
+        category: item.category,
+        verdict: null as string | null,
+      }
+      if (assigned) return { ...base, verdict: 'SUITABLE', displayStatus: 'SUITABLE', questions: [], reasons: [] }
+      if (!sameCategory) return { ...base, displayStatus: 'NOT_ASSESSED', questions: [], reasons: [NOT_ASSESSED_REASON] }
+      const missing = [...new Set(sameCategory.missingFields ?? [])].sort()
+      return {
+        ...base,
+        displayStatus: sameCategory.status === 'UNKNOWN' && missing.length ? 'NEEDS_INFORMATION' : 'NEEDS_ATTENTION',
+        questions: missing.map(questionFor),
+        reasons: sameCategory.warnings ?? [],
+      }
+    })
   return {
     available: true,
-    requirements: (Array.isArray(data.coverage?.requirements) ? data.coverage.requirements : []).map((requirement) => ({
+    requirements: coverageRequirements.map((requirement) => ({
       requirementId: requirement.requirementId,
       category: requirement.category,
       priority: requirement.priority,
       status: requirement.status,
       recommendedAction: requirement.recommendedAction,
+      quantity: requirement.quantity,
       remainingQuantity: requirement.remainingQuantity,
       assignedItemIds: requirement.assignedItemIds,
       warnings: requirement.warnings,
+      criteria: describeCriteria(requirement.constraints),
       questions: [...new Set(requirement.missingFields ?? [])].sort().map(questionFor),
     })),
-    items: data.coreCheck.items.map((item) => {
+    items: [...data.coreCheck.items.map((item) => {
       const savedItem = itemById.get(item.itemId)
       const traces = Array.isArray(item.traces) ? item.traces : []
       const missing = [...new Set(traces
@@ -157,6 +203,6 @@ export function buildGearGuidance(snapshot: unknown, inputSnapshot?: unknown) {
         questions: missing.map(questionFor),
         reasons: item.reasons,
       }
-    }),
+    }), ...extendedItems],
   }
 }

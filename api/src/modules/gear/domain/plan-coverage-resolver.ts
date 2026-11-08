@@ -1,6 +1,7 @@
 import { GearCategory, GearCondition, isCoreGearCategory } from './gear.types';
 import { TripContext } from './rule-predicates';
 import { evaluateGearItem } from './pure-gear-engine';
+import { describeGearConstraintFailure } from './gear-labels';
 
 export interface PlanGearItemInput {
   id: string;
@@ -178,6 +179,9 @@ export function isRuleContextApplicable(ruleId: string, trip: TripContext): bool
  * Builds canonical requirements based on Trip facts and optional explicit needs.
  * Baseline REQUIRED: JACKET, FOOTWEAR, BACKPACK (R26).
  */
+/** Đêm lạnh từ mức này trở xuống thì túi ngủ bắt buộc dù chưa biết chỗ ngủ (chăn homestay thường không đủ). */
+export const SLEEPING_BAG_REQUIRED_NIGHT_C = 5
+
 export function buildTripRequirements(
   tripContext: TripContext,
   explicitNeeds?: PlanRequirement[],
@@ -200,7 +204,8 @@ export function buildTripRequirements(
       createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c, 'C', `R03: Nhiệt độ thấp (<=10°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c}°C`),
     );
   }
-  if (tripContext.temp_min_c <= 15) {
+  // R03 (<= 10°C) đã chặt hơn R04, nên R04 chỉ áp cho khoảng 10–15°C để không hiện hai tiêu chí trùng.
+  if (tripContext.temp_min_c > 10 && tripContext.temp_min_c <= 15) {
     jacketConstraints.push(
       createPlanConstraint('req_jacket', 'JACKET', 'temp_rating_c', 'LTE', tripContext.temp_min_c + 5, 'C', `R04: Trời lạnh (<=15°C) yêu cầu áo giữ ấm chịu được ${tripContext.temp_min_c + 5}°C`),
     );
@@ -288,7 +293,76 @@ export function buildTripRequirements(
     description: 'Balo trekking chứa đồ',
   });
 
-  // 4. Merge explicit / optional requirements if specified
+  // 4. Yêu cầu theo điều kiện chuyến. Lều không thêm vì chưa biết chuyến ngủ ở đâu.
+  // Chuyến chưa có thông tin lưu trú (homestay/lán thường có chăn): túi ngủ chỉ bắt buộc khi đêm rất lạnh.
+  if (tripContext.days >= 2) {
+    const coldNight = tripContext.temp_min_night_c <= SLEEPING_BAG_REQUIRED_NIGHT_C
+    requirements.push({
+      id: 'req_sleeping_bag',
+      category: 'SLEEPING_BAG',
+      priority: coldNight ? 'REQUIRED' : 'OPTIONAL',
+      quantity: 1,
+      constraints: [
+        createPlanConstraint(
+          'req_sleeping_bag', 'SLEEPING_BAG', 'temp_rating_c', 'LTE', tripContext.temp_min_night_c, 'C',
+          `R20: Chuyến ${tripContext.days} ngày có ngủ đêm, đêm lạnh nhất ${tripContext.temp_min_night_c}°C`,
+        ),
+      ],
+      source: 'SYSTEM_BASELINE',
+      description: coldNight
+        ? 'Túi ngủ đủ ấm cho đêm lạnh nhất'
+        : 'Túi ngủ (cần nếu ngủ lều hoặc lán không có chăn)',
+    });
+  }
+
+  if (tripContext.rain_prob_pct >= 60 || tripContext.temp_min_c <= 12) {
+    const pantsConstraints: PlanConstraint[] = [];
+    if (tripContext.rain_prob_pct >= 60) {
+      pantsConstraints.push(
+        createPlanConstraint('req_pants', 'PANTS', 'waterproof_mm', 'GTE', 3000, 'mm', `R12: Khả năng mưa ${tripContext.rain_prob_pct}%`),
+      );
+    }
+    if (tripContext.temp_min_c <= 12) {
+      pantsConstraints.push(
+        createPlanConstraint('req_pants', 'PANTS', 'insulated', 'EQ', true, undefined, `R14: Nhiệt độ thấp nhất ${tripContext.temp_min_c}°C`),
+      );
+    }
+    requirements.push({
+      id: 'req_pants',
+      category: 'PANTS',
+      priority: 'OPTIONAL',
+      quantity: 1,
+      constraints: pantsConstraints,
+      source: 'SYSTEM_BASELINE',
+      description: 'Quần trekking chống nước / giữ ấm',
+    });
+  }
+
+  if (tripContext.rain_prob_pct >= 50) {
+    requirements.push({
+      id: 'req_rain_gear',
+      category: 'RAIN_GEAR',
+      priority: 'OPTIONAL',
+      quantity: 1,
+      constraints: [],
+      source: 'SYSTEM_BASELINE',
+      description: `Áo mưa / poncho dự phòng (mưa ${tripContext.rain_prob_pct}%)`,
+    });
+  }
+
+  if (tripContext.difficulty >= 4) {
+    requirements.push({
+      id: 'req_trekking_pole',
+      category: 'TREKKING_POLE',
+      priority: 'OPTIONAL',
+      quantity: 1,
+      constraints: [],
+      source: 'SYSTEM_BASELINE',
+      description: `Gậy trekking giảm tải đầu gối (độ khó ${tripContext.difficulty}/5)`,
+    });
+  }
+
+  // 5. Merge explicit / optional requirements if specified
   if (explicitNeeds && explicitNeeds.length > 0) {
     const existingIds = new Set(requirements.map((r) => r.id));
     for (const need of explicitNeeds) {
@@ -302,12 +376,9 @@ export function buildTripRequirements(
   return requirements;
 }
 
-function formatAttrValue(val: unknown): string {
-  if (val === null || val === undefined) return 'null';
-  if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
-    return String(val);
-  }
-  return JSON.stringify(val);
+export interface PlanCoverageOptions {
+  /** Yêu cầu người dùng tự lo (mượn, mua...). Chỉ áp khi đồ trong tủ chưa đáp ứng đủ. */
+  selfProvidedRequirementIds?: readonly string[];
 }
 
 /**
@@ -318,7 +389,9 @@ export function resolvePlanCoverage(
   items: PlanGearItemInput[],
   requirements: PlanRequirement[],
   tripContext: TripContext,
+  options: PlanCoverageOptions = {},
 ): PlanCoverageResult {
+  const selfProvided = new Set(options.selfProvidedRequirementIds ?? []);
   // 1. Guard against duplicate item IDs
   const seenItemIds = new Set<string>();
   for (const item of items) {
@@ -411,7 +484,7 @@ export function resolvePlanCoverage(
       // Physical condition check (POOR is always rejected)
       if (candidate.condition === 'POOR') {
         isItemCompliant = false;
-        itemWarnings.push('Món đồ trong tình trạng xuống cấp nghiêm trọng (POOR)');
+        itemWarnings.push('Món đồ đã xuống cấp nặng (tình trạng Cũ/kém), không nên mang');
       }
 
       // Check all constraints for this requirement (AND logic)
@@ -427,16 +500,12 @@ export function resolvePlanCoverage(
         if (constraint.op === 'GTE') {
           if (typeof val !== 'number' || val < (constraint.expected as number)) {
             isItemCompliant = false;
-            itemWarnings.push(
-              `${constraint.field} (${formatAttrValue(val)}) không đạt mức tối thiểu ${formatAttrValue(constraint.expected)}`,
-            );
+            itemWarnings.push(describeGearConstraintFailure(constraint, val));
           }
         } else if (constraint.op === 'LTE') {
           if (typeof val !== 'number' || val > (constraint.expected as number)) {
             isItemCompliant = false;
-            itemWarnings.push(
-              `${constraint.field} (${formatAttrValue(val)}) vượt quá mức tối đa ${formatAttrValue(constraint.expected)}`,
-            );
+            itemWarnings.push(describeGearConstraintFailure(constraint, val));
           }
         } else if (constraint.op === 'EQ') {
           if (val !== constraint.expected) {
@@ -449,9 +518,7 @@ export function resolvePlanCoverage(
               // satisfied via waterproof attribute
             } else {
               isItemCompliant = false;
-              itemWarnings.push(
-                `${constraint.field} (${formatAttrValue(val)}) không thỏa mãn điều kiện yêu cầu (${formatAttrValue(constraint.expected)})`,
-              );
+              itemWarnings.push(describeGearConstraintFailure(constraint, val));
             }
           }
         }
@@ -474,9 +541,15 @@ export function resolvePlanCoverage(
     let status: PlanCoverageStatus;
     let recommendedAction: RecommendedAction;
     const assignedIds = assignedForReq.map((i) => i.id);
-    const remainingQuantity = Math.max(0, req.quantity - assignedIds.length);
+    let remainingQuantity = Math.max(0, req.quantity - assignedIds.length);
+    const isSelfProvided = assignedForReq.length < requiredQty && selfProvided.has(req.id);
 
-    if (assignedForReq.length === requiredQty) {
+    if (isSelfProvided) {
+      // Người dùng tự lo phần còn thiếu: không còn cần thuê, không hỏi thêm thông số.
+      status = 'USER_DECLARED_PROVISION';
+      recommendedAction = 'PROVIDE';
+      remainingQuantity = 0;
+    } else if (assignedForReq.length === requiredQty) {
       status = 'COVERED_BY_OWNED';
       recommendedAction = 'USE_OWNED';
     } else if (assignedForReq.length > 0) {
@@ -509,8 +582,8 @@ export function resolvePlanCoverage(
       remainingQuantity,
       status,
       assignedItemIds: assignedIds,
-      missingFields: assignedForReq.length === requiredQty ? [] : bestMissingFields,
-      warnings: assignedForReq.length === requiredQty ? [] : bestFailureReasons,
+      missingFields: assignedForReq.length === requiredQty || isSelfProvided ? [] : bestMissingFields,
+      warnings: assignedForReq.length === requiredQty || isSelfProvided ? [] : bestFailureReasons,
       recommendedAction,
       constraints: req.constraints,
     });

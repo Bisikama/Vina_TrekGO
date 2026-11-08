@@ -43,6 +43,24 @@ function writeCart(tripId: string, items: RentalCartItem[]) {
   window.dispatchEvent(new CustomEvent(CART_EVENT, { detail: { tripId } }));
 }
 
+/**
+ * Đưa nhiều món vào giỏ của chuyến (dùng ngoài trang danh mục, ví dụ từ Gear Advisor).
+ * Món đã có trong giỏ được đặt lại số lượng; món khác trong giỏ giữ nguyên.
+ */
+export function mergeIntoRentalCart(tripId: string, entries: RentalCartItem[]) {
+  const incoming = new Map(entries.map((entry) => [entry.product.id, entry]));
+  const kept = readCart(tripId).filter((item) => !incoming.has(item.product.id));
+  const merged = [...kept, ...incoming.values()]
+    .map((item) => ({
+      ...item,
+      availableCount: Math.max(0, Math.floor(item.availableCount)),
+      quantity: Math.min(Math.max(0, Math.floor(item.quantity)), Math.max(0, Math.floor(item.availableCount))),
+    }))
+    .filter((item) => item.quantity > 0);
+  writeCart(tripId, merged);
+  return merged;
+}
+
 export function useRentalCart(tripId: string) {
   const [items, setItems] = useState<RentalCartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);

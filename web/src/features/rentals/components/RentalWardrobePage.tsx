@@ -16,8 +16,11 @@ import { gearAttributes, loadGearAttributeSchema } from "@/features/rentals/serv
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { RentalPageHeader } from "./RentalSectionNav";
 import {
-  AddGearMenu, CATEGORY_ORDER, ChecklistGroup, PackingProgress, printPackingList, usePackedItems,
+  CATEGORY_ORDER, GearCardGroup, SmartAddPanel, WardrobeOverview, printPackingList, usePackedItems,
 } from "./wardrobe/WardrobeChecklist";
+import { GearThumb, specCompleteness } from "./wardrobe/GearVisuals";
+
+type EditorContext = { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string; photoPreview?: string };
 
 const categories: Array<[GearCategory, string]> = [
   ["JACKET", "Áo khoác"], ["FOOTWEAR", "Giày"], ["PANTS", "Quần"],
@@ -78,11 +81,11 @@ export function RentalWardrobePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<GearCategory | "ALL" | "UNPACKED">("ALL");
+  const [filter, setFilter] = useState<GearCategory | "ALL" | "UNPACKED" | "INCOMPLETE">("ALL");
   const [, setSchemaTick] = useState(0);
   const userKey = useAuthStore((state) => state.user?.id ?? "guest");
   const [query, setQuery] = useState("");
-  const [editor, setEditor] = useState<{ item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string } | null>(null);
+  const [editor, setEditor] = useState<EditorContext | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [duplicate, setDuplicate] = useState<{ input: GearItemInput; item?: UserGearItem; draft?: GearExtractionDraft; details: Record<string, unknown> } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -161,7 +164,10 @@ export function RentalWardrobePage() {
   }, []);
 
   const visibleItems = useMemo(() => items.filter((item) => {
-    const matchCategory = filter === "ALL" || (filter === "UNPACKED" ? !packed.has(item.id) : item.category === filter);
+    const matchCategory = filter === "ALL"
+      || (filter === "UNPACKED" ? !packed.has(item.id)
+        : filter === "INCOMPLETE" ? !specCompleteness(item).complete
+          : item.category === filter);
     const needle = query.trim().toLocaleLowerCase("vi");
     return matchCategory && (!needle || `${item.name} ${item.brand ?? ""}`.toLocaleLowerCase("vi").includes(needle));
   }), [filter, items, packed, query]);
@@ -198,7 +204,7 @@ export function RentalWardrobePage() {
       setAiProgress({ source: "IMAGE", stage: "ANALYZING" });
       const draft = await createGearExtraction({ source: "IMAGE", uploadId });
       if (draft.status !== "READY") throw new Error("AI chưa tạo được bản nháp sẵn sàng. Bạn vẫn có thể nhập tay.");
-      setEditor({ draft, photoRef: uploadId });
+      setEditor({ draft, photoRef: uploadId, photoPreview: URL.createObjectURL(file) });
     } catch (reason) {
       const issue = issueOf(reason);
       if (issue.status === 409 || issue.code === "GEAR_CONCURRENCY_CONFLICT") {
@@ -231,32 +237,38 @@ export function RentalWardrobePage() {
     } finally { setDeleting(false); }
   }
 
-  return <main className="min-h-[700px] bg-[#f4f7fb] px-4 py-8 sm:px-6 lg:px-8">
+  return <main className="relative min-h-[700px] bg-[#F4F6F1] px-4 py-8 sm:px-6 lg:px-8">
     <section className="mx-auto max-w-7xl">
-      <RentalPageHeader eyebrow="Tủ đồ của bạn" title="Danh sách đồ mang theo" description="Tích những món đã cho vào balo. Tải danh sách về để soạn đồ ngay cả khi không có mạng." active="/rentals/wardrobe" />
+      <RentalPageHeader
+        eyebrow="Tủ đồ của bạn"
+        title="Trạm trang bị"
+        highlight="trước mỗi cung đường."
+        description="Lưu đồ bạn có kèm ảnh và thông số. AI đọc tem mác hoặc trang sản phẩm giúp bạn; Kế hoạch đồ dùng các thông số này để kiểm tra theo từng chuyến."
+        action={{ href: "/rentals/gear-advisor", label: "Lập kế hoạch đồ cho chuyến" }}
+        active="/rentals/wardrobe"
+      />
 
       <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzeImage} />
-      <PackingProgress
+      {!loading && <WardrobeOverview
+        items={items}
         packedCount={packedCount}
-        total={items.length}
         onClear={clearPacked}
+        onShowIncomplete={() => setFilter("INCOMPLETE")}
         onPrint={() => {
           void printPackingList(items, packed).catch((reason: unknown) => setError(getRentalApiErrorMessage(reason, "Không tạo được danh sách PDF. Vui lòng thử lại.")));
         }}
-        addMenu={<AddGearMenu
-          disabled={busy || Boolean(aiProgress)}
-          quotaText={quota ? `Lượt AI hôm nay: còn ${quota.remaining}/${quota.limit}, làm mới lúc 00:00.` : quotaLoading ? "Đang tải số lượt AI..." : null}
-          onImage={() => { if (!aiRequestLock.current) fileRef.current?.click(); }}
-          onLink={() => { if (!aiRequestLock.current) setLinkOpen(true); }}
-          onCatalog={() => setCatalogOpen(true)}
-          onManual={() => setEditor({})}
-        />}
+      />}
+      <SmartAddPanel
+        disabled={busy || Boolean(aiProgress)}
+        quotaText={quota ? `Lượt AI hôm nay: còn ${quota.remaining}/${quota.limit}` : quotaLoading ? "Đang tải số lượt AI..." : null}
+        image={{ ready: !imageNotice, note: imageNotice }}
+        link={{ ready: !linkNotice, note: linkNotice }}
+        onImage={() => { if (!aiRequestLock.current) fileRef.current?.click(); }}
+        onLink={() => { if (!aiRequestLock.current) setLinkOpen(true); }}
+        onCatalog={() => setCatalogOpen(true)}
+        onManual={() => setEditor({})}
       />
       {quotaError && <ErrorAlert className="mt-3" message="Không tải được số lượt AI." onRetry={() => void refreshQuota()} />}
-      {(imageNotice || linkNotice) && <div className="mt-3 space-y-1 text-xs leading-5 text-amber-700">
-        {imageNotice && <p>Ảnh: {imageNotice}</p>}
-        {linkNotice && <p>Đường dẫn: {linkNotice}</p>}
-      </div>}
 
       <ExtractionGuide capabilities={capabilities} />
 
@@ -271,15 +283,16 @@ export function RentalWardrobePage() {
             <Filter active={filter === "ALL"} onClick={() => setFilter("ALL")}>Tất cả <b>{items.length}</b></Filter>
             {CATEGORY_ORDER.filter(([value]) => items.some((item) => item.category === value)).map(([value, label]) => <Filter key={value} active={filter === value} onClick={() => setFilter(value)}>{label} <b>{items.filter((item) => item.category === value).length}</b></Filter>)}
             <Filter active={filter === "UNPACKED"} onClick={() => setFilter("UNPACKED")}>Chưa soạn <b>{items.length - packedCount}</b></Filter>
+            <Filter active={filter === "INCOMPLETE"} onClick={() => setFilter("INCOMPLETE")}>Thiếu thông số <b>{items.filter((item) => !specCompleteness(item).complete).length}</b></Filter>
           </div>
           <label className="flex min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-slate-900 outline-none" placeholder="Tìm tên hoặc thương hiệu..." /></label>
         </div>
       </div>
 
       {loading ? <State title="Đang mở tủ đồ..." description="TrekGo đang kiểm tra trang bị của bạn." /> : visibleItems.length === 0 ? <State title={items.length ? "Không có món phù hợp bộ lọc" : "Tủ đồ đang trống"} description={items.length ? "Thử chọn danh mục khác hoặc xóa từ khóa tìm kiếm." : "Thêm món đầu tiên: chụp nhãn, dán đường dẫn, chọn món có sẵn hoặc tự nhập."} /> :
-        <div className="mt-5 gap-4 lg:columns-2">{CATEGORY_ORDER.map(([value, label]) => {
+        <div className="mt-2">{CATEGORY_ORDER.map(([value, label]) => {
           const groupItems = visibleItems.filter((item) => item.category === value);
-          return groupItems.length ? <ChecklistGroup key={value} label={label} items={groupItems} packed={packed} onToggle={togglePacked} onEdit={(item) => setEditor({ item })} /> : null;
+          return groupItems.length ? <GearCardGroup key={value} category={value} label={label} items={groupItems} packed={packed} onToggle={togglePacked} onEdit={(item) => setEditor({ item })} /> : null;
         })}</div>}
 
       <TripReviewSection items={items} />
@@ -361,8 +374,25 @@ function Filter({ active, onClick, children }: { active: boolean; onClick: () =>
   return <button onClick={onClick} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold ${active ? "bg-[#123f32] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{children}</button>;
 }
 
-function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string }; busy: boolean; onClose: () => void; onSave: (input: GearItemInput) => void; onDelete?: () => void }) {
+function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: EditorContext; busy: boolean; onClose: () => void; onSave: (input: GearItemInput) => void; onDelete?: () => void }) {
   const seed = context.item ?? context.draft?.extractedData;
+  const [photoRef, setPhotoRef] = useState<string | null>(context.photoRef ?? context.item?.photoRef ?? null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(context.photoPreview ?? context.item?.photoUrl ?? null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  async function pickPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file) return;
+    setPhotoBusy(true); setPhotoError(null);
+    try {
+      const mediaId = await uploadUserGearPhoto(file);
+      setPhotoRef(mediaId);
+      setPhotoPreview(URL.createObjectURL(file));
+    } catch (reason) {
+      setPhotoError(getRentalApiErrorMessage(reason, "Chưa tải được ảnh. Vui lòng thử lại."));
+    } finally { setPhotoBusy(false); }
+  }
   // Không đoán loại đồ: AI không nhận ra (category null) hoặc nhập tay mới thì người dùng phải tự chọn.
   const [category, setCategory] = useState<GearCategory | "">(seed?.category ?? "");
   const [attributes, setAttributes] = useState<Record<string, unknown>>(seed?.attributes ?? {});
@@ -380,7 +410,7 @@ function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: { i
     event.preventDefault(); if (!category) return;
     const form = new FormData(event.currentTarget); const parsed: Record<string, unknown> = {};
     gearAttributes(category).forEach(([key, , unit]) => { const raw = String(form.get(`attr_${key}`) ?? ""); if (!raw) parsed[key] = null; else if (unit === "bool") parsed[key] = raw === "true"; else if (unit === "coverage") parsed[key] = raw; else parsed[key] = Number(raw); });
-    onSave({ name: String(form.get("name") ?? "").trim(), brand: String(form.get("brand") ?? "").trim() || null, category, condition: String(form.get("condition")) as GearCondition, attributes: parsed, photoRef: context.photoRef ?? context.item?.photoRef ?? null });
+    onSave({ name: String(form.get("name") ?? "").trim(), brand: String(form.get("brand") ?? "").trim() || null, category, condition: String(form.get("condition")) as GearCondition, attributes: parsed, photoRef });
   }
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
     <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#27735a]">{manualEntry ? "Bản nháp · cần nhập tay" : context.draft ? "AI · Bản nháp cần xác nhận" : context.item ? "Tủ đồ cá nhân" : "Nhập tay số liệu"}</p><h2 className="mt-1 text-xl font-bold text-slate-950">{context.item ? "Xem & sửa trang bị" : "Thêm trang bị vào tủ"}</h2></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full bg-slate-100">✕</button></div>
@@ -395,6 +425,19 @@ function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: { i
       {context.draft && !manualEntry && <DraftSourceDetails data={context.draft.extractedData} />}
       {categoryUnknown && <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">AI chưa xác định được loại đồ. Hãy chọn đúng loại đồ trước khi nhập thông số.</div>}
       {warnings.length > 0 && <ul className="sm:col-span-2 list-disc space-y-1 rounded-xl border border-slate-200 bg-slate-50 py-3 pl-7 pr-3 text-xs text-slate-600">{warnings.slice(0, 6).map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+      <div className="sm:col-span-2 flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+        <GearThumb url={photoPreview} category={category || "BACKPACK"} name="Ảnh món đồ" size="lg" />
+        <div className="min-w-0 flex-1 text-xs text-slate-500">
+          <p className="text-sm font-semibold text-slate-900">Ảnh món đồ</p>
+          <p className="mt-0.5">Ảnh giúp bạn nhận ra món đồ khi soạn balo và khi chọn đồ cho chuyến. JPEG/PNG/WebP, tối đa 5MB.</p>
+          {photoError && <p className="mt-1 font-medium text-red-600">{photoError}</p>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => void pickPhoto(event)} />
+            <button type="button" disabled={photoBusy} onClick={() => photoInput.current?.click()} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{photoBusy ? "Đang tải ảnh..." : photoRef ? "Đổi ảnh" : "Tải ảnh lên"}</button>
+            {photoRef && <button type="button" disabled={photoBusy} onClick={() => { setPhotoRef(null); setPhotoPreview(null); }} className="rounded-lg px-3 py-1.5 font-semibold text-red-600 hover:bg-red-50">Bỏ ảnh</button>}
+          </div>
+        </div>
+      </div>
       <Field label="Tên món đồ"><input name="name" required defaultValue={seed?.name ?? ""} className={inputClass} placeholder="Ví dụ: Balo Naturehike 45L" /></Field>
       <Field label="Thương hiệu"><input name="brand" defaultValue={seed?.brand ?? ""} className={inputClass} placeholder="Không bắt buộc" /></Field>
       <Field label="Loại đồ"><select name="category" required value={category} onChange={(event) => { setCategory(event.target.value as GearCategory | ""); setAttributes({}); }} className={inputClass}><option value="" disabled>Chọn loại đồ</option>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
@@ -403,7 +446,7 @@ function GearEditor({ context, busy, onClose, onSave, onDelete }: { context: { i
       {!category && <p className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500">Chọn loại đồ để hiện các thông số kỹ thuật tương ứng.</p>}
       {category && gearAttributes(category).map(([key, label, unit]) => <Field key={key} label={`${label}${!["bool", "coverage"].includes(unit) ? ` (${unit})` : ""}${fieldStatus(key) === "FOUND" ? " · AI đọc được" : fieldStatus(key) === "MISSING" ? " · AI không thấy" : itemSource(key) ? ` · ${attributeSourceLabel[itemSource(key) as string] ?? itemSource(key)}` : ""}`}>{unit === "bool" ? <select name={`attr_${key}`} defaultValue={attributes[key] === true ? "true" : attributes[key] === false ? "false" : ""} className={inputClass}><option value="">Chưa biết</option><option value="true">Có</option><option value="false">Không</option></select> : unit === "coverage" ? <select name={`attr_${key}`} defaultValue={String(attributes[key] ?? "")} className={inputClass}><option value="">Chưa biết</option><option value="UPPER_BODY">Thân trên</option><option value="FULL_BODY">Toàn thân</option></select> : <input name={`attr_${key}`} type="number" defaultValue={typeof attributes[key] === "number" ? String(attributes[key]) : ""} className={inputClass} placeholder="Chưa biết" />}</Field>)}
     </div>
-    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4">{onDelete && <button type="button" onClick={onDelete} className="mr-auto rounded-xl px-3 py-3 text-sm font-medium text-red-600 hover:bg-red-50">Gỡ khỏi tủ</button>}<button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold">Hủy</button><button disabled={busy || !category} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
+    <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4">{onDelete && <button type="button" onClick={onDelete} className="mr-auto rounded-xl px-3 py-3 text-sm font-medium text-red-600 hover:bg-red-50">Gỡ khỏi tủ</button>}<button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold">Hủy</button><button disabled={busy || photoBusy || !category} className="rounded-xl bg-[#123f32] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? "Đang lưu..." : context.draft ? "Xác nhận lưu vào tủ" : "Lưu vào tủ đồ"}</button></div>
   </form></div>;
 }
 
@@ -439,7 +482,7 @@ function ConfirmDialog({ title, message, confirmLabel, tone = "default", busy, o
   </div>;
 }
 
-function DuplicateDialog({ data, busy, onBack, onConfirm }: { data: Record<string, unknown>; busy: boolean; onBack: () => void; onConfirm: () => void }) { const similar = data.similarItem as { name?: string } | undefined; const matched = Array.isArray(data.matchedFields) ? data.matchedFields.join(", ") : "các thông số kỹ thuật"; return <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4"><div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="bg-orange-50 px-6 py-5"><p className="text-[10px] font-bold uppercase tracking-wider text-orange-600">Có thể bị trùng</p><h3 className="mt-1 text-lg font-bold">Tủ đã có một món có thông số tương tự</h3></div><div className="p-6 text-sm text-slate-600"><p>Món tương tự: <b className="text-slate-950">{similar?.name ?? "Trang bị đã lưu"}</b></p><p className="mt-2">Thông số trùng: <b>{matched}</b></p><p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs">Đây chỉ là so sánh thông số, không khẳng định cùng một vật thật.</p></div><div className="flex justify-end gap-3 border-t p-4"><button onClick={onBack} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Quay lại chỉnh sửa</button><button disabled={busy} onClick={onConfirm} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-bold text-white">Vẫn lưu thêm</button></div></div></div>; }
+function DuplicateDialog({ data, busy, onBack, onConfirm }: { data: Record<string, unknown>; busy: boolean; onBack: () => void; onConfirm: () => void }) { const similar = data.similarItem as { name?: string } | undefined; const matched = Array.isArray(data.matchedFields) && data.matchedFields.length ? data.matchedFields.map((field) => fieldLabel(String(field))).join(", ") : "các thông số kỹ thuật"; return <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4"><div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="bg-orange-50 px-6 py-5"><p className="text-[10px] font-bold uppercase tracking-wider text-orange-600">Có thể bị trùng</p><h3 className="mt-1 text-lg font-bold">Tủ đã có một món có thông số tương tự</h3></div><div className="p-6 text-sm text-slate-600"><p>Món tương tự: <b className="text-slate-950">{similar?.name ?? "Trang bị đã lưu"}</b></p><p className="mt-2">Thông số trùng: <b>{matched}</b></p><p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs">Đây chỉ là so sánh thông số, không khẳng định cùng một vật thật.</p></div><div className="flex justify-end gap-3 border-t p-4"><button onClick={onBack} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Quay lại chỉnh sửa</button><button disabled={busy} onClick={onConfirm} className="rounded-xl bg-[#123f32] px-4 py-2.5 text-sm font-bold text-white">Vẫn lưu thêm</button></div></div></div>; }
 function State({ title, description }: { title: string; description: string }) { return <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><p className="mt-4 font-bold text-slate-900">{title}</p><p className="mt-2 text-sm text-slate-500">{description}</p></div>; }
 function formatAttribute(value: unknown, unit: string) { if (value === true) return "Có"; if (value === false) return "Không"; if (value === null || value === undefined || value === "") return "Chưa biết"; if (unit === "coverage") return value === "FULL_BODY" ? "Toàn thân" : "Thân trên"; return `${String(value)}${unit}`; }
 function formatDateTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date); }
@@ -466,7 +509,7 @@ function ExtractionGuide({ capabilities }: { capabilities: GearCapabilities | nu
         <CapabilityRow label="Đọc từ ảnh tem/mác" status={capabilities?.imageExtraction} hint="Nút “Chụp nhãn” ở trên" />
         <CapabilityRow label="Đọc từ link sản phẩm" status={capabilities?.linkExtraction} hint="Nút “Từ đường dẫn” ở trên" />
         <CapabilityRow label="Tư vấn theo bộ quy tắc" status={capabilities?.ruleBasedAdvice} hint="Dùng trong Kế hoạch đồ ›" href="/rentals/gear-advisor" />
-        <CapabilityRow label="Tư vấn bổ sung bằng AI" status={capabilities?.aiAdvice} hint="Trong Kế hoạch đồ → phương án thuê → Xem lời khuyên ›" href="/rentals/gear-advisor" />
+        <CapabilityRow label="Tư vấn bổ sung bằng AI" status={capabilities?.aiAdvice} hint="Trong Kế hoạch đồ → Thuê phần còn thiếu → Xem lời khuyên ›" href="/rentals/gear-advisor" />
       </div>
       <div className="space-y-3 text-xs leading-5">
         <p className="font-bold uppercase tracking-wider text-[#27735a]">Cách dùng</p>
@@ -507,6 +550,7 @@ const DISPLAY_STATUS: Record<string, { label: string; className: string }> = {
   SUITABLE: { label: "Phù hợp", className: "bg-emerald-50 text-emerald-800" },
   NEEDS_INFORMATION: { label: "Thiếu thông tin", className: "bg-amber-50 text-amber-800" },
   NEEDS_ATTENTION: { label: "Cần chú ý", className: "bg-red-50 text-red-700" },
+  NOT_ASSESSED: { label: "Chuyến không yêu cầu", className: "bg-slate-100 text-slate-600" },
 };
 
 /** Xem lại theo chuyến: lấy từ bản đánh giá mới nhất của từng kế hoạch đã lưu, không chạy lại bộ luật. */
@@ -545,7 +589,7 @@ function TripReviewSection({ items }: { items: UserGearItem[] }) {
               <p className="font-bold text-slate-900">{tripTitle}</p>
               <p className="mt-0.5 text-xs text-slate-500">Lần đánh giá #{plan.evaluatedRevision}{plan.isStale || guidance?.needsReevaluation ? " · cần đánh giá lại vì dữ liệu đã đổi" : ""}</p>
             </div>
-            <Link href="/rentals/gear-advisor" className="shrink-0 text-xs font-semibold text-[#165c45] underline">Mở kế hoạch</Link>
+            <Link href={plan.tripId ? `/rentals/gear-advisor?tripId=${encodeURIComponent(plan.tripId)}` : "/rentals/gear-advisor"} className="shrink-0 text-xs font-semibold text-[#165c45] underline">Mở kế hoạch</Link>
           </div>
           {!guidance || !guidance.available ? <p className="mt-3 text-xs text-slate-500">Bản đánh giá này không có chi tiết từng món.</p> :
             <ul className="mt-3 divide-y divide-slate-100">{(guidance.items ?? []).map((entry) => {
@@ -587,9 +631,12 @@ function CatalogDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (it
     } finally { setLoading(false); }
   }, [q, category]);
 
-  // Đổi loại đồ → tìm lại từ đầu.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void search(); }, [category]);
+  // Đổi loại đồ → tìm lại từ đầu (gõ từ khoá thì chỉ tìm khi bấm "Tìm").
+  useEffect(() => {
+    const timer = window.setTimeout(() => void search(), 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
 
   async function add(acknowledgeDuplicate = false) {
     if (!selected) return;

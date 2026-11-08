@@ -118,4 +118,5 @@ export const DISPLAY_STATUS_LABELS: Record<string, { label: string; tone: "ok" |
   NEEDS_INFO: { label: "Thiếu thông tin", tone: "info" },
   NEEDS_ATTENTION: { label: "Cần chú ý", tone: "warn" },
   NEEDS_PREPARATION: { label: "Cần chuẩn bị", tone: "warn" },
+  NOT_ASSESSED: { label: "Chuyến không yêu cầu", tone: "info" },
 };

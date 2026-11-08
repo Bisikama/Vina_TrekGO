@@ -120,6 +120,9 @@ export class GearPlanController {
     description: `
 Truy vấn thông số chuyến đi (độ dài ngày, độ khó, địa hình), ước tính thời tiết ban đầu, và danh sách các hạng mục trang bị cơ bản cần chuẩn bị.
 
+- \`highestElevationM\`: độ cao điểm cao nhất của cung (lấy từ toạ độ 3D của geojson); \`null\` khi cung không có độ cao.
+- \`forecastClimate\`: khi có điểm cao nhất, dự báo được lấy tại điểm đó và có thêm \`atElevationM\`.
+
 **Cách test:** Truyền \`tripId\` của chuyến đi cần kiểm tra (ví dụ từ \`GET /api/v1/trips/{tripId}/rental-eligibility\`).
 `,
   })
@@ -246,6 +249,13 @@ Cập nhật tiêu đề, danh sách đồ đã chọn từ tủ đồ, hoặc t
           items: { type: 'string', format: 'uuid' },
           example: ['550e8400-e29b-41d4-a716-446655440201', '550e8400-e29b-41d4-a716-446655440202'],
         },
+        selfProvidedRequirementIds: {
+          type: 'array',
+          items: { type: 'string', example: 'req_footwear' },
+          maxItems: 30,
+          description:
+            'Các yêu cầu người dùng tự chuẩn bị (mượn, mua...). Thay toàn bộ danh sách cũ; lưu ở `preferences.selfProvidedRequirementIds`, giữ các khoá preferences khác. Lần đánh giá sau, yêu cầu chưa được đồ trong tủ đáp ứng sẽ có `status = USER_DECLARED_PROVISION`, `remainingQuantity = 0` và không còn trong phương án thuê.',
+        },
       },
       example: {
         expectedInputRevision: 1,
@@ -279,21 +289,21 @@ Cập nhật tiêu đề, danh sách đồ đã chọn từ tủ đồ, hoặc t
       type: 'object',
       required: ['expectedProgressVersion', 'items'],
       properties: {
-        expectedProgressVersion: { type: 'integer', minimum: 0, example: 0, description: 'Phiên bản tiến độ đóng gói hiện tại' },
+        expectedProgressVersion: { type: 'integer', minimum: 1, example: 1, description: 'Phiên bản tiến độ đóng gói hiện tại (progressVersion của kế hoạch, bắt đầu từ 1)' },
         items: {
           type: 'array',
           items: {
             type: 'object',
             required: ['requirementId', 'isChecked'],
             properties: {
-              requirementId: { type: 'string', example: 'req_jacket', description: 'Mã yêu cầu trong checklist' },
+              requirementId: { type: 'string', example: 'req_jacket', description: 'Mã yêu cầu trong `checklist` (req_*) hoặc đồ thiết yếu trong `essentials` (ess_*) của lần đánh giá mới nhất' },
               isChecked: { type: 'boolean', example: true, description: 'Trạng thái đã đóng gói vào balo' },
             },
           },
         },
       },
       example: {
-        expectedProgressVersion: 0,
+        expectedProgressVersion: 1,
         items: [
           { requirementId: 'req_jacket', isChecked: true },
           { requirementId: 'req_footwear', isChecked: true },
@@ -407,6 +417,24 @@ Xác nhận điều kiện thời tiết của chuyến đi, đánh giá từng 
   @ApiParam({ name: 'revision', type: Number, description: 'Phiên bản đánh giá' })
   @ApiResponse({ status: 200, description: 'Hướng dẫn đọc từ snapshot, không thay đổi kết quả đánh giá', schema: {
     type: 'object', properties: {
+      items: { type: 'array', description: 'Mọi món đã chọn. Món thuộc nhóm chưa có tiêu chí cho chuyến có displayStatus = NOT_ASSESSED, verdict = null.', items: { type: 'object', properties: {
+        itemId: { type: 'string', format: 'uuid' }, nameAtEvaluation: { type: 'string', nullable: true }, category: { type: 'string' },
+        verdict: { type: 'string', nullable: true },
+        displayStatus: { type: 'string', enum: ['SUITABLE', 'NEEDS_INFORMATION', 'NEEDS_ATTENTION', 'NOT_ASSESSED'] },
+        reasons: { type: 'array', items: { type: 'string' } },
+      } } },
+      requirements: { type: 'array', items: { type: 'object', properties: {
+        requirementId: { type: 'string', example: 'req_jacket' }, category: { type: 'string' },
+        status: { type: 'string', enum: ['COVERED_BY_OWNED', 'USER_DECLARED_PROVISION', 'NEEDS_REPLACEMENT', 'MISSING', 'UNKNOWN'] },
+        quantity: { type: 'integer' }, remainingQuantity: { type: 'integer' },
+        assignedItemIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+        warnings: { type: 'array', items: { type: 'string' }, example: ['Chống nước 3000 mm – yêu cầu tối thiểu 5000 mm'] },
+        criteria: { type: 'array', description: 'Tiêu chí của yêu cầu ở dạng đọc được và lý do theo chuyến', items: { type: 'object', properties: {
+          field: { type: 'string', example: 'waterproof_mm' }, label: { type: 'string', example: 'Chống nước' },
+          text: { type: 'string', example: 'Chống nước tối thiểu 5000 mm' },
+          reason: { type: 'string', nullable: true, example: 'Mưa lớn (>=60%) yêu cầu áo chống nước >= 5000mm' },
+        } } },
+      } } },
       contextQuestions: { type: 'object', description: 'Câu hỏi theo món được chọn và constraint chưa đủ dữ liệu trong snapshot; không phải verdict.', properties: {
         available: { type: 'boolean' }, items: { type: 'array', items: { type: 'object', properties: {
           itemId: { type: 'string', format: 'uuid' }, nameAtEvaluation: { type: 'string', nullable: true }, category: { type: 'string' },

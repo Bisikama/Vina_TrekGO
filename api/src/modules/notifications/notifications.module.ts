@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { MongooseModule } from '@nestjs/mongoose'
+import { WebsocketModule } from '../../websockets/websocket.module'
 import { Notification, NotificationSchema } from './schemas/notification.schema'
 
 import { NotificationsService } from './notifications.service'
@@ -13,6 +14,7 @@ import { RentalNotificationConsumer } from './consumers/rental-notification.cons
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
     ]),
+    WebsocketModule,
   ],
   controllers: [NotificationsController],
   providers: [

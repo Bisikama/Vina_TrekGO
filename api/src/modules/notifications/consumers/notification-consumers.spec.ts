@@ -182,12 +182,14 @@ describe('BookingNotificationConsumer.loadContext', () => {
     const db: any = {
       tripMember: { findMany: jest.fn().mockResolvedValue([{ userId: 'm-1' }]) },
       bookingParticipant: { findMany: jest.fn().mockResolvedValue([{ userId: 'h-1' }]) },
+      trip: { findUnique: jest.fn().mockResolvedValue({ title: 'Fansipan' }) },
     }
     const consumer = new BookingNotificationConsumer(db, {} as any) as any
     expect(
       await consumer.loadContext({ id: 'e', eventType: 'PRIVATE_TRIP_CANCELLED', payload: { tripId: 't-1' } }),
     ).toEqual({
       memberUserIds: ['m-1'],
+      tripTitle: 'Fansipan',
     })
     expect(db.tripMember.findMany).toHaveBeenCalledWith({
       where: { tripId: 't-1', status: 'ACTIVE' },
