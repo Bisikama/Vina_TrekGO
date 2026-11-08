@@ -525,3 +525,4 @@ Dùng `postgres:5432` trên máy Windows sẽ lỗi, vì tên `postgres` chỉ t
 | `413 Request Entity Too Large` | File upload vượt `client_max_body_size` trong cấu hình Nginx. |
 | Màn hình kẹt ở `lines 1-22/22 (END)` | Đang ở chế độ xem trang. Nhấn `q` để thoát. |
 | Hết dung lượng ổ đĩa | `docker system prune` (không xoá volume). |
+pre
