@@ -12,6 +12,7 @@ const coverageLabels: Record<string, string> = {
   NEEDS_REPLACEMENT: "Cần thay thế",
   MISSING: "Cần chuẩn bị thêm",
   UNKNOWN: "Cần thêm thông tin",
+  ESSENTIAL: "Đồ thiết yếu",
 };
 
 type Progress = { requirementId: string; isChecked: boolean; note?: string };
@@ -65,7 +66,7 @@ export function GearPackingChecklist({ plan, checklist, itemNames, tripTitle, tr
     <div className="overflow-hidden rounded-2xl border border-[#e3ebe3] divide-y divide-[#e9eee9]">{checklist.map((item, index) => {
       const value = draft[index];
       return <div key={item.requirementId} className={`p-4 sm:p-5 ${value.isChecked ? "bg-[#f5faf4]" : "bg-white"}`}>
-        <label className="flex cursor-pointer items-start gap-3"><input type="checkbox" checked={value.isChecked} onChange={(event) => setDraft((old) => old.map((entry, i) => i === index ? { ...entry, isChecked: event.target.checked } : entry))} className="mt-1 h-4 w-4 accent-[#2F6B4F]" /><span className="min-w-0 flex-1"><strong className="text-sm text-[#1F2937]">{item.title || item.category}</strong><span className="mt-1 block text-xs text-slate-500">{item.priority === "REQUIRED" ? "Bắt buộc" : "Tùy chọn"} · Số lượng {item.quantity} · {coverageLabels[item.status] ?? item.status}{item.remainingQuantity > 0 ? ` · Còn thiếu ${item.remainingQuantity}` : ""}</span>{item.assignedItemIds?.length > 0 && <span className="mt-1 block text-xs text-[#2F6B4F]">Đồ được chọn: {item.assignedItemIds.map((id) => itemNames[id] ?? "Món đồ không còn trong Tủ đồ").join(", ")}</span>}</span></label>
+        <label className="flex cursor-pointer items-start gap-3"><input type="checkbox" checked={value.isChecked} onChange={(event) => setDraft((old) => old.map((entry, i) => i === index ? { ...entry, isChecked: event.target.checked } : entry))} className="mt-1 h-4 w-4 accent-[#2F6B4F]" /><span className="min-w-0 flex-1"><strong className="text-sm text-[#1F2937]">{item.title || item.category}</strong><span className="mt-1 block text-xs text-slate-500">{item.priority === "REQUIRED" ? "Bắt buộc" : item.status === "ESSENTIAL" ? "Nên mang" : "Tùy chọn"} · Số lượng {item.quantity} · {coverageLabels[item.status] ?? item.status}{item.remainingQuantity > 0 ? ` · Còn thiếu ${item.remainingQuantity}` : ""}</span>{item.reason ? <span className="mt-1 block text-xs text-slate-600">{item.reason}</span> : null}{item.assignedItemIds?.length > 0 && <span className="mt-1 block text-xs text-[#2F6B4F]">Đồ được chọn: {item.assignedItemIds.map((id) => itemNames[id] ?? "Món đồ không còn trong Tủ đồ").join(", ")}</span>}</span></label>
         <details className="ml-7 mt-2"><summary className="cursor-pointer text-xs font-semibold text-[#6b8875]">{value.note ? "Xem ghi chú" : "+ Thêm ghi chú"}</summary><Input aria-label={`Ghi chú ${item.title || item.category}`} value={value.note ?? ""} maxLength={500} placeholder="Ghi chú khi chuẩn bị (không bắt buộc)" className="mt-2" onChange={(event) => setDraft((old) => old.map((entry, i) => i === index ? { ...entry, note: event.target.value } : entry))} /></details>
       </div>;
     })}</div>

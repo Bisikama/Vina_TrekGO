@@ -4,36 +4,11 @@ import { z } from 'zod'
 import { AuthType } from '../../../../shared/constants/auth.constant'
 import { Auth } from '../../../../shared/decorators/auth.decorator'
 import { CATEGORY_ATTRIBUTE_SCHEMAS, gearCategorySchema } from '../../application/dtos/user-gear.dto'
-import type { GearCategory } from '../../domain/gear.types'
-
-const categoryLabels: Record<GearCategory, string> = {
-  JACKET: 'Áo khoác', FOOTWEAR: 'Giày', PANTS: 'Quần', BACKPACK: 'Balo',
-  SLEEPING_BAG: 'Túi ngủ', TENT: 'Lều', TREKKING_POLE: 'Gậy trekking', RAIN_GEAR: 'Đồ đi mưa',
-}
-
-const optionLabels: Record<string, Record<string, string>> = {
-  coverage: { UPPER_BODY: 'Thân trên', FULL_BODY: 'Toàn thân' },
-}
-
-const metadata: Record<string, { label: string; unit: string | null }> = {
-  waterproof_mm: { label: 'Chống nước', unit: 'mm' },
-  temp_rating_c: { label: 'Chịu lạnh', unit: '°C' },
-  weight_g: { label: 'Trọng lượng', unit: 'g' },
-  windproof: { label: 'Cản gió', unit: null },
-  waterproof: { label: 'Chống nước', unit: null },
-  ankle_support: { label: 'Hỗ trợ cổ chân', unit: null },
-  grip_level: { label: 'Độ bám', unit: '/5' },
-  insulated: { label: 'Giữ nhiệt', unit: null },
-  capacity_l: { label: 'Dung tích', unit: 'L' },
-  rain_cover: { label: 'Áo trùm mưa', unit: null },
-  sleeping_places: { label: 'Sức chứa', unit: 'người' },
-  flysheet_waterproof_mm: { label: 'Chống nước mái', unit: 'mm' },
-  floor_waterproof_mm: { label: 'Chống nước đáy', unit: 'mm' },
-  adjustable: { label: 'Điều chỉnh', unit: null },
-  length_min_cm: { label: 'Dài tối thiểu', unit: 'cm' },
-  length_max_cm: { label: 'Dài tối đa', unit: 'cm' },
-  coverage: { label: 'Phạm vi che', unit: null },
-}
+import {
+  GEAR_ATTRIBUTE_META as metadata,
+  GEAR_CATEGORY_LABELS as categoryLabels,
+  GEAR_OPTION_LABELS as optionLabels,
+} from '../../domain/gear-labels'
 
 @ApiTags('Gear - Attribute Schema')
 @Auth([AuthType.Optional])

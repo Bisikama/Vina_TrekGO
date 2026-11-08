@@ -21,6 +21,12 @@ export const updatePlanInputSchema = z.object({
   title: z.string().min(1).max(220).optional(),
   selectedItemIds: z.array(z.string().uuid('Item ID phải là UUID hợp lệ')).optional(),
   preferences: z.record(z.string(), z.unknown()).optional(),
+  /** Yêu cầu người dùng tự chuẩn bị (thay toàn bộ danh sách cũ). Lưu vào preferences.selfProvidedRequirementIds. */
+  selfProvidedRequirementIds: z
+    .array(z.string().regex(/^req_[a-z0-9_]{1,60}$/, 'requirementId không hợp lệ'))
+    .max(30)
+    .refine((ids) => new Set(ids).size === ids.length, 'requirementId bị trùng')
+    .optional(),
 })
 
 export type UpdatePlanInputDto = z.infer<typeof updatePlanInputSchema>

@@ -1,4 +1,7 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+
+import { TrekBanner } from "./trek/TrekBanner";
 
 const links = [
   ["/rentals", "Danh mục"],
@@ -27,14 +30,26 @@ export function RentalSectionNav({ active }: { active: string }) {
   );
 }
 
-export function RentalPageHeader({ eyebrow, title, description, active }: { eyebrow: string; title: string; description: string; active: string }) {
+export function RentalPageHeader({
+  eyebrow,
+  title,
+  highlight,
+  description,
+  active,
+  action,
+  aside,
+}: {
+  eyebrow: string;
+  title: string;
+  highlight?: string;
+  description: string;
+  active: string;
+  action?: { href: string; label: string };
+  aside?: ReactNode;
+}) {
   return (
     <>
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#123f2f] via-[#185a42] to-[#2b7a59] p-7 text-white shadow-sm sm:p-9">
-        <p className="text-xs font-medium uppercase tracking-[0.16em] text-emerald-200/90">{eyebrow}</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50/80">{description}</p>
-      </section>
+      <TrekBanner eyebrow={eyebrow} title={title} highlight={highlight} description={description} action={action} aside={aside} />
       <div className="mt-5"><RentalSectionNav active={active} /></div>
     </>
   );

@@ -48,9 +48,11 @@ export function RentalTransactionsPage() {
     <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-10 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-5xl">
         <RentalPageHeader
-          eyebrow="Tài chính minh bạch"
-          title="Lịch sử giao dịch"
+          eyebrow="Lịch sử giao dịch"
+          title="Tài chính minh bạch"
+          highlight="cho mọi chuyến đi."
           description="Chỉ hiển thị thanh toán và hoàn tiền thuộc dịch vụ thuê thiết bị."
+          action={{ href: "/rentals/orders", label: "Xem đơn thuê" }}
           active="/rentals/transactions"
         />
         <div className="mt-5 flex gap-2">

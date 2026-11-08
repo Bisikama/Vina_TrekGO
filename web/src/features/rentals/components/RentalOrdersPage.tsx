@@ -55,6 +55,12 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
   const [tripNames, setTripNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Mốc thời gian để biết đơn còn hạn thanh toán; làm mới mỗi 30 giây.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -96,9 +102,11 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
     <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-10 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-6xl">
         <RentalPageHeader
-          eyebrow="Thuê thiết bị"
-          title={reviewMode ? "Đánh giá thiết bị" : "Đơn thuê của bạn"}
-          description={reviewMode ? "Chọn đơn đã nhận thiết bị để chia sẻ trải nghiệm thực tế." : "Theo dõi toàn bộ quá trình từ thanh toán, chuẩn bị, giao nhận đến hoàn cọc."}
+          eyebrow={reviewMode ? "Đánh giá" : "Đơn thuê"}
+          title={reviewMode ? "Kể lại trải nghiệm" : "Đồ thuê của bạn"}
+          highlight={reviewMode ? "sau mỗi cung đường." : "trên từng chặng hành trình."}
+          description={reviewMode ? "Chọn đơn đã nhận thiết bị để chia sẻ trải nghiệm thực tế, giúp người đi sau chọn đồ chuẩn hơn." : "Theo dõi toàn bộ quá trình từ thanh toán, chuẩn bị, giao nhận đến hoàn cọc."}
+          action={reviewMode ? { href: "/rentals/orders", label: "Xem đơn thuê" } : { href: "/rentals", label: "Thuê thêm thiết bị" }}
           active={reviewMode ? "/rentals/reviews" : "/rentals/orders"}
         />
         {loading ? <State text="Đang kiểm tra hành trình đơn thuê..." /> : error ? <State text={error} error /> : visible.length === 0 ? (
@@ -108,7 +116,7 @@ export function RentalOrdersPage({ reviewMode = false }: { reviewMode?: boolean 
             {visible.map((order) => {
               const status = STATUS[order.status] ?? FALLBACK_SIGN;
               const awaitingPayment =
-                order.status === "PENDING_PAYMENT" && new Date(order.paymentExpiresAt).getTime() > Date.now();
+                order.status === "PENDING_PAYMENT" && new Date(order.paymentExpiresAt).getTime() > now;
               const reviewAllowed = order.status === "COMPLETED" && order.financialStatus === "SETTLED";
               const reviewMessage = order.status !== "COMPLETED"
                 ? "Đơn vẫn đang trong quy trình sử dụng hoặc hoàn trả."
