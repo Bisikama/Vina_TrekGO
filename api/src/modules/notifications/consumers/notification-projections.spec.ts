@@ -90,7 +90,7 @@ describe('rentalNotificationProjection', () => {
     const [real] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' })
     const [sandbox] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' }, { refundSimulated: true })
     expect(real.data.title).toBe('Hoàn tiền cọc thiết bị')
-    expect(sandbox.data.title).toMatch(/^\[Sandbox\]/)
+    expect(sandbox.data.title).toBe('Hoàn tiền cọc thiết bị')
     expect(sandbox.data.content).toMatch(/không có tiền thật/)
   })
   it('falls back to generic wording for cancellations without cancellationSource (events from before the field)', () => {
@@ -168,7 +168,7 @@ describe('paymentNotificationProjection', () => {
 
   it('labels sandbox-simulated refunds', () => {
     const [d] = paymentNotificationProjection('REFUND_SUCCEEDED', refund({ simulated: true }))
-    expect(d.data.title).toBe('[Sandbox] Hoàn tiền thành công')
+    expect(d.data.title).toBe('Hoàn tiền thành công')
     expect(d.data.metadata).toMatchObject({ sandboxSimulated: true })
   })
 })

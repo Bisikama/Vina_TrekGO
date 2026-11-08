@@ -145,7 +145,7 @@ export function rentalNotificationProjection(
       return [
         customer(
           N.RENTAL_DEPOSIT_REFUNDED,
-          `${sandbox ? '[Sandbox] ' : ''}Hoàn tiền cọc thiết bị`,
+          'Hoàn tiền cọc thiết bị',
           `Tiền đặt cọc cho đơn thuê ${ref} đã được hoàn về tài khoản thanh toán của bạn.` +
             (sandbox ? ' (Giao dịch mô phỏng, không có tiền thật.)' : ''),
           { refundId: p.refundId, ...(sandbox ? { sandboxSimulated: true } : {}) },
