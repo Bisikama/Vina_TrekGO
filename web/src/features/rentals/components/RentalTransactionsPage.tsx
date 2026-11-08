@@ -48,9 +48,11 @@ export function RentalTransactionsPage() {
     <main className="min-h-[650px] bg-[#F7F7F4] px-4 py-10 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-5xl">
         <RentalPageHeader
-          eyebrow="Tài chính minh bạch"
-          title="Lịch sử giao dịch"
+          eyebrow="Lịch sử giao dịch"
+          title="Tài chính minh bạch"
+          highlight="cho mọi chuyến đi."
           description="Chỉ hiển thị thanh toán và hoàn tiền thuộc dịch vụ thuê thiết bị."
+          action={{ href: "/rentals/orders", label: "Xem đơn thuê" }}
           active="/rentals/transactions"
         />
         <div className="mt-5 flex gap-2">
@@ -81,8 +83,6 @@ export function RentalTransactionsPage() {
           <div className="mt-5 space-y-3">
             {items.map((item) => {
               const isRefund = item.kind === "REFUND";
-              const simulated =
-                isRefund && item.confirmationSource === "SANDBOX_SIMULATION";
               const orderId =
                 item.rentalOrderId || item.orderId || item.sourceId;
               return (
@@ -98,7 +98,7 @@ export function RentalTransactionsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <h2 className="font-extrabold text-gray-900">
-                        {isRefund ? "Hoàn tiền thuê" : "Thanh toán đơn thuê"}
+                        {isRefund ? (REFUND_PURPOSE[item.purpose ?? ""] ?? "Hoàn tiền thuê") : "Thanh toán đơn thuê"}
                       </h2>
                       <strong
                         className={
@@ -117,11 +117,8 @@ export function RentalTransactionsPage() {
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
                       {dateTime(item.createdAt)} ·{" "}
-                      {simulated ? "Đã Hoàn Tiền" : item.status}
+                      <span className={statusTone(item.status)}>{statusText(item)}</span>
                     </p>
-                    {simulated && (
-                      <p className="mt-1 text-xs text-amber-800">Hoàn Tiền</p>
-                    )}
                     {orderId && (
                       <p className="mt-2 text-xs font-bold text-emerald-800">
                         Đơn #{shortCode(orderId)}
@@ -136,6 +133,39 @@ export function RentalTransactionsPage() {
       </section>
     </main>
   );
+}
+
+const REFUND_PURPOSE: Record<string, string> = {
+  DEPOSIT: "Hoàn tiền cọc",
+  RENTAL_CANCELLATION: "Hoàn tiền hủy đơn thuê",
+  TECHNICAL_REVERSAL: "Hoàn tiền do lỗi thanh toán",
+};
+
+// Trạng thái giao dịch bằng tiếng Việt; hoàn tiền thành công ghi "Đã hoàn tiền".
+function statusText(item: { kind: string; status: string }) {
+  const refund = item.kind === "REFUND";
+  switch (item.status) {
+    case "SUCCEEDED":
+      return refund ? "Đã hoàn tiền" : "Thanh toán thành công";
+    case "PENDING":
+    case "PROCESSING":
+      return refund ? "Đang hoàn tiền" : "Đang xử lý";
+    case "FAILED":
+      return refund ? "Hoàn tiền chưa thành công" : "Thanh toán thất bại";
+    case "CANCELLED":
+      return "Đã hủy";
+    case "EXPIRED":
+      return "Hết hạn";
+    default:
+      return "Đang cập nhật";
+  }
+}
+
+function statusTone(status: string) {
+  if (status === "SUCCEEDED") return "text-emerald-700";
+  if (status === "FAILED") return "text-red-600";
+  if (status === "PENDING" || status === "PROCESSING") return "text-amber-700";
+  return "text-gray-500";
 }
 
 function State({ text }: { text: string }) {

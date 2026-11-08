@@ -315,7 +315,7 @@ describe('Phase 05: Coverage & Requirement Builder Unit Tests', () => {
       expect(jacketCoverage.assignedItemIds).toEqual(['jacket-good']);
       expect(jacketCoverage.recommendedAction).toBe('USE_OWNED');
 
-      // Fully covered: 3 required, 3 covered by owned
+      // Fully covered: 3 required, 3 covered by owned (đêm 6°C: túi ngủ không bắt buộc)
       expect(result.summary.requiredCount).toBe(3);
       expect(result.summary.coveredOwnedCount).toBe(3);
       expect(result.summary.plannedRentalCount).toBe(0);
@@ -392,7 +392,7 @@ describe('Phase 05: Coverage & Requirement Builder Unit Tests', () => {
 
       for (const req of result.requirements) {
         expect(req.status).toBe('MISSING');
-        expect(req.recommendedAction).toBe('RENT');
+        expect(req.recommendedAction).toBe(req.priority === 'REQUIRED' ? 'RENT' : 'OPTIONAL_CONSIDER');
       }
       expect(result.summary.plannedRentalCount).toBe(0);
       expect(result.summary.unresolvedCount).toBe(3);

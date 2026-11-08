@@ -43,6 +43,32 @@ export function resolveTripCoordinates(trip: any): { lat: number; lng: number } 
   return null
 }
 
+/**
+ * Điểm cao nhất của cung từ toạ độ GeoJSON dạng [lng, lat, độ cao]. Bỏ qua toạ độ không có độ cao;
+ * không có điểm nào có độ cao thì trả null (không đoán).
+ */
+export function resolveTrailHighestPoint(geojson: unknown): { lat: number; lng: number; elevationM: number } | null {
+  let best: { lat: number; lng: number; elevationM: number } | null = null
+  const visit = (node: unknown, depth: number): void => {
+    if (depth > 8 || node === null || typeof node !== 'object') return
+    if (Array.isArray(node)) {
+      if (node.length >= 3 && node.every((v) => typeof v === 'number')) {
+        const [lng, lat, elevation] = node
+        if ([lng, lat, elevation].every(Number.isFinite) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+          if (!best || elevation > best.elevationM) best = { lat, lng, elevationM: Math.round(elevation) }
+        }
+        return
+      }
+      for (const child of node) visit(child, depth + 1)
+      return
+    }
+    const record = node as Record<string, unknown>
+    for (const key of ['coordinates', 'geometry', 'geometries', 'features']) visit(record[key], depth + 1)
+  }
+  visit(geojson, 0)
+  return best
+}
+
 @Injectable()
 export class PrismaTripContextReadAdapter implements TripContextReadPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -55,6 +81,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
     terrain: string[]
     days: number
     destination?: string
+    highestPoint: { lat: number; lng: number; elevationM: number } | null
     contextVersion: string
     sourceReferences: any
   } {
@@ -144,6 +171,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       terrain: dedupedTerrain,
       days,
       destination,
+      highestPoint: resolveTrailHighestPoint(geojson),
       contextVersion,
       sourceReferences,
     }
@@ -226,6 +254,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       terrain: facts.terrain,
       destination: facts.destination,
       coordinates: resolveTripCoordinates(trip),
+      highestPoint: facts.highestPoint,
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
     }
@@ -321,6 +350,7 @@ export class PrismaTripContextReadAdapter implements TripContextReadPort {
       difficulty: facts.difficulty,
       terrain: facts.terrain,
       destination: facts.destination,
+      highestPoint: facts.highestPoint,
       contextVersion: facts.contextVersion,
       sourceReferences: facts.sourceReferences,
     }

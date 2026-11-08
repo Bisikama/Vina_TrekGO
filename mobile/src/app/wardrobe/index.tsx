@@ -43,9 +43,26 @@ import type {
   GearExtractionDraft,
   UserGearItem,
 } from "@/features/gear/types";
+import { BackpackMeter } from "@/features/gear/BackpackMeter";
+import {
+  CATEGORY_TONE,
+  CompassLoader,
+  CompletenessBar,
+  FadeInUp,
+  GearThumb,
+  MountainHero,
+  Trek,
+  specCompleteness,
+} from "@/features/gear/TrekKit";
 import { ApiError } from "@/lib/api-client";
 
-type EditorContext = { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string };
+type EditorContext = { item?: UserGearItem; draft?: GearExtractionDraft; photoRef?: string; photoPreview?: string };
+type WardrobeFilter = GearCategory | "ALL" | "INCOMPLETE";
+
+const isIncomplete = (item: UserGearItem) => {
+  const { known, total } = specCompleteness(item);
+  return known < total;
+};
 
 const MAX_ITEMS = 50;
 
@@ -82,7 +99,7 @@ export default function WardrobeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const [filter, setFilter] = useState<GearCategory | "ALL">("ALL");
+  const [filter, setFilter] = useState<WardrobeFilter>("ALL");
   const [capabilities, setCapabilities] = useState<GearCapabilities | null>(null);
   const [editor, setEditor] = useState<EditorContext | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -125,7 +142,8 @@ export default function WardrobeScreen() {
   }, [accessToken]);
 
   useEffect(() => {
-    void loadItems();
+    const timer = setTimeout(() => void loadItems(), 0);
+    return () => clearTimeout(timer);
   }, [loadItems]);
 
   useEffect(() => {
@@ -135,9 +153,15 @@ export default function WardrobeScreen() {
   }, [accessToken]);
 
   const visibleItems = useMemo(
-    () => (filter === "ALL" ? items : items.filter((item) => item.category === filter)),
+    () =>
+      filter === "ALL"
+        ? items
+        : filter === "INCOMPLETE"
+          ? items.filter(isIncomplete)
+          : items.filter((item) => item.category === filter),
     [filter, items],
   );
+  const incompleteCount = useMemo(() => items.filter(isIncomplete).length, [items]);
 
   function upsertItem(saved: UserGearItem) {
     setItems((current) =>
@@ -164,7 +188,7 @@ export default function WardrobeScreen() {
       const uploadId = await gearApi.uploadGearPhoto(picked.assets[0], accessToken);
       const draft = await gearApi.createExtraction({ source: "IMAGE", uploadId }, accessToken);
       if (draft.status !== "READY") throw new Error("AI chưa tạo được bản nháp. Bạn vẫn có thể nhập tay.");
-      setEditor({ draft, photoRef: uploadId });
+      setEditor({ draft, photoRef: uploadId, photoPreview: picked.assets[0].uri });
     } catch (requestError) {
       if (requestError instanceof ApiError && (requestError.status === 409 || requestError.code === "GEAR_CONCURRENCY_CONFLICT")) {
         setNotice("Ảnh này đang được AI phân tích. Chờ tác vụ hiện tại xong rồi thử lại.");
@@ -225,22 +249,41 @@ export default function WardrobeScreen() {
   const full = items.length >= MAX_ITEMS;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()} accessibilityLabel="Quay lại">
           <Ionicons name="arrow-back" size={21} color={Colors.onSurface} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>CHUẨN BỊ ĐỒ</Text>
-          <Text style={styles.title}>Tủ đồ của bạn</Text>
+          <Text style={styles.title}>Tủ đồ</Text>
         </View>
         <Text style={styles.counter}>{items.length}/{MAX_ITEMS}</Text>
       </View>
 
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadItems(true)} tintColor={Colors.primaryDark} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadItems(true)} tintColor={Trek.trail} />}
         contentContainerStyle={styles.content}
       >
+        <MountainHero
+          eyebrow="Tủ đồ của bạn"
+          icon="file-tray-full-outline"
+          title="Trạm trang bị"
+          highlight="trước mỗi cung đường."
+          description="Lưu đồ bạn đang có kèm thông số để TrekGo kiểm tra theo thời tiết và độ khó từng chuyến."
+        >
+          <TouchableOpacity style={styles.heroAction} onPress={() => router.push("/gear-advisor" as Href)}>
+            <Ionicons name="compass" size={16} color="#3b2302" />
+            <Text style={styles.heroActionText}>Kiểm tra đồ cho chuyến đi</Text>
+            <Ionicons name="arrow-forward" size={15} color="#3b2302" />
+          </TouchableOpacity>
+        </MountainHero>
+
+        {!loading && items.length ? (
+          <WardrobeOverview items={items} incomplete={incompleteCount} onShowIncomplete={() => setFilter("INCOMPLETE")} />
+        ) : null}
+
+        <Text style={styles.sectionLabel}>THÊM ĐỒ VÀO TỦ</Text>
         <View style={styles.actionGrid}>
           <ActionButton icon="sparkles-outline" label={aiBusy === "IMAGE" ? "Đang đọc ảnh..." : "Chụp nhãn"} disabled={full || Boolean(aiBusy)} onPress={() => void analyzeImage()} />
           <ActionButton icon="link-outline" label={aiBusy === "LINK" ? "Đang đọc link..." : "Từ đường dẫn"} disabled={full || Boolean(aiBusy)} onPress={() => setLinkOpen(true)} />
@@ -251,10 +294,7 @@ export default function WardrobeScreen() {
 
         {aiBusy ? (
           <View style={styles.progressCard}>
-            <ActivityIndicator color={Colors.primaryDark} />
-            <Text style={styles.progressText}>
-              {aiBusy === "IMAGE" ? "AI đang đọc ảnh tem/mác, có thể mất một lúc..." : "AI đang đọc trang sản phẩm, có thể mất một lúc..."}
-            </Text>
+            <CompassLoader label={aiBusy === "IMAGE" ? "AI đang đọc ảnh tem/mác, có thể mất một lúc..." : "AI đang đọc trang sản phẩm, có thể mất một lúc..."} />
           </View>
         ) : null}
         {notice ? <Banner tone="warn" text={notice} onClose={() => setNotice(undefined)} /> : null}
@@ -264,6 +304,9 @@ export default function WardrobeScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} style={styles.filterRow}>
           <ChoiceChip label={`Tất cả ${items.length}`} selected={filter === "ALL"} onPress={() => setFilter("ALL")} />
+          {incompleteCount ? (
+            <ChoiceChip label={`Thiếu thông số ${incompleteCount}`} selected={filter === "INCOMPLETE"} warn onPress={() => setFilter("INCOMPLETE")} />
+          ) : null}
           {GEAR_CATEGORIES.map((entry) => (
             <ChoiceChip
               key={entry.value}
@@ -276,21 +319,22 @@ export default function WardrobeScreen() {
 
         {loading ? (
           <View style={styles.centerState}>
-            <ActivityIndicator size="large" color={Colors.primaryDark} />
-            <Text style={styles.stateDescription}>Đang mở tủ đồ...</Text>
+            <CompassLoader label="Đang mở tủ đồ..." />
           </View>
         ) : visibleItems.length === 0 ? (
           <StateCard
             icon="bag-add-outline"
-            title={items.length ? "Không có món thuộc loại này" : "Tủ đồ đang trống"}
+            title={items.length ? (filter === "INCOMPLETE" ? "Mọi món đã đủ thông số" : "Không có món thuộc loại này") : "Tủ đồ đang trống"}
             description={items.length ? "Chọn loại khác để xem." : "Thêm món đầu tiên bằng cách chụp nhãn, dán đường dẫn, chọn có sẵn hoặc tự nhập."}
             actionLabel={items.length ? "Xem tất cả" : "Tự nhập"}
             onAction={() => (items.length ? setFilter("ALL") : setEditor({}))}
           />
         ) : (
           <View style={styles.list}>
-            {visibleItems.map((item) => (
-              <GearCard key={item.id} item={item} onPress={() => setEditor({ item })} />
+            {visibleItems.map((item, index) => (
+              <FadeInUp key={item.id} delay={Math.min(index, 8) * 60}>
+                <GearCard item={item} onPress={() => setEditor({ item })} />
+              </FadeInUp>
             ))}
           </View>
         )}
@@ -323,6 +367,49 @@ export default function WardrobeScreen() {
         />
       ) : null}
     </SafeAreaView>
+  );
+}
+
+const CORE_CATEGORIES: GearCategory[] = ["JACKET", "FOOTWEAR", "BACKPACK", "SLEEPING_BAG", "RAIN_GEAR"];
+
+/** Tổng quan tủ: balo đầy theo số nhóm đồ chính đã có, số món thiếu thông số, số món theo loại. */
+function WardrobeOverview({ items, incomplete, onShowIncomplete }: { items: UserGearItem[]; incomplete: number; onShowIncomplete: () => void }) {
+  const coveredCore = CORE_CATEGORIES.filter((category) => items.some((item) => item.category === category)).length;
+  const withPhoto = items.filter((item) => item.photoUrl).length;
+  return (
+    <FadeInUp style={styles.overview}>
+      <View style={styles.overviewTop}>
+        <BackpackMeter value={coveredCore} total={CORE_CATEGORIES.length} size={60} />
+        <View style={styles.flexOne}>
+          <Text style={styles.overviewTitle}>{coveredCore}/{CORE_CATEGORIES.length} nhóm đồ chính đã có</Text>
+          <Text style={styles.hint}>Áo khoác, giày, balo, túi ngủ, đồ đi mưa là những nhóm hay được yêu cầu nhất.</Text>
+          <View style={styles.overviewStats}>
+            <Text style={styles.overviewStat}>{items.length} món</Text>
+            <Text style={styles.overviewStat}>{withPhoto} có ảnh</Text>
+            {incomplete ? (
+              <TouchableOpacity onPress={onShowIncomplete}>
+                <Text style={[styles.overviewStat, styles.overviewWarn]}>{incomplete} thiếu thông số ›</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.overviewStat, styles.overviewOk]}>Đủ thông số</Text>
+            )}
+          </View>
+        </View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryStrip}>
+        {GEAR_CATEGORIES.map((entry) => {
+          const count = items.filter((item) => item.category === entry.value).length;
+          const tone = CATEGORY_TONE[entry.value];
+          return (
+            <View key={entry.value} style={[styles.categoryTile, { backgroundColor: count ? tone.bg : "#f3f5f3" }]}>
+              <Ionicons name={entry.icon} size={18} color={count ? tone.fg : "#a3ada6"} />
+              <Text style={[styles.categoryCount, { color: count ? tone.fg : "#a3ada6" }]}>{count}</Text>
+              <Text style={styles.categoryName} numberOfLines={1}>{entry.label}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </FadeInUp>
   );
 }
 
@@ -397,20 +484,27 @@ function GearCard({ item, onPress }: { item: UserGearItem; onPress: () => void }
   const stats = gearAttributes(item.category)
     .filter(([key]) => item.attributes?.[key] !== null && item.attributes?.[key] !== undefined)
     .slice(0, 3);
+  const completeness = specCompleteness(item);
+  const tone = CATEGORY_TONE[item.category];
   return (
-    <TouchableOpacity style={styles.itemCard} onPress={onPress}>
+    <TouchableOpacity style={styles.itemCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={[styles.itemBand, { backgroundColor: tone.fg }]} />
       <View style={styles.itemTop}>
-        {item.photoUrl ? (
-          <Image source={{ uri: item.photoUrl }} style={styles.itemPhoto} />
-        ) : (
-          <View style={styles.itemIcon}>
-            <Ionicons name={category.icon} size={24} color={Colors.primaryDark} />
-          </View>
-        )}
+        <View>
+          <GearThumb url={item.photoUrl} category={item.category} size={72} radius={16} />
+          {!item.photoUrl ? (
+            <View style={styles.photoHint}>
+              <Ionicons name="camera" size={11} color="#ffffff" />
+            </View>
+          ) : null}
+        </View>
         <View style={styles.flexOne}>
-          <Text style={styles.itemCategory}>{category.label.toUpperCase()} · {sourceLabel(item.source)}</Text>
-          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={[styles.itemCategory, { color: tone.fg }]}>{category.label.toUpperCase()} · {sourceLabel(item.source)}</Text>
+          <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
           <Text style={styles.itemMeta}>{[item.brand, conditionLabel(item.condition)].filter(Boolean).join(" · ")}</Text>
+          <View style={styles.itemBar}>
+            <CompletenessBar known={completeness.known} total={completeness.total} />
+          </View>
         </View>
         <Ionicons name="chevron-forward" size={18} color={Colors.onSurfaceMuted} />
       </View>
@@ -464,7 +558,32 @@ function GearEditorModal({
     );
   });
   const [saving, setSaving] = useState(false);
+  // Ảnh món: giữ ảnh hiện có, đổi sang ảnh mới (tải lên ngay khi chọn) hoặc xoá (null).
+  const [photoRef, setPhotoRef] = useState<string | null>(context.photoRef ?? context.item?.photoRef ?? null);
+  const [photoPreview, setPhotoPreview] = useState<string | undefined>(context.photoPreview ?? context.item?.photoUrl);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const manualEntry = context.draft?.manualEntry?.required ? context.draft.manualEntry : null;
+
+  async function pickPhoto() {
+    if (!accessToken) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Cần quyền thư viện ảnh", "Hãy cho phép truy cập ảnh để chọn ảnh món đồ.");
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    if (picked.canceled || !picked.assets[0]) return;
+    setPhotoBusy(true);
+    try {
+      const uploadId = await gearApi.uploadGearPhoto(picked.assets[0], accessToken);
+      setPhotoRef(uploadId);
+      setPhotoPreview(picked.assets[0].uri);
+    } catch (uploadError) {
+      Alert.alert("Chưa tải được ảnh", errorText(uploadError, "Vui lòng thử lại."));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
   const warnings = context.draft && !manualEntry ? (context.draft.extractedData.warnings ?? []).filter(Boolean) : [];
 
   const fieldBadge = (key: string) => {
@@ -522,7 +641,7 @@ function GearEditorModal({
       category,
       condition,
       attributes,
-      photoRef: context.photoRef ?? context.item?.photoRef ?? null,
+      photoRef,
     };
     setSaving(true);
     try {
@@ -564,6 +683,35 @@ function GearEditorModal({
             {context.draft?.extractedData._cacheHit ? <Text style={styles.hint}>Dùng lại kết quả đọc trước đó, không tính thêm lượt AI.</Text> : null}
             {warnings.map((warning) => <Text key={warning} style={styles.draftNote}>{warning}</Text>)}
             {context.draft ? <Text style={styles.hint}>AI chỉ gợi ý. Hãy kiểm tra và sửa trước khi lưu.</Text> : null}
+
+            <View style={styles.photoEditor}>
+              {photoPreview && photoRef ? (
+                <Image source={{ uri: photoPreview }} style={styles.photoLarge} />
+              ) : (
+                <GearThumb category={category || "BACKPACK"} size={96} radius={18} />
+              )}
+              <View style={styles.flexOne}>
+                <Text style={styles.photoTitle}>Ảnh món đồ</Text>
+                <Text style={styles.hint}>Ảnh giúp bạn nhận ra món đồ nhanh khi chọn cho chuyến đi.</Text>
+                <View style={styles.photoActions}>
+                  <TouchableOpacity style={[styles.photoButton, photoBusy && styles.disabled]} disabled={photoBusy} onPress={() => void pickPhoto()}>
+                    {photoBusy ? <ActivityIndicator size="small" color={Trek.trail} /> : <Ionicons name="image-outline" size={15} color={Trek.trail} />}
+                    <Text style={styles.photoButtonText}>{photoBusy ? "Đang tải..." : photoRef ? "Đổi ảnh" : "Thêm ảnh"}</Text>
+                  </TouchableOpacity>
+                  {photoRef && !photoBusy ? (
+                    <TouchableOpacity
+                      style={styles.photoRemove}
+                      onPress={() => {
+                        setPhotoRef(null);
+                        setPhotoPreview(undefined);
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={15} color={Colors.error} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            </View>
 
             <Text style={styles.fieldLabel}>Tên món đồ</Text>
             <TextInput value={name} onChangeText={setName} placeholder="Ví dụ: Balo Naturehike 45L" placeholderTextColor={Colors.onSurfaceMuted} style={styles.input} />
@@ -621,7 +769,7 @@ function GearEditorModal({
               <Text style={styles.hint}>Chọn loại đồ để hiện các thông số cần nhập.</Text>
             )}
 
-            <TouchableOpacity disabled={saving} style={[styles.saveButton, saving && styles.disabled]} onPress={() => void save()}>
+            <TouchableOpacity disabled={saving || photoBusy} style={[styles.saveButton, (saving || photoBusy) && styles.disabled]} onPress={() => void save()}>
               {saving ? <ActivityIndicator color={Colors.onPrimary} /> : <Text style={styles.saveButtonText}>{context.draft ? "Xác nhận và lưu vào tủ" : "Lưu"}</Text>}
             </TouchableOpacity>
             {onDelete ? (
@@ -690,7 +838,8 @@ function CatalogModal({ accessToken, onClose, onAdded }: { accessToken: string; 
 
   // Đổi loại đồ → tìm lại từ đầu (không dùng cursor cũ).
   useEffect(() => {
-    void search();
+    const timer = setTimeout(() => void search(), 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
@@ -847,8 +996,12 @@ function TripReviewSection({ accessToken, items }: { accessToken: string; items:
           {rows && rows.length === 0 ? <Text style={styles.hint}>Chưa có chuyến nào được đánh giá. Tạo kế hoạch trong Kế hoạch đồ.</Text> : null}
           {rows?.map(({ plan, tripTitle, guidance }) => (
             <View key={plan.id} style={styles.tripCard}>
-              <TouchableOpacity onPress={() => router.push("/gear-advisor" as Href)}>
-                <Text style={styles.itemName}>{tripTitle}</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push((plan.tripId ? `/gear-advisor?tripId=${encodeURIComponent(plan.tripId)}` : "/gear-advisor") as Href)
+                }
+              >
+                <Text style={styles.itemName}>{tripTitle} ›</Text>
                 <Text style={styles.hint}>
                   Lần đánh giá #{plan.evaluatedRevision}
                   {plan.isStale || guidance?.needsReevaluation ? " · cần đánh giá lại vì dữ liệu đã đổi" : ""}
@@ -883,9 +1036,9 @@ function TripReviewSection({ accessToken, items }: { accessToken: string; items:
   );
 }
 
-function ChoiceChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function ChoiceChip({ label, selected, warn, onPress }: { label: string; selected: boolean; warn?: boolean; onPress: () => void }) {
   return (
-    <TouchableOpacity style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
+    <TouchableOpacity style={[styles.chip, warn && !selected && styles.chipWarn, selected && styles.chipSelected]} onPress={onPress}>
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -907,7 +1060,72 @@ function StateCard({ icon, title, description, actionLabel, onAction }: { icon: 
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.surface },
+  safeArea: { flex: 1, backgroundColor: Trek.paper },
+  heroAction: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Trek.sun,
+  },
+  heroActionText: { color: "#3b2302", fontSize: 12, fontWeight: "800" },
+  sectionLabel: { marginTop: 18, marginBottom: 8, color: Trek.muted, fontSize: 10, fontWeight: "800", letterSpacing: 1.2 },
+  overview: { marginTop: 14, gap: 12, padding: 14, borderRadius: 22, borderWidth: 1, borderColor: Trek.line, backgroundColor: "#ffffff", ...Shadows.card },
+  overviewTop: { flexDirection: "row", alignItems: "center", gap: 14 },
+  overviewTitle: { color: Trek.ink, fontSize: 15, fontWeight: "800" },
+  overviewStats: { marginTop: 6, flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  overviewStat: {
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    color: "#55625a",
+    backgroundColor: "#f1f4f1",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  overviewWarn: { color: Trek.amberInk, backgroundColor: Trek.amberBg },
+  overviewOk: { color: Trek.trail, backgroundColor: Trek.mintPale },
+  categoryStrip: { gap: 8 },
+  categoryTile: { width: 76, alignItems: "center", gap: 2, paddingVertical: 9, borderRadius: 14 },
+  categoryCount: { fontSize: 16, fontWeight: "900" },
+  categoryName: { color: "#55625a", fontSize: 10, fontWeight: "600" },
+  chipWarn: { backgroundColor: Trek.amberBg },
+  itemBand: { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
+  itemBar: { marginTop: 6 },
+  photoHint: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    backgroundColor: Trek.trail,
+  },
+  photoEditor: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 14, padding: 12, borderRadius: Radius.lg, backgroundColor: "#ffffff" },
+  photoLarge: { width: 96, height: 96, borderRadius: 18, backgroundColor: Colors.surfaceContainer },
+  photoTitle: { color: Colors.onSurface, fontSize: 13, fontWeight: "700" },
+  photoActions: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 8 },
+  photoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bcdcc6",
+    backgroundColor: Trek.mintPale,
+  },
+  photoButtonText: { color: Trek.trail, fontSize: 12, fontWeight: "800" },
+  photoRemove: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: "#fdecea" },
   flexOne: { flex: 1 },
   disabled: { opacity: 0.5 },
   header: { paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
@@ -951,7 +1169,7 @@ const styles = StyleSheet.create({
   chipTextSelected: { color: Colors.onPrimaryDark },
   centerState: { paddingVertical: 60, alignItems: "center", gap: 12 },
   list: { marginTop: 14, gap: 11 },
-  itemCard: { padding: 14, gap: 10, borderRadius: Radius.lg, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
+  itemCard: { overflow: "hidden", padding: 14, paddingLeft: 16, gap: 10, borderRadius: 20, backgroundColor: Colors.surfaceContainerLowest, ...Shadows.card },
   itemTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   itemIcon: { width: 52, height: 52, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
   itemPhoto: { width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.surfaceContainer },
