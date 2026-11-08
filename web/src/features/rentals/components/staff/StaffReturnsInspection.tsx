@@ -20,6 +20,7 @@ import {
   type StaffReturnSummary,
 } from "@/features/rentals/services/staff-returns.api";
 import type { RentalGrade } from "@/features/rentals/types/rental";
+import { orderShortCode, productLabel, shortId } from "@/features/rentals/services/rental-display";
 
 type Draft = {
   condition: FinalInspectionInput["condition"];
@@ -47,6 +48,25 @@ const statusLabel: Record<string, string> = {
 };
 
 type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
+
+const UNIT_STATUS_LABELS: Record<string, string> = {
+  RETURN_PENDING: "Chờ kiểm định",
+  INSPECTING: "Đang kiểm định",
+  CLEANING: "Đang vệ sinh",
+  AVAILABLE: "Sẵn sàng cho thuê",
+  MAINTENANCE: "Đang bảo trì",
+  DAMAGED: "Hư hỏng",
+  LOST: "Thất lạc",
+  RENTED: "Đang cho thuê",
+  RESERVED: "Đã giữ chỗ",
+};
+
+const OUTCOME_LABELS: Record<string, { label: string; tone: string }> = {
+  NORMAL: { label: "Đạt kiểm định", tone: "bg-emerald-100 text-emerald-800" },
+  DAMAGED: { label: "Hư hỏng", tone: "bg-red-100 text-red-800" },
+  MISSING_ACCESSORY: { label: "Thiếu phụ kiện", tone: "bg-amber-100 text-amber-800" },
+  LOST: { label: "Thất lạc", tone: "bg-red-100 text-red-800" },
+};
 
 const GRADE_LABELS: Record<RentalGrade, string> = {
   LIKE_NEW: "Như mới",
@@ -240,7 +260,7 @@ export function StaffReturnsInspection() {
         throw requestError;
       }
     }, () =>
-      `${input.assetCode} đã AVAILABLE${downgraded ? " và chuyển sang hạng Sử dụng tốt" : ""}.` +
+      `Mã ${shortId(input.assetCode)} đã sẵn sàng cho thuê${downgraded ? " và chuyển sang hạng Sử dụng tốt" : ""}.` +
       (shortageCount > 0
         ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn đã đặt; các đơn này đã được đánh dấu cần xử lý.`
         : ""),
@@ -260,7 +280,7 @@ export function StaffReturnsInspection() {
       const evidenceIds = splitIds(draft.evidenceIds);
       const availableRules = rules.filter((rule) => rule.productId === expected?.productId);
       if (issue && availableRules.length === 0) {
-        throw new Error(`Sản phẩm ${expected?.productName ?? unit.assetCode} chưa có damage rule.`);
+        throw new Error(`Sản phẩm ${expected?.productName ?? unit.assetCode} chưa có mức hư hỏng để chọn. Báo Admin bổ sung.`);
       }
       return {
         unitId: unit.unitId,
@@ -285,9 +305,9 @@ export function StaffReturnsInspection() {
       <div className="mx-auto max-w-[1500px]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Rental Return</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Hoàn trả thiết bị</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-950">Tiếp nhận và kiểm định hoàn trả</h1>
-            <p className="mt-1 text-sm text-slate-500">Dữ liệu trực tiếp từ Backend, không còn task mẫu.</p>
+            <p className="mt-1 text-sm text-slate-500">Nhận thiết bị khách trả về kho, kiểm định và đưa về sẵn sàng cho thuê.</p>
           </div>
           <button
             type="button"
@@ -319,10 +339,10 @@ export function StaffReturnsInspection() {
 
         <div className="mt-4 grid items-start gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
           <aside className="rounded-xl border bg-white p-4 shadow-sm">
-            <h2 className="font-bold">Task hoàn trả ({tasks.length})</h2>
+            <h2 className="font-bold">Hồ sơ hoàn trả ({tasks.length})</h2>
             <div className="mt-3 space-y-2">
               {loading ? <p className="text-sm text-slate-500">Đang tải...</p> : null}
-              {!loading && tasks.length === 0 ? <p className="text-sm text-slate-500">Không có task phù hợp.</p> : null}
+              {!loading && tasks.length === 0 ? <p className="text-sm text-slate-500">Không có hồ sơ phù hợp.</p> : null}
               {tasks.map((task) => (
                 <button
                   type="button"
@@ -332,8 +352,7 @@ export function StaffReturnsInspection() {
                     selectedId === task.id ? "border-emerald-700 bg-emerald-50" : "border-slate-200"
                   }`}
                 >
-                  <p className="font-mono text-[10px] font-bold text-emerald-900">{task.id}</p>
-                  <p className="mt-2 text-xs font-semibold">Đơn {task.orderId}</p>
+                  <p className="mt-2 text-xs font-semibold">Đơn {orderShortCode(task.orderId)}</p>
                   <p className="mt-2 text-[10px] text-slate-500">
                     {statusLabel[task.status] ?? task.status} · {task.issueCount} vấn đề · {task.missingCount} thiếu
                   </p>
@@ -344,15 +363,15 @@ export function StaffReturnsInspection() {
 
           <section className="space-y-4">
             {!detail ? (
-              <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">Chọn một task hoàn trả.</div>
+              <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-500">Chọn một hồ sơ hoàn trả.</div>
             ) : (
               <>
                 <div className="rounded-xl border bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap justify-between gap-3">
                     <div>
-                      <p className="font-mono text-xs font-bold text-emerald-900">#{detail.id}</p>
-                      <h2 className="mt-2 text-xl font-bold">Đơn {detail.orderId}</h2>
-                      <p className="mt-1 text-xs text-slate-500">{statusLabel[detail.status] ?? detail.status} · version {detail.version}</p>
+                      <p className="text-xs font-semibold text-emerald-900">Hồ sơ hoàn trả</p>
+                      <h2 className="mt-2 text-xl font-bold">Đơn {orderShortCode(detail.orderId)}</h2>
+                      <p className="mt-1 text-xs text-slate-500">{statusLabel[detail.status] ?? (detail.status === "CLOSED" ? "Đã đóng hồ sơ" : "Đang cập nhật")}</p>
                     </div>
                     {detail.pendingTransfer?.status === "PENDING_RECEIPT" ? (
                       <button
@@ -373,7 +392,7 @@ export function StaffReturnsInspection() {
                   {detail.pendingTransfer ? (
                     <div className="mt-3 space-y-3">
                       <p className="rounded-lg bg-blue-50 p-3 text-xs text-slate-700">
-                        Điểm nhận: <strong>{detail.pendingTransfer.inventoryLocationName}</strong> · transfer {detail.pendingTransfer.id}
+                        Điểm nhận: <strong>{detail.pendingTransfer.inventoryLocationName}</strong>
                       </p>
                       {detail.pendingTransfer.status === "PENDING_RECEIPT" ? (
                         <div className="rounded-xl border border-slate-200 p-4">
@@ -396,7 +415,7 @@ export function StaffReturnsInspection() {
                                         : [...current, unitId]
                                     )}
                                   />
-                                  <span><strong>{unit?.productName ?? unitId}</strong><br />{unit?.assetCode}</span>
+                                  <span><strong>{unit?.productName ? productLabel(unit.productName) : "Thiết bị"}</strong><br />Mã {shortId(unit?.assetCode ?? unitId)}</span>
                                 </label>
                               );
                             })}
@@ -404,7 +423,7 @@ export function StaffReturnsInspection() {
                           {receiptShortageCount > 0 ? (
                             <div className="mt-3 rounded-lg bg-red-50 p-3">
                               <p className="text-xs font-semibold text-red-800">
-                                Thiếu {receiptShortageCount} thiết bị so với transfer. Hãy mô tả sự việc.
+                                Thiếu {receiptShortageCount} thiết bị so với lúc bàn giao về kho. Hãy mô tả sự việc.
                               </p>
                               <textarea
                                 value={custodyIncidentNote}
@@ -433,11 +452,11 @@ export function StaffReturnsInspection() {
                     <article key={received.unitId} className="rounded-xl border bg-white p-5 shadow-sm">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-bold">{unit?.productName ?? received.assetCode}</h3>
-                          <p className="mt-1 font-mono text-xs text-slate-500">{received.assetCode} · {unit?.unitStatus}</p>
+                          <h3 className="font-bold">{unit?.productName ? productLabel(unit.productName) : `Mã ${shortId(received.assetCode)}`}</h3>
+                          <p className="mt-1 text-xs text-slate-500">Mã {shortId(received.assetCode)} · {unit ? UNIT_STATUS_LABELS[unit.unitStatus] ?? "Đang cập nhật" : "Đang cập nhật"}</p>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[10px] font-semibold ${inspection?.final ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>
-                          {inspection?.final ? `FINAL ${inspection.final.outcome}` : "CHỜ FINAL"}
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-semibold ${inspection?.final ? (OUTCOME_LABELS[inspection.final.outcome]?.tone ?? "bg-slate-100 text-slate-700") : "bg-orange-100 text-orange-800"}`}>
+                          {inspection?.final ? (OUTCOME_LABELS[inspection.final.outcome]?.label ?? "Đã kiểm định") : "Chờ kiểm định cuối"}
                         </span>
                       </div>
                       {!inspection?.final ? (
@@ -455,7 +474,7 @@ export function StaffReturnsInspection() {
                               onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, ruleId: event.target.value } }))}
                               className="h-11 rounded-lg bg-red-50 px-3 text-xs"
                             >
-                              <option value="">Chọn damage rule</option>
+                              <option value="">Chọn mức hư hỏng</option>
                               {productRules.map((rule) => <option key={rule.id} value={rule.id}>{rule.name} ({rule.severity})</option>)}
                             </select>
                           ) : <div />}
@@ -468,7 +487,7 @@ export function StaffReturnsInspection() {
                           <input
                             value={draft.evidenceIds}
                             onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, evidenceIds: event.target.value } }))}
-                            placeholder="Media UUID (cách nhau bằng dấu phẩy)"
+                            placeholder="Mã ảnh bằng chứng, nếu có (cách nhau bằng dấu phẩy)"
                             className="h-11 rounded-lg bg-[#edf3ff] px-3 text-xs"
                           />
                         </div>
@@ -524,11 +543,15 @@ export function StaffReturnsInspection() {
                             })}
                             className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
                           >
-                            Đã vệ sinh & đủ phụ kiện — đưa về AVAILABLE
+                            Đã vệ sinh & đủ phụ kiện — sẵn sàng cho thuê
                           </button>
                         </div>
+                      ) : inspection.final.outcome === "NORMAL" && unit?.unitStatus === "AVAILABLE" ? (
+                        <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">✓ Thiết bị đã vệ sinh và sẵn sàng cho thuê.</p>
+                      ) : inspection.final.outcome === "NORMAL" ? (
+                        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Đạt kiểm định, đang chờ chuyển sang vệ sinh.</p>
                       ) : (
-                        <p className="mt-4 rounded-lg bg-orange-50 p-3 text-xs text-orange-800">Thiết bị có vấn đề đang chờ Admin xử lý ngoại lệ và quyết toán.</p>
+                        <p className="mt-4 rounded-lg bg-orange-50 p-3 text-xs text-orange-800">Thiết bị có vấn đề, đang chờ Admin xử lý ngoại lệ và quyết toán cọc.</p>
                       )}
                     </article>
                   );
@@ -538,10 +561,10 @@ export function StaffReturnsInspection() {
                   <button
                     type="button"
                     disabled={busy || detail.status !== "INVENTORY_RECEIVED"}
-                    onClick={() => void run(inspectPendingUnits, "Đã ghi FINAL inspection; các món đạt được chuyển sang vệ sinh.")}
+                    onClick={() => void run(inspectPendingUnits, "Đã ghi kết quả kiểm định cuối; các món đạt được chuyển sang vệ sinh.")}
                     className="w-full rounded-xl bg-[#125238] px-5 py-4 text-sm font-bold text-white disabled:opacity-50"
                   >
-                    {busy ? "Đang xử lý..." : `Hoàn tất FINAL inspection (${pendingInspection.length} thiết bị)`}
+                    {busy ? "Đang xử lý..." : `Hoàn tất kiểm định cuối (${pendingInspection.length} thiết bị)`}
                   </button>
                 ) : null}
               </>

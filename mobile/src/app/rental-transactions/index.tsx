@@ -199,7 +199,7 @@ function TransactionCard({
     isRefund && transaction.confirmationSource === "SANDBOX_SIMULATION";
   const status = simulated
     ? {
-        label: "Đã Hoàn",
+        label: "Đã hoàn tiền",
         color: "#8A5A00",
         backgroundColor: "#FFF1C2",
       }
@@ -234,7 +234,6 @@ function TransactionCard({
             {formatCurrency(transaction.amount, transaction.currency)}
           </Text>
         </View>
-        {simulated && <Text style={styles.simulationNote}>Hoàn Tiền</Text>}
         <View style={styles.metaRow}>
           <View
             style={[
