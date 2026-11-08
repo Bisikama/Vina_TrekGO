@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore, useCurrentUser } from "@/features/auth";
 import { Button } from "@/components/ui";
+import { NotificationBell } from "@/features/notifications";
 import {
   bookingApiService,
   formatBookingDateTime,
@@ -310,6 +311,13 @@ export const UserHeader = () => {
               )}
               </span>
             </Button>
+
+            <NotificationBell
+              onOpen={() => {
+                setInvitationsOpen(false);
+                setMobileMenuOpen(false);
+              }}
+            />
 
             <a
               href="tel:18009988"

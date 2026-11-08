@@ -224,6 +224,22 @@ describe('bookingNotificationProjection — trip cancellations', () => {
     expect(deliveries[0].data.content).toMatch(/Lý do: Thời tiết xấu/)
   })
 
+  it('names the trip in the content when its title is known', () => {
+    const [named] = bookingNotificationProjection(
+      'PRIVATE_TRIP_CANCELLED',
+      { tripId: TRIP, creatorId: CREATOR },
+      { memberUserIds: [MEMBER], tripTitle: 'Fansipan 3N2Đ' },
+    )
+    expect(named.data.content).toBe('Người tổ chức đã huỷ chuyến đi riêng "Fansipan 3N2Đ" bạn tham gia.')
+    expect(named.data.metadata).toMatchObject({ tripTitle: 'Fansipan 3N2Đ' })
+    const [unnamed] = bookingNotificationProjection(
+      'PRIVATE_TRIP_CANCELLED',
+      { tripId: TRIP, creatorId: CREATOR },
+      { memberUserIds: [MEMBER] },
+    )
+    expect(unnamed.data.content).toBe('Người tổ chức đã huỷ chuyến đi riêng bạn tham gia.')
+  })
+
   it('notifies private-trip members only when the schedule window changes', () => {
     const window = { startAt: '2026-11-10T00:00:00.000Z', endAt: '2026-11-12T00:00:00.000Z' }
     const same = bookingNotificationProjection(

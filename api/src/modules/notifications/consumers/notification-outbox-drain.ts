@@ -4,6 +4,7 @@ import { PrismaService } from '../../../shared/services/prisma.service'
 
 /** Nguồn outbox + bảng receipt tương ứng. Tên bảng là hằng trong code, không bao giờ lấy từ input. */
 export const NOTIFICATION_OUTBOX_SOURCES = {
+  booking: { outboxTable: 'booking_outbox_events', receiptTable: 'booking_notification_receipts' },
   rental: { outboxTable: 'rental_outbox_events', receiptTable: 'rental_notification_receipts' },
   payment: { outboxTable: 'payment_outbox_events', receiptTable: 'payment_notification_receipts' },
 } as const

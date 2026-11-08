@@ -17,7 +17,12 @@ export const bookingNotificationEvents = [
  * - `participantUserIds`: người đã nhận vé của booking (khác người mua), cho BOOKING_CANCELLED khi chuyến bị huỷ.
  * - `memberUserIds`: thành viên đang hoạt động của Trip riêng (trừ người tạo), cho PRIVATE_TRIP_*.
  */
-export type BookingNotificationContext = { participantUserIds?: string[]; memberUserIds?: string[] }
+export type BookingNotificationContext = {
+  participantUserIds?: string[]
+  memberUserIds?: string[]
+  /** Tên chuyến để người nhận biết thông báo nói về chuyến nào. */
+  tripTitle?: string
+}
 /** Booking bị huỷ không phải do chính khách: cần báo cả người đã nhận vé. */
 export function bookingCancelledByOthers(raw: unknown): boolean {
   const source = (raw as { cancelSource?: unknown } | null)?.cancelSource
@@ -32,6 +37,9 @@ export function bookingNotificationProjection(
 ): Delivery[] {
   const common = z.object({ tripId: uuid }).passthrough().parse(raw)
   const base = { referenceType: R.TRIP, referenceId: common.tripId }
+  const tripTitle = ctx.tripTitle?.trim().slice(0, 120)
+  /** Chèn sau chữ "chuyến đi": ` "Tên chuyến"`, rỗng khi không tra được tên. */
+  const named = tripTitle ? ` "${tripTitle}"` : ''
   const delivery = (userId: string, notificationType: N, title: string, target: Record<string, string>): Delivery => ({
     semanticType: eventType,
     data: {
@@ -40,33 +48,38 @@ export function bookingNotificationProjection(
       notificationType,
       title,
       content: title,
-      metadata: { schemaVersion: 1, tripId: common.tripId, target },
+      metadata: { schemaVersion: 1, tripId: common.tripId, target, ...(tripTitle ? { tripTitle } : {}) },
     },
   })
   if (eventType === 'PRIVATE_TRIP_MEMBER_INVITED' || eventType === 'PUBLIC_PARTICIPANT_INVITED') {
     const p = z.object({ invitationId: uuid, recipientUserId: uuid }).parse(raw)
     const type = eventType === 'PUBLIC_PARTICIPANT_INVITED' ? 'PUBLIC' : 'PRIVATE'
-    return [
-      delivery(
-        p.recipientUserId,
-        type === 'PUBLIC' ? N.PUBLIC_PARTICIPANT_INVITE : N.PRIVATE_TRIP_INVITE,
-        type === 'PUBLIC' ? 'Bạn nhận được lời mời nhận vé chuyến đi' : 'Bạn nhận được lời mời tham gia chuyến riêng',
-        { kind: 'INVITATION', type, invitationId: p.invitationId },
-      ),
-    ]
+    const result = delivery(
+      p.recipientUserId,
+      type === 'PUBLIC' ? N.PUBLIC_PARTICIPANT_INVITE : N.PRIVATE_TRIP_INVITE,
+      type === 'PUBLIC' ? 'Bạn nhận được lời mời nhận vé chuyến đi' : 'Bạn nhận được lời mời tham gia chuyến riêng',
+      { kind: 'INVITATION', type, invitationId: p.invitationId },
+    )
+    result.data.content =
+      type === 'PUBLIC'
+        ? `Bạn được mời nhận vé chuyến đi${named}. Mở mục Lời mời để chấp nhận hoặc từ chối.`
+        : `Bạn được mời tham gia chuyến đi riêng${named}. Mở mục Lời mời để chấp nhận hoặc từ chối.`
+    return [result]
   }
   if (eventType === 'PUBLIC_PARTICIPANT_CLAIMED') {
     const p = z.object({ buyerUserId: uuid, recipientUserId: uuid, participantId: uuid, bookingId: uuid }).parse(raw)
-    return [...new Set([p.recipientUserId, p.buyerUserId])].map((userId) =>
-      delivery(
+    return [...new Set([p.recipientUserId, p.buyerUserId])].map((userId) => {
+      const result = delivery(
         userId,
         N.PUBLIC_PARTICIPANT_CLAIMED,
         'Vé chuyến đi đã được liên kết thành công',
         userId === p.recipientUserId
           ? { kind: 'TICKET', participantId: p.participantId }
           : { kind: 'BOOKING_PARTICIPANT', bookingId: p.bookingId, participantId: p.participantId },
-      ),
-    )
+      )
+      result.data.content = `Vé chuyến đi${named} đã được liên kết thành công.`
+      return result
+    })
   }
   if (eventType === 'PRIVATE_TRIP_MEMBER_JOINED') {
     const p = z.object({ userId: uuid, memberRole: z.enum(['HOST', 'MEMBER']).optional() }).parse(raw)
@@ -74,7 +87,7 @@ export function bookingNotificationProjection(
       kind: 'PRIVATE_TRIP',
       tripId: common.tripId,
     })
-    result.data.content = 'Bạn đã tham gia thành công vào chuyến đi riêng (Private Trip).'
+    result.data.content = `Bạn đã tham gia thành công vào chuyến đi riêng${named}.`
     if (p.memberRole) result.data.metadata!.memberRole = p.memberRole
     return [result]
   }
@@ -96,7 +109,7 @@ export function bookingNotificationProjection(
         +new Date(p.oldWindow.startAt) !== +new Date(p.newWindow.startAt) ||
         +new Date(p.oldWindow.endAt) !== +new Date(p.newWindow.endAt)
       if (!changed) return []
-      const content = `Chuyến đi riêng bạn tham gia đã đổi lịch: ${formatDateTimeVi(p.newWindow.startAt)} – ${formatDateTimeVi(p.newWindow.endAt)}.`
+      const content = `Chuyến đi riêng${named} bạn tham gia đã đổi lịch: ${formatDateTimeVi(p.newWindow.startAt)} – ${formatDateTimeVi(p.newWindow.endAt)}.`
       return recipients.map((userId) => {
         const result = delivery(userId, N.TRIP_SCHEDULE_CHANGED, 'Lịch chuyến đi đã thay đổi', {
           kind: 'PRIVATE_TRIP',
@@ -113,7 +126,7 @@ export function bookingNotificationProjection(
         kind: 'PRIVATE_TRIP',
         tripId: common.tripId,
       })
-      result.data.content = `Người tổ chức đã huỷ chuyến đi riêng bạn tham gia.${reason}`
+      result.data.content = `Người tổ chức đã huỷ chuyến đi riêng${named} bạn tham gia.${reason}`
       return result
     })
   }
@@ -139,8 +152,8 @@ export function bookingNotificationProjection(
       buyer.data.referenceType = R.BOOKING
       buyer.data.referenceId = p.bookingId
       buyer.data.content = byOrganizer
-        ? 'Đơn vị tổ chức đã huỷ chuyến đi nên đặt chỗ của bạn được huỷ. Khoản hoàn tiền (nếu có) đang được xử lý; bạn sẽ nhận thông báo khi tiền đã được hoàn.'
-        : 'TrekGo đã huỷ đặt chỗ chuyến đi của bạn. Khoản hoàn tiền (nếu có) đang được xử lý; bạn sẽ nhận thông báo khi tiền đã được hoàn.'
+        ? `Đơn vị tổ chức đã huỷ chuyến đi${named} nên đặt chỗ của bạn được huỷ. Khoản hoàn tiền (nếu có) đang được xử lý; bạn sẽ nhận thông báo khi tiền đã được hoàn.`
+        : `TrekGo đã huỷ đặt chỗ chuyến đi${named} của bạn. Khoản hoàn tiền (nếu có) đang được xử lý; bạn sẽ nhận thông báo khi tiền đã được hoàn.`
       buyer.data.metadata!.cancelSource = p.cancelSource
       if (p.cancellationId) buyer.data.metadata!.cancellationId = p.cancellationId
       // Người đã nhận vé chỉ cần biết vé bị huỷ; không gửi thông tin tiền của người mua.
@@ -154,8 +167,8 @@ export function bookingNotificationProjection(
             { kind: 'TICKET_CANCELLED', tripId: common.tripId },
           )
           result.data.content = byOrganizer
-            ? 'Đơn vị tổ chức đã huỷ chuyến đi nên vé của bạn không còn hiệu lực.'
-            : 'Vé chuyến đi của bạn đã bị huỷ.'
+            ? `Đơn vị tổ chức đã huỷ chuyến đi${named} nên vé của bạn không còn hiệu lực.`
+            : `Vé chuyến đi${named} của bạn đã bị huỷ.`
           return result
         })
       return [buyer, ...holders]
@@ -170,8 +183,8 @@ export function bookingNotificationProjection(
     result.data.referenceId = p.bookingId
     result.data.content =
       eventType === 'BOOKING_CONFIRMED'
-        ? 'Chuyến trekking của bạn đã được xác nhận thành công. Chúc bạn có một hành trình an toàn và đáng nhớ!'
-        : 'Chuyến đi của bạn đã được hủy. Mọi thủ tục hoàn cọc/tiền (nếu có) đang được hệ thống xử lý.'
+        ? `Chuyến trekking${named} của bạn đã được xác nhận thành công. Chúc bạn có một hành trình an toàn và đáng nhớ!`
+        : `Đặt chỗ chuyến đi${named} của bạn đã được hủy. Mọi thủ tục hoàn cọc/tiền (nếu có) đang được hệ thống xử lý.`
     if (p.confirmedAt) result.data.metadata!.confirmedAt = p.confirmedAt
     if (p.cancellationId) result.data.metadata!.cancellationId = p.cancellationId
     return [result]
