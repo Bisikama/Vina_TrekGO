@@ -20,6 +20,7 @@ export class PrismaMediaReferenceAdapter implements MediaReferencePort {
 
   async hasActiveReferences(mediaId: string): Promise<boolean> {
     try {
+      if (await this.prisma.publicTripImage.count({ where: { mediaAssetId: mediaId } })) return true;
       if (await this.prisma.leaderCertificate.count({ where: { mediaAssetId: mediaId } })) return true;
       // TECHNICAL DEBT: Currently, Rental entities store media IDs inside unstructured JSON arrays
       // instead of using explicit relational join tables (e.g., ConditionSnapshot.evidenceIds).

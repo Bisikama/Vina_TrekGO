@@ -14,6 +14,7 @@ describe('PrismaMediaReferenceAdapter', () => {
         {
           provide: PrismaService,
           useValue: {
+            publicTripImage: { count: jest.fn().mockResolvedValue(0) },
             leaderCertificate: { count: jest.fn().mockResolvedValue(0) },
             rentalProduct: { count: jest.fn() },
             conditionSnapshot: { count: jest.fn() },
@@ -43,6 +44,12 @@ describe('PrismaMediaReferenceAdapter', () => {
         evidenceIds: { array_contains: ['media-a'] },
       },
     });
+  });
+
+  it('retains media attached to any public trip, including drafts', async () => {
+    (prismaService.publicTripImage.count as jest.Mock).mockResolvedValue(1);
+    expect(await adapter.hasActiveReferences('gallery-image')).toBe(true);
+    expect(prismaService.rentalProduct.count).not.toHaveBeenCalled();
   });
 
   describe('PostgreSQL JSON Reference Check', () => {

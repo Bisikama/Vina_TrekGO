@@ -17,6 +17,11 @@ export class MediaPolicyService {
   private readonly allowedVideoFormats = ['mp4', 'mov', 'webm'];
 
   private readonly scopePolicies: Record<MediaScopeValue, ScopePolicy> = {
+    PUBLIC_TRIP: {
+      allowedResourceTypes: ['IMAGE'],
+      requiresProvenance: false,
+      deliveryType: 'upload',
+    },
     LEADER_CERTIFICATE: {
       allowedResourceTypes: ['IMAGE'], // Cloudinary image resource supports multipage PDF.
       requiresProvenance: false,

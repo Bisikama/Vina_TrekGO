@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common'
+import { MediaModule } from '../media/media.module'
+import { PublicTripImagesService } from './images/public-trip-images.service'
+import { PublicTripImagesController } from './images/public-trip-images.controller'
 import { PrivateMemberInvitationService } from './infrastructure/adapters/private-member-invitation.service'
 import { PrivateMemberInvitationController } from './presentation/controllers/private-member-invitation.controller'
 import { PrivateInvitationRequestService } from './infrastructure/adapters/private-invitation-request.service'
@@ -34,7 +37,9 @@ import { TripPricingController } from './pricing/trip-pricing.controller'
 import { TripPricingService } from './pricing/trip-pricing.service'
 
 @Module({
+  imports: [MediaModule],
   controllers: [
+    PublicTripImagesController,
     PrivateMemberInvitationController,
     TripHistoryController,
     TransportController,
@@ -47,6 +52,7 @@ import { TripPricingService } from './pricing/trip-pricing.service'
     PrivateMembershipController,
   ],
   providers: [
+    PublicTripImagesService,
     PrivateMemberInvitationService,
     PrivateInvitationRequestService,
     TripHistoryUseCase,

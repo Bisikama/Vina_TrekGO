@@ -451,24 +451,9 @@ class Session implements TripSession {
 export class PrismaTripAdapter implements TripStore {
   constructor(private readonly prisma: PrismaService) {}
   async transaction<T>(actorId: string, tripId: string | undefined, work: (s: TripSession) => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.prisma.$transaction(
-          async (tx) => {
-            await tx.$queryRaw`SELECT id FROM users WHERE id = ${actorId}::uuid FOR UPDATE`
-            if (tripId) await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
-            return work(new Session(tx))
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 },
-        )
-      } catch (error) {
-        const retryable =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          (error.code === 'P2034' || (error.code === 'P2010' && ['40001', '40P01'].includes(String(error.meta?.code))))
-        if (!retryable || attempt >= 2) throw error
-      }
-    }
+    return withTripTransaction(this.prisma, actorId, tripId, (tx) => work(new Session(tx)))
   }
+
   read<T>(work: (s: TripSession) => Promise<T>) {
     return this.prisma.$transaction((tx) => work(new Session(tx)), {
       isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
@@ -500,5 +485,31 @@ export class PrismaTripAdapter implements TripStore {
       include,
     })
     return row ? view(row) : null
+  }
+}
+
+// Shared actor -> trip lock order and serializable retry policy for CF01 writes.
+export async function withTripTransaction<T>(
+  prisma: PrismaService,
+  actorId: string,
+  tripId: string | undefined,
+  work: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM users WHERE id = ${actorId}::uuid FOR UPDATE`
+          if (tripId) await tx.$queryRaw`SELECT id FROM trips WHERE id = ${tripId}::uuid FOR UPDATE`
+          return work(tx)
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 },
+      )
+    } catch (error) {
+      const retryable =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === 'P2034' || (error.code === 'P2010' && ['40001', '40P01'].includes(String(error.meta?.code))))
+      if (!retryable || attempt >= 2) throw error
+    }
   }
 }
