@@ -88,7 +88,8 @@ describe('RentalNotificationConsumer.deliver', () => {
   it('marks deposit refunds that were simulated in sandbox', async () => {
     const { service, consumer } = rentalConsumer()
     await consumer.deliver(event('DEPOSIT_REFUND_SUCCEEDED', { orderId: ORDER, refundId: 'ref-1' }))
-    expect(service.deliverEvent.mock.calls[0][2].title).toMatch(/^\[Sandbox\]/)
+    expect(service.deliverEvent.mock.calls[0][2].title).toBe('Hoàn tiền cọc thiết bị')
+    expect(service.deliverEvent.mock.calls[0][2].content).toMatch(/không có tiền thật/)
   })
 })
 
@@ -147,7 +148,7 @@ describe('PaymentNotificationConsumer.deliver', () => {
       expect.objectContaining({
         referenceType: 'BOOKING',
         referenceId: 'b-1',
-        title: '[Sandbox] Hoàn tiền thành công',
+        title: 'Hoàn tiền thành công',
       }),
     )
   })

@@ -90,7 +90,7 @@ export function paymentNotificationProjection(
           notificationType: N.PAYMENT_REFUND,
           referenceType: forRental ? R.RENTAL_ORDER : forBooking ? R.BOOKING : R.PAYMENT,
           referenceId: forRental ? ctx.rentalOrderId! : forBooking ? ctx.bookingId! : ctx.refundId,
-          title: `${sandbox ? '[Sandbox] ' : ''}Hoàn tiền thành công`,
+          title: 'Hoàn tiền thành công',
           content:
             `TrekGo đã hoàn ${formatVnd(ctx.amount)} cho ${target}. Thời gian tiền về tài khoản tuỳ ngân hàng hoặc cổng thanh toán.` +
             (sandbox ? ' (Giao dịch mô phỏng, không có tiền thật.)' : ''),
