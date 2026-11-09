@@ -4,6 +4,7 @@ export const MEDIA_STORAGE_PORT = Symbol('MEDIA_STORAGE_PORT');
 
 export interface CreateUploadIntentInput {
   immutable?: boolean;
+  allowedFormats?: string[];
   publicId: string;
   resourceType: MediaResourceTypeValue;
   deliveryType: 'upload' | 'authenticated';

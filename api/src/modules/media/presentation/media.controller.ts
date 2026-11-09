@@ -68,6 +68,7 @@ Phân quyền (Roles/Scopes):
 - RETURN_EVIDENCE: STAFF_INVENTORY / STAFF_DELIVERY
 - EXCEPTION_EVIDENCE: USER / LEADER / STAFF_INVENTORY / STAFF_DELIVERY / ADMIN
 - USER_GEAR: USER / LEADER / STAFF_INVENTORY / STAFF_DELIVERY / ADMIN
+- PUBLIC_TRIP: LEADER ACTIVE; IMAGE only; public catalog delivery
 `,
   })
   @ApiBody({
@@ -83,6 +84,7 @@ Phân quyền (Roles/Scopes):
             'EXCEPTION_EVIDENCE',
             'LEADER_CERTIFICATE',
             'USER_GEAR',
+            'PUBLIC_TRIP',
           ],
         },
         resourceType: { type: 'string', enum: ['IMAGE', 'VIDEO'] },

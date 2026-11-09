@@ -7,7 +7,12 @@ import { z } from 'zod'
 const uuid = z.string().uuid()
 const time = z.string().datetime({ offset: true })
 const issue = z.object({ code: z.string(), field: z.string(), message: z.string() })
+const image = z.object({ mediaId: uuid, position: z.number().int(), url: z.string().url(),
+  width: z.number().int(), height: z.number().int() })
 const publicTrip = z.object({
+  images: z.array(image).optional().describe('Gallery có thứ tự, chỉ trả ở API chi tiết.'),
+  coverImage: image.nullable(),
+  imageCount: z.number().int(),
   id: uuid,
   title: z.string(),
   description: z.string().nullable(),
@@ -49,6 +54,8 @@ const trail = z.object({
   checkpointIds: z.array(uuid),
 })
 const trip = publicTrip.extend({
+  coverImage: image.nullable().optional().describe('Ảnh bìa, trả ở API đọc chi tiết/danh sách leader.'),
+  imageCount: z.number().int().optional().describe('Tổng ảnh, trả ở API đọc chi tiết/danh sách leader.'),
   priceExplanation: z.string().nullable().describe('Cơ sở tính giá nội bộ, chỉ trả trong dữ liệu quản lý của leader.'),
   tripType: z.literal('PUBLIC'),
   creatorId: uuid,

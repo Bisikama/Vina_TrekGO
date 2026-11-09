@@ -257,6 +257,22 @@ describe('CompleteUploadUseCase', () => {
     }));
   });
 
+  it('completes public trip photos with catalog orphan retention', async () => {
+    envConfig.MEDIA_MAX_IMAGE_BYTES = 2000;
+    mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', scope: 'PUBLIC_TRIP',
+      providerPublicId: 'trip-photo', resourceType: 'IMAGE', deliveryType: 'upload' } as never);
+    mockStoragePort.verifyUploadResponse.mockResolvedValue(true);
+    mockStoragePort.getAssetMetadata.mockResolvedValue({ providerAssetId: 'asset', providerPublicId: 'trip-photo',
+      resourceType: 'IMAGE', deliveryType: 'upload', format: 'jpg', bytes: 1024, width: 800, height: 600,
+      secureUrl: 'https://cdn.example/trip-photo' } as never);
+    await useCase.execute('photo-id', { publicId: 'trip-photo', version: 1, signature: 'sig' }, mockUser('LEADER') as never);
+    expect(mockPolicyService.validateProviderMetadata.mock.calls[0].slice(0, 2)).toEqual(['PUBLIC_TRIP', 'IMAGE']);
+    const retention = mockAssetPort.markReadyFromProcessing.mock.calls[0][0].retentionUntil!;
+    expect(retention.getTime()).toBeGreaterThan(Date.now());
+    expect(retention.getTime()).toBeLessThanOrEqual(Date.now() + envConfig.MEDIA_CATALOG_ORPHAN_RETENTION_DAYS * 86400000);
+    expect(mockProvenancePort.analyzeEvidence).not.toHaveBeenCalled();
+  });
+
   it('throws MEDIA_FILE_TOO_LARGE if canonical bytes exceed VIDEO limit', async () => {
     envConfig.MEDIA_MAX_VIDEO_BYTES = 1000;
     mockAssetPort.findOwnedById.mockResolvedValue({ status: 'PENDING_UPLOAD', providerPublicId: 'p1', resourceType: 'VIDEO', deliveryType: 'upload' } as unknown as never);

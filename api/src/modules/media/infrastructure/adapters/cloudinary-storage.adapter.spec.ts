@@ -21,6 +21,15 @@ jest.mock('cloudinary', () => ({
 describe('CloudinaryStorageAdapter', () => {
   let adapter: CloudinaryStorageAdapter;
 
+  it('signs public trip image uploads without overwrites or document formats', async () => {
+    const intent = await adapter.createUploadIntent({ publicId: 'trip-photo', resourceType: 'IMAGE', deliveryType: 'upload',
+      timestamp: 123, immutable: true, allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'] });
+    expect(intent.formFields).toMatchObject({ overwrite: false, allowed_formats: 'jpg,jpeg,png,webp,heic,heif', type: 'upload' });
+    expect(cloudinary.utils.api_sign_request).toHaveBeenCalledWith(expect.objectContaining({
+      overwrite: false, allowed_formats: 'jpg,jpeg,png,webp,heic,heif',
+    }), 'secret');
+  });
+
   it('signs immutable certificate uploads and genuinely time-limited original downloads', async () => {
     const intent = await adapter.createUploadIntent({ publicId: 'document', resourceType: 'IMAGE', deliveryType: 'authenticated', timestamp: 123, immutable: true });
     expect(intent.formFields).toMatchObject({ overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf', type: 'authenticated' });

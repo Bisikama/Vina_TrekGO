@@ -1,3 +1,4 @@
+import { PUBLIC_TRIP_IMAGES_ERROR_CODES as PI } from './codes/public-trip-images.error-codes'
 import { COMMON_ERROR_CODES } from './codes/common.error-codes'
 import { TRIP_GPS_ERROR_CODES as GPS } from './codes/trip-gps.error-codes'
 import { TRIP_TRANSPORT_ERROR_CODES as TT } from './codes/trip-transport.error-codes'
@@ -25,6 +26,10 @@ export interface ErrorDefinition {
 }
 
 export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+  [PI.NOT_FOUND]: { status: 404, message: 'Không tìm thấy public trip.', retryable: false },
+  [PI.LOCKED]: { status: 409, message: 'Không thể sửa ảnh ở trạng thái chuyến đi hiện tại.', retryable: false },
+  [PI.VERSION_CONFLICT]: { status: 409, message: 'Chuyến đi đã thay đổi. Hãy tải lại trước khi lưu ảnh.', retryable: false },
+  [PI.INVALID_MEDIA]: { status: 422, message: 'Ảnh phải thuộc leader, đúng scope PUBLIC_TRIP và đã READY với metadata hợp lệ.', retryable: false },
   [P.MANUAL_REFUND_INVALID_STATE]: { status: 409, message: 'Manual refund action is not allowed in this state', retryable: false },
   [P.MANUAL_REFUND_VERSION_CONFLICT]: { status: 409, message: 'Reload the manual refund before retrying', retryable: false },
   [P.MANUAL_REFUND_RECIPIENT_LOCKED]: { status: 409, message: 'Recipient is locked after the refund is claimed', retryable: false },
