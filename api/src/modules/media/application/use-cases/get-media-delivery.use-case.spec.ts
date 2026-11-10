@@ -32,6 +32,16 @@ describe('GetMediaDeliveryUseCase', () => {
     await expect(useCase.execute({ mediaId: 'doc', variant: 'EVIDENCE_PREVIEW' }, { ...mockUser('ADMIN'), status: 'ACTIVE' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('serves PUBLIC_TRIP catalog URLs to anonymous visitors', async () => {
+    mockAssetPort.findById.mockResolvedValue({ id: 'photo', scope: 'PUBLIC_TRIP', status: 'READY',
+      resourceType: 'IMAGE', deliveryType: 'upload', providerPublicId: 'trip-photo' } as never);
+    mockPolicyService.getScopePolicy.mockReturnValue({ deliveryType: 'upload', allowedResourceTypes: ['IMAGE'], requiresProvenance: false });
+    mockStoragePort.createDeliveryUrl.mockResolvedValue({ url: 'https://cdn.example/trip-photo' });
+    expect(await useCase.execute({ mediaId: 'photo', variant: 'CATALOG_DETAIL' })).toMatchObject({
+      mediaId: 'photo', url: 'https://cdn.example/trip-photo',
+    });
+  });
+
   const mockUser = (role: string) => ({
     id: 'u1',
     authUserId: 'au1',

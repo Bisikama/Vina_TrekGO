@@ -1,4 +1,5 @@
-import { HttpException, Inject, Injectable } from '@nestjs/common'
+import { HttpException, Inject, Injectable, Optional } from '@nestjs/common'
+import { PublicTripImagesService } from '../../images/public-trip-images.service'
 import { TRIP_STORE } from '../trip.types'
 import type {
   Actor,
@@ -67,7 +68,10 @@ const publicProjection = (t: TripView) => ({
 
 @Injectable()
 export class PublicTripUseCase {
-  constructor(@Inject(TRIP_STORE) private readonly store: TripStore) {}
+  constructor(
+    @Inject(TRIP_STORE) private readonly store: TripStore,
+    @Optional() private readonly images?: PublicTripImagesService,
+  ) {}
   private write<T>(actor: Actor, id: string | undefined, work: (s: TripSession, trip?: TripView) => Promise<T>) {
     leader(actor)
     return this.store.transaction(actor.id, id, async (s) => {
@@ -305,8 +309,9 @@ export class PublicTripUseCase {
       return work(s, trip)
     })
   }
-  detail(actor: Actor, id: string) {
-    return this.ownerRead(actor, id, (_s, t) => Promise.resolve(t))
+  async detail(actor: Actor, id: string) {
+    const trip = await this.ownerRead(actor, id, (_s, t) => Promise.resolve(t))
+    return this.images ? (await this.images.decorate([trip], false))[0] : trip
   }
   readiness(actor: Actor, id: string) {
     return this.ownerRead(actor, id, (s, t) => this.readinessIn(s, t))
@@ -333,17 +338,20 @@ export class PublicTripUseCase {
       return { hasConflict: !!conflicts.length, conflicts }
     })
   }
-  list(actor: Actor, page: Page) {
+  async list(actor: Actor, page: Page) {
     leader(actor)
-    return this.store.list(actor.id, page)
+    const trips = await this.store.list(actor.id, page)
+    return this.images ? this.images.decorate(trips, true) : trips
   }
   async publicList(page: Page) {
-    return (await this.store.list(undefined, page)).map(publicProjection)
+    const trips = (await this.store.list(undefined, page)).map(publicProjection)
+    return this.images ? this.images.decorate(trips, true) : trips
   }
   async publicDetail(id: string) {
     const trip = await this.store.publicDetail(id)
     if (!trip) fail(404, 'NOT_FOUND', 'Không tìm thấy Public Trip.')
-    return publicProjection(trip)
+    const result = publicProjection(trip)
+    return this.images ? (await this.images.decorate([result], false))[0] : result
   }
   options(actor: Actor, kind: 'destinations' | 'pickups' | 'checkpoints', page: Page, destinationId?: string) {
     leader(actor)

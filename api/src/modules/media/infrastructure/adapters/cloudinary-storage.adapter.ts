@@ -69,7 +69,7 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
 
   createUploadIntent(input: CreateUploadIntentInput): Promise<CreateProviderUploadIntentResult> {
     const paramsToSign = {
-      ...(input.immutable ? { overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf' } : {}),
+      ...(input.immutable ? { overwrite: false, allowed_formats: input.allowedFormats?.join(',') ?? 'jpg,jpeg,png,pdf' } : {}),
       public_id: input.publicId,
       type: input.deliveryType,
       timestamp: input.timestamp,
@@ -85,7 +85,7 @@ export class CloudinaryStorageAdapter implements MediaStoragePort, OnModuleInit 
       uploadUrl,
       method: 'POST',
       formFields: {
-        ...(input.immutable ? { overwrite: false, allowed_formats: 'jpg,jpeg,png,pdf' } : {}),
+        ...(input.immutable ? { overwrite: false, allowed_formats: input.allowedFormats?.join(',') ?? 'jpg,jpeg,png,pdf' } : {}),
         api_key: envConfig.CLOUDINARY_API_KEY!,
         timestamp: input.timestamp,
         signature,

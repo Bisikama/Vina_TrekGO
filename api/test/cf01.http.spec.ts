@@ -20,6 +20,9 @@ import { PublicTripUseCase } from '../src/modules/trips/application/use-cases/pu
 import { TRIP_STORE } from '../src/modules/trips/application/trip.types'
 import { GlobalErrorFilter } from '../src/shared/errors'
 
+// MediaModule is now reused by TripsModule. Keep the unrelated ESM scheduler out of this CJS HTTP test.
+jest.mock('@nestjs/schedule', () => ({ Cron: jest.fn(() => () => {}), CronExpression: { EVERY_HOUR: '0 0 * * * *' } }))
+
 describe('CF01 Swagger and HTTP responses without external services', () => {
   let app: INestApplication
   const leader = { id: randomUUID(), role: 'LEADER', status: 'ACTIVE' }

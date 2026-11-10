@@ -67,8 +67,25 @@ describe('CreateUploadIntentUseCase', () => {
     envConfig.MEDIA_MAX_VIDEO_BYTES = 104857600;
   });
 
+  it('restricts public trip upload to active leaders and images', async () => {
+    const input = { scope: 'PUBLIC_TRIP' as const, resourceType: 'IMAGE' as const,
+      fileName: 'trip.jpg', contentType: 'image/jpeg', sizeBytes: 1024 };
+    await useCase.execute(input, mockUser('LEADER') as never);
+    expect(mockStoragePort.createUploadIntent.mock.calls[0][0]).toMatchObject({ immutable: true,
+      allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'], deliveryType: 'upload' });
+    await expect(useCase.execute(input, { ...mockUser('LEADER'), status: 'SUSPENDED' } as never))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(useCase.execute({ ...input, resourceType: 'VIDEO', contentType: 'video/mp4' }, mockUser('LEADER') as never))
+      .rejects.toMatchObject({ code: 'MEDIA_INVALID_RESOURCE_TYPE' });
+    await expect(useCase.execute({ ...input, sizeBytes: envConfig.MEDIA_MAX_IMAGE_BYTES + 1 }, mockUser('LEADER') as never))
+      .rejects.toMatchObject({ code: 'MEDIA_FILE_TOO_LARGE' });
+  });
+
   describe('Role Matrix', () => {
     it.each([
+      ['PUBLIC_TRIP', 'LEADER', true],
+      ['PUBLIC_TRIP', 'USER', false],
+      ['PUBLIC_TRIP', 'ADMIN', false],
       ['RENTAL_PRODUCT', 'STAFF_INVENTORY', true],
       ['RENTAL_PRODUCT', 'ADMIN', true],
       ['RENTAL_PRODUCT', 'USER', false],

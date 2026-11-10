@@ -38,6 +38,9 @@ export class CreateUploadIntentUseCase {
     }
 
     this.checkScopeAuthorization(dto.scope, activeUser.role);
+    if (dto.scope === 'PUBLIC_TRIP' && activeUser.status !== 'ACTIVE') {
+      throw new AppError({ code: COMMON_ERROR_CODES.FORBIDDEN });
+    }
     if (dto.scope === 'LEADER_CERTIFICATE') {
       if (activeUser.status !== 'ACTIVE' || activeUser.role !== 'USER')
         throw new AppError({ code: COMMON_ERROR_CODES.FORBIDDEN });
@@ -85,6 +88,10 @@ export class CreateUploadIntentUseCase {
         deliveryType,
         timestamp: Math.round(now.getTime() / 1000),
         ...(dto.scope === 'LEADER_CERTIFICATE' ? { immutable: true } : {}),
+        ...(dto.scope === 'PUBLIC_TRIP' ? {
+          immutable: true,
+          allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'],
+        } : {}),
       });
 
       return {
@@ -105,6 +112,8 @@ export class CreateUploadIntentUseCase {
   private checkScopeAuthorization(scope: MediaScopeValue, role: string) {
     const isAllowed = (() => {
       switch (scope) {
+        case 'PUBLIC_TRIP':
+          return role === 'LEADER';
         case 'LEADER_CERTIFICATE':
           return role === 'USER';
         case 'RENTAL_PRODUCT':

@@ -1,4 +1,5 @@
 export * from './app-error'
+export * from './codes/public-trip-images.error-codes'
 export * from './codes/trip-gps.error-codes'
 export * from './codes/trip-transport.error-codes'
 export * from './error-definitions'

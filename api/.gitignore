@@ -83,6 +83,7 @@ jest_output.txt
 !/docs/TRIP_GPS_OFFLINE_SYNC_V2.md
 !/docs/TRIP_GPS_V2_API_HANDOFF.md
 !/docs/NOTIFICATIONS_HANDOFF.md
+!/docs/public-trip-images.frontend-integration.md
 /handoffs/rental
 /handoffs
 

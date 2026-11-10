@@ -114,6 +114,11 @@ describe('Media Foundation', () => {
       expect((result as unknown as Record<string, unknown>).version).toBeUndefined();
     });
 
+    it('maps the gallery deletion trigger to the shared media business error', async () => {
+      prismaMock.mediaAsset.updateMany.mockRejectedValue(new Error('CF01: public trip image is retained'));
+      await expect(adapter.markDeletePending({ id: 'gallery-image' })).rejects.toMatchObject({ code: 'MEDIA_INVALID_STATE' });
+    });
+
     it('throws MEDIA_INVALID_STATE if markReady affects 0 rows and asset is not READY', async () => {
       // Mock updateMany to return count 0
       prismaMock.mediaAsset.updateMany.mockResolvedValue({ count: 0 });

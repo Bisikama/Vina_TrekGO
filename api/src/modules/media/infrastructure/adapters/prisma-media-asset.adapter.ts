@@ -244,17 +244,27 @@ export class PrismaMediaAssetAdapter implements MediaAssetPort {
   }
 
   async markDeletePending(input: MarkDeletePendingInput): Promise<MediaAssetView> {
-    const updated = await this.prisma.mediaAsset.updateMany({
-      where: {
-        id: input.id,
-        status: { in: ['READY', 'REJECTED', 'PENDING_UPLOAD'] },
-      },
-      data: {
-        status: 'DELETE_PENDING',
-        deleteRequestedAt: new Date(),
-        version: { increment: 1 },
-      },
-    });
+    try {
+      await this.prisma.mediaAsset.updateMany({
+        where: {
+          id: input.id,
+          status: { in: ['READY', 'REJECTED', 'PENDING_UPLOAD'] },
+          OR: [{ scope: { not: 'PUBLIC_TRIP' } }, { publicTripImages: { none: {} } }],
+        },
+        data: {
+          status: 'DELETE_PENDING',
+          deleteRequestedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+    } catch (error) {
+      // A concurrent gallery attachment may commit while this update waits on
+      // the media row. Translate the DB trigger guard into the shared media error.
+      if (error instanceof Error && error.message.includes('CF01: public trip image is retained')) {
+        throw new AppError({ code: MEDIA_ERROR_CODES.MEDIA_INVALID_STATE, message: 'Public trip image is still referenced' });
+      }
+      throw error;
+    }
 
     const asset = await this.prisma.mediaAsset.findUnique({
       where: { id: input.id },
