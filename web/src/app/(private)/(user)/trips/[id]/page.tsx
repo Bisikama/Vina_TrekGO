@@ -11,6 +11,8 @@ import { LoadingState, PageHeader, PageShell } from "@/components/ui";
 import { UnavailableBookingTrip } from "@/features/bookings/components/UnavailableBookingTrip";
 import { useRefreshOnReturn } from "@/features/bookings/hooks/useRefreshOnReturn";
 import { apiClient } from "@/lib/axios";
+import { getPublicTripDetail } from "@/features/trips/services/public-trips.api";
+import type { PublicTripImageFields } from "@/features/trips/types/public-trip-images";
 
 export default function TripDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +27,7 @@ export default function TripDetailPage() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadTripDetail() {
       setIsLoading(true);
@@ -32,6 +35,7 @@ export default function TripDetailPage() {
 
       try {
         let rawData: any = null;
+        const publicTrip = getPublicTripDetail(id, controller.signal).catch(() => null);
 
         // 1. Thử lấy từ Public Booking Discovery API (/api/v1/trips/:id)
         try {
@@ -52,11 +56,12 @@ export default function TripDetailPage() {
 
         // 3. Fallback lấy từ /api/v1/public-trips/:id
         if (!rawData) {
-          const pubRes = await apiClient.get<any>(`/api/v1/public-trips/${id}`);
-          rawData = pubRes.data;
+          rawData = await publicTrip;
         }
 
-        if (!rawData || cancelled) return;
+        if (cancelled) return;
+        if (!rawData) throw new Error("Không thể tải thông tin chuyến đi.");
+        const gallery: PublicTripImageFields = Array.isArray(rawData.images) ? rawData : (await publicTrip) ?? {};
 
         // 4. Nếu thiếu thông tin destination.name, gọi API destination
         let destName = rawData.destination?.name;
@@ -220,7 +225,8 @@ export default function TripDetailPage() {
               name: destName || "Khu vực trekking",
               distance: totalDist || "Theo đoàn",
             },
-            image:
+            images: gallery.images,
+            image: gallery.coverImage?.url ??
               "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
             date: {
               start: `${sDay}/${sMonth}`,
@@ -282,6 +288,7 @@ export default function TripDetailPage() {
     loadTripDetail();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [id, attempt]);
 

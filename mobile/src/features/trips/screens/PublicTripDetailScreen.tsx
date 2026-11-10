@@ -4,6 +4,7 @@ import {
   LoadingState,
   ScreenHeader,
 } from "@/components/ui";
+import { PublicTripGallery } from "@/features/trips/components/PublicTripGallery";
 import {
   Colors as UiColors,
   Radius as UiRadius,
@@ -203,6 +204,12 @@ function PublicTripDetailContent({
         <TripCancellationNotice status={isTripPaused(trip.status) ? trip.status : existingBooking?.trip.status ?? existingTicket?.trip.status} activeBooking={!!existingBooking && !['CANCELLED', 'EXPIRED'].includes(existingBooking.status)} onRefresh={() => void refreshCancellationContext()} />
 
         {/* 1. Hero Section */}
+        <PublicTripGallery
+          key={JSON.stringify([trip.id, trip.images?.map((image) => image.mediaId)])}
+          images={trip.images}
+          fallback={trip.coverImage?.url}
+          title={trip.title}
+        />
         <TripHeroSection trip={trip} />
 
         {/* 2. Thẻ Bạn đã tham gia chuyến đi này! (Hiển thị khi đã đặt vé hoặc được mời vé thành công) */}

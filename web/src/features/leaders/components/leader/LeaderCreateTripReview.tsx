@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TripRouteReviewMap } from "./TripRouteReviewMap";
 import { getRentalCategories } from "@/features/rentals/services/rental.api";
 import type { RentalCategory } from "@/features/rentals/types/rental";
+import { PublicTripCarousel } from "@/features/trips/components/PublicTripCarousel";
 
 const DEFAULT_FALLBACK_CATEGORIES: RentalCategory[] = [
   { id: "seed-1", name: "Lều và mái che", slug: "leu-trai", description: "Lều trekking, tăng và mái che chống mưa cho chuyến đi nhiều ngày." },
@@ -631,20 +632,23 @@ export function LeaderCreateTripReview() {
 
               <div className="mt-5 grid gap-5 md:grid-cols-[210px_minmax(0,1fr)]">
                 <div>
-                  <div
-                    className="relative h-44 rounded-xl bg-cover bg-center"
-                    style={{
-                      backgroundImage: `linear-gradient(to top, rgba(0,0,0,.65), transparent), url("https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80")`,
-                    }}
-                  >
-                    <span className="absolute left-3 top-3 rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
+                  <PublicTripCarousel
+                    key={JSON.stringify([trip?.id, trip?.images?.map((image) => image.mediaId)])}
+                    images={trip?.images ?? []}
+                    fallback={trip?.coverImage?.url ?? "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80"}
+                    title={tripTitle}
+                    maxHeight="16rem"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-800">
                       {difficultyLabels[draftData.difficulty || 3] || "Cấp 3 – Vừa phải"}
                     </span>
 
-                    <span className="absolute bottom-3 left-3 rounded bg-slate-950/70 px-2 py-1 text-[10px] font-bold text-white">
+                    <span className="rounded bg-slate-950/70 px-2 py-1 text-[10px] font-bold text-white">
                       #{trip?.id ? trip.id.slice(0, 8) : "DRAFT"}
                     </span>
                   </div>
+                  {!!trip?.images?.length && <p className="mt-2 text-xs text-slate-500">Ảnh đầu tiên là ảnh bìa.</p>}
 
                   <div className="mt-3 flex justify-between text-xs text-slate-500">
                     <span>Công khai VFRS</span>
