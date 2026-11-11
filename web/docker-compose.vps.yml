@@ -1,0 +1,13 @@
+# TrekGo Web - docker compose cho VPS (image từ Docker Hub)
+# Trên VPS nằm ở ~/trekgo-web/docker-compose.yml (tách riêng với ~/trekgo của API,
+# để deploy API không ghi đè file này và ngược lại).
+#   Chạy:      docker compose up -d
+#   Cập nhật:  docker compose pull && docker compose up -d
+
+services:
+  web:
+    image: luatng304/trekgo-web:latest
+    restart: unless-stopped
+    ports:
+      # Chỉ mở cho chính VPS: truy cập từ ngoài đi qua Nginx (80/443)
+      - "127.0.0.1:5000:5000"
