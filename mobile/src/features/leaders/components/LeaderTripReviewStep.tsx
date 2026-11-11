@@ -1,11 +1,20 @@
-import { Trip3DMapView } from "@/components/Trip3DMapView";
+import { MapLibre3DView, type MapLibre3DViewRef } from "@/components/map/MapLibre3DView";
+import { ErrorAlert, InfoBanner, LoadingState } from "@/components/ui";
 import { Colors, Radius, Shadows } from "@/constants/theme";
+import { PublicTripGallery } from "@/features/trips/components/PublicTripGallery";
+import type { PublicTripImage } from "@/features/trips/services/public-trip-images.api";
 import type {
-  TripOptionCheckpoint,
   TripOptionDestination,
   TripOptionPickupPoint,
 } from "@/features/leaders/hooks";
 import type { CostItem } from "@/features/leaders/services/leader-pricing.api";
+import {
+  getLeaderPublicTripById,
+  type LeaderCheckpointDetail,
+  type LeaderTrailDetail,
+  type LeaderTrailSuggestion,
+} from "@/features/leaders/services/leader-public-trips.api";
+import { getTripReviewMap } from "@/features/leaders/utils/tripReviewMap";
 import {
   calculateTripDuration,
   getDayOfWeekName,
@@ -15,11 +24,12 @@ import { CostPlanBuilder } from "./CostPlanBuilder";
 import type { LeaderTripFormData } from "./LeaderTripFormStep";
 import { TrekkingPricingSimulator } from "./TrekkingPricingSimulator";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -29,6 +39,7 @@ import {
 
 export interface LeaderTripReviewStepProps {
   form: LeaderTripFormData;
+  images?: PublicTripImage[];
   tripId?: string;
   expectedVersion?: number;
   accessToken?: string;
@@ -36,8 +47,7 @@ export interface LeaderTripReviewStepProps {
   onChangeCostItems: (items: CostItem[]) => void;
   selectedDestination?: TripOptionDestination;
   selectedPickup?: TripOptionPickupPoint;
-  selectedCheckpoints: TripOptionCheckpoint[];
-  selectedTrail?: any;
+  selectedTrail: LeaderTrailSuggestion | null;
   conflictWarning?: string | null;
   submitError?: string | null;
   readinessIssues?: string[];
@@ -60,6 +70,9 @@ export interface LeaderTripReviewStepProps {
   onSaveDraft?: () => void;
 }
 
+type SavedRoute = { trail: LeaderTrailDetail; checkpoints: LeaderCheckpointDetail[] };
+type RouteResult = { key: string } & ({ data: SavedRoute } | { error: string });
+
 const RENTAL_GEAR_TAGS = [
   "+ Balo trekking",
   "+ Chiếu sáng và nguồn điện",
@@ -74,6 +87,7 @@ const RENTAL_GEAR_TAGS = [
 
 export function LeaderTripReviewStep({
   form,
+  images,
   tripId = "",
   expectedVersion = 1,
   accessToken = "",
@@ -81,7 +95,6 @@ export function LeaderTripReviewStep({
   onChangeCostItems,
   selectedDestination,
   selectedPickup,
-  selectedCheckpoints,
   selectedTrail,
   conflictWarning,
   submitError,
@@ -100,6 +113,49 @@ export function LeaderTripReviewStep({
   onSaveDraft,
 }: LeaderTripReviewStepProps) {
   const isLoading = isSubmitting || apiLoading;
+  const mapRef = useRef<MapLibre3DViewRef>(null);
+  const [routeResult, setRouteResult] = useState<RouteResult>();
+  const [routeAttempt, setRouteAttempt] = useState(0);
+  const trailId = selectedTrail?.id;
+  const routeKey = `${tripId}:${trailId}:${routeAttempt}`;
+  const currentRoute = routeResult?.key === routeKey ? routeResult : undefined;
+  const savedRoute = currentRoute && "data" in currentRoute ? currentRoute.data : undefined;
+  const routeError = currentRoute && "error" in currentRoute ? currentRoute.error : undefined;
+  const loadingRoute = Boolean(tripId && accessToken && trailId && !currentRoute);
+
+  useEffect(() => {
+    if (!tripId || !accessToken || !trailId) return;
+    let current = true;
+    getLeaderPublicTripById(tripId, accessToken)
+      .then((trip) => {
+        if (!current) return;
+        const trail = trip.trails?.find((item) => item.systemTrailId === trailId);
+        if (!trail) {
+          setRouteResult({ key: routeKey, error: "Không tìm thấy cung đường đã chọn trong bản nháp. Vui lòng kiểm tra Bước 2." });
+          return;
+        }
+        const checkpoints = (trip.checkpoints ?? [])
+          .filter((checkpoint) => checkpoint.isEnabled !== false)
+          .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+        setRouteResult({ key: routeKey, data: { trail, checkpoints } });
+      })
+      .catch(() => {
+        if (current) setRouteResult({ key: routeKey, error: "Không thể tải lộ trình đã lưu. Vui lòng thử lại." });
+      });
+    return () => { current = false; };
+  }, [tripId, accessToken, trailId, routeKey]);
+
+  const reviewMap = useMemo(() => savedRoute
+    ? getTripReviewMap(savedRoute.trail.snapshotGeojson, savedRoute.checkpoints)
+    : null, [savedRoute]);
+  const mapBounds = reviewMap?.bounds;
+  const selectedCheckpoints = savedRoute?.checkpoints ?? [];
+  const trailName = savedRoute?.trail.snapshotName || selectedTrail?.name || "Chưa chọn cung đường";
+  const distanceKm = savedRoute?.trail.snapshotDistanceKm ?? selectedTrail?.distanceKm ?? selectedTrail?.lengthKm;
+  const elevationGain = savedRoute?.trail.snapshotElevationGainM ?? selectedTrail?.elevationGainM;
+  const distanceLabel = distanceKm != null ? `${distanceKm} km` : "—";
+  const elevationLabel = elevationGain != null ? `+${elevationGain} m` : "—";
+  const estimate = Number(distanceKm) > 0 ? `~${Math.max(1, Math.round(Number(distanceKm) * 0.8))} giờ` : "—";
 
   // Local state for description editing and markdown tab
   const [descTab, setDescTab] = useState<"edit" | "preview">("edit");
@@ -141,7 +197,6 @@ export function LeaderTripReviewStep({
   // Generate standard itinerary template
   const handleApplyDescriptionTemplate = () => {
     const destName = selectedDestination?.name || "Khu bảo tồn thiên nhiên";
-    const trailName = selectedTrail?.name || "Cung đường trekking tiêu chuẩn";
     const cpNames = selectedCheckpoints.length > 0
       ? selectedCheckpoints.map((c) => c.name).join(" → ")
       : "Các trạm kiểm soát VFRS";
@@ -156,7 +211,7 @@ export function LeaderTripReviewStep({
 
 ## 🗺️ Cung đường & Trắc địa
 - **Tuyến đường**: ${trailName}
-- **Cự ly**: ${selectedTrail?.distanceKm || "5.0"} km • Cao độ: +${selectedTrail?.elevationGainM || 500}m
+- **Cự ly**: ${distanceLabel} • Độ cao tăng: ${elevationLabel}
 - **Trạm dừng an toàn**: ${cpNames}
 
 ## 🎒 Trang bị khuyến nghị thành viên cần chuẩn bị
@@ -282,9 +337,11 @@ export function LeaderTripReviewStep({
                 color={selectedTrail && selectedCheckpoints.length > 0 ? "#125238" : "#d97706"}
               />
               <Text style={[styles.checkItemText, (!selectedTrail || selectedCheckpoints.length === 0) && { color: "#d97706" }]}>
-                {selectedTrail && selectedCheckpoints.length > 0
-                  ? `Đã chọn cung đường ${selectedTrail.name} (${selectedCheckpoints.length} trạm an toàn).`
-                  : "Cần hoàn thiện cung đường & trạm dừng ở Bước 2."}
+                {loadingRoute ? "Đang tải cung đường và trạm dừng đã lưu…"
+                  : routeError ? "Chưa tải được lộ trình đã lưu."
+                  : selectedCheckpoints.length > 0
+                    ? `Đã lưu cung đường ${trailName} (${selectedCheckpoints.length} trạm an toàn).`
+                    : "Cần hoàn thiện cung đường & trạm dừng ở Bước 2."}
               </Text>
             </View>
           </View>
@@ -312,7 +369,7 @@ export function LeaderTripReviewStep({
         <View style={styles.destSummaryRow}>
           <Image
             source={{
-              uri: (selectedDestination as any)?.imageUrl ||
+              uri: images?.[0]?.url || (selectedDestination as any)?.imageUrl ||
                 "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80",
             }}
             style={styles.destThumb}
@@ -333,6 +390,8 @@ export function LeaderTripReviewStep({
             </View>
           </View>
         </View>
+
+        {!!images?.length && <PublicTripGallery key={JSON.stringify(images.map((image) => image.mediaId))} images={images} title={form.name} />}
 
         {/* Mô tả chi tiết & Lịch trình chuyến đi */}
         <View style={styles.itineraryBox}>
@@ -487,10 +546,10 @@ export function LeaderTripReviewStep({
         <View style={styles.trailBanner}>
           <View style={{ flex: 1 }}>
             <Text style={styles.trailBannerTitle}>
-              ~ Cung đường: {selectedTrail?.name || "HBS - La Bàn"}
+              ~ Cung đường: {trailName}
             </Text>
             <Text style={styles.trailBannerSub}>
-              Mã quản lý: #{selectedTrail?.id ? selectedTrail.id.slice(0, 8) : "2a48e61f"} • Cự ly: {selectedTrail?.distanceKm || selectedTrail?.lengthKm || "5"} km
+              Mã quản lý: {trailId ? `#${trailId.slice(0, 8)}` : "—"} • Cự ly: {distanceLabel}
             </Text>
           </View>
           <View style={styles.verifiedBadgeDark}>
@@ -504,33 +563,60 @@ export function LeaderTripReviewStep({
           <View style={styles.fourStatCell}>
             <Text style={styles.fourStatLabel}>Tổng cự ly</Text>
             <Text style={styles.fourStatVal}>
-              {selectedTrail?.distanceKm || selectedTrail?.lengthKm || "5"} km
+              {distanceLabel}
             </Text>
           </View>
           <View style={styles.fourStatCell}>
             <Text style={styles.fourStatLabel}>Độ khó</Text>
             <Text style={[styles.fourStatVal, { color: "#b45309" }]}>
-              {selectedTrail?.difficulty || "MEDIUM"}
+              {savedRoute?.trail.snapshotDifficulty ?? selectedTrail?.difficulty ?? "—"}
             </Text>
           </View>
           <View style={styles.fourStatCell}>
-            <Text style={styles.fourStatLabel}>Cao độ đỉnh</Text>
+            <Text style={styles.fourStatLabel}>Độ cao tăng</Text>
             <Text style={styles.fourStatVal}>
-              +{selectedTrail?.elevationGainM || 500}m
+              {elevationLabel}
             </Text>
           </View>
           <View style={styles.fourStatCell}>
             <Text style={styles.fourStatLabel}>Dự kiến leo</Text>
             <Text style={styles.fourStatVal}>
-              ~{Math.round(Number(selectedTrail?.distanceKm || 5) * 0.8) || 5} giờ
+              {estimate}
             </Text>
           </View>
         </View>
 
-        {/* Interactive 3D GPS Map Preview */}
-        <View style={styles.mapWrap}>
-          <Trip3DMapView trailData={selectedTrail as any} height={220} />
-        </View>
+        {loadingRoute ? (
+          <LoadingState message="Đang tải bản đồ lộ trình…" />
+        ) : routeError ? (
+          <ErrorAlert message={routeError} onRetry={() => setRouteAttempt((attempt) => attempt + 1)} />
+        ) : !reviewMap || !mapBounds ? (
+          <InfoBanner message="Cung đường đã lưu chưa có tọa độ để hiển thị bản đồ." />
+        ) : Platform.OS === "web" ? (
+          <InfoBanner message="Bản đồ 3D khả dụng trên iOS và Android." />
+        ) : (
+          <View style={styles.mapWrap}>
+            <MapLibre3DView
+              ref={mapRef}
+              height={260}
+              plannedRoute={reviewMap.plannedRoute}
+              checkpoints={reviewMap.markers}
+              center={mapBounds[0]}
+              is3D
+              pitch={50}
+              bearing={-20}
+              fitOnPlannedRouteUpdate={false}
+              onMapReady={() => {
+                if (mapBounds[0][0] !== mapBounds[1][0] || mapBounds[0][1] !== mapBounds[1][1]) {
+                  mapRef.current?.fitBounds(mapBounds, 36);
+                }
+              }}
+            />
+          </View>
+        )}
+        {Platform.OS !== "web" && !!reviewMap?.markers.length && !reviewMap.plannedRoute.length && (
+          <InfoBanner message="Cung đường này chưa có đường GPS. Bản đồ hiển thị các trạm đã lưu." />
+        )}
       </View>
 
       {/* ─── MỤC 03 · AN TOÀN & GIÁM SÁT: Trạm kiểm soát an toàn ─── */}
@@ -539,17 +625,21 @@ export function LeaderTripReviewStep({
           <View style={{ flex: 1 }}>
             <Text style={styles.sectionEyebrow}>MỤC 03 · AN TOÀN & GIÁM SÁT</Text>
             <Text style={styles.sectionTitle}>
-              {selectedCheckpoints.length} Trạm kiểm soát an toàn
+              {savedRoute ? `${selectedCheckpoints.length} trạm kiểm soát an toàn` : "Trạm kiểm soát an toàn"}
             </Text>
           </View>
-          <View style={styles.countBadgePill}>
+          {savedRoute && <View style={styles.countBadgePill}>
             <Text style={styles.countBadgePillText}>
               {selectedCheckpoints.length} đã thiết lập
             </Text>
-          </View>
+          </View>}
         </View>
 
-        {selectedCheckpoints.length === 0 ? (
+        {loadingRoute ? (
+          <LoadingState message="Đang tải trạm kiểm soát…" />
+        ) : routeError ? (
+          <InfoBanner message="Chưa tải được danh sách trạm kiểm soát." />
+        ) : selectedCheckpoints.length === 0 ? (
           <View style={styles.emptyCpNotice}>
             <Ionicons name="information-circle-outline" size={18} color="#707972" />
             <Text style={styles.emptyCpNoticeText}>
@@ -563,19 +653,19 @@ export function LeaderTripReviewStep({
               const lngStr = Number(cp.longitude).toFixed(3);
 
               return (
-                <View key={cp.id || idx} style={styles.checkpointWebCard}>
+                <View key={cp.sourceCheckpointId ?? cp.id ?? idx} style={styles.checkpointWebCard}>
                   <View style={styles.cpWebNumCircle}>
-                    <Text style={styles.cpWebNumText}>{idx + 1}</Text>
+                    <Text style={styles.cpWebNumText}>{cp.sequence ?? idx + 1}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.cpWebTitleRow}>
                       <Text style={styles.cpWebName}>{cp.name}</Text>
                       <View style={styles.cpReqBadge}>
-                        <Text style={styles.cpReqBadgeText}>• Bắt buộc</Text>
+                        <Text style={styles.cpReqBadgeText}>{cp.isRequired === false ? "• Tùy chọn" : "• Bắt buộc"}</Text>
                       </View>
                     </View>
                     <Text style={styles.cpWebSub}>
-                      Mốc GPS ({latStr}, {lngStr}) · Bán kính 50m
+                      Mốc GPS ({latStr}, {lngStr}){cp.radiusMeters != null ? ` · Bán kính ${cp.radiusMeters} m` : ""}
                     </Text>
                   </View>
                   <Ionicons name="checkmark" size={18} color="#0e0f0c" />

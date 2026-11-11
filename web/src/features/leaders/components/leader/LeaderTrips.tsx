@@ -110,7 +110,7 @@ export function LeaderTrips() {
         capacity: t.capacity || 15,
         status: statusMap[t.status] || "open",
         revenue: priceNum * (t.capacity || 0),
-        imageUrl:
+        imageUrl: t.coverImage?.url ??
           "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
       };
     });

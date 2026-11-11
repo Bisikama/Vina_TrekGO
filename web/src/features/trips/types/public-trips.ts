@@ -1,6 +1,7 @@
 import { TripStatus } from "@/features/leaders/types/leader-trips";
+import type { PublicTripImageFields } from "./public-trip-images";
 
-export interface PublicTripItem {
+export interface PublicTripItem extends PublicTripImageFields {
   id: string;
   title: string;
   description: string | null;

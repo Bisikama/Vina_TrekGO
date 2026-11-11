@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api-client";
+import type { PublicTripImageFields } from "@/features/trips/services/public-trip-images.api";
 
 // ─── Leader Public Trip Types ─────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export interface LeaderTrailDetail {
   snapshotCheckpointIds?: string[];
 }
 
-export interface LeaderPublicTrip {
+export interface LeaderPublicTrip extends PublicTripImageFields {
   id: string;
   title: string;
   description?: string;

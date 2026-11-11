@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { TripData } from "../data/mockTripsData";
+import { PublicTripPhoto } from "./PublicTripPhoto";
 
 interface TripCardProps {
   trip: TripData;
@@ -16,13 +17,8 @@ export const TripCard = ({ trip }: TripCardProps) => {
       className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col group cursor-pointer"
     >
       {/* Image & Top Badges */}
-      <div className="relative h-48 w-full">
-        <Image
-          src={trip.image}
-          alt={trip.title}
-          fill
-          className="object-cover group-hover:scale-105 transition-transform duration-500"
-        />
+      <div className="relative h-48 w-full overflow-hidden">
+        <PublicTripPhoto src={trip.image} alt={trip.title} className="transition-transform duration-500 group-hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
         
         {/* Top Badges */}

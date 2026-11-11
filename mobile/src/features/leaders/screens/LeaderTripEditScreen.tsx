@@ -1,5 +1,9 @@
 import { Colors, Radius, Shadows } from "@/constants/theme";
+import { Button, ErrorAlert, InfoBanner } from "@/components/ui";
 import { useAuth } from "@/features/auth/AuthContext";
+import { PublicTripGalleryEditor } from "@/features/leaders/components/PublicTripGalleryEditor";
+import { usePublicTripGallery } from "@/features/leaders/hooks/usePublicTripGallery";
+import { galleryRequiresReload, isGalleryEditable, savePublicTripImages } from "@/features/trips/services/public-trip-images.api";
 import {
   getLeaderPublicTripById,
   requestTripCancellation,
@@ -9,7 +13,7 @@ import {
 import { validateTripDates } from "@/features/leaders/utils/tripDateUtils";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -104,6 +108,16 @@ export function LeaderTripEditScreen() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const gallery = usePublicTripGallery(accessToken);
+  const resetGallery = gallery.reset;
+  const loadedTripId = useRef<string | null>(null);
+  const writing = useRef(false);
+  const [isSavingGallery, setIsSavingGallery] = useState(false);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [galleryReload, setGalleryReload] = useState(false);
+  const [gallerySaved, setGallerySaved] = useState(false);
+  const galleryLocked = !trip || !isGalleryEditable(trip.status);
+  const busy = isSubmitting || isCancelling || isSavingGallery || gallery.isPicking || gallery.isUploading;
 
   const loadTrip = useCallback(async () => {
     if (!tripId || !accessToken) return;
@@ -112,6 +126,11 @@ export function LeaderTripEditScreen() {
     try {
       const res = await getLeaderPublicTripById(tripId, accessToken);
       setTrip(res);
+      loadedTripId.current = res.id;
+      resetGallery(res.images);
+      setGalleryError(null);
+      setGalleryReload(false);
+      setGallerySaved(false);
       setTitle(res.title || "");
       setDescription(res.description || "");
       setStartDate(formatIsoToVnDate(res.startAt));
@@ -134,18 +153,18 @@ export function LeaderTripEditScreen() {
     } finally {
       setLoading(false);
     }
-  }, [tripId, accessToken]);
+  }, [tripId, accessToken, resetGallery]);
 
   useEffect(() => {
-    void loadTrip();
-  }, [loadTrip]);
+    if (loadedTripId.current !== tripId) void loadTrip();
+  }, [loadTrip, tripId]);
 
   const handleCapacityChange = (delta: number) => {
     setCapacity((prev) => Math.max(1, Math.min(30, prev + delta)));
   };
 
   const handleSave = async () => {
-    if (!tripId || !accessToken || !trip) return;
+    if (!tripId || !accessToken || !trip || busy || writing.current) return;
 
     if (!title.trim()) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập tiêu đề chuyến đi.");
@@ -197,6 +216,7 @@ export function LeaderTripEditScreen() {
     setIsSubmitting(true);
     setError(null);
 
+    writing.current = true;
     try {
       const startIso = parseDateToIso(startDate, "06:00:00");
       const endIso = parseDateToIso(endDate, "18:00:00");
@@ -231,17 +251,44 @@ export function LeaderTripEditScreen() {
     } catch (err: any) {
       setError(err?.message || "Không thể lưu thay đổi chuyến đi.");
     } finally {
+      writing.current = false;
       setIsSubmitting(false);
     }
   };
 
+  const handleSaveGallery = async () => {
+    if (!tripId || !accessToken || !trip || busy || writing.current || galleryLocked || galleryReload || !gallery.changed) return;
+    writing.current = true;
+    setIsSavingGallery(true);
+    setGalleryError(null);
+    setGallerySaved(false);
+    try {
+      const mediaIds = await gallery.prepare();
+      if (mediaIds === null) {
+        setGalleryError("Một số ảnh chưa tải lên được. Thử lại từng ảnh hoặc gỡ ảnh lỗi trước khi lưu.");
+        return;
+      }
+      const saved = await savePublicTripImages(tripId, trip.version, mediaIds, accessToken);
+      setTrip({ ...trip, ...saved });
+      resetGallery(saved.images);
+      setGallerySaved(true);
+    } catch (error) {
+      setGalleryReload(galleryRequiresReload(error));
+      setGalleryError(error instanceof Error ? error.message : "Không thể lưu ảnh chuyến đi.");
+    } finally {
+      writing.current = false;
+      setIsSavingGallery(false);
+    }
+  };
+
   const handleConfirmCancel = async () => {
-    if (!tripId || !accessToken || !trip) return;
+    if (!tripId || !accessToken || !trip || busy || writing.current) return;
     if (!cancelReason.trim()) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do hủy chuyến.");
       return;
     }
 
+    writing.current = true;
     setIsCancelling(true);
     try {
       await requestTripCancellation(
@@ -268,6 +315,7 @@ export function LeaderTripEditScreen() {
     } catch (err: any) {
       Alert.alert("Lỗi hủy chuyến", err?.message || "Không thể gửi yêu cầu hủy chuyến.");
     } finally {
+      writing.current = false;
       setIsCancelling(false);
     }
   };
@@ -373,6 +421,16 @@ export function LeaderTripEditScreen() {
             />
           </View>
         </View>
+
+        <PublicTripGalleryEditor gallery={gallery} locked={galleryLocked} disabled={busy || galleryReload}>
+          {galleryError && <ErrorAlert message={galleryError} />}
+          {gallerySaved && !gallery.changed && <InfoBanner tone="success" message="Đã lưu ảnh chuyến đi." />}
+          {galleryReload ? (
+            <Button label="Bỏ thay đổi và tải lại chuyến" variant="secondary" disabled={busy} onPress={() => void loadTrip()} />
+          ) : !galleryLocked && (
+            <Button label="Lưu ảnh chuyến đi" loading={isSavingGallery} disabled={busy || !gallery.changed} onPress={() => void handleSaveGallery()} />
+          )}
+        </PublicTripGalleryEditor>
 
         {/* 2. LỊCH TRÌNH & THỜI GIAN */}
         <View style={styles.card}>
@@ -517,9 +575,9 @@ export function LeaderTripEditScreen() {
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.saveBtn, isSubmitting && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, busy && styles.saveBtnDisabled]}
             onPress={handleSave}
-            disabled={isSubmitting}
+            disabled={busy}
             activeOpacity={0.88}
           >
             {isSubmitting ? (
@@ -535,6 +593,7 @@ export function LeaderTripEditScreen() {
           {canCancel && (
             <TouchableOpacity
               style={styles.cancelTripBtn}
+              disabled={busy}
               onPress={() => {
                 setShowCancelModal(true);
                 setCancelReason("");

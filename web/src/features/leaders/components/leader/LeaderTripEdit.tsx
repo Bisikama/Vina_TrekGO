@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { TripPricingManager } from "../pricing/TripPricingManager";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button, ErrorAlert, InfoBanner } from "@/components/ui";
+import type { SavedPublicTripGallery } from "@/features/trips/types/public-trip-images";
 import { useLeaderTripDetail, useLeaderTripMutations } from "../../hooks";
+import { usePublicTripGallery } from "../../hooks/usePublicTripGallery";
+import { galleryErrorMessage, galleryRequiresReload, savePublicTripGallery } from "../../services/public-trip-images.api";
 import { LeaderTripCancellation } from "./LeaderTripCancellation";
+import { PublicTripGalleryEditor } from "./PublicTripGalleryEditor";
 
 type LeaderTripEditProps = {
   tripId: string;
@@ -103,6 +108,17 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
   const cleanTripId = tripId.replace(/^#/, "");
   const { trip, refetch: refetchTrip } = useLeaderTripDetail({ tripId: cleanTripId });
   const { updateTrip, isSubmitting } = useLeaderTripMutations();
+  const [savedGallery, setSavedGallery] = useState<SavedPublicTripGallery | null>(null);
+  const currentGallery = trip && savedGallery?.tripId === trip.id && savedGallery.version > trip.version ? savedGallery : null;
+  const tripVersion = currentGallery?.version ?? trip?.version;
+  const gallery = usePublicTripGallery(currentGallery?.images ?? trip?.images);
+  const canEditGallery = !!trip && ["DRAFT", "OPEN", "FULL", "CLOSED"].includes(trip.status);
+  const writing = useRef(false);
+  const [isSavingGallery, setIsSavingGallery] = useState(false);
+  const [galleryError, setGalleryError] = useState("");
+  const [galleryConflict, setGalleryConflict] = useState(false);
+  const mustReloadGallery = galleryConflict || gallery.hasServerChanges;
+  const busy = isSubmitting || isSavingGallery || gallery.isUploading;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -167,7 +183,8 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
   }, [trip?.startAt, startDate]);
 
   async function handleSave() {
-    if (!trip) return;
+    if (!trip || tripVersion === undefined || writing.current || busy) return;
+    writing.current = true;
     try {
       const baseStart = trip.startAt ? new Date(trip.startAt) : new Date(`${startDate}T06:00:00`);
       const maxDeadlineMs = baseStart.getTime() - 24 * 3600_000;
@@ -186,13 +203,13 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
 
       if (trip.status !== "DRAFT") {
         await updateTrip(cleanTripId, {
-          expectedVersion: trip.version,
+          expectedVersion: tripVersion,
           registrationOpenAt: openDate ? openDate.toISOString() : undefined,
           registrationDeadlineAt: deadlineDate ? deadlineDate.toISOString() : undefined,
         });
       } else {
         await updateTrip(cleanTripId, {
-          expectedVersion: trip.version,
+          expectedVersion: tripVersion,
           title: title.trim() || undefined,
           description: description.trim() || null,
           priceExplanation: priceExplanation.trim() || null,
@@ -207,6 +224,51 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
       showTemporaryMessage("Đã lưu thay đổi của chuyến đi thành công.");
     } catch (err: unknown) {
       showTemporaryMessage(err instanceof Error ? err.message : "Lỗi lưu thay đổi.");
+    } finally {
+      writing.current = false;
+    }
+  }
+
+  async function handleSaveGallery() {
+    if (!canEditGallery || !trip || tripVersion === undefined || writing.current || busy || mustReloadGallery || !gallery.changed) return;
+    writing.current = true;
+    setIsSavingGallery(true);
+    setGalleryError("");
+    try {
+      const mediaIds = await gallery.prepare();
+      if (mediaIds === null) {
+        setGalleryError("Một số ảnh chưa tải lên được. Thử lại từng ảnh hoặc gỡ ảnh lỗi trước khi lưu.");
+        return;
+      }
+      const result = await savePublicTripGallery(trip.id, tripVersion, mediaIds);
+      setSavedGallery(result);
+      gallery.reset();
+    } catch (error) {
+      setGalleryConflict(galleryRequiresReload(error));
+      setGalleryError(galleryErrorMessage(error, "Không thể lưu bộ ảnh. Vui lòng thử lại."));
+    } finally {
+      writing.current = false;
+      setIsSavingGallery(false);
+    }
+  }
+
+  async function reloadSavedGallery() {
+    if (writing.current || busy) return;
+    writing.current = true;
+    setIsSavingGallery(true);
+    try {
+      const latest = await refetchTrip();
+      if (!latest) {
+        setGalleryError("Không thể tải lại ảnh đã lưu. Vui lòng thử lại.");
+        return;
+      }
+      setSavedGallery(null);
+      gallery.reset();
+      setGalleryConflict(false);
+      setGalleryError("");
+    } finally {
+      writing.current = false;
+      setIsSavingGallery(false);
     }
   }
 
@@ -239,7 +301,7 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
               </span>
 
               <span>•</span>
-              <span>Phiên bản v{trip?.version || 1}</span>
+              <span>Phiên bản v{tripVersion ?? 1}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -272,11 +334,11 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
                 ◉ Xem quản lý đoàn &amp; Timeline
               </Link>
 
-              {trip && <LeaderTripCancellation key={trip.id} trip={trip} size="md" disabled={isSubmitting} onRequested={() => { void refetchTrip(); }} />}
+              {trip && <LeaderTripCancellation key={trip.id} trip={{ ...trip, version: tripVersion ?? trip.version }} size="md" disabled={busy} onRequested={() => { void refetchTrip(); }} />}
 
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={busy}
                 onClick={handleSave}
                 className="h-11 rounded-xl bg-[#125238] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#2f6b4f] disabled:opacity-50"
               >
@@ -357,6 +419,26 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
                 </label>
               </div>
             </FormSection>
+
+            {trip && (
+              <PublicTripGalleryEditor gallery={gallery} locked={!canEditGallery} disabled={busy || mustReloadGallery}>
+                {(galleryError || gallery.hasServerChanges) && (
+                  <ErrorAlert message={galleryError || "Bộ ảnh trên máy chủ đã thay đổi. Vui lòng tải lại để xem ảnh đã lưu."} />
+                )}
+                {savedGallery && !gallery.changed && !galleryError && (
+                  <InfoBanner tone="success">Đã lưu ảnh chuyến đi.</InfoBanner>
+                )}
+                {mustReloadGallery ? (
+                  <Button variant="secondary" disabled={busy} onClick={reloadSavedGallery}>
+                    Bỏ thay đổi ảnh và tải lại bộ ảnh đã lưu
+                  </Button>
+                ) : canEditGallery && (
+                  <Button loading={isSavingGallery} disabled={busy || !gallery.changed} onClick={handleSaveGallery}>
+                    Lưu ảnh chuyến đi
+                  </Button>
+                )}
+              </PublicTripGalleryEditor>
+            )}
 
             <FormSection
               id="section-schedule"
@@ -465,7 +547,8 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
                 <div className="md:col-span-2 pt-2">
                   <TripPricingManager
                     tripId={cleanTripId}
-                    tripVersion={trip?.version || 1}
+                    tripVersion={tripVersion ?? 1}
+                    disabled={busy}
                     capacity={capacity}
                     minPax={minCapacity}
                     durationDays={durationDays}
@@ -515,6 +598,7 @@ export function LeaderTripEdit({ tripId }: LeaderTripEditProps) {
                 <button
                   type="button"
                   onClick={handleSave}
+                  disabled={busy}
                   className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white hover:bg-[#2f6b4f]"
                 >
                   ✓ Lưu thay đổi

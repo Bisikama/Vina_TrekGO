@@ -1,5 +1,6 @@
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import type { LeaderPublicTrip } from "@/features/leaders/services/leader-public-trips.api";
+import { PublicTripPhoto } from "@/features/trips/components/PublicTripGallery";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -158,6 +159,7 @@ export function LeaderTripList({
                 });
               }}
             >
+              <PublicTripPhoto uri={trip.coverImage?.url} label={`Ảnh bìa ${trip.title}`} style={styles.cover} />
               {/* Top row: Mã tour rút gọn & Badge trạng thái */}
               <View style={styles.cardTop}>
                 <View style={styles.codeWrap}>
@@ -335,6 +337,7 @@ export function LeaderTripList({
 }
 
 const styles = StyleSheet.create({
+  cover: { marginBottom: 12 },
   container: {
     gap: 12,
     marginTop: 8,

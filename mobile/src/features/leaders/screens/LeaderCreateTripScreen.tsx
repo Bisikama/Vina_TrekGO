@@ -1,4 +1,4 @@
-import { ConfirmModal, ScreenShell, StepIndicator } from "@/components/ui";
+import { Button, ConfirmModal, ErrorAlert, LoadingState, ScreenShell, StepIndicator, SurfaceCard } from "@/components/ui";
 import { Colors } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -16,14 +16,17 @@ import {
   type TripOptionDestination,
   type TripOptionPickupPoint,
 } from "@/features/leaders/hooks";
-import type { LeaderTrailSuggestion } from "@/features/leaders/services/leader-public-trips.api";
+import { PublicTripGalleryEditor } from "@/features/leaders/components/PublicTripGalleryEditor";
+import { usePublicTripGallery } from "@/features/leaders/hooks/usePublicTripGallery";
+import type { LeaderPublicTrip, LeaderTrailSuggestion } from "@/features/leaders/services/leader-public-trips.api";
 import {
   STANDARD_COST_TEMPLATE,
   type CostItem,
 } from "@/features/leaders/services/leader-pricing.api";
 import { validateTripDates } from "@/features/leaders/utils/tripDateUtils";
+import { galleryRequiresReload, isGalleryEditable, savePublicTripImages } from "@/features/trips/services/public-trip-images.api";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -108,6 +111,15 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
 
   const [draftTripId, setDraftTripId] = useState<string | null>(initialTripId || null);
   const [draftTripVersion, setDraftTripVersion] = useState<number>(1);
+  const [draftStatus, setDraftStatus] = useState<string>("DRAFT");
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
+  const [draftLoadError, setDraftLoadError] = useState<string | null>(null);
+  const gallery = usePublicTripGallery(accessToken);
+  const resetGallery = gallery.reset;
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [galleryReload, setGalleryReload] = useState(false);
+  const savingForm = useRef(false);
+  const lastFormSave = useRef<{ id: string; version: number; formKey: string } | null>(null);
   const [lastSavedDestinationId, setLastSavedDestinationId] = useState<string | null>(null);
   const [readinessIssues, setReadinessIssues] = useState<string[]>([]);
   const [canPublish, setCanPublish] = useState<boolean>(false);
@@ -147,51 +159,52 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftModalHasDraft, setDraftModalHasDraft] = useState(false);
 
-  // Load existing trip if initialTripId is passed (Editing Public Trip)
-  useEffect(() => {
+  const restoreDraft = useCallback((existing: LeaderPublicTrip) => {
+    setDraftTripId(existing.id);
+    setDraftTripVersion(existing.version);
+    setDraftStatus(existing.status);
+    setLoadedDraftId(existing.id);
+    resetGallery(existing.images);
+    lastFormSave.current = null;
+    setLastSavedDestinationId(existing.destination?.id || existing.destinationId || null);
+    setIsPriceConfirmed(Boolean(existing.priceExplanation));
+    setConfirmedPriceExplanation(existing.priceExplanation || null);
+
+    const departure = new Date(existing.startAt);
+    const departureTime = Number.isNaN(departure.getTime()) ? "05:30"
+      : `${String(departure.getHours()).padStart(2, "0")}:${String(departure.getMinutes()).padStart(2, "0")}`;
+    setForm((prev) => ({
+      ...prev,
+      name: existing.title || prev.name,
+      description: existing.description || "",
+      destinationId: existing.destination?.id || existing.destinationId || prev.destinationId,
+      pickupPointId: existing.pickupPoint?.id || existing.pickupPointId || prev.pickupPointId,
+      startDate: formatIsoToVnDate(existing.startAt) || prev.startDate,
+      endDate: formatIsoToVnDate(existing.endAt) || prev.endDate,
+      departureTime,
+      bookingGateDays: "2",
+      registrationOpenAt: existing.registrationOpenAt || "",
+      registrationDeadlineAt: existing.registrationDeadlineAt || "",
+      slots: String(existing.capacity || prev.slots),
+      minPax: String(existing.minPax || prev.minPax || "5"),
+      price: existing.pricePerPax || existing.price || prev.price,
+      priceExplanation: existing.priceExplanation || "",
+    }));
+  }, [resetGallery]);
+
+  const loadInitialDraft = useCallback(async () => {
     if (!initialTripId || !accessToken) return;
-    setIsLoadingMeta(true);
-    getTripById(initialTripId)
-      .then((existing: any) => {
-        setDraftTripId(existing.id);
-        setDraftTripVersion(existing.version);
-        setLastSavedDestinationId(existing.destination?.id || existing.destinationId || null);
-        if (existing.priceExplanation) {
-          setIsPriceConfirmed(true);
-          setConfirmedPriceExplanation(existing.priceExplanation);
-        }
-        let depTime = "05:30";
-        if (existing.startAt) {
-          try {
-            const dt = new Date(existing.startAt);
-            if (!isNaN(dt.getTime())) {
-              depTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
-            }
-          } catch {}
-        }
-        setForm((prev) => ({
-          ...prev,
-          name: existing.title || prev.name,
-          description: existing.description || "",
-          destinationId: existing.destination?.id || existing.destinationId || prev.destinationId,
-          pickupPointId: existing.pickupPoint?.id || existing.pickupPointId || prev.pickupPointId,
-          startDate: formatIsoToVnDate(existing.startAt) || prev.startDate,
-          endDate: formatIsoToVnDate(existing.endAt) || prev.endDate,
-          departureTime: depTime,
-          bookingGateDays: "2",
-          registrationOpenAt: existing.registrationOpenAt || "",
-          registrationDeadlineAt: existing.registrationDeadlineAt || "",
-          slots: String(existing.capacity || prev.slots),
-          minPax: String(existing.minPax || prev.minPax || "5"),
-          price: existing.pricePerPax || existing.price || prev.price,
-          priceExplanation: existing.priceExplanation || "",
-        }));
-      })
-      .catch((err: any) => {
-        console.warn("Lỗi tải thông tin chuyến để chỉnh sửa:", err?.message);
-      })
-      .finally(() => setIsLoadingMeta(false));
-  }, [initialTripId, accessToken, getTripById]);
+    setDraftLoadError(null);
+    try {
+      restoreDraft(await getTripById(initialTripId));
+    } catch (error) {
+      setDraftLoadError(error instanceof Error ? error.message : "Không thể tải bản nháp đã lưu.");
+    }
+  }, [initialTripId, accessToken, getTripById, restoreDraft]);
+
+  useEffect(() => {
+    if (initialTripId && loadedDraftId !== initialTripId) void loadInitialDraft();
+  }, [initialTripId, loadedDraftId, loadInitialDraft]);
 
   const fetchDestinations = useCallback(() => {
     if (!canCreatePublicTrip || !accessToken) return;
@@ -234,14 +247,6 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
     () => pickupPoints.find((p) => p.id === form.pickupPointId),
     [pickupPoints, form.pickupPointId],
   );
-
-  // Checkpoints thuộc trail được chọn theo đúng thứ tự
-  const selectedCheckpoints = useMemo(() => {
-    if (!selectedTrail?.checkpointIds) return [];
-    return selectedTrail.checkpointIds
-      .map((id) => checkpoints.find((c) => c.id === id))
-      .filter((cp): cp is TripOptionCheckpoint => Boolean(cp));
-  }, [selectedTrail, checkpoints]);
 
   const updateField = (field: keyof LeaderTripFormData, value: string) => {
     setForm((current) => {
@@ -310,13 +315,40 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
   };
 
   // ─── BƯỚC 1: LƯU THÔNG TIN & CHUYỂN SANG BƯỚC 2 (LỘ TRÌNH) ───────────────────
+  const awaitingDraft = !!initialTripId && loadedDraftId !== initialTripId;
+  const galleryBusy = gallery.isPicking || gallery.isUploading;
+
+  const reloadSavedGallery = async () => {
+    if (!draftTripId || savingForm.current || galleryBusy) return;
+    savingForm.current = true;
+    setIsSubmitting(true);
+    try {
+      restoreDraft(await getTripById(draftTripId));
+      setGalleryReload(false);
+      setGalleryError(null);
+    } catch (error) {
+      setGalleryError(error instanceof Error ? error.message : "Không thể tải lại chuyến đi.");
+    } finally {
+      savingForm.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
   const handleProceedToRoute = async () => {
+    if (!accessToken || awaitingDraft || savingForm.current || galleryBusy || galleryReload) return;
     if (!validateFormStep()) return;
     setConflictWarning(null);
     setSubmitError(null);
+    setGalleryError(null);
+    savingForm.current = true;
     setIsSubmitting(true);
 
     try {
+      const mediaIds = gallery.changed ? await gallery.prepare() : undefined;
+      if (mediaIds === null) {
+        setGalleryError("Một số ảnh chưa tải lên được. Thử lại từng ảnh hoặc gỡ ảnh lỗi để tiếp tục.");
+        return;
+      }
       const depTime = form.departureTime || "05:30";
       const [depHour, depMin] = depTime.split(":");
       const timeStr = `${(depHour || "05").padStart(2, "0")}:${(depMin || "30").padStart(2, "0")}:00`;
@@ -340,6 +372,9 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
 
       let activeDraftId = draftTripId;
       let activeVersion = draftTripVersion;
+      const formKey = JSON.stringify(form);
+      const saved = lastFormSave.current;
+      const formAlreadySaved = saved?.id === activeDraftId && saved.version === activeVersion && saved.formKey === formKey;
 
       // Verify schedule conflict via API
       if (accessToken) {
@@ -379,7 +414,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
         setDraftTripId(draft.id);
         setDraftTripVersion(draft.version);
         setLastSavedDestinationId(form.destinationId);
-      } else {
+      } else if (!formAlreadySaved) {
         // Ràng buộc BE: Checkpoints và Trails phải thuộc đúng destinationId.
         // Nếu Leader đổi destinationId trên bản nháp đã có, phải reset checkpoints và trails rỗng trước:
         if (lastSavedDestinationId && form.destinationId !== lastSavedDestinationId) {
@@ -424,6 +459,21 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
         setLastSavedDestinationId(form.destinationId);
       }
 
+      lastFormSave.current = { id: activeDraftId, version: activeVersion, formKey };
+      if (mediaIds) {
+        try {
+          const result = await savePublicTripImages(activeDraftId, activeVersion, mediaIds, accessToken);
+          activeVersion = result.version;
+          setDraftTripVersion(result.version);
+          resetGallery(result.images);
+          lastFormSave.current = { id: activeDraftId, version: activeVersion, formKey };
+        } catch (error) {
+          setGalleryReload(galleryRequiresReload(error));
+          setGalleryError(error instanceof Error ? error.message : "Bản nháp đã lưu nhưng chưa lưu được ảnh.");
+          return;
+        }
+      }
+
       // 2. Tải danh sách System Trail suggestions & Checkpoints của Destination
       setIsLoadingRouteData(true);
       const [rawSuggestions, destinationCps] = await Promise.all([
@@ -462,6 +512,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
     } catch (err: any) {
       setSubmitError(err?.message || "Không thể chuẩn bị chuyến đi để thiết lập lộ trình.");
     } finally {
+      savingForm.current = false;
       setIsSubmitting(false);
       setIsLoadingRouteData(false);
     }
@@ -622,6 +673,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
   };
 
   const handleSafeGoBack = useCallback(() => {
+    if (savingForm.current) return;
     if (onNavigateTab) {
       onNavigateTab("dashboard");
     } else if (router.canGoBack()) {
@@ -737,6 +789,7 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
         <StepIndicator steps={WIZARD_STEPS} currentStepIndex={2} style={styles.stepBar} />
         <LeaderTripReviewStep
             form={form}
+            images={gallery.images}
             tripId={draftTripId || ""}
             expectedVersion={draftTripVersion}
             accessToken={accessToken || ""}
@@ -744,7 +797,6 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
             onChangeCostItems={setCostItems}
             selectedDestination={selectedDestination}
             selectedPickup={selectedPickup}
-            selectedCheckpoints={selectedCheckpoints}
             selectedTrail={selectedTrail}
             conflictWarning={conflictWarning}
             submitError={submitError}
@@ -812,6 +864,21 @@ export function LeaderCreateTripScreen({ onNavigateTab }: LeaderCreateTripScreen
           pickupPoints={pickupPoints}
           checkpoints={checkpoints}
           isLoadingMeta={isLoadingMeta}
+          isProceeding={isSubmitting}
+          proceedDisabled={awaitingDraft || galleryBusy || galleryReload}
+          gallery={awaitingDraft ? (
+            <SurfaceCard>
+              {draftLoadError ? <ErrorAlert message={draftLoadError} onRetry={() => void loadInitialDraft()} />
+                : <LoadingState message="Đang tải bản nháp và ảnh đã lưu…" />}
+            </SurfaceCard>
+          ) : (
+            <PublicTripGalleryEditor gallery={gallery} locked={!isGalleryEditable(draftStatus)} disabled={isSubmitting || galleryReload}>
+              {galleryError && <ErrorAlert message={galleryError} />}
+              {galleryReload && (
+                <Button label="Bỏ thay đổi và tải lại chuyến" variant="secondary" disabled={isSubmitting} onPress={() => void reloadSavedGallery()} />
+              )}
+            </PublicTripGalleryEditor>
+          )}
           submitError={submitError}
           onUpdateField={updateField}
           onProceed={() => void handleProceedToRoute()}
