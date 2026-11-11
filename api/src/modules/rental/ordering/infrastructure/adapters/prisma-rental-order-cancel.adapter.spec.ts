@@ -222,22 +222,25 @@ describe('PrismaRentalOrderAdapter.cancelOrder — trả đồ về kho', () => 
 })
 
 describe('PrismaPreparationTaskAdapter.listTasks — hàng đợi kho', () => {
-  function adapterWith(findMany: jest.Mock) {
+  it('không lọc trạng thái thì ẩn task CANCELLED; lọc status=CANCELLED vẫn xem được', async () => {
+    const count = jest.fn().mockResolvedValue(0)
+    const queryRaw = jest.fn().mockResolvedValue([])
     const prisma = {
-      inventoryTask: { findMany, count: jest.fn().mockResolvedValue(0) },
+      inventoryTask: { findMany: jest.fn().mockResolvedValue([]), count },
+      $queryRaw: queryRaw,
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     }
-    return new PrismaPreparationTaskAdapter(prisma as never)
-  }
-
-  it('không lọc trạng thái thì ẩn task CANCELLED; lọc status=CANCELLED vẫn xem được', async () => {
-    const findMany = jest.fn().mockResolvedValue([])
-    const adapter = adapterWith(findMany)
+    const adapter = new PrismaPreparationTaskAdapter(prisma as never)
 
     await adapter.listTasks({ actorUserId: 'staff-1', page: 1, pageSize: 20 })
     await adapter.listTasks({ actorUserId: 'staff-1', page: 1, pageSize: 20, status: 'CANCELLED' })
 
-    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ status: { not: 'CANCELLED' } })
-    expect(findMany.mock.calls[1][0].where.AND).toContainEqual({ status: 'CANCELLED' })
+    // Trang id lấy bằng SQL, tổng số bằng count: cả hai phải cùng điều kiện.
+    const pageSql = (call: unknown[]) => Prisma.sql(call[0] as string[], ...(call.slice(1) as Prisma.Sql[]))
+    expect(pageSql(queryRaw.mock.calls[0]).sql).toContain(`t.status <> 'CANCELLED'`)
+    expect(pageSql(queryRaw.mock.calls[1]).values).toContain('CANCELLED')
+    expect(pageSql(queryRaw.mock.calls[1]).sql).not.toContain(`<> 'CANCELLED'`)
+    expect(count.mock.calls[0][0].where.AND).toContainEqual({ status: { not: 'CANCELLED' } })
+    expect(count.mock.calls[1][0].where.AND).toContainEqual({ status: 'CANCELLED' })
   })
 })
