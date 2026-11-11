@@ -3,6 +3,8 @@ import { PrismaClient, GearCategory, GearCondition, GearItemSource } from '@pris
 import { GEAR_RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
 import { PrismaTripContextReadAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-trip-context-read.adapter'
 import type { PrismaService } from '../src/shared/services/prisma.service'
+import { calculateOccupiedWindow } from '../src/modules/rental/ordering/application/services/rental-ordering.rules'
+import { getVerifiedCapacitySnapshot } from '../src/modules/rental/ordering/infrastructure/adapters/rental-capacity-snapshot'
 
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL
 const prisma = new PrismaClient({
@@ -227,6 +229,75 @@ export async function seedGearDemo(client: PrismaClient, userId: string, tripId?
   return result
 }
 
+/** Kiểm tra catalog thật; không thay đổi sản phẩm, hồ sơ, chính sách hoặc tồn kho. */
+export async function inspectRentalReadiness(client: PrismaClient, userId: string, tripId: string) {
+  const trip = await new PrismaTripContextReadAdapter(client as PrismaService).getTripContext(tripId, userId)
+  const now = new Date()
+  const policy = await client.rentalPolicy.findFirst({
+    where: { isActive: true, effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+    orderBy: [{ effectiveFrom: 'desc' }, { versionNo: 'desc' }],
+  })
+  if (!policy) throw new Error('Không có chính sách thuê đang hiệu lực; cần cấu hình chính sách thật trước khi demo.')
+  const context = {
+    pickup: { scheduledAt: trip.startAt },
+    dropoff: { scheduledAt: trip.endAt },
+    activePolicy: {
+      returnBufferMinutes: Number(policy.returnBufferMinutes),
+      cleaningBufferMinutes: Number(policy.cleaningBufferMinutes),
+      deepInspectionBufferMinutes: policy.deepInspectionBufferMinutes == null ? undefined : Number(policy.deepInspectionBufferMinutes),
+    },
+  } as any
+  // Áp dụng cùng kiểm tra buffer với luồng gợi ý thuê.
+  calculateOccupiedWindow(context, trip.endAt)
+  if (policy.deepInspectionBufferMinutes != null && (!Number.isSafeInteger(Number(policy.deepInspectionBufferMinutes)) || Number(policy.deepInspectionBufferMinutes) < 2880)) {
+    throw new Error('Chính sách thuê có deepInspectionBufferMinutes không hợp lệ (tối thiểu 2880).')
+  }
+  const slugs = ['ao-mua-chong-thoi-tiet', 'giay-leo-nui', 'balo-trekking', 'tui-ngu-dem-cach-nhiet', 'leu-trai', 'gay-trekking']
+  const categoriesForSlug: Record<string, GearCategory[]> = {
+    'ao-mua-chong-thoi-tiet': [GearCategory.JACKET, GearCategory.RAIN_GEAR],
+    'giay-leo-nui': [GearCategory.FOOTWEAR],
+    'balo-trekking': [GearCategory.BACKPACK],
+    'tui-ngu-dem-cach-nhiet': [GearCategory.SLEEPING_BAG],
+    'leu-trai': [GearCategory.TENT],
+    'gay-trekking': [GearCategory.TREKKING_POLE],
+  }
+  const categories = await client.rentalCategory.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } })
+  const missingCategories = slugs.filter((slug) => !categories.some((category) => category.slug === slug))
+  if (missingCategories.length) console.warn(`Thiếu danh mục thuê: ${missingCategories.join(', ')}`)
+  let available = 0
+  let missingProfiles = 0
+  for (const category of categories) {
+    // Cùng thứ tự và giới hạn ứng viên mặc định với Gear Advisor.
+    const products = await client.rentalProduct.findMany({
+      where: { categoryId: category.id, status: 'ACTIVE' },
+      include: { technicalProfile: true },
+      orderBy: [{ dailyPrice: 'asc' }, { id: 'asc' }], take: 20,
+    })
+    for (const product of products) {
+      if (!product.technicalProfile) {
+        missingProfiles++
+        console.warn(`SKU ${product.sku} thiếu hồ sơ kỹ thuật.`)
+      } else if (!categoriesForSlug[category.slug].includes(product.technicalProfile.category)) {
+        console.warn(`SKU ${product.sku} có nhóm hồ sơ không khớp danh mục thuê; bỏ qua.`)
+        continue
+      }
+      const attributes = product.technicalProfile?.attributes as Record<string, unknown> | null
+      try {
+        const window = calculateOccupiedWindow(context, trip.endAt, attributes?.requires_deep_inspection === true || (product as any).requiresDeepInspectionAfterReturn === true)
+        const snapshot = await getVerifiedCapacitySnapshot(client, { productId: product.id, ...window, now })
+        if (snapshot.availableCount > 0) available++
+      } catch {
+        console.warn(`Không thể xác minh tồn kho của SKU ${product.sku}; bỏ qua khi đếm.`)
+      }
+    }
+  }
+  console.log(`Catalog: ${available} ứng viên có tồn kho xác minh; ${missingProfiles} ứng viên thiếu hồ sơ kỹ thuật.`)
+  if (!available) console.warn('Chưa tìm thấy ứng viên có tồn kho xác minh cho khoảng thời gian chuyến đi.')
+  if (missingProfiles) console.warn('Cấu hình hồ sơ kỹ thuật thật qua chức năng quản lý trước khi demo; seed không suy đoán thông số.')
+  console.log('Tồn kho và khả năng đáp ứng còn phụ thuộc yêu cầu cụ thể, thời tiết, các lượt giữ hàng và thời điểm tạo gợi ý.')
+  return { available, missingProfiles }
+}
+
 if (require.main === module) {
   const argument = (name: string) =>
     process.argv.find((arg) => arg.startsWith('--' + name + '='))?.slice(name.length + 3)
@@ -237,7 +308,10 @@ if (require.main === module) {
     console.error('Cách dùng: npm run seed:gear-demo -- --userId=<UUID> [--tripId=<UUID>]')
     process.exitCode = 1
   } else {
-    seedGearDemo(prisma, userId, tripId)
+    (async () => {
+      if (tripId) await inspectRentalReadiness(prisma, userId, tripId)
+      await seedGearDemo(prisma, userId, tripId)
+    })()
       .catch((error) => {
         console.error('Không thể seed Gear demo:', error.message)
         process.exitCode = 1
