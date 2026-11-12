@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import {
   getLeaderPublicTripDetail,
   getLeaderTripErrorMessage,
@@ -18,7 +19,8 @@ export function useLeaderTripDetail({
 }: UseLeaderTripDetailOptions) {
   const [trip, setTrip] = useState<LeaderTripView | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(!!tripId && enabled);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ tripId: string; message: string; status?: number } | null>(null);
+  const error = loadError?.tripId === tripId ? loadError : null;
 
   const fetchDetail = useCallback(
     async (signal?: AbortSignal) => {
@@ -29,7 +31,7 @@ export function useLeaderTripDetail({
       }
 
       setIsLoading(true);
-      setError(null);
+      setLoadError(null);
       try {
         const data = await getLeaderPublicTripDetail(tripId, signal);
         setTrip(data);
@@ -42,7 +44,7 @@ export function useLeaderTripDetail({
           err,
           "Không thể tải chi tiết chuyến đi."
         );
-        setError(msg);
+        setLoadError({ tripId, message: msg, status: axios.isAxiosError(err) ? err.response?.status : undefined });
         return undefined;
       } finally {
         setIsLoading(false);
@@ -65,7 +67,8 @@ export function useLeaderTripDetail({
   return {
     trip,
     isLoading,
-    error,
+    error: error?.message ?? null,
+    errorStatus: error?.status,
     refetch: () => fetchDetail(),
   };
 }

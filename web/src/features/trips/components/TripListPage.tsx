@@ -20,7 +20,7 @@ function publicTripToTripData(trip: PublicTripItem): TripData {
     difficulty: { level: "medium", label: "Trung bình", color: "bg-blue-100 text-blue-700" },
     isVFRSVerified: true,
     location: { name: "Khu vực leo núi", distance: "Cung đường thực tế" },
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop",
+    image: trip.coverImage?.url ?? "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=500&auto=format&fit=crop",
     date: { start: startDay, end: endDay, year },
     status: { label: trip.status === 'OPEN' ? 'Đang mở đăng ký' : trip.status, color: "text-emerald-600" },
     title: trip.title,

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api-client";
+import type { PublicTripImageFields } from "./public-trip-images.api";
 
 // ─── Public Trip Types ────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export interface PublicTripCheckpoint {
   isRequired: boolean;
 }
 
-export interface PublicTrip {
+export interface PublicTrip extends PublicTripImageFields {
   id: string;
   title: string;
   description?: string | null;
@@ -266,22 +267,34 @@ async function getTripFromMyBookings(id: string): Promise<PublicTrip | null> {
 
 /** GET /api/v1/public-trips/:id — Trip detail for user (no internal priceExplanation) */
 export async function getPublicTripById(id: string): Promise<PublicTrip> {
+  const encodedId = encodeURIComponent(id);
+  const publicDetail = apiRequest<unknown>(`/api/v1/public-trips/${encodedId}`).then(
+    (response) => ({ trip: unwrapTrip(response), error: null }),
+    (error: unknown) => ({ trip: null, error }),
+  );
   let lastError: unknown;
-
-  for (const path of [`/api/v1/trips/${id}`, `/api/v1/public-trips/${id}`]) {
-    try {
-      const res = await apiRequest<any>(path);
-      const trip = unwrapTrip(res);
-      // Bỏ qua response không phải dữ liệu chuyến đi (không có ngày khởi hành)
-      if (trip.startAt) return { ...trip, id: trip.id || id };
-    } catch (err) {
-      lastError = err;
-      if (!isNotFound(err)) throw err;
+  try {
+    const trip = unwrapTrip(await apiRequest<unknown>(`/api/v1/trips/${encodedId}`));
+    if (trip.startAt) {
+      const { trip: withImages } = await publicDetail;
+      return {
+        ...trip,
+        id: trip.id || id,
+        images: withImages?.images ?? trip.images,
+        coverImage: withImages?.coverImage === undefined ? trip.coverImage : withImages.coverImage,
+        imageCount: withImages?.imageCount ?? trip.imageCount,
+      };
     }
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+    lastError = error;
   }
 
+  const { trip, error } = await publicDetail;
+  if (trip?.startAt) return { ...trip, id: trip.id || id };
+  if (error && !isNotFound(error)) throw error;
   const fromBooking = await getTripFromMyBookings(id);
   if (fromBooking) return fromBooking;
 
-  throw lastError ?? new Error("Không tìm thấy thông tin chuyến đi.");
+  throw error ?? lastError ?? new Error("Không tìm thấy thông tin chuyến đi.");
 }

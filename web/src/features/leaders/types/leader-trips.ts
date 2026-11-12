@@ -1,3 +1,5 @@
+import type { PublicTripImageFields } from "@/features/trips/types/public-trip-images";
+
 export type TripStatus =
   | 'DRAFT'
   | 'OPEN'
@@ -33,7 +35,7 @@ export interface PlannedTrail {
   snapshotCheckpointIds: string[] | unknown;
 }
 
-export interface LeaderTripView {
+export interface LeaderTripView extends PublicTripImageFields {
   id: string;
   tripType: string;
   creatorId: string;

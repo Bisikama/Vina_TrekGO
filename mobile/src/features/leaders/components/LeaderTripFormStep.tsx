@@ -1,4 +1,5 @@
 import { Trip3DMapView } from "@/components/Trip3DMapView";
+import { Button, Spacing } from "@/components/ui";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import type {
   TripOptionCheckpoint,
@@ -15,7 +16,7 @@ import {
 } from "@/features/leaders/utils/tripDateUtils";
 import { WheelDatePickerModal } from "./WheelDatePickerModal";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -62,6 +63,9 @@ interface LeaderTripFormStepProps {
   pickupPoints: TripOptionPickupPoint[];
   checkpoints: TripOptionCheckpoint[];
   isLoadingMeta: boolean;
+  gallery?: ReactNode;
+  proceedDisabled?: boolean;
+  isProceeding?: boolean;
   submitError?: string | null;
   onUpdateField: (field: keyof LeaderTripFormData, value: string) => void;
   onToggleCheckpoint?: (id: string) => void;
@@ -77,6 +81,9 @@ export function LeaderTripFormStep({
   pickupPoints,
   checkpoints,
   isLoadingMeta,
+  gallery,
+  proceedDisabled,
+  isProceeding,
   submitError,
   onUpdateField,
   onToggleCheckpoint,
@@ -309,6 +316,8 @@ export function LeaderTripFormStep({
           </View>
         </View>
       </View>
+
+      {gallery && <View style={styles.gallerySection}>{gallery}</View>}
 
       {/* 2. CARD: THỜI GIAN & ĐIỂM TẬP KẾT ĐOÀN */}
       <View style={styles.card}>
@@ -1005,10 +1014,13 @@ export function LeaderTripFormStep({
       </View>
 
       {/* Bottom Action Button */}
-      <TouchableOpacity style={styles.primaryBtn} onPress={onProceed} activeOpacity={0.88}>
-        <Text style={styles.primaryBtnText}>TIẾP TỤC: THIẾT LẬP LỘ TRÌNH</Text>
-        <Ionicons name="arrow-forward" size={18} color="#fff" />
-      </TouchableOpacity>
+      <Button
+        label="Tiếp tục: Thiết lập lộ trình"
+        loading={isProceeding}
+        disabled={proceedDisabled}
+        onPress={onProceed}
+        rightIcon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
+      />
 
       {/* Wheel Date Picker Modals */}
       <WheelDatePickerModal
@@ -1199,11 +1211,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  gallerySection: {
+    marginBottom: Spacing.lg,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     ...Shadows.card,
   },
   cardHeader: {
@@ -1858,22 +1873,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: 4,
-  },
-  primaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#9fe870",
-    paddingVertical: 15,
-    borderRadius: Radius.sm,
-    marginTop: 10,
-  },
-  primaryBtnText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.5,
   },
   timeSection: {
     marginTop: 14,

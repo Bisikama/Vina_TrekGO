@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth';
+import { PublicTripPhoto } from '@/features/trips/components/PublicTripPhoto';
+import { getPublicTripDetail } from '@/features/trips/services/public-trips.api';
 import {
   usePublicBookingTrips,
   usePublicBookingTripDetail,
@@ -32,6 +35,21 @@ import {
   PaginationBar,
   TripSummaryBanner,
 } from '@/components/ui';
+
+function BookingTripCover({ trip }: { trip: PublicTrip }) {
+  const { data } = useSWR(['public-trip-cover', trip.id], ([, id]) => getPublicTripDetail(id), {
+    shouldRetryOnError: false,
+  });
+
+  return (
+    <div className="relative mb-4 aspect-video overflow-hidden rounded-lg bg-stone-100">
+      <PublicTripPhoto
+        src={data?.coverImage?.url ?? 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=720&q=80'}
+        alt={trip.title}
+      />
+    </div>
+  );
+}
 
 export function PublicBookingTrips() {
   const {
@@ -153,6 +171,7 @@ export function PublicBookingTrips() {
                 className="flex flex-col justify-between"
               >
                 <div>
+                  <BookingTripCover trip={trip} />
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <span
                       title={`${trip.destination?.name ?? ''} · Còn ${trip.remainingSlots} chỗ`}

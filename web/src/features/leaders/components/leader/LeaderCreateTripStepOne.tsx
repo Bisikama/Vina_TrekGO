@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, ErrorAlert, LoadingState, SurfaceCard } from "@/components/ui";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-[#E5E7EB] bg-[#F7F7F4] px-4 text-sm text-[#1F2937] outline-none transition focus:border-[#2F6B4F] focus:bg-white focus:ring-2 focus:ring-[#2F6B4F]/15";
@@ -13,6 +14,9 @@ import {
   useLeaderTripOptions,
 } from "../../hooks";
 import type { LeaderTripView } from "../../types";
+import { usePublicTripGallery } from "../../hooks/usePublicTripGallery";
+import { galleryErrorMessage, galleryRequiresReload, savePublicTripGallery } from "../../services/public-trip-images.api";
+import { PublicTripGalleryEditor } from "./PublicTripGalleryEditor";
 
 function dateInputValue(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
@@ -119,9 +123,23 @@ export function LeaderCreateTripStepOne() {
     }
   }, [tripIdFromParam]);
 
-  const { trip, error: tripFetchError } = useLeaderTripDetail({
+  const { trip: loadedTrip, error: tripFetchError, errorStatus: tripFetchStatus, refetch: refetchTrip } = useLeaderTripDetail({
     tripId: tripId || undefined,
   });
+  const trip = loadedTrip?.id === tripId ? loadedTrip : null;
+  const [lastDraftSave, setLastDraftSave] = useState<{ trip: LeaderTripView; inputKey: string } | null>(null);
+  const savedDraft = lastDraftSave?.trip.id === tripId ? lastDraftSave : null;
+  const savedImages = savedDraft && savedDraft.trip.version > (trip?.version ?? 0)
+    ? savedDraft.trip.images ?? trip?.images
+    : trip?.images;
+  const gallery = usePublicTripGallery(savedImages);
+  const saving = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [galleryError, setGalleryError] = useState("");
+  const [galleryConflict, setGalleryConflict] = useState(false);
+  const mustReloadGallery = galleryConflict || gallery.hasServerChanges;
+  const busy = isSaving || gallery.isUploading;
+  const awaitingDraft = Boolean(tripId && !trip && !savedDraft);
 
   const { destinations, isLoadingDestinations, fetchPickups } = useLeaderTripOptions();
   const {
@@ -156,7 +174,7 @@ export function LeaderCreateTripStepOne() {
 
   // Nếu tripId lưu trong sessionStorage không còn tồn tại trên server (VD: đổi DB hoặc bản nháp đã xóa), tự động xóa session cũ
   useEffect(() => {
-    if (tripId && tripFetchError && !tripIdFromParam) {
+    if (tripId && tripFetchStatus === 404 && !tripIdFromParam && !savedDraft) {
       window.sessionStorage.removeItem("leader-create-trip-id");
       window.sessionStorage.removeItem("leader-create-trip-draft");
       window.sessionStorage.removeItem("leader-create-trip-route");
@@ -165,7 +183,7 @@ export function LeaderCreateTripStepOne() {
       setPickupPointId("");
       setApiPickups([]);
     }
-  }, [tripId, tripFetchError, tripIdFromParam]);
+  }, [tripId, tripFetchStatus, tripIdFromParam, savedDraft]);
 
   // Nếu destinationId được khôi phục từ sessionStorage không nằm trong danh sách destinations khả dụng của DB hiện tại thì reset
   useEffect(() => {
@@ -314,9 +332,14 @@ export function LeaderCreateTripStepOne() {
   const maxAllowedDeadlineLocal = computeDeadlineBeforeStart(startDate, meetingTime, 24);
 
   function handleStartNewTrip() {
+    if (saving.current || gallery.isUploading) return;
     window.sessionStorage.removeItem("leader-create-trip-id");
     window.sessionStorage.removeItem("leader-create-trip-draft");
     window.sessionStorage.removeItem("leader-create-trip-route");
+    setLastDraftSave(null);
+    gallery.reset();
+    setGalleryConflict(false);
+    setGalleryError("");
     setTripId(null);
     setTitle("");
     setDescription("");
@@ -330,7 +353,28 @@ export function LeaderCreateTripStepOne() {
     router.replace("/leader/create-trip");
   }
 
+  async function reloadSavedGallery() {
+    if (saving.current) return;
+    saving.current = true;
+    setIsSaving(true);
+    try {
+      const latest = await refetchTrip();
+      if (!latest) {
+        setGalleryError("Không thể tải lại ảnh đã lưu. Vui lòng thử lại.");
+        return;
+      }
+      setLastDraftSave(null);
+      gallery.reset();
+      setGalleryConflict(false);
+      setGalleryError("");
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
+    }
+  }
+
   async function handleContinue() {
+    if (saving.current || gallery.isUploading || mustReloadGallery || awaitingDraft) return;
     if (!title.trim()) {
       setTitleError("Vui lòng nhập tiêu đề chuyến đi trước khi tiếp tục.");
       return;
@@ -397,8 +441,16 @@ export function LeaderCreateTripStepOne() {
     setDateError("");
     setTitleError("");
     setSubmitError("");
+    setGalleryError("");
+    saving.current = true;
+    setIsSaving(true);
 
     try {
+      const mediaIds = gallery.changed ? await gallery.prepare() : undefined;
+      if (mediaIds === null) {
+        setGalleryError("Một số ảnh chưa tải lên được. Thử lại từng ảnh hoặc gỡ ảnh lỗi để tiếp tục.");
+        return;
+      }
       const startAt = startAtDate.toISOString();
       const endAt = new Date(`${endDate}T23:59:59`).toISOString();
       const registrationDeadlineAt = deadlineDate.toISOString();
@@ -406,21 +458,40 @@ export function LeaderCreateTripStepOne() {
       const cleanPrice = String(price).replace(/\D/g, "") || "1000000";
       const cleanPriceExplanation = priceExplanation.trim() || null;
 
+      const input = {
+        destinationId,
+        pickupPointId,
+        title: title.trim(),
+        description: description.trim() || null,
+        priceExplanation: cleanPriceExplanation,
+        startAt,
+        endAt,
+        registrationOpenAt,
+        registrationDeadlineAt,
+        capacity: Number(capacity),
+        minCapacity: Number(minCapacity),
+        price: cleanPrice,
+      };
+      const inputKey = JSON.stringify(input);
       let savedTrip: LeaderTripView;
 
-      if (tripId) {
-        let currentVersion = trip?.version || 1;
+      if (savedDraft?.inputKey === inputKey) {
+        savedTrip = savedDraft.trip;
+      } else if (tripId) {
+        const currentTrip = savedDraft?.trip ?? trip;
+        if (!currentTrip) throw new Error("Chưa tải được bản nháp. Vui lòng tải lại trang.");
+        let currentVersion = currentTrip.version;
 
         // Nếu người dùng đổi Destination thì cần xóa checkpoints/trails cũ trước (quy tắc backend)
-        if (trip && trip.destinationId && destinationId !== trip.destinationId) {
-          if (trip.checkpoints && trip.checkpoints.length > 0) {
+        if (currentTrip.destinationId && destinationId !== currentTrip.destinationId) {
+          if (currentTrip.checkpoints?.length > 0) {
             const cpRes = await setCheckpoints(tripId, {
               expectedVersion: currentVersion,
               checkpointIds: [],
             });
             currentVersion = cpRes.version;
           }
-          if (trip.trails && trip.trails.length > 0) {
+          if (currentTrip.trails?.length > 0) {
             const trailRes = await setTrails(tripId, {
               expectedVersion: currentVersion,
               trailIds: [],
@@ -430,45 +501,18 @@ export function LeaderCreateTripStepOne() {
         }
 
         // Cập nhật lại bản nháp hiện có, tránh tạo chuyến mới gây trùng lịch
-        savedTrip = await updateTrip(tripId, {
-          expectedVersion: currentVersion,
-          destinationId,
-          pickupPointId,
-          title: title.trim(),
-          description: description.trim() || null,
-          priceExplanation: cleanPriceExplanation,
-          startAt,
-          endAt,
-          registrationOpenAt,
-          registrationDeadlineAt,
-          capacity: Number(capacity),
-          minCapacity: Number(minCapacity),
-          price: cleanPrice,
-        });
+        savedTrip = await updateTrip(tripId, { ...input, expectedVersion: currentVersion });
       } else {
-        // Tạo chuyến đi nháp mới lần đầu
-        savedTrip = await createDraft({
-          destinationId,
-          pickupPointId,
-          title: title.trim(),
-          description: description.trim() || null,
-          priceExplanation: cleanPriceExplanation,
-          startAt,
-          endAt,
-          registrationOpenAt,
-          registrationDeadlineAt,
-          capacity: Number(capacity),
-          minCapacity: Number(minCapacity),
-          price: cleanPrice,
-        });
+        savedTrip = await createDraft(input);
       }
 
+      setLastDraftSave({ trip: savedTrip, inputKey });
       window.sessionStorage.setItem("leader-create-trip-id", savedTrip.id);
-      window.sessionStorage.setItem(
-        "leader-create-trip-draft",
-        JSON.stringify({
+      setTripId(savedTrip.id);
+      const saveDraftSnapshot = (version: number) => window.sessionStorage.setItem(
+        "leader-create-trip-draft", JSON.stringify({
           id: savedTrip.id,
-          version: savedTrip.version,
+          version,
           destinationId,
           destinationName: destinations.find((d) => d.id === destinationId)?.name,
           pickupPointId,
@@ -490,11 +534,28 @@ export function LeaderCreateTripStepOne() {
           minCapacity: savedTrip.minCapacity ?? Number(minCapacity),
         })
       );
+      saveDraftSnapshot(savedTrip.version);
+
+      if (mediaIds) {
+        try {
+          const result = await savePublicTripGallery(savedTrip.id, savedTrip.version, mediaIds);
+          saveDraftSnapshot(result.version);
+          setLastDraftSave({ trip: { ...savedTrip, ...result }, inputKey });
+          gallery.reset();
+        } catch (error) {
+          setGalleryConflict(galleryRequiresReload(error));
+          setGalleryError(galleryErrorMessage(error, "Bản nháp đã lưu nhưng chưa lưu được ảnh. Vui lòng thử lại."));
+          return;
+        }
+      }
 
       router.push(`/leader/create-trip/route?tripId=${savedTrip.id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Đã có lỗi xảy ra khi lưu thông tin chuyến đi.";
       setSubmitError(msg);
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -522,6 +583,7 @@ export function LeaderCreateTripStepOne() {
                   <button
                     type="button"
                     onClick={handleStartNewTrip}
+                    disabled={busy}
                     className="text-xs font-medium text-[#6B7280] hover:text-red-600 underline transition"
                   >
                     Tạo chuyến mới
@@ -577,6 +639,7 @@ export function LeaderCreateTripStepOne() {
             {tripId ? (
               <button
                 type="button"
+                disabled={busy || gallery.changed || mustReloadGallery || awaitingDraft}
                 onClick={() =>
                   router.push(`/leader/create-trip/route?tripId=${tripId}`)
                 }
@@ -654,6 +717,27 @@ export function LeaderCreateTripStepOne() {
                 </label>
               </div>
             </FormCard>
+
+            {awaitingDraft ? (
+              <SurfaceCard>
+                {tripFetchError ? (
+                  <ErrorAlert message={tripFetchError} onRetry={() => { void refetchTrip(); }} />
+                ) : (
+                  <LoadingState message="Đang tải bản nháp và ảnh đã lưu…" />
+                )}
+              </SurfaceCard>
+            ) : (
+              <PublicTripGalleryEditor gallery={gallery} disabled={isSaving || mustReloadGallery}>
+                {(galleryError || gallery.hasServerChanges) && (
+                  <ErrorAlert message={galleryError || "Bộ ảnh trên máy chủ đã thay đổi. Vui lòng tải lại để xem ảnh đã lưu."} />
+                )}
+                {mustReloadGallery && (
+                  <Button variant="secondary" disabled={isSaving} onClick={reloadSavedGallery}>
+                    Bỏ thay đổi ảnh và tải lại bộ ảnh đã lưu
+                  </Button>
+                )}
+              </PublicTripGalleryEditor>
+            )}
 
             <FormCard
               number={2}
@@ -1034,11 +1118,11 @@ export function LeaderCreateTripStepOne() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || busy || mustReloadGallery || awaitingDraft}
                   onClick={handleContinue}
                   className="h-11 rounded-xl bg-[#2F6B4F] px-6 text-sm font-bold text-white shadow-xs hover:bg-[#1F4A36] disabled:cursor-not-allowed disabled:bg-stone-400"
                 >
-                  {isSubmitting
+                  {isSaving
                     ? "Đang xử lý..."
                     : tripId
                       ? "Cập nhật & Tiếp tục: Chọn cung đường →"
