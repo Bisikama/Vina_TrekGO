@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { TripData } from "../../data/mockTripsData";
+import { PublicTripCarousel } from "../PublicTripCarousel";
 
 export const TripHeader = ({ trip }: { trip: TripData }) => {
   const dayOfWeek = trip.date.rawStart
@@ -85,15 +86,14 @@ export const TripHeader = ({ trip }: { trip: TripData }) => {
         </div>
 
         {/* Hero Image Section */}
-        <div className="relative h-[280px] sm:h-[380px] lg:h-[450px] w-full rounded-2xl overflow-hidden mb-8 shadow-sm">
-          <Image
-            src={trip.image}
-            alt={trip.title}
-            fill
-            className="object-cover"
+        <div className="mb-8">
+          <PublicTripCarousel
+            key={JSON.stringify([trip.id, trip.images?.map((image) => image.mediaId)])}
+            images={trip.images ?? []}
+            fallback={trip.image}
+            title={trip.title}
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
         </div>
 
         {/* Quick Stats & Leader Info */}

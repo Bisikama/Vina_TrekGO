@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { PublicTripPhoto } from "./PublicTripGallery";
 
 export interface TripCardProps {
   trip: PublicTrip;
@@ -32,6 +33,7 @@ export const TripCard = memo(function TripCard({ trip, onPress }: TripCardProps)
 
   return (
     <SurfaceCard padding="md" onPress={onPress} style={styles.card}>
+      <PublicTripPhoto uri={trip.coverImage?.url} label={`Ảnh bìa ${trip.title}`} style={styles.cover} />
       {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.destinationPill}>
@@ -133,6 +135,7 @@ export const TripCard = memo(function TripCard({ trip, onPress }: TripCardProps)
 });
 
 const styles = StyleSheet.create({
+  cover: { marginBottom: Spacing.md },
   card: {
     gap: Spacing.sm,
     marginBottom: Spacing.md + 2,

@@ -5,6 +5,7 @@ import {
   type PublicTripsFilter,
 } from "@/features/trips/services/public-trips.api";
 import { ApiError } from "@/lib/api-client";
+import { getPublicTripImages } from "../services/public-trip-images.api";
 
 export interface UsePublicTripsOptions {
   initialFilter?: PublicTripsFilter;
@@ -31,6 +32,7 @@ export function usePublicTrips(options: UsePublicTripsOptions = {}) {
   });
 
   const isMountedRef = useRef(true);
+  const listGeneration = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -44,6 +46,7 @@ export function usePublicTrips(options: UsePublicTripsOptions = {}) {
       activeFilter: PublicTripsFilter,
       mode: "init" | "refresh" | "more" = "init",
     ) => {
+      const generation = mode === "more" ? listGeneration.current : ++listGeneration.current;
       if (mode === "init") setLoading(true);
       if (mode === "refresh") setRefreshing(true);
       if (mode === "more") setLoadingMore(true);
@@ -56,7 +59,7 @@ export function usePublicTrips(options: UsePublicTripsOptions = {}) {
           pageSize: activeFilter.pageSize || pageSize,
         });
 
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || listGeneration.current !== generation) return;
 
         const newItems = response.items ?? [];
         const totalCount = response.total ?? newItems.length;
@@ -66,15 +69,29 @@ export function usePublicTrips(options: UsePublicTripsOptions = {}) {
         setHasMore(targetPage === 1 && newItems.length > 0 && newItems.length < totalCount);
 
         setTrips((prev) => (targetPage === 1 ? newItems : [...prev, ...newItems]));
+
+        // Booking discovery owns filtering and capacity. The CF01 detail supplies missing covers.
+        const missingCovers = newItems.filter((trip) => trip.id && trip.coverImage === undefined);
+        void (async () => {
+          for (let index = 0; index < missingCovers.length; index += 4) {
+            if (!isMountedRef.current || listGeneration.current !== generation) return;
+            const covers = new Map(await Promise.all(missingCovers.slice(index, index + 4).map(async ({ id }) => {
+              const data = await getPublicTripImages(id).catch(() => null);
+              return [id, data?.coverImage ?? null] as const;
+            })));
+            if (!isMountedRef.current || listGeneration.current !== generation) return;
+            setTrips((current) => current.map((trip) => covers.has(trip.id) ? { ...trip, coverImage: covers.get(trip.id) } : trip));
+          }
+        })();
       } catch (err) {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || listGeneration.current !== generation) return;
         const msg =
           err instanceof ApiError
             ? err.message
             : "Không thể tải danh sách chuyến đi.";
         setError(msg);
       } finally {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && listGeneration.current === generation) {
           setLoading(false);
           setRefreshing(false);
           setLoadingMore(false);

@@ -21,6 +21,8 @@ export interface TripCostBreakdownItem {
   includedInPrice: boolean;
   sourceNote?: string | null;
 }
+import type { PublicTripImage } from "../types/public-trip-images";
+
 export interface TripData {
   id: string;
   duration: string;
@@ -35,6 +37,7 @@ export interface TripData {
     distance: string;
   };
   image: string;
+  images?: PublicTripImage[];
   date: {
     start: string;
     end: string;

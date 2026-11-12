@@ -71,7 +71,10 @@ export class PreparationTaskController {
     description:
       'Trả về danh sách các task chuẩn bị thiết bị cho thuê, phân trang. ' +
       'Hỗ trợ lọc theo ngày, trạng thái, và tripId. ' +
-      'Chỉ hiển thị task thuộc phạm vi nhân viên kho đang đăng nhập.',
+      'Chỉ hiển thị task thuộc phạm vi nhân viên kho đang đăng nhập. ' +
+      'Sắp theo mức ưu tiên: BLOCKED → trễ hạn → đang chờ kho → kho đã xong (READY/TRANSFERRED) → đã kết thúc; ' +
+      'cùng mức thì theo deadline rồi thời điểm tới kho. Mỗi item có sentToInventoryAt (lúc đơn tới kho), ' +
+      'priority (URGENT | HIGH | NORMAL | LOW; HIGH = còn ≤ 2 giờ tới deadline) và isOverdue.',
   })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Ngày lọc (YYYY-MM-DD)', example: '2026-10-05' })
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Trạng thái task', enum: ['OPEN', 'PICKING', 'CONDITION_CAPTURED', 'PACKED', 'READY', 'TRANSFERRED', 'RETURN_RECEIVED', 'CLOSED', 'BLOCKED', 'CANCELLED'] })
