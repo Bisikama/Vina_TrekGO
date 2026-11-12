@@ -1,4 +1,4 @@
-import { CANONICAL_SAMPLE_GEAR_ITEMS, seedGearDemo } from '../prisma/seed-gear-demo'
+import { CANONICAL_SAMPLE_GEAR_ITEMS, inspectRentalReadiness, seedGearDemo } from '../prisma/seed-gear-demo'
 import { CATEGORY_ATTRIBUTE_SCHEMAS } from '../src/modules/gear/application/dtos/user-gear.dto'
 import { GEAR_RULE_METADATA_REGISTRY } from '../src/modules/gear/domain/rule-metadata.registry'
 import { PrismaTripContextReadAdapter } from '../src/modules/gear/infrastructure/adapters/prisma-trip-context-read.adapter'
@@ -95,6 +95,15 @@ describe('gear demo seed', () => {
       .spyOn(PrismaTripContextReadAdapter.prototype, 'getTripContext')
       .mockRejectedValueOnce(new Error('Chuyến không hợp lệ'))
     await expect(seedGearDemo(client, 'user', 'trip')).rejects.toThrow('Chuyến không hợp lệ')
+    expect(client.$transaction).not.toHaveBeenCalled()
+    check.mockRestore()
+  })
+
+  it('báo thiếu chính sách thuê trước khi tạo dữ liệu demo', async () => {
+    const { client } = setup()
+    client.rentalPolicy = { findFirst: jest.fn().mockResolvedValue(null) }
+    const check = jest.spyOn(PrismaTripContextReadAdapter.prototype, 'getTripContext').mockResolvedValue({} as any)
+    await expect(inspectRentalReadiness(client, 'user', 'trip')).rejects.toThrow('chính sách thuê')
     expect(client.$transaction).not.toHaveBeenCalled()
     check.mockRestore()
   })

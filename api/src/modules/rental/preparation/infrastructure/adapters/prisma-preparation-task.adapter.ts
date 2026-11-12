@@ -21,6 +21,7 @@ import { PrismaService } from 'src/shared/services/prisma.service';
 import { AppError } from 'src/shared/errors/app-error';
 import { PREPARATION_ERROR_CODES as PR, WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location';
+import { preparationTaskPriority } from '../../domain/preparation-task-priority';
 import type {
   ClaimPreparationTaskCommand,
   ClaimPreparationTaskResult,
@@ -70,6 +71,22 @@ const REPLACEABLE_TASK_STATUSES: InventoryTaskStatus[] = [
   InventoryTaskStatus.READY,
 ];
 
+/**
+ * Thứ tự hàng đợi kho trên bảng alias `t` (cột status, deadline, created_at, id).
+ * Hạng phải khớp `preparationTaskRank`; PG spec kiểm hai bên bằng cùng dữ liệu.
+ */
+export const PREPARATION_TASK_ORDER_BY_SQL = Prisma.sql`
+  CASE
+    WHEN t.status = 'BLOCKED' THEN 0
+    WHEN t.status IN ('OPEN', 'PICKING', 'CONDITION_CAPTURED', 'PACKED') AND t.deadline < clock_timestamp() THEN 1
+    WHEN t.status IN ('OPEN', 'PICKING', 'CONDITION_CAPTURED', 'PACKED') THEN 2
+    WHEN t.status IN ('READY', 'TRANSFERRED') THEN 3
+    ELSE 4
+  END,
+  t.deadline ASC NULLS LAST,
+  t.created_at ASC,
+  t.id ASC`;
+
 @Injectable()
 export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -90,33 +107,49 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
       ],
     };
 
-    const [rows, totalItems] = await this.prisma.$transaction([
-      this.prisma.inventoryTask.findMany({
-        where,
-        skip,
-        take: query.pageSize,
-        orderBy: [{ deadline: 'asc' }, { createdAt: 'asc' }],
-        include: {
-          staff: { select: { id: true, fullName: true } },
-          inventoryLocation: { select: { id: true, name: true } },
-          order: {
-            include: {
-              pickupPoint: { select: { id: true, name: true } },
-              rentalOrderLinesViaOrderId: {
-                include: {
-                  product: { select: { id: true, name: true } },
-                  rentalUnitAssignmentsViaOrderLineId: {
-                    where: { status: { in: ACTIVE_ASSIGNMENT_STATUSES } },
-                    select: { id: true },
-                  },
+    // Prisma không orderBy theo CASE: lấy trang id bằng SQL (hạng khớp preparationTaskRank), rồi nạp chi tiết.
+    const sqlFilters: Prisma.Sql[] = [
+      Prisma.sql`(t.staff_id IS NULL OR t.staff_id = ${query.actorUserId}::uuid)`,
+      query.status
+        ? Prisma.sql`t.status = ${query.status}::inventory_task_status`
+        : Prisma.sql`t.status <> 'CANCELLED'::inventory_task_status`,
+      ...(query.tripId ? [Prisma.sql`o.trip_id = ${query.tripId}::uuid`] : []),
+      ...(dateWindow ? [Prisma.sql`t.deadline >= ${dateWindow.start} AND t.deadline < ${dateWindow.end}`] : []),
+    ];
+    const [pageRows, totalItems] = await this.prisma.$transaction([
+      this.prisma.$queryRaw<Array<{ id: string; now: Date }>>`
+        SELECT t.id::text AS id, clock_timestamp() AS now
+        FROM inventory_tasks t
+        JOIN rental_orders o ON o.id = t.order_id
+        WHERE ${Prisma.join(sqlFilters, ' AND ')}
+        ORDER BY ${PREPARATION_TASK_ORDER_BY_SQL}
+        LIMIT ${query.pageSize} OFFSET ${skip}`,
+      this.prisma.inventoryTask.count({ where }),
+    ]);
+    const now = pageRows[0]?.now ?? new Date();
+    const position = new Map(pageRows.map((row, index) => [row.id, index]));
+    const loaded = await this.prisma.inventoryTask.findMany({
+      where: { id: { in: pageRows.map((row) => row.id) } },
+      include: {
+        staff: { select: { id: true, fullName: true } },
+        inventoryLocation: { select: { id: true, name: true } },
+        order: {
+          include: {
+            pickupPoint: { select: { id: true, name: true } },
+            rentalOrderLinesViaOrderId: {
+              include: {
+                product: { select: { id: true, name: true } },
+                rentalUnitAssignmentsViaOrderLineId: {
+                  where: { status: { in: ACTIVE_ASSIGNMENT_STATUSES } },
+                  select: { id: true },
                 },
               },
             },
           },
         },
-      }),
-      this.prisma.inventoryTask.count({ where }),
-    ]);
+      },
+    });
+    const rows = loaded.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
 
     return {
       items: rows.map((row) => {
@@ -133,6 +166,9 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           orderCode: rentalOrderCode(row.orderId),
           assignee: row.staff ? { id: row.staff.id, displayName: row.staff.fullName } : null,
           deadline: row.deadline?.toISOString() ?? null,
+          // Task được tạo khi thanh toán đơn thành công, tức lúc đơn tới kho.
+          sentToInventoryAt: row.createdAt.toISOString(),
+          ...preparationTaskPriority(row.status, row.deadline, now),
           trip: { id: row.order.tripId },
           pickup: { id: row.order.pickupPoint.id, name: row.order.pickupPoint.name },
           inventoryLocation: { id: row.inventoryLocation.id, name: row.inventoryLocation.name },
