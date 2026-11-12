@@ -182,6 +182,60 @@ Chứng chỉ tự gia hạn mỗi 90 ngày.
 
 > Quay về bản cũ chỉ là tạm thời: lần deploy kế tiếp workflow sẽ ghi đè lại `docker-compose.yml` với tag `latest`.
 
+### Kiểm tra container và log (API + Web)
+
+SSH vào VPS trước: `ssh -p 8686 luatng304@160.30.161.237`
+
+**Tổng quan container**
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"   # đang chạy (nên có 5: web, api, postgres, mongo, redis)
+docker ps -a                                                     # cả container đã dừng / lỗi (Exited)
+docker stats --no-stream                                         # CPU, RAM từng container
+free -h && df -h /                                               # RAM và ổ đĩa của cả VPS
+```
+
+**Log Web** (thư mục `~/trekgo-web`)
+```bash
+cd ~/trekgo-web
+docker compose logs --tail 100 web            # 100 dòng cuối
+docker compose logs -f --tail 50 web          # theo dõi trực tiếp, Ctrl + C để thoát
+docker compose logs --since 30m web           # log 30 phút gần nhất
+docker compose logs web 2>&1 | grep -i error  # chỉ dòng lỗi
+```
+
+**Log API** (thư mục `~/trekgo`)
+```bash
+cd ~/trekgo
+docker compose logs --tail 100 api
+docker compose logs -f --tail 50 api
+docker compose logs --since 1h api
+docker compose logs api 2>&1 | grep -iE "error|exception" | tail -30
+```
+
+**Log database / cache** (khi API báo lỗi kết nối)
+```bash
+cd ~/trekgo
+docker compose logs --tail 50 postgres
+docker compose logs --tail 50 mongo
+docker compose logs --tail 50 redis
+docker compose logs postgres 2>&1 | grep -i "authentication failed" | tail -5   # có bot dò mật khẩu không
+```
+
+**Không cần `cd`** (dùng tên container)
+```bash
+docker logs --tail 100 trekgo-web-web-1
+docker logs -f --tail 50 trekgo-api-1
+```
+
+**Log Nginx** (request vào web / API)
+```bash
+sudo tail -f /var/log/nginx/access.log        # mọi request, Ctrl + C để thoát
+sudo tail -50 /var/log/nginx/error.log        # lỗi 502, 413, ...
+sudo grep " 50[0-9] " /var/log/nginx/access.log | tail -20   # request trả lỗi 5xx
+```
+
+> Mẹo: mở 2 cửa sổ SSH, một bên `docker compose logs -f api`, một bên `docker compose logs -f web`, rồi thao tác trên trình duyệt để thấy lỗi ngay khi xảy ra.
+
 ---
 
 ## 8. Lỗi thường gặp
