@@ -117,6 +117,10 @@ const returnReasonMessages: Record<string, string> = {
   NO_APPROVED_DEDUCTION: "Chưa có khoản trừ được duyệt.",
   DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER: "Thất lạc trong khâu giao nhận nội bộ, không được trừ vào cọc của khách.",
   INSPECTION_TASK_NOT_PENDING: "Nhiệm vụ kiểm định không còn ở trạng thái chờ.",
+  DEEP_INSPECTION_EVIDENCE_REQUIRED: "Thiết bị này cần kiểm định kỹ: hãy chụp hoặc tải ít nhất 1 ảnh bằng chứng rồi hoàn tất lại.",
+  EVIDENCE_NOT_READY_OR_FOREIGN: "Ảnh bằng chứng chưa tải xong hoặc không phải ảnh bạn tải lên. Hãy tải lại ảnh.",
+  PASS_CONFLICTS_WITH_DAMAGE: "Thiết bị đã chọn hư hỏng thì không thể đánh dấu đạt.",
+  PHYSICALLY_RECEIVED_UNIT_CANNOT_BE_LOST: "Thiết bị đã nhận vào kho nên không thể ghi là thất lạc.",
 };
 
 export function getStaffReturnErrorMessage(error: unknown) {
@@ -127,7 +131,7 @@ export function getStaffReturnErrorMessage(error: unknown) {
     const base = data?.error?.message || data?.message || error.message;
     const reason = data?.error?.details?.reason;
     if (typeof reason === "string" && reason) {
-      return `${base} — ${returnReasonMessages[reason] ?? reason}`;
+      return returnReasonMessages[reason] ?? `${base} — ${reason}`;
     }
     return base;
   }
