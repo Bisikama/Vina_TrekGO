@@ -1251,21 +1251,13 @@ export const LiveTrailRecorderModal: React.FC<LiveTrailRecorderModalProps> = ({
             </View>
           </View>
 
-          {/* Row 2: Secondary Stats (Tốc độ, Độ cao lũy kế, Nhịp độ) */}
+          {/* Row 2: Secondary Stats (Tốc độ, Nhịp độ) */}
           <View style={styles.secondaryStatsRow}>
             <View style={styles.secondaryStatBox}>
               <Text style={styles.compactSubLabel}>TỐC ĐỘ</Text>
               <Text style={styles.secondaryStatValue}>
                 {currentSpeedKmh.toFixed(1)}{" "}
                 <Text style={styles.secondaryStatUnit}>km/h</Text>
-              </Text>
-            </View>
-
-            <View style={styles.secondaryStatBox}>
-              <Text style={styles.compactSubLabel}>ĐỘ CAO +</Text>
-              <Text style={styles.secondaryStatValue}>
-                +{elevationGainM}{" "}
-                <Text style={styles.secondaryStatUnit}>m</Text>
               </Text>
             </View>
 

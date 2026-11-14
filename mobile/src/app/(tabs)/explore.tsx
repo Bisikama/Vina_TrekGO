@@ -789,8 +789,8 @@ export default function ExploreScreen() {
                     activeOpacity={0.85}
                   >
                     <Ionicons name="eye" size={18} color={Colors.onPrimary} />
-                    <Text style={styles.primaryCtaText}>
-                      Xem Chi Tiết Cung Đường
+                    <Text style={styles.primaryCtaText} numberOfLines={1}>
+                      Xem chi tiết
                     </Text>
                   </TouchableOpacity>
 
@@ -1446,7 +1446,9 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     flex: 1,
+    minWidth: 0,
     height: 46,
+    paddingHorizontal: 12,
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryDark,
     flexDirection: "row",
@@ -1456,6 +1458,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   primaryCtaText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: "900",
     color: "#ffffff",
