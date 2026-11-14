@@ -95,19 +95,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#ba1a1a',
     letterSpacing: 0.5,
   },
   headlineText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     color: '#4a3b1c',
   },
   bodyText: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     color: '#41493a',
     marginBottom: 10,
   },
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   infoText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#564500',
   },
   boldText: {
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   reconnectButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: Colors.onPrimary,
   },
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dismissButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: '#41493a',
   },

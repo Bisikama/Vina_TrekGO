@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.onSurfaceMuted,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: Colors.body,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   badgeTextWhite: {
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     color: Colors.ink,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   stepTitleActive: {
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
   stepDetail: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
   },
 });

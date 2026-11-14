@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     borderColor: "#c4e3b7",
   },
   qrButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainer,
   },
   codeButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   createButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -423,17 +423,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     marginBottom: 6,
     textAlign: "center",
   },
   modalSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 19,
     marginBottom: 16,
   },
   modalInput: {
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     borderColor: "#c4e3b7",
   },
   modalQRScannerBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLow,
   },
   modalCancelBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   modalConfirmBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -543,11 +543,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
   },
   errorText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#DC2626",
     textAlign: "center",
   },
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   retryButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -569,15 +569,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
   },
   primaryCta: {
     flexDirection: "row",
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryCtaText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },

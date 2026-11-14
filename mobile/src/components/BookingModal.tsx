@@ -703,13 +703,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   stepCaption: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: Colors.primaryDark,
   },
   stepTitle: {
     marginTop: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
   },
@@ -736,12 +736,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondaryContainer,
   },
   publicBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: "#0c2000",
   },
   slotsText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
   },
   tripMeta: {
     marginTop: 4,
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   section: {
@@ -761,7 +761,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: 9,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: Colors.onSurface,
   },
@@ -792,13 +792,13 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
   },
   counterLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   inputLabel: {
     marginTop: 9,
     marginBottom: 5,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceContainerLowest,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
   },
   safetyCard: {
     padding: 14,
@@ -834,13 +834,13 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   safetyTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   safetySubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   checkboxRow: {
@@ -865,8 +865,8 @@ const styles = StyleSheet.create({
   },
   checkboxText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     color: Colors.onSurfaceVariant,
   },
   primaryButton: {
@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onPrimary,
   },
@@ -901,13 +901,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   reviewCaption: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: Colors.primaryDark,
   },
   reviewTrip: {
     marginTop: 3,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
   },
@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondaryContainer,
   },
   memberBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#0c2000",
   },
@@ -935,13 +935,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   reviewLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   reviewValue: {
     flex: 1,
     textAlign: "right",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -959,11 +959,11 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   priceValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -981,8 +981,8 @@ const styles = StyleSheet.create({
   },
   remainingDescription: {
     marginTop: 4,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     color: Colors.onSurfaceMuted,
   },
   paymentOption: {
@@ -1013,13 +1013,13 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   paymentTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   paymentSubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   radio: {
@@ -1062,8 +1062,8 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     marginTop: 7,
     textAlign: "center",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     color: Colors.onSurfaceVariant,
   },
   ticketCard: {
@@ -1081,7 +1081,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   ticketLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: Colors.onSurfaceVariant,
   },
@@ -1105,13 +1105,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   ticketTripName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   ticketMeta: {
     marginTop: 4,
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   depositPaid: {
@@ -1121,7 +1121,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   depositPaidText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1136,8 +1136,8 @@ const styles = StyleSheet.create({
   },
   nextStepText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     color: Colors.onSurfaceVariant,
   },
 });

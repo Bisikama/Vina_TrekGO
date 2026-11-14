@@ -48,17 +48,17 @@ export function MyTripFilters({ selected, source, counts, onSelect, onSource, on
 
 const s = StyleSheet.create({
   card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 24, borderWidth: 0, backgroundColor: '#ffffff', gap: 12 },
-  label: { fontSize: 12, fontWeight: '700', color: '#454745' },
+  label: { fontSize: 14, fontWeight: '700', color: '#454745' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cell: { flexBasis: '30%', flexGrow: 1, minHeight: 72, padding: 10, borderRadius: 16, backgroundColor: '#f0f2ed', gap: 8 },
   active: { backgroundColor: '#9fe870' },
   cellTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
-  count: { fontSize: 11, fontWeight: '700', color: '#163300', fontVariant: ['tabular-nums'] },
-  text: { fontSize: 12, lineHeight: 17, color: '#0e0f0c' },
+  count: { fontSize: 13, fontWeight: '700', color: '#163300', fontVariant: ['tabular-nums'] },
+  text: { fontSize: 14, lineHeight: 20, color: '#0e0f0c' },
   sources: { flexDirection: 'row', padding: 4, backgroundColor: '#e8ebe6', borderRadius: 24, gap: 4 },
   source: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
   sourceActive: { backgroundColor: '#ffffff' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: 1, borderTopColor: '#e8ebe6', paddingTop: 8, gap: 8 },
   action: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  actionText: { fontSize: 12, fontWeight: '600', color: '#0e0f0c' },
+  actionText: { fontSize: 14, fontWeight: '600', color: '#0e0f0c' },
 });

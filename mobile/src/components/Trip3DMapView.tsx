@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: Colors.primary,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     textAlign: "center",
   },
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   },
   trailBadgeText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
 });

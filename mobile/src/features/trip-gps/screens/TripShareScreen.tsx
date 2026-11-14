@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   tools: { flexDirection: 'row', backgroundColor: Colors.surfaceContainerLowest, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.surfaceContainerHigh, paddingVertical: 10 },
   tool: { flex: 1, alignItems: 'center', gap: 6 },
   toolIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer },
-  toolLabel: { fontSize: 12, fontWeight: '600', color: Colors.body },
+  toolLabel: { fontSize: 14, fontWeight: '600', color: Colors.body },
   colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: Colors.surfaceContainerHighest },
-  saveError: { textAlign: 'center', fontSize: 14, color: Colors.negative },
+  saveError: { textAlign: 'center', fontSize: 15, color: Colors.negative },
 });

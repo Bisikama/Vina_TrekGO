@@ -475,7 +475,7 @@ export default function TripsScreen() {
         </SurfaceCard>
         <Text style={flowStyles.heading}>Lời mời chuyến riêng</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
-          {([['PENDING', `Chờ trả lời (${pendingInvitations.length})`], ['HANDLED', 'Đã xử lý']] as const).map(([value, label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: invitationView === value }} onPress={() => setInvitationView(value)} style={{ flex: 1, minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: invitationView === value ? '#9fe870' : '#ffffff' }}><Text style={{ fontSize: 13, fontWeight: '700', color: '#0e0f0c' }}>{label}</Text></Pressable>)}
+          {([['PENDING', `Chờ trả lời (${pendingInvitations.length})`], ['HANDLED', 'Đã xử lý']] as const).map(([value, label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: invitationView === value }} onPress={() => setInvitationView(value)} style={{ flex: 1, minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: invitationView === value ? '#9fe870' : '#ffffff' }}><Text style={{ fontSize: 14, fontWeight: '700', color: '#0e0f0c' }}>{label}</Text></Pressable>)}
         </View>
       </View>
       {renderInvitationsInbox()}
@@ -685,12 +685,12 @@ const styles = StyleSheet.create({
   },
   segmentBtnText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   segmentBtnTextActive: {
     color: Colors.ink,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   emptyState: {
@@ -720,8 +720,8 @@ const styles = StyleSheet.create({
   emptyDescription: {
     marginTop: 7,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   searchSection: {
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
     padding: 0,
   },
@@ -761,7 +761,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   diffChipText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
@@ -777,12 +777,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resultCountText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
   resetFilterText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.secondary,
   },
@@ -809,15 +809,15 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   leaderCreateTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   leaderCreateSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   invitationInboxNotice: {
     flexDirection: "row",
@@ -830,7 +830,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   invitationInboxNoticeText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.primaryDark,
     fontWeight: "500",
     flex: 1,

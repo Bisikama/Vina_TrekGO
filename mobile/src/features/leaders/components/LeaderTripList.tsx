@@ -355,17 +355,17 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.ink,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
   memberCount: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   viewAllText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   codeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#334155",
     letterSpacing: 0.5,
@@ -405,10 +405,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   tripTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: "#121c2a",
-    lineHeight: 20,
+    lineHeight: 21,
     marginTop: 2,
   },
   tripSubtitle: {
@@ -428,12 +428,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   trailIcon: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#0e0f0c",
     fontWeight: "900",
   },
   trailName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     flex: 1,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   infoText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#414942",
     fontWeight: "600",
   },
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   progressCountLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#414942",
   },
   boldText: {
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     color: "#121c2a",
   },
   remainingSlotsText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0369a1",
   },
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   revenueValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0e0f0c",
   },
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
   },
   manageBtnText: {
     color: "#ffffff",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   modalOverlay: {
@@ -563,17 +563,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   modalSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#414942",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#121c2a",
   },
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     borderColor: "#d6dbd2",
     borderRadius: 20,
     padding: 10,
-    fontSize: 12,
+    fontSize: 14,
     color: "#121c2a",
     textAlignVertical: "top",
     backgroundColor: "#fbfcfb",
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     borderColor: "#d6dbd2",
   },
   modalCancelBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#707972",
   },
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   modalSubmitBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ffffff",
   },

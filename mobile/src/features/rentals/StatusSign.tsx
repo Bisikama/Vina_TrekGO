@@ -89,5 +89,5 @@ const styles = StyleSheet.create({
     paddingRight: 17,
     paddingVertical: 5,
   },
-  label: { fontSize: 11, fontWeight: "500", letterSpacing: 0.1 },
+  label: { fontSize: 13, fontWeight: "500", letterSpacing: 0.1 },
 });

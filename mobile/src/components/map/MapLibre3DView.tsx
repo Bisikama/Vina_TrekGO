@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: Colors.primary,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   hudTopRight: {
@@ -1287,7 +1287,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   hudButtonText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: "#ffffff",
   },
@@ -1304,7 +1304,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   watermarkText: {
-    fontSize: 8,
+    fontSize: 10,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: "rgba(159, 232, 112, 0.7)",
     fontWeight: "700",

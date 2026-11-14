@@ -1437,14 +1437,14 @@ const styles = StyleSheet.create({
   },
   cancelOrderTitle: {
     color: Colors.error,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
   },
   cancelOrderDescription: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
   },
   header: {
     minHeight: 72,
@@ -1466,7 +1466,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1,
   },
@@ -1492,8 +1492,8 @@ const styles = StyleSheet.create({
   },
   mutedText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   retryButton: {
@@ -1528,7 +1528,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "600",
   },
-  tripName: { marginTop: 4, color: Colors.primaryNeutral, fontSize: 11 },
+  tripName: { marginTop: 4, color: Colors.primaryNeutral, fontSize: 13 },
   statusBadge: {
     maxWidth: 112,
     paddingHorizontal: 9,
@@ -1538,7 +1538,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     color: Colors.onPrimary,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -1552,8 +1552,8 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     marginTop: 4,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   sectionBody: { marginTop: 14 },
   stepRow: { minHeight: 48, flexDirection: "row", gap: 10 },
@@ -1584,15 +1584,15 @@ const styles = StyleSheet.create({
   },
   stepLineComplete: { backgroundColor: Colors.primaryDark },
   stepTextWrap: { flex: 1, paddingBottom: 12 },
-  stepTitle: { color: Colors.onSurfaceMuted, fontSize: 12, fontWeight: "500" },
+  stepTitle: { color: Colors.onSurfaceMuted, fontSize: 14, fontWeight: "500" },
   stepTitleComplete: { color: Colors.onSurface, fontWeight: "600" },
   stepCurrent: {
     marginTop: 3,
     color: Colors.primaryDark,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
   },
-  stepTime: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 10 },
+  stepTime: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 12 },
   stepTimePlanned: { color: Colors.onSurfaceMuted, fontStyle: "italic" },
   lineItem: {
     minHeight: 58,
@@ -1618,13 +1618,13 @@ const styles = StyleSheet.create({
   },
   lineName: {
     color: Colors.onSurface,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: "700",
   },
   lineGrade: { marginTop: 4 },
-  lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10 },
-  lineAmount: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
+  lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 12 },
+  lineAmount: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
   unitWrap: {
     marginTop: 12,
     padding: 12,
@@ -1634,19 +1634,19 @@ const styles = StyleSheet.create({
   subheading: {
     marginBottom: 6,
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
-  unitText: { color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 17 },
+  unitText: { color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 20 },
   moneyRow: {
     minHeight: 30,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  moneyLabel: { color: Colors.onSurfaceVariant, fontSize: 11 },
-  moneyValue: { color: Colors.onSurface, fontSize: 11, fontWeight: "600" },
-  moneyStrong: { color: Colors.primaryDark, fontSize: 14, fontWeight: "600" },
+  moneyLabel: { color: Colors.onSurfaceVariant, fontSize: 13 },
+  moneyValue: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
+  moneyStrong: { color: Colors.primaryDark, fontSize: 15, fontWeight: "600" },
   totalDivider: {
     height: 1,
     marginVertical: 8,
@@ -1655,10 +1655,10 @@ const styles = StyleSheet.create({
   paymentStatus: {
     marginTop: 12,
     color: Colors.onSurface,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
-  deadline: { marginTop: 4, color: "#A32020", fontSize: 10 },
+  deadline: { marginTop: 4, color: "#A32020", fontSize: 12 },
   countdownCard: {
     marginTop: 12,
     padding: 12,
@@ -1681,8 +1681,8 @@ const styles = StyleSheet.create({
   },
   countdownLabel: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: "600",
   },
   countdownValue: {
@@ -1710,7 +1710,7 @@ const styles = StyleSheet.create({
   },
   gatewayText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
   },
   gatewayTextSelected: { color: Colors.primaryDark },
@@ -1739,14 +1739,14 @@ const styles = StyleSheet.create({
   },
   checkPaymentText: {
     color: Colors.primaryDark,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
   },
   paymentNotice: {
     marginTop: 9,
     color: Colors.primaryDark,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 19,
     textAlign: "center",
   },
   paymentProgress: {
@@ -1770,14 +1770,14 @@ const styles = StyleSheet.create({
   },
   paymentProgressTitle: {
     color: Colors.primaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   paymentProgressDescription: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   codeBox: {
     padding: 18,
@@ -1791,7 +1791,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 5,
   },
-  codeExpiry: { marginTop: 6, color: Colors.primaryNeutral, fontSize: 10 },
+  codeExpiry: { marginTop: 6, color: Colors.primaryNeutral, fontSize: 12 },
   revealButton: {
     minHeight: 48,
     flexDirection: "row",
@@ -1805,14 +1805,14 @@ const styles = StyleSheet.create({
   inlineError: {
     marginTop: 8,
     color: "#A32020",
-    fontSize: 10,
+    fontSize: 12,
     textAlign: "center",
   },
   readOnlyNote: {
     marginTop: 10,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 19,
   },
   depositItem: {
     marginTop: 10,
@@ -1822,7 +1822,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceContainer,
   },
-  reasonText: { marginTop: 3, color: "#A32020", fontSize: 9 },
+  reasonText: { marginTop: 3, color: "#A32020", fontSize: 11 },
   historyRow: {
     paddingVertical: 9,
     flexDirection: "row",
@@ -1830,8 +1830,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceContainer,
   },
-  historyTitle: { color: Colors.onSurface, fontSize: 11, fontWeight: "600" },
-  historyTime: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 9 },
+  historyTitle: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
+  historyTime: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 11 },
   infoBanner: {
     padding: 14,
     flexDirection: "row",
@@ -1842,12 +1842,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryPale,
   },
   warningBanner: { borderColor: "#F3AAA7", backgroundColor: "#FFE5E2" },
-  infoTitle: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
+  infoTitle: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
   warningText: { color: "#A32020" },
   infoDescription: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 19,
   },
 });

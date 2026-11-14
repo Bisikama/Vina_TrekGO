@@ -189,10 +189,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: Colors.onSurface,
-    lineHeight: 20,
+    lineHeight: 21,
   },
   badge: {
     flexDirection: "row",
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   holdBanner: {
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   holdText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#92400E",
   },
   holdBold: {
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   metaVal: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   divider: {
@@ -250,11 +250,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   priceLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceMuted,
   },
   priceVal: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.primaryDark,
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   actionText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },

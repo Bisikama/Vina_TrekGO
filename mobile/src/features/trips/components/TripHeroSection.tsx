@@ -160,16 +160,16 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: Colors.primaryDark,
   },
-  statusText: { fontSize: 10, fontWeight: "800", color: Colors.primaryDark },
+  statusText: { fontSize: 12, fontWeight: "800", color: Colors.primaryDark },
   difficultyBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.full,
     backgroundColor: Colors.tertiaryContainer,
   },
-  difficultyText: { fontSize: 10, fontWeight: "800", color: Colors.onTertiaryContainer },
+  difficultyText: { fontSize: 12, fontWeight: "800", color: Colors.onTertiaryContainer },
   tripTitle: { fontSize: 20, fontWeight: "900", color: Colors.onSurface, marginBottom: 4 },
-  destinationText: { fontSize: 13, color: Colors.onSurfaceVariant, marginBottom: 14 },
+  destinationText: { fontSize: 14, color: Colors.onSurfaceVariant, marginBottom: 14 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   statTile: {
     flex: 1,
@@ -180,6 +180,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 3,
   },
-  statLabel: { fontSize: 8, fontWeight: "800", color: Colors.mute, letterSpacing: 0.3 },
-  statValue: { fontSize: 13, fontWeight: "900", color: Colors.onSurface },
+  statLabel: { fontSize: 10, fontWeight: "800", color: Colors.mute, letterSpacing: 0.3 },
+  statValue: { fontSize: 14, fontWeight: "900", color: Colors.onSurface },
 });

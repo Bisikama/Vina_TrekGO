@@ -27,10 +27,10 @@ export function TripParticipationCard({ entry, onPress }: { entry: CardEntry; on
 const s = StyleSheet.create({
   card: { padding: 18, borderRadius: 24, borderWidth: 0, backgroundColor: '#ffffff', marginBottom: 12, gap: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, color: '#454745' },
+  eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: '#454745' },
   title: { fontSize: 17, fontWeight: '800', lineHeight: 24, color: '#0e0f0c' },
-  body: { fontSize: 13, lineHeight: 19, color: '#454745' },
+  body: { fontSize: 14, lineHeight: 20, color: '#454745' },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   footer: { minHeight: 44, borderTopWidth: 1, borderTopColor: '#e8ebe6', paddingTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  link: { fontSize: 13, fontWeight: '700', color: '#163300' },
+  link: { fontSize: 14, fontWeight: '700', color: '#163300' },
 });

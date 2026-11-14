@@ -197,12 +197,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.body,
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 20,
-    lineHeight: 18,
+    lineHeight: 19,
     paddingHorizontal: 8,
   },
   metricsGrid: {
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.mute,
     letterSpacing: 0.6,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   metricUnit: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.body,
   },
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     borderColor: '#e4e7e1',
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 14,
     flexShrink: 1,
   },
   statusTextReady: {
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     color: Colors.onPrimary, // #0e0f0c
   },

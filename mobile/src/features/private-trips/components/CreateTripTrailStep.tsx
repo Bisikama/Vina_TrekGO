@@ -386,15 +386,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     marginBottom: 4,
   },
   stepDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 14,
   },
   loadingContainer: {
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyContainer: {
@@ -415,16 +415,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: Colors.onSurface,
     textAlign: "center",
   },
   emptySubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   trailList: {
     marginBottom: 12,
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
   },
   typeBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.4,
   },
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     color: "#B45309",
   },
   trailName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: Colors.onSurface,
     marginBottom: 6,
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   checkpointsText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   checkpointsPreview: {
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   previewTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
     marginBottom: 8,
@@ -514,12 +514,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainerHigh,
   },
   checkpointChipSequence: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
   checkpointChipName: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurface,
   },
   browseSystemBtn: {
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   browseSystemBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   moreTrailsBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.surfaceContainer,
   },
   catalogTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   catalogLoadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   catalogList: {
@@ -621,12 +621,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   catalogTrailName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   catalogTrailSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   unlockBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },

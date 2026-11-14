@@ -196,15 +196,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     marginBottom: 4,
   },
   stepDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 16,
   },
   card: {
@@ -223,12 +223,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   cardNote: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   required: {
@@ -272,12 +272,12 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   capacityUnit: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },
   capacityHint: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
     marginTop: 4,
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyBox: {
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
   },
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickupName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
   },
   pickupAddress: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },

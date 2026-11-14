@@ -105,12 +105,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   countText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#16A34A",
   },
   nodeNumber: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.onSurfaceVariant,
   },
@@ -174,12 +174,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkpointName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
     color: Colors.onSurface,
   },
   checkpointCoords: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.mute,
     marginTop: 2,
   },

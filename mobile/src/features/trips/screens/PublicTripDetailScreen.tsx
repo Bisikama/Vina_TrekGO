@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   },
   bottomBarPrice: { flex: 1, gap: 1 },
   bottomPriceLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: UiColors.textSecondary,
     fontWeight: "600",
   },
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     color: UiColors.primaryDeep,
   },
   bottomSlots: {
-    fontSize: 11,
+    fontSize: 13,
     color: UiColors.primary,
     fontWeight: "600",
   },
@@ -429,5 +429,5 @@ const styles = StyleSheet.create({
   bookingBtnPending: {
     backgroundColor: UiColors.accent,
   },
-  bookingBtnText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
+  bookingBtnText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
 });

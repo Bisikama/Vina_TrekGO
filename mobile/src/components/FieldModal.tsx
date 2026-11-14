@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   warning: { backgroundColor: '#fff1c7' },
   danger: { backgroundColor: '#ffe8e5' },
   title: { color: Colors.ink, fontSize: 21, fontWeight: '800' },
-  message: { color: Colors.body, fontSize: 14, lineHeight: 21, marginTop: 8 },
+  message: { color: Colors.body, fontSize: 15, lineHeight: 22, marginTop: 8 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 22 },
   secondaryButton: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: Radius.sm, backgroundColor: Colors.surfaceContainerHighest },
   primaryButton: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: Radius.sm, backgroundColor: Colors.primaryDark },
