@@ -252,10 +252,10 @@ export default function PersonalTrailDetailScreen() {
       return;
     }
 
-    if (trail.distanceKm < 0.5) {
+    if (trail.distanceKm < 0.3) {
       Alert.alert(
         "Chưa đủ điều kiện duyệt",
-        "Cung đường cần có độ dài tối thiểu 500m (0.5km) để gửi Ban Quản Trị xét duyệt thành System Trail.",
+        "Cung đường cần có độ dài tối thiểu 300m (0.3km) để gửi Ban Quản Trị xét duyệt thành System Trail.",
       );
       return;
     }

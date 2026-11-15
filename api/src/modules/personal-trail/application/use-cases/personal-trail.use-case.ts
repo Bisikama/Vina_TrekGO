@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import {
+  AdminSubmissionsQuery,
+  ReviewSubmissionInput,
   MyTrailsQuery,
   SubmitVerificationInput,
   UpdatePersonalTrailInput,
@@ -50,6 +52,10 @@ export class PersonalTrailUseCase {
       })
     }
 
+    return this.toDetail(trail)
+  }
+
+  private toDetail(trail: any) {
     const multiLineCoordinates = trail.routeGeojson?.coordinates || []
 
     return {
@@ -93,5 +99,33 @@ export class PersonalTrailUseCase {
 
   async submitVerification(user: ActiveUserData, id: string, input: SubmitVerificationInput) {
     return this.repo.submitTrailVerification(id, user.id, input.noteToAdmin)
+  }
+
+  async listSubmissions(query: AdminSubmissionsQuery) {
+    const { items, totalItems } = await this.repo.findSubmissions(query)
+    return {
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        totalItems,
+        totalPages: Math.ceil(totalItems / query.limit) || 1,
+      },
+      data: items,
+    }
+  }
+
+  /** Admin view of a submitted trail: access is granted through the submission, not the trail visibility. */
+  async getSubmissionDetail(submissionId: string) {
+    const submission = await this.repo.findSubmissionById(submissionId)
+    const trail = submission && (await this.repo.findPersonalTrailById(submission.personalTrailId))
+    if (!submission || !trail) {
+      throw new AppError({ code: PersonalTrailErrorCode.TRAIL_SUBMISSION_NOT_FOUND })
+    }
+    const checkpoints = await this.repo.findPersonalCheckpointsByTrailId(trail.id)
+    return { ...submission, trail: { ...this.toDetail(trail), checkpoints } }
+  }
+
+  async reviewSubmission(admin: ActiveUserData, submissionId: string, input: ReviewSubmissionInput) {
+    return this.repo.reviewSubmission(submissionId, admin.id, input)
   }
 }
