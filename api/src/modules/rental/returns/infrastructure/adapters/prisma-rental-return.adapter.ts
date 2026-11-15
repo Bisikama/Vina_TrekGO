@@ -1,9 +1,14 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
-import { EARLY_RETURN_SCAN_TOLERANCE_MINUTES, earlyReturnScanAllowed } from '../../application/early-return-scan.policy'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
 import { deductionReviewGate } from '../../application/deduction-review-gate'
+import {
+  countReturnUnitStages,
+  deriveReturnQueueStatus,
+  deriveReturnUnitStage,
+  isFinalEvidenceRequired,
+} from '../../application/return-unit-stage'
 import { Injectable, Logger } from '@nestjs/common'
 import {
   CustodyActorType,
@@ -48,6 +53,8 @@ import { RENTAL_DOCUMENT_ERROR_CODES as RD } from 'src/shared/errors/codes/renta
 import { assertGradeDecision } from '../../../inventory/application/services/equipment-grade.rules'
 import { applyGradeDecision } from '../../../inventory/infrastructure/equipment-grade-transfer'
 import type {
+  AcceptAssessmentCommand,
+  AcceptAssessmentResult,
   CreateAssessmentReviewCommand,
   CreateDepositSettlementCommand,
   FinalInspectionCommand,
@@ -74,6 +81,17 @@ import type {
 const DELIVERY_CUSTODY_DISCREPANCY = 'DELIVERY_CUSTODY_DISCREPANCY'
 const DELIVERY_TRANSFER_OMISSION = `${DELIVERY_CUSTODY_DISCREPANCY}:TRANSFER_OMISSION`
 const DELIVERY_RECEIPT_SHORTAGE = `${DELIVERY_CUSTODY_DISCREPANCY}:WAREHOUSE_RECEIPT_SHORTAGE`
+/** RB-API-605: scopes accepted for both item-level and damage-level evidence. */
+export const FINAL_INSPECTION_EVIDENCE_SCOPES: MediaScope[] = [
+  MediaScope.RETURN_EVIDENCE,
+  MediaScope.EXCEPTION_EVIDENCE,
+  MediaScope.CONDITION_EVIDENCE,
+]
+/** FINAL outcomes of a unit that came back physically damaged (with or without a priced finding). */
+const DAMAGED_FINAL_OUTCOMES: ReturnInspectionOutcome[] = [
+  ReturnInspectionOutcome.ISSUE,
+  ReturnInspectionOutcome.DAMAGE_CONFIRMED,
+]
 
 @Injectable()
 export class PrismaRentalReturnAdapter implements RentalReturnPort {
@@ -129,33 +147,28 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         })
         if (!task) throw AppError.fromCode(RR.RETURN_TASK_NOT_FOUND)
         if (task.staffId !== actor.id) throw AppError.fromCode(RR.FORBIDDEN)
-        // A return scan is a one-way custody transition. Once Delivery has
-        // returned the units or Inventory has received them, reopening the
-        // scanner would create a duplicate-only session and regress the task.
-        if (
-          ![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.COLLECTING].includes(
-            task.status as any,
-          )
-        ) {
+        // A return scan is a one-way custody transition per unit. A finished
+        // collection round (RETURNED / INVENTORY_RECEIVED) may only be reopened
+        // while the customer still holds units: partial early returns are
+        // collected in several rounds on the same task.
+        const customerStillHoldsUnits = order.rentalOrderLinesViaOrderId.some((line) =>
+          line.rentalUnitAssignmentsViaOrderLineId.some(
+            (assignment) => assignment.status === RentalUnitAssignmentStatus.HANDED_OVER && !assignment.returnedAt,
+          ),
+        )
+        const scannable =
+          [DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.COLLECTING].includes(task.status as any) ||
+          ([DeliveryTaskStatus.RETURNED, DeliveryTaskStatus.INVENTORY_RECEIVED].includes(task.status as any) &&
+            customerStillHoldsUnits)
+        if (!scannable) {
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { taskId: task.id, currentStatus: task.status },
           })
         }
 
-        const early = await tx.rentalEarlyReturnRequest.findFirst({
-          where: { orderId: order.id, taskId: task.id }, orderBy: { createdAt: 'desc' },
-        })
-        if (early && !earlyReturnScanAllowed(early, task.scheduledAt, effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt), command.now))
-          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
-            message: 'Lịch trả sớm chưa được xác nhận hoặc chưa đến thời gian thu hồi.',
-            details: {
-              earlyReturnStatus: early.status,
-              allowedFrom:
-                early.status === 'CONFIRMED' && early.confirmedSlotAt
-                  ? new Date(early.confirmedSlotAt.getTime() - EARLY_RETURN_SCAN_TOLERANCE_MINUTES * 60_000).toISOString()
-                  : effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt).toISOString(),
-            },
-          })
+        // No time gate: the RETURN task exists from handover and collection may
+        // happen at any point of the rental. Early-return requests are only a
+        // scheduling aid; scanning completes/supersedes them below.
 
         const assignments = order.rentalOrderLinesViaOrderId.flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
         const byCode = new Map(assignments.map((assignment) => [assignment.equipmentUnit.assetCode, assignment]))
@@ -349,6 +362,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
 
           const nextPreliminaryOutcome =
             item.outcome === 'OBSERVED_RECEIVED' ? ReturnInspectionOutcome.NORMAL : ReturnInspectionOutcome.ISSUE
+          // Kept for Inventory: the canonical request has no condition, so nothing else stores these.
+          const observations = jsonValue({
+            visibleDamage: item.visibleDamage ?? item.condition === 'DAMAGED',
+            accessoryObservations: item.accessoryIssues,
+          })
           const inspection = await tx.returnInspection.upsert({
             where: { assignmentId_stage: { assignmentId: assignment.id, stage: InspectionStage.PRELIMINARY } },
             update: {
@@ -357,6 +375,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               receivedAt: assignment.returnedAt,
               notes: item.notes ?? null,
               evidenceIds: jsonValue(item.evidenceIds),
+              observations,
               version: { increment: 1 },
             },
             create: {
@@ -369,6 +388,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               receivedAt: assignment.returnedAt,
               notes: item.notes ?? null,
               evidenceIds: jsonValue(item.evidenceIds),
+              observations,
             },
           })
           await tx.rentalExceptionCase.updateMany({
@@ -439,10 +459,17 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           })
         }
 
-        // Any handed-over assignment still not scanned becomes MISSING_PENDING_REVIEW.
-        const missingAssignments = [...assignmentByUnit.values()].filter(
+        // Units the customer still holds. Before the return deadline this is a partial
+        // (early) return: they stay with the customer and a later round collects them.
+        // From the deadline on they become MISSING_PENDING_REVIEW.
+        const outstandingAssignments = [...assignmentByUnit.values()].filter(
           (assignment) => assignment.status === RentalUnitAssignmentStatus.HANDED_OVER && !assignment.returnedAt,
         )
+        const returnDue = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt)
+        const missingAssignments = command.now.getTime() >= returnDue.getTime() ? outstandingAssignments : []
+        const outstandingUnits = outstandingAssignments
+          .filter((assignment) => !missingAssignments.includes(assignment))
+          .map((assignment) => ({ unitId: assignment.equipmentUnitId, reason: 'STILL_WITH_CUSTOMER' }))
         for (const assignment of missingAssignments) {
           const missingInspection = await tx.returnInspection.upsert({
             where: { assignmentId_stage: { assignmentId: assignment.id, stage: InspectionStage.PRELIMINARY } },
@@ -549,6 +576,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           requiresInventoryInspection: true,
           refundEligible: false,
           discrepancies,
+          outstandingUnits,
         }
       },
     )
@@ -585,8 +613,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           (line: any) => line.rentalUnitAssignmentsViaOrderLineId,
         )
         const assignmentByUnit = new Map(assignments.map((item: any) => [item.equipmentUnitId, item]))
-        const unitIds = [...new Set(command.unitIds)]
-        const explicitlyMissing = [...new Set(command.missingInCustodyUnitIds)]
+        let unitIds = [...new Set(command.unitIds)]
+        let explicitlyMissing = [...new Set(command.missingInCustodyUnitIds)]
         const overlap = explicitlyMissing.filter((unitId) => unitIds.includes(unitId))
         if (overlap.length)
           throw AppError.fromCode(RR.CUSTODY_MISMATCH, {
@@ -604,9 +632,53 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               details: { unitId, reason: 'PRELIMINARY_INSPECTION_REQUIRED' },
             })
         }
+        // Units handled by an earlier collection round (already in a transfer or
+        // already reported as a custody discrepancy) are out of this round's scope.
+        const taskTransfers = await tx.returnCustodyTransfer.findMany({
+          where: { deliveryTaskId: task.id, status: { not: CustodyTransferStatus.CANCELLED } },
+        })
+        const pendingTransfers = taskTransfers.filter(
+          (transfer) => transfer.status === CustodyTransferStatus.PENDING_RECEIPT,
+        )
+        const sameUnits = (transfer: { unitIds: unknown }) =>
+          stableJson(stringArray(transfer.unitIds).sort()) === stableJson([...unitIds].sort())
+        const replay = command.pendingTransferId
+          ? pendingTransfers.find((transfer) => transfer.id === command.pendingTransferId)
+          : pendingTransfers.find(sameUnits)
+        if (replay) {
+          if (!sameUnits(replay))
+            throw AppError.fromCode(RR.OPERATION_CONFLICT, {
+              details: { reason: 'PENDING_TRANSFER_HAS_DIFFERENT_UNITS' },
+            })
+          return {
+            pendingTransferId: replay.id,
+            unitIds: stringArray(replay.unitIds),
+            status: replay.status,
+            transferStartedAt: replay.transferStartedAt?.toISOString() ?? replay.requestedAt.toISOString(),
+            transferWatchAt: replay.transferWatchAt?.toISOString() ?? null,
+            monitoringStatus: replay.monitoringStatus,
+          }
+        }
+        if (command.pendingTransferId) throw AppError.fromCode(RR.CUSTODY_TRANSFER_NOT_FOUND)
+        const handledEarlier = new Set(taskTransfers.flatMap((transfer) => stringArray(transfer.unitIds)))
+        const priorCustodyCases = await tx.rentalExceptionCase.findMany({
+          where: { orderId: order.id, caseType: RentalExceptionType.OTHER, reason: { startsWith: DELIVERY_CUSTODY_DISCREPANCY } },
+          select: { unitId: true },
+        })
+        for (const custodyCase of priorCustodyCases) if (custodyCase.unitId) handledEarlier.add(custodyCase.unitId)
+        // Clients list every RETURNED unit; units moved by an earlier round are simply skipped.
+        // Only a request made entirely of such units is an error.
+        const alreadyHandled = [...unitIds, ...explicitlyMissing].filter((unitId) => handledEarlier.has(unitId))
+        unitIds = unitIds.filter((unitId) => !handledEarlier.has(unitId))
+        explicitlyMissing = explicitlyMissing.filter((unitId) => !handledEarlier.has(unitId))
+        if (alreadyHandled.length && !unitIds.length && !explicitlyMissing.length)
+          throw AppError.fromCode(RR.CUSTODY_MISMATCH, {
+            details: { reason: 'UNIT_ALREADY_TRANSFERRED', unitIds: alreadyHandled },
+          })
         const returnedUnitIds = assignments
           .filter((assignment: any) => assignment.status === RentalUnitAssignmentStatus.RETURNED)
           .map((assignment: any) => assignment.equipmentUnitId)
+          .filter((unitId: string) => !handledEarlier.has(unitId))
         const declared = new Set([...unitIds, ...explicitlyMissing])
         const implicitlyMissing = returnedUnitIds.filter((unitId: string) => !declared.has(unitId))
         const custodyMissingUnitIds = [...new Set([...explicitlyMissing, ...implicitlyMissing])]
@@ -642,27 +714,6 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const transferWatchHours = order.rentalPolicy.returnToInventoryAllowanceHours
         if (!transferWatchHours || transferWatchHours <= 0)
           throw AppError.fromCode(RR.POLICY_CONFIG_REQUIRED, { details: { field: 'returnToInventoryAllowanceHours' } })
-        const existing = await tx.returnCustodyTransfer.findFirst({
-          where: { deliveryTaskId: task.id, status: CustodyTransferStatus.PENDING_RECEIPT },
-        })
-        if (existing) {
-          if (command.pendingTransferId && command.pendingTransferId !== existing.id)
-            throw AppError.fromCode(RR.OPERATION_CONFLICT)
-          const expected = stringArray(existing.unitIds)
-          if (stableJson(expected.sort()) !== stableJson(unitIds.sort()))
-            throw AppError.fromCode(RR.OPERATION_CONFLICT, {
-              details: { reason: 'PENDING_TRANSFER_HAS_DIFFERENT_UNITS' },
-            })
-          return {
-            pendingTransferId: existing.id,
-            unitIds: expected,
-            status: existing.status,
-            transferStartedAt: existing.transferStartedAt?.toISOString() ?? existing.requestedAt.toISOString(),
-            transferWatchAt: existing.transferWatchAt?.toISOString() ?? null,
-            monitoringStatus: existing.monitoringStatus,
-          }
-        }
-        if (command.pendingTransferId) throw AppError.fromCode(RR.CUSTODY_TRANSFER_NOT_FOUND)
         if (!unitIds.length) {
           await writeAudit(
             tx,
@@ -869,6 +920,37 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           })
         }
         const complete = missing.length === 0
+        // With several collection rounds the task only reaches INVENTORY_RECEIVED once
+        // Delivery holds nothing more: no other pending transfer, not re-collecting, and
+        // every unit it collected is in a transfer or a custody case. Units still with the
+        // customer don't block it: 601 reopens the task for the next round.
+        const allAssignments = order.rentalOrderLinesViaOrderId.flatMap(
+          (line: any) => line.rentalUnitAssignmentsViaOrderLineId,
+        )
+        const taskTransfers = await tx.returnCustodyTransfer.findMany({
+          where: { deliveryTaskId: task.id, status: { not: CustodyTransferStatus.CANCELLED } },
+          select: { id: true, status: true, unitIds: true },
+        })
+        const otherPendingTransfers = taskTransfers.some(
+          (item) => item.id !== transfer.id && item.status === CustodyTransferStatus.PENDING_RECEIPT,
+        )
+        const custodyCaseUnits = await tx.rentalExceptionCase.findMany({
+          where: { orderId: order.id, caseType: RentalExceptionType.OTHER, reason: { startsWith: DELIVERY_CUSTODY_DISCREPANCY } },
+          select: { unitId: true },
+        })
+        const declaredByDelivery = new Set([
+          ...taskTransfers.flatMap((item) => stringArray(item.unitIds)),
+          ...custodyCaseUnits.map((item) => item.unitId).filter(Boolean),
+        ])
+        const deliveryStillHoldsUnits = allAssignments.some(
+          (item: any) =>
+            item.status === RentalUnitAssignmentStatus.RETURNED && !declaredByDelivery.has(item.equipmentUnitId),
+        )
+        const deliveryDone =
+          complete &&
+          !otherPendingTransfers &&
+          !deliveryStillHoldsUnits &&
+          task.status !== DeliveryTaskStatus.COLLECTING
         const updatedTransfer = await tx.returnCustodyTransfer.update({
           where: { id: transfer.id },
           data: {
@@ -878,7 +960,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             version: { increment: 1 },
           },
         })
-        const updatedTask = complete
+        const updatedTask = deliveryDone
           ? await tx.deliveryTask.update({
               where: { id: task.id },
               data: {
@@ -888,7 +970,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               },
             })
           : task
-        if (complete) {
+        if (deliveryDone) {
           const allReturnedAssignments = order.rentalOrderLinesViaOrderId
             .flatMap((line: any) => line.rentalUnitAssignmentsViaOrderLineId)
             .filter((item: any) => item.status === RentalUnitAssignmentStatus.RETURNED)
@@ -954,7 +1036,17 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         const task = await lockDeliveryTask(tx, command.returnId)
         if (!task || task.taskType !== DeliveryTaskType.RETURN) throw AppError.fromCode(RR.RETURN_TASK_NOT_FOUND)
         assertExpectedVersion(task.version, command.expectedVersion)
-        if (![DeliveryTaskStatus.RETURNED, DeliveryTaskStatus.INVENTORY_RECEIVED].includes(task.status as any))
+        // Per-unit guards below (inventory receipt + pending inspection task) decide what can be
+        // inspected. The task may be COLLECTING (next round in progress) or CLOSED (custody
+        // discrepancy resolved) while units already received still await FINAL.
+        if (
+          ![
+            DeliveryTaskStatus.COLLECTING,
+            DeliveryTaskStatus.RETURNED,
+            DeliveryTaskStatus.INVENTORY_RECEIVED,
+            DeliveryTaskStatus.CLOSED,
+          ].includes(task.status as any)
+        )
           throw AppError.fromCode(RR.INVALID_RETURN_STATE)
         const order = await getReturnOrder(tx, task.orderId)
         if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND)
@@ -991,16 +1083,10 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
               details: { reason: 'PHYSICALLY_RECEIVED_UNIT_CANNOT_BE_LOST' },
             })
-          await validateEvidence(tx, actor.id, item.evidenceIds, [
-            MediaScope.RETURN_EVIDENCE,
-            MediaScope.EXCEPTION_EVIDENCE,
-            MediaScope.CONDITION_EVIDENCE,
-          ])
+          // Item and damage evidence end up in the same exception case, so both accept the same scopes.
+          await validateEvidence(tx, actor.id, item.evidenceIds, FINAL_INSPECTION_EVIDENCE_SCOPES)
           for (const damage of item.damage)
-            await validateEvidence(tx, actor.id, damage.evidenceIds ?? [], [
-              MediaScope.RETURN_EVIDENCE,
-              MediaScope.EXCEPTION_EVIDENCE,
-            ])
+            await validateEvidence(tx, actor.id, damage.evidenceIds ?? [], FINAL_INSPECTION_EVIDENCE_SCOPES)
           const baseline = await tx.conditionSnapshot.findUnique({
             where: {
               assignmentId_snapshotStage: { assignmentId: assignment.id, snapshotStage: SnapshotStage.PRE_HANDOVER },
@@ -1010,6 +1096,16 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
 
           if (item.outcome === 'PASS' && (item.condition === 'DAMAGED' || item.damage.length > 0))
             throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'PASS_CONFLICTS_WITH_DAMAGE' } })
+          // A deduction can only be approved with evidence (evidenceCompleteAt), and FINAL is immutable,
+          // so damage without any evidence would leave the case un-approvable forever.
+          if (
+            item.damage.length > 0 &&
+            item.evidenceIds.length === 0 &&
+            item.damage.every((damage) => !(damage.evidenceIds ?? []).length)
+          )
+            throw AppError.fromCode(RR.EVIDENCE_NOT_READY, {
+              details: { unitId: item.issueUnitId, reason: 'DAMAGE_EVIDENCE_REQUIRED' },
+            })
           if (deepRequired && !item.evidenceIds.length) {
             throw AppError.fromCode(RR.EVIDENCE_NOT_READY, { details: { reason: 'DEEP_INSPECTION_EVIDENCE_REQUIRED' } })
           }
@@ -1259,7 +1355,10 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           ...finalInspections.map((f) => f.assignmentId),
           ...missingPrelims.map((m) => m.assignmentId),
         ])
-        const orderInspectionComplete = assignments.every((a: any) => completedAssignmentIds.has(a.id))
+        // Units swapped out during preparation (REPLACED / UNASSIGNED) were never rented.
+        const orderInspectionComplete = assignments
+          .filter((a: any) => !INACTIVE_RETURN_ASSIGNMENT_STATUSES.includes(a.status))
+          .every((a: any) => completedAssignmentIds.has(a.id))
 
         if (orderInspectionComplete) {
           const passItemsToRelease = await tx.depositSettlementItem.findMany({
@@ -1335,7 +1434,15 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       command.idempotencyKey,
       { orderId: command.orderId, assessmentId: command.assessmentId, approvalRef: command.approvalRef },
       async (tx) => {
-        await requireActiveRole(tx, command.actorUserId, UserRole.ADMIN)
+        // A system-triggered settlement executes an Admin decision already on record; the approver
+        // being deactivated since must not block the customer's refund forever.
+        if (command.systemTriggered) {
+          const approver = await tx.user.findFirst({
+            where: { id: command.actorUserId, role: UserRole.ADMIN },
+            select: { id: true },
+          })
+          if (!approver) throw AppError.fromCode(RR.FORBIDDEN)
+        } else await requireActiveRole(tx, command.actorUserId, UserRole.ADMIN)
         await lockOrder(tx, command.orderId)
         const order = await tx.rentalOrder.findUnique({
           where: { id: command.orderId },
@@ -1369,6 +1476,17 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             item.status as any,
           )
         ) {
+          // Heals orders settled before auto-close existed: a damaged unit's assignment must still close.
+          if (item.status !== DepositItemStatus.REFUND_FAILED) {
+            const closed = await closeSettledAssignment(tx, {
+              assignmentId: item.assignmentId,
+              inspectionId: assessment.id,
+              actorUserId: command.actorUserId,
+              now: command.now,
+              idempotencyKey: command.idempotencyKey,
+            })
+            if (closed) await tryCompleteOrder(tx, order.id, command.now)
+          }
           const [settlement, refund, allocation] = await Promise.all([
             tx.depositSettlement.findUnique({ where: { orderId: order.id } }),
             tx.refund.findUnique({ where: { depositSettlementItemId: item.id }, select: { id: true } }),
@@ -1455,6 +1573,14 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             },
           })
         }
+        // Both branches above leave the item SETTLED or REFUND_PENDING: a damaged unit is now final.
+        await closeSettledAssignment(tx, {
+          assignmentId: item.assignmentId,
+          inspectionId: assessment.id,
+          actorUserId: command.actorUserId,
+          now: command.now,
+          idempotencyKey: command.idempotencyKey,
+        })
         const aggregate = await refreshSettlementAggregate(tx, order.id, command.now)
         await tryCompleteOrder(tx, order.id, command.now)
         await writeAudit(
@@ -1560,6 +1686,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       const reason = query.actorUserId !== order.userId ? 'ORDER_OWNER_ONLY'
         : !assessmentId ? 'ASSESSMENT_NOT_READY'
         : review ? 'REVIEW_ALREADY_SUBMITTED'
+        : publishedCase?.customerAcceptedAt ? 'DEDUCTION_ALREADY_ACCEPTED'
         : !approved.gt(0) ? 'NO_APPROVED_DEDUCTION'
         : publishedCase?.evidenceAccessBlockedAt ? 'EVIDENCE_ACCESS_INTERRUPTED'
         : !windowEndsAt ? 'EVIDENCE_NOT_ACCESSIBLE'
@@ -1578,6 +1705,9 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         reviewStatus: review ? ([RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(review.exceptionCase.status as any) ? 'SUBMITTED' : 'RESOLVED') : 'NOT_SUBMITTED',
         canSubmitReview: reason === null,
         cannotSubmitReviewReason: reason,
+        // RB-API-617: accepting is allowed under exactly the same conditions as disputing.
+        canAcceptDeduction: reason === null,
+        deductionAcceptedAt: publishedCase?.customerAcceptedAt?.toISOString() ?? null,
         approvedDeduction: decimalToInteger(approved),
         assetCode: item.unit.assetCode,
         depositAmount: decimalToInteger(item.depositAmount),
@@ -1731,6 +1861,10 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             })
             unitStates.push({ unitId: input.unitId, status: EquipmentUnitStatus.CLEANING })
           } else if (input.outcome === 'DAMAGED') {
+            if (!DAMAGED_FINAL_OUTCOMES.includes(inspection.outcome))
+              throw AppError.fromCode(RR.RETURN_ITEM_REVIEW_REQUIRED, {
+                details: { unitId: input.unitId, reason: 'FINAL_OUTCOME_MISMATCH' },
+              })
             if (![DepositItemStatus.SETTLED, DepositItemStatus.REFUND_PENDING].includes(depositItem.status as any))
               throw AppError.fromCode(RR.RETURN_ITEM_REVIEW_REQUIRED, { details: { unitId: input.unitId } })
             await tx.equipmentUnit.update({
@@ -1821,6 +1955,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         })
         if (!publishedCase?.evidenceAccessibleAt)
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_NOT_ACCESSIBLE' } })
+        if (publishedCase.customerAcceptedAt)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'DEDUCTION_ALREADY_ACCEPTED' } })
         if (publishedCase.evidenceAccessBlockedAt)
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_ACCESS_INTERRUPTED' } })
         const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
@@ -1895,6 +2031,93 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
     )
   }
 
+  // RB-API-617 ---------------------------------------------------------------
+  /** Order owner accepts the published deduction: closes the review window now instead of after 48h. */
+  async acceptAssessment(command: AcceptAssessmentCommand): Promise<AcceptAssessmentResult> {
+    return this.runIdempotentMutation(
+      'RB-API-617:assessment-acceptance',
+      command.actorUserId,
+      command.idempotencyKey,
+      { orderId: command.orderId, assessmentId: command.assessmentId },
+      async (tx) => {
+        await lockOrder(tx, command.orderId)
+        const order = await tx.rentalOrder.findUnique({
+          where: { id: command.orderId },
+          include: { rentalPolicy: true },
+        })
+        if (!order) throw AppError.fromCode(RR.RENTAL_NOT_FOUND)
+        if (order.userId !== command.actorUserId) throw AppError.fromCode(RR.FORBIDDEN)
+        const inspection = await tx.returnInspection.findFirst({
+          where: { id: command.assessmentId, orderId: order.id, stage: InspectionStage.FINAL },
+        })
+        if (!inspection) throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
+        const existingReview = await tx.rentalAssessmentReview.findUnique({
+          where: { inspectionId_userId: { inspectionId: inspection.id, userId: command.actorUserId } },
+        })
+        // A dispute already submitted must be decided by Admin; it cannot be withdrawn by accepting.
+        if (existingReview) throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'REVIEW_ALREADY_SUBMITTED' } })
+        const depositItem = await tx.depositSettlementItem.findUnique({ where: { assignmentId: inspection.assignmentId } })
+        const decision = depositItem ? jsonObject(depositItem.decisionSnapshot) : {}
+        if (!depositItem || !decimalFromUnknown(decision.approvedDeduction ?? '0').gt(0))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'NO_APPROVED_DEDUCTION' } })
+        const publishedCase = await tx.rentalExceptionCase.findFirst({
+          where: { inspectionId: inspection.id, evidenceAccessibleAt: { not: null } },
+          orderBy: { evidenceAccessibleAt: 'desc' },
+        })
+        if (publishedCase?.customerAcceptedAt)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'DEDUCTION_ALREADY_ACCEPTED' } })
+        if (['REFUND_PENDING', 'REFUND_FAILED', 'SETTLED'].includes(depositItem.status))
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'SETTLEMENT_ALREADY_STARTED' } })
+        // The customer can only accept what they were actually able to see.
+        if (!publishedCase?.evidenceAccessibleAt)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_NOT_ACCESSIBLE' } })
+        if (publishedCase.evidenceAccessBlockedAt)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'EVIDENCE_ACCESS_INTERRUPTED' } })
+        const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+        const reviewWindowEndsAt = publishedCase.dueAt ?? new Date(
+          publishedCase.evidenceAccessibleAt.getTime() + (order.rentalPolicy.userAssessmentReviewMinutes ?? 0) * 60_000)
+        if (now.getTime() >= reviewWindowEndsAt.getTime())
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'USER_REVIEW_WINDOW_EXPIRED' } })
+        // Ending the window at acceptance keeps every window-based check (gate, publication worker,
+        // dispute endpoint, deposit view) consistent with "no more review pending".
+        await tx.rentalExceptionCase.update({
+          where: { id: publishedCase.id },
+          data: { customerAcceptedAt: now, dueAt: now, version: { increment: 1 } },
+        })
+        await writeAudit(
+          tx,
+          command.actorUserId,
+          'RENTAL_DEDUCTION_ACCEPTED_BY_CUSTOMER',
+          'RentalExceptionCase',
+          publishedCase.id,
+          { dueAt: reviewWindowEndsAt.toISOString() },
+          {
+            customerAcceptedAt: now.toISOString(),
+            inspectionId: inspection.id,
+            approvedDeduction: String(decision.approvedDeduction),
+          },
+          command.idempotencyKey,
+        )
+        const approvalRef = typeof decision.approvalRef === 'string' ? decision.approvalRef : null
+        return {
+          caseId: publishedCase.id,
+          assessmentId: inspection.id,
+          acceptedAt: now.toISOString(),
+          settlement:
+            approvalRef && depositItem.approvedBy
+              ? {
+                  orderId: order.id,
+                  assessmentId: inspection.id,
+                  approvalRef,
+                  approvedBy: depositItem.approvedBy,
+                  depositItemId: depositItem.id,
+                }
+              : null,
+        }
+      },
+    )
+  }
+
   // RB-API-610 ---------------------------------------------------------------
   async resolveException(command: ResolveExceptionCommand) {
     return this.runIdempotentMutation(
@@ -1940,12 +2163,27 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         let resolvedInspectionId = exceptionCase.inspectionId
         const resolution = command.decision
         const isDeliveryCustodyDiscrepancy = exceptionCase.reason.startsWith(DELIVERY_CUSTODY_DISCREPANCY)
+        // 602 opens this case for a unit the customer never handed back: there is no photo
+        // to attach, the elapsed lost-confirmation window is the evidence.
+        const isMissingUnitCase = exceptionCase.caseType === RentalExceptionType.RETURN_INCOMPLETE
+        if (command.decision === 'RETRY_REFUND' && exceptionCase.caseType !== RentalExceptionType.REFUND_FAILURE)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'RETRY_REFUND_ONLY_FOR_REFUND_FAILURE' } })
         if (isDeliveryCustodyDiscrepancy && command.decision !== 'CLOSE_NO_ACTION')
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { reason: 'DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER' },
           })
 
-        if (command.decision === 'APPROVE_DEDUCTION' || command.decision === 'REJECT_DEDUCTION') {
+        if (command.decision === 'RETRY_REFUND') {
+          nextAction = await queueDepositRefundRetry(tx, {
+            orderId: exceptionCase.orderId,
+            caseId: exceptionCase.id,
+            caseReason: exceptionCase.reason,
+            actorUserId: actor.id,
+            reason: command.reason,
+            now: command.now,
+            idempotencyKey: command.idempotencyKey,
+          })
+        } else if (command.decision === 'APPROVE_DEDUCTION' || command.decision === 'REJECT_DEDUCTION') {
           if (!exceptionCase.inspection || !depositItem) throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
           if (command.decision === 'APPROVE_DEDUCTION' && !exceptionCase.evidenceCompleteAt)
             throw AppError.fromCode(RR.EVIDENCE_NOT_READY)
@@ -1980,7 +2218,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             throw AppError.fromCode(RR.POLICY_CONFIG_REQUIRED, {
               details: { field: 'lostConfirmationMinutes', minimum: 2880 },
             })
-          if (!exceptionCase.evidenceCompleteAt) throw AppError.fromCode(RR.EVIDENCE_NOT_READY)
+          if (!exceptionCase.evidenceCompleteAt && !isMissingUnitCase) throw AppError.fromCode(RR.EVIDENCE_NOT_READY)
           // Legacy dueAt may have been calculated from a shorter policy window.
           const operationalDue = Math.max(
             exceptionCase.order.rentalEndAt.getTime(),
@@ -2018,6 +2256,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
               },
             })
           }
+          // 606 looks the decision case up by the FINAL inspection id.
+          resolvedInspectionId = inspection.id
           await tx.depositSettlementItem.update({
             where: { id: depositItem.id },
             data: {
@@ -2041,7 +2281,14 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           if (depositItem) {
             const snapshot = jsonObject(depositItem.decisionSnapshot)
             let settlementInspectionId = exceptionCase.inspectionId
-            if (isDeliveryCustodyDiscrepancy) {
+            // The unit never came back: write it off as lost without charging the customer.
+            // 606 only settles against a FINAL inspection, so one is recorded here.
+            const writeOffReason = isDeliveryCustodyDiscrepancy
+              ? 'INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY'
+              : isMissingUnitCase
+                ? 'MISSING_UNIT_LOSS_WAIVED'
+                : null
+            if (writeOffReason) {
               if (!exceptionCase.assignmentId || !exceptionCase.unitId)
                 throw AppError.fromCode(RR.ASSESSMENT_NOT_FOUND)
               const finalInspection = await tx.returnInspection.upsert({
@@ -2053,7 +2300,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 },
                 update: {
                   outcome: ReturnInspectionOutcome.LOST_CONFIRMED,
-                  notes: `INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY: ${command.reason}`,
+                  notes: `${writeOffReason}: ${command.reason}`,
                   version: { increment: 1 },
                 },
                 create: {
@@ -2063,7 +2310,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                   inspectorId: actor.id,
                   stage: InspectionStage.FINAL,
                   outcome: ReturnInspectionOutcome.LOST_CONFIRMED,
-                  notes: `INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY: ${command.reason}`,
+                  notes: `${writeOffReason}: ${command.reason}`,
                 },
               })
               settlementInspectionId = finalInspection.id
@@ -2075,10 +2322,8 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 inspectionId: settlementInspectionId,
                 status: DepositItemStatus.DEDUCTION_REJECTED,
                 deductionAmount: 0,
-                refundAmount: isDeliveryCustodyDiscrepancy ? depositItem.depositAmount : depositItem.refundAmount,
-                reason: isDeliveryCustodyDiscrepancy
-                  ? 'INTERNAL_CUSTODY_LOSS_NO_CUSTOMER_LIABILITY'
-                  : depositItem.reason,
+                refundAmount: writeOffReason ? depositItem.depositAmount : depositItem.refundAmount,
+                reason: writeOffReason ?? depositItem.reason,
                 decisionSnapshot: jsonValue({
                   ...snapshot,
                   approvedDeduction: '0',
@@ -2318,6 +2563,24 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             recipientParticipant: { select: { fullName: true } },
             depositSettlementViaOrderId: { include: { depositSettlementItemsViaSettlementId: true } },
             returnInspectionsViaOrderId: true,
+            // Needed to derive each unit's warehouse stage (buildReturnUnitViews).
+            returnInspectionTasks: { select: { assignmentId: true } },
+            // What Delivery wrote down when handing the gear to the customer (RB-API-404).
+            rentalHandoverViaOrderId: { select: { reportedIssues: true } },
+            rentalOrderLinesViaOrderId: {
+              select: {
+                product: { select: { requiresDeepReturnInspection: true } },
+                rentalUnitAssignmentsViaOrderLineId: {
+                  select: {
+                    id: true,
+                    status: true,
+                    returnedAt: true,
+                    equipmentUnitId: true,
+                    equipmentUnit: { select: { status: true } },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -2373,6 +2636,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
             trip: { select: { title: true } },
             user: { select: { fullName: true } },
             recipientParticipant: { select: { fullName: true } },
+            rentalHandoverViaOrderId: { select: { reportedIssues: true, handedOverAt: true } },
             refundsViaRentalOrderId: {
               orderBy: { createdAt: 'desc' },
               select: { id: true, amount: true, currency: true, status: true, reconcileStatus: true, retryCount: true, lastErrorCode: true, lastCheckedAt: true },
@@ -2427,6 +2691,15 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       },
       evidence: jsonArray(row.evidenceIds),
       assessment: row.inspection ? mapInspection(row.inspection) : null,
+      // Shown before approving a deduction: defects of this unit already noted when it was handed over.
+      handoverReportedIssues: (() => {
+        const issues = handoverReportedIssues(row.order.rentalHandoverViaOrderId?.reportedIssues)
+        return {
+          handedOverAt: row.order.rentalHandoverViaOrderId?.handedOverAt?.toISOString() ?? null,
+          unit: row.unitId ? (issues.byUnit.get(row.unitId) ?? []) : [],
+          orderLevel: issues.orderLevel,
+        }
+      })(),
       refund: refund
         ? {
             id: refund.id,
@@ -2456,7 +2729,16 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       allowedActions:
         query.actorRole === UserRole.ADMIN &&
         [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(row.status as any)
-          ? ['APPROVE_DEDUCTION', 'REJECT_DEDUCTION', 'CONFIRM_LOST', 'CLOSE_NO_ACTION']
+          ? [
+              'APPROVE_DEDUCTION',
+              'REJECT_DEDUCTION',
+              'CONFIRM_LOST',
+              'CLOSE_NO_ACTION',
+              // Only a refund the provider definitively FAILED can be sent again.
+              ...(row.caseType === RentalExceptionType.REFUND_FAILURE && referencedRefund?.status === RefundStatus.FAILED
+                ? ['RETRY_REFUND']
+                : []),
+            ]
           : [],
     }
   }
@@ -3241,6 +3523,11 @@ const returnDetailOrderInclude = {
   packageViaOrderId: true,
   conditionSnapshotsViaOrderId: true,
   returnInspectionsViaOrderId: { include: { findingsViaInspectionId: true } },
+  returnInspectionTasks: { select: { assignmentId: true, receivedAt: true, inspectionDueAt: true } },
+  rentalHandoverViaOrderId: { select: { reportedIssues: true, handedOverAt: true } },
+  rentalExceptionCasesViaOrderId: {
+    select: { id: true, assignmentId: true, caseType: true, status: true, reason: true, createdAt: true },
+  },
   depositSettlementViaOrderId: {
     include: { depositSettlementItemsViaSettlementId: { include: { refundViaDepositSettlementItemId: true } } },
   },
@@ -3556,6 +3843,12 @@ async function closeResolvedDeliveryCustodyChain(
     },
   })
   if (openCustodyCases) return
+  // Partial early return: the customer still holds units, so the same task must
+  // stay open for the next collection round.
+  const stillWithCustomer = await tx.rentalUnitAssignment.count({
+    where: { orderLine: { orderId }, status: RentalUnitAssignmentStatus.HANDED_OVER, returnedAt: null },
+  })
+  if (stillWithCustomer) return
   await tx.deliveryTask.updateMany({
     where: { orderId, taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.RETURNED },
     data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } },
@@ -3570,6 +3863,104 @@ const refundReviewReference = (refundId: string) => `[refund:${refundId}]`
 
 function refundIdFromReviewReason(reason: string): string | null {
   return reason.match(/\[refund:([0-9a-f-]{36})\]/i)?.[1] ?? null
+}
+
+/**
+ * RB-API-610 RETRY_REFUND: a deposit refund the provider definitively FAILED is re-queued.
+ * A deposit item can only be linked to one refund (unique keys), so the failed refund is
+ * unlinked (kept, with its settlement id, for audit) and the item goes back to REFUND_PENDING
+ * with a higher refundAttempt; the deposit worker then dispatches it under a new
+ * idempotency key (`...:v<attempt>`). A refund still PENDING/PROCESSING may yet succeed at the
+ * provider, so it is never retried here (that could refund twice).
+ */
+async function queueDepositRefundRetry(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string
+    caseId: string
+    caseReason: string
+    actorUserId: string
+    reason: string
+    now: Date
+    idempotencyKey: string
+  },
+): Promise<string> {
+  const refundId = refundIdFromReviewReason(input.caseReason)
+  if (!refundId)
+    throw AppError.fromCode(RR.REFUND_RECONCILIATION_REQUIRED, { details: { reason: 'REFUND_REFERENCE_MISSING' } })
+  await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${refundId}::uuid FOR UPDATE`
+  const refund = await tx.refund.findUnique({
+    where: { id: refundId },
+    include: { depositRefundItems: true, depositSettlement: { select: { orderId: true } } },
+  })
+  if (!refund || refund.purpose !== 'DEPOSIT' || refund.depositSettlement?.orderId !== input.orderId)
+    throw AppError.fromCode(RR.REFUND_RECONCILIATION_REQUIRED, { details: { reason: 'REFUND_NOT_FOUND_FOR_ORDER' } })
+  if (refund.status !== RefundStatus.FAILED)
+    throw AppError.fromCode(RR.REFUND_RECONCILIATION_REQUIRED, {
+      details: { reason: 'REFUND_NOT_FAILED', refundStatus: refund.status },
+    })
+  const itemIds = [
+    ...new Set([
+      ...(refund.depositSettlementItemId ? [refund.depositSettlementItemId] : []),
+      ...refund.depositRefundItems.map((allocation) => allocation.depositSettlementItemId),
+    ]),
+  ]
+  const items = await tx.depositSettlementItem.findMany({ where: { id: { in: itemIds } } })
+  const failed = items.filter((item) => item.status === DepositItemStatus.REFUND_FAILED)
+  if (!failed.length) throw AppError.fromCode(RR.INVALID_RETURN_STATE, { details: { reason: 'NO_FAILED_DEPOSIT_ITEM' } })
+  // Free the unique item links for the new attempt; the failed refund row itself stays.
+  if (refund.depositSettlementItemId)
+    await tx.refund.update({
+      where: { id: refund.id },
+      data: { depositSettlementItemId: null, version: { increment: 1 } },
+    })
+  await tx.depositRefundItemAllocation.deleteMany({ where: { refundId: refund.id } })
+  for (const item of failed) {
+    const snapshot = jsonObject(item.decisionSnapshot)
+    const previousAttempt = Number(snapshot.refundAttempt ?? 1)
+    await tx.depositSettlementItem.update({
+      where: { id: item.id },
+      data: {
+        status: DepositItemStatus.REFUND_PENDING,
+        reason: 'REFUND_RETRY_QUEUED',
+        decisionSnapshot: jsonValue({
+          ...snapshot,
+          refundAttempt: (Number.isFinite(previousAttempt) ? previousAttempt : 1) + 1,
+          failedRefundIds: [...(Array.isArray(snapshot.failedRefundIds) ? snapshot.failedRefundIds : []), refund.id],
+        }),
+        version: { increment: 1 },
+      },
+    })
+  }
+  // One case per item may exist for the same refund (processRefundEvent): close them together.
+  await tx.rentalExceptionCase.updateMany({
+    where: {
+      orderId: input.orderId,
+      id: { not: input.caseId },
+      caseType: RentalExceptionType.REFUND_FAILURE,
+      status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+      reason: { contains: refundReviewReference(refund.id) },
+    },
+    data: {
+      status: RentalExceptionCaseStatus.RESOLVED,
+      adminReviewStatus: 'DECIDED',
+      resolution: `RETRY_REFUND: ${input.reason}`,
+      resolvedAt: input.now,
+      version: { increment: 1 },
+    },
+  })
+  await refreshSettlementAggregate(tx, input.orderId, input.now)
+  await writeAudit(
+    tx,
+    input.actorUserId,
+    'RENTAL_DEPOSIT_REFUND_RETRY_QUEUED',
+    'Refund',
+    refund.id,
+    { refundStatus: refund.status, depositSettlementItemId: refund.depositSettlementItemId, itemIds },
+    { requeuedItemIds: failed.map((item) => item.id), reason: input.reason },
+    input.idempotencyKey,
+  )
+  return 'DEPOSIT_REFUND_RETRY_QUEUED'
 }
 
 async function materializeRefundReviewCases(tx: Prisma.TransactionClient) {
@@ -3631,18 +4022,21 @@ function policyDueAt(minutes: number | null | undefined, now: Date): Date | null
   return minutes && minutes > 0 ? new Date(now.getTime() + minutes * 60_000) : null
 }
 
-function calculateRuleDeduction(
+export function calculateRuleDeduction(
   rule: any,
   orderLine: any,
   depositAmount: Prisma.Decimal,
   quantity: number,
 ): Prisma.Decimal {
   const value = new Prisma.Decimal(rule.deductionValue)
-  if (rule.deductionType === DamageDeductionType.FIXED) return value.mul(quantity)
-  if (rule.deductionType === DamageDeductionType.PERCENT_DEPOSIT) return depositAmount.mul(value).div(100).mul(quantity)
-  if (rule.deductionType === DamageDeductionType.PERCENT_REPLACEMENT_VALUE)
-    return new Prisma.Decimal(orderLine.replacementValueSnapshot).mul(value).div(100).mul(quantity)
-  return new Prisma.Decimal(0)
+  let amount = new Prisma.Decimal(0)
+  if (rule.deductionType === DamageDeductionType.FIXED) amount = value.mul(quantity)
+  else if (rule.deductionType === DamageDeductionType.PERCENT_DEPOSIT) amount = depositAmount.mul(value).div(100).mul(quantity)
+  else if (rule.deductionType === DamageDeductionType.PERCENT_REPLACEMENT_VALUE)
+    amount = new Prisma.Decimal(orderLine.replacementValueSnapshot).mul(value).div(100).mul(quantity)
+  // VND has no minor unit: a percentage (12.5% of 99,999) must not reach 605 as a fraction, which
+  // decimalToInteger rejects. Round down, in the customer's favour.
+  return amount.toDecimalPlaces(0, Prisma.Decimal.ROUND_FLOOR)
 }
 
 async function refreshSettlementAggregate(tx: Prisma.TransactionClient, orderId: string, now: Date) {
@@ -3728,6 +4122,169 @@ async function refreshSettlementAggregate(tx: Prisma.TransactionClient, orderId:
   }
 }
 
+/**
+ * Once a damaged or lost unit's deposit is settled (SETTLED / REFUND_PENDING), close its
+ * assignment and set the unit's end state (DAMAGED / LOST) - the same as RB-API-608 - so the
+ * order can complete without a manual finalize call. Idempotent; returns true only when it
+ * changed something.
+ */
+export async function closeSettledAssignment(
+  tx: Prisma.TransactionClient,
+  input: { assignmentId: string; inspectionId: string; actorUserId: string; now: Date; idempotencyKey?: string },
+): Promise<boolean> {
+  const inspection = await tx.returnInspection.findUnique({
+    where: { id: input.inspectionId },
+    select: { outcome: true, stage: true },
+  })
+  if (!inspection || inspection.stage !== InspectionStage.FINAL) return false
+  const lost = inspection.outcome === ReturnInspectionOutcome.LOST_CONFIRMED
+  if (!lost && !DAMAGED_FINAL_OUTCOMES.includes(inspection.outcome)) return false
+  const assignment = await tx.rentalUnitAssignment.findUnique({
+    where: { id: input.assignmentId },
+    select: { id: true, status: true, equipmentUnitId: true },
+  })
+  if (!assignment || assignment.status === RentalUnitAssignmentStatus.CLOSED) return false
+  await tx.rentalUnitAssignment.update({
+    where: { id: assignment.id },
+    data: { status: RentalUnitAssignmentStatus.CLOSED, closedAt: input.now, version: { increment: 1 } },
+  })
+  const unit = await tx.equipmentUnit.findUnique({
+    where: { id: assignment.equipmentUnitId },
+    select: { status: true },
+  })
+  // 605 parks a damaged unit in MAINTENANCE; if staff already moved it on, leave the physical state alone.
+  // A lost unit is never physically in stock, so it is always marked LOST.
+  const nextUnitStatus = lost
+    ? unit?.status === EquipmentUnitStatus.LOST
+      ? null
+      : EquipmentUnitStatus.LOST
+    : unit?.status === EquipmentUnitStatus.MAINTENANCE
+      ? EquipmentUnitStatus.DAMAGED
+      : null
+  if (nextUnitStatus)
+    await tx.equipmentUnit.update({
+      where: { id: assignment.equipmentUnitId },
+      data: {
+        status: nextUnitStatus,
+        condition: lost ? EquipmentCondition.LOST : EquipmentCondition.DAMAGED,
+        version: { increment: 1 },
+      },
+    })
+  await writeAudit(
+    tx,
+    input.actorUserId,
+    lost ? 'RETURN_LOST_UNIT_AUTO_CLOSED' : 'RETURN_DAMAGED_UNIT_AUTO_CLOSED',
+    'RentalUnitAssignment',
+    assignment.id,
+    { status: assignment.status, unitStatus: unit?.status ?? null },
+    {
+      status: RentalUnitAssignmentStatus.CLOSED,
+      unitStatus: nextUnitStatus ?? unit?.status ?? null,
+      inspectionId: input.inspectionId,
+    },
+    input.idempotencyKey,
+  )
+  return true
+}
+
+/** Grace after the return deadline before an unreturned unit is opened as missing (SOT +2h). */
+export const MISSING_REVIEW_GRACE_MINUTES = 120
+
+/**
+ * Units the customer still holds MISSING_REVIEW_GRACE_MINUTES after the return deadline get a
+ * MISSING_PENDING_REVIEW inspection and a RETURN_INCOMPLETE case, so Admin can later
+ * CONFIRM_LOST (or the case resolves itself when 602 receives the unit late). Covers orders
+ * nobody ever collected (ACTIVE) and partial early returns (RETURN_PROCESSING). Caller must
+ * hold the order lock. Never marks a unit LOST and never deducts anything by itself.
+ */
+export async function openOverdueMissingUnitCases(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  now: Date,
+): Promise<number> {
+  const order = await tx.rentalOrder.findUnique({
+    where: { id: orderId },
+    include: {
+      rentalPolicy: true,
+      deliveryTasksViaOrderId: { where: { taskType: DeliveryTaskType.RETURN }, select: { staffId: true } },
+      rentalOrderLinesViaOrderId: { include: { rentalUnitAssignmentsViaOrderLineId: true } },
+    },
+  })
+  if (!order) return 0
+  if (![RentalOrderStatus.ACTIVE, RentalOrderStatus.RETURN_PENDING, RentalOrderStatus.RETURN_PROCESSING].includes(order.status as any))
+    return 0
+  const due = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt)
+  if (now.getTime() < due.getTime() + MISSING_REVIEW_GRACE_MINUTES * 60_000) return 0
+  // ReturnInspection needs an inspector: the delivery staff who owns the collection.
+  const inspectorId = order.deliveryTasksViaOrderId[0]?.staffId
+  if (!inspectorId) return 0
+  const outstanding = order.rentalOrderLinesViaOrderId
+    .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
+    .filter((assignment) => assignment.status === RentalUnitAssignmentStatus.HANDED_OVER && !assignment.returnedAt)
+  let opened = 0
+  for (const assignment of outstanding) {
+    // One RETURN_INCOMPLETE case per unit ever: a resolved one (e.g. CONFIRM_LOST awaiting 606) must not reopen.
+    const existing = await tx.rentalExceptionCase.findFirst({
+      where: { orderId, assignmentId: assignment.id, caseType: RentalExceptionType.RETURN_INCOMPLETE },
+      select: { id: true },
+    })
+    if (existing) continue
+    const inspection = await tx.returnInspection.upsert({
+      where: { assignmentId_stage: { assignmentId: assignment.id, stage: InspectionStage.PRELIMINARY } },
+      update: {},
+      create: {
+        orderId,
+        assignmentId: assignment.id,
+        unitId: assignment.equipmentUnitId,
+        inspectorId,
+        stage: InspectionStage.PRELIMINARY,
+        outcome: ReturnInspectionOutcome.MISSING_PENDING_REVIEW,
+        notes: 'SYSTEM: unit not returned after the return deadline',
+      },
+    })
+    await tx.depositSettlementItem.updateMany({
+      where: { assignmentId: assignment.id, status: { not: DepositItemStatus.SETTLED } },
+      data: {
+        status: DepositItemStatus.REVIEW_REQUIRED,
+        inspectionId: inspection.id,
+        reason: 'MISSING_PENDING_REVIEW',
+        version: { increment: 1 },
+      },
+    })
+    await ensureReviewCase(tx, {
+      orderId,
+      assignmentId: assignment.id,
+      unitId: assignment.equipmentUnitId,
+      inspectionId: inspection.id,
+      caseType: RentalExceptionType.RETURN_INCOMPLETE,
+      reason: 'MISSING_PENDING_REVIEW',
+      evidenceIds: [],
+      dueAt: policyDueAt(order.rentalPolicy.lostConfirmationMinutes, now),
+    })
+    opened += 1
+  }
+  if (!opened) return 0
+  await tx.rentalOrder.update({
+    where: { id: orderId },
+    data: {
+      status: order.status === RentalOrderStatus.ACTIVE ? RentalOrderStatus.RETURN_PENDING : order.status,
+      exceptionStatus: RentalOrderExceptionStatus.RETURN_INCOMPLETE,
+      version: { increment: 1 },
+    },
+  })
+  await refreshSettlementAggregate(tx, orderId, now)
+  await writeAudit(
+    tx,
+    null,
+    'RENTAL_MISSING_UNITS_OPENED',
+    'RentalOrder',
+    orderId,
+    { status: order.status, exceptionStatus: order.exceptionStatus },
+    { openedCases: opened, dueAt: due.toISOString() },
+  )
+  return opened
+}
+
 export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: string, now: Date): Promise<boolean> {
   await lockOrder(tx, orderId)
   const order = await tx.rentalOrder.findUnique({
@@ -3768,10 +4325,18 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
   // Return tasks must be strictly INVENTORY_RECEIVED, CLOSED, or CANCELLED.
   // Rejects BLOCKED, NO_SHOW, REFUSED, SCHEDULED, COLLECTING, RETURNED, PACKAGE_RECEIVED, RECIPIENT_VERIFIED, HANDED_OVER.
   const returnTasks = (order.deliveryTasksViaOrderId || []).filter((t) => t.taskType === DeliveryTaskType.RETURN)
+  // Every unit closed (returned + finalized, or confirmed LOST) and every transfer terminal means
+  // nobody holds anything. Then a task left RETURNED by several collection rounds, or never
+  // collected at all (SCHEDULED: all units lost), no longer blocks completion; step 10 closes it.
+  const everyUnitClosed = (order.rentalOrderLinesViaOrderId || [])
+    .flatMap((line) => line.rentalUnitAssignmentsViaOrderLineId)
+    .filter((item) => !INACTIVE_RETURN_ASSIGNMENT_STATUSES.includes(item.status))
+    .every((item) => item.status === RentalUnitAssignmentStatus.CLOSED)
   const allowedReturnTaskStatuses: DeliveryTaskStatus[] = [
     DeliveryTaskStatus.INVENTORY_RECEIVED,
     DeliveryTaskStatus.CLOSED,
     DeliveryTaskStatus.CANCELLED,
+    ...(everyUnitClosed ? [DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.RETURNED] : []),
   ]
   const returnTasksTerminal = returnTasks.every((t) => allowedReturnTaskStatuses.includes(t.status as any))
   if (!returnTasksTerminal) return false
@@ -3794,18 +4359,15 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
       PackageStatus.RETURNED_TO_INVENTORY,
       PackageStatus.CLOSED,
       PackageStatus.CANCELLED,
+      ...(everyUnitClosed ? [PackageStatus.HANDED_OVER, PackageStatus.RETURNING] : []),
     ]
     if (!allowedPackageStatuses.includes(pkgStatus)) {
       return false
     }
   }
 
-  // 5. Return Sessions: POSITIVE ALLOWLIST - all sessions must be FINALIZED or CANCELLED.
-  // Rejects OPEN.
-  const returnSessions = order.rentalReturnSessionsViaOrderId || []
-  const allowedSessionStatuses: RentalReturnSessionStatus[] = [RentalReturnSessionStatus.FINALIZED]
-  const sessionsTerminal = returnSessions.every((s) => allowedSessionStatuses.includes(s.status as any))
-  if (!sessionsTerminal) return false
+  // 5. Return sessions are receipts, not custody: an OPEN session (driver never tapped
+  // "finalize receipt") must not block completion. Custody is proven by steps 2 and 6.
 
   // 6. Unit assignments: all active assignments must be CLOSED (Positive check)
   const assignments = (order.rentalOrderLinesViaOrderId || [])
@@ -3875,14 +4437,23 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
 
   // 10. Post-completion transition: only transition tasks/packages that were already in INVENTORY_RECEIVED / RETURNED_TO_INVENTORY
   for (const t of returnTasks) {
-    if (t.status === DeliveryTaskStatus.INVENTORY_RECEIVED) {
+    if (
+      [DeliveryTaskStatus.INVENTORY_RECEIVED, DeliveryTaskStatus.RETURNED, DeliveryTaskStatus.SCHEDULED].includes(
+        t.status as any,
+      )
+    ) {
       await tx.deliveryTask.update({
         where: { id: t.id },
         data: { status: DeliveryTaskStatus.CLOSED, version: { increment: 1 } },
       })
     }
   }
-  if (order.packageViaOrderId && order.packageViaOrderId.status === PackageStatus.RETURNED_TO_INVENTORY) {
+  if (
+    order.packageViaOrderId &&
+    [PackageStatus.RETURNED_TO_INVENTORY, PackageStatus.HANDED_OVER, PackageStatus.RETURNING].includes(
+      order.packageViaOrderId.status as any,
+    )
+  ) {
     await tx.package.update({
       where: { id: order.packageViaOrderId.id },
       data: { status: PackageStatus.CLOSED, version: { increment: 1 } },
@@ -3962,36 +4533,76 @@ async function allUnitsHaveInventoryLocationReceipt(
   return count >= new Set(unitIds).size
 }
 
-function mapReturnQueueItem(task: any) {
-  const inspections = task.order.returnInspectionsViaOrderId ?? []
-  const items = task.order.depositSettlementViaOrderId?.depositSettlementItemsViaSettlementId ?? []
-  const normalCount = inspections.filter(
-    (item: any) => item.stage === InspectionStage.PRELIMINARY && item.outcome === ReturnInspectionOutcome.NORMAL,
-  ).length
-  const issueCount = inspections.filter((item: any) =>
-    [ReturnInspectionOutcome.ISSUE, ReturnInspectionOutcome.DAMAGE_CONFIRMED].includes(item.outcome),
-  ).length
-  const missingCount = inspections.filter(
-    (item: any) => item.outcome === ReturnInspectionOutcome.MISSING_PENDING_REVIEW,
-  ).length
-  let status = 'INVENTORY_RECEIVED'
-  if (items.some((item: any) => item.status === DepositItemStatus.REVIEW_REQUIRED)) status = 'REVIEW_REQUIRED'
-  else if (task.status === DeliveryTaskStatus.RETURNED) status = 'TRANSFER_PENDING'
-  else if (
-    items.some((item: any) => item.status === DepositItemStatus.SETTLED) &&
-    task.order.status === RentalOrderStatus.COMPLETED
+const DAMAGED_INSPECTION_OUTCOMES: string[] = [ReturnInspectionOutcome.ISSUE, ReturnInspectionOutcome.DAMAGE_CONFIRMED]
+const INACTIVE_RETURN_ASSIGNMENT_STATUSES: string[] = [
+  RentalUnitAssignmentStatus.REPLACED,
+  RentalUnitAssignmentStatus.UNASSIGNED,
+]
+
+/** One entry per unit the customer had, with its warehouse stage (see return-unit-stage.ts). */
+export function buildReturnUnitViews(order: any) {
+  const inspections = new Map<string, any>(
+    (order.returnInspectionsViaOrderId ?? []).map((inspection: any) => [
+      `${inspection.assignmentId}:${inspection.stage}`,
+      inspection,
+    ]),
   )
-    status = 'COMPLETED'
-  else if (task.status === DeliveryTaskStatus.INVENTORY_RECEIVED) status = 'WAITING_CLEANING'
+  const receivedAssignments = new Set<string>(
+    (order.returnInspectionTasks ?? []).map((task: any) => task.assignmentId),
+  )
+  return (order.rentalOrderLinesViaOrderId ?? []).flatMap((line: any) =>
+    (line.rentalUnitAssignmentsViaOrderLineId ?? [])
+      .filter((assignment: any) => !INACTIVE_RETURN_ASSIGNMENT_STATUSES.includes(assignment.status))
+      .map((assignment: any) => {
+        const preliminary = inspections.get(`${assignment.id}:${InspectionStage.PRELIMINARY}`) ?? null
+        const final = inspections.get(`${assignment.id}:${InspectionStage.FINAL}`) ?? null
+        const product = line.product ?? {}
+        const stage = deriveReturnUnitStage({
+          returnedFromCustomer: Boolean(assignment.returnedAt),
+          receivedByInventory: receivedAssignments.has(assignment.id),
+          assignmentStatus: assignment.status,
+          unitStatus: assignment.equipmentUnit?.status ?? '',
+          preliminaryOutcome: preliminary?.outcome ?? null,
+          finalOutcome: final?.outcome ?? null,
+        })
+        return {
+          assignment,
+          product,
+          preliminary,
+          final,
+          stage,
+          evidenceRequired: isFinalEvidenceRequired({
+            requiresDeepReturnInspection: Boolean(product.requiresDeepReturnInspection),
+            preliminaryOutcome: preliminary?.outcome ?? null,
+          }),
+          deliveryReportedIssue: Boolean(preliminary && preliminary.outcome === ReturnInspectionOutcome.ISSUE),
+        }
+      }),
+  )
+}
+
+function mapReturnQueueItem(task: any) {
+  const views = buildReturnUnitViews(task.order)
+  const stages = views.map((view: any) => view.stage)
+  const stageCounts = countReturnUnitStages(stages)
   return {
     id: task.id,
     orderId: task.orderId,
     tripTitle: task.order.trip?.title ?? null,
     customerName: task.order.recipientParticipant?.fullName ?? task.order.user?.fullName ?? null,
-    status,
-    normalCount,
-    issueCount,
-    missingCount,
+    status: deriveReturnQueueStatus(stages),
+    normalCount: views.filter((view: any) => view.preliminary?.outcome === ReturnInspectionOutcome.NORMAL).length,
+    // FINAL wins once it exists; before that, what Delivery reported.
+    issueCount: views.filter((view: any) =>
+      view.final
+        ? DAMAGED_INSPECTION_OUTCOMES.includes(view.final.outcome)
+        : view.preliminary?.outcome === ReturnInspectionOutcome.ISSUE,
+    ).length,
+    missingCount: stageCounts.MISSING,
+    deliveryReportedIssueCount: views.filter((view: any) => view.deliveryReportedIssue).length,
+    handoverReportedIssueCount: handoverReportedIssues(task.order.rentalHandoverViaOrderId?.reportedIssues).total,
+    pendingInspectionCount: stageCounts.AWAITING_FINAL_INSPECTION,
+    stageCounts,
     scheduledAt: task.scheduledAt?.toISOString() ?? null,
     version: task.version,
   }
@@ -4085,6 +4696,136 @@ function buildReturnDetail(task: any) {
         accessories: snapshot.accessories,
         evidenceIds: jsonArray(snapshot.evidenceIds),
       })),
+    ...buildReturnUnitsSection(order, depositItems),
+  }
+}
+
+/** Everything Inventory needs per unit in one place, plus a case summary (RB-API-614). */
+export type HandoverReportedIssue = { type: string; description: string }
+
+/**
+ * Splits RB-API-404 `rental_handovers.reported_issues` (free text written by Delivery when the
+ * customer received the gear) into per-unit lists and issues not tied to a unit.
+ */
+export function handoverReportedIssues(raw: unknown): {
+  byUnit: Map<string, HandoverReportedIssue[]>
+  orderLevel: HandoverReportedIssue[]
+  total: number
+} {
+  const byUnit = new Map<string, HandoverReportedIssue[]>()
+  const orderLevel: HandoverReportedIssue[] = []
+  let total = 0
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== 'object') continue
+    const { unitId, type, description } = entry as Record<string, unknown>
+    if (typeof type !== 'string' || typeof description !== 'string') continue
+    const issue = { type, description }
+    total += 1
+    if (typeof unitId === 'string' && unitId) byUnit.set(unitId, [...(byUnit.get(unitId) ?? []), issue])
+    else orderLevel.push(issue)
+  }
+  return { byUnit, orderLevel, total }
+}
+
+function buildReturnUnitsSection(order: any, depositItems: Map<unknown, unknown>) {
+  const views = buildReturnUnitViews(order)
+  const baselines = new Map<string, any>(
+    (order.conditionSnapshotsViaOrderId ?? [])
+      .filter((snapshot: any) => snapshot.snapshotStage === SnapshotStage.PRE_HANDOVER)
+      .map((snapshot: any) => [snapshot.assignmentId, snapshot]),
+  )
+  const receipts = new Map<string, any>(
+    (order.returnInspectionTasks ?? []).map((task: any) => [task.assignmentId, task]),
+  )
+  const openStatuses: string[] = [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW]
+  const casesByAssignment = new Map<string, any>()
+  for (const exceptionCase of [...(order.rentalExceptionCasesViaOrderId ?? [])].sort(
+    (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )) {
+    if (!exceptionCase.assignmentId) continue
+    const current = casesByAssignment.get(exceptionCase.assignmentId)
+    // Prefer an open case; otherwise the most recent one.
+    if (!current || (!openStatuses.includes(current.status) && openStatuses.includes(exceptionCase.status)))
+      casesByAssignment.set(exceptionCase.assignmentId, exceptionCase)
+  }
+
+  const handoverIssues = handoverReportedIssues(order.rentalHandoverViaOrderId?.reportedIssues)
+  const units = views.map((view: any) => {
+    const { assignment, product, preliminary, final } = view
+    const baseline = baselines.get(assignment.id)
+    const receipt = receipts.get(assignment.id)
+    const deposit: any = depositItems.get(assignment.id)
+    const exceptionCase = casesByAssignment.get(assignment.id)
+    const observations = jsonObject(preliminary?.observations ?? null)
+    return {
+      unitId: assignment.equipmentUnitId,
+      assetCode: assignment.equipmentUnit?.assetCode ?? null,
+      productId: product.id ?? null,
+      productName: product.name ?? null,
+      assignmentStatus: assignment.status,
+      unitStatus: assignment.equipmentUnit?.status ?? null,
+      unitCondition: assignment.equipmentUnit?.condition ?? null,
+      unitVersion: assignment.equipmentUnit?.version ?? null,
+      stage: view.stage,
+      evidenceRequired: view.evidenceRequired,
+      requiresDeepInspection: Boolean(product.requiresDeepReturnInspection),
+      returnedAt: assignment.returnedAt?.toISOString?.() ?? null,
+      inventoryReceivedAt: receipt?.receivedAt?.toISOString?.() ?? null,
+      inspectionDueAt: receipt?.inspectionDueAt?.toISOString?.() ?? null,
+      deliveryObservation: preliminary
+        ? {
+            outcome: preliminary.outcome,
+            // null = recorded before observations were stored; rely on outcome then.
+            visibleDamage: typeof observations.visibleDamage === 'boolean' ? observations.visibleDamage : null,
+            accessoryObservations: Array.isArray(observations.accessoryObservations)
+              ? observations.accessoryObservations.filter((value: unknown) => typeof value === 'string')
+              : [],
+            notes: preliminary.notes ?? null,
+            evidenceIds: jsonArray(preliminary.evidenceIds),
+            observedAt: preliminary.createdAt?.toISOString?.() ?? null,
+          }
+        : null,
+      handoverBaseline: baseline
+        ? {
+            condition: baseline.condition,
+            accessories: baseline.accessories ?? null,
+            notes: baseline.notes ?? null,
+            evidenceIds: jsonArray(baseline.evidenceIds),
+          }
+        : null,
+      // Defects Delivery recorded when handing this unit to the customer: they existed before the
+      // rental and must not be charged at FINAL.
+      handoverReportedIssues: handoverIssues.byUnit.get(assignment.equipmentUnitId) ?? [],
+      finalInspection: mapInspection(final),
+      deposit: deposit
+        ? {
+            status: deposit.status,
+            depositAmount: decimalToInteger(deposit.depositAmount),
+            deductionAmount: decimalToInteger(deposit.deductionAmount),
+            refundAmount: decimalToInteger(deposit.refundAmount),
+          }
+        : null,
+      exceptionCase: exceptionCase
+        ? { id: exceptionCase.id, caseType: exceptionCase.caseType, status: exceptionCase.status, reason: exceptionCase.reason }
+        : null,
+    }
+  })
+  const stageCounts = countReturnUnitStages(views.map((view: any) => view.stage))
+  return {
+    units,
+    summary: {
+      totalUnits: units.length,
+      queueStatus: deriveReturnQueueStatus(views.map((view: any) => view.stage)),
+      deliveryReportedIssueCount: views.filter((view: any) => view.deliveryReportedIssue).length,
+      handoverReportedIssueCount: handoverIssues.total,
+      // Issues recorded at handover without a specific unit.
+      handoverOrderLevelIssues: handoverIssues.orderLevel,
+      handedOverAt: order.rentalHandoverViaOrderId?.handedOverAt?.toISOString?.() ?? null,
+      evidenceRequiredPendingCount: views.filter(
+        (view: any) => view.stage === 'AWAITING_FINAL_INSPECTION' && view.evidenceRequired,
+      ).length,
+      stageCounts,
+    },
   }
 }
 

@@ -23,8 +23,26 @@ export async function deductionReviewGate(
   const published = await tx.rentalExceptionCase.findFirst({
     where: { orderId: input.orderId, inspectionId: input.inspectionId, evidenceAccessibleAt: { not: null } },
     orderBy: { evidenceAccessibleAt: 'desc' },
-    select: { evidenceAccessibleAt: true, evidenceAccessBlockedAt: true, dueAt: true },
+    select: { evidenceAccessibleAt: true, evidenceAccessBlockedAt: true, dueAt: true, customerAcceptedAt: true },
   })
+  // RB-API-617: the customer saw the evidence and accepted the deduction, so nothing is left to wait for.
+  if (published?.evidenceAccessibleAt && published.customerAcceptedAt) return null
+  // A unit the customer never returned has no photos to publish. CONFIRM_LOST is only allowed
+  // once the lost-confirmation window (>= 48h after the return deadline) has elapsed, which
+  // already was the customer's chance to respond.
+  if (!published) {
+    const missingUnitLoss = await tx.rentalExceptionCase.findFirst({
+      where: {
+        orderId: input.orderId,
+        inspectionId: input.inspectionId,
+        caseType: 'RETURN_INCOMPLETE',
+        status: 'RESOLVED',
+        resolution: { startsWith: 'CONFIRM_LOST:' },
+      },
+      select: { id: true },
+    })
+    if (missingUnitLoss) return null
+  }
   if (published?.evidenceAccessBlockedAt) return 'EVIDENCE_ACCESS_INTERRUPTED'
   if (!published?.evidenceAccessibleAt || !input.reviewMinutes || input.reviewMinutes <= 0 ||
       input.now.getTime() < (published.dueAt?.getTime() ?? published.evidenceAccessibleAt.getTime() + input.reviewMinutes * 60_000))

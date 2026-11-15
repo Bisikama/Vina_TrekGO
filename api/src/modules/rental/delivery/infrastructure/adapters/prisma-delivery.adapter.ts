@@ -1,5 +1,7 @@
 import envconfig from 'src/shared/config';
 import { issueHandoverDocumentTx } from '../../../documents/application/rental-document-events';
+import { ensureReturnTaskWithTx, returnTaskScheduleAt } from '../../../lifecycle/application/services/rental-return-task';
+import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy';
 import { reserveRentalCancellationRefundWithTx } from '../../../payments/rental-cancellation-refund';
 import { confirmedPublicBookingOwnerId, VALID_PUBLIC_BOOKING_STATUSES } from '../../../shared/public-booking-membership';
 import { createHash, createHmac, randomInt, randomUUID } from 'node:crypto';
@@ -500,6 +502,17 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           where: { id: order.id },
           data: { status: RentalOrderStatus.ACTIVE, exceptionStatus: RentalOrderExceptionStatus.NONE, version: { increment: 1 } },
         });
+        // Task thu hồi có ngay khi khách nhận đồ (không chờ đến hạn trả). Lịch hẹn = khung giờ khách chọn hoặc hạn trả;
+        // gia hạn / trả sớm / chuyến kết thúc sớm sẽ dời lịch của chính task này.
+        await ensureReturnTaskWithTx(
+          tx,
+          order.id,
+          returnTaskScheduleAt(
+            updatedOrder.returnOptionSnapshot,
+            effectiveDueAt(updatedOrder.rentalEndAt, updatedOrder.operationalReturnDueAt),
+          ),
+          'HANDOVER',
+        );
 
         for (const item of pkg.packageItemsViaPackageId) {
           if (item.assignment.orderLine.orderId !== order.id || item.assignment.status !== RentalUnitAssignmentStatus.PACKED || item.equipmentUnit.status !== EquipmentUnitStatus.PACKED) {

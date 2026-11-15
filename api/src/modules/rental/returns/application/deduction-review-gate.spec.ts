@@ -48,4 +48,17 @@ describe('deduction review gate', () => {
       .mockResolvedValueOnce({ evidenceAccessibleAt: publishedAt, dueAt: new Date(input.now.getTime() + 1000) })
     expect(await deductionReviewGate(db, input)).toBe('USER_48H_REVIEW_WINDOW_NOT_CLOSED')
   })
+
+  it('releases immediately once the customer accepted the deduction, inside the 48h window', async () => {
+    const db = tx(null, publishedAt)
+    db.rentalExceptionCase.findFirst.mockReset().mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ evidenceAccessibleAt: publishedAt, customerAcceptedAt: publishedAt,
+        dueAt: new Date(publishedAt.getTime() + 2880 * 60_000) })
+    expect(await deductionReviewGate(db, { ...input, now: new Date(publishedAt.getTime() + 60_000) })).toBeNull()
+  })
+
+  it('still holds an open dispute even if the deduction was accepted', async () => {
+    const db = tx({ id: 'dispute' }, publishedAt)
+    expect(await deductionReviewGate(db, input)).toBe('USER_DISPUTE_MUST_BE_RESOLVED')
+  })
 })

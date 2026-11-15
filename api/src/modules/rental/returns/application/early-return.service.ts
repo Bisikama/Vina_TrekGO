@@ -165,9 +165,9 @@ export class EarlyReturnService {
     )
   }
 
-  async confirm(requestId: string, adminId: string, expectedVersion: number, key: string, now?: Date) {
-    return this.mutate('EARLY_RETURN_CONFIRM', adminId, key, { requestId, expectedVersion }, now, async (tx, at) => {
-      await requireActiveAdmin(tx, adminId)
+  async confirm(requestId: string, actorId: string, expectedVersion: number, key: string, now?: Date) {
+    return this.mutate('EARLY_RETURN_CONFIRM', actorId, key, { requestId, expectedVersion }, now, async (tx, at) => {
+      await requireEarlyReturnReviewer(tx, actorId)
       const request = await lockRequest(tx, requestId)
       if (request.status !== 'PENDING')
         throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
@@ -220,7 +220,7 @@ export class EarlyReturnService {
         data: {
           status: 'CONFIRMED',
           confirmedAt: at,
-          confirmedBy: adminId,
+          confirmedBy: actorId,
           confirmedSlotAt: request.requestedSlotAt,
           taskId,
           previousTaskAt: existing?.scheduledAt ?? null,
@@ -230,7 +230,7 @@ export class EarlyReturnService {
       })
       await audit(
         tx,
-        adminId,
+        actorId,
         'RENTAL_EARLY_RETURN_CONFIRMED',
         requestId,
         { orderId: request.orderId, taskId, slotAt: request.requestedSlotAt.toISOString() },
@@ -247,16 +247,16 @@ export class EarlyReturnService {
     })
   }
 
-  /** Admin từ chối yêu cầu chưa xác nhận. Task (nếu có) đã được dời Trip đưa về hạn nên không cần sửa. */
-  async reject(requestId: string, adminId: string, expectedVersion: number, reason: string, key: string, now?: Date) {
+  /** Admin hoặc nhân viên kho từ chối yêu cầu chưa xác nhận. Task (nếu có) đã được dời Trip đưa về hạn nên không cần sửa. */
+  async reject(requestId: string, actorId: string, expectedVersion: number, reason: string, key: string, now?: Date) {
     return this.mutate(
       'EARLY_RETURN_REJECT',
-      adminId,
+      actorId,
       key,
       { requestId, expectedVersion, reason },
       now,
       async (tx, at) => {
-        await requireActiveAdmin(tx, adminId)
+        await requireEarlyReturnReviewer(tx, actorId)
         const request = await lockRequest(tx, requestId)
         if (request.status !== 'PENDING')
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
@@ -268,13 +268,13 @@ export class EarlyReturnService {
           where: { id: requestId },
           data: {
             status: 'REJECTED',
-            rejectedBy: adminId,
+            rejectedBy: actorId,
             rejectedAt: at,
             rejectionReason: reason,
             version: { increment: 1 },
           },
         })
-        await audit(tx, adminId, 'RENTAL_EARLY_RETURN_REJECTED', requestId, { orderId: request.orderId, reason }, key)
+        await audit(tx, actorId, 'RENTAL_EARLY_RETURN_REJECTED', requestId, { orderId: request.orderId, reason }, key)
         await emitEarlyReturnEventTx(tx, {
           requestId,
           orderId: request.orderId,
@@ -463,12 +463,15 @@ async function lockRequest(tx: Tx, requestId: string) {
   return request
 }
 
-async function requireActiveAdmin(tx: Tx, adminId: string) {
-  const admin = await tx.user.findFirst({
-    where: { id: adminId, role: UserRole.ADMIN, status: UserStatus.ACTIVE },
+/** Xếp lịch trả sớm là việc điều phối (không động tới tiền): Admin hoặc nhân viên kho đều xử lý được. */
+export const EARLY_RETURN_REVIEWER_ROLES = [UserRole.ADMIN, UserRole.STAFF_INVENTORY] as const
+
+async function requireEarlyReturnReviewer(tx: Tx, actorId: string) {
+  const actor = await tx.user.findFirst({
+    where: { id: actorId, role: { in: [...EARLY_RETURN_REVIEWER_ROLES] }, status: UserStatus.ACTIVE },
     select: { id: true },
   })
-  if (!admin) throw AppError.fromCode(RR.FORBIDDEN)
+  if (!actor) throw AppError.fromCode(RR.FORBIDDEN)
 }
 
 async function audit(

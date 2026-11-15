@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { REQUEST_USER_KEY } from 'src/shared/constants/auth.constant'
+import { ROLES_KEY } from 'src/shared/decorators/roles.decorator'
 import { GlobalErrorFilter } from 'src/shared/errors/global-error.filter'
 import { EarlyReturnController } from '../presentation/controllers/early-return.controller'
 import { validateRentalOrderPaymentMembershipWithTx } from '../../payments/rental-membership.guard'
@@ -226,6 +227,56 @@ describe('EarlyReturnService request', () => {
     )
   })
 
+  it('lets inventory staff confirm; the role check accepts only Admin and inventory staff', async () => {
+    const { service, tx } = setup()
+    const request = {
+      id: 'request',
+      orderId: 'order',
+      userId: 'renter',
+      status: 'PENDING',
+      version: 1,
+      requestedSlotAt: slot,
+      order,
+    }
+    tx.user.findFirst.mockResolvedValue({ id: 'inventory-staff' })
+    tx.rentalEarlyReturnRequest.findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ orderId: 'order' })
+      .mockResolvedValueOnce(request)
+    tx.rentalEarlyReturnRequest.update = jest
+      .fn()
+      .mockImplementation(({ data }: any) => ({ ...request, ...data, version: 2 }))
+    tx.rentalReturnSession = { findFirst: jest.fn().mockResolvedValue(null) }
+    tx.rentalUnitAssignment = { count: jest.fn().mockResolvedValue(1) }
+    tx.rentalOrder.findUnique.mockResolvedValue({ ...order, tripId: 'trip', returnPointId: 'point' })
+    tx.deliveryTask.findUnique.mockResolvedValue({ id: 'task', status: 'SCHEDULED', scheduledAt: order.rentalEndAt })
+    tx.deliveryTask.update = jest.fn()
+    const result = await service.confirm('request', 'inventory-staff', 1, 'confirm-key-staff', now)
+    expect(result.status).toBe('CONFIRMED')
+    expect(tx.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'inventory-staff',
+          role: { in: ['ADMIN', 'STAFF_INVENTORY'] },
+          status: 'ACTIVE',
+        }),
+      }),
+    )
+    expect(tx.rentalEarlyReturnRequest.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ confirmedBy: 'inventory-staff' }) }),
+    )
+  })
+
+  it('exposes staff routes for inventory staff and keeps the admin routes', () => {
+    const proto = EarlyReturnController.prototype as any
+    for (const method of ['list', 'confirm', 'reject']) {
+      expect(Reflect.getMetadata(ROLES_KEY, proto[method])).toEqual(['STAFF_INVENTORY', 'ADMIN'])
+      const paths = Reflect.getMetadata('path', proto[method]) as string[]
+      expect(paths.some((path) => path.startsWith('staff/rental-early-returns'))).toBe(true)
+      expect(paths.some((path) => path.startsWith('admin/rental-early-returns'))).toBe(true)
+    }
+  })
+
   it('refuses confirmation by an inactive or non-admin actor', async () => {
     const { service, tx } = setup()
     tx.user.findFirst.mockResolvedValue(null)
@@ -299,7 +350,9 @@ describe('early return collection timing', () => {
     expect(earlyReturnScanAllowed({ ...request, status: 'CANCELLED' }, slot, due, now)).toBe(false)
     expect(earlyReturnScanAllowed({ ...request, status: 'CANCELLED', supersededAt: now }, slot, due, now)).toBe(true)
   })
-  it('blocks the actual scan before the confirmed slot without changing custody', async () => {
+  // Collection has no time gate any more (RETURN task exists from handover): a confirmed slot later
+  // than now must not block the scan. The empty order makes it stop at the asset lookup instead.
+  it('does not block the scan before the confirmed slot', async () => {
     const tx: any = {
       $queryRaw: jest.fn(),
       user: { findFirst: jest.fn().mockResolvedValue({ id: 'delivery', role: 'STAFF_DELIVERY' }) },
@@ -335,7 +388,7 @@ describe('early return collection timing', () => {
         idempotencyKey: 'scan-key',
         now,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_RETURN_STATE' })
+    ).rejects.toMatchObject({ code: 'UNIT_NOT_IN_RENTAL' })
     expect(tx.custodyEvent.create).not.toHaveBeenCalled()
     expect(tx.rentalUnitAssignment.update).not.toHaveBeenCalled()
   })

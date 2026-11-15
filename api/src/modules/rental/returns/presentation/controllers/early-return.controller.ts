@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { UserRole } from 'src/shared/constants'
 import { AuthType } from 'src/shared/constants/auth.constant'
 import { ActiveUser } from 'src/shared/decorators/active-user.decorator'
@@ -55,14 +55,21 @@ export class EarlyReturnController {
     return this.service.cancel(p.id, userId, body.expectedVersion, key(rawKey))
   }
 
-  @Get('admin/rental-early-returns')
-  @Roles(UserRole.ADMIN)
+  // Xếp lịch trả sớm là việc điều phối, không động tới tiền: nhân viên kho xử lý, Admin vẫn làm được.
+  // Route staff/... là đường chính; admin/... giữ lại để client cũ không vỡ.
+  @Get(['staff/rental-early-returns', 'admin/rental-early-returns'])
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Danh sách yêu cầu trả sớm (nhân viên kho / Admin)' })
   list(@Query(new ZodValidationPipe(listQuerySchema)) query: z.infer<typeof listQuerySchema>) {
     return this.service.listForAdmin(query.status)
   }
 
-  @Post('admin/rental-early-returns/:id/confirm')
-  @Roles(UserRole.ADMIN)
+  @Post(['staff/rental-early-returns/:id/confirm', 'admin/rental-early-returns/:id/confirm'])
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Xác nhận lịch trả sớm (nhân viên kho / Admin)',
+    description: 'Dời giờ hẹn của task thu hồi sang giờ khách chọn. Không thay đổi phí thuê hay tiền cọc.',
+  })
   confirm(
     @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) p: { id: string },
     @Body(new ZodValidationPipe(versionSchema)) body: z.infer<typeof versionSchema>,
@@ -72,8 +79,9 @@ export class EarlyReturnController {
     return this.service.confirm(p.id, userId, body.expectedVersion, key(rawKey))
   }
 
-  @Post('admin/rental-early-returns/:id/reject')
-  @Roles(UserRole.ADMIN)
+  @Post(['staff/rental-early-returns/:id/reject', 'admin/rental-early-returns/:id/reject'])
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Từ chối lịch trả sớm kèm lý do (nhân viên kho / Admin)' })
   reject(
     @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) p: { id: string },
     @Body(new ZodValidationPipe(rejectSchema)) body: z.infer<typeof rejectSchema>,

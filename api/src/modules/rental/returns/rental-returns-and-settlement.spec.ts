@@ -53,6 +53,7 @@ import { CreateDepositSettlementUseCase } from './application/use-cases/create-d
 import { GetDepositUseCase } from './application/use-cases/get-deposit.use-case'
 import { FinalizeReturnUseCase } from './application/use-cases/finalize-return.use-case'
 import { CreateAssessmentReviewUseCase } from './application/use-cases/create-assessment-review.use-case'
+import { AcceptAssessmentUseCase } from './application/use-cases/accept-assessment.use-case'
 import { ResolveRentalExceptionUseCase } from './application/use-cases/resolve-rental-exception.use-case'
 import { MarkReturnedUnitReadyUseCase } from './application/use-cases/mark-returned-unit-ready.use-case'
 import { ListRentalExceptionsUseCase } from './application/use-cases/list-rental-exceptions.use-case'
@@ -201,6 +202,12 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             provide: CreateAssessmentReviewUseCase,
             useValue: {
               execute: jest.fn().mockResolvedValue({ caseId: dummyExceptionId, reviewStatus: 'UNDER_REVIEW' }),
+            },
+          },
+          {
+            provide: AcceptAssessmentUseCase,
+            useValue: {
+              execute: jest.fn().mockResolvedValue({ caseId: dummyExceptionId, settlementStatus: 'SETTLED' }),
             },
           },
           {
@@ -556,6 +563,30 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         })
       expect(res.status).toBe(201)
       expect(res.body.caseId).toBe(dummyExceptionId)
+    })
+
+    it('RB-API-617: POST /api/v1/rental-orders/:id/assessment-acceptances returns 201', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/rental-orders/${dummyOrderId}/assessment-acceptances`)
+        .set('x-mock-role', UserRole.USER)
+        .set('idempotency-key', 'key-accept-12345')
+        .send({ assessmentId: dummyAssessmentId })
+      expect(res.status).toBe(201)
+      expect(res.body.settlementStatus).toBe('SETTLED')
+    })
+
+    it('RB-API-617: rejects unknown body fields and a missing Idempotency-Key', async () => {
+      const extra = await request(app.getHttpServer())
+        .post(`/api/v1/rental-orders/${dummyOrderId}/assessment-acceptances`)
+        .set('x-mock-role', UserRole.USER)
+        .set('idempotency-key', 'key-accept-67890')
+        .send({ assessmentId: dummyAssessmentId, approvedDeduction: 0 })
+      expect(extra.status).toBeGreaterThanOrEqual(400)
+      const noKey = await request(app.getHttpServer())
+        .post(`/api/v1/rental-orders/${dummyOrderId}/assessment-acceptances`)
+        .set('x-mock-role', UserRole.USER)
+        .send({ assessmentId: dummyAssessmentId })
+      expect(noKey.status).toBeGreaterThanOrEqual(400)
     })
 
     it('accepts idempotent customer evidence outage reports and confirmations', async () => {
@@ -1586,6 +1617,10 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
           }),
           update: jest.fn().mockResolvedValue({}),
         },
+        rentalExceptionCase: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({ id: 'case-refund-failed' }),
+        },
         rentalOutboxEvent: {
           create: jest.fn().mockResolvedValue({}),
           upsert: jest.fn().mockResolvedValue({}),
@@ -1604,6 +1639,13 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         expect.objectContaining({
           where: { id: 'item-1' },
           data: expect.objectContaining({ status: 'REFUND_FAILED' }),
+        }),
+      )
+
+      // Admin gets a REFUND_FAILURE case to RETRY_REFUND (RB-API-610).
+      expect(mockTx.rentalExceptionCase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ caseType: 'REFUND_FAILURE', reason: expect.stringContaining('[refund:') }),
         }),
       )
 
@@ -2105,6 +2147,10 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             }),
             update: jest.fn().mockResolvedValue({}),
           },
+          rentalExceptionCase: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({ id: 'case-refund-failed' }),
+          },
           rentalOutboxEvent: {
             create: jest.fn().mockResolvedValue({}),
             upsert: jest.fn().mockResolvedValue({}),
@@ -2395,8 +2441,9 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         )
       })
 
-      it('tryCompleteOrder: rejects completion if return task is SCHEDULED or COLLECTING', async () => {
-        for (const taskStatus of [DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.COLLECTING]) {
+      // SCHEDULED with every unit CLOSED is the "all units confirmed LOST, never collected" case and may complete.
+      it('tryCompleteOrder: rejects completion if return task is COLLECTING', async () => {
+        for (const taskStatus of [DeliveryTaskStatus.COLLECTING]) {
           const mockTx: any = {
             rentalOrder: {
               findUnique: jest.fn().mockResolvedValue({
@@ -2440,7 +2487,8 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
               deliveryTasksViaOrderId: [
                 { taskType: DeliveryTaskType.RETURN, status: DeliveryTaskStatus.INVENTORY_RECEIVED },
               ],
-              packageViaOrderId: { status: PackageStatus.RETURNING },
+              // RETURNING is accepted once every unit is CLOSED (all lost); an outbound package is not.
+              packageViaOrderId: { status: PackageStatus.TRANSFERRED_TO_DELIVERY },
               returnCustodyTransfersViaOrderId: [],
               rentalReturnSessionsViaOrderId: [],
             }),
@@ -2482,7 +2530,8 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
         expect(mockTx.rentalOrder.update).not.toHaveBeenCalled()
       })
 
-      it('tryCompleteOrder: rejects completion if any return session is still OPEN', async () => {
+      // A return session is a receipt, not custody: an un-finalized one must not block completion.
+      it('tryCompleteOrder: completes even if a return session is still OPEN', async () => {
         const mockTx: any = {
           rentalOrder: {
             findUnique: jest.fn().mockResolvedValue({
@@ -2503,12 +2552,16 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
               rentalReturnSessionsViaOrderId: [{ status: RentalReturnSessionStatus.OPEN }],
             }),
             update: jest.fn(),
-            updateMany: jest.fn(),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
           },
+          deliveryTask: { update: jest.fn() },
+          package: { update: jest.fn() },
+          auditLog: { create: jest.fn() },
+          rentalOutboxEvent: { upsert: jest.fn(), create: jest.fn() },
         }
         const result = await tryCompleteOrder(mockTx, dummyOrderId, new Date())
-        expect(result).toBe(false)
-        expect(mockTx.rentalOrder.update).not.toHaveBeenCalled()
+        expect(result).toBe(true)
+        expect(mockTx.rentalOrder.updateMany).toHaveBeenCalled()
       })
 
       it('tryCompleteOrder: rejects completion if order status is ACTIVE or CANCELLED', async () => {
@@ -3874,10 +3927,19 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
             .mockResolvedValue({ id: dummyOrderId, rentalPolicy: {}, depositSettlementViaOrderId: null }),
           update: jest.fn(),
         },
-        returnInspection: { findFirst: jest.fn().mockResolvedValue({ id: dummyAssessmentId, orderId: dummyOrderId }) },
+        returnInspection: {
+          findFirst: jest.fn().mockResolvedValue({ id: dummyAssessmentId, orderId: dummyOrderId }),
+          findUnique: jest.fn().mockResolvedValue({ outcome: 'DAMAGE_CONFIRMED', stage: 'FINAL' }),
+        },
+        // Damaged unit already closed on the first settlement: the replay must not touch it again.
+        rentalUnitAssignment: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'assignment-1', status: 'CLOSED', equipmentUnitId: 'unit-1' }),
+          update: jest.fn(),
+        },
         depositSettlementItem: {
           findFirst: jest.fn().mockResolvedValue({
             id: 'item-1',
+            assignmentId: 'assignment-1',
             status: DepositItemStatus.SETTLED,
             depositAmount: new Prisma.Decimal(200000),
             deductionAmount: new Prisma.Decimal(50000),
@@ -3920,6 +3982,7 @@ describe('Phase 08: Returns, Custody & Hybrid Deposit Settlement', () => {
       })
       expect(update).not.toHaveBeenCalled()
       expect(tx.rentalOrder.update).not.toHaveBeenCalled()
+      expect(tx.rentalUnitAssignment.update).not.toHaveBeenCalled()
     })
   })
 })
