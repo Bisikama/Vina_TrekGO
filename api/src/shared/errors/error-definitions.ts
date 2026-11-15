@@ -812,7 +812,7 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [PT.PERSONAL_TRAIL_NOT_FOUND]: { status: 404, message: 'Không tìm thấy cung đường cá nhân', retryable: false },
   [PT.TRAIL_TOO_SHORT_FOR_VERIFY]: {
     status: 422,
-    message: 'Cung đường phải dài tối thiểu 500m để gửi kiểm duyệt',
+    message: 'Cung đường phải dài tối thiểu 300m để gửi kiểm duyệt',
     retryable: false,
   },
   [PT.DEM_NOT_READY]: { status: 422, message: 'Độ cao vệ tinh DEM chưa xử lý xong', retryable: false },
@@ -824,6 +824,12 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   [PT.CANNOT_MODIFY_VERIFIED_TRAIL]: {
     status: 400,
     message: 'Không thể chỉnh sửa cung đường đang xét duyệt hoặc đã được xác minh',
+    retryable: false,
+  },
+  [PT.TRAIL_SUBMISSION_NOT_FOUND]: { status: 404, message: 'Không tìm thấy yêu cầu kiểm duyệt', retryable: false },
+  [PT.TRAIL_SUBMISSION_ALREADY_REVIEWED]: {
+    status: 409,
+    message: 'Yêu cầu kiểm duyệt này đã được xử lý',
     retryable: false,
   },
   [TP.NOT_FOUND]: { status: 404, message: 'Không tìm thấy chuyến đi hoặc bảng dự toán chi phí.', retryable: false },
