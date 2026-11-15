@@ -20,20 +20,73 @@ import {
   DamageAssessmentRule,
   FinalInspectionInput,
   ReturnQueueStatus,
+  ReturnUnitStage,
   StaffReturnDetail,
   StaffReturnSummary,
+  StaffReturnUnit,
   staffReturnsApi,
 } from "@/features/rentals/staff-returns-api";
 import { productLabel, splitGradeName } from "@/features/rentals/display";
 import { EvidenceThumbStrip } from "@/features/rentals/EvidenceThumbStrip";
+import { ReturnEvidenceGallery } from "@/features/rentals/ReturnEvidenceGallery";
 import { useEvidenceUploads } from "@/features/rentals/useEvidenceUploads";
 
 type Condition = FinalInspectionInput["condition"];
 type Draft = {
-  condition: Condition;
+  /** "" = chưa chọn: bắt buộc với món giao hàng báo có vấn đề. */
+  condition: Condition | "";
   notes: string;
   ruleId?: string;
 };
+
+const STAGE: Record<ReturnUnitStage, { label: string; bg: string; fg: string }> = {
+  AWAITING_RECEIPT: { label: "Chờ kho nhận", bg: "#eceff1", fg: "#455a64" },
+  AWAITING_FINAL_INSPECTION: { label: "Chờ kiểm định cuối", bg: "#fff1cd", fg: "#875b00" },
+  AWAITING_ADMIN: { label: "Chờ Admin xử lý", bg: "#ffe9c7", fg: "#8a4b00" },
+  WAITING_CLEANING: { label: "Chờ vệ sinh", bg: "#e0f0ff", fg: "#0b4f8a" },
+  READY: { label: "Sẵn sàng cho thuê", bg: "#ddf4d1", fg: "#1f5e2c" },
+  CLOSED_DAMAGED: { label: "Đã đóng · hư hỏng", bg: "#ffe8e5", fg: "#a32020" },
+  CLOSED_LOST: { label: "Đã đóng · thất lạc", bg: "#ffe8e5", fg: "#a32020" },
+  MISSING: { label: "Thiếu / thất lạc", bg: "#ffe8e5", fg: "#a32020" },
+};
+
+/** Thứ tự hiển thị: việc kho cần làm trước. */
+const STAGE_ORDER: ReturnUnitStage[] = [
+  "AWAITING_FINAL_INSPECTION",
+  "WAITING_CLEANING",
+  "AWAITING_RECEIPT",
+  "AWAITING_ADMIN",
+  "MISSING",
+  "READY",
+  "CLOSED_DAMAGED",
+  "CLOSED_LOST",
+];
+
+const FINAL_OUTCOME_LABEL: Record<string, string> = {
+  NORMAL: "Đạt kiểm định",
+  ISSUE: "Có vấn đề (chưa định mức)",
+  DAMAGE_CONFIRMED: "Hư hỏng (đã định mức)",
+  LOST_CONFIRMED: "Xác nhận thất lạc",
+};
+
+const CASE_STATUS_LABEL: Record<string, string> = {
+  OPEN: "đang mở",
+  UNDER_REVIEW: "Admin đang xem xét",
+  RESOLVED: "đã xử lý",
+  REJECTED: "đã từ chối",
+  CLOSED: "đã đóng",
+};
+
+const money = (value: number) =>
+  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value || 0);
+
+const reportedIssue = (unit: StaffReturnUnit) => unit.deliveryObservation?.outcome === "ISSUE";
+
+const emptyDraft = (unit: StaffReturnUnit): Draft => ({
+  // Món bị giao hàng báo có vấn đề: không mặc định "Tốt", nhân viên phải tự chọn.
+  condition: reportedIssue(unit) ? "" : "GOOD",
+  notes: "",
+});
 
 type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
 
@@ -55,28 +108,18 @@ const STATUS_LABEL: Record<string, string> = {
   TRANSFER_PENDING: "Chờ kho nhận",
   INVENTORY_RECEIVED: "Chờ kiểm định cuối",
   WAITING_CLEANING: "Chờ vệ sinh",
-  REVIEW_REQUIRED: "Cần Admin duyệt",
+  REVIEW_REQUIRED: "Chờ Admin xử lý",
   COMPLETED: "Hoàn tất",
   RETURNED: "Đang chuyển về kho",
 };
 
-const CONDITION_LABEL: Record<Condition, string> = {
+const CONDITION_LABEL: Record<string, string> = {
   NEW: "Như mới",
   GOOD: "Tốt",
   FAIR: "Có hao mòn",
   DAMAGED: "Hư hỏng",
+  LOST: "Thất lạc",
 };
-
-function inspectionLabel(outcome: string) {
-  const labels: Record<string, string> = {
-    NORMAL: "Đạt kiểm định",
-    PASS: "Đạt kiểm định",
-    ISSUE: "Có vấn đề",
-    DAMAGED: "Hư hỏng",
-    MISSING: "Thiếu thiết bị",
-  };
-  return labels[outcome] ?? "Đã kiểm định";
-}
 
 function severityLabel(severity: string) {
   const labels: Record<string, string> = {
@@ -159,14 +202,8 @@ export default function InventoryReturnsScreen() {
         setCustodyIncidentNote("");
         setDrafts((current) => {
           const updated = { ...current };
-          next.receivedUnits.forEach((unit) => {
-            const expected = next.expectedUnits.find((item) => item.unitId === unit.unitId);
-            updated[unit.unitId] ??= {
-              condition:
-                expected?.unitCondition === "NEW" ? "NEW" :
-                expected?.unitCondition === "FAIR" ? "FAIR" : "GOOD",
-              notes: "",
-            };
+          (next.units ?? []).forEach((unit) => {
+            if (unit.stage === "AWAITING_FINAL_INSPECTION") updated[unit.unitId] ??= emptyDraft(unit);
           });
           return updated;
         });
@@ -185,14 +222,20 @@ export default function InventoryReturnsScreen() {
     }, [loadList]),
   );
 
-  const finalByUnit = useMemo(
-    () => new Map(detail?.inspection.map((item) => [item.unitId, item.final]) ?? []),
-    [detail?.inspection],
-  );
+  const units = useMemo(() => {
+    const list = [...(detail?.units ?? [])];
+    return list.sort((a, b) => {
+      const byStage = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
+      if (byStage !== 0) return byStage;
+      // Trong cùng giai đoạn: món giao hàng báo có vấn đề lên trước.
+      return Number(reportedIssue(b)) - Number(reportedIssue(a));
+    });
+  }, [detail?.units]);
   const pendingInspection = useMemo(
-    () => detail?.receivedUnits.filter((unit) => !finalByUnit.get(unit.unitId)) ?? [],
-    [detail?.receivedUnits, finalByUnit],
+    () => units.filter((unit) => unit.stage === "AWAITING_FINAL_INSPECTION"),
+    [units],
   );
+  const ruleName = useMemo(() => new Map(rules.map((rule) => [rule.id, rule.name])), [rules]);
 
   async function refreshDetail(message?: string) {
     if (!detail) return;
@@ -317,25 +360,28 @@ export default function InventoryReturnsScreen() {
     await run(
       "inspect",
       async () => {
-        const payload: FinalInspectionInput[] = pendingInspection.map((received) => {
-          const expected = detail.expectedUnits.find((unit) => unit.unitId === received.unitId);
-          const draft = drafts[received.unitId];
-          if (!draft) throw new Error(`Thiếu kết quả cho ${received.assetCode}.`);
-          const media = evidence.idsFor(received.unitId);
-          if (!media.imageIds.length) {
-            throw new Error(`Cần ít nhất 1 ảnh cho mã ${shortAssetCode(received.assetCode)}; video không bắt buộc.`);
+        const payload: FinalInspectionInput[] = pendingInspection.map((unit) => {
+          const code = `mã ${shortAssetCode(unit.assetCode)}`;
+          const draft = drafts[unit.unitId] ?? emptyDraft(unit);
+          const condition = draft.condition;
+          if (!condition) {
+            throw new Error(`Giao hàng báo ${code} có vấn đề: hãy tự chọn tình trạng sau khi kiểm tra.`);
+          }
+          const issue = condition === "DAMAGED";
+          const media = evidence.idsFor(unit.unitId);
+          if ((unit.evidenceRequired || issue) && !media.imageIds.length) {
+            throw new Error(`Cần ít nhất 1 ảnh cho ${code}; video không bắt buộc.`);
           }
           const evidenceIds = [...media.imageIds, ...media.videoIds];
-          const issue = draft.condition === "DAMAGED";
-          const productRules = rules.filter((rule) => rule.productId === expected?.productId);
+          const productRules = rules.filter((rule) => rule.productId === unit.productId);
           if (issue && !draft.ruleId) {
-            if (!productRules.length) throw new Error(`${expected?.productName ?? received.assetCode} chưa có quy tắc đánh giá hư hỏng.`);
-            throw new Error(`Hãy chọn quy tắc đánh giá hư hỏng cho mã ${shortAssetCode(received.assetCode)}.`);
+            if (!productRules.length) throw new Error(`${unit.productName ?? code} chưa có quy tắc đánh giá hư hỏng.`);
+            throw new Error(`Hãy chọn quy tắc đánh giá hư hỏng cho ${code}.`);
           }
           return {
-            unitId: received.unitId,
+            unitId: unit.unitId,
             outcome: issue ? "ISSUE" : "PASS",
-            condition: draft.condition,
+            condition,
             damage: issue
               ? [{ ruleId: draft.ruleId!, quantity: 1, notes: draft.notes || undefined, evidenceIds }]
               : [],
@@ -349,7 +395,7 @@ export default function InventoryReturnsScreen() {
           .map((item) => ({ unitId: item.unitId, inspectionVersion: item.version }));
         await staffReturnsApi.finalizeNormal(detail, normal, accessToken);
       },
-      "Đã ghi nhận kiểm định cuối. Món đạt chuyển sang chờ vệ sinh; món lỗi chờ Admin duyệt.",
+      "Đã ghi nhận kiểm định cuối. Món đạt chuyển sang chờ vệ sinh; món có vấn đề chuyển cho Admin xử lý.",
     );
   }
 
@@ -362,11 +408,44 @@ export default function InventoryReturnsScreen() {
             <Text style={styles.heroCode}>HOÀN TRẢ THIẾT BỊ</Text>
             <Text style={styles.heroTitle}>{detail.tripTitle || "Đơn thuê thiết bị"}</Text>
             <Text style={styles.heroMeta}>
-              {[detail.customerName, STATUS_LABEL[detail.status] ?? "Đang cập nhật"]
+              {[detail.customerName, detail.summary ? STATUS_LABEL[detail.summary.queueStatus] : "Đang cập nhật"]
                 .filter(Boolean)
                 .join(" · ")}
             </Text>
+            {detail.summary ? (
+              <View style={styles.chipRow}>
+                <Text style={styles.chip}>{detail.summary.totalUnits} thiết bị</Text>
+                {detail.summary.deliveryReportedIssueCount ? (
+                  <Text style={[styles.chip, styles.chipWarn]}>
+                    Lúc thu hồi: {detail.summary.deliveryReportedIssueCount} món có vấn đề
+                  </Text>
+                ) : (
+                  <Text style={styles.chip}>Lúc thu hồi: không báo vấn đề</Text>
+                )}
+                {detail.summary.handoverReportedIssueCount ? (
+                  <Text style={[styles.chip, styles.chipWarn]}>
+                    Lúc giao cho khách: ghi {detail.summary.handoverReportedIssueCount} lỗi có sẵn
+                  </Text>
+                ) : null}
+                {detail.summary.evidenceRequiredPendingCount ? (
+                  <Text style={[styles.chip, styles.chipDanger]}>
+                    {detail.summary.evidenceRequiredPendingCount} món bắt buộc ảnh
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {detail.summary?.handoverOrderLevelIssues?.length ? (
+              <View style={[styles.infoBox, styles.infoWarn]}>
+                <Text style={[styles.infoTitle, styles.infoTitleWarn]}>Ghi chú lúc giao cho khách (không gắn món)</Text>
+                {detail.summary.handoverOrderLevelIssues.map((issue, index) => (
+                  <Text key={`${issue.type}-${index}`} style={styles.infoLine}>• {issue.description}</Text>
+                ))}
+              </View>
+            ) : null}
           </View>
+          {!detail.units ? (
+            <Text style={styles.warning}>API chưa trả danh sách thiết bị theo giai đoạn. Hãy khởi động lại API bản mới.</Text>
+          ) : null}
           {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
           {notice ? <Text style={styles.noticeBanner}>{notice}</Text> : null}
           {busy ? (
@@ -422,30 +501,92 @@ export default function InventoryReturnsScreen() {
             </>
           ) : null}
 
-          {detail.receivedUnits.map((received) => {
-            const expected = detail.expectedUnits.find((unit) => unit.unitId === received.unitId);
-            const final = finalByUnit.get(received.unitId);
-            const draft = drafts[received.unitId] ?? { condition: "GOOD" as Condition, notes: "" };
-            const productRules = rules.filter((rule) => rule.productId === expected?.productId);
+          {units.map((unit) => {
+            const name = unit.productName ? productLabel(unit.productName) : `Mã ${shortAssetCode(unit.assetCode)}`;
+            const draft = drafts[unit.unitId] ?? emptyDraft(unit);
+            const productRules = rules.filter((rule) => rule.productId === unit.productId);
+            const observation = unit.deliveryObservation;
+            const flagged = reportedIssue(unit);
+            const final = unit.finalInspection;
+            const stage = STAGE[unit.stage];
             return (
-              <View key={received.unitId} style={styles.card}>
+              <View key={unit.unitId} style={[styles.card, flagged && unit.stage === "AWAITING_FINAL_INSPECTION" && styles.cardFlagged]}>
                 <View style={styles.rowBetween}>
                   <View style={styles.flex}>
-                    <Text style={styles.unitTitle}>{expected?.productName ? productLabel(expected.productName) : received.assetCode}</Text>
-                    <Text style={styles.asset}>Mã {shortAssetCode(received.assetCode)}</Text>
+                    <Text style={styles.unitTitle}>{name}</Text>
+                    <Text style={styles.asset}>
+                      Mã {shortAssetCode(unit.assetCode)}
+                      {unit.deposit ? ` · Cọc ${money(unit.deposit.depositAmount)}` : ""}
+                    </Text>
                   </View>
-                  <Text style={final ? styles.donePill : styles.waitPill}>
-                    {final ? inspectionLabel(final.outcome) : "Chờ kiểm định cuối"}
-                  </Text>
+                  <View style={styles.pillCol}>
+                    <Text style={[styles.pill, { backgroundColor: stage.bg, color: stage.fg }]}>{stage.label}</Text>
+                    {unit.stage === "AWAITING_FINAL_INSPECTION" && unit.evidenceRequired ? (
+                      <Text style={[styles.pill, styles.pillDanger]}>Bắt buộc ảnh</Text>
+                    ) : null}
+                  </View>
                 </View>
-                {!final ? (
+
+                <View style={[styles.infoBox, flagged ? styles.infoWarn : styles.infoOk]}>
+                  <Text style={[styles.infoTitle, flagged ? styles.infoTitleWarn : styles.infoTitleOk]}>
+                    {observation
+                      ? flagged
+                        ? "⚠ Lúc thu hồi: nhân viên giao báo có vấn đề"
+                        : "✓ Lúc thu hồi: nhân viên giao báo bình thường"
+                      : "Lúc thu hồi: chưa ghi nhận"}
+                  </Text>
+                  {observation?.visibleDamage ? <Text style={styles.infoLine}>• Có hư hỏng nhìn thấy</Text> : null}
+                  {observation?.accessoryObservations.map((text, index) => (
+                    <Text key={`${text}-${index}`} style={styles.infoLine}>• {text}</Text>
+                  ))}
+                  {observation?.notes ? <Text style={styles.infoLine}>Ghi chú: {observation.notes}</Text> : null}
+                  {observation ? (
+                    <ReturnEvidenceGallery
+                      ids={observation.evidenceIds}
+                      label="Ảnh giao hàng chụp"
+                      accessToken={accessToken}
+                      autoLoad={flagged && unit.stage === "AWAITING_FINAL_INSPECTION"}
+                    />
+                  ) : null}
+                </View>
+
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoTitle}>Lúc giao cho khách</Text>
+                  {unit.handoverBaseline ? (
+                    <>
+                      <Text style={styles.infoLine}>
+                        Tình trạng: {CONDITION_LABEL[unit.handoverBaseline.condition] ?? unit.handoverBaseline.condition}
+                      </Text>
+                      {unit.handoverBaseline.notes ? <Text style={styles.infoLine}>Ghi chú: {unit.handoverBaseline.notes}</Text> : null}
+                      <ReturnEvidenceGallery ids={unit.handoverBaseline.evidenceIds} label="Ảnh lúc giao" accessToken={accessToken} />
+                    </>
+                  ) : (
+                    <Text style={styles.infoLine}>Không có hồ sơ lúc giao.</Text>
+                  )}
+                  {unit.handoverReportedIssues?.length ? (
+                    <View style={[styles.infoBox, styles.infoWarn]}>
+                      <Text style={[styles.infoTitle, styles.infoTitleWarn]}>
+                        ⚠ Nhân viên giao đã ghi lỗi có sẵn khi giao cho khách
+                      </Text>
+                      {unit.handoverReportedIssues.map((issue, index) => (
+                        <Text key={`${issue.type}-${index}`} style={styles.infoLine}>• {issue.description}</Text>
+                      ))}
+                      <Text style={styles.infoLine}>Lỗi này có trước kỳ thuê: không trừ cọc cho lỗi này.</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {unit.stage === "AWAITING_FINAL_INSPECTION" ? (
                   <>
+                    {!draft.condition ? (
+                      <Text style={styles.choosePrompt}>Chọn tình trạng sau khi kiểm tra thực tế:</Text>
+                    ) : null}
                     <View style={styles.choiceRow}>
                       {(["GOOD", "FAIR", "DAMAGED"] as Condition[]).map((condition) => (
                         <TouchableOpacity
                           key={condition}
-                          style={[styles.choice, draft.condition === condition && styles.choiceActive]}
-                          onPress={() => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, condition, ruleId: condition === "DAMAGED" ? draft.ruleId : undefined } }))}
+                          style={[styles.choice, !draft.condition && styles.choiceUnset, draft.condition === condition && styles.choiceActive]}
+                          onPress={() => setDrafts((current) => ({ ...current, [unit.unitId]: { ...draft, condition, ruleId: condition === "DAMAGED" ? draft.ruleId : undefined } }))}
                         >
                           <Text style={[styles.choiceText, draft.condition === condition && styles.choiceTextActive]}>
                             {CONDITION_LABEL[condition]}
@@ -455,29 +596,52 @@ export default function InventoryReturnsScreen() {
                     </View>
                     {draft.condition === "DAMAGED" ? (
                       <View style={styles.ruleList}>
+                        {!productRules.length ? (
+                          <Text style={styles.warning}>Sản phẩm chưa có mức hư hỏng. Báo Admin bổ sung.</Text>
+                        ) : null}
                         {productRules.map((rule) => (
-                          <TouchableOpacity key={rule.id} style={[styles.rule, draft.ruleId === rule.id && styles.ruleActive]} onPress={() => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, ruleId: rule.id } }))}>
+                          <TouchableOpacity key={rule.id} style={[styles.rule, draft.ruleId === rule.id && styles.ruleActive]} onPress={() => setDrafts((current) => ({ ...current, [unit.unitId]: { ...draft, ruleId: rule.id } }))}>
                             <Text style={styles.ruleText}>{rule.name} · Mức độ {severityLabel(rule.severity)}</Text>
                           </TouchableOpacity>
                         ))}
                       </View>
                     ) : null}
-                    <TextInput value={draft.notes} onChangeText={(notes) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, notes } }))} placeholder="Ghi chú kiểm định" placeholderTextColor={Colors.onSurfaceMuted} style={styles.input} />
+                    <TextInput value={draft.notes} onChangeText={(notes) => setDrafts((current) => ({ ...current, [unit.unitId]: { ...draft, notes } }))} placeholder="Ghi chú kiểm định" placeholderTextColor={Colors.onSurfaceMuted} style={styles.input} />
                     <EvidenceThumbStrip
                       busy={evidence.cameraOpen}
-                      required
-                      items={evidence.previewsFor(received.unitId)}
-                      onAddPhoto={() => void evidence.capture(received.unitId, "image")}
-                      onAddVideo={() => void evidence.capture(received.unitId, "video")}
+                      required={unit.evidenceRequired || draft.condition === "DAMAGED"}
+                      items={evidence.previewsFor(unit.unitId)}
+                      onAddPhoto={() => void evidence.capture(unit.unitId, "image")}
+                      onAddVideo={() => void evidence.capture(unit.unitId, "video")}
                       onRemove={evidence.remove}
                       onRetry={evidence.retry}
                     />
                   </>
-                ) : final.outcome === "NORMAL" && expected?.unitStatus === "CLEANING" ? (
+                ) : null}
+
+                {final ? (
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoTitle}>Kiểm định cuối: {FINAL_OUTCOME_LABEL[final.outcome] ?? final.outcome}</Text>
+                    {final.findings.map((finding) => (
+                      <Text key={finding.ruleId} style={styles.infoLine}>
+                        • {ruleName.get(finding.ruleId) ?? "Mức hư hỏng"} × {finding.quantity}: {money(finding.amount)}
+                      </Text>
+                    ))}
+                    {final.notes ? <Text style={styles.infoLine}>Ghi chú: {final.notes}</Text> : null}
+                    {unit.deposit && (unit.deposit.deductionAmount > 0 || unit.deposit.refundAmount > 0) ? (
+                      <Text style={styles.infoLine}>
+                        Cọc: trừ {money(unit.deposit.deductionAmount)} · hoàn {money(unit.deposit.refundAmount)}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {unit.stage === "WAITING_CLEANING" && unit.unitStatus === "CLEANING" && final && unit.unitVersion !== null ? (
                   (() => {
-                    const currentGrade = gradeOf(received.unitId, expected.productName);
+                    const productName = unit.productName ?? undefined;
+                    const currentGrade = gradeOf(unit.unitId, productName);
                     const chosen: GradeDraft | undefined =
-                      gradeDrafts[received.unitId] ??
+                      gradeDrafts[unit.unitId] ??
                       (currentGrade === "Sử dụng tốt" ? { decision: "KEEP", reason: "" } : undefined);
                     const decisions = currentGrade === "Sử dụng tốt" ? (["KEEP"] as const) : (["KEEP", "DOWNGRADE"] as const);
                     const waitingGrade = Boolean(currentGrade) && !chosen;
@@ -497,7 +661,7 @@ export default function InventoryReturnsScreen() {
                                     onPress={() =>
                                       setGradeDrafts((current) => ({
                                         ...current,
-                                        [received.unitId]: { decision, reason: current[received.unitId]?.reason ?? "" },
+                                        [unit.unitId]: { decision, reason: current[unit.unitId]?.reason ?? "" },
                                       }))
                                     }
                                   >
@@ -511,7 +675,7 @@ export default function InventoryReturnsScreen() {
                             {chosen?.decision === "DOWNGRADE" ? (
                               <TextInput
                                 value={chosen.reason}
-                                onChangeText={(reason) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { decision: "DOWNGRADE", reason } }))}
+                                onChangeText={(reason) => setGradeDrafts((current) => ({ ...current, [unit.unitId]: { decision: "DOWNGRADE", reason } }))}
                                 placeholder="Lý do hạ hạng (bắt buộc)"
                                 placeholderTextColor={Colors.onSurfaceMuted}
                                 style={styles.input}
@@ -523,7 +687,7 @@ export default function InventoryReturnsScreen() {
                         ) : null}
                         <Action
                           label={
-                            busy === `ready-${received.unitId}`
+                            busy === `ready-${unit.unitId}`
                               ? "ĐANG CẬP NHẬT..."
                               : waitingGrade
                                 ? "CHỌN HẠNG Ở BƯỚC 1 TRƯỚC"
@@ -531,14 +695,28 @@ export default function InventoryReturnsScreen() {
                           }
                           disabled={Boolean(busy) || waitingGrade}
                           onPress={() =>
-                            void markReady(received.unitId, received.assetCode, final.id, expected.unitVersion, expected.productName)
+                            void markReady(unit.unitId, unit.assetCode ?? unit.unitId, final.id, unit.unitVersion!, productName)
                           }
                         />
                       </>
                     );
                   })()
-                ) : final.outcome !== "NORMAL" ? (
-                  <Text style={styles.warning}>Thiết bị có vấn đề đang chờ Admin xử lý ngoại lệ.</Text>
+                ) : unit.stage === "WAITING_CLEANING" ? (
+                  <Text style={styles.warning}>Đạt kiểm định, đang chờ chuyển sang vệ sinh.</Text>
+                ) : unit.stage === "AWAITING_ADMIN" ? (
+                  <Text style={styles.warning}>
+                    Thiết bị có vấn đề, đang chờ Admin xử lý ngoại lệ và quyết toán cọc
+                    {unit.exceptionCase ? ` (hồ sơ ${CASE_STATUS_LABEL[unit.exceptionCase.status] ?? unit.exceptionCase.status})` : ""}.
+                    Kho không cần thao tác thêm.
+                  </Text>
+                ) : unit.stage === "READY" ? (
+                  <Text style={styles.okNote}>✓ Thiết bị đã vệ sinh và sẵn sàng cho thuê.</Text>
+                ) : unit.stage === "CLOSED_DAMAGED" ? (
+                  <Text style={styles.dangerNote}>Cọc đã quyết toán; thiết bị đã chuyển sang hư hỏng để sửa chữa.</Text>
+                ) : unit.stage === "MISSING" || unit.stage === "CLOSED_LOST" ? (
+                  <Text style={styles.dangerNote}>Thiết bị chưa về kho; được xử lý trong hồ sơ thất lạc của Admin.</Text>
+                ) : unit.stage === "AWAITING_RECEIPT" ? (
+                  <Text style={styles.warning}>Đang chờ kho xác nhận thực nhận ở phía trên.</Text>
                 ) : null}
               </View>
             );
@@ -577,7 +755,13 @@ export default function InventoryReturnsScreen() {
             <Text style={styles.queueTitle}>{item.tripTitle || "Đơn thuê thiết bị"}</Text>
             {item.customerName ? <Text style={styles.body}>Khách: {item.customerName}</Text> : null}
             <Text style={styles.body}>{STATUS_LABEL[item.status] ?? "Đang cập nhật"}</Text>
-            <Text style={styles.meta}>{item.issueCount} vấn đề · {item.missingCount} thiếu</Text>
+            <Text style={styles.meta}>
+              {item.pendingInspectionCount ? `${item.pendingInspectionCount} chờ kiểm định · ` : ""}
+              {item.deliveryReportedIssueCount
+                ? `${item.deliveryReportedIssueCount} giao hàng báo vấn đề`
+                : "Giao hàng không báo vấn đề"}
+              {item.missingCount ? ` · ${item.missingCount} thiếu` : ""}
+            </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -640,6 +824,25 @@ const styles = StyleSheet.create({
   gradeStepNext: { marginTop: 12 },
   gradeBox: { marginTop: 12, marginBottom: 10, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: Radius.md, padding: 12 },
   warning: { color: "#9b6700", backgroundColor: "#fff5d7", borderRadius: 8, padding: 11, fontSize: 13, marginTop: 12 },
+  okNote: { color: Colors.primaryDark, backgroundColor: "#eaf5e1", borderRadius: 8, padding: 11, fontSize: 13, marginTop: 12 },
+  dangerNote: { color: Colors.error, backgroundColor: "#ffe8e5", borderRadius: 8, padding: 11, fontSize: 13, marginTop: 12 },
+  cardFlagged: { borderWidth: 1.5, borderColor: "#f0b46b" },
+  pillCol: { alignItems: "flex-end", gap: 6 },
+  pill: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5, fontSize: 11, fontWeight: "600", overflow: "hidden" },
+  pillDanger: { backgroundColor: "#ffe8e5", color: Colors.error },
+  infoBox: { marginTop: 12, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, backgroundColor: "#f7f8f6", padding: 11 },
+  infoWarn: { borderColor: "#f0c48a", backgroundColor: "#fff6ea" },
+  infoOk: { borderColor: "#cfe7c4", backgroundColor: "#f3faef" },
+  infoTitle: { color: Colors.ink, fontSize: 13, fontWeight: "700" },
+  infoTitleWarn: { color: "#8a4b00" },
+  infoTitleOk: { color: Colors.primaryDark },
+  infoLine: { color: Colors.body, fontSize: 13, marginTop: 4 },
+  choosePrompt: { color: "#8a4b00", fontSize: 13, fontWeight: "600", marginTop: 14 },
+  choiceUnset: { borderColor: "#f0b46b", backgroundColor: "#fff6ea" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  chip: { color: "#e6efe4", backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, fontSize: 12, overflow: "hidden" },
+  chipWarn: { color: "#ffd9a3", backgroundColor: "rgba(255,170,60,0.18)" },
+  chipDanger: { color: "#ffc2bb", backgroundColor: "rgba(255,90,70,0.18)" },
   errorBanner: { color: Colors.error, backgroundColor: "#ffe8e5", borderRadius: 9, padding: 12, marginBottom: 12 },
   noticeBanner: { color: Colors.primaryDark, backgroundColor: "#eaf5e1", borderRadius: 9, padding: 12, marginBottom: 12 },
   empty: { color: Colors.onSurfaceMuted, textAlign: "center", backgroundColor: "#fff", borderRadius: Radius.md, padding: 28 },

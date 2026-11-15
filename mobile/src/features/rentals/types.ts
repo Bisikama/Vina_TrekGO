@@ -509,6 +509,9 @@ export type RentalDepositItem = {
   reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
   canSubmitReview?: boolean;
   cannotSubmitReviewReason?: string | null;
+  /** RB-API-617: khách có thể đồng ý khoản trừ để quyết toán ngay (cùng điều kiện với phản đối). */
+  canAcceptDeduction?: boolean;
+  deductionAcceptedAt?: string | null;
   approvedDeduction?: number | null;
 };
 

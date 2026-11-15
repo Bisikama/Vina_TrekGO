@@ -79,6 +79,7 @@ export const reviewReasonMessages: Record<string, string> = {
   EVIDENCE_ACCESS_INTERRUPTED: "Đang khôi phục quyền xem chứng cứ. Thời hạn phản hồi tạm dừng.",
   USER_REVIEW_WINDOW_EXPIRED: "Đã hết thời hạn phản đối khoản trừ.",
   SETTLEMENT_ALREADY_STARTED: "Khoản cọc đã vào quyết toán, không thể phản đối. Vui lòng liên hệ hỗ trợ.",
+  DEDUCTION_ALREADY_ACCEPTED: "Bạn đã đồng ý khoản trừ này. Khoản cọc còn lại đang được quyết toán.",
   IDEMPOTENCY_KEY_REUSED: "Yêu cầu bị trùng với một lần gửi khác. Vui lòng tải lại.",
 };
 
@@ -168,6 +169,25 @@ export const deductionReviewApi = {
           body: JSON.stringify(body),
         },
       ),
+    );
+  },
+
+  /** RB-API-617: khách đồng ý khoản trừ, đóng thời hạn phản hồi và quyết toán cọc ngay. */
+  async acceptDeduction(orderId: string, assessmentId: string, idempotencyKey: string, accessToken: string) {
+    return unwrap(
+      await apiRequest<
+        Envelope<{
+          caseId: string;
+          acceptedAt: string;
+          settlementStatus: "SETTLED" | "DEFERRED";
+          settlement: { status: string; deductionAmount: number; refundAmount: number } | null;
+        }>
+      >(`/api/v1/rental-orders/${encodeURIComponent(orderId)}/assessment-acceptances`, {
+        method: "POST",
+        accessToken,
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ assessmentId }),
+      }),
     );
   },
 
