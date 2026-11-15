@@ -3,6 +3,8 @@ import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
+import { productLabel } from "@/features/rentals/display";
+import { DeliveryTaskDoneView } from "@/features/rentals/DeliveryTaskDoneView";
 import {
   DeliveryTaskDetail,
   DeliveryTaskSummary,
@@ -384,6 +386,24 @@ export default function StaffTaskScreen() {
     );
   }
 
+  // Nhiệm vụ đã kết thúc (kể cả khi vừa bàn giao xong): hiện màn tổng kết, không còn thao tác.
+  if (completedStatus(serverStatus) && !complete) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <DeliveryTaskDoneView
+          type="OUTBOUND"
+          status={serverStatus ?? ""}
+          orderCode={`#${summary.orderSummary.orderId.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase()}`}
+          recipient={recipientName(summary, task)}
+          pointName={summary.point.name}
+          units={(task?.units?.length ? task.units : (order.assignedUnits ?? []).map((unit) => ({ unitId: unit.unitId, assetCode: unit.assetCode ?? "", product: { name: unit.productName } })))}
+          timeline={order.timeline ?? []}
+          onBack={() => router.back()}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -414,7 +434,7 @@ export default function StaffTaskScreen() {
             <Text style={styles.cardTitle}>Thiết bị trong gói</Text>
             {units.map((unit) => (
               <View key={unit.unitId} style={styles.item}>
-                <Text style={styles.itemName}>{unit.product?.name || "Thiết bị thuê"}</Text>
+                <Text style={styles.itemName}>{unit.product?.name ? productLabel(unit.product.name) : "Thiết bị thuê"}</Text>
                 <Text style={styles.assetCode}>Mã thiết bị {shortAssetCode(unit.assetCode)}</Text>
               </View>
             ))}
@@ -441,7 +461,7 @@ export default function StaffTaskScreen() {
               const review = reviews[unit.unitId] || { status: "PENDING" as ItemStatus, note: "" };
               return (
                 <View key={unit.unitId} style={styles.item}>
-                  <Text style={styles.itemName}>{unit.product?.name || unit.assetCode}</Text>
+                  <Text style={styles.itemName}>{unit.product?.name ? productLabel(unit.product.name) : unit.assetCode}</Text>
                   <Text style={styles.assetCode}>Mã {shortAssetCode(unit.assetCode)}</Text>
                   <View style={styles.statusRow}>
                     {(["OK", "MISSING", "DAMAGED"] as ItemStatus[]).map((status) => (

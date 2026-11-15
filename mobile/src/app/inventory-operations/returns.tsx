@@ -1,9 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -18,7 +16,6 @@ import { Colors, Radius, Shadows } from "@/constants/theme";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { useAuth } from "@/features/auth/AuthContext";
 import { ApiError } from "@/lib/api-client";
-import { uploadInventoryEvidence } from "@/features/rentals/staff-inventory-api";
 import {
   DamageAssessmentRule,
   FinalInspectionInput,
@@ -28,17 +25,16 @@ import {
   staffReturnsApi,
 } from "@/features/rentals/staff-returns-api";
 import { productLabel, splitGradeName } from "@/features/rentals/display";
+import { EvidenceThumbStrip } from "@/features/rentals/EvidenceThumbStrip";
+import { useEvidenceUploads } from "@/features/rentals/useEvidenceUploads";
 
 type Condition = FinalInspectionInput["condition"];
 type Draft = {
   condition: Condition;
   notes: string;
   ruleId?: string;
-  imageIds: string[];
-  videoIds: string[];
 };
 
-type EvidenceKind = "image" | "video";
 type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
 
 function shortAssetCode(value?: string | null) {
@@ -104,6 +100,7 @@ export default function InventoryReturnsScreen() {
   const [scannedIds, setScannedIds] = useState<string[]>([]);
   const [custodyIncidentNote, setCustodyIncidentNote] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const evidence = useEvidenceUploads(accessToken);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -169,8 +166,6 @@ export default function InventoryReturnsScreen() {
                 expected?.unitCondition === "NEW" ? "NEW" :
                 expected?.unitCondition === "FAIR" ? "FAIR" : "GOOD",
               notes: "",
-              imageIds: [],
-              videoIds: [],
             };
           });
           return updated;
@@ -215,41 +210,6 @@ export default function InventoryReturnsScreen() {
       await refreshDetail(typeof success === "function" ? success() : success);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Thao tác chưa thể hoàn tất.");
-    } finally {
-      setBusy(undefined);
-    }
-  }
-
-  async function capture(unitId: string, kind: EvidenceKind) {
-    if (!accessToken || busy) return;
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Cần quyền camera", "Hãy cấp quyền camera để ghi lại bằng chứng kiểm định.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: kind === "video" ? ["videos"] : ["images"],
-      quality: kind === "image" ? 0.8 : 0.7,
-      videoMaxDuration: kind === "video" ? 20 : undefined,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    setBusy(`evidence-${unitId}`);
-    setError(undefined);
-    try {
-      const mediaId = await uploadInventoryEvidence(result.assets[0], accessToken);
-      setDrafts((current) => ({
-        ...current,
-        [unitId]: {
-          ...(current[unitId] ?? { condition: "GOOD", notes: "", imageIds: [], videoIds: [] }),
-          ...(kind === "video"
-            ? { videoIds: [...(current[unitId]?.videoIds ?? []), mediaId] }
-            : { imageIds: [...(current[unitId]?.imageIds ?? []), mediaId] }),
-        },
-      }));
-      setNotice(kind === "video" ? "Đã lưu video kiểm định." : "Đã lưu ảnh kiểm định.");
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Không tải được bằng chứng kiểm định.");
     } finally {
       setBusy(undefined);
     }
@@ -346,6 +306,14 @@ export default function InventoryReturnsScreen() {
 
   async function inspect() {
     if (!detail || !accessToken || pendingInspection.length === 0) return;
+    if (evidence.uploadingCount > 0) {
+      setError(`Còn ${evidence.uploadingCount} ảnh/video đang tải lên, chờ vài giây rồi bấm lại.`);
+      return;
+    }
+    if (evidence.failedCount > 0) {
+      setError("Có ảnh tải lỗi: chạm vào ảnh đó để thử lại hoặc bấm ✕ để bỏ.");
+      return;
+    }
     await run(
       "inspect",
       async () => {
@@ -353,10 +321,11 @@ export default function InventoryReturnsScreen() {
           const expected = detail.expectedUnits.find((unit) => unit.unitId === received.unitId);
           const draft = drafts[received.unitId];
           if (!draft) throw new Error(`Thiếu kết quả cho ${received.assetCode}.`);
-          if (!draft.imageIds.length) {
+          const media = evidence.idsFor(received.unitId);
+          if (!media.imageIds.length) {
             throw new Error(`Cần ít nhất 1 ảnh cho mã ${shortAssetCode(received.assetCode)}; video không bắt buộc.`);
           }
-          const evidenceIds = [...draft.imageIds, ...draft.videoIds];
+          const evidenceIds = [...media.imageIds, ...media.videoIds];
           const issue = draft.condition === "DAMAGED";
           const productRules = rules.filter((rule) => rule.productId === expected?.productId);
           if (issue && !draft.ruleId) {
@@ -403,9 +372,7 @@ export default function InventoryReturnsScreen() {
           {busy ? (
             <TrekkingLoader
               label={
-                busy.startsWith("evidence-")
-                  ? "Đang tải bằng chứng kiểm định lên trạm..."
-                  : busy === "receive"
+                busy === "receive"
                     ? "Đang xác nhận thiết bị vào kho..."
                     : busy === "inspect"
                       ? "Đang hoàn tất kiểm định cuối..."
@@ -458,7 +425,7 @@ export default function InventoryReturnsScreen() {
           {detail.receivedUnits.map((received) => {
             const expected = detail.expectedUnits.find((unit) => unit.unitId === received.unitId);
             const final = finalByUnit.get(received.unitId);
-            const draft = drafts[received.unitId] ?? { condition: "GOOD" as Condition, notes: "", imageIds: [], videoIds: [] };
+            const draft = drafts[received.unitId] ?? { condition: "GOOD" as Condition, notes: "" };
             const productRules = rules.filter((rule) => rule.productId === expected?.productId);
             return (
               <View key={received.unitId} style={styles.card}>
@@ -496,20 +463,15 @@ export default function InventoryReturnsScreen() {
                       </View>
                     ) : null}
                     <TextInput value={draft.notes} onChangeText={(notes) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, notes } }))} placeholder="Ghi chú kiểm định" placeholderTextColor={Colors.onSurfaceMuted} style={styles.input} />
-                    <View style={styles.evidenceCountRow}>
-                      <View style={styles.evidenceCount}><Ionicons name="images-outline" size={17} color={Colors.primaryDark} /><Text style={styles.evidenceCountText}>Ảnh {draft.imageIds.length}/1</Text></View>
-                      <View style={styles.evidenceCount}><Ionicons name="videocam-outline" size={17} color={Colors.primaryDark} /><Text style={styles.evidenceCountText}>Video {draft.videoIds.length} (tùy chọn)</Text></View>
-                    </View>
-                    <View style={styles.captureRow}>
-                      <TouchableOpacity style={styles.camera} disabled={Boolean(busy)} onPress={() => void capture(received.unitId, "image")}>
-                        <Ionicons name="camera-outline" size={19} color={Colors.primaryDark} />
-                        <Text style={styles.cameraText}>Chụp ảnh</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.camera} disabled={Boolean(busy)} onPress={() => void capture(received.unitId, "video")}>
-                        <Ionicons name="videocam-outline" size={19} color={Colors.primaryDark} />
-                        <Text style={styles.cameraText}>Quay video</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <EvidenceThumbStrip
+                      busy={evidence.cameraOpen}
+                      required
+                      items={evidence.previewsFor(received.unitId)}
+                      onAddPhoto={() => void evidence.capture(received.unitId, "image")}
+                      onAddVideo={() => void evidence.capture(received.unitId, "video")}
+                      onRemove={evidence.remove}
+                      onRetry={evidence.retry}
+                    />
                   </>
                 ) : final.outcome === "NORMAL" && expected?.unitStatus === "CLEANING" ? (
                   (() => {
@@ -671,12 +633,6 @@ const styles = StyleSheet.create({
   ruleActive: { borderColor: Colors.error, backgroundColor: "#ffe8e5" },
   ruleText: { color: Colors.body, fontSize: 11, fontWeight: "500" },
   input: { borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: 8, padding: 11, color: Colors.ink, marginTop: 10 },
-  evidenceCountRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  evidenceCount: { flex: 1, minHeight: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
-  evidenceCountText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
-  captureRow: { flexDirection: "row", gap: 8 },
-  camera: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: Colors.primaryNeutral, backgroundColor: Colors.surfaceContainerLowest, borderRadius: Radius.md, padding: 12, marginTop: 10 },
-  cameraText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
   primary: { backgroundColor: Colors.primaryDark, borderRadius: Radius.xl, padding: 15, alignItems: "center", marginBottom: 14 },
   primaryText: { color: "#fff", fontSize: 12, fontWeight: "600", textAlign: "center" },
   disabled: { opacity: 0.5 },

@@ -1,10 +1,12 @@
 import { FieldModal } from "@/components/FieldModal";
-import { AssetQrScannerModal } from "@/components/common/AssetQrScannerModal";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
-import { uploadInventoryEvidence } from "@/features/rentals/staff-inventory-api";
+import { productLabel } from "@/features/rentals/display";
+import { DeliveryTaskDoneView } from "@/features/rentals/DeliveryTaskDoneView";
+import { EvidenceThumbStrip } from "@/features/rentals/EvidenceThumbStrip";
+import { useEvidenceUploads } from "@/features/rentals/useEvidenceUploads";
 import {
   DeliveryTaskDetail,
   DeliveryTaskSummary,
@@ -13,11 +15,9 @@ import {
   RentalReturnScanResult,
 } from "@/features/rentals/types";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,8 +29,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type ItemStatus = "PENDING" | "OK" | "MISSING" | "DAMAGED";
 type ItemReview = { status: ItemStatus; note: string };
-type EvidenceKind = "image" | "video";
-type EvidenceDraft = { imageIds: string[]; videoIds: string[] };
 
 const labels: Record<ItemStatus, string> = {
   PENDING: "Chưa kiểm",
@@ -99,13 +97,9 @@ export default function StaffReturnScreen() {
   const [task, setTask] = useState<DeliveryTaskDetail>();
   const [order, setOrder] = useState<RentalOrderDetail>();
   const [reviews, setReviews] = useState<Record<string, ItemReview>>({});
-  const [evidenceDrafts, setEvidenceDrafts] = useState<
-    Record<string, EvidenceDraft>
-  >({});
+  const evidence = useEvidenceUploads(accessToken, "RETURN_EVIDENCE");
   const [scanResult, setScanResult] = useState<RentalReturnScanResult>();
   const [returnReceipt, setReturnReceipt] = useState<RentalReturnReceipt>();
-  const [scannerVisible, setScannerVisible] = useState(false);
-  const [scannedAssetCodes, setScannedAssetCodes] = useState<string[]>([]);
   const [custodyPresentIds, setCustodyPresentIds] = useState<string[]>([]);
   const [custodyIncidentNote, setCustodyIncidentNote] = useState("");
   const [stage, setStage] = useState<0 | 1 | 2>(0);
@@ -225,18 +219,6 @@ export default function StaffReturnScreen() {
         .filter((unitId) => !custodyPresentIds.includes(unitId)) ?? [],
     [custodyPresentIds, scanResult?.receivedUnits],
   );
-  const requiredScanCodes = useMemo(
-    () => receivedUnits.map((unit) => unit.assetCode),
-    [receivedUnits],
-  );
-  const validScannedCodes = useMemo(
-    () => scannedAssetCodes.filter((code) => requiredScanCodes.includes(code)),
-    [requiredScanCodes, scannedAssetCodes],
-  );
-  const allReceivedScanned =
-    requiredScanCodes.length > 0 &&
-    requiredScanCodes.every((code) => validScannedCodes.includes(code));
-
   const setReview = (unitId: string, update: Partial<ItemReview>) => {
     setReviews((current) => ({
       ...current,
@@ -248,67 +230,6 @@ export default function StaffReturnScreen() {
     }));
   };
 
-  const confirmReceivedForDemo = () => {
-    if (requiredScanCodes.length === 0) {
-      setFeedback({
-        title: "Không có món thực nhận",
-        message: "Các món đang được đánh dấu Thiếu nên không thể xác nhận nhận nhanh.",
-      });
-      return;
-    }
-
-    setScannedAssetCodes(requiredScanCodes);
-    setFeedback({
-      title: "Đã thu hồi thiết bị",
-      message: "Đã ghi nhận các thiết bị thực nhận để tiếp tục lập biên nhận trả đồ.",
-    });
-  };
-
-  const captureEvidence = async (unitId: string, kind: EvidenceKind) => {
-    if (!accessToken || busy) return;
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Cần quyền camera",
-        "Hãy cấp quyền để ghi lại hiện trạng thiết bị.",
-      );
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: kind === "video" ? ["videos"] : ["images"],
-      allowsEditing: false,
-      quality: kind === "image" ? 0.8 : 0.7,
-      videoMaxDuration: kind === "video" ? 20 : undefined,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const mediaId = await uploadInventoryEvidence(
-        result.assets[0],
-        accessToken,
-        { scope: "RETURN_EVIDENCE" },
-      );
-      setEvidenceDrafts((current) => {
-        const draft = current[unitId] ?? { imageIds: [], videoIds: [] };
-        return {
-          ...current,
-          [unitId]:
-            kind === "video"
-              ? { ...draft, videoIds: [...draft.videoIds, mediaId] }
-              : { ...draft, imageIds: [...draft.imageIds, mediaId] },
-        };
-      });
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "Không tải được bằng chứng hiện trạng.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const scanReturn = async () => {
     if (!accessToken || !summary || !order || busy) return;
@@ -322,20 +243,29 @@ export default function StaffReturnScreen() {
     }
     if (receivedUnits.length === 0) {
       setFeedback({
-        title: "Không có thiết bị để quét",
+        title: "Không có thiết bị thực nhận",
         message:
           "Cần có ít nhất một thiết bị thực nhận. Trường hợp mất toàn bộ phải chuyển sang quy trình ngoại lệ.",
       });
       return;
     }
-    if (!allReceivedScanned) {
-      setScannerVisible(true);
+    if (evidence.uploadingCount > 0) {
+      setFeedback({
+        title: "Ảnh đang tải lên",
+        message: `Còn ${evidence.uploadingCount} ảnh/video đang tải, chờ vài giây rồi bấm lại.`,
+      });
       return;
     }
-    const missingEvidence = receivedUnits.find((unit) => {
-      const draft = evidenceDrafts[unit.unitId];
-      return !draft?.imageIds.length;
-    });
+    if (evidence.failedCount > 0) {
+      setFeedback({
+        title: "Có ảnh tải lỗi",
+        message: "Chạm vào ảnh báo lỗi để thử lại, hoặc bấm ✕ để bỏ ảnh đó.",
+      });
+      return;
+    }
+    const missingEvidence = receivedUnits.find(
+      (unit) => !evidence.idsFor(unit.unitId).imageIds.length,
+    );
     if (missingEvidence) {
       setFeedback({
         title: "Thiếu ảnh",
@@ -396,8 +326,8 @@ export default function StaffReturnScreen() {
                   : [],
               notes: review.note.trim() || undefined,
               evidenceIds: [
-                ...(evidenceDrafts[unit.unitId]?.imageIds ?? []),
-                ...(evidenceDrafts[unit.unitId]?.videoIds ?? []),
+                ...evidence.idsFor(unit.unitId).imageIds,
+                ...evidence.idsFor(unit.unitId).videoIds,
               ],
             };
           }),
@@ -411,8 +341,8 @@ export default function StaffReturnScreen() {
         accessToken,
       );
       const evidenceIds = receivedUnits.flatMap((unit) => [
-        ...(evidenceDrafts[unit.unitId]?.imageIds ?? []),
-        ...(evidenceDrafts[unit.unitId]?.videoIds ?? []),
+        ...evidence.idsFor(unit.unitId).imageIds,
+        ...evidence.idsFor(unit.unitId).videoIds,
       ]);
       const receipt = await rentalApi.finalizeRentalReturnReceipt(
         summary.orderSummary.orderId,
@@ -520,6 +450,24 @@ export default function StaffReturnScreen() {
     );
   }
 
+  // Nhiệm vụ đã kết thúc: chỉ xem lại, không hiện các bước chụp/quét nữa.
+  if (["INVENTORY_RECEIVED", "CLOSED", "CANCELLED"].includes(task.task.status)) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <DeliveryTaskDoneView
+          type="RETURN"
+          status={task.task.status}
+          orderCode={`#${summary.orderSummary.orderId.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase()}`}
+          recipient={recipientName(summary)}
+          pointName={summary.point.name}
+          units={(task?.units?.length ? task.units : (order.assignedUnits ?? []).map((unit) => ({ unitId: unit.unitId, assetCode: unit.assetCode ?? "", product: { name: unit.productName } })))}
+          timeline={order.timeline ?? []}
+          onBack={() => router.back()}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -565,19 +513,13 @@ export default function StaffReturnScreen() {
                 status: "PENDING" as ItemStatus,
                 note: "",
               };
-              const evidence = evidenceDrafts[unit.unitId] ?? {
-                imageIds: [],
-                videoIds: [],
-              };
-              const wasScanned = validScannedCodes.includes(unit.assetCode);
               return (
                 <View key={unit.unitId} style={styles.item}>
                   <Text style={styles.checkLabel}>
-                    {unit.product?.name || "Thiết bị thuê"}
+                    {unit.product?.name ? productLabel(unit.product.name) : "Thiết bị thuê"}
                   </Text>
                   <Text style={styles.assetCode}>
-                    Mã {shortAssetCode(unit.assetCode)} ·{" "}
-                    {wasScanned ? "Đã xác nhận nhận" : "Chưa xác nhận nhận"}
+                    Mã {shortAssetCode(unit.assetCode)}
                   </Text>
                   <View style={styles.statusRow}>
                     {(["OK", "MISSING", "DAMAGED"] as ItemStatus[]).map(
@@ -615,51 +557,19 @@ export default function StaffReturnScreen() {
                   )}
                   {review.status !== "MISSING" && (
                     <>
-                      <View style={styles.evidenceSummary}>
-                        <Ionicons
-                          name="camera-outline"
-                          size={16}
-                          color={Colors.primaryDark}
-                        />
-                        <Text style={styles.evidenceText}>
-                          {evidence.imageIds.length} ảnh ·{" "}
-                          {evidence.videoIds.length} video (tùy chọn)
-                        </Text>
-                      </View>
-                      <View style={styles.evidenceActions}>
-                        <TouchableOpacity
-                          disabled={busy}
-                          style={styles.evidenceButton}
-                          onPress={() =>
-                            void captureEvidence(unit.unitId, "image")
-                          }
-                        >
-                          <Ionicons
-                            name="camera"
-                            size={16}
-                            color={Colors.primaryDark}
-                          />
-                          <Text style={styles.evidenceButtonText}>
-                            Chụp ảnh
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          disabled={busy}
-                          style={styles.evidenceButton}
-                          onPress={() =>
-                            void captureEvidence(unit.unitId, "video")
-                          }
-                        >
-                          <Ionicons
-                            name="videocam"
-                            size={16}
-                            color={Colors.primaryDark}
-                          />
-                          <Text style={styles.evidenceButtonText}>
-                            Quay video
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                      <EvidenceThumbStrip
+                        busy={evidence.cameraOpen}
+                        required
+                        items={evidence.previewsFor(unit.unitId)}
+                        onAddPhoto={() =>
+                          void evidence.capture(unit.unitId, "image")
+                        }
+                        onAddVideo={() =>
+                          void evidence.capture(unit.unitId, "video")
+                        }
+                        onRemove={evidence.remove}
+                        onRetry={evidence.retry}
+                      />
                     </>
                   )}
                 </View>
@@ -668,28 +578,9 @@ export default function StaffReturnScreen() {
             <View style={styles.summary}>
               <Text style={styles.noticeText}>
                 {receivedUnits.length} món thực nhận · {issueCount} món có vấn
-                đề · {validScannedCodes.length}/{requiredScanCodes.length} món
-                đã xác nhận.
+                đề.
               </Text>
             </View>
-            {!allReceivedScanned && requiredScanCodes.length > 0 ? (
-              <TouchableOpacity
-                disabled={busy}
-                style={styles.demoReceiveButton}
-                onPress={confirmReceivedForDemo}
-              >
-                <Ionicons
-                  name="flash-outline"
-                  size={18}
-                  color={Colors.primaryDark}
-                />
-                <View style={styles.demoReceiveCopy}>
-                  <Text style={styles.demoReceiveTitle}>
-                    Thu hồi các thiết bị
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ) : null}
           </View>
         )}
 
@@ -760,7 +651,7 @@ export default function StaffReturnScreen() {
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.checkLabel}>
-                      {taskUnit?.product?.name || "Thiết bị"}
+                      {taskUnit?.product?.name ? productLabel(taskUnit.product.name) : "Thiết bị"}
                     </Text>
                     <Text style={styles.assetCode}>
                       {unit.assetCode} ·{" "}
@@ -823,9 +714,7 @@ export default function StaffReturnScreen() {
           ]}
           onPress={() =>
             void (stage === 0
-              ? allReceivedScanned
-                ? scanReturn()
-                : setScannerVisible(true)
+              ? scanReturn()
               : stage === 1
                 ? recordObservations()
                 : transferToInventory())
@@ -835,9 +724,7 @@ export default function StaffReturnScreen() {
             {busy
               ? "ĐANG XỬ LÝ..."
               : stage === 0
-                ? allReceivedScanned
-                  ? "XÁC NHẬN THU HỒI"
-                  : `MỞ MÁY QUÉT QR (${validScannedCodes.length}/${requiredScanCodes.length})`
+                ? "XÁC NHẬN THU HỒI"
                 : stage === 1
                   ? "GHI NHẬN & LẬP BIÊN NHẬN"
                   : missingInCustodyUnitIds.length
@@ -847,20 +734,6 @@ export default function StaffReturnScreen() {
           <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </ScrollView>
-      <AssetQrScannerModal
-        visible={scannerVisible}
-        expectedAssets={receivedUnits.map((unit) => ({
-          assetCode: unit.assetCode,
-          label: unit.product?.name || "Thiết bị thuê",
-        }))}
-        scannedAssetCodes={validScannedCodes}
-        onScanned={(assetCode) =>
-          setScannedAssetCodes((current) =>
-            current.includes(assetCode) ? current : [...current, assetCode],
-          )
-        }
-        onClose={() => setScannerVisible(false)}
-      />
       <FieldModal
         visible={complete}
         title="Đã chuyển về kho"
@@ -1009,29 +882,6 @@ const styles = StyleSheet.create({
     color: Colors.ink,
     marginTop: 8,
   },
-  evidenceSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-  },
-  evidenceText: { color: Colors.onSurfaceVariant, fontSize: 11 },
-  evidenceActions: { flexDirection: "row", gap: 8, marginTop: 8 },
-  evidenceButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: Radius.full,
-    paddingVertical: 10,
-    backgroundColor: Colors.primaryPale,
-  },
-  evidenceButtonText: {
-    color: Colors.primaryDark,
-    fontSize: 11,
-    fontWeight: "600",
-  },
   summary: {
     backgroundColor: "#fff5d7",
     padding: 12,
@@ -1039,23 +889,6 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   noticeText: { color: Colors.body, fontSize: 12 },
-  demoReceiveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: Colors.primaryNeutral,
-    borderRadius: Radius.sm,
-    padding: 12,
-    backgroundColor: Colors.primaryPale,
-  },
-  demoReceiveCopy: { flex: 1 },
-  demoReceiveTitle: {
-    color: Colors.primaryDark,
-    fontSize: 12,
-    fontWeight: "700",
-  },
   cardTitle: {
     color: Colors.ink,
     fontSize: 17,
