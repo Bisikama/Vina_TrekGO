@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { money, dateTime } from "@/features/rentals/components/RentalSectionNav";
+import { ReturnEvidenceGallery } from "@/features/rentals/components/staff/ReturnEvidenceGallery";
 import { listStaffRentalProducts } from "@/features/rentals/services/staff-products.api";
 import {
   finalizeNormalReturnUnits,
@@ -16,15 +18,18 @@ import {
   type DamageAssessmentRule,
   type FinalInspectionInput,
   type ReturnQueueStatus,
+  type ReturnUnitStage,
   type StaffReturnDetail,
   type StaffReturnSummary,
+  type StaffReturnUnit,
 } from "@/features/rentals/services/staff-returns.api";
 import type { RentalGrade } from "@/features/rentals/types/rental";
 import { orderShortCode, productLabel, shortId } from "@/features/rentals/services/rental-display";
 import { uploadConditionEvidence } from "@/features/rentals/services/staff-preparation.api";
 
 type Draft = {
-  condition: FinalInspectionInput["condition"];
+  /** "" = chưa chọn: bắt buộc với món giao hàng báo có vấn đề. */
+  condition: FinalInspectionInput["condition"] | "";
   notes: string;
   ruleId: string;
   evidenceIds: string;
@@ -41,32 +46,56 @@ const filters: { label: string; value?: ReturnQueueStatus }[] = [
 
 const statusLabel: Record<string, string> = {
   TRANSFER_PENDING: "Chờ kho nhận",
-  INVENTORY_RECEIVED: "Đã nhận vào kho",
+  INVENTORY_RECEIVED: "Chờ kiểm định cuối",
   WAITING_CLEANING: "Chờ vệ sinh",
-  REVIEW_REQUIRED: "Cần Admin duyệt",
+  REVIEW_REQUIRED: "Chờ Admin xử lý",
   COMPLETED: "Hoàn tất",
-  RETURNED: "Đang chuyển về kho",
 };
 
-type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
+const STAGE: Record<ReturnUnitStage, { label: string; tone: string }> = {
+  AWAITING_RECEIPT: { label: "Chờ kho nhận", tone: "bg-slate-100 text-slate-700" },
+  AWAITING_FINAL_INSPECTION: { label: "Chờ kiểm định cuối", tone: "bg-orange-100 text-orange-800" },
+  AWAITING_ADMIN: { label: "Chờ Admin xử lý", tone: "bg-amber-100 text-amber-800" },
+  WAITING_CLEANING: { label: "Chờ vệ sinh", tone: "bg-sky-100 text-sky-800" },
+  READY: { label: "Sẵn sàng cho thuê", tone: "bg-emerald-100 text-emerald-800" },
+  CLOSED_DAMAGED: { label: "Đã đóng · hư hỏng", tone: "bg-red-100 text-red-800" },
+  CLOSED_LOST: { label: "Đã đóng · thất lạc", tone: "bg-red-100 text-red-800" },
+  MISSING: { label: "Thiếu / thất lạc", tone: "bg-red-100 text-red-800" },
+};
 
-const UNIT_STATUS_LABELS: Record<string, string> = {
-  RETURN_PENDING: "Chờ kiểm định",
-  INSPECTING: "Đang kiểm định",
-  CLEANING: "Đang vệ sinh",
-  AVAILABLE: "Sẵn sàng cho thuê",
-  MAINTENANCE: "Đang bảo trì",
+/** Thứ tự hiển thị: việc kho cần làm trước. */
+const STAGE_ORDER: ReturnUnitStage[] = [
+  "AWAITING_FINAL_INSPECTION",
+  "WAITING_CLEANING",
+  "AWAITING_RECEIPT",
+  "AWAITING_ADMIN",
+  "MISSING",
+  "READY",
+  "CLOSED_DAMAGED",
+  "CLOSED_LOST",
+];
+
+const CONDITION_LABELS: Record<string, string> = {
+  NEW: "Mới",
+  GOOD: "Tốt",
+  FAIR: "Hao mòn",
   DAMAGED: "Hư hỏng",
   LOST: "Thất lạc",
-  RENTED: "Đang cho thuê",
-  RESERVED: "Đã giữ chỗ",
 };
 
-const OUTCOME_LABELS: Record<string, { label: string; tone: string }> = {
-  NORMAL: { label: "Đạt kiểm định", tone: "bg-emerald-100 text-emerald-800" },
-  DAMAGED: { label: "Hư hỏng", tone: "bg-red-100 text-red-800" },
-  MISSING_ACCESSORY: { label: "Thiếu phụ kiện", tone: "bg-amber-100 text-amber-800" },
-  LOST: { label: "Thất lạc", tone: "bg-red-100 text-red-800" },
+const FINAL_OUTCOME_LABELS: Record<string, string> = {
+  NORMAL: "Đạt kiểm định",
+  ISSUE: "Có vấn đề (chưa định mức)",
+  DAMAGE_CONFIRMED: "Hư hỏng (đã định mức)",
+  LOST_CONFIRMED: "Xác nhận thất lạc",
+};
+
+const CASE_STATUS_LABELS: Record<string, string> = {
+  OPEN: "đang mở",
+  UNDER_REVIEW: "Admin đang xem xét",
+  RESOLVED: "đã xử lý",
+  REJECTED: "đã từ chối",
+  CLOSED: "đã đóng",
 };
 
 const GRADE_LABELS: Record<RentalGrade, string> = {
@@ -74,11 +103,23 @@ const GRADE_LABELS: Record<RentalGrade, string> = {
   GOOD_USED: "Sử dụng tốt",
 };
 
+type GradeDraft = { decision: "KEEP" | "DOWNGRADE"; reason: string };
+
 const splitIds = (value: string) =>
   value
     .split(/[\s,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+
+const reportedIssue = (unit: StaffReturnUnit) => unit.deliveryObservation?.outcome === "ISSUE";
+
+const emptyDraft = (unit: StaffReturnUnit): Draft => ({
+  // Món bị giao hàng báo có vấn đề: không mặc định "Tốt", nhân viên phải tự chọn.
+  condition: reportedIssue(unit) ? "" : "GOOD",
+  notes: "",
+  ruleId: "",
+  evidenceIds: "",
+});
 
 export function StaffReturnsInspection() {
   const [filter, setFilter] = useState<ReturnQueueStatus>();
@@ -154,13 +195,8 @@ export function StaffReturnsInspection() {
       setRules(damageRules);
       setDrafts((current) => {
         const next = { ...current };
-        returnDetail.receivedUnits.forEach((unit) => {
-          next[unit.unitId] ??= {
-            condition: "GOOD",
-            notes: "",
-            ruleId: "",
-            evidenceIds: "",
-          };
+        (returnDetail.units ?? []).forEach((unit) => {
+          if (unit.stage === "AWAITING_FINAL_INSPECTION") next[unit.unitId] ??= emptyDraft(unit);
         });
         return next;
       });
@@ -198,17 +234,17 @@ export function StaffReturnsInspection() {
     };
   }, [loadDetail, selectedId]);
 
-  const inspectionByUnit = useMemo(
-    () => new Map(detail?.inspection.map((item) => [item.unitId, item]) ?? []),
-    [detail?.inspection],
-  );
-  const pendingInspection = useMemo(
-    () =>
-      detail?.receivedUnits.filter(
-        (unit) => !inspectionByUnit.get(unit.unitId)?.final,
-      ) ?? [],
-    [detail?.receivedUnits, inspectionByUnit],
-  );
+  const units = useMemo(() => {
+    const list = [...(detail?.units ?? [])];
+    return list.sort((a, b) => {
+      const byStage = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
+      if (byStage !== 0) return byStage;
+      // Trong cùng giai đoạn: món giao hàng báo có vấn đề lên trước.
+      return Number(reportedIssue(b)) - Number(reportedIssue(a));
+    });
+  }, [detail?.units]);
+  const pendingInspection = units.filter((unit) => unit.stage === "AWAITING_FINAL_INSPECTION");
+  const ruleName = useMemo(() => new Map(rules.map((rule) => [rule.id, rule.name])), [rules]);
   const pendingReceiptUnits = detail?.pendingTransfer?.unitIds.filter(
     (unitId) => !detail.pendingTransfer?.receivedUnitIds.includes(unitId),
   ) ?? [];
@@ -269,9 +305,13 @@ export function StaffReturnsInspection() {
     );
   }
 
-  async function addEvidencePhotos(unitId: string, files: FileList | null) {
+  function updateDraft(unit: StaffReturnUnit, patch: Partial<Draft>) {
+    setDrafts((current) => ({ ...current, [unit.unitId]: { ...(current[unit.unitId] ?? emptyDraft(unit)), ...patch } }));
+  }
+
+  async function addEvidencePhotos(unit: StaffReturnUnit, files: FileList | null) {
     if (!files?.length) return;
-    setUploadingUnit(unitId);
+    setUploadingUnit(unit.unitId);
     setError(undefined);
     try {
       const ids: string[] = [];
@@ -280,9 +320,9 @@ export function StaffReturnsInspection() {
         ids.push(await uploadConditionEvidence(file));
       }
       setDrafts((current) => {
-        const draft = current[unitId] ?? { condition: "GOOD", notes: "", ruleId: "", evidenceIds: "" };
+        const draft = current[unit.unitId] ?? emptyDraft(unit);
         const merged = [...splitIds(draft.evidenceIds), ...ids];
-        return { ...current, [unitId]: { ...draft, evidenceIds: merged.join(",") } };
+        return { ...current, [unit.unitId]: { ...draft, evidenceIds: merged.join(",") } };
       });
     } catch (uploadError) {
       setError(uploadError instanceof Error && !("isAxiosError" in uploadError)
@@ -293,37 +333,29 @@ export function StaffReturnsInspection() {
     }
   }
 
-  function clearEvidencePhotos(unitId: string) {
-    setDrafts((current) => {
-      const draft = current[unitId];
-      return draft ? { ...current, [unitId]: { ...draft, evidenceIds: "" } } : current;
-    });
-  }
-
   async function inspectPendingUnits() {
     if (!detail || !pendingInspection.length) return;
     const items: FinalInspectionInput[] = pendingInspection.map((unit) => {
-      const expected = detail.expectedUnits.find((item) => item.unitId === unit.unitId);
-      const draft = drafts[unit.unitId];
-      if (!draft) throw new Error(`Thiếu kết quả kiểm định cho ${unit.assetCode}.`);
-      const issue = draft.condition === "DAMAGED";
-      if (issue && !draft.ruleId) {
-        throw new Error(`Hãy chọn quy tắc hư hỏng cho ${unit.assetCode}.`);
+      const name = unit.productName ? productLabel(unit.productName) : `Mã ${shortId(unit.assetCode)}`;
+      const draft = drafts[unit.unitId] ?? emptyDraft(unit);
+      if (!draft.condition) {
+        throw new Error(`${name}: giao hàng báo có vấn đề, hãy tự chọn tình trạng sau khi kiểm tra.`);
       }
+      const damaged = draft.condition === "DAMAGED";
+      const availableRules = rules.filter((rule) => rule.productId === unit.productId);
+      if (damaged && availableRules.length === 0) {
+        throw new Error(`${name} chưa có mức hư hỏng để chọn. Báo Admin bổ sung.`);
+      }
+      if (damaged && !draft.ruleId) throw new Error(`Hãy chọn mức hư hỏng cho ${name}.`);
       const evidenceIds = splitIds(draft.evidenceIds);
-      const preliminary = inspectionByUnit.get(unit.unitId)?.preliminary;
-      if ((issue || (preliminary && preliminary.outcome !== "NORMAL")) && evidenceIds.length === 0) {
-        throw new Error(`Thiết bị ${expected?.productName ? productLabel(expected.productName) : unit.assetCode} cần ít nhất 1 ảnh bằng chứng.`);
-      }
-      const availableRules = rules.filter((rule) => rule.productId === expected?.productId);
-      if (issue && availableRules.length === 0) {
-        throw new Error(`Sản phẩm ${expected?.productName ?? unit.assetCode} chưa có mức hư hỏng để chọn. Báo Admin bổ sung.`);
+      if ((unit.evidenceRequired || damaged) && evidenceIds.length === 0) {
+        throw new Error(`${name} cần ít nhất 1 ảnh bằng chứng.`);
       }
       return {
         unitId: unit.unitId,
-        outcome: issue ? "ISSUE" : "PASS",
+        outcome: damaged ? "ISSUE" : "PASS",
         condition: draft.condition,
-        damage: issue
+        damage: damaged
           ? [{ ruleId: draft.ruleId, quantity: 1, notes: draft.notes || undefined, evidenceIds }]
           : [],
         evidenceIds,
@@ -336,6 +368,8 @@ export function StaffReturnsInspection() {
       .map((item) => ({ unitId: item.unitId, inspectionVersion: item.version }));
     await finalizeNormalReturnUnits(detail.id, detail.version, normal);
   }
+
+  const queueStatus = detail?.summary?.queueStatus;
 
   return (
     <main className="px-6 py-5">
@@ -389,9 +423,16 @@ export function StaffReturnsInspection() {
                     selectedId === task.id ? "border-emerald-700 bg-emerald-50" : "border-slate-200"
                   }`}
                 >
-                  <p className="mt-2 text-xs font-semibold">Đơn {orderShortCode(task.orderId)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold">Đơn {orderShortCode(task.orderId)}</p>
+                    <span className="text-[10px] font-semibold text-slate-600">{statusLabel[task.status] ?? task.status}</span>
+                  </div>
                   <p className="mt-2 text-[10px] text-slate-500">
-                    {statusLabel[task.status] ?? task.status} · {task.issueCount} vấn đề · {task.missingCount} thiếu
+                    {task.pendingInspectionCount ? `${task.pendingInspectionCount} chờ kiểm định · ` : ""}
+                    {task.deliveryReportedIssueCount
+                      ? <span className="font-semibold text-orange-700">{task.deliveryReportedIssueCount} giao hàng báo vấn đề</span>
+                      : "Giao hàng không báo vấn đề"}
+                    {task.missingCount ? ` · ${task.missingCount} thiếu` : ""}
                   </p>
                 </button>
               ))}
@@ -408,7 +449,9 @@ export function StaffReturnsInspection() {
                     <div>
                       <p className="text-xs font-semibold text-emerald-900">Hồ sơ hoàn trả</p>
                       <h2 className="mt-2 text-xl font-bold">Đơn {orderShortCode(detail.orderId)}</h2>
-                      <p className="mt-1 text-xs text-slate-500">{statusLabel[detail.status] ?? (detail.status === "CLOSED" ? "Đã đóng hồ sơ" : "Đang cập nhật")}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {queueStatus ? statusLabel[queueStatus] : "Đang cập nhật"}
+                      </p>
                     </div>
                     {detail.pendingTransfer?.status === "PENDING_RECEIPT" ? (
                       <button
@@ -426,6 +469,40 @@ export function StaffReturnsInspection() {
                       </button>
                     ) : null}
                   </div>
+                  {detail.summary ? (
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
+                        {detail.summary.totalUnits} thiết bị
+                      </span>
+                      {detail.summary.deliveryReportedIssueCount ? (
+                        <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-800">
+                          Lúc thu hồi: {detail.summary.deliveryReportedIssueCount} món có vấn đề
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-800">
+                          Lúc thu hồi: không báo vấn đề
+                        </span>
+                      )}
+                      {detail.summary.handoverReportedIssueCount ? (
+                        <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-900">
+                          Lúc giao cho khách: ghi {detail.summary.handoverReportedIssueCount} lỗi có sẵn
+                        </span>
+                      ) : null}
+                      {detail.summary.evidenceRequiredPendingCount ? (
+                        <span className="rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700">
+                          {detail.summary.evidenceRequiredPendingCount} món bắt buộc ảnh
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {detail.summary?.handoverOrderLevelIssues?.length ? (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                      <p className="font-bold">Ghi chú lúc giao cho khách (không gắn món cụ thể)</p>
+                      {detail.summary.handoverOrderLevelIssues.map((issue, index) => (
+                        <p key={`${issue.type}-${index}`}>• {issue.description}</p>
+                      ))}
+                    </div>
+                  ) : null}
                   {detail.pendingTransfer ? (
                     <div className="mt-3 space-y-3">
                       <p className="rounded-lg bg-blue-50 p-3 text-xs text-slate-700">
@@ -476,62 +553,137 @@ export function StaffReturnsInspection() {
                   ) : null}
                 </div>
 
-                {detail.receivedUnits.map((received) => {
-                  const unit = detail.expectedUnits.find((item) => item.unitId === received.unitId);
-                  const inspection = inspectionByUnit.get(received.unitId);
-                  const draft = drafts[received.unitId] ?? { condition: "GOOD", notes: "", ruleId: "", evidenceIds: "" };
-                  const productRules = rules.filter((rule) => rule.productId === unit?.productId);
-                  const grade = unit ? productGrades[unit.productId] ?? null : null;
-                  const needsGrade = Boolean(grade) || gradeRequiredUnits.includes(received.unitId);
-                  const gradeDraft: GradeDraft = gradeDrafts[received.unitId] ?? { decision: "KEEP", reason: "" };
+                {!detail.units ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                    API chưa trả danh sách thiết bị theo giai đoạn. Hãy khởi động lại API bản mới.
+                  </div>
+                ) : null}
+
+                {units.map((unit) => {
+                  const name = unit.productName ? productLabel(unit.productName) : `Mã ${shortId(unit.assetCode)}`;
+                  const draft = drafts[unit.unitId] ?? emptyDraft(unit);
+                  const productRules = rules.filter((rule) => rule.productId === unit.productId);
+                  const grade = unit.productId ? productGrades[unit.productId] ?? null : null;
+                  const needsGrade = Boolean(grade) || gradeRequiredUnits.includes(unit.unitId);
+                  const gradeDraft: GradeDraft = gradeDrafts[unit.unitId] ?? { decision: "KEEP", reason: "" };
                   const downgradeReasonMissing = gradeDraft.decision === "DOWNGRADE" && gradeDraft.reason.trim().length < 3;
+                  const observation = unit.deliveryObservation;
+                  const flagged = reportedIssue(unit);
+                  const evidenceCount = splitIds(draft.evidenceIds).length;
+                  const evidenceNeeded = unit.evidenceRequired || draft.condition === "DAMAGED";
                   return (
-                    <article key={received.unitId} className="rounded-xl border bg-white p-5 shadow-sm">
+                    <article
+                      key={unit.unitId}
+                      className={`rounded-xl border bg-white p-5 shadow-sm ${flagged && unit.stage === "AWAITING_FINAL_INSPECTION" ? "border-orange-300" : ""}`}
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-bold">{unit?.productName ? productLabel(unit.productName) : `Mã ${shortId(received.assetCode)}`}</h3>
-                          <p className="mt-1 text-xs text-slate-500">Mã {shortId(received.assetCode)} · {unit ? UNIT_STATUS_LABELS[unit.unitStatus] ?? "Đang cập nhật" : "Đang cập nhật"}</p>
+                          <h3 className="font-bold">{name}</h3>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Mã {shortId(unit.assetCode)}
+                            {unit.deposit ? ` · Cọc ${money(unit.deposit.depositAmount)}` : ""}
+                            {unit.inventoryReceivedAt ? ` · Vào kho ${dateTime(unit.inventoryReceivedAt)}` : ""}
+                          </p>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[10px] font-semibold ${inspection?.final ? (OUTCOME_LABELS[inspection.final.outcome]?.tone ?? "bg-slate-100 text-slate-700") : "bg-orange-100 text-orange-800"}`}>
-                          {inspection?.final ? (OUTCOME_LABELS[inspection.final.outcome]?.label ?? "Đã kiểm định") : "Chờ kiểm định cuối"}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {unit.stage === "AWAITING_FINAL_INSPECTION" && unit.evidenceRequired ? (
+                            <span className="rounded-full bg-red-50 px-3 py-1 text-[10px] font-semibold text-red-700">Bắt buộc ảnh</span>
+                          ) : null}
+                          <span className={`rounded-full px-3 py-1 text-[10px] font-semibold ${STAGE[unit.stage].tone}`}>
+                            {STAGE[unit.stage].label}
+                          </span>
+                        </div>
                       </div>
-                      {!inspection?.final ? (
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className={`rounded-lg border p-3 ${flagged ? "border-orange-200 bg-orange-50" : "border-emerald-100 bg-emerald-50/50"}`}>
+                          <p className={`text-xs font-bold ${flagged ? "text-orange-900" : "text-emerald-900"}`}>
+                            {observation
+                              ? flagged
+                                ? "⚠ Lúc thu hồi: nhân viên giao báo có vấn đề"
+                                : "✓ Lúc thu hồi: nhân viên giao báo bình thường"
+                              : "Lúc thu hồi: chưa ghi nhận"}
+                          </p>
+                          {observation ? (
+                            <div className="mt-2 space-y-1 text-[11px] text-slate-700">
+                              {observation.visibleDamage ? <p>• Có hư hỏng nhìn thấy</p> : null}
+                              {observation.accessoryObservations.map((text, index) => (
+                                <p key={`${text}-${index}`}>• {text}</p>
+                              ))}
+                              {observation.notes ? <p>Ghi chú: {observation.notes}</p> : null}
+                              {observation.observedAt ? (
+                                <p className="text-slate-500">Lúc {dateTime(observation.observedAt)}</p>
+                              ) : null}
+                              <ReturnEvidenceGallery
+                                ids={observation.evidenceIds}
+                                label="Ảnh giao hàng chụp"
+                                autoLoad={flagged && unit.stage === "AWAITING_FINAL_INSPECTION"}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-bold text-slate-800">Lúc giao cho khách</p>
+                          {unit.handoverBaseline ? (
+                            <div className="mt-2 space-y-1 text-[11px] text-slate-700">
+                              <p>Tình trạng: {CONDITION_LABELS[unit.handoverBaseline.condition] ?? unit.handoverBaseline.condition}</p>
+                              {unit.handoverBaseline.notes ? <p>Ghi chú: {unit.handoverBaseline.notes}</p> : null}
+                              <ReturnEvidenceGallery ids={unit.handoverBaseline.evidenceIds} label="Ảnh lúc giao" />
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-[11px] text-slate-500">Không có hồ sơ lúc giao.</p>
+                          )}
+                          {unit.handoverReportedIssues?.length ? (
+                            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900">
+                              <p className="font-bold">⚠ Nhân viên giao đã ghi lỗi có sẵn khi giao cho khách</p>
+                              {unit.handoverReportedIssues.map((issue, index) => (
+                                <p key={`${issue.type}-${index}`}>• {issue.description}</p>
+                              ))}
+                              <p className="mt-1 text-amber-800">Lỗi này có trước kỳ thuê: không trừ cọc cho lỗi này.</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {unit.stage === "AWAITING_FINAL_INSPECTION" ? (
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
                           <select
                             value={draft.condition}
-                            onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, condition: event.target.value as Draft["condition"] } }))}
-                            className="h-11 rounded-lg bg-[#edf3ff] px-3 text-xs"
+                            onChange={(event) => updateDraft(unit, { condition: event.target.value as Draft["condition"] })}
+                            className={`h-11 rounded-lg px-3 text-xs ${draft.condition ? "bg-[#edf3ff]" : "border border-orange-300 bg-orange-50"}`}
                           >
+                            {!draft.condition ? <option value="">Chọn tình trạng sau khi kiểm tra</option> : null}
                             <option value="GOOD">Tốt</option><option value="FAIR">Hao mòn</option><option value="DAMAGED">Hư hỏng</option>
                           </select>
                           {draft.condition === "DAMAGED" ? (
                             <select
                               value={draft.ruleId}
-                              onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, ruleId: event.target.value } }))}
+                              onChange={(event) => updateDraft(unit, { ruleId: event.target.value })}
                               className="h-11 rounded-lg bg-red-50 px-3 text-xs"
                             >
-                              <option value="">Chọn mức hư hỏng</option>
+                              <option value="">{productRules.length ? "Chọn mức hư hỏng" : "Sản phẩm chưa có mức hư hỏng"}</option>
                               {productRules.map((rule) => <option key={rule.id} value={rule.id}>{rule.name} ({rule.severity})</option>)}
                             </select>
                           ) : <div />}
                           <input
                             value={draft.notes}
-                            onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, notes: event.target.value } }))}
+                            onChange={(event) => updateDraft(unit, { notes: event.target.value })}
                             placeholder="Ghi chú kiểm định"
                             className="h-11 rounded-lg bg-[#edf3ff] px-3 text-xs"
                           />
-                          <div className="flex h-11 items-center justify-between gap-2 rounded-lg bg-[#edf3ff] px-3 text-xs">
-                            <span className="text-slate-600">
-                              {uploadingUnit === received.unitId
+                          <div className={`flex h-11 items-center justify-between gap-2 rounded-lg px-3 text-xs ${evidenceNeeded && !evidenceCount ? "bg-red-50" : "bg-[#edf3ff]"}`}>
+                            <span className={evidenceNeeded && !evidenceCount ? "font-semibold text-red-700" : "text-slate-600"}>
+                              {uploadingUnit === unit.unitId
                                 ? "Đang tải ảnh..."
-                                : splitIds(draft.evidenceIds).length
-                                  ? `Đã có ${splitIds(draft.evidenceIds).length} ảnh bằng chứng`
-                                  : "Ảnh bằng chứng (thiết bị cần kiểm định kỹ bắt buộc có)"}
+                                : evidenceCount
+                                  ? `Đã có ${evidenceCount} ảnh bằng chứng`
+                                  : evidenceNeeded
+                                    ? "Bắt buộc ít nhất 1 ảnh"
+                                    : "Ảnh bằng chứng (không bắt buộc)"}
                             </span>
                             <span className="flex shrink-0 items-center gap-2">
-                              {splitIds(draft.evidenceIds).length && uploadingUnit !== received.unitId ? (
-                                <button type="button" onClick={() => clearEvidencePhotos(received.unitId)} className="text-slate-500 hover:text-red-600">
+                              {evidenceCount && uploadingUnit !== unit.unitId ? (
+                                <button type="button" onClick={() => updateDraft(unit, { evidenceIds: "" })} className="text-slate-500 hover:text-red-600">
                                   Xóa
                                 </button>
                               ) : null}
@@ -544,7 +696,7 @@ export function StaffReturnsInspection() {
                                   multiple
                                   className="hidden"
                                   onChange={(event) => {
-                                    void addEvidencePhotos(received.unitId, event.target.files);
+                                    void addEvidencePhotos(unit, event.target.files);
                                     event.target.value = "";
                                   }}
                                 />
@@ -552,7 +704,28 @@ export function StaffReturnsInspection() {
                             </span>
                           </div>
                         </div>
-                      ) : inspection.final.outcome === "NORMAL" && unit?.unitStatus === "CLEANING" ? (
+                      ) : null}
+
+                      {unit.finalInspection ? (
+                        <div className="mt-4 rounded-lg bg-slate-50 p-3 text-[11px] text-slate-700">
+                          <p className="font-semibold">
+                            Kiểm định cuối: {FINAL_OUTCOME_LABELS[unit.finalInspection.outcome] ?? unit.finalInspection.outcome}
+                          </p>
+                          {unit.finalInspection.findings.map((finding) => (
+                            <p key={finding.ruleId}>
+                              • {ruleName.get(finding.ruleId) ?? "Mức hư hỏng"} × {finding.quantity}: {money(finding.amount)}
+                            </p>
+                          ))}
+                          {unit.finalInspection.notes ? <p>Ghi chú: {unit.finalInspection.notes}</p> : null}
+                          {unit.deposit && (unit.deposit.deductionAmount > 0 || unit.deposit.refundAmount > 0) ? (
+                            <p>
+                              Cọc: trừ {money(unit.deposit.deductionAmount)} · hoàn {money(unit.deposit.refundAmount)}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {unit.stage === "WAITING_CLEANING" && unit.unitStatus === "CLEANING" && unit.finalInspection ? (
                         <div className="mt-4 space-y-3">
                           {needsGrade ? (
                             <div className="rounded-lg border border-slate-200 p-3">
@@ -563,9 +736,9 @@ export function StaffReturnsInspection() {
                                 <label className="flex items-center gap-2">
                                   <input
                                     type="radio"
-                                    name={`grade-${received.unitId}`}
+                                    name={`grade-${unit.unitId}`}
                                     checked={gradeDraft.decision === "KEEP"}
-                                    onChange={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, decision: "KEEP" } }))}
+                                    onChange={() => setGradeDrafts((current) => ({ ...current, [unit.unitId]: { ...gradeDraft, decision: "KEEP" } }))}
                                   />
                                   Giữ hạng
                                 </label>
@@ -573,9 +746,9 @@ export function StaffReturnsInspection() {
                                   <label className="flex items-center gap-2">
                                     <input
                                       type="radio"
-                                      name={`grade-${received.unitId}`}
+                                      name={`grade-${unit.unitId}`}
                                       checked={gradeDraft.decision === "DOWNGRADE"}
-                                      onChange={() => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, decision: "DOWNGRADE" } }))}
+                                      onChange={() => setGradeDrafts((current) => ({ ...current, [unit.unitId]: { ...gradeDraft, decision: "DOWNGRADE" } }))}
                                     />
                                     Hạ xuống &quot;Sử dụng tốt&quot;
                                   </label>
@@ -584,7 +757,7 @@ export function StaffReturnsInspection() {
                               {gradeDraft.decision === "DOWNGRADE" ? (
                                 <textarea
                                   value={gradeDraft.reason}
-                                  onChange={(event) => setGradeDrafts((current) => ({ ...current, [received.unitId]: { ...gradeDraft, reason: event.target.value } }))}
+                                  onChange={(event) => setGradeDrafts((current) => ({ ...current, [unit.unitId]: { ...gradeDraft, reason: event.target.value } }))}
                                   placeholder="Lý do hạ hạng (bắt buộc, tối thiểu 3 ký tự)"
                                   className="mt-2 min-h-16 w-full rounded-lg border border-slate-200 p-3 text-xs"
                                 />
@@ -594,12 +767,12 @@ export function StaffReturnsInspection() {
                           ) : null}
                           <button
                             type="button"
-                            disabled={busy || (needsGrade && downgradeReasonMissing)}
+                            disabled={busy || (needsGrade && downgradeReasonMissing) || unit.unitVersion === null}
                             onClick={() => void markUnitReady({
-                              unitId: received.unitId,
-                              assetCode: received.assetCode,
-                              inspectionId: inspection.final!.id,
-                              expectedVersion: unit.unitVersion,
+                              unitId: unit.unitId,
+                              assetCode: unit.assetCode ?? unit.unitId,
+                              inspectionId: unit.finalInspection!.id,
+                              expectedVersion: unit.unitVersion!,
                               needsGrade,
                             })}
                             className="rounded-lg bg-[#125238] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
@@ -607,13 +780,23 @@ export function StaffReturnsInspection() {
                             Đã vệ sinh & đủ phụ kiện — sẵn sàng cho thuê
                           </button>
                         </div>
-                      ) : inspection.final.outcome === "NORMAL" && unit?.unitStatus === "AVAILABLE" ? (
-                        <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">✓ Thiết bị đã vệ sinh và sẵn sàng cho thuê.</p>
-                      ) : inspection.final.outcome === "NORMAL" ? (
+                      ) : unit.stage === "WAITING_CLEANING" ? (
                         <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Đạt kiểm định, đang chờ chuyển sang vệ sinh.</p>
-                      ) : (
-                        <p className="mt-4 rounded-lg bg-orange-50 p-3 text-xs text-orange-800">Thiết bị có vấn đề, đang chờ Admin xử lý ngoại lệ và quyết toán cọc.</p>
-                      )}
+                      ) : unit.stage === "AWAITING_ADMIN" ? (
+                        <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                          Thiết bị có vấn đề, đang chờ Admin xử lý ngoại lệ và quyết toán cọc
+                          {unit.exceptionCase ? ` (hồ sơ ${CASE_STATUS_LABELS[unit.exceptionCase.status] ?? unit.exceptionCase.status})` : ""}.
+                          Kho không cần thao tác thêm; thiết bị tự chuyển sang hư hỏng khi quyết toán xong.
+                        </p>
+                      ) : unit.stage === "READY" ? (
+                        <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">✓ Thiết bị đã vệ sinh và sẵn sàng cho thuê.</p>
+                      ) : unit.stage === "CLOSED_DAMAGED" ? (
+                        <p className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800">Cọc đã quyết toán; thiết bị đã chuyển sang hư hỏng để sửa chữa.</p>
+                      ) : unit.stage === "MISSING" || unit.stage === "CLOSED_LOST" ? (
+                        <p className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800">Thiết bị chưa về kho; được xử lý trong hồ sơ thất lạc của Admin.</p>
+                      ) : unit.stage === "AWAITING_RECEIPT" ? (
+                        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Đang chờ kho xác nhận thực nhận ở phía trên.</p>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -622,7 +805,7 @@ export function StaffReturnsInspection() {
                   <button
                     type="button"
                     disabled={busy || Boolean(uploadingUnit) || detail.status !== "INVENTORY_RECEIVED"}
-                    onClick={() => void run(inspectPendingUnits, "Đã ghi kết quả kiểm định cuối; các món đạt được chuyển sang vệ sinh.")}
+                    onClick={() => void run(inspectPendingUnits, "Đã ghi kết quả kiểm định cuối. Món đạt chuyển sang chờ vệ sinh; món có vấn đề chuyển cho Admin xử lý.")}
                     className="w-full rounded-xl bg-[#125238] px-5 py-4 text-sm font-bold text-white disabled:opacity-50"
                   >
                     {busy ? "Đang xử lý..." : `Hoàn tất kiểm định cuối (${pendingInspection.length} thiết bị)`}

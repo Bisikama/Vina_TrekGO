@@ -36,6 +36,11 @@ const navigation = [
     icon: "return",
   },
   {
+    href: "/staff/early-returns",
+    label: "Lịch trả đồ sớm",
+    icon: "calendar",
+  },
+  {
     href: "/staff/gear-catalog",
     label: "Danh mục đồ cá nhân",
     icon: "badge",

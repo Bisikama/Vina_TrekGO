@@ -30,7 +30,13 @@ const TABS: Array<{ value: AdminEarlyReturnFilter; label: string }> = [
   { value: "CONFIRMED", label: "Đã xác nhận" },
 ];
 
-export function AdminEarlyReturns() {
+/**
+ * Danh sách yêu cầu trả đồ sớm để xác nhận / từ chối lịch.
+ * Dùng chung cho Admin và nhân viên kho: `audience` quyết định link đơn và lời nhắc sau khi xác nhận.
+ */
+export function AdminEarlyReturns({ audience = "admin" }: { audience?: "admin" | "staff" } = {}) {
+  const orderHref = (orderId: string) =>
+    audience === "staff" ? `/staff/orders/${orderId}` : `/admin/rental-orders/${orderId}`;
   const [filter, setFilter] = useState<AdminEarlyReturnFilter>("PENDING");
   const [items, setItems] = useState<AdminEarlyReturn[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +144,7 @@ export function AdminEarlyReturns() {
               <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-[#E5E7EB] p-3">
                 <div className="min-w-0 space-y-1 text-sm">
                   <p className="font-semibold text-[#1F2937]">
-                    <Link className="underline-offset-2 hover:underline" href={`/admin/rental-orders/${item.orderId}`}>
+                    <Link className="underline-offset-2 hover:underline" href={orderHref(item.orderId)}>
                       Đơn {orderCode(item.orderId)}
                     </Link>{" "}
                     · hẹn <span className="tabular-nums">{dateTime(slotAt)}</span>
@@ -196,7 +202,10 @@ export function AdminEarlyReturns() {
         title="Xác nhận lịch trả đồ sớm?"
         description={
           confirming
-            ? `Task thu hồi của đơn ${orderCode(confirming.orderId)} sẽ được dời tới ${dateTime(confirming.requestedSlotAt)}. Hãy phân công nhân viên ở danh sách việc bên dưới.`
+            ? `Task thu hồi của đơn ${orderCode(confirming.orderId)} sẽ được dời tới ${dateTime(confirming.requestedSlotAt)}. ` +
+              (audience === "staff"
+                ? "Nhân viên giao hàng sẽ thấy giờ hẹn mới trên task thu hồi. Phí thuê và tiền cọc không đổi."
+                : "Hãy phân công nhân viên ở danh sách việc bên dưới.")
             : ""
         }
         confirmLabel="Xác nhận"

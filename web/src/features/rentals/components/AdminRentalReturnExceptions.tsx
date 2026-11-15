@@ -724,6 +724,25 @@ export function AdminRentalReturnExceptions() {
                   />
                 )}
 
+                {detail.handoverReportedIssues &&
+                (detail.handoverReportedIssues.unit.length || detail.handoverReportedIssues.orderLevel.length) ? (
+                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p className="font-medium">⚠ Nhân viên giao đã ghi lỗi có sẵn khi giao đồ cho khách</p>
+                    {detail.handoverReportedIssues.unit.map((issue, index) => (
+                      <p key={`unit-${index}`} className="mt-1">• {issue.description}</p>
+                    ))}
+                    {detail.handoverReportedIssues.orderLevel.map((issue, index) => (
+                      <p key={`order-${index}`} className="mt-1">• (Cả đơn) {issue.description}</p>
+                    ))}
+                    <p className="mt-2 text-xs text-amber-800">
+                      Lỗi có trước kỳ thuê: đối chiếu với kết quả kiểm định, không trừ cọc cho lỗi này.
+                      {detail.handoverReportedIssues.handedOverAt
+                        ? ` Giao lúc ${formatDateTime(detail.handoverReportedIssues.handedOverAt)}.`
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
+
                 {detail.assessment ? (
                   <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
                     <p className="font-medium text-slate-800">

@@ -75,13 +75,14 @@ export async function cancelEarlyReturn(request: EarlyReturn, key?: string) {
   );
   return unwrap<EarlyReturn>(response.data);
 }
+// Route staff/... cho cả nhân viên kho và Admin (backend cho phép cả hai vai trò).
 export async function listEarlyReturns(status: AdminEarlyReturnFilter = "PENDING") {
-  const response = await apiClient.get("/api/v1/admin/rental-early-returns", { params: { status } });
+  const response = await apiClient.get("/api/v1/staff/rental-early-returns", { params: { status } });
   return unwrap<AdminEarlyReturn[]>(response.data);
 }
 export async function confirmEarlyReturn(request: EarlyReturn, key?: string) {
   const response = await apiClient.post(
-    `/api/v1/admin/rental-early-returns/${encodeURIComponent(request.id)}/confirm`,
+    `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/confirm`,
     { expectedVersion: request.version },
     { headers: idempotency(key) },
   );
@@ -89,7 +90,7 @@ export async function confirmEarlyReturn(request: EarlyReturn, key?: string) {
 }
 export async function rejectEarlyReturn(request: EarlyReturn, reason: string, key?: string) {
   const response = await apiClient.post(
-    `/api/v1/admin/rental-early-returns/${encodeURIComponent(request.id)}/reject`,
+    `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/reject`,
     { expectedVersion: request.version, reason },
     { headers: idempotency(key) },
   );

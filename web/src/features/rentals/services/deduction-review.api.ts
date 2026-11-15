@@ -25,7 +25,8 @@ export type CannotSubmitReviewReason =
   | "EVIDENCE_NOT_ACCESSIBLE"
   | "EVIDENCE_ACCESS_INTERRUPTED"
   | "USER_REVIEW_WINDOW_EXPIRED"
-  | "SETTLEMENT_ALREADY_STARTED";
+  | "SETTLEMENT_ALREADY_STARTED"
+  | "DEDUCTION_ALREADY_ACCEPTED";
 
 export type RentalAssessmentItem = {
   inspectionId: string;
@@ -159,6 +160,29 @@ export async function submitAssessmentReview(
   return unwrap(response.data);
 }
 
+export type AssessmentAcceptanceResult = {
+  caseId: string;
+  assessmentId: string;
+  acceptedAt: string;
+  /** SETTLED: đã quyết toán ngay; DEFERRED: hệ thống sẽ tự quyết toán trong ít phút. */
+  settlementStatus: "SETTLED" | "DEFERRED";
+  settlement: { status: string; deductionAmount: number; refundAmount: number } | null;
+};
+
+/** RB-API-617: khách đồng ý khoản trừ, đóng thời hạn phản hồi và quyết toán cọc ngay. */
+export async function acceptAssessmentDeduction(
+  orderId: string,
+  assessmentId: string,
+  idempotencyKey: string,
+) {
+  const response = await apiClient.post<Envelope<AssessmentAcceptanceResult>>(
+    `/api/v1/rental-orders/${encodeURIComponent(orderId)}/assessment-acceptances`,
+    { assessmentId },
+    { headers: { "Idempotency-Key": idempotencyKey } },
+  );
+  return unwrap(response.data);
+}
+
 export async function reportEvidenceAccessProblem(
   orderId: string,
   assessmentId: string,
@@ -194,5 +218,6 @@ export const reviewReasonMessages: Record<string, string> = {
   EVIDENCE_ACCESS_INTERRUPTED: "Đang khôi phục quyền xem chứng cứ. Thời hạn phản hồi tạm dừng.",
   USER_REVIEW_WINDOW_EXPIRED: "Đã hết thời hạn phản đối khoản trừ.",
   SETTLEMENT_ALREADY_STARTED: "Khoản cọc đã vào quyết toán, không thể phản đối. Vui lòng liên hệ hỗ trợ.",
+  DEDUCTION_ALREADY_ACCEPTED: "Bạn đã đồng ý khoản trừ này. Khoản cọc còn lại đang được quyết toán.",
   IDEMPOTENCY_KEY_REUSED: "Yêu cầu bị trùng với một lần gửi khác. Vui lòng tải lại trang.",
 };
