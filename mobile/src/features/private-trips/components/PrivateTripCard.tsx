@@ -134,21 +134,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   paxText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
-    lineHeight: 22,
+    lineHeight: 23,
     marginBottom: 6,
   },
   description: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 10,
   },
   metaRow: {
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
   },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
   },
   slotTagText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#B45309",
   },
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.surfaceContainer,
   },
   actionText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },

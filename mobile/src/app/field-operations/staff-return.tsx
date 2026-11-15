@@ -786,10 +786,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     marginBottom: 16,
   },
-  taskId: { color: Colors.primary, fontSize: 11, fontWeight: "600" },
+  taskId: { color: Colors.primary, fontSize: 13, fontWeight: "600" },
   title: { color: "#fff", fontSize: 22, fontWeight: "600", marginTop: 7 },
-  meta: { color: "#bed0bb", fontSize: 13, marginTop: 8 },
-  tripTime: { color: "#dce9d8", fontSize: 11, lineHeight: 16, marginTop: 5 },
+  meta: { color: "#bed0bb", fontSize: 14, marginTop: 8 },
+  tripTime: { color: "#dce9d8", fontSize: 13, lineHeight: 19, marginTop: 5 },
   steps: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -805,10 +805,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepDone: { backgroundColor: Colors.primaryDark },
-  stepNumber: { color: Colors.onSurfaceMuted, fontWeight: "600", fontSize: 12 },
+  stepNumber: { color: Colors.onSurfaceMuted, fontWeight: "600", fontSize: 14 },
   stepLabel: {
     color: Colors.onSurfaceMuted,
-    fontSize: 10,
+    fontSize: 12,
     textAlign: "center",
     marginTop: 6,
   },
@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
   },
   section: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     letterSpacing: 0.8,
     marginBottom: 10,
@@ -858,8 +858,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 6,
   },
-  checkLabel: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
-  assetCode: { color: Colors.onSurfaceMuted, fontSize: 11, marginTop: 3 },
+  checkLabel: { color: Colors.ink, fontSize: 15, fontWeight: "600" },
+  assetCode: { color: Colors.onSurfaceMuted, fontSize: 13, marginTop: 3 },
   statusRow: { flexDirection: "row", gap: 6, marginTop: 8 },
   statusButton: {
     borderWidth: 1,
@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
     borderColor: Colors.primaryDark,
   },
-  statusText: { color: Colors.ink, fontSize: 10, fontWeight: "600" },
+  statusText: { color: Colors.ink, fontSize: 12, fontWeight: "600" },
   statusTextSelected: { color: "#fff" },
   noteInput: {
     borderWidth: 1,
@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 15,
   },
-  noticeText: { color: Colors.body, fontSize: 12 },
+  noticeText: { color: Colors.body, fontSize: 14 },
   cardTitle: {
     color: Colors.ink,
     fontSize: 17,
@@ -897,7 +897,7 @@ const styles = StyleSheet.create({
   },
   muted: {
     color: Colors.onSurfaceMuted,
-    fontSize: 12,
+    fontSize: 14,
     marginTop: 5,
     textAlign: "center",
   },
@@ -908,7 +908,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
-  errorText: { color: Colors.error, fontSize: 12 },
+  errorText: { color: Colors.error, fontSize: 14 },
   primary: {
     flexDirection: "row",
     alignItems: "center",
@@ -925,6 +925,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   disabled: { opacity: 0.55 },
-  primaryText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+  primaryText: { color: "#fff", fontWeight: "600", fontSize: 15 },
   emptyTitle: { color: Colors.ink, fontSize: 18, fontWeight: "600" },
 });

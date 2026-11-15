@@ -188,8 +188,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  title: { color: Colors.ink, fontSize: 12, fontWeight: "600" },
-  count: { color: Colors.onSurfaceVariant, fontSize: 11 },
+  title: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
+  count: { color: Colors.onSurfaceVariant, fontSize: 13 },
   countWarn: { color: Colors.error },
   row: { gap: 8, paddingTop: 6, paddingRight: 6 },
   thumb: { width: TILE, height: TILE },
@@ -218,8 +218,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   overlayError: { backgroundColor: "rgba(185,28,28,0.6)" },
-  overlayText: { color: "#fff", fontSize: 10, fontWeight: "600", marginTop: 2 },
-  videoDuration: { color: "#fff", fontSize: 10, marginTop: 2 },
+  overlayText: { color: "#fff", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  videoDuration: { color: "#fff", fontSize: 12, marginTop: 2 },
   removeBadge: {
     position: "absolute",
     top: -6,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: "#fafcf7",
   },
-  addText: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
+  addText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },
   disabled: { opacity: 0.5 },
   viewer: {
     flex: 1,
@@ -263,5 +263,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.15)",
   },
-  viewerButtonText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  viewerButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 });

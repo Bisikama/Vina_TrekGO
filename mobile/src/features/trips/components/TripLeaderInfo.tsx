@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     padding: 16,
     ...Shadows.card,
   },
-  sectionTitle: { fontSize: 13, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
   leaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   leaderAvatar: {
     width: 44,
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   },
   leaderAvatarText: { fontSize: 18, fontWeight: "900", color: Colors.primaryDark },
   leaderInfo: { flex: 1, gap: 2 },
-  leaderName: { fontSize: 14, fontWeight: "800", color: Colors.onSurface },
+  leaderName: { fontSize: 15, fontWeight: "800", color: Colors.onSurface },
   leaderBadgeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  leaderBadgeText: { fontSize: 11, color: Colors.primaryDark, fontWeight: "700" },
+  leaderBadgeText: { fontSize: 13, color: Colors.primaryDark, fontWeight: "700" },
 });

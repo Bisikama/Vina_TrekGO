@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   distanceText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '900',
   },
   distanceTextDark: {
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   legendLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
   },
   legendLabelDark: {
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyText: {
-    fontSize: 11,
+    fontSize: 13,
     textAlign: 'center',
   },
   emptyTextDark: {

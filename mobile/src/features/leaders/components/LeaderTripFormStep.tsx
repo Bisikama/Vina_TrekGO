@@ -1006,7 +1006,7 @@ export function LeaderTripFormStep({
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, backgroundColor: "#f5f4ee", padding: 10, borderRadius: 10 }}>
             <Ionicons name="information-circle-outline" size={16} color="#47672d" />
-            <Text style={{ fontSize: 12, color: "#454745", flex: 1, lineHeight: 17 }}>
+            <Text style={{ fontSize: 14, color: "#454745", flex: 1, lineHeight: 20 }}>
               Ở Bước 3, bạn sẽ dùng Bảng kê chi phí thực tế & Bộ mô phỏng tài chính để tính điểm hòa vốn và chốt giá chính thức.
             </Text>
           </View>
@@ -1094,13 +1094,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#0e0f0c",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
   headerSubtitle: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.8,
   },
@@ -1115,7 +1115,7 @@ const styles = StyleSheet.create({
   },
   badgeVfrsText: {
     color: "#002113",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   progressContainer: {
@@ -1146,18 +1146,18 @@ const styles = StyleSheet.create({
   },
   progressStepNum: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   progressStepText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.6,
   },
   progressPercent: {
     color: "#404943",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   progressBarTrack: {
@@ -1186,14 +1186,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     color: "#ba1a1a",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     marginBottom: 3,
   },
   errorText: {
     color: "#93000a",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   retryBtn: {
     flexDirection: "row",
@@ -1208,7 +1208,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   gallerySection: {
@@ -1232,7 +1232,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
   },
   muted: {
     color: "#707972",
-    fontSize: 12,
+    fontSize: 14,
   },
   dropdownTrigger: {
     flexDirection: "row",
@@ -1285,7 +1285,7 @@ const styles = StyleSheet.create({
   },
   dropdownSelectedText: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   dropdownPlaceholderText: {
@@ -1294,7 +1294,7 @@ const styles = StyleSheet.create({
   },
   dropdownSubText: {
     color: "#404943",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
   },
   dropdownMenu: {
@@ -1326,7 +1326,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenuItemText: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   dropdownMenuItemTextSelected: {
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenuItemSubText: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
   },
   disabledPromptBox: {
@@ -1349,7 +1349,7 @@ const styles = StyleSheet.create({
   },
   disabledPromptText: {
     color: "#707972",
-    fontSize: 12,
+    fontSize: 14,
     flex: 1,
   },
   destList: {
@@ -1382,7 +1382,7 @@ const styles = StyleSheet.create({
   },
   destName: {
     color: "#0e0f0c",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
   destNameSelected: {
@@ -1391,7 +1391,7 @@ const styles = StyleSheet.create({
   },
   destMeta: {
     color: "#404943",
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
   },
   emptyCard: {
@@ -1401,13 +1401,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     textAlign: "center",
   },
   emptySubtext: {
     color: "#707972",
-    fontSize: 11,
+    fontSize: 13,
     textAlign: "center",
     maxWidth: 260,
   },
@@ -1430,13 +1430,13 @@ const styles = StyleSheet.create({
   },
   checkpointSectionTitle: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
   checkpointCountBadge: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   checkpointList: {
@@ -1473,12 +1473,12 @@ const styles = StyleSheet.create({
   },
   cpPillText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   cpName: {
     color: "#404943",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   cpNameSelected: {
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
   },
   cpCoords: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
   },
   cpDefaultBadge: {
@@ -1507,7 +1507,7 @@ const styles = StyleSheet.create({
   },
   cpDefaultBadgeText: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   cpDefaultBadgeTextActive: {
@@ -1533,7 +1533,7 @@ const styles = StyleSheet.create({
   },
   map3DTitle: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -1548,7 +1548,7 @@ const styles = StyleSheet.create({
   },
   map3DBadgeText: {
     color: "#002113",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   map3DContainer: {
@@ -1560,7 +1560,7 @@ const styles = StyleSheet.create({
   },
   map3DNote: {
     color: "#707972",
-    fontSize: 11,
+    fontSize: 13,
     fontStyle: "italic",
     marginTop: 6,
     textAlign: "center",
@@ -1576,12 +1576,12 @@ const styles = StyleSheet.create({
   },
   charCountText: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   inputLabel: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     marginBottom: 6,
   },
@@ -1591,7 +1591,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
     borderWidth: 1,
     borderColor: "transparent",
@@ -1606,7 +1606,7 @@ const styles = StyleSheet.create({
   },
   inputHint: {
     color: "#707972",
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 4,
   },
   tripTypeBox: {
@@ -1621,12 +1621,12 @@ const styles = StyleSheet.create({
   },
   tripTypeTitle: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   tripTypeSub: {
     color: "#404943",
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
   },
   tripTypeBadge: {
@@ -1637,12 +1637,12 @@ const styles = StyleSheet.create({
   },
   tripTypeBadgeText: {
     color: "#002113",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   fieldError: {
     color: "#ba1a1a",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     marginTop: 4,
   },
@@ -1669,7 +1669,7 @@ const styles = StyleSheet.create({
   },
   durationPillText: {
     color: "#002113",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   presetsRow: {
@@ -1691,13 +1691,13 @@ const styles = StyleSheet.create({
   },
   presetChipText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   presetDurationBadge: {
     backgroundColor: "#e6eeff",
     color: "#0e0f0c",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     paddingHorizontal: 4,
     paddingVertical: 1,
@@ -1712,7 +1712,7 @@ const styles = StyleSheet.create({
   },
   dateSubLabel: {
     color: "#404943",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     marginBottom: 4,
   },
@@ -1740,8 +1740,8 @@ const styles = StyleSheet.create({
   },
   dateValueText: {
     fontFamily: "Roboto",
-    fontSize: 14,
-    lineHeight: 14 * 1.5,
+    fontSize: 15,
+    lineHeight: 15 * 1.5,
     fontWeight: "700",
     color: "#0e0f0c",
     flex: 1,
@@ -1753,22 +1753,22 @@ const styles = StyleSheet.create({
   dayOfWeekText: {
     fontFamily: "Roboto",
     color: "#0e0f0c",
-    fontSize: 10,
-    lineHeight: 10 * 1.5,
+    fontSize: 12,
+    lineHeight: 13 * 1.5,
     fontWeight: "600",
     marginTop: 4,
   },
   dayOfWeekSubHint: {
     fontFamily: "Roboto",
     color: "#707972",
-    fontSize: 10,
-    lineHeight: 10 * 1.5,
+    fontSize: 12,
+    lineHeight: 13 * 1.5,
     marginTop: 4,
     fontStyle: "italic",
   },
   dateRulesHint: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 8,
     fontStyle: "italic",
   },
@@ -1791,7 +1791,7 @@ const styles = StyleSheet.create({
   },
   pickupText: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   pickupTextSelected: {
@@ -1805,7 +1805,7 @@ const styles = StyleSheet.create({
   },
   slotCapTag: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   stepperContainer: {
@@ -1838,13 +1838,13 @@ const styles = StyleSheet.create({
   },
   stepperSub: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
   },
   slotRuleHint: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 6,
     fontStyle: "italic",
   },
@@ -1865,12 +1865,12 @@ const styles = StyleSheet.create({
   },
   priceSuffix: {
     color: "#707972",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   priceFormatted: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     marginTop: 4,
   },
@@ -1890,7 +1890,7 @@ const styles = StyleSheet.create({
   },
   timePresetHint: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
   },
   timeRow: {
     flexDirection: "row",
@@ -1906,7 +1906,7 @@ const styles = StyleSheet.create({
   },
   timePeriodBadgeText: {
     color: "#002113",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   clearRegOpenBtn: {
@@ -1933,7 +1933,7 @@ const styles = StyleSheet.create({
   },
   regOpenChipText: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   regOpenChipTextActive: {
@@ -1953,7 +1953,7 @@ const styles = StyleSheet.create({
   },
   timeInputText: {
     color: "#0e0f0c",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     padding: 0,
     minWidth: 50,
@@ -1977,7 +1977,7 @@ const styles = StyleSheet.create({
   },
   timeChipText: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   timeChipTextActive: {
@@ -2000,14 +2000,14 @@ const styles = StyleSheet.create({
   },
   bookingGateTitle: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   bookingGateSub: {
     color: "#404943",
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   gatePresetsRow: {
     flexDirection: "row",
@@ -2031,7 +2031,7 @@ const styles = StyleSheet.create({
   },
   gatePresetBtnText: {
     color: "#404943",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -2047,7 +2047,7 @@ const styles = StyleSheet.create({
   },
   gateInputLabel: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     marginBottom: 4,
   },
@@ -2069,21 +2069,21 @@ const styles = StyleSheet.create({
   gateInputText: {
     flex: 1,
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     padding: 0,
   },
   gateDeadlineText: {
     flex: 1,
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   gateInputHint: {
     color: "#707972",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   vfrsRuleBox: {
     flexDirection: "row",
@@ -2098,8 +2098,8 @@ const styles = StyleSheet.create({
   vfrsRuleText: {
     flex: 1,
     color: "#92400e",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   rulesCard: {
     backgroundColor: "#f8fafc",
@@ -2117,7 +2117,7 @@ const styles = StyleSheet.create({
   },
   rulesCardTitle: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   ruleItemRow: {
@@ -2129,7 +2129,7 @@ const styles = StyleSheet.create({
   ruleItemText: {
     flex: 1,
     color: "#475569",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

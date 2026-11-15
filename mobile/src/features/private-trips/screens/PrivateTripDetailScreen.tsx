@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     textAlign: "center",
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
   },
   errorTitle: {
@@ -461,10 +461,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
   },
   retryButton: {
     paddingHorizontal: 20,
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   roomButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEE2E2",
   },
   cancelTripButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#DC2626",
   },
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainerHighest,
   },
   editTripButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     borderColor: "#A3E635",
   },
   shareCodeButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#054D28",
   },

@@ -843,12 +843,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   headerSubtitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#707972",
     marginTop: 1,
@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
   },
   draftTopBtnText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   stepperContainer: {
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
   },
   stepperItemTextDone: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     flex: 1,
   },
@@ -915,12 +915,12 @@ const styles = StyleSheet.create({
   },
   activeStepBadgeText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   stepperItemTextActive: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     flex: 1,
   },
@@ -940,7 +940,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   readinessTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -956,14 +956,14 @@ const styles = StyleSheet.create({
   },
   readinessPassTitle: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   readinessPassSub: {
     color: "#374151",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   readinessWarnBox: {
     flexDirection: "row",
@@ -983,19 +983,19 @@ const styles = StyleSheet.create({
   },
   warnBadgeText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   readinessWarnTitle: {
     color: "#b45309",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   readinessWarnSub: {
     color: "#92400e",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   checklistWrap: {
     marginTop: 10,
@@ -1010,10 +1010,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   checkItemText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#475569",
     flex: 1,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   sectionCard: {
     backgroundColor: "#ffffff",
@@ -1031,13 +1031,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionEyebrow: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#0e0f0c",
     letterSpacing: 0.5,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     marginTop: 2,
@@ -1055,7 +1055,7 @@ const styles = StyleSheet.create({
   },
   editStepBtnText: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   destSummaryRow: {
@@ -1084,17 +1084,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   gradeBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#92400e",
   },
   destCodeText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     fontWeight: "600",
   },
   tripH1Title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -1105,7 +1105,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   vfrsTagText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#0e0f0c",
   },
@@ -1124,12 +1124,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   itineraryTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   itinerarySub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     marginTop: 1,
   },
@@ -1145,7 +1145,7 @@ const styles = StyleSheet.create({
   },
   templateActionBtnText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   saveDescActionBtn: {
@@ -1156,19 +1156,19 @@ const styles = StyleSheet.create({
   },
   saveDescActionBtnText: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   rentalTagsSection: {
     marginBottom: 10,
   },
   rentalTagsTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0e0f0c",
   },
   rentalTagsSub: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#707972",
     marginBottom: 6,
   },
@@ -1186,7 +1186,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
   },
   rentalTagChipText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#334155",
     fontWeight: "600",
   },
@@ -1208,7 +1208,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toolIcon: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#475569",
   },
@@ -1225,7 +1225,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#9fe870",
   },
   editorTabText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#64748b",
   },
@@ -1241,9 +1241,9 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     padding: 10,
     minHeight: 120,
-    fontSize: 11,
+    fontSize: 13,
     color: "#0e0f0c",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   descPreviewArea: {
     backgroundColor: "#ffffff",
@@ -1255,9 +1255,9 @@ const styles = StyleSheet.create({
     minHeight: 120,
   },
   descPreviewText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#334155",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   editorTipBox: {
     marginTop: 8,
@@ -1268,9 +1268,9 @@ const styles = StyleSheet.create({
     borderColor: "#fde68a",
   },
   editorTipText: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#92400e",
-    lineHeight: 13,
+    lineHeight: 16,
   },
   threeInfoGrid: {
     flexDirection: "row",
@@ -1286,24 +1286,24 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   infoColLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#707972",
   },
   infoColVal: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#0e0f0c",
     marginTop: 2,
   },
   infoColSub: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#64748b",
     marginTop: 2,
   },
   pickupFooterText: {
     marginTop: 10,
-    fontSize: 10,
+    fontSize: 12,
     color: "#475569",
   },
   trailBanner: {
@@ -1318,12 +1318,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   trailBannerTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   trailBannerSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#64748b",
     marginTop: 2,
   },
@@ -1338,7 +1338,7 @@ const styles = StyleSheet.create({
   },
   verifiedBadgeDarkText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   fourStatsRow: {
@@ -1356,12 +1356,12 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   fourStatLabel: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#707972",
     fontWeight: "600",
   },
   fourStatVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     marginTop: 2,
@@ -1380,7 +1380,7 @@ const styles = StyleSheet.create({
   },
   countBadgePillText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   emptyCpNotice: {
@@ -1392,7 +1392,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   emptyCpNoticeText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
     flex: 1,
   },
@@ -1419,7 +1419,7 @@ const styles = StyleSheet.create({
   },
   cpWebNumText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   cpWebTitleRow: {
@@ -1428,7 +1428,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cpWebName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -1439,17 +1439,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpReqBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#15803d",
   },
   cpWebSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#64748b",
     marginTop: 2,
   },
   currencyNoticeText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     fontWeight: "600",
   },
@@ -1474,12 +1474,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   expSub: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#707972",
   },
   verifiedBadge: {
@@ -1493,7 +1493,7 @@ const styles = StyleSheet.create({
   },
   verifiedBadgeText: {
     color: "#15803d",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   explanationContentBox: {
@@ -1504,9 +1504,9 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
   },
   explanationText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#334155",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   missingExplanationBox: {
     flexDirection: "row",
@@ -1519,15 +1519,15 @@ const styles = StyleSheet.create({
     borderColor: "#fecdd3",
   },
   missingExplanationTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   missingExplanationText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#9f1239",
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   warningBox: {
     flexDirection: "row",
@@ -1541,12 +1541,12 @@ const styles = StyleSheet.create({
     borderColor: "#fed7aa",
   },
   warningTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#c2410c",
   },
   warningText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#9a3412",
     marginTop: 2,
   },
@@ -1562,12 +1562,12 @@ const styles = StyleSheet.create({
     borderColor: "#fecdd3",
   },
   errorTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   errorText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#9f1239",
     marginTop: 2,
   },
@@ -1590,7 +1590,7 @@ const styles = StyleSheet.create({
   },
   publishMainBtnText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -1607,7 +1607,7 @@ const styles = StyleSheet.create({
   },
   saveDraftBottomBtnText: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   backLinkBtn: {
@@ -1616,7 +1616,7 @@ const styles = StyleSheet.create({
   },
   backLinkBtnText: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
 });

@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   infoText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#475569",
   },
   infoHighlight: {
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   actionBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#ffffff",
   },

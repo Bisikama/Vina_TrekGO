@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     padding: 16,
     ...Shadows.card,
   },
-  sectionTitle: { fontSize: 13, fontWeight: "900", color: Colors.onSurface },
+  sectionTitle: { fontSize: 14, fontWeight: "900", color: Colors.onSurface },
   mapSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -66,6 +66,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.surfaceContainerLow,
   },
-  mapToggleText: { fontSize: 11, fontWeight: "700", color: Colors.primaryDark },
+  mapToggleText: { fontSize: 13, fontWeight: "700", color: Colors.primaryDark },
   mapWrapper: { marginTop: 12, borderRadius: Radius.lg, overflow: "hidden" },
 });

@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryDark,
   },
   tabPillText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyTitle: {
@@ -253,11 +253,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   emptySub: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
     marginTop: 6,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 20,
   },
   primaryBtn: {
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
 });

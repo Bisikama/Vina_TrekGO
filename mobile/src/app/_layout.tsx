@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: Colors.onPrimaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
 });

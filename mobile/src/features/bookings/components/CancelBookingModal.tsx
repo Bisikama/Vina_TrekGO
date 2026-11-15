@@ -126,7 +126,7 @@ function CancellationForm({ bookingId, onClose, onSuccess, scope, token }: Cance
           <View style={{ gap: 8 }}>
             {REASONS.map((item) => <Pressable key={item} disabled={locked} onPress={() => setReason(item)} accessibilityRole="button" accessibilityState={{ selected: reason === item, disabled: locked }} style={{ minHeight: 44, justifyContent: 'center', padding: 12, borderRadius: 16, backgroundColor: reason === item ? '#e2f6d5' : '#e8ebe6', opacity: locked ? 0.6 : 1 }}><Text style={s.body}>{item}</Text></Pressable>)}
           </View>
-          <Textarea value={reason} onChangeText={setReason} editable={!locked} maxLength={500} placeholder="Nhập lý do hủy, tối đa 500 ký tự" accessibilityLabel="Lý do hủy đặt chỗ" style={{ fontSize: 16, lineHeight: 24, color: '#0e0f0c' }} containerStyle={{ borderRadius: 12 }} />
+          <Textarea value={reason} onChangeText={setReason} editable={!locked} maxLength={500} placeholder="Nhập lý do hủy, tối đa 500 ký tự" accessibilityLabel="Lý do hủy đặt chỗ" style={{ fontSize: 17, lineHeight: 25, color: '#0e0f0c' }} containerStyle={{ borderRadius: 12 }} />
           <BookingFlowButton label={uncertain ? 'Gửi lại cùng yêu cầu' : 'Xác nhận hủy đặt chỗ'} loading={busy} disabled={loading || !preview?.canCancel || !reason.trim()} onPress={() => void confirm()} fullWidth />
           <BookingFlowButton label="Giữ đặt chỗ / Quay lại" appearance="quiet" disabled={busy} onPress={close} fullWidth />
         </>}

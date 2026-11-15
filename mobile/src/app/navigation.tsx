@@ -875,13 +875,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hudTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
     color: Colors.ink,
     maxWidth: 180,
   },
   hudSubtitle: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     color: Colors.mute,
     letterSpacing: 0.5,
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.ink,
   },
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   accuracyText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.positiveDeep,
   },
@@ -936,7 +936,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   errorNoticeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.negative,
     flex: 1,
@@ -963,7 +963,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   map3DText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: Colors.ink,
   },
@@ -999,7 +999,7 @@ const styles = StyleSheet.create({
     borderColor: '#ffe0b2',
   },
   simPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '900',
     color: '#e65100',
     letterSpacing: 0.5,
@@ -1024,7 +1024,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   mapFollowText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: Colors.ink,
   },
@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   previewSequenceText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: Colors.ink,
   },
@@ -1075,17 +1075,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memberAvatarText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
   },
   previewTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
     color: Colors.ink,
   },
   previewSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.mute,
     marginTop: 2,
     fontWeight: '600',
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   previewActionText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: Colors.primaryDark,
   },
@@ -1126,7 +1126,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   previewLocateBackText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.onPrimary,
   },
@@ -1140,7 +1140,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fed018',
   },
   roleMiniText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     color: Colors.ink,
   },
@@ -1158,7 +1158,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   syncingText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.ink,
   },
@@ -1196,14 +1196,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   syncActionTitle: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 17,
+    lineHeight: 25,
     fontWeight: '700',
     color: Colors.inkDeep,
   },
   syncActionDescription: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     color: Colors.body,
   },
   bottomPanel: {
@@ -1232,7 +1232,7 @@ const styles = StyleSheet.create({
   },
   deviationTextCompact: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.negative,
   },
@@ -1243,7 +1243,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   reconnectBtnTextCompact: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#ffffff',
   },
@@ -1290,7 +1290,7 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   compactStatUnit: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.mute,
   },
@@ -1313,7 +1313,7 @@ const styles = StyleSheet.create({
   },
   quickPillText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.ink,
   },
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   primaryPillText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
     color: Colors.onPrimary,
   },
@@ -1356,7 +1356,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pauseBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     color: Colors.ink,
   },
@@ -1371,7 +1371,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   resumeBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
     color: Colors.onPrimary,
   },
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   finishBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
     color: '#ffffff',
   },

@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceContainerLow,
   },
-  headerTitle: { fontSize: 16, fontWeight: "900", color: Colors.onSurface },
+  headerTitle: { fontSize: 17, fontWeight: "900", color: Colors.onSurface },
   scrollContent: { padding: 16, gap: 12 },
   tripSummary: {
     backgroundColor: Colors.surfaceContainerLowest,
@@ -294,15 +294,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     gap: 4,
   },
-  tripTitle: { fontSize: 15, fontWeight: "800", color: Colors.onSurface },
-  tripMeta: { fontSize: 12, color: Colors.mute },
+  tripTitle: { fontSize: 16, fontWeight: "800", color: Colors.onSurface },
+  tripMeta: { fontSize: 14, color: Colors.mute },
   sectionCard: {
     backgroundColor: Colors.surfaceContainerLowest,
     padding: 14,
     borderRadius: Radius.lg,
     gap: 8,
   },
-  sectionLabel: { fontSize: 9, fontWeight: "900", color: Colors.mute, letterSpacing: 0.5 },
+  sectionLabel: { fontSize: 11, fontWeight: "900", color: Colors.mute, letterSpacing: 0.5 },
   countRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   countBtn: {
     width: 34,
@@ -313,14 +313,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countBtnDisabled: { opacity: 0.4 },
-  countValue: { fontSize: 16, fontWeight: "900", color: Colors.onSurface, minWidth: 24, textAlign: "center" },
-  slotHint: { fontSize: 11, color: Colors.primaryDark, fontWeight: "700", marginLeft: 4 },
+  countValue: { fontSize: 17, fontWeight: "900", color: Colors.onSurface, minWidth: 24, textAlign: "center" },
+  slotHint: { fontSize: 13, color: Colors.primaryDark, fontWeight: "700", marginLeft: 4 },
   input: {
     height: 44,
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceContainerLow,
     paddingHorizontal: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
   },
   priceSummary: {
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 4,
   },
-  priceLabel: { fontSize: 14, fontWeight: "700", color: Colors.onSurface },
+  priceLabel: { fontSize: 15, fontWeight: "700", color: Colors.onSurface },
   priceValue: { fontSize: 18, fontWeight: "900", color: Colors.primaryDark },
   footer: {
     padding: 16,
@@ -347,5 +347,5 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   confirmBtnDisabled: { opacity: 0.6 },
-  confirmBtnText: { fontSize: 14, fontWeight: "800", color: Colors.onPrimary },
+  confirmBtnText: { fontSize: 15, fontWeight: "800", color: Colors.onPrimary },
 });

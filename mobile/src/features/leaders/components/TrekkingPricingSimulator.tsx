@@ -560,11 +560,11 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   liveBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#34d399",
   },
-  headerMeta: { fontSize: 11, color: C.mute, lineHeight: 16 },
+  headerMeta: { fontSize: 13, color: C.mute, lineHeight: 19 },
   headerMetaStrong: { color: "#ffffff", fontWeight: "700" },
 
   control: { marginBottom: 16 },
@@ -576,8 +576,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   controlLabel: { flex: 1, fontSize: 12.5, fontWeight: "700", color: C.text },
-  controlValue: { fontSize: 13, fontWeight: "800", color: C.green },
-  controlValueMute: { color: C.mute, fontWeight: "600", fontSize: 11 },
+  controlValue: { fontSize: 14, fontWeight: "800", color: C.green },
+  controlValueMute: { color: C.mute, fontWeight: "600", fontSize: 13 },
   stepRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   stepBtn: {
     width: 34,
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   trackFill: { height: "100%", backgroundColor: C.green, borderRadius: 4 },
   hintRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  hint: { fontSize: 10, color: C.mute },
+  hint: { fontSize: 12, color: C.mute },
 
   priceInputWrap: {
     flexDirection: "row",
@@ -611,12 +611,12 @@ const styles = StyleSheet.create({
   priceInput: {
     flex: 1,
     paddingVertical: 6,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: C.green,
     textAlign: "right",
   },
-  priceUnit: { marginLeft: 4, fontSize: 12, color: C.mute, fontWeight: "700" },
+  priceUnit: { marginLeft: 4, fontSize: 14, color: C.mute, fontWeight: "700" },
   chipRow: { flexDirection: "row", gap: 8 },
   chip: {
     flex: 1,
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#1c2740",
   },
-  chipText: { fontSize: 12, fontWeight: "700", color: "#ffffff" },
+  chipText: { fontSize: 14, fontWeight: "700", color: "#ffffff" },
 
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   kpi: {
@@ -638,10 +638,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  kpiLabel: { fontSize: 11, color: C.mute, marginBottom: 6 },
+  kpiLabel: { fontSize: 13, color: C.mute, marginBottom: 6 },
   kpiValue: { fontSize: 18, fontWeight: "900" },
   kpiSub: { fontSize: 10.5, color: C.mute, marginTop: 4 },
-  kpiAction: { fontSize: 11, color: C.yellow, fontWeight: "700", marginTop: 4 },
+  kpiAction: { fontSize: 13, color: C.yellow, fontWeight: "700", marginTop: 4 },
 
   lossBanner: {
     flexDirection: "row",
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  lossText: { flex: 1, fontSize: 11, color: "#fecdd3", lineHeight: 16 },
+  lossText: { flex: 1, fontSize: 13, color: "#fecdd3", lineHeight: 19 },
 
   tableToggle: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6 },
   tableToggleText: { fontSize: 11.5, color: C.mute, fontWeight: "600" },
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   thRow: { backgroundColor: C.panel },
   trActive: { backgroundColor: "#0c2a22" },
   th: { fontSize: 10.5, fontWeight: "700", color: C.mute },
-  td: { fontSize: 11, color: C.text },
+  td: { fontSize: 13, color: C.text },
   tdBold: { fontWeight: "800" },
   tdActive: { color: "#6ee7b7", fontWeight: "700" },
 
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 8,
   },
-  confirmedText: { fontSize: 12, fontWeight: "800", color: C.green },
+  confirmedText: { fontSize: 14, fontWeight: "800", color: C.green },
   confirmBtn: {
     alignItems: "center",
     justifyContent: "center",
@@ -698,5 +698,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
   },
-  confirmBtnText: { fontSize: 13, fontWeight: "800", color: "#04120c" },
+  confirmBtnText: { fontSize: 14, fontWeight: "800", color: "#04120c" },
 });

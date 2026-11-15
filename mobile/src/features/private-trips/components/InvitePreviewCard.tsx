@@ -241,16 +241,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   invitationHeading: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.onSurfaceVariant,
     letterSpacing: 1,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   hostAvatarText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -318,12 +318,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   hostLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },
   hostName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -344,13 +344,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
     marginBottom: 2,
   },
   detailValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -365,10 +365,10 @@ const styles = StyleSheet.create({
   },
   warningText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "#B45309",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   actionContainer: {
     marginTop: 4,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },

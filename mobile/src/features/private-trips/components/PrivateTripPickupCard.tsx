@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
     textTransform: "uppercase",
@@ -65,12 +65,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   name: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   address: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },

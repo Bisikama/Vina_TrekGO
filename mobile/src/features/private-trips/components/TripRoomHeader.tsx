@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   topRow: {
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
   },
   hostBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#725C00",
     letterSpacing: 0.4,
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   memberBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
     letterSpacing: 0.4,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   timeText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
   },
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   pickupText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
     fontWeight: "600",
   },
@@ -210,12 +210,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   progressLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },
   progressCount: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },

@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.primaryDark,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.7,
   },
@@ -325,8 +325,8 @@ const styles = StyleSheet.create({
   explanationText: {
     flex: 1,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
   },
   centerState: { paddingVertical: 70, alignItems: "center", gap: 12 },
   stateCard: {
@@ -356,8 +356,8 @@ const styles = StyleSheet.create({
     marginTop: 7,
     textAlign: "center",
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
   },
   emptyActions: { width: "100%", marginTop: 18, gap: 9 },
   primaryAction: {
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   listTitle: { color: Colors.onSurface, fontSize: 19, fontWeight: "900" },
-  listCount: { color: Colors.onSurfaceMuted, fontSize: 11 },
+  listCount: { color: Colors.onSurfaceMuted, fontSize: 13 },
   tripList: { marginTop: 12, gap: 12 },
   tripCard: {
     padding: 16,
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   privateBadge: { backgroundColor: Colors.tertiaryContainer },
-  typeBadgeText: { color: Colors.onPrimary, fontSize: 8, fontWeight: "900" },
+  typeBadgeText: { color: Colors.onPrimary, fontSize: 10, fontWeight: "900" },
   eligibilityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -422,11 +422,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryPale,
   },
   ineligibleBadge: { backgroundColor: Colors.errorContainer },
-  eligibilityText: { color: Colors.primaryDark, fontSize: 8, fontWeight: "900" },
+  eligibilityText: { color: Colors.primaryDark, fontSize: 10, fontWeight: "900" },
   ineligibleText: { color: Colors.error },
-  tripTitle: { marginTop: 13, color: Colors.onSurface, fontSize: 16, fontWeight: "900" },
+  tripTitle: { marginTop: 13, color: Colors.onSurface, fontSize: 17, fontWeight: "900" },
   dateRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
-  dateText: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 10 },
+  dateText: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 12 },
   selectRow: {
     marginTop: 14,
     paddingTop: 12,
@@ -435,11 +435,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceContainer,
   },
-  selectText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "900" },
+  selectText: { color: Colors.primaryDark, fontSize: 13, fontWeight: "900" },
   reasonText: {
     marginTop: 12,
     color: Colors.error,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

@@ -240,7 +240,7 @@ export default function HomeScreen() {
                 <Text
                   style={[
                     styles.leaderTelemetryValue,
-                    { color: "#8cd867", fontSize: 13 },
+                    { color: "#8cd867", fontSize: 14 },
                   ]}
                 >
                   {fieldWorkflow.leaderTripStatus === "IN_PROGRESS"
@@ -771,7 +771,7 @@ export default function HomeScreen() {
                   <Text
                     style={[
                       styles.telemetryValue,
-                      { color: Colors.primaryDark, fontSize: 13 },
+                      { color: Colors.primaryDark, fontSize: 14 },
                     ]}
                   >
                     {activeBooking.status === "CONFIRMED"
@@ -1096,7 +1096,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   leaderRoleChipText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: "#8cd867",
     letterSpacing: 0.6,
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   weatherChipText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     color: Colors.onSurface,
   },
@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   gpsChipText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.onPrimaryContainer,
     letterSpacing: 0.5,
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   greetingSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -1176,7 +1176,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#8cd867",
   },
   leaderHeroSub: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#8cd867",
     letterSpacing: 0.8,
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   leaderTripBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#8cd867",
   },
@@ -1206,7 +1206,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   leaderRouteText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#b8cbb2",
     fontWeight: "600",
   },
@@ -1223,18 +1223,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   leaderTelemetryLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#b8cbb2",
     fontWeight: "700",
   },
   leaderTelemetryValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: "#ffffff",
     marginTop: 2,
   },
   leaderTelemetryUnit: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#b8cbb2",
     fontWeight: "600",
   },
@@ -1253,7 +1253,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
   },
   leaderPrimaryBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -1268,7 +1268,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   leaderSecondaryBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -1279,7 +1279,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionHeaderTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: Colors.onSurfaceMuted,
     letterSpacing: 0.8,
@@ -1316,17 +1316,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   toolsetStatusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
   toolsetTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   toolsetSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -1342,7 +1342,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingBoxText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyLeaderTripsCard: {
@@ -1353,18 +1353,18 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   emptyLeaderTripsTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: Colors.onSurface,
     marginTop: 8,
   },
   emptyLeaderTripsSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
     marginTop: 4,
     marginBottom: 14,
-    lineHeight: 17,
+    lineHeight: 20,
   },
   createFirstTripBtn: {
     flexDirection: "row",
@@ -1376,7 +1376,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   createFirstTripBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1393,7 +1393,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   leaderTripCode: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.onSurfaceMuted,
   },
@@ -1403,11 +1403,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   leaderStatusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   leaderTripTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
     marginTop: 6,
@@ -1419,11 +1419,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   leaderTripMetaText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   leaderTripMetaDot: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceMuted,
     marginHorizontal: 2,
   },
@@ -1437,12 +1437,12 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.surfaceContainerLow,
   },
   leaderTripCapacity: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },
   leaderTripPrice: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1463,7 +1463,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rosterCount: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: Colors.primaryDark,
   },
@@ -1489,12 +1489,12 @@ const styles = StyleSheet.create({
   },
   rosterName: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   rosterStatusText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -1504,7 +1504,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   openRosterBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1520,14 +1520,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   leaderAdvisoryTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#2e6c00",
   },
   leaderAdvisoryText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#25461c",
-    lineHeight: 16,
+    lineHeight: 19,
   },
 
   // ── Existing Consumer Styles (Preserved) ──────────────────────────────────
@@ -1566,7 +1566,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   countdownText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.onPrimaryContainer,
     letterSpacing: 0.5,
@@ -1584,7 +1584,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   bookingText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -1595,7 +1595,7 @@ const styles = StyleSheet.create({
     right: 14,
   },
   trailCategory: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#e2e3de",
     textTransform: "uppercase",
@@ -1629,17 +1629,17 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   telemetryLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
   telemetryValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   telemetryUnit: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
@@ -1658,12 +1658,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dateText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
   slotsText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -1694,7 +1694,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   detailsBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onPrimary,
   },
@@ -1709,7 +1709,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   navLiveBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1736,11 +1736,11 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   shortcutLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0e0f0c", // Wise ink
     textAlign: "center",
-    lineHeight: 14,
+    lineHeight: 17,
   },
 
   // ── Featured Section ───────────────────────────────────────────────────────
@@ -1761,12 +1761,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
   viewAllText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1803,7 +1803,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   priceTagText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -1811,12 +1811,12 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   trailCardTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   trailCardRegion: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -1827,11 +1827,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   trailMetaItem: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   trailMetaDivider: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.surfaceContainerHighest,
   },
   advisoryCard: {
@@ -1849,14 +1849,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   advisoryTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#6f5900",
   },
   advisoryText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#4a3b1c",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   // ── New Trekker Empty & Live Feed Styles ────────────────────────────────────
   emptyBookingCard: {
@@ -1878,16 +1878,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyBookingTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     marginBottom: 6,
   },
   emptyBookingSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 21,
     marginBottom: 16,
     paddingHorizontal: 12,
   },
@@ -1902,7 +1902,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   exploreTripsBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1914,7 +1914,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   feedLoadingText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyFeedBox: {
@@ -1924,7 +1924,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyFeedText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
 });

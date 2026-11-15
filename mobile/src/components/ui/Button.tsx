@@ -39,9 +39,9 @@ const SIZE_STYLES: Record<ButtonSize, ViewStyle> = {
 };
 
 const SIZE_FONT: Record<ButtonSize, TextStyle> = {
-  sm: { fontSize: 13 },
-  md: { fontSize: 15 },
-  lg: { fontSize: 16 },
+  sm: { fontSize: 14 },
+  md: { fontSize: 16 },
+  lg: { fontSize: 17 },
 };
 
 export function Button({

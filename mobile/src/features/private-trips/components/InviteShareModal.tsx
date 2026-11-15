@@ -336,10 +336,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 16,
   },
   loadingBox: {
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   contentWrapper: {
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   qrHint: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 8,
     fontWeight: "600",
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   codeLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.onSurfaceVariant,
     letterSpacing: 0.8,
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   copyText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   copiedToastText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#166534",
   },
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   shareButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   regenerateButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.primaryDark,
   },
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   revokeButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#DC2626",
   },

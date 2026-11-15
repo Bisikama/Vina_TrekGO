@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1.2,
   },
@@ -752,14 +752,14 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 0.8,
   },
   tripTitle: {
     marginTop: 3,
     color: Colors.onSurface,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
   },
   sectionCard: {
@@ -790,10 +790,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: "#EAF9E1",
   },
-  itemName: { color: Colors.onSurface, fontSize: 14, fontWeight: "600" },
-  itemMeta: { color: Colors.onSurfaceVariant, fontSize: 12 },
-  stockText: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
-  errorText: { color: Colors.error, fontSize: 13, fontWeight: "600" },
+  itemName: { color: Colors.onSurface, fontSize: 15, fontWeight: "600" },
+  itemMeta: { color: Colors.onSurfaceVariant, fontSize: 14 },
+  stockText: { color: Colors.primaryDark, fontSize: 14, fontWeight: "600" },
+  errorText: { color: Colors.error, fontSize: 14, fontWeight: "600" },
   errorCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
   errorMessage: {
     flex: 1,
     color: Colors.error,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   primaryButton: {
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: Colors.onPrimary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
   disabledButton: { opacity: 0.45 },
@@ -851,21 +851,21 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: "#FFFFFF",
   },
-  progressTitle: { color: Colors.onSurface, fontSize: 15, fontWeight: "600" },
+  progressTitle: { color: Colors.onSurface, fontSize: 16, fontWeight: "600" },
   progressDescription: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
   },
-  summaryLabel: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 13 },
-  depositLine: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 11 },
-  summaryValue: { color: Colors.onSurface, fontSize: 13, fontWeight: "600" },
+  summaryLabel: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 14 },
+  depositLine: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 13 },
+  summaryValue: { color: Colors.onSurface, fontSize: 14, fontWeight: "600" },
   divider: { height: 1, backgroundColor: Colors.surfaceContainerHighest },
   totalRow: {
     flexDirection: "row",
@@ -873,9 +873,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  totalLabel: { color: Colors.onSurface, fontSize: 15, fontWeight: "600" },
+  totalLabel: { color: Colors.onSurface, fontSize: 16, fontWeight: "600" },
   totalValue: { color: Colors.primaryDark, fontSize: 22, fontWeight: "600" },
-  expiryText: { color: Colors.onSurfaceVariant, fontSize: 11 },
+  expiryText: { color: Colors.onSurfaceVariant, fontSize: 13 },
   nameRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },
   gradeBadge: {
     flexDirection: "row",
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   gradeDot: { width: 5, height: 5, borderRadius: 3, opacity: 0.7 },
-  gradeText: { fontSize: 11, fontWeight: "500" },
+  gradeText: { fontSize: 13, fontWeight: "500" },
   estimateCard: {
     gap: 6,
     padding: 14,
@@ -896,11 +896,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceContainerHighest,
   },
-  estimateNote: { color: Colors.onSurfaceMuted, fontSize: 11, lineHeight: 16 },
+  estimateNote: { color: Colors.onSurfaceMuted, fontSize: 13, lineHeight: 19 },
   countdownCard: { gap: 8, padding: 14, borderRadius: Radius.lg, borderWidth: 1 },
   countdownRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  countdownTitle: { fontSize: 14, fontWeight: "600" },
-  countdownNote: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 11, lineHeight: 16 },
+  countdownTitle: { fontSize: 15, fontWeight: "600" },
+  countdownNote: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 13, lineHeight: 19 },
   countdownClock: { fontSize: 26, fontWeight: "600", fontVariant: ["tabular-nums"] },
   countdownTrack: { height: 5, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.8)" },
   countdownBar: { height: 5, borderRadius: 999 },
@@ -912,7 +912,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: "#dc2626",
   },
-  renewButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "600" },
+  renewButtonText: { color: "#ffffff", fontSize: 14, fontWeight: "600" },
   retryButton: {
     minHeight: 44,
     flexDirection: "row",
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
-  retryText: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
+  retryText: { color: Colors.primaryDark, fontSize: 14, fontWeight: "600" },
   stateCard: {
     alignItems: "center",
     gap: 12,
@@ -932,8 +932,8 @@ const styles = StyleSheet.create({
   stateTitle: { color: Colors.onSurface, fontSize: 22, fontWeight: "600" },
   stateDescription: {
     color: Colors.onSurfaceVariant,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: "center",
   },
   successContainer: {
@@ -954,8 +954,8 @@ const styles = StyleSheet.create({
   successTitle: { color: Colors.onSurface, fontSize: 28, fontWeight: "600" },
   successDescription: {
     color: Colors.onSurfaceVariant,
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 23,
     textAlign: "center",
   },
   successAmount: {
@@ -969,8 +969,8 @@ const styles = StyleSheet.create({
   },
   serverNote: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
   },
 });

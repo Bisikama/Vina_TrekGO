@@ -178,8 +178,8 @@ export const authStyles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 20,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   linkButton: {
     alignSelf: "flex-end",
@@ -188,7 +188,7 @@ export const authStyles = StyleSheet.create({
   },
   linkText: {
     color: Colors.primaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   footerRow: {
@@ -199,11 +199,11 @@ export const authStyles = StyleSheet.create({
   },
   footerText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   footerLink: {
     color: Colors.primaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   noticeCard: {
@@ -218,8 +218,8 @@ export const authStyles = StyleSheet.create({
   noticeText: {
     flex: 1,
     color: Colors.onPrimaryContainer,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     fontWeight: "600",
   },
 });
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     marginTop: 25,
     color: Colors.primary,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.4,
   },
@@ -281,8 +281,8 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginTop: 8,
     color: "rgba(255,255,255,0.72)",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   featureRow: {
     marginTop: 18,
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  featureText: { color: Colors.onPrimaryDark, fontSize: 9, fontWeight: "800" },
+  featureText: { color: Colors.onPrimaryDark, fontSize: 11, fontWeight: "800" },
   formCard: {
     marginTop: -18,
     marginHorizontal: 14,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     marginBottom: 7,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   inputWrap: {
@@ -333,9 +333,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
   },
-  fieldError: { marginTop: 5, color: Colors.error, fontSize: 10, fontWeight: "700" },
+  fieldError: { marginTop: 5, color: Colors.error, fontSize: 12, fontWeight: "700" },
   submitButton: {
     minHeight: 52,
     paddingHorizontal: 18,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   submitButtonDisabled: { opacity: 0.55 },
-  submitText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "900" },
+  submitText: { color: Colors.onPrimary, fontSize: 14, fontWeight: "900" },
   errorCard: {
     marginBottom: 14,
     padding: 11,
@@ -359,6 +359,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.errorContainer,
   },
-  errorText: { flex: 1, color: Colors.onErrorContainer, fontSize: 11, lineHeight: 16, fontWeight: "700" },
+  errorText: { flex: 1, color: Colors.onErrorContainer, fontSize: 13, lineHeight: 19, fontWeight: "700" },
   footer: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 28 },
 });

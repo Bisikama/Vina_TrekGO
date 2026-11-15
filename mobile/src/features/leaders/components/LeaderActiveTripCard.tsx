@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#b8cbb2",
     marginTop: 8,
-    fontSize: 13,
+    fontSize: 14,
   },
   commandHeader: {
     flexDirection: "row",
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   },
   tripCode: {
     color: "#9fe870",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   commandRoute: {
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   },
   commandRouteText: {
     color: "#b8cbb2",
-    fontSize: 13,
+    fontSize: 14,
   },
   commandButton: {
     flexDirection: "row",
@@ -189,17 +189,17 @@ const styles = StyleSheet.create({
   },
   commandButtonLabel: {
     color: "#0e0f0c",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
   commandButtonDetail: {
     color: "#454745",
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
   },
   emptyPrompt: {
     color: "#b8cbb2",
     marginTop: 8,
-    fontSize: 13,
+    fontSize: 14,
   },
 });
