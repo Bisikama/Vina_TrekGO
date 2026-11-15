@@ -236,8 +236,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontSize: 15, fontWeight: "900", color: Colors.onSurface },
-  subtitle: { fontSize: 11, color: Colors.onSurfaceMuted, marginTop: 2 },
+  title: { fontSize: 16, fontWeight: "900", color: Colors.onSurface },
+  subtitle: { fontSize: 13, color: Colors.onSurfaceMuted, marginTop: 2 },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: Radius.full,
   },
-  statusPillText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
+  statusPillText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
   chipsRow: { gap: 8, paddingTop: 14 },
   chip: {
     flexDirection: "row",
@@ -271,9 +271,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipAvatarActive: { backgroundColor: LIME },
-  chipAvatarText: { fontSize: 11, fontWeight: "900", color: Colors.onSurfaceVariant },
+  chipAvatarText: { fontSize: 13, fontWeight: "900", color: Colors.onSurfaceVariant },
   chipAvatarTextActive: { color: Colors.inkDeep },
-  chipText: { fontSize: 12, fontWeight: "700", color: Colors.onSurfaceVariant, flexShrink: 1 },
+  chipText: { fontSize: 14, fontWeight: "700", color: Colors.onSurfaceVariant, flexShrink: 1 },
   chipTextActive: { color: "#ffffff" },
   qrWrap: { alignItems: "center", marginTop: 18 },
   qrFrame: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   cBL: { bottom: -1, left: -1, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 20 },
   cBR: { bottom: -1, right: -1, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 20 },
   expandHint: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
-  expandHintText: { fontSize: 11, color: Colors.onSurfaceMuted },
+  expandHintText: { fontSize: 13, color: Colors.onSurfaceMuted },
   memberName: {
     textAlign: "center",
     marginTop: 10,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   shortCode: {
     textAlign: "center",
     marginTop: 2,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 1.5,
     color: Colors.secondary,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: "#fff7d6",
   },
-  tipText: { flex: 1, fontSize: 11, lineHeight: 16, color: "#6b5200" },
+  tipText: { flex: 1, fontSize: 13, lineHeight: 19, color: "#6b5200" },
   // Fullscreen
   fsSafe: { flex: 1, backgroundColor: "#ffffff" },
   fsHeader: {
@@ -331,10 +331,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  fsHeaderTitle: { fontSize: 16, fontWeight: "800", color: Colors.ink },
+  fsHeaderTitle: { fontSize: 17, fontWeight: "800", color: Colors.ink },
   fsBody: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   fsTrip: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurfaceMuted,
     textAlign: "center",
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   fsName: { marginTop: 22, fontSize: 24, fontWeight: "900", color: Colors.ink },
-  fsCode: { marginTop: 4, fontSize: 16, fontWeight: "800", letterSpacing: 2, color: Colors.secondary },
+  fsCode: { marginTop: 4, fontSize: 17, fontWeight: "800", letterSpacing: 2, color: Colors.secondary },
   fsNav: { flexDirection: "row", alignItems: "center", gap: 20, marginTop: 28 },
   fsNavBtn: {
     width: 44,
@@ -360,5 +360,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fsNavBtnDisabled: { opacity: 0.35 },
-  fsNavText: { fontSize: 14, fontWeight: "800", color: Colors.onSurfaceVariant },
+  fsNavText: { fontSize: 15, fontWeight: "800", color: Colors.onSurfaceVariant },
 });

@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   },
   privatePillText: {
     color: "#564500",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.4,
   },
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEE2E2",
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },

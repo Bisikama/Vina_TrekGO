@@ -31,5 +31,5 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   dot: { width: 5, height: 5, borderRadius: 3, opacity: 0.7 },
-  text: { fontSize: 11, fontWeight: "500" },
+  text: { fontSize: 13, fontWeight: "500" },
 });

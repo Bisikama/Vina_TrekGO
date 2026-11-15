@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   floatingButtonText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   modalContainer: {
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
   closeButton: {
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   loggerWrapper: {

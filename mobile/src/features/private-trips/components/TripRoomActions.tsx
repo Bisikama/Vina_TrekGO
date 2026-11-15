@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dangerButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#DC2626",
   },
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     borderColor: "#A3E635",
   },
   codeInviteButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#054D28",
   },

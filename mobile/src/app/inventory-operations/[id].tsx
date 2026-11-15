@@ -1,9 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,13 +18,12 @@ import {
   PreparationTaskDetail,
   RentalDeliveryAssignee,
   staffInventoryApi,
-  uploadInventoryEvidence,
 } from "@/features/rentals/staff-inventory-api";
 import { orderShortCode, productLabel } from "@/features/rentals/display";
+import { EvidenceThumbStrip } from "@/features/rentals/EvidenceThumbStrip";
+import { useEvidenceUploads } from "@/features/rentals/useEvidenceUploads";
 
 type BusyAction = "claim" | "pick" | "evidence" | "pack" | "ready" | "transfer";
-type EvidenceKind = "image" | "video";
-type EvidenceDraft = { imageIds: string[]; videoIds: string[] };
 
 function shortAssetCode(value?: string | null) {
   const compact = (value ?? "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -69,7 +66,7 @@ export default function InventoryTaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [evidenceDrafts, setEvidenceDrafts] = useState<Record<string, EvidenceDraft>>({});
+  const evidence = useEvidenceUploads(accessToken);
 
   const isCancelled = detail?.task.status === "CANCELLED";
 
@@ -136,52 +133,13 @@ export default function InventoryTaskDetailScreen() {
     }
   };
 
-  async function captureEvidence(unitId: string, kind: EvidenceKind) {
-    if (!detail || !accessToken || busy) return;
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Cần quyền camera", "Hãy cấp quyền để ghi lại tình trạng thiết bị.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: kind === "video" ? ["videos"] : ["images"],
-      allowsEditing: false,
-      quality: kind === "image" ? 0.8 : 0.7,
-      videoMaxDuration: kind === "video" ? 20 : undefined,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    setBusy("evidence");
-    setError(null);
-    try {
-      const mediaId = await uploadInventoryEvidence(result.assets[0], accessToken);
-      setEvidenceDrafts((current) => {
-        const draft = current[unitId] ?? { imageIds: [], videoIds: [] };
-        return {
-          ...current,
-          [unitId]: kind === "video"
-            ? { ...draft, videoIds: [...draft.videoIds, mediaId] }
-            : { ...draft, imageIds: [...draft.imageIds, mediaId] },
-        };
-      });
-    } catch (uploadError) {
-      const uploadMessage =
-        uploadError instanceof Error
-          ? uploadError.message
-          : "";
-
-      setError(
-        uploadMessage.includes("Video metadata missing duration")
-          ? "Không đọc được thông tin video. Hãy quay lại video rồi thử tải lên lần nữa."
-          : uploadMessage || "Không tải được ảnh hoặc video tình trạng thiết bị.",
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function saveEvidence(unitId: string) {
     if (!detail || !accessToken) return;
-    const draft = evidenceDrafts[unitId] ?? { imageIds: [], videoIds: [] };
+    if (evidence.previewsFor(unitId).some((item) => item.status === "uploading")) {
+      setError("Ảnh của thiết bị này đang tải lên, chờ vài giây rồi bấm Lưu.");
+      return;
+    }
+    const draft = evidence.idsFor(unitId);
     if (!draft.imageIds.length) {
       setError("Mỗi thiết bị cần ít nhất 1 ảnh tình trạng; video không bắt buộc.");
       return;
@@ -198,11 +156,7 @@ export default function InventoryTaskDetailScreen() {
         },
         accessToken,
       );
-      setEvidenceDrafts((current) => {
-        const next = { ...current };
-        delete next[unitId];
-        return next;
-      });
+      evidence.clearUnit(unitId);
     });
   }
 
@@ -361,35 +315,44 @@ export default function InventoryTaskDetailScreen() {
             <SectionTitle title="3. Ảnh và video tình trạng trước giao" />
             <View style={styles.card}>
               {detail.pickedUnits.map((unit) => {
-                const draft = evidenceDrafts[unit.unitId] ?? { imageIds: [], videoIds: [] };
-                const readyToSave = draft.imageIds.length > 0;
+                const previews = evidence.previewsFor(unit.unitId);
+                const draft = evidence.idsFor(unit.unitId);
+                const uploadingHere = previews.some((item) => item.status === "uploading");
+                const readyToSave = draft.imageIds.length > 0 && !uploadingHere;
                 return (
-                <View key={unit.unitId} style={styles.evidenceRow}>
-                  <View style={styles.flex}>
-                    <Text style={styles.rowTitle}>Mã {shortAssetCode(unit.assetCode)}</Text>
-                    <Text style={styles.rowMeta}>
-                      {unit.evidenceCaptured
-                        ? "Đã lưu bằng chứng tình trạng"
-                        : `Ảnh ${draft.imageIds.length}/1 · Video ${draft.videoIds.length} (tùy chọn)`}
-                    </Text>
-                  </View>
-                  {unit.evidenceCaptured ? (
-                    <Ionicons name="checkmark-circle" size={25} color={Colors.primaryDark} />
-                  ) : (
-                    <View style={styles.evidenceActions}>
-                      <TouchableOpacity style={styles.mediaButton} disabled={Boolean(busy)} onPress={() => void captureEvidence(unit.unitId, "image")}>
-                        <Ionicons name="camera-outline" size={18} color={Colors.primaryDark} />
-                        <Text style={styles.mediaButtonText}>Ảnh</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.mediaButton} disabled={Boolean(busy)} onPress={() => void captureEvidence(unit.unitId, "video")}>
-                        <Ionicons name="videocam-outline" size={18} color={Colors.primaryDark} />
-                        <Text style={styles.mediaButtonText}>Video</Text>
-                      </TouchableOpacity>
+                <View key={unit.unitId} style={styles.evidenceBlock}>
+                  <View style={styles.evidenceRow}>
+                    <View style={styles.flex}>
+                      <Text style={styles.rowTitle}>
+                        Mã {shortAssetCode(unit.assetCode)}
+                      </Text>
+                      <Text style={styles.rowMeta}>
+                        {unit.evidenceCaptured
+                          ? "Đã lưu bằng chứng tình trạng"
+                          : uploadingHere
+                            ? "Đang tải ảnh lên…"
+                            : `Ảnh ${draft.imageIds.length}/1 · Video ${draft.videoIds.length} (tùy chọn)`}
+                      </Text>
+                    </View>
+                    {unit.evidenceCaptured ? (
+                      <Ionicons name="checkmark-circle" size={25} color={Colors.primaryDark} />
+                    ) : (
                       <TouchableOpacity style={[styles.saveEvidenceButton, !readyToSave && styles.disabled]} disabled={Boolean(busy) || !readyToSave} onPress={() => void saveEvidence(unit.unitId)}>
                         <Text style={styles.saveEvidenceText}>Lưu</Text>
                       </TouchableOpacity>
-                    </View>
-                  )}
+                    )}
+                  </View>
+                  {!unit.evidenceCaptured ? (
+                    <EvidenceThumbStrip
+                      busy={evidence.cameraOpen}
+                      required
+                      items={previews}
+                      onAddPhoto={() => void evidence.capture(unit.unitId, "image")}
+                      onAddVideo={() => void evidence.capture(unit.unitId, "video")}
+                      onRemove={evidence.remove}
+                      onRetry={evidence.retry}
+                    />
+                  ) : null}
                 </View>
               );})}
             </View>
@@ -534,10 +497,10 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     ...Shadows.tactical,
   },
-  heroCode: { color: Colors.primary, fontSize: 10, fontWeight: "600" },
+  heroCode: { color: Colors.primary, fontSize: 12, fontWeight: "600" },
   heroTitle: { color: "#fff", fontSize: 22, fontWeight: "600", marginTop: 8 },
-  heroMeta: { color: "#bed0bb", fontSize: 12, marginTop: 7 },
-  heroStatus: { color: Colors.primary, fontSize: 12, fontWeight: "600", marginTop: 12 },
+  heroMeta: { color: "#bed0bb", fontSize: 14, marginTop: 7 },
+  heroStatus: { color: Colors.primary, fontSize: 14, fontWeight: "600", marginTop: 12 },
   error: { color: Colors.error, textAlign: "center" },
   cancelledBanner: {
     flexDirection: "row",
@@ -552,7 +515,7 @@ const styles = StyleSheet.create({
   },
   cancelledBannerText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: "#991B1B",
     fontWeight: "600",
   },
@@ -565,7 +528,7 @@ const styles = StyleSheet.create({
   },
   section: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     letterSpacing: 0.7,
     marginTop: 18,
@@ -581,23 +544,21 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.surfaceContainer,
   },
   flex: { flex: 1 },
-  rowTitle: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
-  rowMeta: { color: Colors.onSurfaceMuted, fontSize: 11, marginTop: 4 },
+  rowTitle: { color: Colors.ink, fontSize: 15, fontWeight: "600" },
+  rowMeta: { color: Colors.onSurfaceMuted, fontSize: 13, marginTop: 4 },
   quantity: { color: Colors.primaryDark, fontSize: 17, fontWeight: "600" },
-  muted: { color: Colors.onSurfaceMuted, fontSize: 12, textAlign: "center" },
+  muted: { color: Colors.onSurfaceMuted, fontSize: 14, textAlign: "center" },
   smallButton: {
     backgroundColor: Colors.primaryDark,
     borderRadius: 8,
     paddingHorizontal: 13,
     paddingVertical: 10,
   },
-  smallButtonText: { color: "#fff", fontSize: 10, fontWeight: "600" },
-  evidenceRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
-  evidenceActions: { flexDirection: "row", gap: 8, marginTop: 12 },
-  mediaButton: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: Colors.primaryNeutral, borderRadius: Radius.md, backgroundColor: Colors.primaryPale },
-  mediaButtonText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
+  smallButtonText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  evidenceBlock: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
+  evidenceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   saveEvidenceButton: { minWidth: 58, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: Radius.md, backgroundColor: Colors.primaryDark },
-  saveEvidenceText: { color: "#fff", fontSize: 11, fontWeight: "600" },
+  saveEvidenceText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   primaryButton: {
     alignItems: "center",
     backgroundColor: Colors.primaryDark,
@@ -605,7 +566,7 @@ const styles = StyleSheet.create({
     padding: 15,
     marginTop: 16,
   },
-  primaryText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  primaryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   disabled: { opacity: 0.45 },
   successCard: {
     flexDirection: "row",
@@ -616,5 +577,5 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 18,
   },
-  successTitle: { color: Colors.primaryDark, fontSize: 14, fontWeight: "600" },
+  successTitle: { color: Colors.primaryDark, fontSize: 15, fontWeight: "600" },
 });

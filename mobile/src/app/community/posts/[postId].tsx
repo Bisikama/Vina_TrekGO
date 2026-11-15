@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     textAlign: "center",
   },
@@ -217,8 +217,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  commentTitle: { color: Colors.onSurface, fontSize: 15, fontWeight: "900" },
-  commentSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 9 },
+  commentTitle: { color: Colors.onSurface, fontSize: 16, fontWeight: "900" },
+  commentSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 11 },
   commentRow: {
     marginBottom: 12,
     flexDirection: "row",
@@ -233,13 +233,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLow,
   },
   commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  commentAuthor: { color: Colors.onSurface, fontSize: 10, fontWeight: "900" },
-  commentTime: { marginLeft: "auto", color: Colors.onSurfaceMuted, fontSize: 8 },
+  commentAuthor: { color: Colors.onSurface, fontSize: 12, fontWeight: "900" },
+  commentTime: { marginLeft: "auto", color: Colors.onSurfaceMuted, fontSize: 10 },
   commentContent: {
     marginTop: 5,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   noCommentCard: {
     padding: 18,
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceContainerLow,
   },
-  noCommentText: { color: Colors.onSurfaceMuted, fontSize: 10 },
+  noCommentText: { color: Colors.onSurfaceMuted, fontSize: 12 },
   commentComposer: {
     paddingHorizontal: 13,
     paddingVertical: 10,
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.surfaceContainerLow,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
   },
   sendButton: {
     width: 44,
@@ -291,8 +291,8 @@ const styles = StyleSheet.create({
   emptyDescription: {
     marginTop: 6,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: "center",
   },
   backToFeedButton: {
@@ -304,5 +304,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryDark,
   },
-  backToFeedButtonText: { color: Colors.onPrimary, fontSize: 11, fontWeight: "900" },
+  backToFeedButtonText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "900" },
 });

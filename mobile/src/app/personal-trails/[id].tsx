@@ -700,13 +700,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   headerSubtitle: {
     marginTop: 1,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
   },
   headerSpacer: {
     width: 40,
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   statusText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
   },
   trailName: {
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
   metaText: {
     flex: 1,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   summaryGrid: {
     marginTop: 17,
@@ -772,13 +772,13 @@ const styles = StyleSheet.create({
   summaryValue: {
     marginTop: 4,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   summaryLabel: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 8,
+    fontSize: 10,
   },
   statusCard: {
     marginTop: 13,
@@ -789,13 +789,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   statusCardTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   statusCardDescription: {
     marginTop: 3,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   rejectionCard: {
     marginTop: 13,
@@ -812,14 +812,14 @@ const styles = StyleSheet.create({
   },
   rejectionTitle: {
     color: "#B91C1C",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   rejectionDescription: {
     marginTop: 7,
     color: "#B91C1C",
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 19,
   },
   sectionCard: {
     marginTop: 13,
@@ -843,13 +843,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   sectionSubtitle: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
   },
   privateBadge: {
     paddingHorizontal: 7,
@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
   },
   privateBadgeText: {
     color: "#725C00",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
   },
   mapWrapper: {
@@ -874,8 +874,8 @@ const styles = StyleSheet.create({
   description: {
     marginTop: 13,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 21,
   },
   infoGrid: {
     marginTop: 12,
@@ -890,13 +890,13 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     color: Colors.onSurfaceVariant,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "800",
   },
   infoValue: {
     marginTop: 3,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
   },
   checkpointList: {
@@ -921,7 +921,7 @@ const styles = StyleSheet.create({
   },
   checkpointOrderText: {
     color: Colors.onPrimary,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   timelineLine: {
@@ -936,13 +936,13 @@ const styles = StyleSheet.create({
   },
   checkpointName: {
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   checkpointMeta: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
   },
   auditCard: {
     marginTop: 13,
@@ -957,11 +957,11 @@ const styles = StyleSheet.create({
   },
   auditLabel: {
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
   },
   auditValue: {
     color: Colors.onSurface,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   primaryButton: {
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: Colors.onPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   editButton: {
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: Colors.primaryDark,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   pendingNotice: {
@@ -1011,8 +1011,8 @@ const styles = StyleSheet.create({
   pendingNoticeText: {
     flex: 1,
     color: "#7A5700",
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   emptyState: {
     flex: 1,
@@ -1030,8 +1030,8 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 18,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
   },
 });

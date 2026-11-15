@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   stepIndicatorText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },

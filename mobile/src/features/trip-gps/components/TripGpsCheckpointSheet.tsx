@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   sheetSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.mute,
     marginTop: 2,
     fontWeight: '500',
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning,
   },
   seqText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
     color: Colors.ink,
   },
@@ -252,12 +252,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cpName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     color: Colors.ink,
   },
   cpSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.mute,
     marginTop: 2,
   },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   badgePassedText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.positiveDeep,
   },
@@ -280,12 +280,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   badgeNextText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#b45309',
   },
   upcomingText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.mute,
   },

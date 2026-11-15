@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   },
   createBtnText: {
     color: "#0e0f0c",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     letterSpacing: 0.3,
   },
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#9fe870",
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#475569",
   },
@@ -615,7 +615,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0d3b28",
   },
   tabBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#334155",
   },
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#868685",
   },
   errorBox: {
@@ -669,12 +669,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#410002",
     textAlign: "center",
   },
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   retryBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#125238",
   },
@@ -701,15 +701,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   emptySubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#868685",
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   emptyActionBtn: {
     flexDirection: "row",
@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   emptyActionBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   codeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#334155",
     letterSpacing: 0.5,
@@ -765,10 +765,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   tripTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: "#0e0f0c",
-    lineHeight: 20,
+    lineHeight: 21,
   },
   tripSubtitle: {
     fontSize: 11.5,
@@ -787,12 +787,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   trailIcon: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#125238",
     fontWeight: "900",
   },
   trailName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#125238",
     flex: 1,
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   infoText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#414942",
     fontWeight: "600",
   },
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
     color: "#0e0f0c",
   },
   remainingSlotsText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0369a1",
   },
@@ -855,12 +855,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   revenueLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#868685",
     textTransform: "uppercase",
   },
   revenueValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#125238",
   },
@@ -876,7 +876,7 @@ const styles = StyleSheet.create({
   },
   manageBtnText: {
     color: "#ffffff",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   loadMoreContainer: {

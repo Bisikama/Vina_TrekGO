@@ -214,8 +214,8 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: Spacing.xs,
     color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
   },
 
   metaCol: {
@@ -227,18 +227,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.sm,
   },
-  metaIcon: { fontSize: 13 },
+  metaIcon: { fontSize: 14 },
   metaLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   metaItemValue: { flex: 1 },
   metaText: {
     flexShrink: 1,
     color: Colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
   },
 
   priceRow: {
@@ -253,12 +253,12 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
   },
   priceValue: {
     color: Colors.primaryDeep,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   } as TextStyle,
 
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   cellThird: { width: "31.5%" },
   gridLabel: {
     color: Colors.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   gridValue: {
     color: Colors.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   } as TextStyle,
 });

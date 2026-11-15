@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   },
   confirmedText: {
     color: "#0C2000",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   title: {
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   bookingCode: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   lockedStatus: {
     marginBottom: 12,
@@ -600,36 +600,36 @@ const styles = StyleSheet.create({
   },
   lockedStatusTitle: {
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   lockedStatusDescription: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   pendingStatusTitle: {
     color: "#6B4B00",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   pendingStatusDescription: {
     marginTop: 2,
     color: "#7A5E1A",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   confirmedStatusTitle: {
     color: "#123524",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   confirmedStatusDescription: {
     marginTop: 2,
     color: "#3E6651",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   sectionCard: {
     marginBottom: 12,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   logisticsDetail: {
@@ -677,12 +677,12 @@ const styles = StyleSheet.create({
   },
   logLabel: {
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   logValue: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     textAlign: "right",
   },
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   },
   licensePlateText: {
     color: "#6F5900",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   weatherBox: {
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
   },
   condition: {
     color: Colors.onSurfaceVariant,
-    fontSize: 13,
+    fontSize: 14,
   },
   weatherMetaRow: {
     marginBottom: 8,
@@ -731,12 +731,12 @@ const styles = StyleSheet.create({
   },
   weatherMetaText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
   },
   weatherNotice: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   checklistHeaderContent: {
     flex: 1,
@@ -744,11 +744,11 @@ const styles = StyleSheet.create({
   checklistProgressText: {
     marginTop: 1,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
   },
   progressPercentage: {
     color: Colors.primaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   progressTrack: {
@@ -799,8 +799,8 @@ const styles = StyleSheet.create({
   checkItemText: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 20,
   },
   checkItemTextSelected: {
     color: "#234D34",
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
   },
   checkInButtonText: {
     color: Colors.onPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
   disabledButton: {
@@ -846,7 +846,7 @@ const styles = StyleSheet.create({
   },
   navButtonText: {
     color: Colors.onPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
   navButtonTextLocked: {
@@ -856,8 +856,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 14,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: "center",
   },
 });

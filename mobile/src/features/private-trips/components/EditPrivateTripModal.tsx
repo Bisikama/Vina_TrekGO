@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   labelNote: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   textInput: {
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurface,
     backgroundColor: Colors.surfaceContainerLowest,
   },
@@ -349,12 +349,12 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   counterValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
   emptyPickupText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.mute,
     fontStyle: "italic",
     paddingVertical: 6,
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickupName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
   },
   pickupAddress: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   cancelBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   saveBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
   },

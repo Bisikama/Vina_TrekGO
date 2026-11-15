@@ -378,12 +378,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.ink,
   },
   headerSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
   },
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.inkDeep,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   tabBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: Colors.inkDeep,
   },
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   emptyBox: {
@@ -457,16 +457,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.ink,
   },
   emptySub: {
     marginTop: 6,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceMuted,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
   },
   card: {
     backgroundColor: Colors.surfaceContainerLowest,
@@ -491,12 +491,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   senderAvatarText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.inkDeep,
   },
   senderTitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
   },
   senderNameBold: {
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   createdAtText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
   },
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainer,
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   statusPillTextWarn: {
@@ -536,13 +536,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tripEyebrow: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
     letterSpacing: 0.6,
   },
   tripTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.ink,
     marginBottom: 4,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   expiryRow: {
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   expiryText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#b45309",
   },
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   declineBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inkDeep,
   },
   acceptBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#FFFFFF",
   },

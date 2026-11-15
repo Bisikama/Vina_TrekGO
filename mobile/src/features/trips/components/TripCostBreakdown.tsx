@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionEyebrow: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: "#47672d",
     letterSpacing: 0.8,
@@ -155,22 +155,22 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   standardBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#717a68",
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: "#0e0f0c",
     marginTop: 2,
   },
   sectionSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#454745",
     marginTop: 8,
     marginBottom: 16,
-    lineHeight: 17,
+    lineHeight: 20,
   },
   itemsList: {
     gap: 12,
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   itemTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -222,18 +222,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   includedBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#054d28",
   },
   itemDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#454745",
     marginTop: 4,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   itemUnitNote: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#47672d",
     marginTop: 3,
@@ -250,14 +250,14 @@ const styles = StyleSheet.create({
     borderColor: "#c5edab",
   },
   guaranteeTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#054d28",
   },
   guaranteeText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#163300",
     marginTop: 2,
-    lineHeight: 15,
+    lineHeight: 18,
   },
 });

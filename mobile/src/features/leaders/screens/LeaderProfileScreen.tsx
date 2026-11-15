@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#707972",
   },
   header: {
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   logoutHeaderText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ba1a1a",
   },
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fee2e2",
   },
   statusBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   statusActiveText: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f1f5f9",
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: "#121c2a",
     letterSpacing: 0.4,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   infoValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#121c2a",
     maxWidth: "60%",
@@ -439,9 +439,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   vfrsBadgeSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#166534",
-    lineHeight: 15,
+    lineHeight: 18,
   },
   logoutBtn: {
     flexDirection: "row",
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   },
   logoutBtnText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
 });

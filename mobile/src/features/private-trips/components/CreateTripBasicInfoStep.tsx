@@ -561,15 +561,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     marginBottom: 4,
   },
   stepDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 16,
   },
   field: {
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scheduleTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   presetsLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
     marginBottom: 6,
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
   },
   presetChipSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
   },
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   colTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   dateMainText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -738,7 +738,7 @@ const styles = StyleSheet.create({
     borderColor: "#0284C7",
   },
   quickTimeText: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },

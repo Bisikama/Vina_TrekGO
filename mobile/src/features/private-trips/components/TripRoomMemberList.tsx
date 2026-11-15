@@ -237,12 +237,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryDark,
   },
   filterTabText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#125238",
   },
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   loadingText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
   },
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#94a3b8",
     fontWeight: "600",
   },

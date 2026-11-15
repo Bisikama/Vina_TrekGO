@@ -123,12 +123,12 @@ const styles = StyleSheet.create({
   },
   checkMark: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   circleText: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   connector: {
@@ -145,8 +145,8 @@ const styles = StyleSheet.create({
 
   label: {
     marginTop: Spacing.xs + 2,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 19,
     textAlign: "left",
   },
   labelDone: {

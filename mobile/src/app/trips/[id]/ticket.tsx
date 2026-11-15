@@ -123,7 +123,7 @@ export default function TripTicketScreen() {
 
   if (ticket?.bookingStatus === 'CANCELLED' || ticket?.trip.status === 'CANCELLED' || ticket?.participantStatus === 'CANCELLED') return <SafeAreaView style={styles.safeArea}>
     <ScreenHeader title="Vé không còn hiệu lực" onBack={() => router.back()} />
-    <View style={{ padding: 24, gap: 16 }}><TripCancellationNotice status="CANCELLED" /><Text style={{ fontSize: 16, lineHeight: 24, color: Colors.ink }}>Vé này không còn dùng để điểm danh. Người mua có thể xem khoản hoàn trong chi tiết đặt chỗ.</Text><Button label="Chuyến đi của tôi" variant="secondary" style={{ backgroundColor: Colors.primary, borderRadius: 24 }} onPress={() => router.replace('/(tabs)/trips')} /></View>
+    <View style={{ padding: 24, gap: 16 }}><TripCancellationNotice status="CANCELLED" /><Text style={{ fontSize: 17, lineHeight: 25, color: Colors.ink }}>Vé này không còn dùng để điểm danh. Người mua có thể xem khoản hoàn trong chi tiết đặt chỗ.</Text><Button label="Chuyến đi của tôi" variant="secondary" style={{ backgroundColor: Colors.primary, borderRadius: 24 }} onPress={() => router.replace('/(tabs)/trips')} /></View>
   </SafeAreaView>;
 
   // Dữ liệu hợp nhất (Ưu tiên API Ticket -> fallback Context Trip)
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
   },
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
   },
   headerAction: {
     width: 40,
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     color: "#92400E",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
   },
   statusTitleSuccess: {
@@ -533,7 +533,7 @@ const styles = StyleSheet.create({
   statusDescription: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   ticketCard: {
     overflow: "hidden",
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   brandCaption: {
     marginTop: 2,
     color: "#B2DFDB",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
   },
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEE2E2",
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   badgeTextPending: {
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 6,
     color: Colors.onSurfaceMuted,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1,
   },
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     color: Colors.onSurfaceVariant,
-    fontSize: 13,
+    fontSize: 14,
   },
   dividerRow: {
     height: 24,
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   },
   scanTitle: {
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -674,8 +674,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   qrFrame: {
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   qrTapHintText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#004D40",
     fontWeight: "600",
   },
@@ -705,14 +705,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   bookingCodeLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceMuted,
     fontWeight: "700",
     letterSpacing: 0.8,
   },
   bookingCodeText: {
     marginTop: 4,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "monospace",
     color: "#004D40",
     fontWeight: "800",
@@ -736,13 +736,13 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   participantLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceMuted,
     fontWeight: "600",
   },
   participantName: {
     marginTop: 2,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -753,15 +753,15 @@ const styles = StyleSheet.create({
   },
   pickupName: {
     marginTop: 2,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   pickupAddress: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   reminderBox: {
     marginHorizontal: 16,
@@ -778,8 +778,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     color: "#78350F",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   buttonGroup: {
     marginTop: 18,
@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
   },
   fullscreenButtonText: {
     color: "#004D40",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
   primaryButton: {
@@ -814,7 +814,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
   },
   emptyContainer: {
@@ -832,8 +832,8 @@ const styles = StyleSheet.create({
   emptyDescription: {
     marginTop: 8,
     color: Colors.onSurfaceVariant,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   // Modal Fullscreen QR Styles
@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
   },
   modalSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
   },
   modalCodeText: {
     marginTop: 12,
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "monospace",
     color: Colors.onSurfaceVariant,
     fontWeight: "700",
@@ -904,9 +904,9 @@ const styles = StyleSheet.create({
   },
   modalHintText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: "#004D40",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   modalDoneButton: {
     marginTop: 18,
@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
   },
   modalDoneText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
   },
 });

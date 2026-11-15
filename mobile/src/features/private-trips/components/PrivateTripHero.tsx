@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   topRow: {
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   versionText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -168,9 +168,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   description: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
-    lineHeight: 20,
+    lineHeight: 21,
     marginBottom: 14,
   },
   metaSection: {
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
     fontWeight: "600",
   },
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainer,
   },
   gridValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     color: Colors.mute,
   },
   gridLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     fontWeight: "500",
   },
