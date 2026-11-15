@@ -2,9 +2,11 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../../../shared/services/prisma.service'
 import { IPersonalTrailRepository } from '../../application/ports/personal-trail.port'
 import {
+  AdminSubmissionsQuery,
   MyTrailsQuery,
   RawSamplesBatchInput,
   PersonalCheckpointInput,
+  ReviewSubmissionInput,
 } from '../../presentation/dtos/personal-trail.dto'
 import {
   PersonalTrailModel,
@@ -529,6 +531,7 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
         duration,
         visibility: t.visibility,
         verificationStatus,
+        rejectionReason: latestSubmission?.status === TrailSubmissionStatus.REJECTED ? latestSubmission.reviewNote : undefined,
         demStatus: 'READY',
         gpsSegments: multiLineCoordinates,
         clientRecordingId: linkedRec?.clientRecordingId || undefined,
@@ -666,10 +669,10 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
       }
 
       const distance = Number(trail.distanceKm ?? 0)
-      if (distance < 0.5) {
+      if (distance < 0.3) {
         throw new AppError({
           code: PersonalTrailErrorCode.TRAIL_TOO_SHORT_FOR_VERIFY,
-          message: 'Cung đường phải dài tối thiểu 500m (0.5 km) để được gửi kiểm duyệt',
+          message: 'Cung đường phải dài tối thiểu 300m (0.3 km) để được gửi kiểm duyệt',
         })
       }
 
@@ -686,6 +689,129 @@ export class PrismaPersonalTrailAdapter implements IPersonalTrailRepository {
         trailId: trail.id,
         verificationStatus: 'PENDING',
         submittedAt: submission.createdAt,
+      }
+    })
+  }
+
+  async findSubmissions(query: AdminSubmissionsQuery): Promise<{ items: any[]; totalItems: number }> {
+    const statuses =
+      query.status === 'PENDING'
+        ? [TrailSubmissionStatus.SUBMITTED, TrailSubmissionStatus.UNDER_REVIEW]
+        : [query.status as TrailSubmissionStatus]
+    const where: Prisma.TrailSubmissionWhereInput = {
+      status: { in: statuses },
+      personalTrail: { status: RecordStatus.ACTIVE },
+    }
+    const [rows, totalItems] = await Promise.all([
+      this.prisma.trailSubmission.findMany({
+        where,
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        // Oldest pending first so the review queue is FIFO; reviewed lists show newest first.
+        orderBy: [{ createdAt: query.status === 'PENDING' ? 'asc' : 'desc' }, { id: 'asc' }],
+        include: {
+          personalTrail: {
+            select: {
+              id: true,
+              title: true,
+              difficulty: true,
+              distanceKm: true,
+              elevationGainM: true,
+              elevationLossM: true,
+              duration: true,
+            },
+          },
+          submittedByUser: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
+          reviewedByUser: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.trailSubmission.count({ where }),
+    ])
+
+    const items = rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      submissionNote: row.submissionNote,
+      reviewNote: row.reviewNote,
+      submittedAt: row.createdAt,
+      reviewedAt: row.reviewedAt,
+      submittedBy: row.submittedByUser,
+      reviewedBy: row.reviewedByUser,
+      trail: {
+        ...row.personalTrail,
+        distanceKm: Number(row.personalTrail.distanceKm ?? 0),
+      },
+    }))
+    return { items, totalItems }
+  }
+
+  async findSubmissionById(id: string) {
+    const row = await this.prisma.trailSubmission.findUnique({
+      where: { id },
+      include: {
+        submittedByUser: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
+        reviewedByUser: { select: { id: true, fullName: true } },
+      },
+    })
+    if (!row) return null
+    return {
+      id: row.id,
+      personalTrailId: row.personalTrailId,
+      status: row.status,
+      submissionNote: row.submissionNote,
+      reviewNote: row.reviewNote,
+      submittedAt: row.createdAt,
+      reviewedAt: row.reviewedAt,
+      submittedBy: row.submittedByUser,
+      reviewedBy: row.reviewedByUser,
+    }
+  }
+
+  async reviewSubmission(submissionId: string, reviewerId: string, input: ReviewSubmissionInput): Promise<any> {
+    const target = await this.prisma.trailSubmission.findUnique({
+      where: { id: submissionId },
+      select: { personalTrailId: true },
+    })
+    if (!target) throw new AppError({ code: PersonalTrailErrorCode.TRAIL_SUBMISSION_NOT_FOUND })
+
+    return this.transaction('review-submission', submissionId, async (tx) => {
+      // Same lock as submit/update so a review cannot interleave with a resubmission or edit.
+      await this.lock(tx, 'personal_trails', target.personalTrailId)
+      const submission = await tx.trailSubmission.findUnique({
+        where: { id: submissionId },
+        include: { personalTrail: { select: { status: true } } },
+      })
+      if (!submission || submission.personalTrail.status !== RecordStatus.ACTIVE) {
+        throw new AppError({ code: PersonalTrailErrorCode.TRAIL_SUBMISSION_NOT_FOUND })
+      }
+      if (
+        submission.status !== TrailSubmissionStatus.SUBMITTED &&
+        submission.status !== TrailSubmissionStatus.UNDER_REVIEW
+      ) {
+        throw new AppError({
+          code: PersonalTrailErrorCode.TRAIL_SUBMISSION_ALREADY_REVIEWED,
+          details: { status: submission.status },
+        })
+      }
+
+      const updated = await tx.trailSubmission.update({
+        where: { id: submissionId },
+        data: {
+          status: input.decision === 'APPROVE' ? TrailSubmissionStatus.APPROVED : TrailSubmissionStatus.REJECTED,
+          reviewedBy: reviewerId,
+          reviewedAt: new Date(),
+          reviewNote: input.reviewNote || null,
+          version: { increment: 1 },
+        },
+      })
+
+      return {
+        id: updated.id,
+        trailId: updated.personalTrailId,
+        status: updated.status,
+        verificationStatus: updated.status === TrailSubmissionStatus.APPROVED ? 'VERIFIED' : 'REJECTED',
+        reviewNote: updated.reviewNote,
+        reviewedAt: updated.reviewedAt,
       }
     })
   }

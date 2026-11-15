@@ -32,6 +32,9 @@ describe('TrailRecordingUseCase Unit Tests', () => {
       updatePersonalTrail: jest.fn(),
       softDeletePersonalTrail: jest.fn(),
       submitTrailVerification: jest.fn(),
+      findSubmissions: jest.fn(),
+      findSubmissionById: jest.fn(),
+      reviewSubmission: jest.fn(),
     }
 
     mockElevationUseCase = {

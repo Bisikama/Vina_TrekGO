@@ -5,7 +5,11 @@ import { PrismaPersonalTrailAdapter } from './infrastructure/adapters/prisma-per
 import { AppError, GlobalErrorFilter, PersonalTrailErrorCode } from '../../shared/errors'
 import { PersonalTrailUseCase } from './application/use-cases/personal-trail.use-case'
 import { Prisma } from '@prisma/client'
-import { finishRecordingSchema, rawSamplesBatchSchema } from './presentation/dtos/personal-trail.dto'
+import {
+  finishRecordingSchema,
+  rawSamplesBatchSchema,
+  reviewSubmissionSchema,
+} from './presentation/dtos/personal-trail.dto'
 import type { RawSamplesBatchInput } from './presentation/dtos/personal-trail.dto'
 import { ZodValidationPipe } from '../../shared/pipes/zod-validation.pipe'
 
@@ -324,6 +328,92 @@ describe('Personal trail repository regressions', () => {
     })
     expect(tx.trailSubmission.create).not.toHaveBeenCalled()
     expect(tx.personalTrail.update).not.toHaveBeenCalled()
+  })
+
+  describe('admin review', () => {
+    const pending = (status: string) => ({
+      id: 'submission',
+      personalTrailId: 'trail',
+      status,
+      personalTrail: { status: 'ACTIVE' },
+    })
+
+    it('approves a pending submission under the trail lock', async () => {
+      tx.trailSubmission.findUnique = jest.fn().mockResolvedValue(pending('UNDER_REVIEW'))
+      tx.trailSubmission.update = jest
+        .fn()
+        .mockResolvedValue({ id: 'submission', personalTrailId: 'trail', status: 'APPROVED', reviewNote: null })
+
+      const result = await adapter.reviewSubmission('submission', 'admin', { decision: 'APPROVE' })
+
+      expect(result).toMatchObject({ status: 'APPROVED', verificationStatus: 'VERIFIED' })
+      expect(tx.$queryRaw).toHaveBeenCalled()
+      expect(tx.trailSubmission.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'APPROVED', reviewedBy: 'admin', version: { increment: 1 } }),
+        }),
+      )
+    })
+
+    it.each(['APPROVED', 'REJECTED', 'WITHDRAWN'])('refuses to review a %s submission again', async (status) => {
+      tx.trailSubmission.findUnique = jest.fn().mockResolvedValue(pending(status))
+      tx.trailSubmission.update = jest.fn()
+      await expect(
+        adapter.reviewSubmission('submission', 'admin', { decision: 'REJECT', reviewNote: 'x' }),
+      ).rejects.toMatchObject({ code: 'TRAIL_SUBMISSION_ALREADY_REVIEWED' })
+      expect(tx.trailSubmission.update).not.toHaveBeenCalled()
+    })
+
+    it('returns not found for an unknown submission', async () => {
+      tx.trailSubmission.findUnique = jest.fn().mockResolvedValue(null)
+      await expect(adapter.reviewSubmission('missing', 'admin', { decision: 'APPROVE' })).rejects.toMatchObject({
+        code: 'TRAIL_SUBMISSION_NOT_FOUND',
+      })
+    })
+
+    it('lets an admin read a submitted private trail with its route and checkpoints', async () => {
+      tx.trailSubmission.findUnique = jest.fn().mockResolvedValue({
+        id: 'submission',
+        personalTrailId: 'trail',
+        status: 'SUBMITTED',
+        createdAt: updatedAt,
+      })
+      tx.personalTrail.findUnique.mockResolvedValue({
+        id: 'trail',
+        userId: 'owner',
+        visibility: 'PRIVATE',
+        routeGeojson: { type: 'MultiLineString', coordinates: [[[106.1, 11.1, 100]]] },
+        trailSubmissionsViaPersonalTrailId: [],
+        trailRecordingsViaCreatedPersonalTrailId: [],
+      })
+      tx.personalCheckpoint.findMany.mockResolvedValue([{ id: 'start', latitude: '11.1', longitude: '106.1' }])
+
+      const detail = await new PersonalTrailUseCase(adapter).getSubmissionDetail('submission')
+
+      expect(detail).toMatchObject({
+        id: 'submission',
+        status: 'SUBMITTED',
+        trail: {
+          id: 'trail',
+          gpsSegments: [[[106.1, 11.1, 100]]],
+          checkpoints: [expect.objectContaining({ id: 'start', latitude: 11.1 })],
+        },
+      })
+    })
+
+    it('returns not found when the submitted trail was deleted', async () => {
+      tx.trailSubmission.findUnique = jest.fn().mockResolvedValue({ id: 'submission', personalTrailId: 'trail' })
+      tx.personalTrail.findUnique.mockResolvedValue(null)
+      await expect(new PersonalTrailUseCase(adapter).getSubmissionDetail('submission')).rejects.toMatchObject({
+        code: 'TRAIL_SUBMISSION_NOT_FOUND',
+      })
+    })
+
+    it('requires a review note when rejecting', () => {
+      expect(reviewSubmissionSchema.safeParse({ decision: 'REJECT' }).success).toBe(false)
+      expect(reviewSubmissionSchema.safeParse({ decision: 'REJECT', reviewNote: '  ' }).success).toBe(false)
+      expect(reviewSubmissionSchema.safeParse({ decision: 'APPROVE' }).success).toBe(true)
+    })
   })
 })
 
