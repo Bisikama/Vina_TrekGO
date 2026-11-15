@@ -619,7 +619,7 @@ export const personalTrailApi = {
         body: JSON.stringify(payload || {}),
         fallbackMessages: {
           400: "Cung đường không hợp lệ hoặc đã được gửi duyệt trước đó.",
-          422: "Cung đường phải dài ít nhất 500m (0.5km) và hoàn tất chuẩn hóa độ cao để gửi duyệt.",
+          422: "Cung đường phải dài ít nhất 300m (0.3km) và hoàn tất chuẩn hóa độ cao để gửi duyệt.",
           404: "Không tìm thấy cung đường cần gửi duyệt.",
         },
       },
