@@ -1,5 +1,7 @@
 import { DifficultyLevel, PersonalTrailVisibility, RecordStatus } from '@prisma/client'
 import {
+  AdminSubmissionsQuery,
+  ReviewSubmissionInput,
   MyTrailsQuery,
   RawSamplesBatchInput,
   PersonalCheckpointInput,
@@ -123,4 +125,7 @@ export interface IPersonalTrailRepository {
   updatePersonalTrail(id: string, userId: string, data: any): Promise<PersonalTrailModel>
   softDeletePersonalTrail(id: string, userId: string): Promise<void>
   submitTrailVerification(trailId: string, userId: string, note?: string): Promise<any>
+  findSubmissions(query: AdminSubmissionsQuery): Promise<{ items: any[]; totalItems: number }>
+  findSubmissionById(id: string): Promise<(Record<string, any> & { personalTrailId: string }) | null>
+  reviewSubmission(submissionId: string, reviewerId: string, input: ReviewSubmissionInput): Promise<any>
 }
