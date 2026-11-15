@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+
+import { useAuthStore } from "@/features/auth";
+import { useLogout } from "@/features/auth/hooks/useLogout";
+import { NotificationBell } from "@/features/notifications";
+import { initialsOf } from "@/features/rentals/services/staff-overview.api";
 
 type StaffDeliveryShellProps = {
   children: ReactNode;
@@ -62,54 +67,19 @@ function MenuIcon({
   );
 }
 
-function BellIcon({
-  className = "h-5 w-5",
-}: {
-  className?: string;
-}) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-      <path d="M10 21h4" />
-    </svg>
-  );
-}
-
-function WifiIcon({
-  className = "h-4 w-4",
-}: {
-  className?: string;
-}) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12.5a10 10 0 0 1 14 0" />
-      <path d="M8.5 16a5 5 0 0 1 7 0" />
-      <path d="M12 20h.01" />
-    </svg>
-  );
-}
-
 export function StaffDeliveryShell({
   children,
 }: StaffDeliveryShellProps) {
+  const router = useRouter();
+  const { logout, isLoading: loggingOut } = useLogout();
+  const user = useAuthStore((state) => state.user);
+  const displayName = user?.fullName || user?.email?.split("@")[0] || "Nhân viên giao nhận";
+
+  async function handleLogout() {
+    await logout();
+    router.replace("/public/login");
+  }
+
   const pathname = usePathname();
 
   return (
@@ -146,10 +116,6 @@ export function StaffDeliveryShell({
               Nhân viên giao nhận
             </p>
 
-            <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Đang trực tuyến
-            </div>
           </div>
         </div>
 
@@ -202,19 +168,27 @@ export function StaffDeliveryShell({
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dcece2] font-black text-[#0d5b3a]">
-              HT
+              {initialsOf(displayName)}
             </div>
 
             <div className="min-w-0">
               <p className="truncate text-sm font-extrabold text-slate-900">
-                Hoàng Văn Tuấn
+                {displayName}
               </p>
 
               <p className="truncate text-xs text-slate-500">
-                Staff Delivery · Sa Pa
+                {user?.email ?? "Nhân viên giao nhận"}
               </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            {loggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
+          </button>
         </div>
       </aside>
 
@@ -242,20 +216,7 @@ export function StaffDeliveryShell({
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <span className="hidden items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-extrabold text-emerald-800 sm:inline-flex">
-                <WifiIcon />
-                GPS ON
-              </span>
-
-              <button
-                type="button"
-                className="relative flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
-                aria-label="Thông báo"
-              >
-                <BellIcon />
-
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-              </button>
+              <NotificationBell />
 
               <span className="hidden rounded-full bg-[#0d5b3a] px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-white md:inline-flex">
                 Staff Delivery
