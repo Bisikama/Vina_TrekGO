@@ -109,13 +109,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
   } as TextStyle,
   sectionSubtitle: {
     marginTop: 2,
     color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
   },
 });

@@ -1250,7 +1250,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     flex: 1,
@@ -1275,7 +1275,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
   },
   errorTitle: {
@@ -1285,11 +1285,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   errorSub: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
     marginTop: 6,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   retryBtn: {
     marginTop: 18,
@@ -1300,7 +1300,7 @@ const styles = StyleSheet.create({
   },
   retryBtnText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
   countdownBanner: {
@@ -1321,7 +1321,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   countdownTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#92400E",
   },
@@ -1333,9 +1333,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   countdownSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#92400E",
-    lineHeight: 15,
+    lineHeight: 18,
   },
   expiredBanner: {
     flexDirection: "row",
@@ -1347,12 +1347,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   expiredTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#DC2626",
   },
   expiredSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#991B1B",
     marginTop: 2,
   },
@@ -1368,15 +1368,15 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
   },
   cancelledTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#DC2626",
   },
   cancelledSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#B91C1C",
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   statusPillCancelled: {
     backgroundColor: "#FEE2E2",
@@ -1397,15 +1397,15 @@ const styles = StyleSheet.create({
     borderColor: "#BBF7D0",
   },
   confirmedTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#16A34A",
   },
   confirmedSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#15803D",
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   card: {
     backgroundColor: Colors.surfaceContainerLowest,
@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tripEyebrow: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.primaryDark,
     letterSpacing: 0.8,
@@ -1435,7 +1435,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -1453,12 +1453,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   metaBoldText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -1477,12 +1477,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   sectionSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
     marginBottom: 12,
@@ -1497,7 +1497,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLow,
   },
   editBtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -1512,21 +1512,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   transportLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceMuted,
   },
   transportVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurface,
   },
   transportValBold: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
   phoneLink: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
     textDecorationLine: "underline",
@@ -1547,12 +1547,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pIndexText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.onSurfaceVariant,
   },
   pName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -1562,11 +1562,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   pMetaText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   pEmergencyText: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
   },
@@ -1607,15 +1607,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   gatewayName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   gatewayDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   priceRow: {
     flexDirection: "row",
@@ -1623,11 +1623,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   priceItemLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   priceItemVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurface,
   },
@@ -1642,7 +1642,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   priceTotalLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -1663,21 +1663,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   refundLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceMuted,
   },
   refundVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
   refundStatus: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   refundTime: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   cancelBookingBtn: {
@@ -1693,7 +1693,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   cancelBookingText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#DC2626",
   },
@@ -1712,7 +1712,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stickyLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceMuted,
   },
   stickyAmount: {
@@ -1731,7 +1731,7 @@ const styles = StyleSheet.create({
   },
   payNowText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
   btnDisabled: {
@@ -1773,10 +1773,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   successModalSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.mute,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 20,
   },
   successModalDetailsBox: {
@@ -1793,11 +1793,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   successModalLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   successModalVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -1813,7 +1813,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   successModalPrimaryText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -1824,7 +1824,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   successModalSecondaryText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -1855,7 +1855,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ticketAvatarText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.inkDeep,
   },
@@ -1866,13 +1866,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ticketFullName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
     flex: 1,
   },
   ticketShortCode: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.onSurfaceMuted,
     backgroundColor: Colors.surfaceContainer,
@@ -1881,12 +1881,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   ticketPhone: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
   ticketEmergencyText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#b45309",
     marginTop: 2,
   },
@@ -1904,7 +1904,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   ticketActionsRow: {
@@ -1929,7 +1929,7 @@ const styles = StyleSheet.create({
     borderColor: "#c5edab",
   },
   ticketActionBtnPrimaryText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.inkDeep,
   },
@@ -1939,7 +1939,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainerHigh,
   },
   ticketActionBtnOutlineText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.ink,
   },
@@ -1949,7 +1949,7 @@ const styles = StyleSheet.create({
     borderColor: "#fecaca",
   },
   ticketActionBtnDangerText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.error,
   },
@@ -1978,12 +1978,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   qrModalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.ink,
   },
   qrModalSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
   },
@@ -2006,7 +2006,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   qrParticipantCode: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
     marginTop: 2,
@@ -2033,9 +2033,9 @@ const styles = StyleSheet.create({
   },
   qrTipText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: "#854d0e",
-    lineHeight: 16,
+    lineHeight: 19,
   },
 
   // Invite Modal
@@ -2062,19 +2062,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inviteModalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.ink,
   },
   inviteModalSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceMuted,
     marginTop: 2,
   },
   inviteFormHelp: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 14,
   },
   inviteEmailInput: {
@@ -2085,7 +2085,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainerHigh,
     borderRadius: Radius.md,
     paddingHorizontal: 14,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.ink,
     marginBottom: 18,
   },
@@ -2103,7 +2103,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inviteCancelText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -2118,7 +2118,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inviteSubmitText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#FFFFFF",
   },

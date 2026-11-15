@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#868685",
   },

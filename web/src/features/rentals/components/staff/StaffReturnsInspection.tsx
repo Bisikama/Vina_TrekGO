@@ -21,6 +21,7 @@ import {
 } from "@/features/rentals/services/staff-returns.api";
 import type { RentalGrade } from "@/features/rentals/types/rental";
 import { orderShortCode, productLabel, shortId } from "@/features/rentals/services/rental-display";
+import { uploadConditionEvidence } from "@/features/rentals/services/staff-preparation.api";
 
 type Draft = {
   condition: FinalInspectionInput["condition"];
@@ -92,6 +93,7 @@ export function StaffReturnsInspection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [uploadingUnit, setUploadingUnit] = useState<string>();
   // Sản phẩm có hạng bắt buộc gửi gradeDecision khi đưa thiết bị về AVAILABLE (RB-API-611).
   const [productGrades, setProductGrades] = useState<Record<string, RentalGrade>>({});
   const [gradeRequiredUnits, setGradeRequiredUnits] = useState<string[]>([]);
@@ -267,6 +269,37 @@ export function StaffReturnsInspection() {
     );
   }
 
+  async function addEvidencePhotos(unitId: string, files: FileList | null) {
+    if (!files?.length) return;
+    setUploadingUnit(unitId);
+    setError(undefined);
+    try {
+      const ids: string[] = [];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) throw new Error("Chỉ nhận file ảnh.");
+        ids.push(await uploadConditionEvidence(file));
+      }
+      setDrafts((current) => {
+        const draft = current[unitId] ?? { condition: "GOOD", notes: "", ruleId: "", evidenceIds: "" };
+        const merged = [...splitIds(draft.evidenceIds), ...ids];
+        return { ...current, [unitId]: { ...draft, evidenceIds: merged.join(",") } };
+      });
+    } catch (uploadError) {
+      setError(uploadError instanceof Error && !("isAxiosError" in uploadError)
+        ? uploadError.message
+        : getStaffReturnErrorMessage(uploadError));
+    } finally {
+      setUploadingUnit(undefined);
+    }
+  }
+
+  function clearEvidencePhotos(unitId: string) {
+    setDrafts((current) => {
+      const draft = current[unitId];
+      return draft ? { ...current, [unitId]: { ...draft, evidenceIds: "" } } : current;
+    });
+  }
+
   async function inspectPendingUnits() {
     if (!detail || !pendingInspection.length) return;
     const items: FinalInspectionInput[] = pendingInspection.map((unit) => {
@@ -278,6 +311,10 @@ export function StaffReturnsInspection() {
         throw new Error(`Hãy chọn quy tắc hư hỏng cho ${unit.assetCode}.`);
       }
       const evidenceIds = splitIds(draft.evidenceIds);
+      const preliminary = inspectionByUnit.get(unit.unitId)?.preliminary;
+      if ((issue || (preliminary && preliminary.outcome !== "NORMAL")) && evidenceIds.length === 0) {
+        throw new Error(`Thiết bị ${expected?.productName ? productLabel(expected.productName) : unit.assetCode} cần ít nhất 1 ảnh bằng chứng.`);
+      }
       const availableRules = rules.filter((rule) => rule.productId === expected?.productId);
       if (issue && availableRules.length === 0) {
         throw new Error(`Sản phẩm ${expected?.productName ?? unit.assetCode} chưa có mức hư hỏng để chọn. Báo Admin bổ sung.`);
@@ -484,12 +521,36 @@ export function StaffReturnsInspection() {
                             placeholder="Ghi chú kiểm định"
                             className="h-11 rounded-lg bg-[#edf3ff] px-3 text-xs"
                           />
-                          <input
-                            value={draft.evidenceIds}
-                            onChange={(event) => setDrafts((current) => ({ ...current, [received.unitId]: { ...draft, evidenceIds: event.target.value } }))}
-                            placeholder="Mã ảnh bằng chứng, nếu có (cách nhau bằng dấu phẩy)"
-                            className="h-11 rounded-lg bg-[#edf3ff] px-3 text-xs"
-                          />
+                          <div className="flex h-11 items-center justify-between gap-2 rounded-lg bg-[#edf3ff] px-3 text-xs">
+                            <span className="text-slate-600">
+                              {uploadingUnit === received.unitId
+                                ? "Đang tải ảnh..."
+                                : splitIds(draft.evidenceIds).length
+                                  ? `Đã có ${splitIds(draft.evidenceIds).length} ảnh bằng chứng`
+                                  : "Ảnh bằng chứng (thiết bị cần kiểm định kỹ bắt buộc có)"}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              {splitIds(draft.evidenceIds).length && uploadingUnit !== received.unitId ? (
+                                <button type="button" onClick={() => clearEvidencePhotos(received.unitId)} className="text-slate-500 hover:text-red-600">
+                                  Xóa
+                                </button>
+                              ) : null}
+                              <label className={`cursor-pointer rounded-md bg-white px-3 py-1.5 font-semibold text-emerald-800 shadow-sm ${uploadingUnit ? "pointer-events-none opacity-50" : ""}`}>
+                                Chụp / tải ảnh
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    void addEvidencePhotos(received.unitId, event.target.files);
+                                    event.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </span>
+                          </div>
                         </div>
                       ) : inspection.final.outcome === "NORMAL" && unit?.unitStatus === "CLEANING" ? (
                         <div className="mt-4 space-y-3">
@@ -560,7 +621,7 @@ export function StaffReturnsInspection() {
                 {pendingInspection.length > 0 ? (
                   <button
                     type="button"
-                    disabled={busy || detail.status !== "INVENTORY_RECEIVED"}
+                    disabled={busy || Boolean(uploadingUnit) || detail.status !== "INVENTORY_RECEIVED"}
                     onClick={() => void run(inspectPendingUnits, "Đã ghi kết quả kiểm định cuối; các món đạt được chuyển sang vệ sinh.")}
                     className="w-full rounded-xl bg-[#125238] px-5 py-4 text-sm font-bold text-white disabled:opacity-50"
                   >

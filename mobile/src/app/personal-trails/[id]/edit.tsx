@@ -470,13 +470,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   headerSubtitle: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
   },
   scrollContent: {
     padding: 16,
@@ -495,14 +495,14 @@ const styles = StyleSheet.create({
   },
   rejectionTitle: {
     color: "#B91C1C",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   rejectionText: {
     marginTop: 4,
     color: "#991B1B",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   sectionCard: {
     padding: 16,
@@ -526,13 +526,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.onSurface,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
   },
   sectionSubtitle: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
   },
   gpsGrid: {
     flexDirection: "row",
@@ -548,13 +548,13 @@ const styles = StyleSheet.create({
   },
   gpsGridValue: {
     color: Colors.primaryDark,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
   },
   gpsGridLabel: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
   },
   gpsNoticeBox: {
@@ -568,14 +568,14 @@ const styles = StyleSheet.create({
   gpsNoticeText: {
     flex: 1,
     color: Colors.primaryDark,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   fieldLabel: {
     marginTop: 12,
     marginBottom: 6,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   requiredMark: {
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceContainerLow,
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
   },
   multilineInput: {
     minHeight: 100,
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
   },
   optionChipText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   optionChipTextSelected: {
@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
   },
   draftButtonText: {
     color: Colors.primaryDark,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   submitButton: {
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: Colors.onPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   missingCard: {
@@ -670,14 +670,14 @@ const styles = StyleSheet.create({
   missingTitle: {
     marginTop: 12,
     color: Colors.onSurface,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
   },
   missingDescription: {
     marginTop: 6,
     textAlign: "center",
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
   },
   backButton: {
     marginTop: 20,
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: Colors.onPrimary,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
 });

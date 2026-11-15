@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   navDisabled: { opacity: 0.4 },
   navText: {
     color: Colors.primary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   navTextDisabled: { color: Colors.textSecondary },
@@ -115,11 +115,11 @@ const styles = StyleSheet.create({
   },
   pageText: {
     color: Colors.textPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
   totalText: {
     color: Colors.textSecondary,
-    fontSize: 12,
+    fontSize: 14,
   },
 });

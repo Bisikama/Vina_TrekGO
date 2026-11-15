@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   rowText: {
     color: Colors.primaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   tokenNotice: {
@@ -124,9 +124,9 @@ const styles = StyleSheet.create({
   },
   tokenNoticeText: {
     color: "#9a3412",
-    fontSize: 11,
+    fontSize: 13,
     flex: 1,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   primary: {
     flexDirection: "row",
@@ -141,6 +141,6 @@ const styles = StyleSheet.create({
   primaryText: {
     color: "#fff",
     fontWeight: "800",
-    fontSize: 13,
+    fontSize: 14,
   },
 });

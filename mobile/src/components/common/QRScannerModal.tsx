@@ -325,14 +325,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   permissionDesc: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 21,
     marginBottom: 24,
   },
   permissionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
     marginTop: 14,
   },
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   permissionBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   cancelLinkText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     borderColor: "#8cd867",
   },
   topCenterText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: "#8cd867",
     letterSpacing: 0.8,
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   analyzingText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#8cd867",
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     borderColor: "#8cd867",
   },
   galleryBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.3)",
   },
   manualInputBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   rescanBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0c2000",
   },

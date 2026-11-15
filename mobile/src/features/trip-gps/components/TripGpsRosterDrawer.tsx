@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   sheetSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.mute,
     marginTop: 2,
     fontWeight: '500',
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memberName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: Colors.ink,
   },
@@ -274,15 +274,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   roleBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   statusLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
   },
   cpProgressText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.mute,
     marginTop: 4,
     fontWeight: '500',
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   locateBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.ink,
   },

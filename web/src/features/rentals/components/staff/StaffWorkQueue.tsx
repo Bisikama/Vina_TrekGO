@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getStaffInventoryErrorMessage } from "@/features/rentals/services/staff-inventory.api";
 import type {
+  PreparationTaskPriority,
   PreparationTaskStatus,
   PreparationTaskSummary,
 } from "@/features/rentals/services/staff-preparation.api";
@@ -30,7 +31,25 @@ function formatDateTime(value: string | null) {
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
-function TaskCard({ task }: { task: PreparationTaskSummary }) {
+function formatAgo(value: string, now: number) {
+  const minutes = Math.max(0, Math.round((now - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return "vừa xong";
+  if (minutes < 60) return `${minutes} phút trước`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} giờ trước`;
+  return `${Math.floor(hours / 24)} ngày trước`;
+}
+
+const PRIORITY_BADGE: Record<PreparationTaskPriority, { label: string; tone: string } | null> = {
+  URGENT: { label: "Khẩn", tone: "bg-red-50 text-red-700 ring-1 ring-red-200" },
+  HIGH: { label: "Sắp tới hạn", tone: "bg-amber-50 text-amber-800 ring-1 ring-amber-200" },
+  NORMAL: null,
+  LOW: null,
+};
+
+const isUrgent = (task: PreparationTaskSummary) => task.priority === "URGENT" || task.status === "BLOCKED";
+
+function TaskCard({ task, now }: { task: PreparationTaskSummary; now: number }) {
   const items = task.requiredLineSummary
     .map((line) => `${productLabel(line.productName)} ×${line.quantity}`)
     .join(" · ");
@@ -39,17 +58,36 @@ function TaskCard({ task }: { task: PreparationTaskSummary }) {
   const percent = task.progress.required
     ? Math.round((task.progress.picked / task.progress.required) * 100)
     : 0;
+  const priorityBadge = task.isOverdue
+    ? { label: "Quá hạn", tone: "bg-red-600 text-white" }
+    : task.status === "BLOCKED"
+      ? null
+      : task.priority
+        ? PRIORITY_BADGE[task.priority]
+        : null;
+  const highlighted = isUrgent(task) || task.priority === "HIGH";
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className={`rounded-xl border bg-white p-4 shadow-sm ${isUrgent(task) ? "border-red-200 ring-1 ring-red-100" : highlighted ? "border-amber-200" : "border-slate-200"}`}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-semibold text-slate-900">Đơn {orderShortCode(task.orderId)}</p>
-        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusInfo.tone}`}>{statusInfo.label}</span>
+        <div className="flex flex-wrap justify-end gap-1">
+          {priorityBadge ? (
+            <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityBadge.tone}`}>{priorityBadge.label}</span>
+          ) : null}
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusInfo.tone}`}>{statusInfo.label}</span>
+        </div>
       </div>
 
       <h3 className="mt-3 text-sm font-semibold text-slate-950">{task.pickup.name}</h3>
       <p className="mt-1 text-[11px] text-slate-600">Kho: <strong>{task.inventoryLocation.name}</strong></p>
-      <p className="mt-1 text-[11px] text-slate-600">Hạn: <strong>{formatDateTime(task.deadline)}</strong></p>
+      {task.sentToInventoryAt ? (
+        <p className="mt-1 text-[11px] text-slate-600">
+          Tới kho: <strong>{formatDateTime(task.sentToInventoryAt)}</strong>
+          <span className="text-slate-400"> · {formatAgo(task.sentToInventoryAt, now)}</span>
+        </p>
+      ) : null}
+      <p className={`mt-1 text-[11px] ${task.isOverdue ? "text-red-700" : "text-slate-600"}`}>Hạn: <strong>{formatDateTime(task.deadline)}</strong></p>
       <div className="mt-3 rounded-lg bg-[#edf3ff] p-3 text-[11px] leading-5 text-slate-700">{items || "Chưa có dòng thiết bị"}</div>
 
       {transferred ? (
@@ -79,6 +117,7 @@ export function StaffWorkQueue() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -86,6 +125,7 @@ export function StaffWorkQueue() {
     try {
       const result = await getPreparationTasks({ pageSize: 100, signal });
       setTasks(result.items);
+      setNow(Date.now());
     } catch (loadError) {
       if (signal?.aborted) return;
       setError(getStaffInventoryErrorMessage(loadError));
@@ -115,6 +155,11 @@ export function StaffWorkQueue() {
     );
   }, [search, tasks]);
 
+  // Giữ nguyên thứ tự backend trả về (đã xếp theo mức ưu tiên); chỉ tách nhóm cần xử lý gấp lên đầu.
+  const urgentTasks = useMemo(() => visibleTasks.filter(isUrgent), [visibleTasks]);
+  const overdueCount = urgentTasks.filter((task) => task.isOverdue).length;
+  const blockedCount = urgentTasks.filter((task) => task.status === "BLOCKED").length;
+
   return (
     <main className="px-6 py-5">
       <div className="mx-auto max-w-[1500px]">
@@ -140,9 +185,25 @@ export function StaffWorkQueue() {
           </div>
         )}
 
+        {urgentTasks.length > 0 && (
+          <section className="mt-5 rounded-xl border border-red-200 bg-red-50/60 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-semibold text-red-800">Cần xử lý trước ({urgentTasks.length})</h2>
+              <p className="text-[11px] text-red-700">
+                {[overdueCount ? `${overdueCount} đơn quá hạn` : null, blockedCount ? `${blockedCount} đơn đang bị chặn` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {urgentTasks.map((task) => <TaskCard key={task.id} task={task} now={now} />)}
+            </div>
+          </section>
+        )}
+
         <section className="mt-5 grid items-start gap-4 xl:grid-cols-4">
           {columns.map((column) => {
-            const columnTasks = visibleTasks.filter((task) => column.statuses.includes(task.status));
+            const columnTasks = visibleTasks.filter((task) => !isUrgent(task) && column.statuses.includes(task.status));
             return (
               <div key={column.key} className="rounded-xl bg-[#eaf0fc] p-3">
                 <div className="flex items-center justify-between">
@@ -150,7 +211,7 @@ export function StaffWorkQueue() {
                   <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">{columnTasks.length}</span>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-500">{column.hint}</p>
-                <div className="mt-3 space-y-3">{columnTasks.map((task) => <TaskCard key={task.id} task={task} />)}</div>
+                <div className="mt-3 space-y-3">{columnTasks.map((task) => <TaskCard key={task.id} task={task} now={now} />)}</div>
               </div>
             );
           })}

@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   },
   privatePillText: {
     color: "#564500",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
   },
   title: {
@@ -575,8 +575,8 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   segmentBox: {
     marginBottom: 18,
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   segmentTextActive: {
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 7,
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   textInput: {
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceContainerLowest,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
   },
   inputWithIcon: {
     height: 48,
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   inputFlex: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
   },
   trailList: {
     gap: 8,
@@ -661,13 +661,13 @@ const styles = StyleSheet.create({
   },
   trailName: {
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   trailMeta: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
   },
   durationBadge: {
     paddingHorizontal: 7,
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
   },
   durationText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   capacityRow: {
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   },
   capacityText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   capacityTextActive: {
@@ -718,8 +718,8 @@ const styles = StyleSheet.create({
   infoNoticeText: {
     flex: 1,
     color: Colors.primaryDark,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   submitButton: {
     minHeight: 51,
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: Colors.onPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
   },
   secondaryButton: {
@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   successBox: {
@@ -768,8 +768,8 @@ const styles = StyleSheet.create({
   successDescription: {
     marginTop: 8,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   codeContainer: {
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
   },
   codeLabel: {
     color: "#725C00",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.6,
   },
@@ -804,7 +804,7 @@ const styles = StyleSheet.create({
   },
   secureText: {
     color: "#725C00",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
   },
   joinHero: {
@@ -828,8 +828,8 @@ const styles = StyleSheet.create({
   joinDescription: {
     marginTop: 5,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
   },
   codeInput: {
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
     marginBottom: 14,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
     textAlign: "center",
   },
   currentTripsSection: {
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   currentTripsTitle: {
     marginBottom: 9,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   currentTripRow: {
@@ -886,12 +886,12 @@ const styles = StyleSheet.create({
   },
   currentTripName: {
     color: Colors.onSurface,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   currentTripMeta: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
   },
 });

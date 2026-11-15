@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   destinationText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.primaryDeep,
   },
@@ -169,25 +169,25 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     backgroundColor: Colors.dangerBg,
   },
-  almostFullText: { fontSize: 9, fontWeight: "800", color: Colors.dangerText },
+  almostFullText: { fontSize: 11, fontWeight: "800", color: Colors.dangerText },
   notOpenBadge: {
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: Radius.pill,
     backgroundColor: Colors.warningBg,
   },
-  notOpenText: { fontSize: 9, fontWeight: "800", color: Colors.warningText },
+  notOpenText: { fontSize: 11, fontWeight: "800", color: Colors.warningText },
 
   cardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.textPrimary,
-    lineHeight: 22,
+    lineHeight: 23,
   },
 
   metaRow: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText: { fontSize: 12, color: Colors.textSecondary },
+  metaText: { fontSize: 14, color: Colors.textSecondary },
 
   leaderRow: {
     flexDirection: "row",
@@ -204,10 +204,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  leaderAvatarLetter: { fontSize: 9, fontWeight: "800", color: Colors.primaryDeep },
+  leaderAvatarLetter: { fontSize: 11, fontWeight: "800", color: Colors.primaryDeep },
   leaderName: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.textSecondary,
   },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: Radius.sm,
   },
-  pickupText: { flex: 1, fontSize: 10, color: Colors.textSecondary },
+  pickupText: { flex: 1, fontSize: 12, color: Colors.textSecondary },
 
   cardFooter: {
     flexDirection: "row",
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   priceLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: "600",
     marginBottom: 1,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   },
   slotBarInner: { height: "100%", borderRadius: 2 },
   slotText: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: "600",
   },

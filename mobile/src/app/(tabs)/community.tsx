@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   searchButtonText: {
     flex: 1,
     color: Colors.onSurfaceMuted,
-    fontSize: 10,
+    fontSize: 12,
   },
   notificationButton: {
     width: 43,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: {
     color: Colors.onPrimary,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
   },
   heroCard: {
@@ -315,21 +315,21 @@ const styles = StyleSheet.create({
   },
   heroEyebrow: {
     color: Colors.primary,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
   heroTitle: {
     marginTop: 4,
     color: Colors.onPrimaryDark,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   heroDescription: {
     marginTop: 5,
     color: "#D9E8CF",
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 17,
   },
   composerCard: {
     marginHorizontal: 14,
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   },
   composerPlaceholder: {
     color: Colors.onSurfaceMuted,
-    fontSize: 10,
+    fontSize: 12,
   },
   composerAction: {
     width: 38,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   },
   filterPillText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   filterPillTextSelected: {
@@ -403,13 +403,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.onSurface,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
   },
   sectionSubtitle: {
     marginTop: 2,
     color: Colors.onSurfaceMuted,
-    fontSize: 9,
+    fontSize: 11,
   },
   floatingButton: {
     position: "absolute",
@@ -433,14 +433,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     marginTop: 10,
     color: Colors.onSurface,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
   },
   emptyDescription: {
     marginTop: 5,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: "center",
   },
 });

@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     padding: 16,
     ...Shadows.card,
   },
-  sectionTitle: { fontSize: 13, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
   routeItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -87,9 +87,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  routeIndexText: { fontSize: 11, fontWeight: "900", color: Colors.inverseOnSurface },
-  routeName: { fontSize: 13, fontWeight: "800", color: Colors.onSurface },
-  routeMeta: { fontSize: 11, color: Colors.mute, marginTop: 1 },
+  routeIndexText: { fontSize: 13, fontWeight: "900", color: Colors.inverseOnSurface },
+  routeName: { fontSize: 14, fontWeight: "800", color: Colors.onSurface },
+  routeMeta: { fontSize: 13, color: Colors.mute, marginTop: 1 },
   checkpointItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -104,13 +104,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cpNumberText: { fontSize: 10, fontWeight: "900", color: "#fff" },
-  cpName: { flex: 1, fontSize: 13, fontWeight: "700", color: Colors.onSurface },
+  cpNumberText: { fontSize: 12, fontWeight: "900", color: "#fff" },
+  cpName: { flex: 1, fontSize: 14, fontWeight: "700", color: Colors.onSurface },
   requiredBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.sm,
     backgroundColor: Colors.errorContainer,
   },
-  requiredText: { fontSize: 8, fontWeight: "900", color: Colors.onErrorContainer },
+  requiredText: { fontSize: 10, fontWeight: "900", color: Colors.onErrorContainer },
 });

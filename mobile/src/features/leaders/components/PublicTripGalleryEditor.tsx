@@ -57,8 +57,8 @@ export function PublicTripGalleryEditor({ gallery, disabled, locked, children }:
 
 const styles = StyleSheet.create({
   content: { gap: Spacing.sm },
-  help: { color: Colors.textSecondary, fontSize: 13 },
+  help: { color: Colors.textSecondary, fontSize: 14 },
   item: { padding: Spacing.sm, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, gap: Spacing.xs },
-  label: { color: Colors.primaryDeep, fontSize: 13, fontWeight: "700" },
+  label: { color: Colors.primaryDeep, fontSize: 14, fontWeight: "700" },
   actions: { flexDirection: "row", gap: Spacing.xs, flexWrap: "wrap" },
 });

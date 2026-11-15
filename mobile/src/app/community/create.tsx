@@ -294,8 +294,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLow,
   },
   headerTitleBox: { flex: 1, alignItems: "center" },
-  headerTitle: { color: Colors.onSurface, fontSize: 15, fontWeight: "900" },
-  headerSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 8 },
+  headerTitle: { color: Colors.onSurface, fontSize: 16, fontWeight: "900" },
+  headerSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 10 },
   publishTopButton: {
     minWidth: 55,
     height: 38,
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryContainer,
   },
-  publishTopButtonText: { color: Colors.ink, fontSize: 11, fontWeight: "900" },
+  publishTopButtonText: { color: Colors.ink, fontSize: 13, fontWeight: "900" },
   scrollContent: { padding: 14, paddingBottom: 42 },
   authorRow: {
     marginBottom: 12,
@@ -314,15 +314,15 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 44, height: 44, borderRadius: Radius.full },
   authorNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  authorName: { color: Colors.onSurface, fontSize: 13, fontWeight: "900" },
+  authorName: { color: Colors.onSurface, fontSize: 14, fontWeight: "900" },
   roleBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryPale,
   },
-  roleBadgeText: { color: Colors.primaryDark, fontSize: 8, fontWeight: "900" },
-  visibilityText: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 9 },
+  roleBadgeText: { color: Colors.primaryDark, fontSize: 10, fontWeight: "900" },
+  visibilityText: { marginTop: 3, color: Colors.onSurfaceMuted, fontSize: 11 },
   editorCard: {
     marginBottom: 13,
     padding: 13,
@@ -333,13 +333,13 @@ const styles = StyleSheet.create({
   contentInput: {
     minHeight: 150,
     color: Colors.onSurface,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
   },
   characterCount: {
     alignSelf: "flex-end",
     color: Colors.onSurfaceMuted,
-    fontSize: 9,
+    fontSize: 11,
   },
   previewWrapper: {
     height: 220,
@@ -372,8 +372,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  sectionTitle: { color: Colors.onSurface, fontSize: 12, fontWeight: "900" },
-  sectionSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 8 },
+  sectionTitle: { color: Colors.onSurface, fontSize: 14, fontWeight: "900" },
+  sectionSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 10 },
   imageOptionRow: { flexDirection: "row", gap: 9 },
   imageOption: {
     flex: 1,
@@ -392,12 +392,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  imageOptionText: { color: Colors.onSurface, fontSize: 9, fontWeight: "800" },
+  imageOptionText: { color: Colors.onSurface, fontSize: 11, fontWeight: "800" },
   fieldLabel: {
     marginTop: 8,
     marginBottom: 5,
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   input: {
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceContainerLow,
     color: Colors.onSurface,
-    fontSize: 10,
+    fontSize: 12,
   },
   tagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   tagPill: {
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryDark,
     backgroundColor: Colors.primaryPale,
   },
-  tagPillText: { color: Colors.onSurfaceVariant, fontSize: 9, fontWeight: "700" },
+  tagPillText: { color: Colors.onSurfaceVariant, fontSize: 11, fontWeight: "700" },
   tagPillTextSelected: { color: Colors.primaryDark, fontWeight: "900" },
   safetyNotice: {
     marginBottom: 13,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: "#FFF7D6",
   },
-  safetyNoticeText: { flex: 1, color: "#725C00", fontSize: 9, lineHeight: 14 },
+  safetyNoticeText: { flex: 1, color: "#725C00", fontSize: 11, lineHeight: 17 },
   publishButton: {
     minHeight: 52,
     flexDirection: "row",
@@ -447,5 +447,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
     ...Shadows.card,
   },
-  publishButtonText: { color: Colors.onPrimary, fontSize: 12, fontWeight: "900" },
+  publishButtonText: { color: Colors.onPrimary, fontSize: 14, fontWeight: "900" },
 });

@@ -501,12 +501,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   headerSubtitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#707972",
     marginTop: 1,
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   },
   draftTopBtnText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   stepperContainer: {
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   },
   stepperItemTextDone: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     flex: 1,
   },
@@ -573,12 +573,12 @@ const styles = StyleSheet.create({
   },
   activeStepBadgeText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   stepperItemTextActive: {
     color: "#0e0f0c",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     flex: 1,
   },
@@ -595,12 +595,12 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   inactiveStepNum: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#94a3b8",
   },
   stepperItemTextInactive: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#94a3b8",
     fontWeight: "600",
     flex: 1,
@@ -630,15 +630,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cardTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   cardSubtitle: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   verifiedBadgeBox: {
     backgroundColor: "#f0fdf4",
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   verifiedPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -667,14 +667,14 @@ const styles = StyleSheet.create({
   },
   verifiedTagText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   verifiedSubText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#374151",
     marginTop: 3,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   searchBox: {
     flexDirection: "row",
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: "#0e0f0c",
     padding: 0,
   },
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadingText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#707972",
     marginTop: 8,
   },
@@ -712,17 +712,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   emptyTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     marginTop: 6,
   },
   emptySub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     textAlign: "center",
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   trailsList: {
     gap: 10,
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
   },
   thumbHashText: {
     color: "#ffffff",
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "700",
   },
   trailNameRow: {
@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   trailName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     flex: 1,
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#15803d",
   },
@@ -802,12 +802,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   noCpBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#c2410c",
   },
   trailSubText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     marginTop: 2,
   },
@@ -822,17 +822,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   metricLabel: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#707972",
   },
   metricVal: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#0e0f0c",
   },
   diffChip: {},
   diffVal: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#b45309",
   },
@@ -854,12 +854,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   overviewTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   overviewSubTitle: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     marginTop: 1,
   },
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
   },
   peakBadgeText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   statsStripGrid: {
@@ -888,12 +888,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statStripLabel: {
-    fontSize: 8,
+    fontSize: 10,
     color: "#707972",
     fontWeight: "600",
   },
   statStripVal: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#0e0f0c",
     marginTop: 2,
@@ -912,14 +912,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   safetyTitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   safetyText: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#374151",
-    lineHeight: 13,
+    lineHeight: 16,
     marginBottom: 2,
   },
   checkpointHeaderTitleRow: {
@@ -939,7 +939,7 @@ const styles = StyleSheet.create({
   },
   reqCpBadgeDarkText: {
     color: "#ffffff",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   disabledPromptBox: {
@@ -951,7 +951,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   disabledPromptText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#707972",
     flex: 1,
   },
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
   },
   cpSeqNum: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   cpTitleRow: {
@@ -987,7 +987,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cpName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -998,17 +998,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpBadgeRequiredText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#15803d",
   },
   cpSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
     marginTop: 1,
   },
   cpCoords: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#64748b",
     marginTop: 2,
   },
@@ -1023,7 +1023,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   backStep1BtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0e0f0c",
   },
@@ -1041,7 +1041,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccd9ea",
   },
   saveDraftBtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0e0f0c",
   },
@@ -1058,7 +1058,7 @@ const styles = StyleSheet.create({
   },
   primaryProceedBtnText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   errorBox: {
@@ -1076,12 +1076,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   errorTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   errorText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#9f1239",
     marginTop: 2,
   },
@@ -1092,7 +1092,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   retryBtnText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#0e0f0c",
     fontWeight: "700",
   },

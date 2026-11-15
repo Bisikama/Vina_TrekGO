@@ -257,12 +257,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionHeading: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   addBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cardNum: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
     marginBottom: 4,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainer,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
   },
   footer: {
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
 });

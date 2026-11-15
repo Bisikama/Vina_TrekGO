@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     ...Shadows.tactical,
   },
   completedText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#0c2000',
   },
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     ...Shadows.tactical,
   },
   targetBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: '#382b00',
   },
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   neutralBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#f2f1eb',
   },
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fed018',
   },
   userBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.onPrimaryContainer,
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(30, 45, 28, 0.95)',
   },
   compassLabel: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '900',
     color: '#fed018',
     marginBottom: -2,
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   coordsText: {
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: 'monospace',
     color: '#c5eba3',
     letterSpacing: 0.5,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   syncText: {
-    fontSize: 9,
+    fontSize: 11,
     color: '#e4e2dd',
     fontWeight: '600',
   },

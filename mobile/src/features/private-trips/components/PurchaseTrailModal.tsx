@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#D1FAE5",
   },
   trailBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#059669",
   },
@@ -642,9 +642,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   trailSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 18,
+    lineHeight: 21,
   },
   loadingBox: {
     paddingVertical: 36,
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   ownedBox: {
@@ -675,10 +675,10 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
   },
   ownedSub: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 12,
     paddingHorizontal: 16,
   },
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   benefitsTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
     marginBottom: 2,
@@ -706,15 +706,15 @@ const styles = StyleSheet.create({
   },
   benefitText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 17,
+    lineHeight: 20,
   },
   gatewaySection: {
     gap: 8,
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   vnpayTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#005BAA",
   },
@@ -757,14 +757,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#BAE6FD",
   },
   vnpayTagText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#0369A1",
   },
   vnpaySub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   paymentSection: {
     gap: 14,
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF3C7",
   },
   pendingBadgeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#B45309",
   },
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   priceLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   priceAmount: {
@@ -813,17 +813,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   summaryLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   summaryValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurface,
   },
   codeText: {
     fontFamily: "monospace",
-    fontSize: 11,
+    fontSize: 13,
   },
   noticeBox: {
     flexDirection: "row",
@@ -836,9 +836,9 @@ const styles = StyleSheet.create({
   },
   noticeText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: "#0369A1",
-    lineHeight: 17,
+    lineHeight: 20,
   },
   openUrlBtn: {
     flexDirection: "row",
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   openUrlBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   verifyBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -879,7 +879,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   externalBrowserBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.primaryDark,
     textDecorationLine: "underline",
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cancelSessionBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textDecorationLine: "underline",
   },
@@ -908,12 +908,12 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#DC2626",
     textAlign: "center",
     marginTop: 4,

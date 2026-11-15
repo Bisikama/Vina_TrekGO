@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainer,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.onSurface,
   },
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondaryContainer,
   },
   publicBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: "#0c2000",
   },
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
   },
   slotBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.primaryDark,
   },
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
   },
   heroEyebrow: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.primaryDark,
     marginBottom: 6,
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   heroMetaText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.onSurfaceVariant,
   },
@@ -525,13 +525,13 @@ const styles = StyleSheet.create({
   },
   statValue: {
     marginTop: 5,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   statLabel: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   sectionCard: {
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.onSurface,
     marginBottom: 13,
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   leaderName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: Colors.onSurface,
   },
@@ -579,13 +579,13 @@ const styles = StyleSheet.create({
   },
   leaderRating: {
     marginLeft: 4,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   leaderBadgeText: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   contactButton: {
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   weatherStatusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
   },
   weatherCondition: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   weatherDetails: {
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   weatherDetailText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -655,8 +655,8 @@ const styles = StyleSheet.create({
   },
   noticeText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     color: Colors.onSurfaceVariant,
   },
   timelineItem: {
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer,
   },
   timelineNumber: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: Colors.onPrimary,
   },
@@ -681,14 +681,14 @@ const styles = StyleSheet.create({
     marginLeft: 11,
   },
   timelineTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   timelineText: {
     marginTop: 3,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     color: Colors.onSurfaceVariant,
   },
   timelineLine: {
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
   },
   includedText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
   },
   priceSummary: {
@@ -725,7 +725,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   priceCaption: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
   },
   priceValue: {
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
   },
   slotWarning: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#8a5a00",
   },
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   bookingButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onPrimary,
   },
@@ -759,8 +759,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 16,
     textAlign: "center",
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     color: Colors.onSurfaceMuted,
   },
   emptyState: {
@@ -778,8 +778,8 @@ const styles = StyleSheet.create({
   emptyDescription: {
     marginTop: 7,
     textAlign: "center",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     color: Colors.onSurfaceVariant,
   },
   primaryButton: {
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer,
   },
   primaryButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: Colors.onPrimary,
   },

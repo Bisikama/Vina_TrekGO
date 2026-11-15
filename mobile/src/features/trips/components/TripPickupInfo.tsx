@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     padding: 16,
     ...Shadows.card,
   },
-  sectionTitle: { fontSize: 13, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: "900", color: Colors.onSurface, marginBottom: 12 },
   pickupRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pickupName: { fontSize: 14, fontWeight: "800", color: Colors.onSurface },
-  pickupAddress: { fontSize: 12, color: Colors.mute, marginTop: 2 },
-  pickupTime: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 4 },
+  pickupName: { fontSize: 15, fontWeight: "800", color: Colors.onSurface },
+  pickupAddress: { fontSize: 14, color: Colors.mute, marginTop: 2 },
+  pickupTime: { fontSize: 14, color: Colors.onSurfaceVariant, marginTop: 4 },
 });

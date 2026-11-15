@@ -92,5 +92,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.primaryDark,
   },
-  label: { flex: 1, color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  label: { flex: 1, color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
 });

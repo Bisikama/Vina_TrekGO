@@ -675,16 +675,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#707972",
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#410002",
     textAlign: "center",
   },
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   },
   primaryActionBtnText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   header: {
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: "#ba1a1a",
   },
   card: {
@@ -778,14 +778,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#121c2a",
   },
   inputHint: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#707972",
-    lineHeight: 15,
+    lineHeight: 18,
   },
   textInput: {
     borderWidth: 1,
@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 13,
+    fontSize: 14,
     color: "#121c2a",
     backgroundColor: "#fbfcfb",
   },
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   stepperCap: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#0e0f0c",
   },
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
     color: "#121c2a",
   },
   stepperSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#707972",
   },
   priceWrap: {
@@ -879,12 +879,12 @@ const styles = StyleSheet.create({
   priceInput: {
     flex: 1,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#121c2a",
   },
   priceUnit: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#707972",
   },
@@ -911,7 +911,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.3,
   },
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   cancelTripBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ba1a1a",
   },
@@ -952,14 +952,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: "#ba1a1a",
   },
   modalDesc: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#414942",
-    lineHeight: 17,
+    lineHeight: 20,
   },
   modalSectionLabel: {
     fontSize: 11.5,
@@ -972,7 +972,7 @@ const styles = StyleSheet.create({
     borderColor: "#d6dbd2",
     borderRadius: 8,
     padding: 10,
-    fontSize: 12,
+    fontSize: 14,
     color: "#121c2a",
     textAlignVertical: "top",
     backgroundColor: "#fbfcfb",

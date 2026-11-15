@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
     textAlign: "center",
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
   },
   errorTitle: {
@@ -439,10 +439,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   errorSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
   },
   retryButton: {
     paddingHorizontal: 20,
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   retryButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
   },

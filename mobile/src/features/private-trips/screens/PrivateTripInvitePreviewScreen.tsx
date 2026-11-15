@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -240,13 +240,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activeCodeLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.onSurfaceVariant,
     letterSpacing: 0.6,
   },
   activeCodeText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: Colors.primaryDark,
     letterSpacing: 2,
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerHigh,
   },
   changeCodeBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -288,10 +288,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 20,
     paddingHorizontal: 8,
   },
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   submitBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     borderColor: "#c4e3b7",
   },
   qrScanBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.primaryDark,
   },

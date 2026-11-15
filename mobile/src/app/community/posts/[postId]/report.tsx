@@ -256,8 +256,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLow,
   },
   headerTitleBox: { flex: 1, alignItems: "center" },
-  headerTitle: { color: Colors.onSurface, fontSize: 15, fontWeight: "900" },
-  headerSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 8 },
+  headerTitle: { color: Colors.onSurface, fontSize: 16, fontWeight: "900" },
+  headerSubtitle: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 10 },
   headerSpacer: { width: 40 },
   scrollContent: { padding: 14, paddingBottom: 42 },
   postPreview: {
@@ -270,12 +270,12 @@ const styles = StyleSheet.create({
   },
   previewLabel: {
     color: Colors.primaryDark,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
-  previewAuthor: { marginTop: 6, color: Colors.onSurface, fontSize: 11, fontWeight: "900" },
-  previewContent: { marginTop: 5, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 15 },
+  previewAuthor: { marginTop: 6, color: Colors.onSurface, fontSize: 13, fontWeight: "900" },
+  previewContent: { marginTop: 5, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18 },
   sectionCard: {
     marginBottom: 13,
     padding: 14,
@@ -283,8 +283,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     ...Shadows.card,
   },
-  sectionTitle: { color: Colors.onSurface, fontSize: 14, fontWeight: "900" },
-  sectionDescription: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9, lineHeight: 14 },
+  sectionTitle: { color: Colors.onSurface, fontSize: 15, fontWeight: "900" },
+  sectionDescription: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 11, lineHeight: 17 },
   reasonList: { marginTop: 12, gap: 8 },
   reasonCard: {
     minHeight: 70,
@@ -307,8 +307,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   reasonIconSelected: { backgroundColor: Colors.primaryDark },
-  reasonLabel: { color: Colors.onSurface, fontSize: 11, fontWeight: "900" },
-  reasonDescription: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 8, lineHeight: 12 },
+  reasonLabel: { color: Colors.onSurface, fontSize: 13, fontWeight: "900" },
+  reasonDescription: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 15 },
   detailInput: {
     minHeight: 110,
     marginTop: 12,
@@ -318,9 +318,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.surfaceContainerLow,
     color: Colors.onSurface,
-    fontSize: 10,
+    fontSize: 12,
   },
-  characterCount: { marginTop: 5, color: Colors.onSurfaceMuted, fontSize: 8, textAlign: "right" },
+  characterCount: { marginTop: 5, color: Colors.onSurfaceMuted, fontSize: 10, textAlign: "right" },
   adminNotice: {
     marginBottom: 13,
     padding: 12,
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: "#FFF7D6",
   },
-  adminNoticeText: { flex: 1, color: "#725C00", fontSize: 9, lineHeight: 14 },
+  adminNoticeText: { flex: 1, color: "#725C00", fontSize: 11, lineHeight: 17 },
   submitButton: {
     minHeight: 52,
     flexDirection: "row",
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.error,
   },
   submitButtonDisabled: { opacity: 0.4 },
-  submitButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  submitButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   messageCard: {
     padding: 30,
     alignItems: "center",
@@ -349,8 +349,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     ...Shadows.card,
   },
-  messageTitle: { marginTop: 12, color: Colors.onSurface, fontSize: 16, fontWeight: "900", textAlign: "center" },
-  messageDescription: { marginTop: 6, color: Colors.onSurfaceVariant, fontSize: 10, lineHeight: 15, textAlign: "center" },
+  messageTitle: { marginTop: 12, color: Colors.onSurface, fontSize: 17, fontWeight: "900", textAlign: "center" },
+  messageDescription: { marginTop: 6, color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 18, textAlign: "center" },
   primaryButton: {
     minHeight: 48,
     marginTop: 16,
@@ -360,5 +360,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryDark,
   },
-  primaryButtonText: { color: Colors.onPrimary, fontSize: 11, fontWeight: "900" },
+  primaryButtonText: { color: Colors.onPrimary, fontSize: 13, fontWeight: "900" },
 });

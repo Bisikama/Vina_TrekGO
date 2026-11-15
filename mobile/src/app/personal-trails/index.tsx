@@ -466,12 +466,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   headerSubtitle: {
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   headerSpacer: {
@@ -501,14 +501,14 @@ const styles = StyleSheet.create({
   },
   overviewTitle: {
     color: Colors.onSurface,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
   },
   overviewDescription: {
     marginTop: 3,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   statRow: {
     flexDirection: "row",
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   statLabel: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   createButton: {
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: Colors.onPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
   },
   filterRow: {
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   filterChipTextActive: {
@@ -597,15 +597,15 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: Colors.onSurface,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
   emptyDescription: {
     marginTop: 6,
     textAlign: "center",
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     maxWidth: 260,
   },
   emptyActionButton: {
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
   },
   emptyActionText: {
     color: Colors.onPrimary,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   trailList: {
@@ -646,19 +646,19 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   statusPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   trailName: {
     marginTop: 10,
     color: Colors.onSurface,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   trailRegion: {
     marginTop: 2,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
   },
   trailStats: {
     marginTop: 12,
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   },
   trailStatText: {
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   rejectionNotice: {
@@ -691,8 +691,8 @@ const styles = StyleSheet.create({
   rejectionText: {
     flex: 1,
     color: "#B91C1C",
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 18,
   },
   updatedRow: {
     marginTop: 10,
@@ -702,11 +702,11 @@ const styles = StyleSheet.create({
   },
   updatedText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 9,
+    fontSize: 11,
   },
   visibilityText: {
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   unsyncedBanner: {
@@ -724,8 +724,8 @@ const styles = StyleSheet.create({
   unsyncedBannerText: {
     flex: 1,
     color: "#1E40AF",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: "600",
   },
   syncNowButton: {
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
   },
   syncNowButtonText: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
 });

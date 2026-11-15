@@ -37,7 +37,14 @@ export type PreparationTaskSummary = {
   }>;
   version: number;
   allowedActions: string[];
+  /** Lúc đơn tới kho (task được tạo khi khách thanh toán xong). */
+  sentToInventoryAt?: string;
+  /** Backend đã xếp hàng đợi theo mức này: BLOCKED/trễ hạn → URGENT, sắp tới hạn (≤ 2 giờ) → HIGH. */
+  priority?: PreparationTaskPriority;
+  isOverdue?: boolean;
 };
+
+export type PreparationTaskPriority = "URGENT" | "HIGH" | "NORMAL" | "LOW";
 
 export type PreparationUnit = {
   unitId: string;

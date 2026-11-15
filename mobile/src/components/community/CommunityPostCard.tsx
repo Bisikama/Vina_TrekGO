@@ -166,13 +166,13 @@ const styles = StyleSheet.create({
   },
   authorName: {
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   authorMeta: {
     marginTop: 3,
     color: Colors.onSurfaceMuted,
-    fontSize: 9,
+    fontSize: 11,
   },
   roleBadge: {
     paddingHorizontal: 6,
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "900",
   },
   moreButton: {
@@ -198,8 +198,8 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 13,
     color: Colors.onSurface,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   trailChip: {
     alignSelf: "flex-start",
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   trailChipText: {
     color: Colors.primaryDark,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   postImage: {
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   tagText: {
     color: Colors.primaryDark,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
   },
   statRow: {
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     color: Colors.onSurfaceMuted,
-    fontSize: 9,
+    fontSize: 11,
   },
   actionRow: {
     minHeight: 47,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   likedActionText: {

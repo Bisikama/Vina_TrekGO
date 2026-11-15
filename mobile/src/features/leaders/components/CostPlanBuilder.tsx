@@ -483,16 +483,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   headerTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0e0f0c",
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#454745",
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 19,
   },
   actionRow: {
     flexDirection: "row",
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   templateBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#054d28",
   },
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   addItemBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0e0f0c",
   },
@@ -545,13 +545,13 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0e0f0c",
     marginTop: 8,
   },
   emptySubText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#868685",
     textAlign: "center",
     marginTop: 4,
@@ -588,10 +588,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   itemEmoji: {
-    fontSize: 14,
+    fontSize: 15,
   },
   itemName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0e0f0c",
     flex: 1,
@@ -621,12 +621,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef3c7",
   },
   kindBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#163300",
   },
   itemNote: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#868685",
     flex: 1,
   },
@@ -634,12 +634,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   itemPrice: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#163300",
   },
   itemPriceUnit: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#868685",
   },
   deleteBtn: {
@@ -661,13 +661,13 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: "#454745",
     fontWeight: "600",
-    lineHeight: 16,
+    lineHeight: 19,
   },
   summaryVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     textAlign: "right",
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   successBannerText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#054d28",
   },
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0e0f0c",
     letterSpacing: 0.5,
@@ -727,12 +727,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#0e0f0c",
   },
   inputLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#454745",
     marginTop: 10,
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     borderColor: "#9fe870",
   },
   catChipText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e0f0c",
   },
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 13,
+    fontSize: 14,
     color: "#0e0f0c",
     backgroundColor: "#fbf9f3",
   },
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
     borderColor: "#163300",
   },
   kindChipText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#454745",
   },
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalCancelText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#454745",
   },
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalSubmitText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0e0f0c",
   },

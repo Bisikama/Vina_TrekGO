@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: Colors.textSecondary,
-    fontSize: 14,
+    fontSize: 15,
     textAlign: "center",
   },
 
@@ -151,15 +151,15 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     textAlign: "center",
   } as TextStyle,
   emptyDescription: {
     marginTop: Spacing.xs + 2,
     color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     textAlign: "center",
   },
   emptyAction: { marginTop: Spacing.lg },
@@ -173,13 +173,13 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     color: Colors.dangerText,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   } as TextStyle,
   errorMessage: {
     color: Colors.dangerText,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
   },
   errorActions: {
     flexDirection: "row",
@@ -190,12 +190,12 @@ const styles = StyleSheet.create({
   errorButton: { paddingVertical: 2 },
   errorRetryText: {
     color: Colors.danger,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   } as TextStyle,
   errorDismissText: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
 
@@ -208,12 +208,12 @@ const styles = StyleSheet.create({
   },
   bannerTextCol: { flex: 1 },
   bannerTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     marginBottom: 2,
   } as TextStyle,
   bannerMessage: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
   },
 });
