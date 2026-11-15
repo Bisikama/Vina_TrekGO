@@ -151,8 +151,8 @@ const styles = StyleSheet.create({
   description: {
     marginTop: Spacing.sm,
     color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
   },
 
   actionsRow: {

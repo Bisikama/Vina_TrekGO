@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 2,
     color: "#64748B",
-    fontSize: 10,
+    fontSize: 12,
   },
   headerPlaceholder: {
     width: 40,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
   completedLabel: {
     color: "#BCE2CA",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.7,
   },
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   tripDate: {
     marginTop: 3,
     color: "#D4E8DB",
-    fontSize: 11,
+    fontSize: 13,
   },
   sectionCard: {
     marginBottom: 12,
@@ -414,14 +414,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#17231B",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   sectionDescription: {
     marginTop: 4,
     color: "#64748B",
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
   },
   starsRow: {
     marginTop: 16,
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
   ratingLabel: {
     marginTop: 8,
     color: "#725C00",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     textAlign: "center",
   },
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   },
   highlightText: {
     color: "#475569",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   highlightTextSelected: {
@@ -488,18 +488,18 @@ const styles = StyleSheet.create({
   },
   leaderAvatarText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   leaderName: {
     color: "#17231B",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   leaderBadge: {
     marginTop: 2,
     color: "#2D6A4F",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   leaderRating: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   },
   leaderRatingText: {
     color: "#17231B",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   commentInput: {
@@ -521,14 +521,14 @@ const styles = StyleSheet.create({
     borderColor: "#CBD5E1",
     borderRadius: 14,
     color: "#17231B",
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     backgroundColor: "#F8FAF9",
   },
   characterCount: {
     marginTop: 5,
     color: "#94A3B8",
-    fontSize: 10,
+    fontSize: 12,
     textAlign: "right",
   },
   noticeCard: {
@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
   noticeText: {
     flex: 1,
     color: "#315E42",
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
   },
   submitButton: {
     minHeight: 54,
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
   },
   successContainer: {
@@ -584,8 +584,8 @@ const styles = StyleSheet.create({
   successDescription: {
     marginTop: 9,
     color: "#64748B",
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   successRating: {
@@ -607,14 +607,14 @@ const styles = StyleSheet.create({
   },
   pointsTitle: {
     color: "#6B5200",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   pointsDescription: {
     marginTop: 2,
     color: "#7A641F",
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
   },
   primaryButton: {
     width: "100%",
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
   },
 });

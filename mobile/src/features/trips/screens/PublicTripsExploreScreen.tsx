@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.lg,
   },
-  searchInput: { flex: 1, fontSize: 14, color: Colors.textPrimary, paddingVertical: Spacing.sm },
+  searchInput: { flex: 1, fontSize: 15, color: Colors.textPrimary, paddingVertical: Spacing.sm },
 
   filterRow: {
     flexDirection: "row",
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   filterPillText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.textSecondary,
   },

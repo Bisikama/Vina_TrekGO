@@ -1131,7 +1131,7 @@ export const LiveTrailRecorderModal: React.FC<LiveTrailRecorderModalProps> = ({
             <Text style={{ color: "#fff", textAlign: "center" }}>
               {isSwitchingGps ? "Đang chuyển nguồn GPS..." : isSimulated ? "GPS GIẢ LẬP · Bấm để về GPS thật" : "Chuyển sang GPS giả lập"}
             </Text>
-            <Text style={{ color: "#ddd", textAlign: "center", fontSize: 11 }}>
+            <Text style={{ color: "#ddd", textAlign: "center", fontSize: 13 }}>
               {isRecording ? "Kết thúc phiên để đổi nguồn GPS" : "Chỉ personal trail · dữ liệu vẫn lưu/đồng bộ theo luồng hiện tại"}
             </Text>
           </TouchableOpacity>
@@ -1460,7 +1460,7 @@ const styles = StyleSheet.create({
   },
   recTitle: {
     color: "#e4e2dd",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -1477,7 +1477,7 @@ const styles = StyleSheet.create({
   },
   simStepText: {
     color: Colors.primary,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   mapContainer: {
@@ -1520,7 +1520,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4cc9f0",
   },
   gpsStatusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#c2d1be",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
@@ -1546,7 +1546,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   gpsActionPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#9fe870",
   },
@@ -1572,7 +1572,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.22)",
   },
   gpsLocateText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   gpsLocateTextActive: {
@@ -1594,7 +1594,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(56, 239, 125, 0.18)",
   },
   gpsCoordText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#9fe870",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
@@ -1629,7 +1629,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   compactMetricLabel: {
-    fontSize: 9,
+    fontSize: 11,
     color: "#9fe870",
     fontWeight: "800",
     letterSpacing: 0.6,
@@ -1648,7 +1648,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   primaryStatUnit: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#8a9486",
   },
@@ -1670,20 +1670,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   compactSubLabel: {
-    fontSize: 8,
+    fontSize: 10,
     color: "#8a9486",
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   secondaryStatValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#ffffff",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   secondaryStatUnit: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#8a9486",
   },
@@ -1705,7 +1705,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   startButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: "#0c2000",
     letterSpacing: 0.5,
@@ -1735,7 +1735,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   pauseResumeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.3,
   },
@@ -1753,7 +1753,7 @@ const styles = StyleSheet.create({
   },
   finishActionText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.3,
   },
@@ -1778,14 +1778,14 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   saveModalSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.primary,
     fontWeight: "700",
     marginTop: 4,
     marginBottom: 14,
   },
   inputLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#9fe870",
     marginTop: 10,
@@ -1797,7 +1797,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.12)",
   },
@@ -1816,7 +1816,7 @@ const styles = StyleSheet.create({
   },
   saveCancelText: {
     color: "#ffffff",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   saveSubmitBtn: {
@@ -1829,7 +1829,7 @@ const styles = StyleSheet.create({
   },
   saveSubmitText: {
     color: "#0c2000",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
 });

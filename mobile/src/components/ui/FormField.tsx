@@ -284,22 +284,22 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Colors.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
   } as TextStyle,
   requiredMark: {
     color: Colors.danger,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
   hint: {
     color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 19,
   },
   error: {
     color: Colors.danger,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "500",
   },
 
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   inputText: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
     paddingVertical: Spacing.sm + 2,
   },
   textareaShell: {
@@ -337,12 +337,12 @@ const styles = StyleSheet.create({
   selectText: {
     flex: 1,
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   selectPlaceholder: { color: Colors.textSecondary },
   selectChevron: {
     color: Colors.textSecondary,
-    fontSize: 14,
+    fontSize: 15,
   },
 
   modalOverlay: {
@@ -368,17 +368,17 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   } as TextStyle,
   sheetClose: {
     color: Colors.textSecondary,
-    fontSize: 16,
+    fontSize: 17,
   },
   optionsList: { flexGrow: 0 },
   emptyOptions: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     padding: Spacing.lg,
     textAlign: "center",
   },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   optionTextCol: { flex: 1 },
   optionLabel: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
   },
   optionLabelSelected: {
     color: Colors.primaryDeep,
@@ -406,11 +406,11 @@ const styles = StyleSheet.create({
   optionDescription: {
     marginTop: 2,
     color: Colors.textSecondary,
-    fontSize: 12,
+    fontSize: 14,
   },
   optionCheck: {
     color: Colors.primary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
   },
 });

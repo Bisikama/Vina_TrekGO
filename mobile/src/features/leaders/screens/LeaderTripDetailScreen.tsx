@@ -435,13 +435,13 @@ export function LeaderTripDetailScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 4, flexWrap: "wrap" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <Ionicons name="person-outline" size={13} color="#054d28" />
-              <Text style={{ fontSize: 12, color: "#4b5563", fontWeight: "600" }}>
+              <Text style={{ fontSize: 14, color: "#4b5563", fontWeight: "600" }}>
                 {authUser?.fullName || (authUser as any)?.name || (user as any)?.fullName || (user as any)?.name || (trip as any)?.leader?.fullName || "Leader"}
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <Ionicons name="location-outline" size={13} color="#054d28" />
-              <Text style={{ fontSize: 12, color: "#4b5563", fontWeight: "600" }}>
+              <Text style={{ fontSize: 14, color: "#4b5563", fontWeight: "600" }}>
                 {pickupDisplayName}
               </Text>
             </View>
@@ -1199,16 +1199,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#707972",
   },
   errorTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#ba1a1a",
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#410002",
     textAlign: "center",
   },
@@ -1222,7 +1222,7 @@ const styles = StyleSheet.create({
   primaryActionBtnText: {
     color: "#ffffff",
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 15,
   },
   scrollContent: {
     padding: 14,
@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
   },
   breadcrumbText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
     fontWeight: "500",
   },
@@ -1275,7 +1275,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   trailPill: {
@@ -1287,7 +1287,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   trailPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: "#854d0e",
   },
@@ -1298,7 +1298,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   tripMeta: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#64748b",
   },
 
@@ -1390,21 +1390,21 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   webSectionCategoryGreen: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#15803d",
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   webSectionCategoryAmber: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#b45309",
     letterSpacing: 0.5,
     marginBottom: 2,
   },
   webSectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1412,7 +1412,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   adjustDeadlineText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0284c7",
   },
@@ -1425,7 +1425,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   autoRecordedBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#1d4ed8",
   },
@@ -1447,7 +1447,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   gridBoxLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
     marginBottom: 4,
     fontWeight: "500",
@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
     borderColor: "#fde047",
   },
   gridBoxLabelAmber: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#b45309",
     marginBottom: 4,
     fontWeight: "700",
@@ -1491,13 +1491,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   lifecycleBoxTitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#475569",
     marginBottom: 4,
     fontWeight: "600",
   },
   lifecycleBoxValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1521,7 +1521,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.5,
@@ -1534,7 +1534,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   metricValueSub: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#94a3b8",
   },
@@ -1549,7 +1549,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rosterTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
     color: "#0f172a",
   },
@@ -1571,7 +1571,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0e0f0c",
   },
   rosterTabText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#475569",
   },
@@ -1591,7 +1591,7 @@ const styles = StyleSheet.create({
   },
   rosterSearchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: "#0f172a",
     padding: 0,
   },
@@ -1618,7 +1618,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   webEmptyStateTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
@@ -1649,7 +1649,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   participantFullName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1676,7 +1676,7 @@ const styles = StyleSheet.create({
     color: "#1e40af",
   },
   participantBookingCode: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
     marginTop: 2,
   },
@@ -1708,7 +1708,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   participantDetailValue: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#0f172a",
     fontWeight: "500",
   },
@@ -1782,7 +1782,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0e0f0c",
     textTransform: "uppercase",
@@ -1795,7 +1795,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   sectionHeaderBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#054d28",
   },
@@ -1841,7 +1841,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   specValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1867,7 +1867,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cpDotNum: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1884,7 +1884,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cpNameText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -1902,7 +1902,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpRequiredPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#054d28",
   },
@@ -1913,12 +1913,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cpEnabledPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#0369a1",
   },
   cpDetailText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
   },
 
@@ -1935,7 +1935,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pricingTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: "#0e0f0c",
   },
@@ -1986,13 +1986,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   breakdownSubInfo: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#94a3b8",
     marginTop: 3,
     marginLeft: 13,
   },
   breakdownValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0f172a",
     textAlign: "right",
@@ -2037,7 +2037,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   priceExplEmptyText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#94a3b8",
     fontStyle: "italic",
   },
@@ -2049,9 +2049,9 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   priceExplText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#334155",
-    lineHeight: 18,
+    lineHeight: 21,
   },
 
   // Rescue
@@ -2062,15 +2062,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rescueItem: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#334155",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   rescueHotline: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: "#ba1a1a",
-    lineHeight: 18,
+    lineHeight: 21,
   },
 
   // Modals
@@ -2095,13 +2095,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#0f172a",
   },
   settlementText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#334155",
-    lineHeight: 19,
+    lineHeight: 20,
   },
 });

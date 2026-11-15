@@ -185,13 +185,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   arrivalBadge: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     color: '#6f5900',
     letterSpacing: 0.5,
   },
   elevationTag: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     backgroundColor: Colors.surfaceContainer,
     paddingHorizontal: 6,
@@ -219,14 +219,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   missionHeadline: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
     color: Colors.inkDeep,
   },
   missionDesc: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceVariant,
-    lineHeight: 17,
+    lineHeight: 20,
     marginBottom: 12,
   },
   photoContainer: {
@@ -243,13 +243,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   takePhotoText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.primaryDark,
     marginTop: 6,
   },
   takePhotoSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   photoVerifiedText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0c2000',
   },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   notesLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.onSurfaceVariant,
     marginBottom: 4,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurface,
   },
   rewardRow: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rewardText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: '#6f5900',
   },
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   submitButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: Colors.onPrimary,
   },

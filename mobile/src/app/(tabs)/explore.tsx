@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   tabButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -1072,21 +1072,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#38ef7d",
   },
   liveRecordTagText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: "#38ef7d",
     letterSpacing: 0.6,
   },
   liveRecordTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: "#ffffff",
   },
   liveRecordDesc: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#a4b39e",
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 17,
   },
   liveRecordActionBtn: {
     flexDirection: "row",
@@ -1099,7 +1099,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   liveRecordActionText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "900",
     color: "#0c2000",
   },
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.onSurface,
   },
   filterIconButton: {
@@ -1142,7 +1142,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryDark,
   },
   filterPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
   },
@@ -1179,12 +1179,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   publicTripsBannerTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   publicTripsBannerSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.mute,
     marginTop: 2,
   },
@@ -1229,12 +1229,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#3a3d38",
   },
   verificationBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#ffffff",
   },
   personalDateText: {
-    fontSize: 10,
+    fontSize: 12,
     color: "#9fe870",
     fontWeight: "600",
   },
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   personalRegionText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#c2d4bc",
     marginTop: 3,
   },
@@ -1261,15 +1261,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceContainer,
   },
   emptyPersonalTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   emptyPersonalDesc: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.onSurfaceMuted,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   personalTrailThumbBg: {
     width: 60,
@@ -1304,7 +1304,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   offlineGpsText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1321,7 +1321,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   ratingText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1343,7 +1343,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   categoryTagText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1353,7 +1353,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   trailSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#e4e2dd",
     marginTop: 2,
   },
@@ -1381,12 +1381,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bentoLabel: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "800",
     color: Colors.onSurfaceMuted,
   },
   bentoValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: Colors.onSurface,
     marginTop: 1,
@@ -1409,7 +1409,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0d150c",
   },
   mapHeaderTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -1420,7 +1420,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   contourText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.primary,
   },
@@ -1429,14 +1429,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   descTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: Colors.onSurface,
   },
   descBody: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
-    lineHeight: 16,
+    lineHeight: 19,
     marginTop: 4,
   },
   ctaRow: {
@@ -1456,7 +1456,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   primaryCtaText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: "#ffffff",
   },
@@ -1471,7 +1471,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   secondaryCtaText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   unlockCtaText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
     color: "#ffffff",
   },
@@ -1496,7 +1496,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   otherTrailsTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "900",
     color: Colors.onSurface,
     marginBottom: 10,
@@ -1528,12 +1528,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   otherTrailName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.onSurface,
   },
   otherTrailRegion: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     marginTop: 2,
   },
@@ -1544,11 +1544,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   otherTrailMeta: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.onSurfaceVariant,
   },
   otherTrailDifficulty: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -1557,7 +1557,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   trailPrice: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurface,
   },

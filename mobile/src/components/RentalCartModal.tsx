@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.primaryDark,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.7,
   },
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: "900",
   },
-  subtitle: { marginTop: 4, color: Colors.onSurfaceVariant, fontSize: 11 },
+  subtitle: { marginTop: 4, color: Colors.onSurfaceVariant, fontSize: 13 },
   tripCard: {
     marginTop: 16,
     padding: 13,
@@ -309,11 +309,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.primaryPale,
   },
-  tripLabel: { color: Colors.primaryDark, fontSize: 8, fontWeight: "900" },
+  tripLabel: { color: Colors.primaryDark, fontSize: 10, fontWeight: "900" },
   tripTitle: {
     marginTop: 3,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
   },
   tripAction: {
@@ -324,20 +324,20 @@ const styles = StyleSheet.create({
   },
   tripActionText: {
     color: Colors.onPrimaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   emptyState: { paddingVertical: 45, alignItems: "center" },
   emptyTitle: {
     marginTop: 12,
     color: Colors.onSurface,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
   },
   emptyDescription: {
     marginTop: 5,
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
   },
   itemList: { marginTop: 16, gap: 10 },
   itemRow: {
@@ -358,14 +358,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Colors.primaryPale,
   },
-  itemName: { color: Colors.onSurface, fontSize: 12, fontWeight: "900" },
+  itemName: { color: Colors.onSurface, fontSize: 14, fontWeight: "900" },
   itemPrice: {
     marginTop: 4,
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
-  itemDeposit: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 9 },
+  itemDeposit: { marginTop: 2, color: Colors.onSurfaceVariant, fontSize: 11 },
   quantityControl: {
     flexDirection: "row",
     alignItems: "center",
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     color: Colors.onSurface,
     textAlign: "center",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
   },
   summaryCard: {
@@ -397,10 +397,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
-  summaryLabel: { color: Colors.primaryNeutral, fontSize: 11 },
+  summaryLabel: { color: Colors.primaryNeutral, fontSize: 13 },
   summaryValue: {
     color: Colors.onPrimaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "900",
   },
   notice: {
@@ -414,8 +414,8 @@ const styles = StyleSheet.create({
   noticeText: {
     flex: 1,
     color: Colors.primaryNeutral,
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 17,
   },
   primaryButton: {
     marginTop: 16,
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: Colors.onPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
   nextStepCard: {
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   nextStepText: {
     flex: 1,
     color: Colors.onTertiaryContainer,
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 17,
   },
 });

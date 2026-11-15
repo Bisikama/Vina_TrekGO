@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   subtitleText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.onSurfaceVariant,
     textTransform: 'uppercase',
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer,
   },
   roleText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.ink,
     letterSpacing: 0.5,

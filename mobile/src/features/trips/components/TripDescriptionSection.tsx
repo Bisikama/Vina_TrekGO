@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#0f172a",
   },
@@ -82,8 +82,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   emptyText: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     color: "#64748b",
     fontStyle: "italic",
   },

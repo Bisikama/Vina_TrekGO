@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerEyebrow: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: Colors.primaryDark,
     letterSpacing: 0.6,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.body,
     fontWeight: "600",
   },
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Colors.onSurfaceMuted,
     letterSpacing: 0.8,
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#eaf5e1",
   },
   addBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -535,11 +535,11 @@ const styles = StyleSheet.create({
   },
   badgeIndexText: {
     color: "#FFFFFF",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
   },
   cardTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: Colors.ink,
   },
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   inputLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: Colors.onSurfaceVariant,
     marginBottom: 5,
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   textInputWithIcon: {
     flex: 1,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurface,
   },
   addMoreCardBtn: {
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   addMoreCardText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.primaryDark,
   },
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   priceLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.onSurfaceVariant,
     fontWeight: "600",
   },
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
   },
 });

@@ -54,5 +54,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: Trek.forestMid,
   },
-  badgeText: { color: "#ffffff", fontSize: 9, fontWeight: "900" },
+  badgeText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
 });

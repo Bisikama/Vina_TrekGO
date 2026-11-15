@@ -103,8 +103,8 @@ const styles = StyleSheet.create({
     color: Colors.body,
     textAlign: "center",
     marginTop: 8,
-    lineHeight: 20,
-    fontSize: 13,
+    lineHeight: 21,
+    fontSize: 14,
   },
   successCard: {
     alignSelf: "stretch",
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -134,12 +134,12 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: Colors.onSurfaceMuted,
-    fontSize: 11,
+    fontSize: 13,
   },
   rowValue: {
     color: Colors.ink,
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 2,
   },
   actionsContainer: {
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   primaryText: {
     color: "#fff",
     fontWeight: "800",
-    fontSize: 13,
+    fontSize: 14,
   },
   secondaryBtn: {
     alignSelf: "stretch",
@@ -178,6 +178,6 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     color: Colors.primaryDark,
     fontWeight: "800",
-    fontSize: 13,
+    fontSize: 14,
   },
 });

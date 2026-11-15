@@ -3,6 +3,8 @@ import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
+import { productLabel } from "@/features/rentals/display";
+import { DeliveryTaskDoneView } from "@/features/rentals/DeliveryTaskDoneView";
 import {
   DeliveryTaskDetail,
   DeliveryTaskSummary,
@@ -384,6 +386,24 @@ export default function StaffTaskScreen() {
     );
   }
 
+  // Nhiệm vụ đã kết thúc (kể cả khi vừa bàn giao xong): hiện màn tổng kết, không còn thao tác.
+  if (completedStatus(serverStatus) && !complete) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <DeliveryTaskDoneView
+          type="OUTBOUND"
+          status={serverStatus ?? ""}
+          orderCode={`#${summary.orderSummary.orderId.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase()}`}
+          recipient={recipientName(summary, task)}
+          pointName={summary.point.name}
+          units={(task?.units?.length ? task.units : (order.assignedUnits ?? []).map((unit) => ({ unitId: unit.unitId, assetCode: unit.assetCode ?? "", product: { name: unit.productName } })))}
+          timeline={order.timeline ?? []}
+          onBack={() => router.back()}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -414,7 +434,7 @@ export default function StaffTaskScreen() {
             <Text style={styles.cardTitle}>Thiết bị trong gói</Text>
             {units.map((unit) => (
               <View key={unit.unitId} style={styles.item}>
-                <Text style={styles.itemName}>{unit.product?.name || "Thiết bị thuê"}</Text>
+                <Text style={styles.itemName}>{unit.product?.name ? productLabel(unit.product.name) : "Thiết bị thuê"}</Text>
                 <Text style={styles.assetCode}>Mã thiết bị {shortAssetCode(unit.assetCode)}</Text>
               </View>
             ))}
@@ -441,7 +461,7 @@ export default function StaffTaskScreen() {
               const review = reviews[unit.unitId] || { status: "PENDING" as ItemStatus, note: "" };
               return (
                 <View key={unit.unitId} style={styles.item}>
-                  <Text style={styles.itemName}>{unit.product?.name || unit.assetCode}</Text>
+                  <Text style={styles.itemName}>{unit.product?.name ? productLabel(unit.product.name) : unit.assetCode}</Text>
                   <Text style={styles.assetCode}>Mã {shortAssetCode(unit.assetCode)}</Text>
                   <View style={styles.statusRow}>
                     {(["OK", "MISSING", "DAMAGED"] as ItemStatus[]).map((status) => (
@@ -560,45 +580,45 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
   headerTitle: { color: Colors.ink, fontSize: 17, fontWeight: "600" },
   taskHeader: { backgroundColor: Colors.inverseSurface, padding: 18, borderRadius: Radius.xl, marginBottom: 18, ...Shadows.tactical },
-  taskId: { color: Colors.primary, fontSize: 11, fontWeight: "600" },
+  taskId: { color: Colors.primary, fontSize: 13, fontWeight: "600" },
   title: { color: "#fff", fontSize: 22, fontWeight: "600", marginTop: 7 },
-  meta: { color: "#bed0bb", fontSize: 13, marginTop: 8 },
-  tripTime: { color: "#dce9d8", fontSize: 11, lineHeight: 16, marginTop: 5 },
+  meta: { color: "#bed0bb", fontSize: 14, marginTop: 8 },
+  tripTime: { color: "#dce9d8", fontSize: 13, lineHeight: 19, marginTop: 5 },
   card: { backgroundColor: "#fff", padding: 17, borderRadius: Radius.xl, marginBottom: 16, ...Shadows.card },
-  section: { color: Colors.onSurfaceMuted, fontSize: 11, fontWeight: "600", letterSpacing: 0.8, marginBottom: 12 },
+  section: { color: Colors.onSurfaceMuted, fontSize: 13, fontWeight: "600", letterSpacing: 0.8, marginBottom: 12 },
   cardTitle: { color: Colors.ink, fontSize: 18, fontWeight: "600", marginTop: 8 },
-  muted: { color: Colors.onSurfaceMuted, fontSize: 12, marginTop: 6 },
+  muted: { color: Colors.onSurfaceMuted, fontSize: 14, marginTop: 6 },
   input: { borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: Radius.sm, padding: 13, color: Colors.ink, marginTop: 10 },
   notes: { minHeight: 76, textAlignVertical: "top" },
-  notice: { color: Colors.body, backgroundColor: "#fff5d7", padding: 12, borderRadius: 8, marginTop: 12, fontSize: 12 },
+  notice: { color: Colors.body, backgroundColor: "#fff5d7", padding: 12, borderRadius: 8, marginTop: 12, fontSize: 14 },
   primary: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: Colors.primaryDark, padding: 15, borderRadius: Radius.sm, marginTop: 15 },
-  primaryText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+  primaryText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   disabled: { opacity: 0.55 },
   info: { flexDirection: "row", gap: 12, alignItems: "center", paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
-  infoValue: { color: Colors.ink, fontSize: 14, fontWeight: "600", marginTop: 3 },
+  infoValue: { color: Colors.ink, fontSize: 15, fontWeight: "600", marginTop: 3 },
   item: { paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: Colors.surfaceContainer },
-  itemName: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
-  assetCode: { color: Colors.onSurfaceMuted, fontSize: 11, marginTop: 3 },
+  itemName: { color: Colors.ink, fontSize: 15, fontWeight: "600" },
+  assetCode: { color: Colors.onSurfaceMuted, fontSize: 13, marginTop: 3 },
   statusRow: { flexDirection: "row", gap: 6, marginTop: 8 },
   statusButton: { borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: 7, paddingVertical: 8, paddingHorizontal: 9 },
   statusSelected: { backgroundColor: Colors.primaryDark, borderColor: Colors.primaryDark },
-  statusText: { color: Colors.ink, fontSize: 10, fontWeight: "600" },
+  statusText: { color: Colors.ink, fontSize: 12, fontWeight: "600" },
   statusTextSelected: { color: "#fff" },
   issueInput: { borderWidth: 1, borderColor: Colors.error, borderRadius: 7, padding: 9, color: Colors.ink, marginTop: 8 },
   errorBox: { backgroundColor: "#ffe8e5", borderRadius: Radius.sm, padding: 12, marginBottom: 12 },
-  errorText: { color: Colors.error, fontSize: 12, marginTop: 8 },
+  errorText: { color: Colors.error, fontSize: 14, marginTop: 8 },
   noShowButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14 },
-  noShowText: { color: Colors.error, fontWeight: "600", fontSize: 11 },
+  noShowText: { color: Colors.error, fontWeight: "600", fontSize: 13 },
   warningCard: { borderWidth: 1, borderColor: "#f1c978", backgroundColor: "#fffaf0" },
   resultIcon: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "#e4f4db" },
   resultIconWarning: { backgroundColor: "#ffedc7" },
   friendlyStatus: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, borderRadius: 14, backgroundColor: "#edf5e8", paddingHorizontal: 10, paddingVertical: 7, marginTop: 14 },
-  friendlyStatusText: { color: Colors.primaryDark, fontSize: 10, fontWeight: "600" },
+  friendlyStatusText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },
   backdrop: { flex: 1, backgroundColor: "rgba(14,15,12,.45)", justifyContent: "flex-end" },
   menu: { backgroundColor: Colors.surface, padding: 22, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   menuTitle: { color: Colors.ink, fontSize: 19, fontWeight: "600", marginBottom: 12 },
   reasonButton: { padding: 11, borderRadius: 8, marginBottom: 6, backgroundColor: Colors.surfaceContainerLow },
   reasonSelected: { backgroundColor: "#dcefd2", borderWidth: 1, borderColor: Colors.primaryDark },
-  reasonText: { color: Colors.ink, fontSize: 12, fontWeight: "600" },
+  reasonText: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
   dangerButton: { alignItems: "center", backgroundColor: Colors.error, padding: 14, borderRadius: Radius.sm, marginTop: 12 },
 });

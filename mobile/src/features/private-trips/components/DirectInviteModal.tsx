@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#64748B",
     marginTop: 1,
   },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     borderColor: "#A3E635",
   },
   tabBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: "#64748B",
   },
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
   },
   tabBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#334155",
     marginTop: 2,
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: "#0E0F0C",
   },
   errorBanner: {
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: "#DC2626",
     fontWeight: "600",
   },
@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#334155",
     marginTop: 4,
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     color: "#0E0F0C",
   },
   createdDate: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748B",
     marginTop: 1,
   },
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#E2E8F0",
   },
   expiresText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748B",
     flex: 1,
   },
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   badgePending: {

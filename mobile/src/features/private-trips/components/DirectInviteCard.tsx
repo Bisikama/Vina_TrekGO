@@ -324,11 +324,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   hostLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748B",
   },
   hostName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#0E0F0C",
   },
@@ -337,10 +337,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tripTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0E0F0C",
-    lineHeight: 20,
+    lineHeight: 21,
   },
   tripMetaRow: {
     flexDirection: "row",
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tripMetaText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#475569",
   },
   expiresRow: {
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
   },
   declineBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#991B1B",
   },
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     ...Shadows.hover,
   },
   acceptBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
   badgePending: {
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#0E0F0C",
   },
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     borderColor: "#86EFAC",
   },
   reasonItemText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#334155",
   },
   reasonItemTextSelected: {
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   modalCancelBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: "#475569",
   },
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#DC2626",
   },
   modalConfirmBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },

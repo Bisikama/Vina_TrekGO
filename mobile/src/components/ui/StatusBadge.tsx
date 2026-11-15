@@ -191,11 +191,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   } as TextStyle,
   badgeTextSm: {
-    fontSize: 11,
+    fontSize: 13,
   },
 
   chip: {
@@ -212,12 +212,12 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     color: Colors.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "500",
   },
   chipValue: {
     color: Colors.textPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   } as TextStyle,
 });

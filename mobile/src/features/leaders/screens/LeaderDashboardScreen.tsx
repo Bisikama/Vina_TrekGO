@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     fontWeight: "900", // Wise display heavy 900
     letterSpacing: -0.3,
   },
-  subheading: { color: "#454745", fontSize: 13, marginTop: 2 },
+  subheading: { color: "#454745", fontSize: 14, marginTop: 2 },
   refreshBtn: {
     width: 42,
     height: 42,
@@ -455,8 +455,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  statNumber: { color: "#0e0f0c", fontSize: 16, fontWeight: "900" },
-  statLabel: { color: "#454745", fontSize: 10, fontWeight: "600", marginTop: 2 },
+  statNumber: { color: "#0e0f0c", fontSize: 17, fontWeight: "900" },
+  statLabel: { color: "#454745", fontSize: 12, fontWeight: "600", marginTop: 2 },
 
   // Hero Card
   heroSection: { marginBottom: 20 },
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     letterSpacing: 0.8,
   },
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   },
   heroIdText: {
     color: "#0e0f0c",
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   heroMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  heroMetaText: { color: "#454745", fontSize: 13, fontWeight: "600" },
+  heroMetaText: { color: "#454745", fontSize: 14, fontWeight: "600" },
   heroTrailBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     marginBottom: 14,
   },
-  heroTrailText: { color: "#0e0f0c", fontSize: 12, fontWeight: "600", flex: 1 },
+  heroTrailText: { color: "#0e0f0c", fontSize: 14, fontWeight: "600", flex: 1 },
   heroMetricsRow: {
     flexDirection: "row",
     backgroundColor: "#e8ebe6",
@@ -538,8 +538,8 @@ const styles = StyleSheet.create({
   },
   heroMetric: { flex: 1, alignItems: "center" },
   heroMetricDivider: { width: 1, backgroundColor: "#d6dbd2" },
-  heroMetricLabel: { color: "#868685", fontSize: 11, fontWeight: "600" },
-  heroMetricVal: { color: "#0e0f0c", fontSize: 14, fontWeight: "800", marginTop: 2 },
+  heroMetricLabel: { color: "#868685", fontSize: 13, fontWeight: "600" },
+  heroMetricVal: { color: "#0e0f0c", fontSize: 15, fontWeight: "800", marginTop: 2 },
   heroActionBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 24, // Radius.xl
   },
-  heroActionBtnText: { color: "#0e0f0c", fontSize: 14, fontWeight: "700" },
+  heroActionBtnText: { color: "#0e0f0c", fontSize: 15, fontWeight: "700" },
 
   // Quick Actions Section
   quickActionsSection: { marginBottom: 20 },
@@ -578,13 +578,13 @@ const styles = StyleSheet.create({
   },
   quickActionTitle: {
     color: "#0e0f0c",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     textAlign: "center",
   },
   quickActionSub: {
     color: "#868685",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
     textAlign: "center",
   },
@@ -614,16 +614,16 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: "#0e0f0c",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     marginBottom: 6,
     textAlign: "center",
   },
   emptySub: {
     color: "#454745",
-    fontSize: 13,
+    fontSize: 14,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 16,
   },
   emptyCreateBtn: {
@@ -635,5 +635,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 24,
   },
-  emptyCreateBtnText: { color: "#0e0f0c", fontSize: 13, fontWeight: "700" },
+  emptyCreateBtnText: { color: "#0e0f0c", fontSize: 14, fontWeight: "700" },
 });

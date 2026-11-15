@@ -427,10 +427,10 @@ const styles = StyleSheet.create({
   },
   permTitle: { fontSize: 20, fontWeight: "900", color: Colors.onSurface, textAlign: "center" },
   permDesc: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.onSurfaceVariant,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 21,
     marginTop: 8,
     marginBottom: 22,
   },
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: Radius.full,
   },
-  permBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  permBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   permGalleryBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -451,9 +451,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     marginTop: 12,
   },
-  permGalleryBtnText: { color: "#0c2000", fontWeight: "800", fontSize: 14 },
+  permGalleryBtnText: { color: "#0c2000", fontWeight: "800", fontSize: 15 },
   permLink: { marginTop: 14, padding: 6 },
-  permLinkText: { color: Colors.onSurfaceVariant, fontWeight: "700", fontSize: 13 },
+  permLinkText: { color: Colors.onSurfaceVariant, fontWeight: "700", fontSize: 14 },
   overlay: { ...StyleSheet.absoluteFill, justifyContent: "space-between" },
   topBar: {
     flexDirection: "row",
@@ -484,8 +484,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LIME,
   },
-  counterText: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  counterTotal: { color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: "700" },
+  counterText: { color: "#fff", fontSize: 17, fontWeight: "900" },
+  counterTotal: { color: "rgba(255,255,255,0.6)", fontSize: 14, fontWeight: "700" },
   progressTrack: {
     height: 4,
     marginHorizontal: 20,
@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: 1.5,
   },
-  resultTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  resultMsg: { color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2, lineHeight: 17 },
+  resultTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  resultMsg: { color: "rgba(255,255,255,0.85)", fontSize: 14, marginTop: 2, lineHeight: 20 },
   idleHint: {
     flexDirection: "row",
     alignItems: "center",
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: LIME },
-  idleHintText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  idleHintText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   actionsRow: { flexDirection: "row", justifyContent: "center", gap: 10 },
   ghostBtn: {
     flexDirection: "row",
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.3)",
   },
-  ghostBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  ghostBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   doneBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -579,5 +579,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: LIME,
   },
-  doneBtnText: { color: "#0c2000", fontSize: 13, fontWeight: "800" },
+  doneBtnText: { color: "#0c2000", fontSize: 14, fontWeight: "800" },
 });

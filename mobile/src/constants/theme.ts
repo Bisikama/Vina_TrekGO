@@ -25,7 +25,7 @@ export const Colors = {
   inkDeep: '#163300',
   onSurface: '#1b1c19',
   onSurfaceVariant: '#41493a',
-  onSurfaceMuted: '#717a68',
+  onSurfaceMuted: '#5b6453',
   body: '#454745',
   mute: '#868685',
   

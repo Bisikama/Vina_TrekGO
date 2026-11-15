@@ -185,12 +185,12 @@ const styles = StyleSheet.create({
   },
   backLabel: {
     color: Colors.primary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
   eyebrow: {
     color: Colors.primary,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     letterSpacing: 1,
   } as TextStyle,
@@ -208,8 +208,8 @@ const styles = StyleSheet.create({
   actionsSpacer: { flexGrow: 1 },
   subtitle: {
     color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
   },
   pressedOpacity: { opacity: 0.6 },
 });

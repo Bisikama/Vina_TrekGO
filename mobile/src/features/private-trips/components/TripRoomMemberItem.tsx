@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarInitial: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#125238",
   },
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   name: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: Colors.onSurface,
   },
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     borderColor: "#FDE68A",
   },
   hostBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#725C00",
     letterSpacing: 0.2,
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     borderColor: "#dee9fc",
   },
   memberBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#125238",
     letterSpacing: 0.2,
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
   },
   leftBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#6b7280",
   },
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fee2e2",
   },
   removedBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#dc2626",
   },
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   shortIdText: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#125238",
     fontWeight: "700",
     backgroundColor: "#eff4ff",
@@ -250,10 +250,10 @@ const styles = StyleSheet.create({
   },
   dotSeparator: {
     color: "#94a3b8",
-    fontSize: 11,
+    fontSize: 13,
   },
   joinedAt: {
-    fontSize: 11,
+    fontSize: 13,
     color: "#64748b",
   },
   removeButton: {
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   removeButtonText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: "#dc2626",
   },

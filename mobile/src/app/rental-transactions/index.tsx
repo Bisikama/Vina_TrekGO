@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: Colors.primaryDark,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.7,
   },
@@ -466,8 +466,8 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   filters: { marginTop: 14, flexDirection: "row", gap: 8 },
   filterButton: {
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   filterButtonActive: { backgroundColor: Colors.primaryContainer },
   filterText: {
     color: Colors.onSurfaceVariant,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
   },
   filterTextActive: { color: Colors.onPrimary, fontWeight: "700" },
@@ -509,10 +509,10 @@ const styles = StyleSheet.create({
   transactionTitle: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
   },
-  amount: { color: Colors.onSurface, fontSize: 14, fontWeight: "800" },
+  amount: { color: Colors.onSurface, fontSize: 15, fontWeight: "800" },
   refundAmount: { color: Colors.primaryDark },
   metaRow: { marginTop: 7, flexDirection: "row", alignItems: "center", gap: 8 },
   statusBadge: {
@@ -520,14 +520,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: Radius.full,
   },
-  statusText: { fontSize: 9, fontWeight: "700" },
-  dateText: { flex: 1, color: Colors.onSurfaceMuted, fontSize: 10 },
-  detailText: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 11 },
+  statusText: { fontSize: 11, fontWeight: "700" },
+  dateText: { flex: 1, color: Colors.onSurfaceMuted, fontSize: 12 },
+  detailText: { marginTop: 7, color: Colors.onSurfaceVariant, fontSize: 13 },
   simulationNote: {
     marginTop: 7,
     color: "#8A5A00",
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   tripInfo: {
     marginTop: 9,
@@ -539,11 +539,11 @@ const styles = StyleSheet.create({
   tripTitle: {
     flex: 1,
     color: Colors.onSurface,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
   },
-  tripMeta: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9 },
-  referenceText: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 9 },
+  tripMeta: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 11 },
+  referenceText: { marginTop: 4, color: Colors.onSurfaceMuted, fontSize: 11 },
   stateCard: {
     marginTop: 24,
     padding: 24,
@@ -569,8 +569,8 @@ const styles = StyleSheet.create({
   stateDescription: {
     marginTop: 7,
     color: Colors.onSurfaceVariant,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: "center",
   },
   stateButton: {
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
   },
   stateButtonText: {
     color: Colors.onPrimaryDark,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
 });

@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
   },
   chipBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -371,14 +371,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
     color: "#1E293B",
   },
   emptySubText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748B",
     textAlign: "center",
-    lineHeight: 19,
+    lineHeight: 20,
   },
 });
