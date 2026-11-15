@@ -453,12 +453,14 @@ describe('Payment History & User Transactions APIs', () => {
       kind: 'PAYMENT',
       financialEffect: 'DEBIT',
       description: 'Thanh toán đơn thuê thiết bị',
+      purpose: null,
     })
     expect(res.body.items[1]).toMatchObject({
       source: 'BOOKING',
       kind: 'REFUND',
       financialEffect: 'CREDIT',
       description: 'Hoàn tiền huỷ đặt chỗ chuyến đi',
+      purpose: 'BOOKING_CANCELLATION',
     })
     expect(res.body.items[2]).toMatchObject({
       source: 'TRAIL_ACCESS',
@@ -590,6 +592,21 @@ describe('Payment History & User Transactions APIs', () => {
     expect(sqlStr).toContain('RENTAL')
     expect(sqlStr).toContain('SUCCEEDED')
     expect(sqlObj.values).toEqual(expect.arrayContaining([10, 10]))
+  })
+
+  it('12b. to/from chỉ có ngày -> lấy trọn ngày theo giờ Việt Nam (không mất giao dịch của ngày cuối)', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ total: 0 }])
+
+    await request(app.getHttpServer())
+      .get('/api/v1/user/transactions?from=2026-10-01&to=2026-10-31')
+      .set('Authorization', 'Bearer valid-token')
+      .expect(200)
+
+    const values: unknown[] = prismaMock.$queryRaw.mock.calls[0][0].values
+    const dates = values.filter((v): v is Date => v instanceof Date).map((d) => d.toISOString())
+    // 00:00 Oct 1 (VN) inclusive, 00:00 Nov 1 (VN) exclusive.
+    expect(dates).toEqual(expect.arrayContaining(['2026-09-30T17:00:00.000Z', '2026-10-31T17:00:00.000Z']))
+    expect(JSON.stringify(prismaMock.$queryRaw.mock.calls[0][0].strings)).toContain('created_at <')
   })
 
   // =========================================================================
