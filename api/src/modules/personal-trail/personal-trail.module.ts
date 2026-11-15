@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { ElevationModule } from '../elevation/elevation.module'
 import { TrailRecordingController } from './presentation/controllers/trail-recording.controller'
 import { PersonalTrailController } from './presentation/controllers/personal-trail.controller'
+import { AdminTrailSubmissionController } from './presentation/controllers/admin-trail-submission.controller'
 import { TrailRecordingUseCase } from './application/use-cases/trail-recording.use-case'
 import { PersonalTrailUseCase } from './application/use-cases/personal-trail.use-case'
 import { I_PERSONAL_TRAIL_REPOSITORY } from './application/ports/personal-trail.port'
@@ -9,7 +10,7 @@ import { PrismaPersonalTrailAdapter } from './infrastructure/adapters/prisma-per
 
 @Module({
   imports: [ElevationModule],
-  controllers: [TrailRecordingController, PersonalTrailController],
+  controllers: [TrailRecordingController, PersonalTrailController, AdminTrailSubmissionController],
   providers: [
     TrailRecordingUseCase,
     PersonalTrailUseCase,

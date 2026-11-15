@@ -1852,23 +1852,7 @@ export const AppProvider: React.FC<{
       return true;
     } catch (apiErr: any) {
       console.warn("[AppContext] Lỗi gọi submitVerification API:", apiErr);
-
-      // Nếu lỗi mạng / offline, vẫn cập nhật tạm PENDING local để trekker không bị chặn
-      setPersonalTrails((current) => {
-        const next: PersonalTrail[] = current.map((trail) =>
-          trail.id === trailId
-            ? {
-                ...trail,
-                visibility: "PRIVATE" as const,
-                verificationStatus: "PENDING" as const,
-                rejectionReason: undefined,
-                updatedAt: new Date().toLocaleDateString("vi-VN"),
-              }
-            : trail,
-        );
-        return next;
-      });
-
+      // Không đổi trạng thái local khi server chưa nhận yêu cầu, để người dùng có thể gửi lại.
       throw apiErr;
     }
   };
