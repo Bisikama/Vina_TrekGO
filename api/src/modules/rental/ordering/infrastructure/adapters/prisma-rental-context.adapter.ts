@@ -6,6 +6,7 @@ import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
 import { BookingParticipationContextService } from 'src/modules/bookings/booking-participation-context.service'
 import {
+  buildReturnOptions,
   calculateRentalCutoff,
   isRentalCutoffPassed,
   isTripTerminalOrInactive,
@@ -228,7 +229,11 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
           address: returnPoint.address,
           scheduledAt: transport?.returnAt ?? trip.endAt,
         },
-        returnOptions: [],
+        returnOptions: buildReturnOptions({
+          dropoff: { id: returnPoint.id, name: returnPoint.name, scheduledAt: transport?.returnAt ?? trip.endAt },
+          tripEndAt: trip.endAt,
+          maxRentalAfterTripHours: activePolicy.maxRentalAfterTripHours,
+        }),
         rentalCutoffAt,
         contextVersion,
         existingOpenOrderId: existing?.id ?? null,
@@ -292,7 +297,11 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
           address: returnPoint.address,
           scheduledAt: transport?.returnAt ?? trip.endAt,
         },
-        returnOptions: [],
+        returnOptions: buildReturnOptions({
+          dropoff: { id: returnPoint.id, name: returnPoint.name, scheduledAt: transport?.returnAt ?? trip.endAt },
+          tripEndAt: trip.endAt,
+          maxRentalAfterTripHours: activePolicy.maxRentalAfterTripHours,
+        }),
         rentalCutoffAt,
         contextVersion,
         existingOpenOrderId: existing?.id ?? null,
@@ -437,7 +446,11 @@ export class PrismaRentalContextAdapter implements RentalContextPort {
         address: returnPoint.address,
         scheduledAt: transport?.returnAt ?? trip.endAt,
       },
-      returnOptions: [],
+      returnOptions: buildReturnOptions({
+        dropoff: { id: returnPoint.id, name: returnPoint.name, scheduledAt: transport?.returnAt ?? trip.endAt },
+        tripEndAt: trip.endAt,
+        maxRentalAfterTripHours: activePolicy.maxRentalAfterTripHours,
+      }),
       rentalCutoffAt,
       contextVersion,
       existingOpenOrderId: existing?.id ?? null,

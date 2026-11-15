@@ -2,6 +2,7 @@ import { AppError } from 'src/shared/errors/app-error';
 import type {
   RentalEligibilityContext,
   RentalRecipientOption,
+  RentalReturnOption,
 } from '../ports/rental-context.port';
 
 export type RentalEligibilityReason = 'TRIP_MEMBERSHIP_NOT_ELIGIBLE' | 'RENTAL_CUTOFF_PASSED' | null;
@@ -36,6 +37,35 @@ export function evaluateRentalEligibility(context: RentalEligibilityContext, now
     return { eligible: false, reason: 'RENTAL_CUTOFF_PASSED' };
   }
   return { eligible: true, reason: null };
+}
+
+export const SCHEDULED_RETURN_METHOD = 'SCHEDULED';
+
+/**
+ * Server-issued return options for a return LATER than the default drop-off: the Trip's return
+ * point, any time from the default drop-off until tripEndAt + maxRentalAfterTripHours. The id is
+ * stable (`<pointId>:SCHEDULED`) because quotes and extensions are re-validated by id.
+ * No policy allowance means no later return is offered.
+ */
+export function buildReturnOptions(input: {
+  dropoff: { id: string; name: string; scheduledAt: Date };
+  tripEndAt: Date;
+  maxRentalAfterTripHours: number | null | undefined;
+}): RentalReturnOption[] {
+  const hours = input.maxRentalAfterTripHours;
+  if (hours == null || !Number.isFinite(hours) || hours <= 0) return [];
+  const windowStart = input.dropoff.scheduledAt;
+  const windowEnd = new Date(input.tripEndAt.getTime() + hours * 3_600_000);
+  if (!Number.isFinite(windowStart.getTime()) || windowEnd <= windowStart) return [];
+  return [{
+    id: `${input.dropoff.id}:${SCHEDULED_RETURN_METHOD}`,
+    pointId: input.dropoff.id,
+    pointName: input.dropoff.name,
+    method: SCHEDULED_RETURN_METHOD,
+    available: true,
+    windowStart,
+    windowEnd,
+  }];
 }
 
 /** Server validates a longer return against policy AND an actual Area A return option. */

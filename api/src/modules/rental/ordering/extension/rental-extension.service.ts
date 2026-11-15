@@ -304,8 +304,20 @@ function requiredPolicyInt(value: unknown, field: string): number {
 }
 function jsonObject(v: unknown): Record<string, any> { return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}; }
 function digest(v: string) { return createHash('sha256').update(v).digest('hex'); }
+/**
+ * Only an order in normal standing can be extended. Trip ended early, booking cancelled or
+ * membership revoked after handover keep the order ACTIVE but flag it ACTION_REQUIRED and pull
+ * the return task earlier; extending it would undo that recall. OVERDUE is tolerated only while
+ * applying a payment confirmed before the due time (see below).
+ */
+const EXTENDABLE_EXCEPTION_STATUSES: string[] = [RentalOrderExceptionStatus.NONE, RentalOrderExceptionStatus.OVERDUE];
+function isExtendableStanding(order: { exceptionStatus?: string | null }): boolean {
+  return EXTENDABLE_EXCEPTION_STATUSES.includes(order.exceptionStatus ?? RentalOrderExceptionStatus.NONE);
+}
+
 function checkExtendable(order: any, now: Date, isApplyingPayment = false) {
   if (![RentalOrderStatus.ACTIVE].includes(order.status)) throw error('EXTENSION_INVALID_ORDER_STATE');
+  if (!isExtendableStanding(order)) throw error('EXTENSION_INVALID_ORDER_STATE');
   const due = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt);
   if (now >= due) throw error('EXTENSION_TOO_LATE');
   // At quote/confirm time, exceptionStatus === 'OVERDUE' blocks extension.
@@ -432,7 +444,9 @@ export async function applyExtensionWithTx(tx: Prisma.TransactionClient, id: str
       plannedReturnAt: finalEffectiveDueAt,
       operationalReturnDueAt: finalOperationalReturnDueAt,
       occupiedEndAt: finalOccupiedEndAt,
-      exceptionStatus: RentalOrderExceptionStatus.NONE, // Reset OVERDUE if cron had flagged it before timely payment arrived
+      // checkExtendable only lets NONE/OVERDUE through: this clears an OVERDUE flag the cron set
+      // before a timely payment arrived, never an ACTION_REQUIRED recall.
+      exceptionStatus: RentalOrderExceptionStatus.NONE,
       returnPointId: pointId,
       returnOptionSnapshot: ext.returnOptionSnapshot as Prisma.InputJsonValue,
       rentalFee: { increment: ext.additionalFee },
@@ -604,7 +618,9 @@ export async function consumeExtensionPaymentWithTx(
 
   const effectiveDue = order ? effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt) : null;
   const isPaidBeforeDue = effectiveDue ? effectivePaidAt < effectiveDue : false;
+  // A recall (ACTION_REQUIRED) raised while the payment was in flight makes it a refund, not an extension.
   const isOrderApplicable = !!order && [RentalOrderStatus.ACTIVE].includes(order.status as any)
+    && isExtendableStanding(order)
     && !order.returnInspectionsViaOrderId?.length
     && !order.deliveryTasksViaOrderId?.some((t: any) => ![DeliveryTaskStatus.SCHEDULED, DeliveryTaskStatus.BLOCKED].includes(t.status));
   // Lịch thuê gốc đã đổi thì khoản vừa thu phải đi vào hoàn kỹ thuật, không retry VERSION_CONFLICT.
