@@ -112,17 +112,20 @@ export function SystemTrailMap({ trail }: { trail: SystemTrail }) {
       // Add Checkpoints
       if (trail.checkpoints) {
         trail.checkpoints.forEach((cp, idx) => {
+          // Build with textContent: checkpoint names can be user-provided (personal trails).
           const el = document.createElement("div");
-          el.innerHTML = `
-            <div class="flex items-center justify-center w-6 h-6 rounded-full border-2 border-white bg-[#1B5E41] text-white text-xs font-bold shadow-lg">
-              ${cp.sequence || idx + 1}
-            </div>
-            <div class="text-xs font-bold text-white bg-black/50 px-1 rounded mt-1 shadow-sm whitespace-nowrap">
-              ${cp.name}
-            </div>
-          `;
+          el.className = "flex flex-col items-center";
+          const badge = document.createElement("div");
+          badge.className =
+            "flex items-center justify-center w-6 h-6 rounded-full border-2 border-white bg-[#1B5E41] text-white text-xs font-bold shadow-lg";
+          badge.textContent = String(cp.sequence || idx + 1);
+          const label = document.createElement("div");
+          label.className = "text-xs font-bold text-white bg-black/50 px-1 rounded mt-1 shadow-sm whitespace-nowrap";
+          label.textContent = String(cp.name ?? "");
+          el.append(badge, label);
           
-          const marker = new maplibregl.Marker({ element: el })
+          // Anchor the badge centre (24px tall) on the coordinate; the label hangs below it.
+          const marker = new maplibregl.Marker({ element: el, anchor: "top", offset: [0, -12] })
             .setLngLat([cp.longitude, cp.latitude])
             .addTo(map);
             

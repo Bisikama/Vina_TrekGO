@@ -139,7 +139,7 @@ export class PersonalTrailController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Gửi yêu cầu kiểm duyệt cung đường cá nhân lên hệ thống (Submit For Verification)',
-    description: 'Điều kiện: Cung đường >= 500m (0.5km), DEM READY',
+    description: 'Điều kiện: Cung đường >= 300m (0.3km), DEM READY',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'UUID của cung đường cá nhân' })
   @ApiBody({ type: SubmitVerificationRequestDto, required: false })

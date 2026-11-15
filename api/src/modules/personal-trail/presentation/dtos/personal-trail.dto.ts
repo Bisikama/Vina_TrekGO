@@ -122,6 +122,34 @@ export const submitVerificationSchema = z
 
 export type SubmitVerificationInput = z.infer<typeof submitVerificationSchema>
 
+export const adminSubmissionsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).default('PENDING'),
+  })
+  .default({ page: 1, limit: 20, status: 'PENDING' })
+
+export type AdminSubmissionsQuery = z.infer<typeof adminSubmissionsQuerySchema>
+
+export const reviewSubmissionSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('APPROVE'), reviewNote: z.string().trim().max(1000).optional() }),
+  z.object({ decision: z.literal('REJECT'), reviewNote: z.string().trim().min(1).max(1000) }),
+])
+
+export type ReviewSubmissionInput = z.infer<typeof reviewSubmissionSchema>
+
+export class ReviewSubmissionRequestDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT'], example: 'REJECT', description: 'Quyết định kiểm duyệt' })
+  decision!: 'APPROVE' | 'REJECT'
+
+  @ApiPropertyOptional({
+    example: 'Đoạn cuối cung đường bị lệch tọa độ, vui lòng ghi lại.',
+    description: 'Ghi chú của admin. Bắt buộc khi từ chối.',
+  })
+  reviewNote?: string
+}
+
 // ============================================================================
 // 2. SWAGGER REQUEST DTOs
 // ============================================================================
