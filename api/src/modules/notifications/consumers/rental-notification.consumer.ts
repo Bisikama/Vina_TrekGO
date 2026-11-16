@@ -74,7 +74,14 @@ export class RentalNotificationConsumer {
     // Không có ai nhận thì retry thay vì ghi receipt hoàn tất (mất thông báo vĩnh viễn).
     if (deliveries.some((d) => d.audience === 'STAFF') && !staffIds.length) throw new Error('NO_STAFF_RECIPIENT')
     for (const delivery of deliveries) {
-      const recipients = delivery.audience === 'STAFF' ? staffIds : [order.userId]
+      const recipients =
+        delivery.audience === 'STAFF'
+          ? staffIds
+          : delivery.audience === 'USER'
+            ? delivery.recipientId
+              ? [delivery.recipientId]
+              : []
+            : [order.userId]
       for (const userId of recipients)
         await this.notificationsService.deliverEvent(event.id, delivery.semanticType, { ...delivery.data, userId })
     }

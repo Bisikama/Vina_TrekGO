@@ -4,7 +4,13 @@ import { EQUIPMENT_UNIT_PORT, type EquipmentUnitPort, type EquipmentConditionVal
 
 export type ChangeEquipmentMaintenanceInput =
   | { action: 'START'; reason: string; notes?: string; expectedVersion: number; staffId: string }
-  | { action: 'COMPLETE'; resultingCondition: EquipmentConditionValue; expectedVersion: number }
+  | {
+      action: 'COMPLETE'
+      resultingCondition: EquipmentConditionValue
+      expectedVersion: number
+      retire?: boolean
+      actorId?: string
+    }
 
 @Injectable()
 export class ChangeEquipmentMaintenanceUseCase {
@@ -65,6 +71,8 @@ export class ChangeEquipmentMaintenanceUseCase {
         unitId: id,
         expectedVersion: input.expectedVersion,
         resultingCondition: input.resultingCondition,
+        retire: input.retire,
+        actorId: input.actorId,
       })
 
       return {

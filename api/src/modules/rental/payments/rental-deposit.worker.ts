@@ -10,6 +10,17 @@ import { planDepositRefundGroups, DepositRefundCandidate } from '../returns/appl
 import { tryCompleteOrder } from '../returns/infrastructure/adapters/prisma-rental-return.adapter'
 import { deductionReviewGate } from '../returns/application/deduction-review-gate'
 
+/**
+ * Attempt number of an item's deposit refund: 1 for the first dispatch, bumped by RB-API-610
+ * RETRY_REFUND after a provider failure. Part of the idempotency key, so a retry is a new refund
+ * while a replay of the same attempt stays idempotent.
+ */
+export function depositRefundAttempt(decisionSnapshot: unknown): number {
+  const raw = (decisionSnapshot as { refundAttempt?: unknown } | null)?.refundAttempt
+  const attempt = Number(raw ?? 1)
+  return Number.isInteger(attempt) && attempt > 1 ? attempt : 1
+}
+
 @Injectable()
 export class RentalDepositWorker {
   private running = false
@@ -48,7 +59,7 @@ export class RentalDepositWorker {
     if (!payment || !allocation || !item.refundAmount.isPositive())
       throw AppError.fromCode(E.REFUND_SOURCE_INVALID)
 
-    const action = `deposit-item:${item.id}:refund:v1`
+    const action = `deposit-item:${item.id}:refund:v${depositRefundAttempt(item.decisionSnapshot)}`
     return this.payments.requestRefund({
       paymentId: payment.id,
       purpose: 'DEPOSIT',
@@ -97,7 +108,7 @@ export class RentalDepositWorker {
         ...missingPrelims.map((m) => m.assignmentId),
       ])
       const assignments = await this.db.rentalUnitAssignment.findMany({
-        where: { orderLine: { orderId } },
+        where: { orderLine: { orderId }, status: { notIn: ['REPLACED', 'UNASSIGNED'] } },
         select: { id: true },
       })
       const isOrderComplete = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))
@@ -180,10 +191,12 @@ export class RentalDepositWorker {
           amount: amount.toFixed(),
         }))
 
+        // A retried item gets a new key (v2, v3...); first attempts keep the original v1 keys.
+        const attempt = Math.max(...groupItems.map((gi) => depositRefundAttempt(gi.decisionSnapshot)))
         const businessActionId =
           group.itemIds.length === 1
-            ? `deposit-item:${group.itemIds[0]}:refund:v1`
-            : `deposit-group:${group.paymentId}:${group.itemIds.sort().join(',')}:v1`
+            ? `deposit-item:${group.itemIds[0]}:refund:v${attempt}`
+            : `deposit-group:${group.paymentId}:${group.itemIds.sort().join(',')}:v${attempt}`
 
         await this.payments.requestRefund({
           paymentId: group.paymentId,
@@ -439,6 +452,32 @@ export class RentalDepositWorker {
               },
             },
           })
+          // A provider failure must reach Admin: open a REFUND_FAILURE case they can RETRY_REFUND (RB-API-610).
+          if (refund.status === 'FAILED') {
+            const reference = `[refund:${refund.id}]`
+            const existingCase = await tx.rentalExceptionCase.findFirst({
+              where: {
+                orderId,
+                assignmentId: item.assignmentId,
+                caseType: RentalExceptionType.REFUND_FAILURE,
+                status: { in: [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW] },
+                reason: { contains: reference },
+              },
+              select: { id: true },
+            })
+            if (!existingCase)
+              await tx.rentalExceptionCase.create({
+                data: {
+                  orderId,
+                  assignmentId: item.assignmentId,
+                  unitId: item.unitId,
+                  caseType: RentalExceptionType.REFUND_FAILURE,
+                  status: RentalExceptionCaseStatus.OPEN,
+                  reason: `${reference} ${refund.lastErrorCode ?? 'DEPOSIT_REFUND_FAILED'}`,
+                  evidenceIds: [],
+                },
+              })
+          }
         }
 
         await updateSettlementProgress(tx, settlementId, now)
@@ -555,7 +594,7 @@ export class RentalDepositWorker {
           ...missingPrelims.map((m) => m.assignmentId),
         ])
         const assignments = await this.db.rentalUnitAssignment.findMany({
-          where: { orderLine: { orderId } },
+          where: { orderLine: { orderId }, status: { notIn: ['REPLACED', 'UNASSIGNED'] } },
           select: { id: true },
         })
         const allInspected = assignments.length > 0 && assignments.every((a) => completedAssignmentIds.has(a.id))

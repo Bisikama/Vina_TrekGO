@@ -629,8 +629,18 @@ export default function FieldOperationsHome() {
                 <Ionicons name="location-outline" size={13} /> {task.point.name}
               </Text>
               <Text style={styles.taskMeta}>
-                <Ionicons name="time-outline" size={13} /> Hẹn {formatShortDateTime(task.scheduledAt)}
+                <Ionicons name="time-outline" size={13} /> Hẹn{" "}
+                <Text style={styles.tabular}>{formatShortDateTime(task.scheduledAt)}</Text>
               </Text>
+              {task.earlyReturn ? (
+                <View style={styles.earlyReturnPill}>
+                  <Text style={styles.earlyReturnText}>
+                    {task.earlyReturn.status === "CONFIRMED"
+                      ? `Khách trả sớm · hẹn ${formatShortDateTime(task.earlyReturn.slotAt)}`
+                      : "Lịch trả sớm chờ xác nhận lại"}
+                  </Text>
+                </View>
+              ) : null}
               {task.timeline && task.timeline.length > 0 ? (
                 <View style={styles.timelineRow}>
                   {task.timeline.map((step) => (
@@ -763,6 +773,16 @@ const styles = StyleSheet.create({
   tripTypeText: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600" },
   tripTime: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 12 },
   taskMeta: { color: Colors.body, fontSize: 14, marginBottom: 5 },
+  tabular: { fontVariant: ["tabular-nums"] },
+  earlyReturnPill: {
+    alignSelf: "flex-start",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 6,
+    backgroundColor: "#FEF3C7",
+  },
+  earlyReturnText: { color: "#92400E", fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
   taskItems: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer, paddingTop: 12, marginTop: 7 },
   taskItemsText: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 14 },
   openTaskText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },

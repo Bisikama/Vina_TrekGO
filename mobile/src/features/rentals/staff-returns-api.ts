@@ -20,8 +20,81 @@ export type StaffReturnSummary = {
   normalCount: number;
   issueCount: number;
   missingCount: number;
+  /** Số món giao hàng báo có vấn đề khi nhận từ khách. */
+  deliveryReportedIssueCount?: number;
+  /** Số lỗi nhân viên giao ghi lúc GIAO đồ cho khách (biên bản bàn giao). */
+  handoverReportedIssueCount?: number;
+  /** Số món đã vào kho nhưng chưa kiểm định cuối. */
+  pendingInspectionCount?: number;
   scheduledAt: string | null;
   version: number;
+};
+
+/** Giai đoạn của từng thiết bị theo góc nhìn kho (backend tính, RB-API-614 `units[].stage`). */
+export type ReturnUnitStage =
+  | "MISSING"
+  | "AWAITING_RECEIPT"
+  | "AWAITING_FINAL_INSPECTION"
+  | "AWAITING_ADMIN"
+  | "WAITING_CLEANING"
+  | "READY"
+  | "CLOSED_DAMAGED"
+  | "CLOSED_LOST";
+
+/** Một dòng "lỗi ghi nhận khi giao" trong biên bản bàn giao (RB-API-404). */
+export type HandoverReportedIssue = { type: string; description: string };
+
+export type StaffReturnUnit = {
+  unitId: string;
+  assetCode: string | null;
+  productId: string | null;
+  productName: string | null;
+  assignmentStatus: string;
+  unitStatus: string | null;
+  unitCondition: string | null;
+  unitVersion: number | null;
+  /** Hạn dùng YYYY-MM-DD; `unitExpired` = món sẽ chuyển Ngừng sử dụng khi đưa ra, không cần phân hạng. */
+  unitExpiresAt?: string | null;
+  unitExpired?: boolean;
+  stage: ReturnUnitStage;
+  /** Bắt buộc ít nhất 1 ảnh khi kiểm định cuối (đúng quy tắc backend RB-API-605). */
+  evidenceRequired: boolean;
+  requiresDeepInspection: boolean;
+  returnedAt: string | null;
+  inventoryReceivedAt: string | null;
+  inspectionDueAt: string | null;
+  deliveryObservation: {
+    outcome: "NORMAL" | "ISSUE" | string;
+    /** null: ghi nhận cũ, trước khi backend lưu chi tiết này. */
+    visibleDamage: boolean | null;
+    accessoryObservations: string[];
+    notes: string | null;
+    evidenceIds: string[];
+    observedAt: string | null;
+  } | null;
+  handoverBaseline: {
+    condition: string;
+    accessories: unknown;
+    notes: string | null;
+    evidenceIds: string[];
+  } | null;
+  /** Lỗi nhân viên giao ghi lúc GIAO món này cho khách: có từ trước kỳ thuê, không được trừ cọc. */
+  handoverReportedIssues?: HandoverReportedIssue[];
+  finalInspection: ReturnInspection | null;
+  deposit: { status: string; depositAmount: number; deductionAmount: number; refundAmount: number } | null;
+  exceptionCase: { id: string; caseType: string; status: string; reason: string } | null;
+};
+
+export type StaffReturnSummaryCounts = {
+  totalUnits: number;
+  queueStatus: ReturnQueueStatus;
+  deliveryReportedIssueCount: number;
+  handoverReportedIssueCount?: number;
+  /** Lỗi ghi lúc giao nhưng không gắn với món cụ thể. */
+  handoverOrderLevelIssues?: HandoverReportedIssue[];
+  handedOverAt?: string | null;
+  evidenceRequiredPendingCount: number;
+  stageCounts: Record<ReturnUnitStage, number>;
 };
 
 export type ReturnInspection = {
@@ -67,6 +140,9 @@ export type StaffReturnDetail = {
     preliminary: ReturnInspection | null;
     final: ReturnInspection | null;
   }[];
+  /** Thông tin gom sẵn cho từng thiết bị (backend mới). */
+  units?: StaffReturnUnit[];
+  summary?: StaffReturnSummaryCounts;
 };
 
 export type DamageAssessmentRule = {
@@ -234,6 +310,9 @@ export const staffReturnsApi = {
   ) {
     return mutate<{
       gradeReview: { decision: "KEEP" | "DOWNGRADE"; shortageOrderIds: string[] } | null;
+      /** AVAILABLE (về kệ), RETIRED (đã hết hạn dùng), MAINTENANCE (đạt ngưỡng hao mòn, đã mở phiếu bảo trì). */
+      disposition?: "AVAILABLE" | "RETIRED" | "MAINTENANCE";
+      unit?: { rentalCount?: number };
     }>(
       `/api/v1/staff/equipment-units/${encodeURIComponent(input.unitId)}/ready`,
       // Body khác (có/không gradeDecision) phải dùng khoá idempotency khác.

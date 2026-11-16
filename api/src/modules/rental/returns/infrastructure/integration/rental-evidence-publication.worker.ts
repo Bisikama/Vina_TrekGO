@@ -21,7 +21,8 @@ export class RentalEvidencePublicationWorker {
     this.running = true
     try {
       const cases = await this.db.rentalExceptionCase.findMany({
-        where: { status: 'RESOLVED', inspectionId: { not: null },
+        // RETURN_INCOMPLETE (unit never returned) has no evidence to publish; see deductionReviewGate.
+        where: { status: 'RESOLVED', inspectionId: { not: null }, caseType: { not: 'RETURN_INCOMPLETE' },
           rentalAssessmentReviewsViaExceptionCaseId: { none: {} },
           AND: [
             { OR: [{ resolution: { startsWith: 'APPROVE_DEDUCTION:' } }, { resolution: { startsWith: 'CONFIRM_LOST:' } }] },

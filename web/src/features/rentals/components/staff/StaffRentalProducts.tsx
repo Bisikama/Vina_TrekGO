@@ -66,6 +66,8 @@ type ProductForm = {
   specJson: string;
   grade: RentalGrade | "";
   gradeGroupId: string;
+  /** Ngưỡng hao mòn (số lượt thuê); rỗng = không giới hạn. */
+  maxRentalCycles: string;
 };
 
 const GRADE_LABELS: Record<RentalGrade, string> = {
@@ -95,6 +97,7 @@ const emptyForm: ProductForm = {
   specJson: "{}",
   grade: "",
   gradeGroupId: "",
+  maxRentalCycles: "",
 };
 
 const inputClass =
@@ -266,6 +269,9 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
   const selectedGradeGroup = gradeGroups.find(
     (group) => group.id === form.gradeGroupId,
   );
+  // Ngưỡng hao mòn dùng chung cả nhóm hạng (món hạ hạng giữ nguyên số lượt thuê).
+  const groupWearLimit = selectedGradeGroup?.members.find((member) => member.maxRentalCycles)?.maxRentalCycles ?? null;
+  const inGradeGroup = Boolean(form.gradeGroupId || selectedProduct?.gradeGroupId);
   const gradeDepositHint =
     form.grade && Number(form.replacementValue) > 0
       ? Math.round(
@@ -309,6 +315,7 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
       specJson: stringifySpec(product.spec),
       grade: product.grade ?? "",
       gradeGroupId: product.gradeGroupId ?? "",
+      maxRentalCycles: product.maxRentalCycles ? String(product.maxRentalCycles) : "",
     });
     setError("");
     setModalMode("edit");
@@ -343,6 +350,15 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
         throw new Error("Giá trị thay thế không hợp lệ.");
       }
 
+      const maxRentalCyclesText = form.maxRentalCycles.trim();
+      const maxRentalCycles = maxRentalCyclesText === "" ? null : Number(maxRentalCyclesText);
+      if (
+        maxRentalCycles !== null &&
+        (!Number.isInteger(maxRentalCycles) || maxRentalCycles < 1 || maxRentalCycles > 100000)
+      ) {
+        throw new Error("Ngưỡng hao mòn phải là số lượt thuê nguyên dương (để trống nếu không giới hạn).");
+      }
+
       if (form.grade && form.depositType !== "FIXED") {
         throw new Error("Sản phẩm có hạng phải dùng tiền cọc cố định.");
       }
@@ -366,6 +382,8 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
         imageMediaIds: splitValues(form.imageMediaIds),
         spec,
         recommendationTags: splitValues(form.recommendationTags),
+        // Vào nhóm hạng sẵn có mà để trống: không gửi, backend lấy theo nhóm (gửi null sẽ xoá ngưỡng cả nhóm).
+        ...(modalMode === "create" && form.gradeGroupId && maxRentalCycles === null ? {} : { maxRentalCycles }),
       };
 
       if (modalMode === "create") {
@@ -657,6 +675,9 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
                           </p>
                           <p className="mt-1 text-[9px] text-slate-500">
                             Thay thế: {formatMoney(product.replacementValue)}
+                          </p>
+                          <p className="mt-1 text-[9px] text-slate-500">
+                            Hao mòn: {product.maxRentalCycles ? `tối đa ${product.maxRentalCycles} lượt` : "không giới hạn"}
                           </p>
                         </td>
                         <td className="px-4 py-4 text-[10px] text-slate-600">
@@ -1035,6 +1056,33 @@ export function StaffRentalProducts({ variant = "staff" }: StaffRentalProductsPr
                 ở trạng thái chưa công khai cho tới khi ADMIN duyệt giá.
               </p>
             ) : null}
+
+            <Field label="Ngưỡng hao mòn — số lượt thuê tối đa mỗi thiết bị">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={form.maxRentalCycles}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    maxRentalCycles: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder={
+                  modalMode === "create" && form.gradeGroupId
+                    ? `Để trống = theo nhóm (${groupWearLimit ? `${groupWearLimit} lượt` : "không giới hạn"})`
+                    : "Để trống = không giới hạn"
+                }
+              />
+              <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+                Lượt thuê được cộng khi kho nhận đồ về. Lượt làm thiết bị chạm ngưỡng sẽ đưa nó sang bảo trì thay vì về kệ;
+                hoàn tất bảo trì thì chọn dùng tiếp (đếm lại từ 0) hoặc ngừng sử dụng.
+                {inGradeGroup ? " Ngưỡng áp dụng cho cả nhóm hạng: đổi ở đây thì hạng còn lại đổi theo." : ""}
+              </span>
+            </Field>
 
             <Field label="Media IDs hoặc URL ảnh — mỗi dòng một giá trị">
               <textarea

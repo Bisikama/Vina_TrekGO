@@ -16,6 +16,8 @@ export interface ReturnInspectionItemInput {
   outcome: ReturnOutcome;
   condition?: 'NEW' | 'GOOD' | 'FAIR' | 'DAMAGED' | 'LOST'; // observation only
   accessoryIssues: string[];
+  /** Canonical RB-API-602 flag; undefined for the legacy request shape. */
+  visibleDamage?: boolean;
   notes?: string;
   evidenceIds: string[];
 }
@@ -88,6 +90,12 @@ export interface CreateDepositSettlementCommand {
   approvalRef: string;
   idempotencyKey: string;
   now: Date;
+  /**
+   * Set only by the system (RentalApprovedSettlementWorker, RB-API-617 acceptance), which act on
+   * a decision an Admin already made: actorUserId is that approver, who may since have been
+   * deactivated. Never set from HTTP input.
+   */
+  systemTriggered?: boolean;
 }
 
 export interface GetDepositQuery { actorUserId: string; orderId: string; }
@@ -107,6 +115,23 @@ export interface FinalizeReturnCommand {
   now: Date;
 }
 
+/** RB-API-617: the order owner accepts a published, admin-approved deduction. */
+export interface AcceptAssessmentCommand {
+  actorUserId: string;
+  orderId: string;
+  assessmentId: string;
+  idempotencyKey: string;
+  now: Date;
+}
+
+/** What the caller needs to dispatch settlement through RB-API-606 right after acceptance. */
+export interface AcceptAssessmentResult {
+  caseId: string;
+  assessmentId: string;
+  acceptedAt: string;
+  settlement: { orderId: string; assessmentId: string; approvalRef: string; approvedBy: string; depositItemId: string } | null;
+}
+
 export interface CreateAssessmentReviewCommand {
   actorUserId: string;
   orderId: string;
@@ -117,7 +142,7 @@ export interface CreateAssessmentReviewCommand {
   now: Date;
 }
 
-export type ExceptionDecision = 'APPROVE_DEDUCTION' | 'REJECT_DEDUCTION' | 'CONFIRM_LOST' | 'CLOSE_NO_ACTION';
+export type ExceptionDecision = 'APPROVE_DEDUCTION' | 'REJECT_DEDUCTION' | 'CONFIRM_LOST' | 'CLOSE_NO_ACTION' | 'RETRY_REFUND';
 export interface ResolveExceptionCommand {
   actorUserId: string;
   exceptionId: string;
@@ -125,6 +150,8 @@ export interface ResolveExceptionCommand {
   reason: string;
   assessmentVersion?: number;
   expectedVersion: number;
+  /** APPROVE_DEDUCTION only: Admin approves less than the proposed (capped) deduction. Integer VND. */
+  approvedDeductionAmount?: number;
   idempotencyKey: string;
   now: Date;
 }
@@ -222,6 +249,7 @@ export interface RentalReturnPort {
   getDeposit(query: GetDepositQuery): Promise<any>;
   finalizeReturn(command: FinalizeReturnCommand): Promise<any>;
   createAssessmentReview(command: CreateAssessmentReviewCommand): Promise<any>;
+  acceptAssessment(command: AcceptAssessmentCommand): Promise<AcceptAssessmentResult>;
   resolveException(command: ResolveExceptionCommand): Promise<any>;
   markUnitReady(command: MarkUnitReadyCommand): Promise<any>;
   listExceptions(query: ListExceptionsQuery): Promise<any>;

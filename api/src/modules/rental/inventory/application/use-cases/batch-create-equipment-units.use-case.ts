@@ -8,6 +8,7 @@ import {
 } from '../ports/equipment-unit.port'
 import { RENTAL_PRODUCT_PORT, type RentalProductPort } from '../../../catalog/application/ports/rental-product.port'
 import { INVENTORY_LOCATION_PORT, type InventoryLocationPort } from '../ports/inventory-location.port'
+import { assertExpiryInFuture } from '../services/equipment-lifecycle.rules'
 export interface BatchCreateEquipmentUnitsInput {
   productId: string
   homeInventoryLocationId: string
@@ -16,6 +17,10 @@ export interface BatchCreateEquipmentUnitsInput {
   assetCodes?: string[]
   condition?: EquipmentConditionValue
   acquiredAt?: string
+  /** Cả lô dùng chung mã lô, hạn dùng và ghi chú thực trạng. */
+  batchCode?: string
+  expiresAt?: string
+  conditionNotes?: string
 }
 import { randomBytes } from 'crypto'
 
@@ -58,6 +63,9 @@ export class BatchCreateEquipmentUnitsUseCase {
         details: { locationId: input.homeInventoryLocationId },
       })
     }
+
+    // A unit that is already past its shelf life would be withdrawn by the expiry job right away.
+    assertExpiryInFuture(input.expiresAt, new Date())
 
     const resolvedCondition = input.condition ?? 'GOOD'
     if (resolvedCondition === 'DAMAGED' || resolvedCondition === 'LOST') {
@@ -118,6 +126,9 @@ export class BatchCreateEquipmentUnitsUseCase {
           status: 'AVAILABLE',
           condition: resolvedCondition,
           acquiredAt: input.acquiredAt,
+          batchCode: input.batchCode,
+          expiresAt: input.expiresAt,
+          conditionNotes: input.conditionNotes,
         })
       }
 

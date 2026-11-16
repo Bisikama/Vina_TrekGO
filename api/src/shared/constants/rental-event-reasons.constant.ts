@@ -31,5 +31,9 @@ export const EARLY_RETURN_EVENT_STATUSES = [
   'EXPIRED',
   'CANCELLED',
   'RECONFIRM_REQUIRED',
+  /** Quá giờ hẹn đã xác nhận mà shipper chưa thu hồi; chỉ cảnh báo, không đổi trạng thái yêu cầu. */
+  'SLOT_MISSED',
+  /** Lịch đã xác nhận được giao / đổi sang shipper khác; giờ hẹn giữ nguyên. */
+  'REASSIGNED',
 ] as const
 export type EarlyReturnEventStatus = (typeof EARLY_RETURN_EVENT_STATUSES)[number]

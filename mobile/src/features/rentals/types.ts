@@ -237,6 +237,8 @@ export type DeliveryTaskSummary = {
   type: "OUTBOUND" | "RETURN";
   status: string;
   scheduledAt?: string | null;
+  /** Task thu hồi theo lịch trả sớm; RECONFIRM_REQUIRED = chuyến đổi lịch, chờ kho xác nhận lại. */
+  earlyReturn?: { requestId: string; status: "CONFIRMED" | "RECONFIRM_REQUIRED"; slotAt: string } | null;
   point: { id: string; name: string; address?: string | null };
   package: { id: string; code: string; status: string };
   orderSummary: {
@@ -509,6 +511,9 @@ export type RentalDepositItem = {
   reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
   canSubmitReview?: boolean;
   cannotSubmitReviewReason?: string | null;
+  /** RB-API-617: khách có thể đồng ý khoản trừ để quyết toán ngay (cùng điều kiện với phản đối). */
+  canAcceptDeduction?: boolean;
+  deductionAcceptedAt?: string | null;
   approvedDeduction?: number | null;
 };
 

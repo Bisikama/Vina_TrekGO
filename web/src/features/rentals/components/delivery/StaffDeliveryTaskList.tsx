@@ -90,6 +90,13 @@ function formatDateTime(value?: string | null) {
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
+/** Nhãn cho task thu hồi theo lịch trả sớm; lịch chờ xác nhận lại thì nhắc shipper đừng đi theo giờ cũ. */
+function earlyReturnLabel(earlyReturn: { status: string; slotAt: string }) {
+  return earlyReturn.status === "CONFIRMED"
+    ? `Khách trả sớm · hẹn ${formatDateTime(earlyReturn.slotAt)}`
+    : "Lịch trả sớm chờ xác nhận lại";
+}
+
 function recipientName(task?: DeliveryTaskSummary, detail?: DeliveryTaskDetail | null) {
   const recipient = detail?.recipient || task?.orderSummary.recipient;
   return recipient?.displayName || recipient?.fullName || recipient?.name || "Khách thuê";
@@ -642,8 +649,11 @@ export function StaffDeliveryTaskList() {
                     <p className="mt-2 text-sm font-semibold text-[#1F2937]">{task.point.name}</p>
                     <p className="mt-1 text-xs text-[#6B7280]">Khách: {recipientName(task)}</p>
                     <p className={`mt-1 text-xs ${late ? "font-semibold text-red-700" : "text-[#6B7280]"}`}>
-                      Hẹn: {formatDateTime(task.scheduledAt)}{late ? " · Trễ hẹn" : ""}
+                      Hẹn: <span className="tabular-nums">{formatDateTime(task.scheduledAt)}</span>{late ? " · Trễ hẹn" : ""}
                     </p>
+                    {task.earlyReturn ? (
+                      <StatusBadge className="mt-2" status="PENDING" customLabel={earlyReturnLabel(task.earlyReturn)} />
+                    ) : null}
                   </button>
                 );
               })
@@ -667,7 +677,7 @@ export function StaffDeliveryTaskList() {
                 <dl className="grid gap-3 rounded-xl bg-[#F7F7F4] p-4 text-sm sm:grid-cols-2">
                   <div><dt className="text-xs text-[#6B7280]">Điểm hẹn</dt><dd className="font-semibold text-[#1F2937]">{selected.point.name}</dd>{selected.point.address && <dd className="text-xs text-[#6B7280]">{selected.point.address}</dd>}</div>
                   <div><dt className="text-xs text-[#6B7280]">Khách thuê</dt><dd className="font-semibold text-[#1F2937]">{recipientName(selected, detail)}</dd></div>
-                  <div><dt className="text-xs text-[#6B7280]">Giờ hẹn</dt><dd className={`font-semibold ${isLate(selected, now) ? "text-red-700" : "text-[#1F2937]"}`}>{formatDateTime(selected.scheduledAt)}</dd></div>
+                  <div><dt className="text-xs text-[#6B7280]">Giờ hẹn</dt><dd className={`font-semibold tabular-nums ${isLate(selected, now) ? "text-red-700" : "text-[#1F2937]"}`}>{formatDateTime(selected.scheduledAt)}</dd>{selected.earlyReturn && <dd className="mt-1"><StatusBadge status="PENDING" customLabel={earlyReturnLabel(selected.earlyReturn)} /></dd>}</div>
                   {detail?.custodyTransfer && (
                     <div><dt className="text-xs text-[#6B7280]">Kho bàn giao lúc</dt><dd className="font-semibold text-[#1F2937]">{formatDateTime(detail.custodyTransfer.requestedAt)}</dd></div>
                   )}

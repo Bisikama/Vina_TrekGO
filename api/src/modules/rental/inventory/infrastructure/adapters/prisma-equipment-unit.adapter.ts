@@ -1,10 +1,17 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/shared/services/prisma.service';
-import { AppError, RENTAL_ERROR_CODES, RENTAL_ORDERING_ERROR_CODES } from '../../../../../shared/errors';
+import { AppError, COMMON_ERROR_CODES, RENTAL_ERROR_CODES, RENTAL_ORDERING_ERROR_CODES } from '../../../../../shared/errors';
 import { Prisma, EquipmentUnitStatus, EquipmentCondition, MaintenanceStatus, RentalUnitAssignmentStatus } from '@prisma/client';
 import { assertGradeDecision } from '../../application/services/equipment-grade.rules';
 import { applyGradeDecision } from '../equipment-grade-transfer';
+import {
+  WEAR_LIMIT_MAINTENANCE_REASON,
+  isExpiryExtension,
+  isUnitExpired,
+  vnCalendarDate,
+  wearPercent,
+} from '../../application/services/equipment-lifecycle.rules';
 import {
   EquipmentUnitPort,
   EquipmentUnitView,
@@ -32,6 +39,9 @@ const OPEN_ASSIGNMENT_STATUSES: RentalUnitAssignmentStatus[] = [
   RentalUnitAssignmentStatus.RETURNED,
 ];
 
+/** Cảnh báo kho: số ngày trước hạn dùng. */
+const EXPIRING_SOON_DAYS = 30;
+
 const explicitSelect = {
   id: true,
   assetCode: true,
@@ -42,12 +52,17 @@ const explicitSelect = {
   expectedReadyAt: true,
   acquiredAt: true,
   retiredAt: true,
+  intakeBatchCode: true,
+  expiresAt: true,
+  conditionNotes: true,
+  rentalCount: true,
   version: true,
   product: {
     select: {
       id: true,
       sku: true,
       name: true,
+      maxRentalCycles: true,
     }
   },
   homeInventoryLocation: {
@@ -86,6 +101,7 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
         id: unit.product.id,
         sku: unit.product.sku,
         name: unit.product.name,
+        maxRentalCycles: unit.product.maxRentalCycles,
       },
       homeInventoryLocation: {
         id: unit.homeInventoryLocation.id,
@@ -102,12 +118,18 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
       expectedReadyAt: unit.expectedReadyAt ? unit.expectedReadyAt.toISOString() : null,
       acquiredAt: unit.acquiredAt ? unit.acquiredAt.toISOString().split('T')[0] : null,
       retiredAt: unit.retiredAt ? unit.retiredAt.toISOString().split('T')[0] : null,
+      intakeBatchCode: unit.intakeBatchCode,
+      expiresAt: unit.expiresAt ? unit.expiresAt.toISOString().split('T')[0] : null,
+      isExpired: isUnitExpired(unit.expiresAt, new Date()),
+      conditionNotes: unit.conditionNotes,
+      rentalCount: unit.rentalCount,
+      wearPercent: wearPercent(unit.rentalCount, unit.product.maxRentalCycles),
       version: unit.version,
     };
   }
 
   async listUnits(params: ListEquipmentUnitsParams): Promise<{ items: EquipmentUnitView[]; total: number; counts: EquipmentUnitCounts }> {
-    const { page, pageSize, productId, status, condition, inventoryLocationId, q } = params;
+    const { page, pageSize, productId, status, condition, inventoryLocationId, q, batchCode, expiringBefore } = params;
     
     // Lọc cơ sở, không bao gồm status để đếm tổng
     const baseWhere: Prisma.EquipmentUnitWhereInput = {};
@@ -116,6 +138,8 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
     if (inventoryLocationId) {
       baseWhere.currentInventoryLocationId = inventoryLocationId;
     }
+    if (batchCode) baseWhere.intakeBatchCode = batchCode;
+    if (expiringBefore) baseWhere.expiresAt = { lte: new Date(expiringBefore) };
     if (q) {
       baseWhere.AND = baseWhere.AND || [];
       (baseWhere.AND as Prisma.EquipmentUnitWhereInput[]).push({
@@ -135,7 +159,8 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
-    const [items, totalFiltered, countsGroup] = await Promise.all([
+    const expiringSoonBefore = new Date(vnCalendarDate(new Date()).getTime() + EXPIRING_SOON_DAYS * 86_400_000);
+    const [items, totalFiltered, countsGroup, expiringSoon] = await Promise.all([
       this.prisma.equipmentUnit.findMany({
         where: itemsWhere,
         skip,
@@ -148,6 +173,12 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
         by: ['status'],
         _count: true,
         where: baseWhere,
+      }),
+      this.prisma.equipmentUnit.count({
+        where: {
+          status: { notIn: [EquipmentUnitStatus.RETIRED, EquipmentUnitStatus.LOST] },
+          expiresAt: { lte: expiringSoonBefore },
+        },
       }),
     ]);
 
@@ -163,6 +194,7 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
       damaged: 0,
       lost: 0,
       retired: 0,
+      expiringSoon,
     };
 
     for (const group of countsGroup) {
@@ -233,6 +265,9 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
           status: payload.status,
           condition: payload.condition,
           acquiredAt: payload.acquiredAt ? new Date(payload.acquiredAt) : undefined,
+          intakeBatchCode: payload.batchCode,
+          expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+          conditionNotes: payload.conditionNotes,
         },
         select: this.getExplicitSelect(),
       });
@@ -259,6 +294,9 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
               status: payload.status,
               condition: payload.condition,
               acquiredAt: payload.acquiredAt ? new Date(payload.acquiredAt) : undefined,
+              intakeBatchCode: payload.batchCode,
+              expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+              conditionNotes: payload.conditionNotes,
             },
             select: this.getExplicitSelect(),
           });
@@ -273,10 +311,20 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
   }
 
   async updateMetadata(input: UpdateEquipmentUnitMetadataInput): Promise<EquipmentUnitView> {
-    const { id, expectedVersion, ...data } = input;
-    
+    const { id, expectedVersion, actorId, actorRole, ...data } = input;
+
     try {
-      const unit = await this.prisma.equipmentUnit.update({
+      return await this.prisma.$transaction(async (tx) => {
+      const current = await tx.equipmentUnit.findUnique({ where: { id }, select: { expiresAt: true, version: true } });
+      if (!current) throw AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_FOUND, { details: { id } });
+      // Kéo dài hoặc xoá hạn dùng đưa món trở lại cho thuê: chỉ ADMIN.
+      if (actorRole !== 'ADMIN' && isExpiryExtension(current.expiresAt, data.expiresAt)) {
+        throw AppError.fromCode(COMMON_ERROR_CODES.FORBIDDEN, {
+          message: 'Chỉ Admin được kéo dài hoặc xoá hạn dùng. Nhân viên kho chỉ được rút ngắn.',
+          details: { field: 'expiresAt', reason: 'EXPIRY_EXTENSION_REQUIRES_ADMIN' },
+        });
+      }
+      const unit = await tx.equipmentUnit.update({
         where: {
           id,
           version: expectedVersion,
@@ -285,12 +333,31 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
           ...(data.homeInventoryLocationId !== undefined && { homeInventoryLocationId: data.homeInventoryLocationId }),
           ...(data.serialNumber !== undefined && { serialNumber: data.serialNumber }),
           ...(data.acquiredAt !== undefined && { acquiredAt: data.acquiredAt ? new Date(data.acquiredAt) : null }),
+          ...(data.batchCode !== undefined && { intakeBatchCode: data.batchCode }),
+          ...(data.expiresAt !== undefined && { expiresAt: data.expiresAt ? new Date(data.expiresAt) : null }),
+          ...(data.conditionNotes !== undefined && { conditionNotes: data.conditionNotes }),
           version: { increment: 1 },
         },
         select: this.getExplicitSelect(),
       });
+      const before = current.expiresAt ? current.expiresAt.toISOString().slice(0, 10) : null;
+      const after = unit.expiresAt ? unit.expiresAt.toISOString().slice(0, 10) : null;
+      if (data.expiresAt !== undefined && before !== after) {
+        await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            action: 'EQUIPMENT_UNIT_EXPIRY_CHANGED',
+            entityType: 'EquipmentUnit',
+            entityId: id,
+            oldValues: { expiresAt: before, version: current.version },
+            newValues: { expiresAt: after, version: unit.version },
+          },
+        });
+      }
       return this.mapToView(unit);
+      });
     } catch (error) {
+      if (error instanceof AppError) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         // Bản ghi không tồn tại hoặc sai phiên bản (optimistic locking)
         const exists = await this.prisma.equipmentUnit.findUnique({ where: { id } });
@@ -301,6 +368,38 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
       }
       this.handlePrismaError(error);
     }
+  }
+
+  /**
+   * Only units sitting in stock are withdrawn: a unit picked, packed or rented keeps serving its
+   * order and is retired when Inventory releases it after the return (RB-API-611).
+   */
+  async retireExpiredUnits(now: Date): Promise<number> {
+    const today = vnCalendarDate(now);
+    return this.prisma.$transaction(async (tx) => {
+      const expired = await tx.$queryRaw<{ id: string; version: number }[]>`
+        SELECT id, version FROM equipment_units
+        WHERE status = 'AVAILABLE'::"EquipmentUnitStatus" AND expires_at IS NOT NULL AND expires_at <= ${today}::date
+        ORDER BY id
+        LIMIT 200
+        FOR UPDATE SKIP LOCKED`;
+      for (const unit of expired) {
+        await tx.equipmentUnit.update({
+          where: { id: unit.id },
+          data: { status: EquipmentUnitStatus.RETIRED, retiredAt: today, version: { increment: 1 } },
+        });
+        await tx.auditLog.create({
+          data: {
+            action: 'EQUIPMENT_UNIT_EXPIRED_RETIRED',
+            entityType: 'EquipmentUnit',
+            entityId: unit.id,
+            oldValues: { status: 'AVAILABLE', version: unit.version },
+            newValues: { status: 'RETIRED', retiredAt: today.toISOString().split('T')[0], version: unit.version + 1 },
+          },
+        });
+      }
+      return expired.length;
+    });
   }
 
   private handlePrismaError(error: unknown): never {
@@ -441,9 +540,20 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
         }
 
         const activeRecord = activeRecords[0];
+        const now = new Date();
+        const before = await tx.equipmentUnit.findUnique({
+          where: { id: payload.unitId },
+          select: { expiresAt: true, rentalCount: true },
+        });
 
+        // Món dùng được: về kệ, trừ khi kho chọn Ngừng sử dụng hoặc món đã hết hạn dùng.
+        const usable = payload.resultingCondition !== 'DAMAGED' && payload.resultingCondition !== 'LOST';
+        const retire = usable && (payload.retire === true || isUnitExpired(before?.expiresAt, now));
         const targetStatus = payload.resultingCondition === 'DAMAGED' ? 'DAMAGED' :
-                             payload.resultingCondition === 'LOST' ? 'LOST' : 'AVAILABLE';
+                             payload.resultingCondition === 'LOST' ? 'LOST' :
+                             retire ? 'RETIRED' : 'AVAILABLE';
+        // Bảo trì vì hao mòn xong và dùng tiếp: bắt đầu chu kỳ mới (số lượt cũ ghi audit bên dưới).
+        const resetWear = activeRecord.reason === WEAR_LIMIT_MAINTENANCE_REASON && targetStatus === 'AVAILABLE';
 
         // 2. Atomically update EquipmentUnit
         const unit = await tx.equipmentUnit.update({
@@ -455,17 +565,31 @@ export class PrismaEquipmentUnitAdapter implements EquipmentUnitPort {
           data: {
             condition: payload.resultingCondition,
             status: targetStatus,
+            ...(targetStatus === 'RETIRED' ? { retiredAt: vnCalendarDate(now) } : {}),
+            ...(resetWear ? { rentalCount: 0 } : {}),
             version: { increment: 1 },
           },
           select: this.getExplicitSelect(),
         });
+        if (resetWear || targetStatus === 'RETIRED') {
+          await tx.auditLog.create({
+            data: {
+              userId: payload.actorId ?? null,
+              action: resetWear ? 'EQUIPMENT_UNIT_WEAR_RESET' : 'EQUIPMENT_UNIT_RETIRED_AFTER_MAINTENANCE',
+              entityType: 'EquipmentUnit',
+              entityId: payload.unitId,
+              oldValues: { status: 'MAINTENANCE', rentalCount: before?.rentalCount ?? null },
+              newValues: { status: targetStatus, rentalCount: unit.rentalCount, maintenanceId: activeRecord.id },
+            },
+          });
+        }
 
         // 3. Update MaintenanceRecord
         const maintenance = await tx.maintenanceRecord.update({
           where: { id: activeRecord.id },
           data: {
             status: 'COMPLETED',
-            completedAt: new Date(),
+            completedAt: now,
             version: { increment: 1 },
           },
         });

@@ -7,8 +7,10 @@ import type {
   RentalOrderPaymentHistoryQueryDto,
   RentalOrderPaymentHistoryResponseDto,
 } from './dtos/rental-order-payment-history.dto'
+import { transactionDateRange } from './dtos/user-transactions.dto'
 import type {
   FinancialEffect,
+  RefundPurpose,
   TransactionKind,
   TransactionSource,
   UserTransactionItemDto,
@@ -319,11 +321,12 @@ export class PaymentHistoryService {
     if (query.status) {
       paymentConditions.push(Prisma.sql`p.status::text = ${query.status}`)
     }
-    if (query.from) {
-      paymentConditions.push(Prisma.sql`p.created_at >= ${new Date(query.from)}`)
+    const range = transactionDateRange(query)
+    if (range.from) {
+      paymentConditions.push(Prisma.sql`p.created_at >= ${range.from}`)
     }
-    if (query.to) {
-      paymentConditions.push(Prisma.sql`p.created_at <= ${new Date(query.to)}`)
+    if (range.toExclusive) {
+      paymentConditions.push(Prisma.sql`p.created_at < ${range.toExclusive}`)
     }
 
     // Build conditions for Refund
@@ -339,11 +342,11 @@ export class PaymentHistoryService {
         refundConditions.push(Prisma.sql`1 = 0`)
       }
     }
-    if (query.from) {
-      refundConditions.push(Prisma.sql`r.created_at >= ${new Date(query.from)}`)
+    if (range.from) {
+      refundConditions.push(Prisma.sql`r.created_at >= ${range.from}`)
     }
-    if (query.to) {
-      refundConditions.push(Prisma.sql`r.created_at <= ${new Date(query.to)}`)
+    if (range.toExclusive) {
+      refundConditions.push(Prisma.sql`r.created_at < ${range.toExclusive}`)
     }
 
     const paymentWhereClause = Prisma.join(paymentConditions, ' AND ')
@@ -514,6 +517,7 @@ export class PaymentHistoryService {
         confirmationSource: row.confirmationSource ?? null,
         ...this.simulationDisclosure(row.executionMode, row.confirmationSource),
         description,
+        purpose: row.kind === 'REFUND' ? ((row.refundPurpose as RefundPurpose | null) ?? null) : null,
         paymentMethod: row.paymentMethod ?? null,
         createdAt: new Date(row.createdAt).toISOString(),
         completedAt: row.completedAt ? new Date(row.completedAt).toISOString() : null,

@@ -12,8 +12,12 @@ export function returnTaskScheduleAt(snapshot: unknown, effectiveDue: Date): Dat
   return effectiveDue;
 }
 
+/** Lý do mở task theo lịch (không phải sự kiện kết thúc sớm): không thay thế yêu cầu trả sớm, không dời lịch. */
+const SCHEDULED_REASONS = new Set<string>(['HANDOVER', 'DUE']);
+
 /**
- * Baseline 1.3.2: mở task thu hồi khi đến hạn hoặc có sự kiện kết thúc sớm.
+ * Mở task thu hồi ngay khi bàn giao cho khách (HANDOVER), hoặc job dự phòng (DUE),
+ * hoặc khi có sự kiện kết thúc sớm. Không có giới hạn giờ thu hồi: nhân viên được quét bất cứ lúc nào.
  * Caller khóa rental_orders trước khi gọi; unique(orderId, taskType) chặn tạo trùng.
  * Task chỉ phân công người thực hiện, không chuyển quyền giữ thiết bị.
  */
@@ -21,7 +25,13 @@ export async function ensureReturnTaskWithTx(
   tx: Prisma.TransactionClient,
   orderId: string,
   scheduledAt: Date,
-  reason: 'DUE' | 'TRIP_ENDED_EARLY' | 'BOOKING_CANCELLED_AFTER_HANDOVER' | 'MEMBERSHIP_REVOKED_AFTER_HANDOVER' | 'USER_EARLY_RETURN',
+  reason:
+    | 'HANDOVER'
+    | 'DUE'
+    | 'TRIP_ENDED_EARLY'
+    | 'BOOKING_CANCELLED_AFTER_HANDOVER'
+    | 'MEMBERSHIP_REVOKED_AFTER_HANDOVER'
+    | 'USER_EARLY_RETURN',
 ): Promise<string | null> {
   const order = await tx.rentalOrder.findUnique({
     where: { id: orderId },
@@ -37,7 +47,7 @@ export async function ensureReturnTaskWithTx(
        order.status !== RentalOrderStatus.RETURN_PROCESSING))
     return null;
 
-  if (reason !== 'DUE' && reason !== 'USER_EARLY_RETURN') {
+  if (!SCHEDULED_REASONS.has(reason) && reason !== 'USER_EARLY_RETURN') {
     // A real lifecycle event is an independent reason to collect, even if the
     // customer cancels or has not confirmed a voluntary early appointment.
     const superseded = await tx.rentalEarlyReturnRequest.updateMany({
@@ -58,7 +68,7 @@ export async function ensureReturnTaskWithTx(
   const existing = await tx.deliveryTask.findUnique({ where });
   if (existing) {
     // Sự kiện kết thúc sớm đưa task đã lên lịch về mốc sớm hơn, không thay assignee/custody.
-    if (reason !== 'DUE' && existing.status === DeliveryTaskStatus.SCHEDULED &&
+    if (!SCHEDULED_REASONS.has(reason) && existing.status === DeliveryTaskStatus.SCHEDULED &&
         (!existing.scheduledAt || scheduledAt < existing.scheduledAt)) {
       await tx.deliveryTask.update({
         where: { id: existing.id },

@@ -3,6 +3,7 @@ import { AppError, RENTAL_ERROR_CODES } from '../../../../../shared/errors'
 import { EQUIPMENT_UNIT_PORT, type EquipmentUnitPort } from '../ports/equipment-unit.port'
 import { RENTAL_PRODUCT_PORT, type RentalProductPort } from '../../../catalog/application/ports/rental-product.port'
 import { INVENTORY_LOCATION_PORT, type InventoryLocationPort } from '../ports/inventory-location.port'
+import { assertExpiryInFuture } from '../services/equipment-lifecycle.rules'
 import { type EquipmentConditionValue } from '../ports/equipment-unit.port'
 
 export interface CreateEquipmentUnitInput {
@@ -12,6 +13,9 @@ export interface CreateEquipmentUnitInput {
   serialNumber?: string
   condition?: EquipmentConditionValue
   acquiredAt?: string
+  batchCode?: string
+  expiresAt?: string
+  conditionNotes?: string
 }
 import { randomBytes } from 'crypto'
 
@@ -53,6 +57,9 @@ export class CreateEquipmentUnitUseCase {
     }
 
     // Ràng buộc trạng thái khởi tạo
+    // A unit that is already past its shelf life would be withdrawn by the expiry job right away.
+    assertExpiryInFuture(input.expiresAt, new Date())
+
     const resolvedCondition = input.condition ?? 'GOOD'
     if (resolvedCondition === 'DAMAGED' || resolvedCondition === 'LOST') {
       throw AppError.fromCode(RENTAL_ERROR_CODES.INVALID_EQUIPMENT_CONDITION, {
@@ -88,6 +95,9 @@ export class CreateEquipmentUnitUseCase {
           status: 'AVAILABLE',
           condition: resolvedCondition,
           acquiredAt: input.acquiredAt,
+          batchCode: input.batchCode,
+          expiresAt: input.expiresAt,
+          conditionNotes: input.conditionNotes,
         })
         break // Thành công
       } catch (error: unknown) {

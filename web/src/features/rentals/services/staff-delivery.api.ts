@@ -25,11 +25,22 @@ export type DeliveryTaskStatus =
 
 type Recipient = { displayName?: string; fullName?: string; name?: string; phone?: string };
 
+/**
+ * Task thu hồi gắn với lịch trả đồ sớm của khách. `RECONFIRM_REQUIRED`: chuyến đổi lịch,
+ * giờ sớm tạm mất hiệu lực cho tới khi kho xác nhận lại.
+ */
+export type DeliveryTaskEarlyReturn = {
+  requestId: string;
+  status: "CONFIRMED" | "RECONFIRM_REQUIRED";
+  slotAt: string;
+};
+
 export type DeliveryTaskSummary = {
   id: string;
   type: DeliveryTaskType;
   status: DeliveryTaskStatus;
   scheduledAt: string | null;
+  earlyReturn?: DeliveryTaskEarlyReturn | null;
   point: { id: string; name: string; address?: string | null };
   package: { id: string; code: string; status: string } | null;
   orderSummary: {
@@ -59,6 +70,7 @@ export type DeliveryTaskDetail = {
     status: DeliveryTaskStatus;
     assignee: { id: string; displayName: string } | null;
     scheduledAt: string | null;
+    earlyReturn?: DeliveryTaskEarlyReturn | null;
     point: { id: string; name: string; address?: string | null };
     version: number;
     allowedActions: string[];

@@ -3,6 +3,10 @@ import { Prisma, RentalOrderStatus, RentalOrderExceptionStatus } from '@prisma/c
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
 import { ensureReturnTaskWithTx, returnTaskScheduleAt } from './rental-return-task'
+import {
+  MISSING_REVIEW_GRACE_MINUTES,
+  openOverdueMissingUnitCases,
+} from '../../../returns/infrastructure/adapters/prisma-rental-return.adapter'
 
 export interface OverdueEvaluationResult {
   isOverdue: boolean
@@ -42,7 +46,10 @@ export class RentalOverdueService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Job fallback: event đến muộn vẫn tạo được đúng một ReturnTask khi hết quyền thuê. */
+  /**
+   * Job dự phòng: task thu hồi bình thường được mở ngay lúc bàn giao (HANDOVER). Job này bù cho các đơn
+   * ACTIVE chưa có task (đơn bàn giao trước khi có thay đổi, hoặc lỗi giữa chừng). Không chờ đến hạn trả.
+   */
   async openDueReturnTasks(now = new Date()): Promise<number> {
     let opened = 0
     let failures = 0
@@ -53,8 +60,6 @@ export class RentalOverdueService {
         where: {
           ...(this.returnTaskCursor ? { id: { gt: this.returnTaskCursor } } : {}),
           status: RentalOrderStatus.ACTIVE,
-          rentalEndAt: { lte: now },
-          OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lte: now } }],
           rentalHandoverViaOrderId: { isNot: null },
           packageViaOrderId: { isNot: null },
           deliveryTasksViaOrderId: { none: { taskType: 'RETURN' } },
@@ -78,12 +83,7 @@ export class RentalOverdueService {
               where: { id: candidate.id },
               select: { status: true, rentalEndAt: true, operationalReturnDueAt: true, returnOptionSnapshot: true },
             })
-            if (
-              !current ||
-              current.status !== RentalOrderStatus.ACTIVE ||
-              effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt) > now
-            )
-              return null
+            if (!current || current.status !== RentalOrderStatus.ACTIVE) return null
             const due = effectiveDueAt(current.rentalEndAt, current.operationalReturnDueAt)
             return ensureReturnTaskWithTx(
               tx,
@@ -130,6 +130,62 @@ export class RentalOverdueService {
     }
     if (failures)
       this.logger.error(`${failures} ReturnTask candidate(s) failed this tick; they remain eligible for retry.`)
+    return opened
+  }
+
+  /**
+   * SOT +2h: units still with the customer after the return deadline get a MISSING_PENDING_REVIEW
+   * case each, so Admin can resolve them (late return, CONFIRM_LOST or write-off) and the order can
+   * complete. Covers never-collected orders (ACTIVE) and partial early returns (RETURN_PROCESSING).
+   */
+  async openMissingUnitReviews(now = new Date()): Promise<number> {
+    const graceCutoff = new Date(now.getTime() - MISSING_REVIEW_GRACE_MINUTES * 60_000)
+    const candidates = await this.prisma.rentalOrder.findMany({
+      where: {
+        status: {
+          in: [RentalOrderStatus.ACTIVE, RentalOrderStatus.RETURN_PENDING, RentalOrderStatus.RETURN_PROCESSING],
+        },
+        OR: [
+          {
+            rentalEndAt: { lt: graceCutoff },
+            OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lt: graceCutoff } }],
+          },
+          // Collection already finished but a unit was never handed back (no rescan since 16/11).
+          {
+            deliveryTasksViaOrderId: {
+              some: { taskType: 'RETURN', status: { in: ['RETURNED', 'INVENTORY_RECEIVED', 'CLOSED'] } },
+            },
+          },
+        ],
+        rentalOrderLinesViaOrderId: {
+          some: {
+            rentalUnitAssignmentsViaOrderLineId: {
+              some: {
+                status: 'HANDED_OVER',
+                returnedAt: null,
+                rentalExceptionCasesViaAssignmentId: { none: { caseType: 'RETURN_INCOMPLETE' } },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: 100,
+    })
+    let opened = 0
+    for (const candidate of candidates) {
+      try {
+        opened += await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM rental_orders WHERE id = ${candidate.id}::uuid FOR UPDATE`
+          return openOverdueMissingUnitCases(tx, candidate.id, now)
+        })
+      } catch (error) {
+        this.logger.error(
+          `Missing-unit review failed for order ${candidate.id}: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
     return opened
   }
 

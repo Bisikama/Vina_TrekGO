@@ -71,7 +71,9 @@ export const ReceiveReturnBodySchema = z.object({
 });
 
 const DamageInputSchema = z.object({
-  ruleId: UUID,
+  // Rule id seed dạng `dddddd11-0001-0001-0001-…` không đúng version/variant RFC nên z.uuid() của zod v4 từ chối;
+  // z.guid() chỉ kiểm tra định dạng hex 8-4-4-4-12, khớp với cột uuid của Postgres.
+  ruleId: z.guid(),
   quantity: z.number().int().min(1).max(100).optional().default(1),
   notes: z.string().trim().max(2000).optional(),
   evidenceIds: z.array(UUID).max(20).optional().default([]),
@@ -116,11 +118,20 @@ export const AssessmentReviewBodySchema = z.object({
   evidenceIds: z.array(UUID).max(20).default([]),
 });
 
+export const AssessmentAcceptanceBodySchema = z.strictObject({
+  assessmentId: UUID,
+});
+
 export const ResolveExceptionBodySchema = z.object({
-  decision: z.enum(['APPROVE_DEDUCTION', 'REJECT_DEDUCTION', 'CONFIRM_LOST', 'CLOSE_NO_ACTION']),
+  decision: z.enum(['APPROVE_DEDUCTION', 'REJECT_DEDUCTION', 'CONFIRM_LOST', 'CLOSE_NO_ACTION', 'RETRY_REFUND']),
   reason: z.string().trim().min(3).max(3000),
   assessmentVersion: z.number().int().min(1).optional(),
   expectedVersion: z.number().int().min(1),
+  // Chỉ dùng với APPROVE_DEDUCTION: Admin duyệt mức thấp hơn mức đề xuất (số nguyên VND).
+  approvedDeductionAmount: z.number().int().min(1).optional(),
+}).refine((body) => body.approvedDeductionAmount === undefined || body.decision === 'APPROVE_DEDUCTION', {
+  message: 'approvedDeductionAmount is only allowed with APPROVE_DEDUCTION',
+  path: ['approvedDeductionAmount'],
 });
 
 export const GradeDecisionSchema = z
@@ -189,6 +200,7 @@ export type FinalInspectionBodyDto = z.infer<typeof FinalInspectionBodySchema>;
 export type CreateDepositSettlementBodyDto = z.infer<typeof CreateDepositSettlementBodySchema>;
 export type FinalizeReturnBodyDto = z.infer<typeof FinalizeReturnBodySchema>;
 export type AssessmentReviewBodyDto = z.infer<typeof AssessmentReviewBodySchema>;
+export type AssessmentAcceptanceBodyDto = z.infer<typeof AssessmentAcceptanceBodySchema>;
 export type ResolveExceptionBodyDto = z.infer<typeof ResolveExceptionBodySchema>;
 export type MarkUnitReadyBodyDto = z.infer<typeof MarkUnitReadyBodySchema>;
 export type ListExceptionsQueryDto = z.infer<typeof ListExceptionsQuerySchema>;
