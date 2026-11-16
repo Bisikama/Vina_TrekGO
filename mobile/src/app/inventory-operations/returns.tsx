@@ -156,8 +156,9 @@ export default function InventoryReturnsScreen() {
   const [ungradedUnits, setUngradedUnits] = useState<string[]>([]);
 
   // Thiết bị có hạng: tên sản phẩm mang hạng, hoặc server đã yêu cầu quyết định hạng.
-  function gradeOf(unitId: string, productName?: string) {
-    if (ungradedUnits.includes(unitId)) return null;
+  function gradeOf(unitId: string, productName?: string, expired?: boolean) {
+    // Món hết hạn dùng sẽ chuyển Ngừng sử dụng, backend không hỏi hạng.
+    if (expired || ungradedUnits.includes(unitId)) return null;
     const grade = productName ? splitGradeName(productName).grade : null;
     if (grade) return grade;
     return gradeRequiredUnits.includes(unitId) ? "Như mới" : null;
@@ -264,9 +265,10 @@ export default function InventoryReturnsScreen() {
     inspectionId: string,
     expectedVersion: number,
     productName?: string,
+    expired?: boolean,
   ) {
     if (!accessToken) return;
-    const currentGrade = gradeOf(unitId, productName);
+    const currentGrade = gradeOf(unitId, productName, expired);
     // Hạng "Sử dụng tốt" không hạ được nữa nên mặc định giữ hạng.
     const grade: GradeDraft | undefined =
       gradeDrafts[unitId] ?? (currentGrade === "Sử dụng tốt" ? { decision: "KEEP", reason: "" } : undefined);
@@ -280,6 +282,8 @@ export default function InventoryReturnsScreen() {
     }
     let shortageCount = 0;
     let downgraded = false;
+    let disposition: "AVAILABLE" | "RETIRED" | "MAINTENANCE" = "AVAILABLE";
+    let rentalCount: number | undefined;
     await run(
       `ready-${unitId}`,
       async () => {
@@ -315,9 +319,16 @@ export default function InventoryReturnsScreen() {
         }
         shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
         downgraded = result?.gradeReview?.decision === "DOWNGRADE";
+        disposition = result?.disposition ?? "AVAILABLE";
+        rentalCount = result?.unit?.rentalCount;
       },
       () =>
-        `${shortAssetCode(assetCode)} đã sẵn sàng cho thuê${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
+        (disposition === "RETIRED"
+          ? `${shortAssetCode(assetCode)} đã hết hạn dùng nên chuyển Ngừng sử dụng, không đưa về kệ cho thuê`
+          : disposition === "MAINTENANCE"
+            ? `${shortAssetCode(assetCode)} đạt ngưỡng hao mòn${rentalCount ? ` (${rentalCount} lượt thuê)` : ""} nên chuyển bảo trì; đã mở phiếu bảo trì`
+            : `${shortAssetCode(assetCode)} đã sẵn sàng cho thuê`) +
+        `${downgraded ? " (đã hạ xuống Sử dụng tốt)" : ""}.` +
         (shortageCount > 0 ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn; các đơn này đã được đánh dấu cần xử lý.` : ""),
     );
   }
@@ -639,7 +650,7 @@ export default function InventoryReturnsScreen() {
                 {unit.stage === "WAITING_CLEANING" && unit.unitStatus === "CLEANING" && final && unit.unitVersion !== null ? (
                   (() => {
                     const productName = unit.productName ?? undefined;
-                    const currentGrade = gradeOf(unit.unitId, productName);
+                    const currentGrade = gradeOf(unit.unitId, productName, unit.unitExpired);
                     const chosen: GradeDraft | undefined =
                       gradeDrafts[unit.unitId] ??
                       (currentGrade === "Sử dụng tốt" ? { decision: "KEEP", reason: "" } : undefined);
@@ -647,6 +658,13 @@ export default function InventoryReturnsScreen() {
                     const waitingGrade = Boolean(currentGrade) && !chosen;
                     return (
                       <>
+                        {unit.unitExpired ? (
+                          <Text style={[styles.meta, { color: "#B91C1C", fontWeight: "700" }]}>
+                            Thiết bị đã hết hạn dùng
+                            {unit.unitExpiresAt ? ` (${unit.unitExpiresAt.split("-").reverse().join("/")})` : ""}: khi xác
+                            nhận sẽ chuyển Ngừng sử dụng, không cần phân hạng.
+                          </Text>
+                        ) : null}
                         {currentGrade ? (
                           <View style={styles.gradeBox}>
                             <Text style={styles.gradeStep}>Bước 1 · Phân hạng sau khi trả</Text>
@@ -695,7 +713,7 @@ export default function InventoryReturnsScreen() {
                           }
                           disabled={Boolean(busy) || waitingGrade}
                           onPress={() =>
-                            void markReady(unit.unitId, unit.assetCode ?? unit.unitId, final.id, unit.unitVersion!, productName)
+                            void markReady(unit.unitId, unit.assetCode ?? unit.unitId, final.id, unit.unitVersion!, productName, unit.unitExpired)
                           }
                         />
                       </>

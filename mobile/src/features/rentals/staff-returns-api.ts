@@ -53,6 +53,9 @@ export type StaffReturnUnit = {
   unitStatus: string | null;
   unitCondition: string | null;
   unitVersion: number | null;
+  /** Hạn dùng YYYY-MM-DD; `unitExpired` = món sẽ chuyển Ngừng sử dụng khi đưa ra, không cần phân hạng. */
+  unitExpiresAt?: string | null;
+  unitExpired?: boolean;
   stage: ReturnUnitStage;
   /** Bắt buộc ít nhất 1 ảnh khi kiểm định cuối (đúng quy tắc backend RB-API-605). */
   evidenceRequired: boolean;
@@ -307,6 +310,9 @@ export const staffReturnsApi = {
   ) {
     return mutate<{
       gradeReview: { decision: "KEEP" | "DOWNGRADE"; shortageOrderIds: string[] } | null;
+      /** AVAILABLE (về kệ), RETIRED (đã hết hạn dùng), MAINTENANCE (đạt ngưỡng hao mòn, đã mở phiếu bảo trì). */
+      disposition?: "AVAILABLE" | "RETIRED" | "MAINTENANCE";
+      unit?: { rentalCount?: number };
     }>(
       `/api/v1/staff/equipment-units/${encodeURIComponent(input.unitId)}/ready`,
       // Body khác (có/không gradeDecision) phải dùng khoá idempotency khác.
