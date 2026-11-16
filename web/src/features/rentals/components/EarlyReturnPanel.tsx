@@ -180,7 +180,13 @@ export function EarlyReturnPanel({
       cancelKey.current = null;
     } catch (e) {
       cancelKey.current = null;
-      setError(getRentalApiErrorMessage(e, "Không huỷ được yêu cầu."));
+      // Kho vừa đổi nhân viên/xác nhận (version tăng): đã tải lại bên dưới, khách chỉ cần thử lại.
+      const code = (e as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
+      setError(
+        code === "VERSION_CONFLICT"
+          ? "Lịch vừa được TrekGo cập nhật. Xem lại thông tin bên dưới rồi thử huỷ lại."
+          : getRentalApiErrorMessage(e, "Không huỷ được yêu cầu."),
+      );
       await reload();
     } finally {
       setConfirmCancel(false);
@@ -226,7 +232,9 @@ export function EarlyReturnPanel({
           ) : null}
           {request.status === "CONFIRMED" ? (
             <InfoBanner tone="success">
-              Lịch đã được xác nhận. Nhân viên có thể đến sớm tối đa 30 phút; hãy chuẩn bị đủ đồ và phụ kiện.
+              Lịch đã được xác nhận.
+              {request.assignee ? ` Nhân viên ${request.assignee.fullName} sẽ đến nhận đồ.` : ""} Hãy có mặt đúng giờ và
+              chuẩn bị đủ đồ, phụ kiện.
             </InfoBanner>
           ) : null}
           {request.status === "REJECTED" ? (

@@ -22,11 +22,18 @@ export type EarlyReturn = {
   rejectionReason: string | null;
   rejectedAt: string | null;
   expiredAt: string | null;
+  /** Chỉ có khi lịch đang xác nhận (GET của khách): tên nhân viên giao nhận sẽ đến lấy đồ. */
+  assignee?: { fullName: string } | null;
 };
 
 export type AdminEarlyReturn = EarlyReturn & {
   requester: { fullName: string; phone: string | null };
-  task: { id: string; status: string; scheduledAt: string | null; staff: { fullName: string } | null } | null;
+  task: {
+    id: string;
+    status: string;
+    scheduledAt: string | null;
+    staff: { id: string; fullName: string } | null;
+  } | null;
   order: {
     status: string;
     effectiveDueAt: string;
@@ -80,13 +87,26 @@ export async function listEarlyReturns(status: AdminEarlyReturnFilter = "PENDING
   const response = await apiClient.get("/api/v1/staff/rental-early-returns", { params: { status } });
   return unwrap<AdminEarlyReturn[]>(response.data);
 }
-export async function confirmEarlyReturn(request: EarlyReturn, key?: string) {
+/**
+ * Xác nhận lịch và chốt nhân viên giao nhận đến lấy đồ.
+ * `assigneeId` bắt buộc khi task thu hồi chưa có người nhận; bỏ trống = giữ người đang nhận.
+ */
+export async function confirmEarlyReturn(request: EarlyReturn, assigneeId?: string, key?: string) {
   const response = await apiClient.post(
     `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/confirm`,
-    { expectedVersion: request.version },
+    { expectedVersion: request.version, ...(assigneeId ? { assigneeId } : {}) },
     { headers: idempotency(key) },
   );
-  return unwrap<EarlyReturn>(response.data);
+  return unwrap<EarlyReturn & { assignee?: { id: string; displayName: string } }>(response.data);
+}
+/** Giao / đổi nhân viên giao nhận cho lịch đã xác nhận (task thu hồi chưa bắt đầu). Giờ hẹn giữ nguyên. */
+export async function assignEarlyReturn(request: EarlyReturn, assigneeId: string, key?: string) {
+  const response = await apiClient.post(
+    `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/assign`,
+    { expectedVersion: request.version, assigneeId },
+    { headers: idempotency(key) },
+  );
+  return unwrap<EarlyReturn & { assignee: { id: string; displayName: string } }>(response.data);
 }
 export async function rejectEarlyReturn(request: EarlyReturn, reason: string, key?: string) {
   const response = await apiClient.post(
