@@ -807,6 +807,15 @@ export function AdminRentalReturnExceptions() {
                       {item.unit?.assetCode ??
                         labelFor(exceptionLabels, item.type)}
                     </p>
+                    {item.role ? (
+                      <p
+                        className={`mt-1 text-[11px] font-semibold ${item.role === "CUSTOMER_DISPUTE" ? "text-amber-700" : "text-slate-500"}`}
+                      >
+                        {item.role === "CUSTOMER_DISPUTE"
+                          ? `Khách phản đối${item.relatedCaseId ? ` · quyết định ở hồ sơ ${shortCode(item.relatedCaseId)}` : ""}`
+                          : `Quyết định ban đầu${item.relatedCaseId ? ` · khách phản đối ở hồ sơ ${shortCode(item.relatedCaseId)}` : ""}`}
+                      </p>
+                    ) : null}
                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
                       {!["OPEN", "UNDER_REVIEW"].includes(item.status)
                         ? "Lý do ban đầu: "
@@ -877,6 +886,27 @@ export function AdminRentalReturnExceptions() {
                       </>
                     ) : null}
                   </p>
+                  {detail.case.role ? (
+                    <p className="mt-2 text-sm text-amber-800">
+                      {detail.case.role === "CUSTOMER_DISPUTE"
+                        ? "Hồ sơ này mở khi khách phản đối khoản trừ"
+                        : "Khách đã phản đối quyết định này"}
+                      {detail.case.relatedCaseId ? (
+                        <>
+                          {detail.case.role === "CUSTOMER_DISPUTE" ? " ở hồ sơ " : "; xem hồ sơ phản đối "}
+                          <button
+                            type="button"
+                            className="font-semibold underline underline-offset-2 hover:text-amber-900 disabled:opacity-50"
+                            disabled={detailLoading || busy}
+                            onClick={() => void selectException(detail.case.relatedCaseId as string)}
+                          >
+                            {shortCode(detail.case.relatedCaseId)}
+                          </button>
+                        </>
+                      ) : null}
+                      .
+                    </p>
+                  ) : null}
                 </div>
                 <StatusBadge
                   status={caseOpen ? "PENDING" : "COMPLETED"}
@@ -1209,7 +1239,9 @@ export function AdminRentalReturnExceptions() {
                     ))
                   ) : (
                     <p className="mt-2 text-xs text-slate-500">
-                      Chưa có phản hồi.
+                      {detail.case.role === "ORIGINAL_DECISION"
+                        ? "Phản đối của khách nằm ở hồ sơ phản đối (liên kết phía trên)."
+                        : "Chưa có phản hồi."}
                     </p>
                   )}
                 </div>

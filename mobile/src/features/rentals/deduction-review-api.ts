@@ -80,6 +80,8 @@ export const reviewReasonMessages: Record<string, string> = {
   USER_REVIEW_WINDOW_EXPIRED: "Đã hết thời hạn phản đối khoản trừ.",
   SETTLEMENT_ALREADY_STARTED: "Khoản cọc đã vào quyết toán, không thể phản đối. Vui lòng liên hệ hỗ trợ.",
   DEDUCTION_ALREADY_ACCEPTED: "Bạn đã đồng ý khoản trừ này. Khoản cọc còn lại đang được quyết toán.",
+  UNIT_CONFIRMED_LOST:
+    "Thiết bị đã được xác nhận thất lạc sau thời gian xác minh. Khoản trừ bằng tiền cọc của món và không có thời hạn phản đối. Nếu có thắc mắc, vui lòng liên hệ hỗ trợ.",
   IDEMPOTENCY_KEY_REUSED: "Yêu cầu bị trùng với một lần gửi khác. Vui lòng tải lại.",
 };
 

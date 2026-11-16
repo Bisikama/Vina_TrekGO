@@ -767,3 +767,58 @@ describe('Admin exception detail shows defects recorded at handover', () => {
     })
   })
 })
+
+describe('Admin exception list links the original decision and the customer dispute', () => {
+  it('marks both DAMAGE_DISPUTE cases of one inspection and points each to the other', async () => {
+    const order = {
+      id: ORDER,
+      bookingId: null,
+      tripId: 'trip',
+      exceptionStatus: 'NONE',
+      trip: { title: 'Trip' },
+      user: { fullName: 'Customer' },
+      recipientParticipant: null,
+    }
+    const base = {
+      orderId: ORDER,
+      caseType: 'DAMAGE_DISPUTE',
+      status: 'RESOLVED',
+      reason: 'r',
+      assignedTo: null,
+      dueAt: null,
+      version: 1,
+      createdAt: new Date('2026-11-16T15:00:00Z'),
+      unit: null,
+      order,
+    }
+    const rows = [
+      { ...base, id: 'original', inspectionId: 'final-1' },
+      { ...base, id: 'dispute', inspectionId: 'final-1' },
+      { ...base, id: 'other', inspectionId: 'final-2' },
+    ]
+    const prisma: any = {
+      user: { findFirst: jest.fn().mockResolvedValue({ id: 'admin-1' }) },
+      $transaction: jest.fn((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : Promise.resolve())),
+      rentalExceptionCase: {
+        findMany: jest.fn(({ where }: any) =>
+          where?.evidenceAccessibleAt ? [{ id: 'original', inspectionId: 'final-1' }] : rows,
+        ),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      rentalAssessmentReview: {
+        findMany: jest.fn().mockResolvedValue([{ inspectionId: 'final-1', exceptionCaseId: 'dispute' }]),
+      },
+    }
+    const adapter = new PrismaRentalReturnAdapter(prisma)
+    const list: any = await adapter.listExceptions({
+      actorUserId: 'admin-1',
+      actorRole: 'ADMIN',
+      page: 1,
+      pageSize: 20,
+    } as any)
+    const byId = Object.fromEntries(list.items.map((item: any) => [item.id, item]))
+    expect(byId.original).toMatchObject({ role: 'ORIGINAL_DECISION', relatedCaseId: 'dispute' })
+    expect(byId.dispute).toMatchObject({ role: 'CUSTOMER_DISPUTE', relatedCaseId: 'original' })
+    expect(byId.other).toMatchObject({ role: null, relatedCaseId: null })
+  })
+})

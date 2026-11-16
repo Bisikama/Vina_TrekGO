@@ -4047,6 +4047,52 @@ describe('customer deposit review data', () => {
     })
   })
 
+  it('says a unit confirmed lost has no dispute window instead of "evidence being published"', async () => {
+    const item = {
+      id: 'item',
+      unitId: 'unit',
+      inspectionId: 'inspection',
+      unit: { assetCode: 'PACK-5' },
+      status: DepositItemStatus.SETTLED,
+      inspection: { outcome: 'LOST' },
+      decisionSnapshot: { approvedDeduction: '400000' },
+      depositAmount: new Prisma.Decimal(400000),
+      deductionAmount: new Prisma.Decimal(400000),
+      refundAmount: new Prisma.Decimal(0),
+      depositRefundAllocations: [],
+      refundViaDepositSettlementItemId: null,
+      reason: null,
+    }
+    const lostCase = {
+      id: 'missing',
+      inspectionId: 'inspection',
+      caseType: 'RETURN_INCOMPLETE',
+      status: 'RESOLVED',
+      resolution: 'CONFIRM_LOST: khách không trả',
+      evidenceAccessibleAt: null,
+    }
+    const db: any = {
+      rentalOrder: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'order',
+          userId: 'owner',
+          rentalPolicy: { userAssessmentReviewMinutes: 2880 },
+          depositSettlementViaOrderId: { depositSettlementItemsViaSettlementId: [item] },
+        }),
+      },
+      returnInspectionTask: { findMany: jest.fn().mockResolvedValue([]) },
+      rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([lostCase]) },
+      rentalAssessmentReview: { findMany: jest.fn().mockResolvedValue([]) },
+    }
+    const adapter = new PrismaRentalReturnAdapter(db)
+    const lost = await adapter.getDeposit({ orderId: 'order', actorUserId: 'owner' })
+    expect(lost.items[0]).toMatchObject({ canSubmitReview: false, cannotSubmitReviewReason: 'UNIT_CONFIRMED_LOST' })
+    // A damaged unit whose evidence is not yet published keeps the old reason.
+    db.rentalExceptionCase.findMany.mockResolvedValue([])
+    const unpublished = await adapter.getDeposit({ orderId: 'order', actorUserId: 'owner' })
+    expect(unpublished.items[0].cannotSubmitReviewReason).toBe('EVIDENCE_NOT_ACCESSIBLE')
+  })
+
   it('rejects a second review before creating or reopening a case', async () => {
     const tx: any = {
       idempotencyRecord: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },

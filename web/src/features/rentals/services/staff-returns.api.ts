@@ -409,6 +409,12 @@ export type RentalExceptionSummary = {
   };
   unit: { id: string; assetCode: string } | null;
   type: string;
+  /**
+   * Cùng một lần kiểm định có thể có 2 hồ sơ DAMAGE_DISPUTE: quyết định ban đầu (đã công bố chứng cứ)
+   * và hồ sơ mở khi khách phản đối. `relatedCaseId` trỏ sang hồ sơ còn lại.
+   */
+  role?: "ORIGINAL_DECISION" | "CUSTOMER_DISPUTE" | null;
+  relatedCaseId?: string | null;
   status: string;
   reason: string;
   dueAt: string | null;

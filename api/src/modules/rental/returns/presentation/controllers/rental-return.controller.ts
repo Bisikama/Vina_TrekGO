@@ -347,7 +347,8 @@ export class RentalReturnController {
     status: 422,
     description:
       'INVALID_RETURN_STATE với details.reason: REVIEW_ALREADY_SUBMITTED, DEDUCTION_ALREADY_ACCEPTED, NO_APPROVED_DEDUCTION, ' +
-      'SETTLEMENT_ALREADY_STARTED, EVIDENCE_NOT_ACCESSIBLE, EVIDENCE_ACCESS_INTERRUPTED, USER_REVIEW_WINDOW_EXPIRED',
+      'SETTLEMENT_ALREADY_STARTED, EVIDENCE_NOT_ACCESSIBLE, EVIDENCE_ACCESS_INTERRUPTED, USER_REVIEW_WINDOW_EXPIRED. ' +
+      'GET deposit còn trả `cannotSubmitReviewReason = UNIT_CONFIRMED_LOST` cho món đã xác nhận thất lạc (không có hạn phản đối).',
   })
   async acceptAssessment(
     @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,

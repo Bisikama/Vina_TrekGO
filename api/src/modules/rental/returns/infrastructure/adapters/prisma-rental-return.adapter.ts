@@ -1709,6 +1709,18 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         .filter((c) => assessmentId && c.inspectionId === assessmentId && c.evidenceAccessibleAt)
         .sort((a, b) => b.evidenceAccessibleAt!.getTime() - a.evidenceAccessibleAt!.getTime())[0]
       const review = reviews.find((r) => r.inspectionId === assessmentId)
+      // Unit never returned: no photos to publish; the >= 48h wait before CONFIRM_LOST was the
+      // customer's chance to respond (same condition as deductionReviewGate), so no dispute window.
+      const confirmedLost =
+        !publishedCase &&
+        reviewCases.some(
+          (c) =>
+            assessmentId &&
+            c.inspectionId === assessmentId &&
+            c.caseType === RentalExceptionType.RETURN_INCOMPLETE &&
+            c.status === RentalExceptionCaseStatus.RESOLVED &&
+            !!c.resolution?.startsWith('CONFIRM_LOST:'),
+        )
       const minutes = order.rentalPolicy.userAssessmentReviewMinutes
       const windowEndsAt =
         publishedCase?.evidenceAccessibleAt && minutes && minutes > 0
@@ -1727,15 +1739,17 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
                 ? 'DEDUCTION_ALREADY_ACCEPTED'
                 : !approved.gt(0)
                   ? 'NO_APPROVED_DEDUCTION'
-                  : publishedCase?.evidenceAccessBlockedAt
-                    ? 'EVIDENCE_ACCESS_INTERRUPTED'
-                    : !windowEndsAt
-                      ? 'EVIDENCE_NOT_ACCESSIBLE'
-                      : now >= windowEndsAt.getTime()
-                        ? 'USER_REVIEW_WINDOW_EXPIRED'
-                        : ['REFUND_PENDING', 'REFUND_FAILED', 'SETTLED'].includes(item.status)
-                          ? 'SETTLEMENT_ALREADY_STARTED'
-                          : null
+                  : confirmedLost
+                    ? 'UNIT_CONFIRMED_LOST'
+                    : publishedCase?.evidenceAccessBlockedAt
+                      ? 'EVIDENCE_ACCESS_INTERRUPTED'
+                      : !windowEndsAt
+                        ? 'EVIDENCE_NOT_ACCESSIBLE'
+                        : now >= windowEndsAt.getTime()
+                          ? 'USER_REVIEW_WINDOW_EXPIRED'
+                          : ['REFUND_PENDING', 'REFUND_FAILED', 'SETTLED'].includes(item.status)
+                            ? 'SETTLEMENT_ALREADY_STARTED'
+                            : null
       return {
         unitId: item.unitId,
         assessmentId,
@@ -2673,12 +2687,14 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       }),
       this.prisma.rentalExceptionCase.count({ where }),
     ])
+    const links = await disputeCaseLinks(this.prisma, rows)
     return {
       items: rows.map((row) => ({
         id: row.id,
         orderId: row.orderId,
         unit: row.unit,
         type: row.caseType,
+        ...(links.get(row.id) ?? { role: null, relatedCaseId: null }),
         status: row.status,
         reason: row.reason,
         assigneeId: row.assignedTo,
@@ -2835,6 +2851,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       ? await this.prisma.depositSettlementItem.findUnique({ where: { assignmentId: row.assignmentId } })
       : null
     const depositDecision = jsonObject(depositItem?.decisionSnapshot)
+    const link = (await disputeCaseLinks(this.prisma, [row])).get(row.id) ?? { role: null, relatedCaseId: null }
     return {
       // What APPROVE_DEDUCTION would charge: `proposed` is the ceiling for `approvedDeductionAmount`.
       deduction: depositItem
@@ -2855,6 +2872,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
         orderId: row.orderId,
         unit: row.unit,
         type: row.caseType,
+        ...link,
         status: row.status,
         reason: row.reason,
         resolution: row.resolution,
@@ -3764,6 +3782,50 @@ async function lockOrder(tx: Prisma.TransactionClient, orderId: string) {
 async function lockUnit(tx: Prisma.TransactionClient, unitId: string) {
   await tx.$queryRaw`SELECT id FROM equipment_units WHERE id = ${unitId}::uuid FOR UPDATE`
 }
+type DisputeCaseRole = 'ORIGINAL_DECISION' | 'CUSTOMER_DISPUTE'
+
+/**
+ * A customer dispute (RB-API-616 review) opens a second case for the same inspection because the
+ * original decision case is already resolved and owns the evidence publication / 48h window.
+ * Both are DAMAGE_DISPUTE, so tell the UI which is which and link them.
+ */
+async function disputeCaseLinks(
+  db: Pick<Prisma.TransactionClient, 'rentalAssessmentReview' | 'rentalExceptionCase'>,
+  rows: Array<{ id: string; inspectionId: string | null }>,
+) {
+  const links = new Map<string, { role: DisputeCaseRole; relatedCaseId: string | null }>()
+  const inspectionIds = [...new Set(rows.map((row) => row.inspectionId).filter((id): id is string => !!id))]
+  if (!inspectionIds.length) return links
+  const [reviews, published] = await Promise.all([
+    db.rentalAssessmentReview.findMany({
+      where: { inspectionId: { in: inspectionIds } },
+      select: { inspectionId: true, exceptionCaseId: true },
+    }),
+    db.rentalExceptionCase.findMany({
+      where: { inspectionId: { in: inspectionIds }, evidenceAccessibleAt: { not: null } },
+      orderBy: { evidenceAccessibleAt: 'desc' },
+      select: { id: true, inspectionId: true },
+    }),
+  ])
+  const disputeBy = new Map(reviews.map((review) => [review.inspectionId, review.exceptionCaseId]))
+  const originalBy = new Map<string, string>()
+  for (const item of published)
+    if (item.inspectionId && !originalBy.has(item.inspectionId)) originalBy.set(item.inspectionId, item.id)
+  for (const row of rows) {
+    if (!row.inspectionId) continue
+    const disputeId = disputeBy.get(row.inspectionId)
+    if (!disputeId) continue
+    const originalId = originalBy.get(row.inspectionId) ?? null
+    if (row.id === disputeId)
+      links.set(row.id, {
+        role: 'CUSTOMER_DISPUTE',
+        relatedCaseId: originalId && originalId !== disputeId ? originalId : null,
+      })
+    else if (row.id === originalId) links.set(row.id, { role: 'ORIGINAL_DECISION', relatedCaseId: disputeId })
+  }
+  return links
+}
+
 async function lockDeliveryTask(tx: Prisma.TransactionClient, taskId: string) {
   await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${taskId}::uuid FOR UPDATE`
   return tx.deliveryTask.findUnique({ where: { id: taskId } })
