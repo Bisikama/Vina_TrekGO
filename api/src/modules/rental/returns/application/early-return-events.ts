@@ -16,6 +16,11 @@ export async function emitEarlyReturnEventTx(
     slotAt: Date
     reason?: string | null
     wasConfirmed?: boolean
+    /** Shipper phụ trách thu hồi (nhận thông báo riêng). */
+    assigneeId?: string | null
+    assigneeName?: string | null
+    /** Shipper bị thay khi xác nhận (báo để họ không đi nữa). */
+    previousAssigneeId?: string | null
   },
 ) {
   const deduplicationKey = `rental-early-return:${input.requestId}:${input.status}:${input.version}`
@@ -35,6 +40,9 @@ export async function emitEarlyReturnEventTx(
         // notifications đọc `reason` là string tuỳ chọn; null sẽ làm parse lỗi.
         ...(input.reason ? { reason: input.reason } : {}),
         wasConfirmed: input.wasConfirmed ?? false,
+        ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
+        ...(input.assigneeName ? { assigneeName: input.assigneeName } : {}),
+        ...(input.previousAssigneeId ? { previousAssigneeId: input.previousAssigneeId } : {}),
       },
     },
   })

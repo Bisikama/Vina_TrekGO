@@ -1,4 +1,5 @@
 import { EarlyReturnService } from './early-return.service'
+import { RENTAL_RETURN_ERROR_CODES as RR } from 'src/shared/errors/codes/rental-return.error-codes'
 import { earlyReturnScanAllowed } from './early-return-scan.policy'
 import { Test } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
@@ -194,6 +195,50 @@ describe('EarlyReturnService request', () => {
     )
   })
 
+  it('warns the assigned delivery staff once a confirmed slot is missed, without changing state', async () => {
+    const { tx } = setup({
+      rentalEarlyReturnRequest: { update: jest.fn() },
+      deliveryTask: { update: jest.fn() },
+    })
+    const confirmedSlotAt = new Date('2026-11-06T05:00:00Z')
+    const rows: Record<string, any> = {
+      missed: {
+        id: 'missed',
+        orderId: 'o1',
+        status: 'CONFIRMED',
+        version: 3,
+        confirmedSlotAt,
+        task: { status: 'SCHEDULED', staffId: 'shipper' },
+      },
+      // Shipper vừa bắt đầu quét sau khi SQL chọn: không cảnh báo nữa.
+      collecting: {
+        id: 'collecting',
+        orderId: 'o2',
+        status: 'CONFIRMED',
+        version: 2,
+        confirmedSlotAt,
+        task: { status: 'COLLECTING', staffId: 'shipper' },
+      },
+    }
+    const prisma: any = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'missed' }, { id: 'collecting' }]),
+      $transaction: jest.fn((work: (arg: any) => unknown) => work(tx)),
+      rentalEarlyReturnRequest: { findUnique: jest.fn(({ where }: any) => rows[where.id]) },
+    }
+    const flagged = await new EarlyReturnService(prisma).flagMissedSlots(now)
+    expect(flagged).toBe(1)
+    expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledTimes(1)
+    const { create } = tx.rentalOutboxEvent.upsert.mock.calls[0][0]
+    expect(create.deduplicationKey).toBe('rental-early-return:missed:SLOT_MISSED:3')
+    expect(create.payload).toMatchObject({
+      status: 'SLOT_MISSED',
+      assigneeId: 'shipper',
+      slotAt: confirmedSlotAt.toISOString(),
+    })
+    expect(tx.rentalEarlyReturnRequest.update).not.toHaveBeenCalled()
+    expect(tx.deliveryTask.update).not.toHaveBeenCalled()
+  })
+
   it('confirms a schedule by reusing the task without changing custody', async () => {
     const { service, tx } = setup()
     const request = {
@@ -215,16 +260,190 @@ describe('EarlyReturnService request', () => {
     tx.rentalReturnSession = { findFirst: jest.fn().mockResolvedValue(null) }
     tx.rentalUnitAssignment = { count: jest.fn().mockResolvedValue(1) }
     tx.rentalOrder.findUnique.mockResolvedValue({ ...order, tripId: 'trip', returnPointId: 'point' })
-    tx.deliveryTask.findUnique.mockResolvedValue({ id: 'task', status: 'SCHEDULED', scheduledAt: order.rentalEndAt })
+    tx.deliveryTask.findUnique.mockResolvedValue({
+      id: 'task',
+      status: 'SCHEDULED',
+      scheduledAt: order.rentalEndAt,
+      staffId: 'shipper',
+    })
     tx.deliveryTask.update = jest.fn()
+    tx.user.findFirst.mockImplementation(({ where }: any) =>
+      where.role === 'STAFF_DELIVERY' ? { id: where.id, fullName: 'Shipper A' } : { id: 'admin' },
+    )
     const result = await service.confirm('request', 'admin', 1, 'confirm-key', now)
     expect(result.status).toBe('CONFIRMED')
+    expect(result.assignee).toEqual({ id: 'shipper', displayName: 'Shipper A' })
     expect(tx.deliveryTask.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ scheduledAt: slot }) }),
+    )
+    // Giữ shipper đang nhận task: không ghi lại staffId.
+    expect(tx.deliveryTask.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ staffId: expect.anything() }) }),
     )
     expect(tx.rentalEarlyReturnRequest.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ taskId: 'task', previousTaskAt: order.rentalEndAt }) }),
     )
+    expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          payload: expect.objectContaining({ status: 'CONFIRMED', assigneeId: 'shipper', assigneeName: 'Shipper A' }),
+        }),
+      }),
+    )
+  })
+
+  function confirmSetup(taskStaffId: string | null) {
+    const ctx = setup()
+    const request = {
+      id: 'request',
+      orderId: 'order',
+      userId: 'renter',
+      status: 'PENDING',
+      version: 1,
+      requestedSlotAt: slot,
+      order,
+    }
+    ctx.tx.rentalEarlyReturnRequest.findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ orderId: 'order' })
+      .mockResolvedValueOnce(request)
+    ctx.tx.rentalEarlyReturnRequest.update = jest
+      .fn()
+      .mockImplementation(({ data }: any) => ({ ...request, ...data, version: 2 }))
+    ctx.tx.rentalReturnSession = { findFirst: jest.fn().mockResolvedValue(null) }
+    ctx.tx.rentalUnitAssignment = { count: jest.fn().mockResolvedValue(1) }
+    ctx.tx.rentalOrder.findUnique.mockResolvedValue({ ...order, tripId: 'trip', returnPointId: 'point' })
+    ctx.tx.deliveryTask.findUnique.mockResolvedValue({
+      id: 'task',
+      status: 'SCHEDULED',
+      scheduledAt: order.rentalEndAt,
+      staffId: taskStaffId,
+    })
+    ctx.tx.deliveryTask.update = jest.fn()
+    ctx.tx.user.findFirst.mockImplementation(({ where }: any) =>
+      where.role === 'STAFF_DELIVERY'
+        ? where.id === 'not-shipper'
+          ? null
+          : { id: where.id, fullName: `Name ${where.id}` }
+        : { id: 'inventory-staff' },
+    )
+    return ctx
+  }
+
+  it('requires choosing a delivery staff when the return task has no assignee', async () => {
+    const { service, tx } = confirmSetup(null)
+    await expect(service.confirm('request', 'inventory-staff', 1, 'k1', now)).rejects.toMatchObject({
+      code: 'RENTAL_ASSIGNEE_INVALID',
+      details: { reason: 'ASSIGNEE_REQUIRED' },
+    })
+    expect(tx.deliveryTask.update).not.toHaveBeenCalled()
+    expect(tx.rentalEarlyReturnRequest.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects an assignee who is not an active delivery staff', async () => {
+    const { service, tx } = confirmSetup(null)
+    await expect(service.confirm('request', 'inventory-staff', 1, 'k2', now, 'not-shipper')).rejects.toMatchObject({
+      code: 'RENTAL_ASSIGNEE_INVALID',
+      details: { reason: 'NOT_ACTIVE_DELIVERY_STAFF' },
+    })
+    expect(tx.rentalEarlyReturnRequest.update).not.toHaveBeenCalled()
+  })
+
+  it('assigns the chosen delivery staff and notifies the replaced one', async () => {
+    const { service, tx } = confirmSetup('old-shipper')
+    const result = await service.confirm('request', 'inventory-staff', 1, 'k3', now, 'new-shipper')
+    expect(result.assignee).toEqual({ id: 'new-shipper', displayName: 'Name new-shipper' })
+    expect(tx.deliveryTask.update).toHaveBeenCalledWith({
+      where: { id: 'task' },
+      data: { staffId: 'new-shipper', version: { increment: 1 } },
+    })
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'RENTAL_EARLY_RETURN_TASK_ASSIGNED',
+          oldValues: { staffId: 'old-shipper' },
+        }),
+      }),
+    )
+    expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          payload: expect.objectContaining({ assigneeId: 'new-shipper', previousAssigneeId: 'old-shipper' }),
+        }),
+      }),
+    )
+  })
+
+  function assignSetup(requestStatus: string, taskStatus: string, taskStaffId: string | null) {
+    const ctx = confirmSetup(taskStaffId)
+    const request = {
+      id: 'request',
+      orderId: 'order',
+      userId: 'renter',
+      status: requestStatus,
+      version: 2,
+      requestedSlotAt: slot,
+      confirmedSlotAt: slot,
+      taskId: 'task',
+      order,
+    }
+    ctx.tx.rentalEarlyReturnRequest.findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ orderId: 'order' })
+      .mockResolvedValueOnce(request)
+    ctx.tx.rentalEarlyReturnRequest.update = jest.fn().mockResolvedValue({ ...request, version: 3 })
+    ctx.tx.deliveryTask.findUnique.mockResolvedValue({ id: 'task', status: taskStatus, staffId: taskStaffId })
+    return ctx
+  }
+
+  it('assigns delivery staff to an already confirmed request that had nobody, keeping the slot', async () => {
+    const { service, tx } = assignSetup('CONFIRMED', 'SCHEDULED', null)
+    const result = await service.assign('request', 'inventory-staff', 2, 'new-shipper', 'a1', now)
+    expect(result.assignee).toEqual({ id: 'new-shipper', displayName: 'Name new-shipper' })
+    expect(tx.deliveryTask.update).toHaveBeenCalledWith({
+      where: { id: 'task' },
+      data: { staffId: 'new-shipper', version: { increment: 1 } },
+    })
+    // Không đổi giờ hẹn hay trạng thái yêu cầu.
+    expect(tx.rentalEarlyReturnRequest.update).toHaveBeenCalledWith({
+      where: { id: 'request' },
+      data: { version: { increment: 1 } },
+    })
+    const { create } = tx.rentalOutboxEvent.upsert.mock.calls[0][0]
+    expect(create.deduplicationKey).toBe('rental-early-return:request:REASSIGNED:3')
+    expect(create.payload).toMatchObject({ status: 'REASSIGNED', assigneeId: 'new-shipper' })
+    expect(create.payload.previousAssigneeId).toBeUndefined()
+  })
+
+  it('locks the return task row before changing its assignee (claim 406 / admin 408 only lock the task)', async () => {
+    const lockedTask = (tx: any) =>
+      tx.$queryRaw.mock.calls.some(([sql]: any) => String(sql.join?.('') ?? sql).includes('FROM delivery_tasks'))
+    const confirmed = confirmSetup('old-shipper')
+    await confirmed.service.confirm('request', 'inventory-staff', 1, 'l1', now, 'new-shipper')
+    expect(lockedTask(confirmed.tx)).toBe(true)
+    const assigned = assignSetup('CONFIRMED', 'SCHEDULED', 'old-shipper')
+    await assigned.service.assign('request', 'inventory-staff', 2, 'new-shipper', 'l2', now)
+    expect(lockedTask(assigned.tx)).toBe(true)
+  })
+
+  it('refuses reassignment once collection started, for a pending request, or to the same staff', async () => {
+    const started = assignSetup('CONFIRMED', 'COLLECTING', 'old-shipper')
+    await expect(
+      started.service.assign('request', 'inventory-staff', 2, 'new-shipper', 'a2', now),
+    ).rejects.toMatchObject({
+      code: RR.INVALID_RETURN_STATE,
+    })
+    const pending = assignSetup('PENDING', 'SCHEDULED', null)
+    await expect(
+      pending.service.assign('request', 'inventory-staff', 2, 'new-shipper', 'a3', now),
+    ).rejects.toMatchObject({
+      code: RR.INVALID_RETURN_STATE,
+    })
+    const same = assignSetup('CONFIRMED', 'SCHEDULED', 'old-shipper')
+    await expect(same.service.assign('request', 'inventory-staff', 2, 'old-shipper', 'a4', now)).rejects.toMatchObject({
+      code: RR.OPERATION_CONFLICT,
+    })
+    for (const ctx of [started, pending, same]) expect(ctx.tx.deliveryTask.update).not.toHaveBeenCalled()
   })
 
   it('lets inventory staff confirm; the role check accepts only Admin and inventory staff', async () => {
@@ -238,7 +457,9 @@ describe('EarlyReturnService request', () => {
       requestedSlotAt: slot,
       order,
     }
-    tx.user.findFirst.mockResolvedValue({ id: 'inventory-staff' })
+    tx.user.findFirst.mockImplementation(({ where }: any) =>
+      where.role === 'STAFF_DELIVERY' ? { id: where.id, fullName: 'Shipper' } : { id: 'inventory-staff' },
+    )
     tx.rentalEarlyReturnRequest.findUnique = jest
       .fn()
       .mockResolvedValueOnce({ orderId: 'order' })
@@ -251,7 +472,7 @@ describe('EarlyReturnService request', () => {
     tx.rentalOrder.findUnique.mockResolvedValue({ ...order, tripId: 'trip', returnPointId: 'point' })
     tx.deliveryTask.findUnique.mockResolvedValue({ id: 'task', status: 'SCHEDULED', scheduledAt: order.rentalEndAt })
     tx.deliveryTask.update = jest.fn()
-    const result = await service.confirm('request', 'inventory-staff', 1, 'confirm-key-staff', now)
+    const result = await service.confirm('request', 'inventory-staff', 1, 'confirm-key-staff', now, 'shipper')
     expect(result.status).toBe('CONFIRMED')
     expect(tx.user.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -269,7 +490,7 @@ describe('EarlyReturnService request', () => {
 
   it('exposes staff routes for inventory staff and keeps the admin routes', () => {
     const proto = EarlyReturnController.prototype as any
-    for (const method of ['list', 'confirm', 'reject']) {
+    for (const method of ['list', 'confirm', 'assign', 'reject']) {
       expect(Reflect.getMetadata(ROLES_KEY, proto[method])).toEqual(['STAFF_INVENTORY', 'ADMIN'])
       const paths = Reflect.getMetadata('path', proto[method]) as string[]
       expect(paths.some((path) => path.startsWith('staff/rental-early-returns'))).toBe(true)
@@ -318,6 +539,13 @@ describe('EarlyReturnService request', () => {
       where: { id: 'task' },
       data: { scheduledAt: order.rentalEndAt, version: { increment: 1 } },
     })
+    expect(tx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          payload: expect.objectContaining({ status: 'CANCELLED', wasConfirmed: true, assigneeId: 'staff' }),
+        }),
+      }),
+    )
     expect(tx.rentalEarlyReturnRequest.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }),
     )

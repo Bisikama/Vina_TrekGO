@@ -107,6 +107,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           package: { select: { id: true, packageCode: true, status: true } },
           servicePoint: { select: { id: true, name: true, address: true } },
           order: { select: { id: true, bookingId: true, tripId: true, status: true, recipientSnapshot: true } },
+          earlyReturnRequests: earlyReturnTaskInclude,
         },
       }),
       this.prisma.deliveryTask.count({ where }),
@@ -118,6 +119,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         type: deliveryTaskTypeToPublicType(task.taskType),
         status: task.status,
         scheduledAt: task.scheduledAt?.toISOString() ?? null,
+        earlyReturn: mapTaskEarlyReturn(task.earlyReturnRequests),
         point: { id: task.servicePoint.id, name: task.servicePoint.name, address: task.servicePoint.address },
         package: { id: task.package.id, code: task.package.packageCode, status: task.package.status },
         orderSummary: {
@@ -940,7 +942,11 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           staffId: assignmentWhere(query.assignment, query.actorUserId),
           scheduledAt: dateWindow ? { gte: dateWindow.start, lt: dateWindow.end } : undefined,
         },
-        include: { staff: { select: { id: true, fullName: true } }, servicePoint: { select: { id: true, name: true } } },
+        include: {
+          staff: { select: { id: true, fullName: true } },
+          servicePoint: { select: { id: true, name: true } },
+          earlyReturnRequests: earlyReturnTaskInclude,
+        },
       });
       for (const row of rows) {
         combined.push({
@@ -952,6 +958,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           tripId: row.tripId,
           point: row.servicePoint,
           scheduledAt: row.scheduledAt?.toISOString() ?? null,
+          earlyReturn: mapTaskEarlyReturn(row.earlyReturnRequests),
           version: row.version,
           sortAt: row.scheduledAt?.getTime() ?? row.createdAt.getTime(),
         });
@@ -1060,8 +1067,32 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
 // Helpers
 // ============================================================================
 
+/**
+ * Yêu cầu trả sớm đang gắn với task thu hồi: CONFIRMED (đi theo giờ hẹn) hoặc PENDING có `taskId`
+ * (lịch đã xác nhận bị dời Trip, chờ kho xác nhận lại). Chỉ lấy bản mới nhất.
+ */
+const earlyReturnTaskInclude = {
+  where: { status: { in: ['CONFIRMED', 'PENDING'] } },
+  orderBy: { createdAt: 'desc' as const },
+  take: 1,
+  select: { id: true, status: true, requestedSlotAt: true, confirmedSlotAt: true },
+};
+
+function mapTaskEarlyReturn(
+  requests: Array<{ id: string; status: string; requestedSlotAt: Date; confirmedSlotAt: Date | null }> | undefined,
+) {
+  const request = requests?.[0];
+  if (!request) return null;
+  return {
+    requestId: request.id,
+    status: request.status === 'CONFIRMED' ? 'CONFIRMED' : 'RECONFIRM_REQUIRED',
+    slotAt: (request.confirmedSlotAt ?? request.requestedSlotAt).toISOString(),
+  };
+}
+
 const deliveryTaskDetailInclude = {
   staff: { select: { id: true, fullName: true } },
+  earlyReturnRequests: earlyReturnTaskInclude,
   custodyTransfersViaDeliveryTaskId: {
     where: { status: CustodyTransferStatus.PENDING_RECEIPT },
     orderBy: { requestedAt: 'desc' as const },
@@ -1098,6 +1129,7 @@ function mapDeliveryTaskDetail(task: any): DeliveryTaskDetailResult {
       status: task.status,
       assignee: task.staff ? { id: task.staff.id, displayName: task.staff.fullName } : null,
       scheduledAt: task.scheduledAt?.toISOString() ?? null,
+      earlyReturn: mapTaskEarlyReturn(task.earlyReturnRequests),
       point: task.servicePoint,
       version: task.version,
       allowedActions: deliveryAllowedActions(task.status),

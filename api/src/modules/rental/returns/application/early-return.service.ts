@@ -12,6 +12,7 @@ import {
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_RETURN_ERROR_CODES as RR } from 'src/shared/errors/codes/rental-return.error-codes'
+import { DELIVERY_ERROR_CODES as DL } from 'src/shared/errors/codes/delivery.error-codes'
 import { effectiveDueAt } from '../../ordering/extension/rental-extension.policy'
 import { ensureReturnTaskWithTx, returnTaskScheduleAt } from '../../lifecycle/application/services/rental-return-task'
 import { validateRentalOrderPaymentMembershipWithTx } from '../../payments/rental-membership.guard'
@@ -21,6 +22,8 @@ import { emitEarlyReturnEventTx } from './early-return-events'
 type Tx = Prisma.TransactionClient
 
 export const EARLY_RETURN_ADMIN_LIST_STATUSES = ['PENDING', 'CONFIRMED'] as const
+/** Quá giờ hẹn đã xác nhận bao nhiêu phút mà chưa thu hồi thì cảnh báo lỡ hẹn. */
+export const EARLY_RETURN_SLOT_MISSED_GRACE_MINUTES = 60
 export type EarlyReturnAdminListStatus = (typeof EARLY_RETURN_ADMIN_LIST_STATUSES)[number]
 
 /** Customer-initiated scheduling does not change contractual due date or custody. */
@@ -31,7 +34,16 @@ export class EarlyReturnService {
   async get(orderId: string, userId: string) {
     const order = await this.prisma.rentalOrder.findUnique({ where: { id: orderId }, select: { userId: true } })
     if (!order || order.userId !== userId) throw AppError.fromCode(RR.RENTAL_NOT_FOUND)
-    return this.prisma.rentalEarlyReturnRequest.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' } })
+    const latest = await this.prisma.rentalEarlyReturnRequest.findFirst({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+      include: { task: { select: { staff: { select: { fullName: true } } } } },
+    })
+    if (!latest) return null
+    const { task, ...request } = latest
+    // Khách chỉ thấy tên người sẽ đến khi lịch đang xác nhận; không lộ số điện thoại nhân viên.
+    const staffName = request.status === 'CONFIRMED' ? task?.staff?.fullName : undefined
+    return { ...request, assignee: staffName ? { fullName: staffName } : null }
   }
 
   /** Danh sách cho Admin: đủ thông tin để quyết định mà không phải mở từng đơn. */
@@ -42,7 +54,9 @@ export class EarlyReturnService {
       take: 100,
       include: {
         requester: { select: { fullName: true, phone: true } },
-        task: { select: { id: true, status: true, scheduledAt: true, staff: { select: { fullName: true } } } },
+        task: {
+          select: { id: true, status: true, scheduledAt: true, staff: { select: { id: true, fullName: true } } },
+        },
         order: {
           select: {
             status: true,
@@ -112,15 +126,14 @@ export class EarlyReturnService {
             message: 'Chỉ đơn đang thuê, đã nhận thiết bị và chưa bắt đầu trả mới yêu cầu trả sớm được.',
           })
         const due = effectiveDueAt(order.rentalEndAt, order.operationalReturnDueAt)
-        if (
-          requestedSlotAt.getTime() <= at.getTime() + EARLY_RETURN_MIN_LEAD_MINUTES * 60_000 ||
-          requestedSlotAt >= due
-        )
+        // Hằng số đang là 0 (demo): khai báo `number` để nhánh còn lại không bị thu hẹp thành `never`.
+        const minLead: number = EARLY_RETURN_MIN_LEAD_MINUTES
+        if (requestedSlotAt.getTime() <= at.getTime() + minLead * 60_000 || requestedSlotAt >= due)
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
-            message: EARLY_RETURN_MIN_LEAD_MINUTES
-              ? `Lịch đề xuất phải cách hiện tại ít nhất ${EARLY_RETURN_MIN_LEAD_MINUTES} phút và trước hạn trả.`
+            message: minLead
+              ? `Lịch đề xuất phải cách hiện tại ít nhất ${minLead} phút và trước hạn trả.`
               : 'Lịch đề xuất phải ở tương lai và trước hạn trả.',
-            details: { minLeadMinutes: EARLY_RETURN_MIN_LEAD_MINUTES, effectiveDueAt: due.toISOString() },
+            details: { minLeadMinutes: minLead, effectiveDueAt: due.toISOString() },
           })
         if (await tx.rentalExtensionRequest.findFirst({ where: { orderId, status: 'PENDING_PAYMENT' } }))
           throw AppError.fromCode(RR.OPERATION_CONFLICT, { message: 'Đơn đang có yêu cầu gia hạn chờ thanh toán.' })
@@ -165,8 +178,20 @@ export class EarlyReturnService {
     )
   }
 
-  async confirm(requestId: string, actorId: string, expectedVersion: number, key: string, now?: Date) {
-    return this.mutate('EARLY_RETURN_CONFIRM', actorId, key, { requestId, expectedVersion }, now, async (tx, at) => {
+  /**
+   * Xác nhận lịch = dời task thu hồi sang giờ khách chọn VÀ chốt shipper chịu trách nhiệm.
+   * Task chưa có người nhận thì bắt buộc chọn `assigneeId`; đã có thì giữ người cũ trừ khi chọn người khác.
+   */
+  async confirm(
+    requestId: string,
+    actorId: string,
+    expectedVersion: number,
+    key: string,
+    now?: Date,
+    assigneeId?: string,
+  ) {
+    const fingerprint = { requestId, expectedVersion, ...(assigneeId ? { assigneeId } : {}) }
+    return this.mutate('EARLY_RETURN_CONFIRM', actorId, key, fingerprint, now, async (tx, at) => {
       await requireEarlyReturnReviewer(tx, actorId)
       const request = await lockRequest(tx, requestId)
       if (request.status !== 'PENDING')
@@ -200,9 +225,7 @@ export class EarlyReturnService {
         throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
           message: 'Lịch đề xuất đã qua hoặc không còn trước hạn trả; hãy từ chối để khách đặt lịch khác.',
         })
-      const existing = await tx.deliveryTask.findUnique({
-        where: { orderId_taskType: { orderId: request.orderId, taskType: DeliveryTaskType.RETURN } },
-      })
+      const existing = await lockReturnTask(tx, request.orderId)
       if (existing && existing.status !== DeliveryTaskStatus.SCHEDULED)
         throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
           message: 'Nhân viên đã bắt đầu thu hồi đơn này.',
@@ -213,8 +236,28 @@ export class EarlyReturnService {
           message: 'Đơn đã có lịch thu hồi sớm hơn; cần điều phối lịch hiện có.',
           details: { scheduledAt: existing.scheduledAt.toISOString() },
         })
+      const assignee = await resolveReturnAssignee(tx, assigneeId ?? existing?.staffId ?? null)
       const taskId = await ensureReturnTaskWithTx(tx, request.orderId, request.requestedSlotAt, 'USER_EARLY_RETURN')
       if (!taskId) throw AppError.fromCode(RR.RETURN_NOT_READY)
+      const previousStaffId = existing?.staffId ?? null
+      if (previousStaffId !== assignee.id) {
+        // Chỉ đổi người phụ trách; task RETURN đang SCHEDULED nên chưa có custody nào để chuyển.
+        await tx.deliveryTask.update({
+          where: { id: taskId },
+          data: { staffId: assignee.id, version: { increment: 1 } },
+        })
+        await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            action: 'RENTAL_EARLY_RETURN_TASK_ASSIGNED',
+            entityType: 'DeliveryTask',
+            entityId: taskId,
+            oldValues: { staffId: previousStaffId },
+            newValues: { staffId: assignee.id, earlyReturnRequestId: requestId, custodyTransferred: false },
+            requestId: key.slice(0, 120),
+          },
+        })
+      }
       const result = await tx.rentalEarlyReturnRequest.update({
         where: { id: requestId },
         data: {
@@ -233,7 +276,13 @@ export class EarlyReturnService {
         actorId,
         'RENTAL_EARLY_RETURN_CONFIRMED',
         requestId,
-        { orderId: request.orderId, taskId, slotAt: request.requestedSlotAt.toISOString() },
+        {
+          orderId: request.orderId,
+          taskId,
+          slotAt: request.requestedSlotAt.toISOString(),
+          assigneeId: assignee.id,
+          previousAssigneeId: previousStaffId,
+        },
         key,
       )
       await emitEarlyReturnEventTx(tx, {
@@ -242,9 +291,86 @@ export class EarlyReturnService {
         status: 'CONFIRMED',
         version: result.version,
         slotAt: request.requestedSlotAt,
+        assigneeId: assignee.id,
+        assigneeName: assignee.fullName,
+        previousAssigneeId: previousStaffId !== assignee.id ? previousStaffId : null,
       })
-      return result
+      return { ...result, assignee: { id: assignee.id, displayName: assignee.fullName } }
     })
+  }
+
+  /**
+   * Giao / đổi shipper cho lịch đã xác nhận (vd lịch xác nhận trước khi bắt buộc chọn người, hoặc shipper bận).
+   * Chỉ khi task thu hồi còn SCHEDULED: chưa ai nhận đồ nên không có custody để chuyển. Giờ hẹn giữ nguyên.
+   */
+  async assign(requestId: string, actorId: string, expectedVersion: number, assigneeId: string, key: string, now?: Date) {
+    return this.mutate(
+      'EARLY_RETURN_ASSIGN',
+      actorId,
+      key,
+      { requestId, expectedVersion, assigneeId },
+      now,
+      async (tx) => {
+        await requireEarlyReturnReviewer(tx, actorId)
+        const request = await lockRequest(tx, requestId)
+        if (request.status !== 'CONFIRMED')
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            message: 'Chỉ giao nhân viên cho lịch trả sớm đã xác nhận; lịch đang chờ hãy giao lúc xác nhận.',
+            details: { status: request.status },
+          })
+        if (request.order.status !== RentalOrderStatus.ACTIVE)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            message: 'Đơn thuê không còn ở trạng thái đang thuê.',
+            details: { orderStatus: request.order.status },
+          })
+        if (request.version !== expectedVersion)
+          throw AppError.fromCode(RR.VERSION_CONFLICT, { message: 'Yêu cầu trả sớm vừa thay đổi, hãy tải lại rồi thử lại.' })
+        const task = request.taskId ? await lockReturnTask(tx, request.orderId) : null
+        if (!task || task.id !== request.taskId || task.status !== DeliveryTaskStatus.SCHEDULED)
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            message: 'Nhân viên đã bắt đầu thu hồi đơn này, không đổi người được nữa.',
+            details: { taskStatus: task?.status ?? null },
+          })
+        const assignee = await resolveReturnAssignee(tx, assigneeId)
+        const previousStaffId = task.staffId ?? null
+        if (previousStaffId === assignee.id)
+          throw AppError.fromCode(RR.OPERATION_CONFLICT, {
+            message: 'Task thu hồi đang giao cho chính nhân viên này.',
+            details: { assigneeId },
+          })
+        await tx.deliveryTask.update({
+          where: { id: task.id },
+          data: { staffId: assignee.id, version: { increment: 1 } },
+        })
+        await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            action: 'RENTAL_EARLY_RETURN_TASK_ASSIGNED',
+            entityType: 'DeliveryTask',
+            entityId: task.id,
+            oldValues: { staffId: previousStaffId },
+            newValues: { staffId: assignee.id, earlyReturnRequestId: requestId, custodyTransferred: false },
+            requestId: key.slice(0, 120),
+          },
+        })
+        // Tăng version để client đang mở thấy thay đổi và khoá chống trùng của event là duy nhất.
+        const result = await tx.rentalEarlyReturnRequest.update({
+          where: { id: requestId },
+          data: { version: { increment: 1 } },
+        })
+        await emitEarlyReturnEventTx(tx, {
+          requestId,
+          orderId: request.orderId,
+          status: 'REASSIGNED',
+          version: result.version,
+          slotAt: request.confirmedSlotAt ?? request.requestedSlotAt,
+          assigneeId: assignee.id,
+          assigneeName: assignee.fullName,
+          previousAssigneeId: previousStaffId,
+        })
+        return { ...result, assignee: { id: assignee.id, displayName: assignee.fullName } }
+      },
+    )
   }
 
   /** Admin hoặc nhân viên kho từ chối yêu cầu chưa xác nhận. Task (nếu có) đã được dời Trip đưa về hạn nên không cần sửa. */
@@ -347,6 +473,51 @@ export class EarlyReturnService {
     return expired
   }
 
+  /**
+   * Lịch đã xác nhận quá {@link EARLY_RETURN_SLOT_MISSED_GRACE_MINUTES} phút mà task vẫn SCHEDULED
+   * (shipper chưa quét): báo shipper + kho/Admin một lần. Không đổi trạng thái yêu cầu hay task.
+   * Khoá chống trùng của outbox (`requestId:SLOT_MISSED:version`) bảo đảm chỉ báo một lần mỗi lần xác nhận.
+   */
+  async flagMissedSlots(now?: Date, limit = 50): Promise<number> {
+    const candidates = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT r.id::text AS id
+      FROM rental_early_return_requests r
+      JOIN rental_orders o ON o.id = r.order_id
+      JOIN delivery_tasks t ON t.id = r.task_id
+      WHERE r.status = 'CONFIRMED'
+        AND o.status = 'ACTIVE'
+        AND t.status = 'SCHEDULED'
+        AND r.confirmed_slot_at
+          + make_interval(mins => ${EARLY_RETURN_SLOT_MISSED_GRACE_MINUTES}::int)
+          <= COALESCE(${now ?? null}::timestamptz, clock_timestamp())
+        AND NOT EXISTS (
+          SELECT 1 FROM rental_outbox_events e
+          WHERE e.deduplication_key = 'rental-early-return:' || r.id::text || ':SLOT_MISSED:' || r.version::text)
+      ORDER BY r.confirmed_slot_at ASC, r.id ASC
+      LIMIT ${limit}`
+    let flagged = 0
+    for (const { id } of candidates) {
+      const request = await this.prisma.rentalEarlyReturnRequest.findUnique({
+        where: { id },
+        include: { task: { select: { status: true, staffId: true } } },
+      })
+      if (!request || request.status !== 'CONFIRMED' || !request.confirmedSlotAt) continue
+      if (request.task?.status !== DeliveryTaskStatus.SCHEDULED) continue
+      await this.prisma.$transaction((tx) =>
+        emitEarlyReturnEventTx(tx, {
+          requestId: request.id,
+          orderId: request.orderId,
+          status: 'SLOT_MISSED',
+          version: request.version,
+          slotAt: request.confirmedSlotAt!,
+          assigneeId: request.task?.staffId ?? null,
+        }),
+      )
+      flagged += 1
+    }
+    return flagged
+  }
+
   async cancel(requestId: string, userId: string, expectedVersion: number, key: string, now?: Date) {
     return this.mutate('EARLY_RETURN_CANCEL', userId, key, { requestId, expectedVersion }, now, async (tx, at) => {
       const request = await lockRequest(tx, requestId)
@@ -363,8 +534,10 @@ export class EarlyReturnService {
         throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
           message: 'Nhân viên đã bắt đầu nhận thiết bị, không thể huỷ.',
         })
+      let assigneeId: string | null = null
       if (request.taskId && !request.supersededAt) {
         const task = await tx.deliveryTask.findUnique({ where: { id: request.taskId } })
+        assigneeId = task?.staffId ?? null
         if (!task || task.status !== DeliveryTaskStatus.SCHEDULED)
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             message: 'Nhân viên đã bắt đầu thu hồi, không thể huỷ.',
@@ -405,6 +578,7 @@ export class EarlyReturnService {
         version: result.version,
         slotAt: request.confirmedSlotAt ?? request.requestedSlotAt,
         wasConfirmed: request.status === 'CONFIRMED',
+        assigneeId: request.status === 'CONFIRMED' ? assigneeId : null,
       })
       return result
     })
@@ -463,6 +637,18 @@ async function lockRequest(tx: Tx, requestId: string) {
   return request
 }
 
+/**
+ * Khoá task RETURN của đơn (sau khi đã khoá đơn) rồi mới đọc: claim 406 / Admin gán 408 chỉ khoá task,
+ * nên không khoá thì kho có thể ghi đè shipper vừa tự nhận mà không ai được báo. Thứ tự: đơn → task.
+ */
+async function lockReturnTask(tx: Tx, orderId: string) {
+  const where = { orderId_taskType: { orderId, taskType: DeliveryTaskType.RETURN } } as const
+  const found = await tx.deliveryTask.findUnique({ where, select: { id: true } })
+  if (!found) return null
+  await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${found.id}::uuid FOR UPDATE`
+  return tx.deliveryTask.findUnique({ where: { id: found.id } })
+}
+
 /** Xếp lịch trả sớm là việc điều phối (không động tới tiền): Admin hoặc nhân viên kho đều xử lý được. */
 export const EARLY_RETURN_REVIEWER_ROLES = [UserRole.ADMIN, UserRole.STAFF_INVENTORY] as const
 
@@ -472,6 +658,25 @@ async function requireEarlyReturnReviewer(tx: Tx, actorId: string) {
     select: { id: true },
   })
   if (!actor) throw AppError.fromCode(RR.FORBIDDEN)
+}
+
+/** Shipper thu hồi: bắt buộc có, và phải là STAFF_DELIVERY đang hoạt động. */
+async function resolveReturnAssignee(tx: Tx, assigneeId: string | null) {
+  if (!assigneeId)
+    throw AppError.fromCode(DL.ASSIGNEE_INVALID, {
+      message: 'Chọn nhân viên giao nhận sẽ đến lấy đồ trước khi xác nhận lịch trả sớm.',
+      details: { reason: 'ASSIGNEE_REQUIRED' },
+    })
+  const assignee = await tx.user.findFirst({
+    where: { id: assigneeId, role: UserRole.STAFF_DELIVERY, status: UserStatus.ACTIVE },
+    select: { id: true, fullName: true },
+  })
+  if (!assignee)
+    throw AppError.fromCode(DL.ASSIGNEE_INVALID, {
+      message: 'Nhân viên được chọn không phải nhân viên giao nhận đang hoạt động.',
+      details: { reason: 'NOT_ACTIVE_DELIVERY_STAFF', assigneeId },
+    })
+  return assignee
 }
 
 async function audit(
