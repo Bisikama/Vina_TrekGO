@@ -6,10 +6,12 @@ describe('deduction review gate', () => {
     orderId: 'order', inspectionId: 'inspection', assignmentId: 'unit',
     reviewMinutes: 2880, now: new Date('2026-10-03T00:00:00Z'),
   }
-  const tx = (open: object | null, accessible: Date | null) => ({
+  const tx = (open: object | null, accessible: Date | null, closedDispute: object | null = null) => ({
     rentalExceptionCase: { findFirst: jest.fn().mockResolvedValueOnce(open)
       .mockResolvedValueOnce(accessible ? { evidenceAccessibleAt: accessible } : null) },
+    rentalAssessmentReview: { findFirst: jest.fn().mockResolvedValue(closedDispute) },
   }) as any
+  const insideWindow = { ...input, now: new Date(publishedAt.getTime() + 60_000) }
 
   it('holds while the dispute is open, even after 48 hours', async () => {
     expect(await deductionReviewGate(tx({ id: 'dispute' }, publishedAt), input))
@@ -22,12 +24,33 @@ describe('deduction review gate', () => {
       .toBe('USER_48H_REVIEW_WINDOW_NOT_CLOSED')
   })
 
-  it('allows a closed dispute after the original published window expires', async () => {
+  it('allows settlement once the original published window expires without a dispute', async () => {
     const db = tx(null, publishedAt)
     expect(await deductionReviewGate(db, input)).toBeNull()
     expect(db.rentalExceptionCase.findFirst.mock.calls[1][0].where).toMatchObject({
       orderId: input.orderId, inspectionId: input.inspectionId, evidenceAccessibleAt: { not: null },
     })
+  })
+
+  it('releases inside the 48h window once the customer dispute was closed by Admin', async () => {
+    const db = tx(null, publishedAt, { id: 'review' })
+    expect(await deductionReviewGate(db, insideWindow)).toBeNull()
+    expect(db.rentalAssessmentReview.findFirst.mock.calls[0][0].where).toEqual({
+      orderId: input.orderId,
+      inspectionId: input.inspectionId,
+      exceptionCase: { status: { notIn: ['OPEN', 'UNDER_REVIEW'] } },
+    })
+  })
+
+  it('keeps waiting inside the window when the customer has not disputed', async () => {
+    expect(await deductionReviewGate(tx(null, publishedAt), insideWindow)).toBe('USER_48H_REVIEW_WINDOW_NOT_CLOSED')
+  })
+
+  it('a closed dispute does not bypass an evidence access interruption', async () => {
+    const db = tx(null, publishedAt, { id: 'review' })
+    db.rentalExceptionCase.findFirst.mockReset().mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ evidenceAccessibleAt: publishedAt, evidenceAccessBlockedAt: publishedAt })
+    expect(await deductionReviewGate(db, insideWindow)).toBe('EVIDENCE_ACCESS_INTERRUPTED')
   })
 
   it('fails closed without a valid policy duration', async () => {

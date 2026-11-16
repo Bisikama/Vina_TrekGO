@@ -45,7 +45,24 @@ export async function deductionReviewGate(
   }
   if (published?.evidenceAccessBlockedAt) return 'EVIDENCE_ACCESS_INTERRUPTED'
   if (!published?.evidenceAccessibleAt || !input.reviewMinutes || input.reviewMinutes <= 0 ||
-      input.now.getTime() < (published.dueAt?.getTime() ?? published.evidenceAccessibleAt.getTime() + input.reviewMinutes * 60_000))
+      input.now.getTime() < (published.dueAt?.getTime() ?? published.evidenceAccessibleAt.getTime() + input.reviewMinutes * 60_000)) {
+    // The 48h window is the customer's chance to dispute. Each customer disputes once
+    // (REVIEW_ALREADY_SUBMITTED) and no open case remains (checked above), so once Admin
+    // closed that dispute there is nothing left to wait for.
+    if (published?.evidenceAccessibleAt && (await hasClosedDispute(tx, input))) return null
     return 'USER_48H_REVIEW_WINDOW_NOT_CLOSED'
+  }
   return null
+}
+
+async function hasClosedDispute(tx: Prisma.TransactionClient, input: { orderId: string; inspectionId: string }) {
+  const review = await tx.rentalAssessmentReview.findFirst({
+    where: {
+      orderId: input.orderId,
+      inspectionId: input.inspectionId,
+      exceptionCase: { status: { notIn: ['OPEN', 'UNDER_REVIEW'] } },
+    },
+    select: { id: true },
+  })
+  return Boolean(review)
 }
