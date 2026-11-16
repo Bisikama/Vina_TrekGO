@@ -709,6 +709,7 @@ describe('Admin exception detail shows defects recorded at handover', () => {
           id: 'case-1',
           orderId: ORDER,
           unitId: 'u-bag2',
+          assignmentId: 'as-bag2',
           caseType: 'DAMAGE',
           status: 'OPEN',
           reason: 'DAMAGE',
@@ -735,6 +736,15 @@ describe('Admin exception detail shows defects recorded at handover', () => {
         }),
       },
       auditLog: { findMany: jest.fn().mockResolvedValue([]) },
+      depositSettlementItem: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'REFUND_PENDING',
+          depositAmount: 500000,
+          deductionAmount: 120000,
+          refundAmount: 380000,
+          decisionSnapshot: { cappedDeduction: '200000', approvedDeduction: '120000' },
+        }),
+      },
     }
     const detail: any = await new PrismaRentalReturnAdapter(prisma).getException({
       actorUserId: 'admin-1',
@@ -745,6 +755,15 @@ describe('Admin exception detail shows defects recorded at handover', () => {
       handedOverAt: '2026-11-10T02:00:00.000Z',
       unit: [{ type: 'DAMAGE', description: 'Khoá kéo hỏng sẵn' }],
       orderLevel: [{ type: 'NOTE', description: 'Khách nhận thiếu túi đựng' }],
+    })
+    // The admin screen reads these to show "settled" and the approved (possibly reduced) amount.
+    expect(detail.deduction).toEqual({
+      status: 'REFUND_PENDING',
+      deductionAmount: 120000,
+      refundAmount: 380000,
+      depositAmount: 500000,
+      proposed: 200000,
+      approved: 120000,
     })
   })
 })

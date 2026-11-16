@@ -145,8 +145,18 @@ export class RentalOverdueService {
         status: {
           in: [RentalOrderStatus.ACTIVE, RentalOrderStatus.RETURN_PENDING, RentalOrderStatus.RETURN_PROCESSING],
         },
-        rentalEndAt: { lt: graceCutoff },
-        OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lt: graceCutoff } }],
+        OR: [
+          {
+            rentalEndAt: { lt: graceCutoff },
+            OR: [{ operationalReturnDueAt: null }, { operationalReturnDueAt: { lt: graceCutoff } }],
+          },
+          // Collection already finished but a unit was never handed back (no rescan since 16/11).
+          {
+            deliveryTasksViaOrderId: {
+              some: { taskType: 'RETURN', status: { in: ['RETURNED', 'INVENTORY_RECEIVED', 'CLOSED'] } },
+            },
+          },
+        ],
         rentalOrderLinesViaOrderId: {
           some: {
             rentalUnitAssignmentsViaOrderLineId: {

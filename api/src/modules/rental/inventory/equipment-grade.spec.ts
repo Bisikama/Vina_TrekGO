@@ -301,7 +301,10 @@ describe('applyGradeDecision', () => {
 })
 
 describe('markUnitReady with grade decision', () => {
-  function makeAdapter(product: typeof LIKE_NEW | typeof PLAIN) {
+  function makeAdapter(
+    product: (typeof LIKE_NEW | typeof PLAIN) & { maxRentalCycles?: number | null },
+    unit: { rentalCount?: number; expiresAt?: Date | null } = {},
+  ) {
     const tx: any = {
       ...makeTx(),
       user: { findFirst: jest.fn().mockResolvedValue({ id: 'staff-1', role: 'STAFF_INVENTORY' }) },
@@ -318,10 +321,20 @@ describe('markUnitReady with grade decision', () => {
       returnInspectionTask: { findUnique: jest.fn().mockResolvedValue({ status: 'COMPLETED' }) },
       rentalOrderLine: { findUnique: jest.fn().mockResolvedValue(null) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
+      maintenanceRecord: { create: jest.fn().mockResolvedValue({}) },
     }
-    tx.equipmentUnit.findUnique = jest
-      .fn()
-      .mockResolvedValue({ id: 'u-1', productId: product.id, status: 'CLEANING', version: 3, assetCode: 'TENT-1' })
+    tx.equipmentUnit.findUnique = jest.fn().mockResolvedValue({
+      id: 'u-1',
+      productId: product.id,
+      status: 'CLEANING',
+      version: 3,
+      assetCode: 'TENT-1',
+      homeInventoryLocationId: 'loc-1',
+      currentInventoryLocationId: 'loc-1',
+      rentalCount: 0,
+      expiresAt: null,
+      ...unit,
+    })
     tx.equipmentUnit.update = jest
       .fn()
       .mockResolvedValueOnce({
@@ -358,6 +371,37 @@ describe('markUnitReady with grade decision', () => {
     expect(result.unit).toEqual(expect.objectContaining({ status: 'AVAILABLE', productId: PLAIN.id, version: 4 }))
     expect(result.gradeReview).toBeNull()
     expect(tx.equipmentGradeReview.create).not.toHaveBeenCalled()
+    expect(result.disposition).toBe('AVAILABLE')
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({ status: 'AVAILABLE', rentalCount: 1 })
+  })
+
+  it('sends a unit that reached the wear limit to maintenance instead of the shelf', async () => {
+    const { adapter, tx } = makeAdapter({ ...PLAIN, maxRentalCycles: 5 }, { rentalCount: 4 })
+    const result = await adapter.markUnitReady(base)
+    expect(result.disposition).toBe('MAINTENANCE')
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({ status: 'MAINTENANCE', rentalCount: 5 })
+    expect(tx.maintenanceRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unitId: 'u-1', reason: 'WEAR_LIMIT_REACHED', status: 'IN_PROGRESS' }),
+    })
+  })
+
+  it('retires a unit whose shelf life ran out while it was rented', async () => {
+    const { adapter, tx } = makeAdapter(PLAIN, { expiresAt: new Date('2026-10-30T00:00:00Z') })
+    const result = await adapter.markUnitReady(base)
+    expect(result.disposition).toBe('RETIRED')
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({
+      status: 'RETIRED',
+      retiredAt: new Date('2026-11-01T00:00:00Z'),
+    })
+    expect(tx.maintenanceRecord.create).not.toHaveBeenCalled()
+  })
+
+  it('retires an expired graded unit without asking for a grade decision', async () => {
+    const { adapter, tx } = makeAdapter(LIKE_NEW, { expiresAt: new Date('2026-10-30T00:00:00Z') })
+    const result = await adapter.markUnitReady(base)
+    expect(result.disposition).toBe('RETIRED')
+    expect(result.gradeReview).toBeNull()
+    expect(tx.equipmentGradeReview.create).not.toHaveBeenCalled()
   })
 
   it('DOWNGRADE returns the unit under the GOOD_USED product with the review', async () => {
@@ -377,6 +421,94 @@ describe('markUnitReady with grade decision', () => {
     )
     expect(tx.equipmentGradeReview.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ assignmentId: 'as-1' }),
+    })
+  })
+})
+
+describe('shelf life and wear of a unit in stock', () => {
+  const VIEW = {
+    id: 'u-1',
+    assetCode: 'ROPE-1',
+    qrCode: null,
+    serialNumber: null,
+    status: 'AVAILABLE',
+    condition: 'GOOD',
+    expectedReadyAt: null,
+    acquiredAt: null,
+    retiredAt: null,
+    intakeBatchCode: null,
+    expiresAt: null,
+    conditionNotes: null,
+    rentalCount: 0,
+    version: 6,
+    product: { id: 'p-rope', sku: 'ROPE', name: 'Dây', maxRentalCycles: 5 },
+    homeInventoryLocation: { id: 'loc', code: 'WH', name: 'Kho' },
+    currentInventoryLocation: { id: 'loc', code: 'WH', name: 'Kho' },
+  }
+  function makeAdapter(unit: { expiresAt?: Date | null; rentalCount?: number } = {}, reason = 'WEAR_LIMIT_REACHED') {
+    const tx: any = {
+      maintenanceRecord: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'm-1', reason }]),
+        update: jest.fn().mockResolvedValue({
+          id: 'm-1', status: 'COMPLETED', reason, notes: null, startAt: NOW, completedAt: NOW, version: 2,
+        }),
+      },
+      equipmentUnit: {
+        findUnique: jest.fn().mockResolvedValue({ expiresAt: null, rentalCount: 5, version: 5, ...unit }),
+        update: jest.fn().mockImplementation(({ data }: any) =>
+          Promise.resolve({ ...VIEW, status: data.status ?? VIEW.status, rentalCount: data.rentalCount ?? 5 }),
+        ),
+      },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    }
+    const prisma: any = { $transaction: jest.fn((cb: any) => cb(tx)) }
+    return { adapter: new PrismaEquipmentUnitAdapter(prisma), tx }
+  }
+  const complete = { unitId: 'u-1', expectedVersion: 5, resultingCondition: 'GOOD' as const, actorId: 'staff-1' }
+
+  it('starts a new wear cycle when a worn unit passes maintenance', async () => {
+    const { adapter, tx } = makeAdapter()
+    const result = await adapter.completeMaintenance(complete)
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({ status: 'AVAILABLE', rentalCount: 0 })
+    expect(result.unit.rentalCount).toBe(0)
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: 'EQUIPMENT_UNIT_WEAR_RESET', oldValues: expect.objectContaining({ rentalCount: 5 }) }),
+    })
+  })
+
+  it('retires a worn unit when inventory decides it should not be rented again', async () => {
+    const { adapter, tx } = makeAdapter()
+    await adapter.completeMaintenance({ ...complete, retire: true })
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({ status: 'RETIRED' })
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data.rentalCount).toBeUndefined()
+  })
+
+  it('retires an expired unit instead of putting it back on the shelf, and keeps the count of other repairs', async () => {
+    const { adapter, tx } = makeAdapter({ expiresAt: new Date('2026-10-01T00:00:00Z') }, 'Khoá kéo hỏng')
+    await adapter.completeMaintenance(complete)
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data).toMatchObject({ status: 'RETIRED' })
+    expect(tx.equipmentUnit.update.mock.calls[0][0].data.rentalCount).toBeUndefined()
+  })
+
+  it('lets only ADMIN extend or remove a shelf life, and audits every change', async () => {
+    const { adapter, tx } = makeAdapter({ expiresAt: new Date('2026-12-01T00:00:00Z') })
+    const edit = { id: 'u-1', expectedVersion: 5, actorId: 'staff-1', actorRole: 'STAFF_INVENTORY' }
+    await expect(adapter.updateMetadata({ ...edit, expiresAt: '2027-06-01' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: { reason: 'EXPIRY_EXTENSION_REQUIRES_ADMIN' },
+    })
+    await expect(adapter.updateMetadata({ ...edit, expiresAt: null })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    expect(tx.equipmentUnit.update).not.toHaveBeenCalled()
+
+    tx.equipmentUnit.update.mockResolvedValueOnce({ ...VIEW, expiresAt: new Date('2027-06-01T00:00:00Z') })
+    await adapter.updateMetadata({ ...edit, actorId: 'admin-1', actorRole: 'ADMIN', expiresAt: '2027-06-01' })
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'admin-1',
+        action: 'EQUIPMENT_UNIT_EXPIRY_CHANGED',
+        oldValues: expect.objectContaining({ expiresAt: '2026-12-01' }),
+        newValues: expect.objectContaining({ expiresAt: '2027-06-01' }),
+      }),
     })
   })
 })

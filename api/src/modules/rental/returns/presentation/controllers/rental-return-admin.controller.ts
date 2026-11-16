@@ -73,6 +73,15 @@ export class RentalReturnAdminController {
         reason: { type: 'string', minLength: 3, maxLength: 3000, description: 'Lý do quyết định chi tiết', example: 'Xác nhận hư hỏng theo ảnh minh chứng, trừ tiền theo biểu phí' },
         assessmentVersion: { type: 'integer', minimum: 1, description: 'Phiên bản assessment (tùy chọn)' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản exception hiện tại', example: 1 },
+        approvedDeductionAmount: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'Chỉ với APPROVE_DEDUCTION: mức khấu trừ Admin duyệt (VND), chỉ được thấp hơn hoặc bằng mức đề xuất ' +
+            '(`deduction.proposed` ở RB-API-615). Bỏ trống = duyệt đúng mức đề xuất. Vượt mức → INVALID_RETURN_STATE ' +
+            'reason APPROVED_DEDUCTION_ABOVE_PROPOSAL.',
+          example: 150000,
+        },
       },
     },
   })

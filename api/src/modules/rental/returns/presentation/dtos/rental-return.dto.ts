@@ -127,6 +127,11 @@ export const ResolveExceptionBodySchema = z.object({
   reason: z.string().trim().min(3).max(3000),
   assessmentVersion: z.number().int().min(1).optional(),
   expectedVersion: z.number().int().min(1),
+  // Chỉ dùng với APPROVE_DEDUCTION: Admin duyệt mức thấp hơn mức đề xuất (số nguyên VND).
+  approvedDeductionAmount: z.number().int().min(1).optional(),
+}).refine((body) => body.approvedDeductionAmount === undefined || body.decision === 'APPROVE_DEDUCTION', {
+  message: 'approvedDeductionAmount is only allowed with APPROVE_DEDUCTION',
+  path: ['approvedDeductionAmount'],
 });
 
 export const GradeDecisionSchema = z

@@ -150,6 +150,8 @@ export interface ResolveExceptionCommand {
   reason: string;
   assessmentVersion?: number;
   expectedVersion: number;
+  /** APPROVE_DEDUCTION only: Admin approves less than the proposed (capped) deduction. Integer VND. */
+  approvedDeductionAmount?: number;
   idempotencyKey: string;
   now: Date;
 }

@@ -7,8 +7,8 @@ import {
 } from './infrastructure/adapters/prisma-rental-return.adapter'
 
 /**
- * Orders must always be able to reach COMPLETED: partial early returns collected in several
- * rounds, units the customer never returns (missing -> LOST), and receipts nobody finalized.
+ * Orders must always be able to reach COMPLETED: units the customer never returns
+ * (missing -> LOST), and receipts nobody finalized. One collection per order (16/11).
  */
 
 const DUE = new Date('2026-11-20T10:00:00.000Z')
@@ -58,7 +58,7 @@ const idempotency = () => ({
   update: jest.fn().mockResolvedValue({}),
 })
 
-describe('RB-API-602 partial early return', () => {
+describe('RB-API-602 units not handed back', () => {
   function makeTx(now: Date) {
     const order = {
       id: ORDER,
@@ -103,19 +103,13 @@ describe('RB-API-602 partial early return', () => {
       now,
     })
 
-  it('before the deadline leaves the unit with the customer instead of opening a missing case', async () => {
-    const tx = makeTx(BEFORE_DUE)
-    const result: any = await run(tx, BEFORE_DUE)
-    expect(result.outstandingUnits).toEqual([{ unitId: UNIT_B, reason: 'STILL_WITH_CUSTOMER' }])
-    expect(result.discrepancies).not.toContainEqual(expect.objectContaining({ reason: 'MISSING_PENDING_REVIEW' }))
-    expect(tx.rentalExceptionCase.create).not.toHaveBeenCalled()
-    expect(tx.rentalOrder.update.mock.calls[0][0].data.exceptionStatus).not.toBe('RETURN_INCOMPLETE')
-  })
-
-  it('from the deadline on opens a RETURN_INCOMPLETE case for the unit still out', async () => {
-    const tx = makeTx(AFTER_DUE)
-    const result: any = await run(tx, AFTER_DUE)
-    expect(result.outstandingUnits).toEqual([])
+  it.each([
+    ['before', BEFORE_DUE],
+    ['after', AFTER_DUE],
+  ])('%s the deadline opens a RETURN_INCOMPLETE case for the unit still out', async (_label, now) => {
+    const tx = makeTx(now)
+    const result: any = await run(tx, now)
+    expect(result.outstandingUnits).toBeUndefined()
     expect(result.discrepancies).toContainEqual({ unitId: UNIT_B, reason: 'MISSING_PENDING_REVIEW' })
     expect(tx.rentalExceptionCase.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -126,7 +120,7 @@ describe('RB-API-602 partial early return', () => {
   })
 })
 
-describe('RB-API-601 next collection round', () => {
+describe('RB-API-601 single collection round', () => {
   function makeTx(taskStatus: string, unitBStatus: string) {
     return autoTx({
       idempotencyRecord: idempotency(),
@@ -186,18 +180,11 @@ describe('RB-API-601 next collection round', () => {
     })
 
   it.each(['RETURNED', 'INVENTORY_RECEIVED'])(
-    'reopens a %s task while the customer still holds a unit',
+    'does not reopen a %s task even while the customer still holds a unit',
     async (taskStatus) => {
       const tx = makeTx(taskStatus, 'HANDED_OVER')
-      const result: any = await scan(tx)
-      expect(result.receivedUnits).toEqual([expect.objectContaining({ unitId: UNIT_B, duplicate: false })])
-      expect(tx.deliveryTask.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'COLLECTING' }) }),
-      )
-      // The package goes back to RETURNING for the new round.
-      expect(tx.package.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'RETURNING' }) }),
-      )
+      expect((await errorOf(scan(tx))).code).toBe('INVALID_RETURN_STATE')
+      expect(tx.rentalUnitAssignment.update).not.toHaveBeenCalled()
     },
   )
 
@@ -252,15 +239,13 @@ describe('RB-API-603 second transfer', () => {
       // Round 1 already moved unit A to the warehouse.
       returnCustodyTransfer: {
         findMany: jest.fn().mockResolvedValue([{ id: 'tr-1', status: 'RECEIVED', unitIds: [UNIT_A] }]),
-        create: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'tr-2',
-            status: 'PENDING_RECEIPT',
-            transferStartedAt: AFTER_DUE,
-            transferWatchAt: null,
-            monitoringStatus: 'ON_TIME',
-          }),
+        create: jest.fn().mockResolvedValue({
+          id: 'tr-2',
+          status: 'PENDING_RECEIPT',
+          transferStartedAt: AFTER_DUE,
+          transferWatchAt: null,
+          monitoringStatus: 'ON_TIME',
+        }),
       },
       rentalExceptionCase: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
     })
@@ -299,7 +284,7 @@ describe('RB-API-603 second transfer', () => {
 })
 
 describe('openOverdueMissingUnitCases', () => {
-  function makeTx(opts: { status?: string; existingCase?: boolean } = {}) {
+  function makeTx(opts: { status?: string; existingCase?: boolean; taskStatus?: string } = {}) {
     return autoTx({
       rentalOrder: {
         findUnique: jest.fn().mockResolvedValue({
@@ -309,7 +294,7 @@ describe('openOverdueMissingUnitCases', () => {
           rentalEndAt: DUE,
           operationalReturnDueAt: null,
           rentalPolicy: { lostConfirmationMinutes: 2880 },
-          deliveryTasksViaOrderId: [{ staffId: 'driver-1' }],
+          deliveryTasksViaOrderId: [{ staffId: 'driver-1', status: opts.taskStatus ?? 'SCHEDULED' }],
           rentalOrderLinesViaOrderId: [
             {
               rentalUnitAssignmentsViaOrderLineId: [
@@ -329,6 +314,26 @@ describe('openOverdueMissingUnitCases', () => {
     })
   }
   const afterGrace = new Date(DUE.getTime() + MISSING_REVIEW_GRACE_MINUTES * 60_000)
+
+  it.each(['RETURNED', 'INVENTORY_RECEIVED', 'CLOSED'])(
+    'before the deadline backfills a missing case once the collection finished (task %s)',
+    async (taskStatus) => {
+      const tx = makeTx({ status: 'RETURN_PROCESSING', taskStatus })
+      await expect(openOverdueMissingUnitCases(tx, ORDER, BEFORE_DUE)).resolves.toBe(1)
+      expect(tx.rentalExceptionCase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ caseType: 'RETURN_INCOMPLETE', assignmentId: 'as-a' }),
+        }),
+      )
+      expect(tx.rentalOrder.update.mock.calls[0][0].data.exceptionStatus).toBe('RETURN_INCOMPLETE')
+    },
+  )
+
+  it('before the deadline leaves an uncollected order alone', async () => {
+    const tx = makeTx({ taskStatus: 'SCHEDULED' })
+    await expect(openOverdueMissingUnitCases(tx, ORDER, BEFORE_DUE)).resolves.toBe(0)
+    expect(tx.rentalExceptionCase.create).not.toHaveBeenCalled()
+  })
 
   it('opens one RETURN_INCOMPLETE case per unreturned unit and moves the order to RETURN_PENDING', async () => {
     const tx = makeTx()
@@ -371,7 +376,10 @@ describe('openOverdueMissingUnitCases', () => {
 })
 
 describe('RB-API-610 resolving a unit the customer never returned', () => {
-  function makeTx(decision: 'CONFIRM_LOST' | 'CLOSE_NO_ACTION') {
+  function makeTx(
+    decision: 'CONFIRM_LOST' | 'CLOSE_NO_ACTION' | 'APPROVE_DEDUCTION',
+    overrides: { exceptionCase?: Record<string, unknown>; decisionSnapshot?: Record<string, unknown> } = {},
+  ) {
     const exceptionCase = {
       id: 'case-1',
       orderId: ORDER,
@@ -384,8 +392,10 @@ describe('RB-API-610 resolving a unit the customer never returned', () => {
       inspectionId: 'pre-a',
       evidenceCompleteAt: null,
       dueAt: null,
+      createdAt: new Date(DUE.getTime() + MISSING_REVIEW_GRACE_MINUTES * 60_000),
       inspection: { id: 'pre-a', stage: 'PRELIMINARY', version: 1 },
       order: { rentalEndAt: DUE, operationalReturnDueAt: null, rentalPolicy: { lostConfirmationMinutes: 2880 } },
+      ...overrides.exceptionCase,
     }
     return {
       decision,
@@ -397,21 +407,19 @@ describe('RB-API-610 resolving a unit the customer never returned', () => {
           update: jest.fn().mockResolvedValue({ status: 'RESOLVED' }),
         },
         depositSettlementItem: {
-          findUnique: jest
-            .fn()
-            .mockResolvedValue({
-              id: 'dep-a',
-              depositAmount: { toString: () => '500000' },
-              refundAmount: 0,
-              decisionSnapshot: {},
-            }),
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'dep-a',
+            depositAmount: { toString: () => '500000' },
+            refundAmount: 0,
+            decisionSnapshot: overrides.decisionSnapshot ?? {},
+          }),
           update: jest.fn().mockResolvedValue({}),
         },
         returnInspection: { upsert: jest.fn().mockResolvedValue({ id: 'final-a', stage: 'FINAL' }) },
       }),
     }
   }
-  const resolve = (tx: any, decision: string) =>
+  const resolve = (tx: any, decision: string, extra: Record<string, unknown> = {}) =>
     adapterFor(tx).resolveException({
       actorUserId: 'admin-1',
       exceptionId: 'case-1',
@@ -420,7 +428,78 @@ describe('RB-API-610 resolving a unit the customer never returned', () => {
       expectedVersion: 1,
       idempotencyKey: `resolve-${decision}`,
       now: new Date(DUE.getTime() + 3 * 24 * 3600_000),
+      ...extra,
     } as any)
+
+  describe('CONFIRM_LOST window for a unit not handed back at an early collection', () => {
+    const collectedAt = new Date(DUE.getTime() - 10 * 24 * 3600_000)
+    const early = { exceptionCase: { createdAt: collectedAt, dueAt: new Date(collectedAt.getTime() + 2880 * 60_000) } }
+
+    it('is allowed immediately after collection (48h gate commented out for demo)', async () => {
+      const { tx } = makeTx('CONFIRM_LOST', early)
+      const result: any = await resolve(tx, 'CONFIRM_LOST', { now: collectedAt })
+      expect(result.nextAction).toBe('CREATE_DEPOSIT_SETTLEMENT')
+    })
+
+    // [DEMO] Tạm comment 2 test kiểm tra chặn 48h LOST_CONFIRMATION_TOO_EARLY khi chạy demo:
+    // it('is still refused inside the 48h after the collection', async () => {
+    //   const { tx } = makeTx('CONFIRM_LOST', early)
+    //   const error = await errorOf(
+    //     resolve(tx, 'CONFIRM_LOST', { now: new Date(collectedAt.getTime() + 2880 * 60_000 - 1) }),
+    //   )
+    //   expect(error.code).toBe('LOST_CONFIRMATION_TOO_EARLY')
+    //   expect(error.details?.earliestAt).toBe(new Date(collectedAt.getTime() + 2880 * 60_000).toISOString())
+    // })
+    //
+    // it('keeps counting from the deadline for a case that is not a missing unit', async () => {
+    //   const { tx } = makeTx('CONFIRM_LOST', {
+    //     exceptionCase: { ...early.exceptionCase, dueAt: null, caseType: 'DAMAGE', evidenceCompleteAt: collectedAt },
+    //   })
+    //   const error = await errorOf(resolve(tx, 'CONFIRM_LOST', { now: new Date(DUE.getTime() + 3600_000) }))
+    //   expect(error.code).toBe('LOST_CONFIRMATION_TOO_EARLY')
+    // })
+  })
+
+  describe('APPROVE_DEDUCTION with an amount set by Admin', () => {
+    const damage = {
+      exceptionCase: {
+        caseType: 'DAMAGE',
+        reason: 'DEDUCTION_APPROVAL_REQUIRED',
+        evidenceCompleteAt: DUE,
+        inspection: { id: 'final-a', stage: 'FINAL', version: 1 },
+      },
+      decisionSnapshot: { proposedDeduction: '250000', cappedDeduction: '200000' },
+    }
+    const approvedSnapshot = (tx: any) => tx.depositSettlementItem.update.mock.calls[0][0].data.decisionSnapshot
+
+    it('approves the proposed amount when none is sent', async () => {
+      const { tx } = makeTx('APPROVE_DEDUCTION', damage)
+      await resolve(tx, 'APPROVE_DEDUCTION')
+      expect(approvedSnapshot(tx)).toMatchObject({
+        approvedDeduction: '200000',
+        cappedDeduction: '200000',
+        adminAdjustedDeduction: false,
+      })
+    })
+
+    it('approves a lower amount and keeps the proposal for the record', async () => {
+      const { tx } = makeTx('APPROVE_DEDUCTION', damage)
+      await resolve(tx, 'APPROVE_DEDUCTION', { approvedDeductionAmount: 120000 })
+      expect(approvedSnapshot(tx)).toMatchObject({
+        approvedDeduction: '120000',
+        cappedDeduction: '200000',
+        adminAdjustedDeduction: true,
+      })
+    })
+
+    it('refuses an amount above the proposal', async () => {
+      const { tx } = makeTx('APPROVE_DEDUCTION', damage)
+      const error = await errorOf(resolve(tx, 'APPROVE_DEDUCTION', { approvedDeductionAmount: 200001 }))
+      expect(error.code).toBe('INVALID_RETURN_STATE')
+      expect(error.details).toMatchObject({ reason: 'APPROVED_DEDUCTION_ABOVE_PROPOSAL', maximum: 200000 })
+      expect(tx.depositSettlementItem.update).not.toHaveBeenCalled()
+    })
+  })
 
   it('CONFIRM_LOST works without photos and points the case at the FINAL inspection 606 needs', async () => {
     const { tx } = makeTx('CONFIRM_LOST')
@@ -541,18 +620,35 @@ describe('RB-API-604 receiving one round while Delivery still holds the next', (
       idempotencyRecord: idempotency(),
       user: { findFirst: jest.fn().mockResolvedValue({ id: 'keeper-1', role: 'STAFF_INVENTORY' }) },
       deliveryTask: {
-        findUnique: jest.fn().mockResolvedValue({ id: TASK, orderId: ORDER, taskType: 'RETURN', status: 'RETURNED', version: 4, packageId: 'pkg' }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            id: TASK,
+            orderId: ORDER,
+            taskType: 'RETURN',
+            status: 'RETURNED',
+            version: 4,
+            packageId: 'pkg',
+          }),
         update: jest.fn().mockResolvedValue({ status: 'INVENTORY_RECEIVED', version: 5 }),
       },
       returnCustodyTransfer: {
         findUnique: jest.fn().mockResolvedValue({
-          id: 'tr-1', deliveryTaskId: TASK, orderId: ORDER, inventoryLocationId: 'loc-1', status: 'PENDING_RECEIPT',
-          unitIds: [UNIT_A], receivedUnitIds: [], fromStaffId: 'driver-1',
+          id: 'tr-1',
+          deliveryTaskId: TASK,
+          orderId: ORDER,
+          inventoryLocationId: 'loc-1',
+          status: 'PENDING_RECEIPT',
+          unitIds: [UNIT_A],
+          receivedUnitIds: [],
+          fromStaffId: 'driver-1',
         }),
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'tr-1', status: 'PENDING_RECEIPT', unitIds: [UNIT_A] },
-          ...(unitBInTransfer ? [{ id: 'tr-2', status: 'RECEIVED', unitIds: [UNIT_B] }] : []),
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 'tr-1', status: 'PENDING_RECEIPT', unitIds: [UNIT_A] },
+            ...(unitBInTransfer ? [{ id: 'tr-2', status: 'RECEIVED', unitIds: [UNIT_B] }] : []),
+          ]),
         update: jest.fn().mockResolvedValue({ status: 'RECEIVED' }),
       },
       rentalOrder: {
@@ -570,7 +666,15 @@ describe('RB-API-604 receiving one round while Delivery still holds the next', (
           ],
         }),
       },
-      equipmentUnit: { findUnique: jest.fn().mockResolvedValue({ id: UNIT_A, status: 'RETURN_PENDING', product: { requiresDeepReturnInspection: false } }) },
+      equipmentUnit: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            id: UNIT_A,
+            status: 'RETURN_PENDING',
+            product: { requiresDeepReturnInspection: false },
+          }),
+      },
       returnInspection: { findUnique: jest.fn().mockResolvedValue({ id: 'pre-a', outcome: 'NORMAL' }) },
     })
   }
@@ -600,7 +704,7 @@ describe('RB-API-604 receiving one round while Delivery still holds the next', (
     )
   })
 
-  it('a unit still with the customer does not hold the task back (601 reopens it later)', async () => {
+  it('a unit not handed back (missing case) does not hold the task back', async () => {
     const tx = makeTx('HANDED_OVER', false)
     await receive(tx)
     expect(tx.deliveryTask.update).toHaveBeenCalledWith(
