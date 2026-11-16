@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  Alert,
   Linking,
   RefreshControl,
   ScrollView,
@@ -23,6 +22,7 @@ import {
   type StaffEarlyReturn,
   type StaffEarlyReturnFilter,
 } from "@/features/rentals/staff-early-returns-api";
+import { staffInventoryApi, type RentalDeliveryAssignee } from "@/features/rentals/staff-inventory-api";
 
 const TABS: { value: StaffEarlyReturnFilter; label: string }[] = [
   { value: "PENDING", label: "Chờ xác nhận" },
@@ -52,6 +52,12 @@ export default function StaffEarlyReturnsScreen() {
   const [notice, setNotice] = useState<string>();
   const [rejectingId, setRejectingId] = useState<string>();
   const [reason, setReason] = useState("");
+  const [confirmingId, setConfirmingId] = useState<string>();
+  const [deliveryStaff, setDeliveryStaff] = useState<RentalDeliveryAssignee[]>();
+  const [staffLoadError, setStaffLoadError] = useState<string>();
+  const [assigneeId, setAssigneeId] = useState<string>();
+  // "confirm": xác nhận lịch đang chờ + chọn người; "assign": giao / đổi người cho lịch đã xác nhận.
+  const [mode, setMode] = useState<"confirm" | "assign">("confirm");
 
   const load = useCallback(
     async (silent = false) => {
@@ -86,6 +92,7 @@ export default function StaffEarlyReturnsScreen() {
       await action();
       setNotice(success);
       setRejectingId(undefined);
+      setConfirmingId(undefined);
       setReason("");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Thao tác chưa thể hoàn tất.");
@@ -95,24 +102,62 @@ export default function StaffEarlyReturnsScreen() {
     }
   }
 
-  function askConfirm(item: StaffEarlyReturn) {
+  function openConfirm(item: StaffEarlyReturn, nextMode: "confirm" | "assign" = "confirm") {
     if (!accessToken) return;
-    Alert.alert(
-      "Xác nhận lịch trả đồ sớm?",
-      `Task thu hồi đơn ${orderShortCode(item.orderId)} sẽ dời tới ${dateTime(item.requestedSlotAt)}. ` +
-        "Phí thuê và tiền cọc không đổi.",
-      [
-        { text: "Đóng", style: "cancel" },
-        {
-          text: "Xác nhận",
-          onPress: () =>
-            void run(
-              item.id,
-              () => staffEarlyReturnsApi.confirm(item, accessToken),
-              `Đã xác nhận lịch trả sớm đơn ${orderShortCode(item.orderId)}.`,
-            ),
-        },
-      ],
+    setMode(nextMode);
+    setError(undefined);
+    setRejectingId(undefined);
+    setAssigneeId(item.task?.staff?.id);
+    setConfirmingId(item.id);
+    loadDeliveryStaff();
+  }
+
+  /** Tải lại mỗi lần mở khung chọn để số việc đang giữ của từng người là số mới. */
+  function loadDeliveryStaff() {
+    if (!accessToken) return;
+    setDeliveryStaff(undefined);
+    setStaffLoadError(undefined);
+    staffInventoryApi
+      .listDeliveryStaff(accessToken)
+      .then((page) => setDeliveryStaff(page.items))
+      .catch((loadError) =>
+        setStaffLoadError(
+          loadError instanceof Error ? loadError.message : "Không tải được danh sách nhân viên giao nhận.",
+        ),
+      );
+  }
+
+  /** Chế độ đổi người mà vẫn chọn người đang nhận task: không có gì để đổi. */
+  function sameAssignee(item: StaffEarlyReturn) {
+    return mode === "assign" && !!assigneeId && assigneeId === item.task?.staff?.id;
+  }
+
+  function submitConfirm(item: StaffEarlyReturn) {
+    if (!accessToken) return;
+    // Không ai nhận task thì khách được hứa nhưng không ai đến: bắt buộc chọn người.
+    if (!assigneeId) {
+      setError("Chọn nhân viên giao nhận sẽ đến lấy đồ.");
+      return;
+    }
+    const keepCurrent = assigneeId === item.task?.staff?.id;
+    const name = deliveryStaff?.find((s) => s.id === assigneeId)?.displayName ?? "nhân viên đã chọn";
+    if (mode === "assign") {
+      if (keepCurrent) {
+        setError("Task đang giao cho nhân viên này; chọn người khác để đổi.");
+        return;
+      }
+      const target = assigneeId;
+      void run(
+        item.id,
+        () => staffEarlyReturnsApi.assign(item, target, accessToken),
+        `Đã giao thu hồi đơn ${orderShortCode(item.orderId)} cho ${name}.`,
+      );
+      return;
+    }
+    void run(
+      item.id,
+      () => staffEarlyReturnsApi.confirm(item, accessToken, keepCurrent ? undefined : assigneeId),
+      `Đã xác nhận lịch trả sớm đơn ${orderShortCode(item.orderId)} và giao cho ${name}.`,
     );
   }
 
@@ -155,6 +200,7 @@ export default function StaffEarlyReturnsScreen() {
               onPress={() => {
                 setItems([]);
                 setRejectingId(undefined);
+                setConfirmingId(undefined);
                 setFilter(tab.value);
               }}
             >
@@ -175,6 +221,7 @@ export default function StaffEarlyReturnsScreen() {
         {items.map((item) => {
           const slotAt = item.confirmedSlotAt ?? item.requestedSlotAt;
           const rejecting = rejectingId === item.id;
+          const confirming = confirmingId === item.id;
           return (
             <View key={item.id} style={styles.card}>
               <View style={styles.rowBetween}>
@@ -198,21 +245,23 @@ export default function StaffEarlyReturnsScreen() {
               {item.status === "PENDING" && item.supersededAt ? (
                 <Text style={styles.warn}>Chuyến đi đổi lịch, cần xác nhận lại.</Text>
               ) : null}
-              {item.status === "CONFIRMED" && item.task ? (
-                <Text style={styles.meta}>
-                  Nhân viên: {item.task.staff?.fullName ?? "chưa nhận"} · task{" "}
-                  {TASK_STATUS_LABEL[item.task.status] ?? item.task.status}
+              {item.task ? (
+                <Text style={item.task.staff ? styles.meta : styles.warnText}>
+                  Nhân viên giao nhận: {item.task.staff?.fullName ?? "chưa phân công"}
+                  {item.status === "CONFIRMED"
+                    ? ` · task ${TASK_STATUS_LABEL[item.task.status] ?? item.task.status}`
+                    : ""}
                 </Text>
               ) : null}
 
-              {item.status === "PENDING" && !rejecting ? (
+              {item.status === "PENDING" && !rejecting && !confirming ? (
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.primary, busy && styles.disabled]}
                     disabled={Boolean(busy)}
-                    onPress={() => askConfirm(item)}
+                    onPress={() => openConfirm(item)}
                   >
-                    <Text style={styles.primaryText}>{busy === item.id ? "Đang xử lý..." : "Xác nhận lịch"}</Text>
+                    <Text style={styles.primaryText}>Xác nhận lịch</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.secondary, busy && styles.disabled]}
@@ -225,6 +274,91 @@ export default function StaffEarlyReturnsScreen() {
                   >
                     <Text style={styles.secondaryText}>Từ chối</Text>
                   </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {item.status === "CONFIRMED" && item.task?.status === "SCHEDULED" && !confirming ? (
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[item.task.staff ? styles.secondary : styles.primary, busy && styles.disabled]}
+                    disabled={Boolean(busy)}
+                    onPress={() => openConfirm(item, "assign")}
+                  >
+                    <Text style={item.task.staff ? styles.secondaryText : styles.primaryText}>
+                      {item.task.staff ? "Đổi nhân viên" : "Giao nhân viên"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {confirming ? (
+                <View style={styles.rejectBox}>
+                  <Text style={styles.rejectLabel}>Nhân viên giao nhận đến lấy đồ</Text>
+                  <Text style={styles.meta}>
+                    {mode === "assign"
+                      ? `Giờ hẹn giữ nguyên (${dateTime(slotAt)}). Người mới nhận thông báo ngay, người cũ (nếu có) được báo không cần đi.`
+                      : `Task thu hồi dời tới ${dateTime(item.requestedSlotAt)} và giao cho người được chọn; họ nhận thông báo ngay. Phí thuê và tiền cọc không đổi.`}
+                  </Text>
+                  {staffLoadError ? (
+                    <View>
+                      <Text style={styles.warnText}>{staffLoadError}</Text>
+                      <TouchableOpacity onPress={loadDeliveryStaff}>
+                        <Text style={styles.link}>Thử lại</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : !deliveryStaff ? (
+                    <TrekkingLoader label="Đang tải nhân viên giao nhận..." compact />
+                  ) : !deliveryStaff.length ? (
+                    <Text style={styles.warnText}>Chưa có nhân viên giao nhận đang hoạt động.</Text>
+                  ) : (
+                    <View style={styles.staffList}>
+                      {deliveryStaff.map((staff) => {
+                        const selected = assigneeId === staff.id;
+                        return (
+                          <TouchableOpacity
+                            key={staff.id}
+                            style={[styles.staffOption, selected && styles.staffOptionActive]}
+                            onPress={() => {
+                              setError(undefined);
+                              setAssigneeId(staff.id);
+                            }}
+                          >
+                            <Ionicons
+                              name={selected ? "radio-button-on" : "radio-button-off"}
+                              size={18}
+                              color={selected ? Colors.primaryDark : Colors.onSurfaceMuted}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.staffName}>
+                                {staff.displayName}
+                                {staff.id === item.task?.staff?.id ? " (đang nhận task này)" : ""}
+                              </Text>
+                              <Text style={styles.staffMeta}>Đang giữ {staff.activeTaskCount} việc</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                  {mode === "assign" && assigneeId && assigneeId === item.task?.staff?.id ? (
+                    <Text style={styles.warnText}>Task đang giao cho người này; chọn nhân viên khác để đổi.</Text>
+                  ) : null}
+                  <View style={styles.actions}>
+                    <TouchableOpacity
+                      style={[styles.primary, (busy || !assigneeId || sameAssignee(item)) && styles.disabled]}
+                      disabled={Boolean(busy) || !assigneeId || sameAssignee(item)}
+                      onPress={() => submitConfirm(item)}
+                    >
+                      <Text style={styles.primaryText}>{busy === item.id ? "Đang xử lý..." : mode === "assign" ? "Giao việc" : "Xác nhận và giao việc"}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.secondary}
+                      disabled={Boolean(busy)}
+                      onPress={() => setConfirmingId(undefined)}
+                    >
+                      <Text style={styles.secondaryText}>Đóng</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : null}
 
@@ -285,6 +419,12 @@ const styles = StyleSheet.create({
   meta: { color: Colors.onSurfaceMuted, fontSize: 13, marginTop: 5 },
   link: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600", textDecorationLine: "underline", marginTop: 5 },
   warn: { color: "#9b6700", backgroundColor: "#fff5d7", borderRadius: 8, padding: 9, fontSize: 13, marginTop: 8 },
+  warnText: { color: "#9b6700", fontSize: 13, marginTop: 5 },
+  staffList: { gap: 8, marginTop: 10 },
+  staffOption: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, borderRadius: 8, padding: 11 },
+  staffOptionActive: { borderColor: Colors.primaryDark, backgroundColor: "#eaf5e1" },
+  staffName: { color: Colors.ink, fontSize: 14, fontWeight: "600" },
+  staffMeta: { color: Colors.onSurfaceMuted, fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
   actions: { flexDirection: "row", gap: 8, marginTop: 12 },
   primary: { flex: 1, backgroundColor: Colors.primaryDark, borderRadius: Radius.md, paddingVertical: 11, alignItems: "center" },
   danger: { flex: 1, backgroundColor: Colors.error, borderRadius: Radius.md, paddingVertical: 11, alignItems: "center" },

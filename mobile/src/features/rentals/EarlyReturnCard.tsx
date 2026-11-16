@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import { WheelDatePickerModal } from "@/features/leaders/components/WheelDatePickerModal";
 import { formatVnDate, getDayOfWeekName, parseVnDate } from "@/features/leaders/utils/tripDateUtils";
-import { apiRequest } from "@/lib/api-client";
+import { ApiError, apiRequest } from "@/lib/api-client";
 
 type EarlyReturnStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED" | "SUPERSEDED" | "REJECTED" | "EXPIRED";
 type EarlyReturn = {
@@ -28,6 +28,8 @@ type EarlyReturn = {
   confirmedSlotAt: string | null;
   supersededAt: string | null;
   rejectionReason: string | null;
+  /** Chỉ có khi lịch đang xác nhận: tên nhân viên giao nhận sẽ đến lấy đồ. */
+  assignee?: { fullName: string } | null;
 };
 type Envelope<T> = T | { data: T };
 
@@ -195,7 +197,14 @@ export function EarlyReturnCard({
       cancelKey.current = null;
     } catch (e) {
       cancelKey.current = null;
-      setError(e instanceof Error ? e.message : "Không huỷ được yêu cầu.");
+      // Kho vừa đổi nhân viên/xác nhận (version tăng): đã tải lại bên dưới, khách chỉ cần thử lại.
+      setError(
+        e instanceof ApiError && e.code === "VERSION_CONFLICT"
+          ? "Lịch vừa được TrekGo cập nhật. Xem lại thông tin bên dưới rồi thử huỷ lại."
+          : e instanceof Error
+            ? e.message
+            : "Không huỷ được yêu cầu.",
+      );
       await load();
     } finally {
       setConfirmCancel(false);
@@ -248,7 +257,14 @@ export function EarlyReturnCard({
             />
           ) : null}
           {request.status === "CONFIRMED" ? (
-            <InfoBanner tone="success" message="Lịch đã được xác nhận. Nhân viên có thể đến sớm tối đa 30 phút; hãy chuẩn bị đủ đồ và phụ kiện." />
+            <InfoBanner
+              tone="success"
+              message={
+                "Lịch đã được xác nhận." +
+                (request.assignee ? ` Nhân viên ${request.assignee.fullName} sẽ đến nhận đồ.` : "") +
+                " Hãy có mặt đúng giờ và chuẩn bị đủ đồ, phụ kiện."
+              }
+            />
           ) : null}
           {request.status === "REJECTED" ? (
             <InfoBanner tone="warning" title="TrekGo chưa thể nhận đồ vào giờ này" message={request.rejectionReason ?? "Vui lòng chọn giờ khác."} />

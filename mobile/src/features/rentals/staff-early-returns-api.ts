@@ -20,7 +20,12 @@ export type StaffEarlyReturn = {
   /** Có giá trị khi lịch đã xác nhận bị đổi chuyến đưa về chờ xác nhận lại. */
   supersededAt: string | null;
   requester: { fullName: string; phone: string | null };
-  task: { id: string; status: string; scheduledAt: string | null; staff: { fullName: string } | null } | null;
+  task: {
+    id: string;
+    status: string;
+    scheduledAt: string | null;
+    staff: { id: string; fullName: string } | null;
+  } | null;
   order: {
     status: string;
     effectiveDueAt: string;
@@ -42,15 +47,44 @@ export const staffEarlyReturnsApi = {
     );
   },
 
-  async confirm(request: StaffEarlyReturn, accessToken: string, idempotencyKey = newKey("early-return-confirm")) {
+  /**
+   * Xác nhận lịch và chốt nhân viên giao nhận đến lấy đồ.
+   * `assigneeId` bắt buộc khi task thu hồi chưa có người nhận; bỏ trống = giữ người đang nhận.
+   */
+  async confirm(
+    request: StaffEarlyReturn,
+    accessToken: string,
+    assigneeId?: string,
+    idempotencyKey = newKey("early-return-confirm"),
+  ) {
     return unwrap(
-      await apiRequest<Envelope<StaffEarlyReturn>>(
+      await apiRequest<Envelope<StaffEarlyReturn & { assignee?: { id: string; displayName: string } }>>(
         `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/confirm`,
         {
           method: "POST",
           accessToken,
           headers: { "Idempotency-Key": idempotencyKey },
-          body: JSON.stringify({ expectedVersion: request.version }),
+          body: JSON.stringify({ expectedVersion: request.version, ...(assigneeId ? { assigneeId } : {}) }),
+        },
+      ),
+    );
+  },
+
+  /** Giao / đổi nhân viên giao nhận cho lịch đã xác nhận (task thu hồi chưa bắt đầu). Giờ hẹn giữ nguyên. */
+  async assign(
+    request: StaffEarlyReturn,
+    assigneeId: string,
+    accessToken: string,
+    idempotencyKey = newKey("early-return-assign"),
+  ) {
+    return unwrap(
+      await apiRequest<Envelope<StaffEarlyReturn & { assignee: { id: string; displayName: string } }>>(
+        `/api/v1/staff/rental-early-returns/${encodeURIComponent(request.id)}/assign`,
+        {
+          method: "POST",
+          accessToken,
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify({ expectedVersion: request.version, assigneeId }),
         },
       ),
     );

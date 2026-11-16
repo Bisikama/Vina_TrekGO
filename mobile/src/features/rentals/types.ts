@@ -237,6 +237,8 @@ export type DeliveryTaskSummary = {
   type: "OUTBOUND" | "RETURN";
   status: string;
   scheduledAt?: string | null;
+  /** Task thu hồi theo lịch trả sớm; RECONFIRM_REQUIRED = chuyến đổi lịch, chờ kho xác nhận lại. */
+  earlyReturn?: { requestId: string; status: "CONFIRMED" | "RECONFIRM_REQUIRED"; slotAt: string } | null;
   point: { id: string; name: string; address?: string | null };
   package: { id: string; code: string; status: string };
   orderSummary: {
