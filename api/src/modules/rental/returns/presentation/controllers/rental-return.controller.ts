@@ -22,11 +22,13 @@ import { ReturnScanUseCase } from '../../application/use-cases/return-scan.use-c
 import { ReturnInspectionUseCase } from '../../application/use-cases/return-inspection.use-case'
 import { GetDepositUseCase } from '../../application/use-cases/get-deposit.use-case'
 import { CreateAssessmentReviewUseCase } from '../../application/use-cases/create-assessment-review.use-case'
+import { AcceptAssessmentUseCase } from '../../application/use-cases/accept-assessment.use-case'
 import { GetRentalAssessmentUseCase } from '../../application/use-cases/get-rental-assessment.use-case'
 import { FinalizeReturnReceiptUseCase } from '../../application/use-cases/finalize-return-receipt.use-case'
 import { ListRentalDocumentsUseCase } from '../../application/use-cases/list-rental-documents.use-case'
 import { GetRentalDocumentUseCase } from '../../application/use-cases/get-rental-document.use-case'
 import {
+  AssessmentAcceptanceBodySchema,
   AssessmentReviewBodySchema,
   FinalizeReturnReceiptBodySchema,
   ListRentalDocumentsQuerySchema,
@@ -35,6 +37,7 @@ import {
   RentalReturnIdempotencyKeySchema,
   ReturnInspectionBodySchema,
   ReturnScanBodySchema,
+  type AssessmentAcceptanceBodyDto,
   type AssessmentReviewBodyDto,
   type FinalizeReturnReceiptBodyDto,
   type ListRentalDocumentsQueryDto,
@@ -54,6 +57,7 @@ export class RentalReturnController {
     private readonly returnInspectionUseCase: ReturnInspectionUseCase,
     private readonly getDepositUseCase: GetDepositUseCase,
     private readonly createAssessmentReviewUseCase: CreateAssessmentReviewUseCase,
+    private readonly acceptAssessmentUseCase: AcceptAssessmentUseCase,
     private readonly getRentalAssessmentUseCase: GetRentalAssessmentUseCase,
     private readonly finalizeReturnReceiptUseCase: FinalizeReturnReceiptUseCase,
     private readonly listRentalDocumentsUseCase: ListRentalDocumentsUseCase,
@@ -204,6 +208,7 @@ export class RentalReturnController {
                 ? ('OBSERVED_ISSUE' as const)
                 : ('OBSERVED_RECEIVED' as const),
             accessoryIssues: item.accessoryObservations,
+            visibleDamage: item.visibleDamage ?? false,
             evidenceIds: item.evidenceIds,
             notes: item.notes,
           },
@@ -298,6 +303,63 @@ export class RentalReturnController {
       actorUserId,
       orderId: params.id,
       ...body,
+      idempotencyKey: requireKey(rawKey),
+      now: new Date(),
+    })
+  }
+
+  @Post(':id/assessment-acceptances')
+  @Roles(UserRole.USER, UserRole.LEADER)
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'RB-API-617 — Khách đồng ý khoản trừ cọc (tất toán ngay, không chờ hết 48 giờ)',
+    description:
+      'Chủ đơn đồng ý khoản trừ cọc mà Admin đã duyệt, sau khi đã xem được chứng cứ. ' +
+      'Thời hạn phản hồi được đóng ngay và hệ thống tất toán cọc luôn (qua RB-API-606). ' +
+      'Điều kiện giống RB-API-609: chưa khiếu nại, chứng cứ đang xem được, còn trong thời hạn, chưa tất toán. ' +
+      'Đã đồng ý thì không khiếu nại được nữa. ' +
+      'settlementStatus = DEFERRED nghĩa là chưa tất toán ngay được; worker sẽ tự thử lại mỗi phút.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID đơn hàng thuê' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'Khóa duy nhất để tránh gọi trùng',
+    example: 'accept-20261115-abc123',
+  })
+  @ApiBody({
+    description: 'Đánh giá (assessment) mà khách đồng ý',
+    schema: {
+      type: 'object',
+      required: ['assessmentId'],
+      properties: {
+        assessmentId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'UUID đánh giá FINAL (assessmentId trong GET /rental-orders/:id/deposit)',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Đã ghi nhận đồng ý; trả kết quả tất toán (SETTLED) hoặc DEFERRED' })
+  @ApiResponse({ status: 403, description: 'Không phải chủ đơn' })
+  @ApiResponse({
+    status: 422,
+    description:
+      'INVALID_RETURN_STATE với details.reason: REVIEW_ALREADY_SUBMITTED, DEDUCTION_ALREADY_ACCEPTED, NO_APPROVED_DEDUCTION, ' +
+      'SETTLEMENT_ALREADY_STARTED, EVIDENCE_NOT_ACCESSIBLE, EVIDENCE_ACCESS_INTERRUPTED, USER_REVIEW_WINDOW_EXPIRED. ' +
+      'GET deposit còn trả `cannotSubmitReviewReason = UNIT_CONFIRMED_LOST` cho món đã xác nhận thất lạc (không có hạn phản đối).',
+  })
+  async acceptAssessment(
+    @Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto,
+    @Body(new ZodValidationPipe(AssessmentAcceptanceBodySchema)) body: AssessmentAcceptanceBodyDto,
+    @Headers('idempotency-key') rawKey: string | undefined,
+    @ActiveUser('id') actorUserId: string,
+  ) {
+    return this.acceptAssessmentUseCase.execute({
+      actorUserId,
+      orderId: params.id,
+      assessmentId: body.assessmentId,
       idempotencyKey: requireKey(rawKey),
       now: new Date(),
     })

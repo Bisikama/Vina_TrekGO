@@ -7,6 +7,7 @@ import {
   normalizeQuoteItems,
   resolveRentalReturn,
   parseWholeVnd,
+  buildReturnOptions,
 } from './rental-ordering.rules';
 import type { RentalEligibilityContext } from '../ports/rental-context.port';
 
@@ -198,5 +199,38 @@ describe('deposit explanation', () => {
   });
   it('returns null when the replacement value is zero', () => {
     expect(describeDeposit(100n, 0n).percentageOfReplacementValue).toBeNull();
+  });
+});
+
+describe('buildReturnOptions', () => {
+  const dropoff = { id: 'dropoff-1', name: 'Dropoff', scheduledAt: new Date('2026-10-12T12:00:00Z') };
+  const tripEndAt = new Date('2026-10-12T10:00:00Z');
+
+  it('offers the Trip return point from the default drop-off until tripEnd + allowance', () => {
+    expect(buildReturnOptions({ dropoff, tripEndAt, maxRentalAfterTripHours: 48 })).toEqual([
+      {
+        id: 'dropoff-1:SCHEDULED',
+        pointId: 'dropoff-1',
+        pointName: 'Dropoff',
+        method: 'SCHEDULED',
+        available: true,
+        windowStart: dropoff.scheduledAt,
+        windowEnd: new Date('2026-10-14T10:00:00Z'),
+      },
+    ]);
+  });
+
+  it('offers nothing without a positive allowance or when the window is empty', () => {
+    expect(buildReturnOptions({ dropoff, tripEndAt, maxRentalAfterTripHours: null })).toEqual([]);
+    expect(buildReturnOptions({ dropoff, tripEndAt, maxRentalAfterTripHours: 0 })).toEqual([]);
+    expect(buildReturnOptions({ dropoff, tripEndAt, maxRentalAfterTripHours: 1 })).toEqual([]);
+  });
+
+  it('lets resolveRentalReturn accept a later return by option id and refuse one past the allowance', () => {
+    const base = createContext();
+    const context = { ...base, returnOptions: buildReturnOptions({ dropoff: base.dropoff, tripEndAt: base.trip.endAt, maxRentalAfterTripHours: 48 }) };
+    const chosen = resolveRentalReturn(context, new Date('2026-10-13T12:00:00Z'), 'dropoff-1:SCHEDULED');
+    expect(chosen.returnOptionSnapshot).toMatchObject({ id: 'dropoff-1:SCHEDULED', method: 'SCHEDULED' });
+    expect(() => resolveRentalReturn(context, new Date('2026-10-14T11:00:00Z'), 'dropoff-1:SCHEDULED')).toThrow();
   });
 });

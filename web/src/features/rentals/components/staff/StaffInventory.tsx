@@ -123,6 +123,96 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+/** Hôm nay theo giờ VN, dạng YYYY-MM-DD (cùng lịch với backend khi so hạn dùng). */
+/**
+ * Cảnh báo hao mòn theo đúng backend (RB-API-611): lượt thuê được cộng khi kho nhận về,
+ * lượt làm số lượt chạm ngưỡng sẽ đưa món sang bảo trì.
+ */
+function wearNotice(unit: Pick<EquipmentUnit, "rentalCount" | "product" | "status">): string | null {
+  const max = unit.product.maxRentalCycles;
+  if (!max || max <= 0) return null;
+  const count = unit.rentalCount ?? 0;
+  if (count >= max) {
+    return unit.status === "MAINTENANCE"
+      ? `Đang bảo trì vì đạt ngưỡng hao mòn (${count}/${max} lượt). Khi hoàn tất: "Dùng tiếp" đếm lại từ 0, hoặc chọn Ngừng sử dụng.`
+      : `Đã vượt ngưỡng hao mòn (${count}/${max} lượt, do ngưỡng vừa bị hạ). Lần kho nhận về tới sẽ tự chuyển bảo trì.`;
+  }
+  if (count + 1 >= max) {
+    return `Lượt thuê tới là lượt cuối (${count}/${max}): khi kho nhận về, thiết bị sẽ tự chuyển bảo trì thay vì về kệ.`;
+  }
+  return null;
+}
+
+/** Đã đạt ngưỡng hao mòn của sản phẩm (cùng quy tắc backend `isWearLimitReached`). */
+function unitWornOut(unit: Pick<EquipmentUnit, "rentalCount" | "product">) {
+  const max = unit.product.maxRentalCycles;
+  return Boolean(max && max > 0 && (unit.rentalCount ?? 0) >= max);
+}
+
+function vnToday(offsetDays = 0) {
+  const shifted = new Date(Date.now() + 7 * 3600_000 + offsetDays * 86_400_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function formatDay(value: string | null | undefined) {
+  if (!value) return "—";
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
+const EXPIRY_SOON_DAYS = 30;
+
+/** Hạn dùng của unit: hết hạn (backend đã/ sẽ rút khỏi cho thuê), sắp hết hạn, hoặc còn hạn. */
+function expiryState(unit: Pick<EquipmentUnit, "expiresAt" | "isExpired">): "NONE" | "EXPIRED" | "SOON" | "OK" {
+  if (!unit.expiresAt) return "NONE";
+  if (unit.isExpired || unit.expiresAt.slice(0, 10) <= vnToday()) return "EXPIRED";
+  if (unit.expiresAt.slice(0, 10) <= vnToday(EXPIRY_SOON_DAYS)) return "SOON";
+  return "OK";
+}
+
+function ExpiryBadge({ unit }: { unit: EquipmentUnit }) {
+  const state = expiryState(unit);
+  if (state === "NONE") return <span className="text-[9px] text-slate-400">Không có hạn dùng</span>;
+  const style =
+    state === "EXPIRED"
+      ? "bg-red-100 text-red-700"
+      : state === "SOON"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-slate-100 text-slate-700";
+  const label = state === "EXPIRED" ? "Hết hạn" : state === "SOON" ? "Sắp hết hạn" : "Hạn dùng";
+  return (
+    <span className={`inline-flex rounded px-2 py-1 text-[9px] font-semibold ${style}`}>
+      {label} · {formatDay(unit.expiresAt)}
+    </span>
+  );
+}
+
+/** Lượt thuê so với ngưỡng hao mòn của sản phẩm; không có ngưỡng thì chỉ hiện số lượt. */
+function WearMeter({ unit }: { unit: EquipmentUnit }) {
+  const count = unit.rentalCount ?? 0;
+  const limit = unit.product.maxRentalCycles ?? null;
+  if (!limit || unit.wearPercent == null) {
+    return <span className="text-[9px] text-slate-500">{count} lượt thuê</span>;
+  }
+  const percent = unit.wearPercent;
+  const bar = percent >= 100 ? "bg-red-600" : percent >= 80 ? "bg-amber-500" : "bg-emerald-600";
+  return (
+    <span className="block w-28">
+      <span className="flex justify-between text-[9px] text-slate-600">
+        <span>Hao mòn {percent}%</span>
+        <span>{count}/{limit}</span>
+      </span>
+      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-200">
+        <span className={`block h-full rounded-full ${bar}`} style={{ width: `${Math.max(4, percent)}%` }} />
+      </span>
+    </span>
+  );
+}
+
+const maintenanceReasonLabel: Record<string, string> = {
+  WEAR_LIMIT_REACHED: "Đạt ngưỡng hao mòn (tự động)",
+};
+
 function percentage(value: number, total: number) {
   if (total === 0) return "0%";
   return `${((value / total) * 100).toFixed(1)}%`;
@@ -137,6 +227,9 @@ type CreateForm = {
   quantity: string;
   condition: "NEW" | "GOOD" | "FAIR";
   acquiredAt: string;
+  batchCode: string;
+  expiresAt: string;
+  conditionNotes: string;
 };
 
 const initialCreateForm: CreateForm = {
@@ -148,6 +241,9 @@ const initialCreateForm: CreateForm = {
   quantity: "5",
   condition: "GOOD",
   acquiredAt: "",
+  batchCode: "",
+  expiresAt: "",
+  conditionNotes: "",
 };
 
 // Tên sản phẩm có hạng kèm hậu tố ("– Rất mới" / "– Đã sử dụng tốt"): tách thành tên + nhãn hạng.
@@ -194,6 +290,9 @@ export function StaffInventory() {
     useState<EquipmentCondition | "">("");
   const [productFilter, setProductFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [batchFilter, setBatchFilter] = useState("");
+  const [debouncedBatch, setDebouncedBatch] = useState("");
+  const [expiringBeforeFilter, setExpiringBeforeFilter] = useState("");
   const [page, setPage] = useState(1);
 
   const [loading, setLoading] = useState(true);
@@ -212,11 +311,15 @@ export function StaffInventory() {
   const [editLocationId, setEditLocationId] = useState("");
   const [editSerialNumber, setEditSerialNumber] = useState("");
   const [editAcquiredAt, setEditAcquiredAt] = useState("");
+  const [editBatchCode, setEditBatchCode] = useState("");
+  const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [editConditionNotes, setEditConditionNotes] = useState("");
   const [showMaintenance, setShowMaintenance] = useState(false);
   const [maintenanceReason, setMaintenanceReason] = useState("");
   const [maintenanceNotes, setMaintenanceNotes] = useState("");
   const [resultingCondition, setResultingCondition] =
     useState<EquipmentCondition>("GOOD");
+  const [retireAfterMaintenance, setRetireAfterMaintenance] = useState(false);
   const [labels, setLabels] = useState<EquipmentLabel[]>([]);
 
   const refresh = useCallback(() => setReloadKey((value) => value + 1), []);
@@ -229,6 +332,15 @@ export function StaffInventory() {
 
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedBatch(batchFilter.trim());
+      setPage(1);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [batchFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -278,6 +390,8 @@ export function StaffInventory() {
           condition: conditionFilter || undefined,
           productId: productFilter || undefined,
           inventoryLocationId: locationFilter || undefined,
+          batchCode: debouncedBatch || undefined,
+          expiringBefore: expiringBeforeFilter || undefined,
           signal: controller.signal,
         });
 
@@ -310,7 +424,9 @@ export function StaffInventory() {
     return () => controller.abort();
   }, [
     conditionFilter,
+    debouncedBatch,
     debouncedSearch,
+    expiringBeforeFilter,
     locationFilter,
     page,
     productFilter,
@@ -437,6 +553,16 @@ export function StaffInventory() {
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Backend từ chối hạn dùng ≤ hôm nay (unit sẽ bị rút ngay); báo trước cho nhân viên.
+    if (createForm.expiresAt && createForm.expiresAt <= vnToday()) {
+      setError("Hạn dùng phải sau hôm nay.");
+      return;
+    }
+    const intakeFields = {
+      batchCode: createForm.batchCode.trim() || undefined,
+      expiresAt: createForm.expiresAt || undefined,
+      conditionNotes: createForm.conditionNotes.trim() || undefined,
+    };
     setSaving(true);
     setError("");
 
@@ -449,6 +575,7 @@ export function StaffInventory() {
           serialNumber: createForm.serialNumber.trim() || undefined,
           condition: createForm.condition,
           acquiredAt: createForm.acquiredAt || undefined,
+          ...intakeFields,
         });
         showSuccess("Đã nhập một thiết bị mới vào kho.");
       } else {
@@ -460,8 +587,11 @@ export function StaffInventory() {
           assetCodeMode: "AUTO",
           condition: createForm.condition,
           acquiredAt: createForm.acquiredAt || undefined,
+          ...intakeFields,
         });
-        showSuccess(`Đã nhập ${quantity} thiết bị mới vào kho.`);
+        showSuccess(
+          `Đã nhập ${quantity} thiết bị mới vào kho${intakeFields.batchCode ? ` (lô ${intakeFields.batchCode})` : ""}.`,
+        );
       }
 
       setShowCreate(false);
@@ -479,12 +609,23 @@ export function StaffInventory() {
     setEditLocationId(activeUnit.homeInventoryLocation.id);
     setEditSerialNumber(activeUnit.serialNumber ?? "");
     setEditAcquiredAt(activeUnit.acquiredAt?.slice(0, 10) ?? "");
+    setEditBatchCode(activeUnit.intakeBatchCode ?? "");
+    setEditExpiresAt(activeUnit.expiresAt?.slice(0, 10) ?? "");
+    setEditConditionNotes(activeUnit.conditionNotes ?? "");
     setShowEdit(true);
   }
+
+  // Nhân viên kho chỉ được rút ngắn hạn dùng; kéo dài hoặc xoá hạn là việc của Admin (/admin/inventory).
+  const currentExpiry = activeUnit?.expiresAt?.slice(0, 10) ?? "";
+  const editExtendsExpiry = Boolean(currentExpiry) && (!editExpiresAt || editExpiresAt > currentExpiry);
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeUnit) return;
+    if (editExtendsExpiry) {
+      setError("Chỉ Admin được kéo dài hoặc xoá hạn dùng. Nhân viên kho chỉ được rút ngắn.");
+      return;
+    }
     setSaving(true);
     setError("");
 
@@ -494,6 +635,9 @@ export function StaffInventory() {
         homeInventoryLocationId: editLocationId,
         serialNumber: editSerialNumber.trim() || null,
         acquiredAt: editAcquiredAt || null,
+        batchCode: editBatchCode.trim() || null,
+        expiresAt: editExpiresAt || null,
+        conditionNotes: editConditionNotes.trim() || null,
       });
       setShowEdit(false);
       showSuccess(`Đã cập nhật ${activeUnit.assetCode}.`);
@@ -528,12 +672,22 @@ export function StaffInventory() {
 
     try {
       if (activeUnit.status === "MAINTENANCE") {
+        const usable = resultingCondition !== "DAMAGED" && resultingCondition !== "LOST";
+        const retire = usable && retireAfterMaintenance;
         await changeEquipmentMaintenance(activeUnit.id, {
           action: "COMPLETE",
           resultingCondition,
+          ...(retire ? { retire: true } : {}),
           expectedVersion: activeUnit.version,
         });
-        showSuccess(`Đã hoàn tất bảo trì ${activeUnit.assetCode}.`);
+        showSuccess(
+          retire
+            ? `Đã hoàn tất bảo trì và chuyển ${activeUnit.assetCode} sang Ngừng sử dụng.`
+            : usable && unitWornOut(activeUnit)
+              ? `Đã hoàn tất bảo trì ${activeUnit.assetCode}: dùng tiếp, đếm lượt thuê lại từ 0.`
+              : `Đã hoàn tất bảo trì ${activeUnit.assetCode}.`,
+        );
+        setRetireAfterMaintenance(false);
       } else {
         await changeEquipmentMaintenance(activeUnit.id, {
           action: "START",
@@ -564,6 +718,10 @@ export function StaffInventory() {
       "Status",
       "Condition",
       "Current location",
+      "Batch",
+      "Expires at",
+      "Rental count",
+      "Wear %",
     ];
     const rows = units.map((unit) => [
       unit.assetCode,
@@ -573,6 +731,10 @@ export function StaffInventory() {
       unit.status,
       unit.condition,
       unit.currentInventoryLocation?.name ?? "",
+      unit.intakeBatchCode ?? "",
+      unit.expiresAt ?? "",
+      unit.rentalCount ?? 0,
+      unit.wearPercent ?? "",
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
@@ -698,6 +860,41 @@ export function StaffInventory() {
                   {allStatuses.map((status) => <option key={status} value={status}>{statusConfig[status].label}</option>)}
                 </select>
               </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                <input
+                  value={batchFilter}
+                  onChange={(event) => setBatchFilter(event.target.value)}
+                  placeholder="Lọc theo mã lô nhập..."
+                  className="h-10 rounded-lg bg-[#edf3ff] px-4 text-xs outline-none focus:ring-2 focus:ring-emerald-700"
+                />
+                <label className="flex h-10 items-center gap-2 rounded-lg bg-[#edf3ff] px-3 text-[10px] font-semibold text-slate-600">
+                  Hết hạn trước
+                  <input
+                    type="date"
+                    value={expiringBeforeFilter}
+                    onChange={(event) => { setExpiringBeforeFilter(event.target.value); setPage(1); }}
+                    className="flex-1 bg-transparent text-xs outline-none"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setExpiringBeforeFilter(vnToday(EXPIRY_SOON_DAYS)); setPage(1); }}
+                  className={`h-10 rounded-lg px-3 text-[10px] font-semibold ${counts.expiringSoon ? "bg-amber-200 text-amber-950 ring-1 ring-amber-400" : "bg-amber-50 text-amber-900"}`}
+                  title="Món còn trong vòng cho thuê đã hoặc sẽ hết hạn dùng trong 30 ngày (toàn kho)"
+                >
+                  Sắp hết hạn trong {EXPIRY_SOON_DAYS} ngày{counts.expiringSoon ? ` · ${counts.expiringSoon} món` : ""}
+                </button>
+                {(batchFilter || expiringBeforeFilter) && (
+                  <button
+                    type="button"
+                    onClick={() => { setBatchFilter(""); setExpiringBeforeFilter(""); setPage(1); }}
+                    className="h-10 rounded-lg bg-slate-100 px-3 text-[10px] font-semibold text-slate-700"
+                  >
+                    Bỏ lọc lô / hạn dùng
+                  </button>
+                )}
+              </div>
             </div>
 
             {selectedIds.length > 0 && (
@@ -710,7 +907,7 @@ export function StaffInventory() {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left">
+              <table className="w-full min-w-[980px] text-left">
                 <thead className="bg-[#e7eefc] text-[10px] uppercase text-slate-600">
                   <tr>
                     <th className="w-12 px-4 py-4"><input type="checkbox" checked={units.length > 0 && units.every((unit) => selectedIds.includes(unit.id))} onChange={toggleAllVisible} className="h-4 w-4 accent-[#125238]" /></th>
@@ -718,6 +915,7 @@ export function StaffInventory() {
                     <th className="px-3 py-4">Sản phẩm</th>
                     <th className="px-3 py-4">Kho hiện tại</th>
                     <th className="px-3 py-4">Tình trạng</th>
+                    <th className="px-3 py-4">Lô · Hạn dùng · Hao mòn</th>
                     <th className="px-3 py-4">Trạng thái</th>
                   </tr>
                 </thead>
@@ -729,6 +927,13 @@ export function StaffInventory() {
                       <td className="px-3 py-4"><p className="text-xs font-bold text-slate-950"><GradeName name={unit.product.name} className="" /></p><p className="mt-1 text-[9px] text-slate-500">{unit.product.sku}</p></td>
                       <td className="px-3 py-4"><p className="text-xs font-semibold">{unit.currentInventoryLocation?.name ?? "Ngoài kho"}</p><p className="mt-1 text-[9px] text-slate-500">{unit.currentInventoryLocation?.code ?? "—"}</p></td>
                       <td className="px-3 py-4"><span className="rounded bg-[#e4ebf8] px-3 py-1.5 text-[9px] font-semibold text-slate-700">{conditionLabel[unit.condition]}</span></td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <p className="font-mono text-[9px] text-slate-500">{unit.intakeBatchCode ? `Lô ${unit.intakeBatchCode}` : "Chưa ghi lô"}</p>
+                          <ExpiryBadge unit={unit} />
+                          <WearMeter unit={unit} />
+                        </div>
+                      </td>
                       <td className="px-3 py-4"><span className={`inline-flex rounded-full px-3 py-2 text-[9px] font-bold ${statusConfig[unit.status].className}`}>{statusConfig[unit.status].label}</span></td>
                     </tr>
                   ))}
@@ -782,11 +987,39 @@ export function StaffInventory() {
                     </dl>
                   </section>
 
+                  <section className="rounded-xl bg-[#edf3ff] p-4">
+                    <h3 className="text-[10px] font-bold uppercase text-slate-700">Lô nhập · Hạn dùng · Hao mòn</h3>
+                    <dl className="mt-3 space-y-3 text-[10px]">
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Mã lô</dt><dd className="font-mono font-bold">{activeUnit.intakeBatchCode ?? "—"}</dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Hạn dùng</dt><dd><ExpiryBadge unit={activeUnit} /></dd></div>
+                      <div className="flex justify-between gap-3"><dt className="text-slate-500">Lượt thuê / ngưỡng</dt><dd className="font-bold">{activeUnit.rentalCount ?? 0} / {activeUnit.product.maxRentalCycles ?? "không giới hạn"}</dd></div>
+                      {activeUnit.wearPercent != null && <div className="flex justify-between gap-3"><dt className="text-slate-500">Hao mòn</dt><dd><WearMeter unit={activeUnit} /></dd></div>}
+                    </dl>
+                    {activeUnit.conditionNotes && (
+                      <p className="mt-3 rounded-lg bg-white p-3 text-[10px] leading-5 text-slate-700"><span className="font-semibold">Thực trạng lúc nhập:</span> {activeUnit.conditionNotes}</p>
+                    )}
+                    {expiryState(activeUnit) === "EXPIRED" && activeUnit.status !== "RETIRED" && (
+                      <p className="mt-3 rounded-lg bg-red-50 p-3 text-[10px] leading-5 text-red-800">
+                        Đã hết hạn dùng: không được cho thuê. {activeUnit.status === "AVAILABLE" ? "Hệ thống sẽ tự chuyển sang Ngừng sử dụng trong vòng 1 giờ." : "Thiết bị sẽ chuyển Ngừng sử dụng khi kho đưa về sau lượt thuê hiện tại."}
+                      </p>
+                    )}
+                    {expiryState(activeUnit) === "SOON" && (
+                      <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-900">
+                        Sắp hết hạn: thiết bị không được chọn cho đơn có hạn trả từ ngày {formatDay(activeUnit.expiresAt)} trở đi.
+                      </p>
+                    )}
+                    {wearNotice(activeUnit) && (
+                      <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-900">
+                        {wearNotice(activeUnit)}
+                      </p>
+                    )}
+                  </section>
+
                   <section>
                     <div className="flex items-center justify-between"><h3 className="text-[10px] font-bold uppercase">Nhật ký vận hành</h3><span className="text-[9px] text-slate-500">{activeDetail?.history.length ?? 0} sự kiện</span></div>
                     <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
                       {(activeDetail?.history ?? []).map((event, index) => (
-                        <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] font-bold">● {event.type}</p><p className="mt-1 text-[9px] text-slate-500">{formatDate(event.occurredAt)}{event.actor ? ` · ${event.actor}` : ""}</p></div>
+                        <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-lg bg-[#edf3ff] p-3"><p className="text-[10px] font-bold">● {event.type}{typeof event.details?.reason === "string" ? ` · ${maintenanceReasonLabel[event.details.reason] ?? event.details.reason}` : ""}</p><p className="mt-1 text-[9px] text-slate-500">{formatDate(event.occurredAt)}{event.actor ? ` · ${event.actor}` : ""}</p></div>
                       ))}
                       {!detailLoading && (activeDetail?.history.length ?? 0) === 0 && <p className="rounded-lg bg-slate-50 p-3 text-[10px] text-slate-500">Chưa có sự kiện lịch sử.</p>}
                     </div>
@@ -796,7 +1029,7 @@ export function StaffInventory() {
                     <button type="button" disabled={saving} onClick={() => void requestLabels([activeUnit.id])} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-semibold disabled:opacity-50">▦ In tem QR</button>
                     <button type="button" onClick={openEditModal} className="rounded-lg bg-[#edf3ff] px-3 py-3 text-[10px] font-semibold">✎ Sửa metadata</button>
                   </div>
-                  <button type="button" onClick={() => setShowMaintenance(true)} disabled={!(["AVAILABLE", "CLEANING", "DAMAGED", "MAINTENANCE"] as EquipmentUnitStatus[]).includes(activeUnit.status)} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900 disabled:cursor-not-allowed disabled:opacity-40">
+                  <button type="button" onClick={() => { setRetireAfterMaintenance(false); setShowMaintenance(true); }} disabled={!(["AVAILABLE", "CLEANING", "DAMAGED", "MAINTENANCE"] as EquipmentUnitStatus[]).includes(activeUnit.status)} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900 disabled:cursor-not-allowed disabled:opacity-40">
                     {activeUnit.status === "MAINTENANCE" ? "✓ Hoàn tất bảo trì" : "⚒ Bắt đầu bảo trì"}
                   </button>
                 </div>
@@ -812,10 +1045,21 @@ export function StaffInventory() {
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#edf3ff] p-1">
               {(["single", "batch"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCreateForm((current) => ({ ...current, mode }))} className={`rounded-lg px-3 py-2 text-xs font-bold ${createForm.mode === mode ? "bg-white text-emerald-900 shadow-sm" : "text-slate-500"}`}>{mode === "single" ? "Một thiết bị" : "Nhập hàng loạt"}</button>)}
             </div>
-            <Field label="Sản phẩm"><select required value={createForm.productId} onChange={(event) => setCreateForm((current) => ({ ...current, productId: event.target.value }))} className={inputClass}><option value="">Chọn sản phẩm</option>{products.filter((product) => product.status === "ACTIVE").map((product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}</select></Field>
+            <Field label="Sản phẩm"><select required value={createForm.productId} onChange={(event) => setCreateForm((current) => ({ ...current, productId: event.target.value }))} className={inputClass}><option value="">Chọn sản phẩm</option>{products.filter((product) => product.status === "ACTIVE").map((product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}</select>
+              {createForm.productId ? (
+                <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+                  Ngưỡng hao mòn của sản phẩm: {products.find((product) => product.id === createForm.productId)?.maxRentalCycles ? `${products.find((product) => product.id === createForm.productId)?.maxRentalCycles} lượt thuê (đạt ngưỡng thì tự chuyển bảo trì)` : "không giới hạn"}. Đổi ngưỡng ở Danh mục cho thuê.
+                </span>
+              ) : null}</Field>
             <Field label="Kho gốc"><select required value={createForm.homeInventoryLocationId} onChange={(event) => setCreateForm((current) => ({ ...current, homeInventoryLocationId: event.target.value }))} className={inputClass}><option value="">Chọn kho</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.code} · {location.name}</option>)}</select></Field>
             {createForm.mode === "single" ? <div className="grid gap-3 sm:grid-cols-2"><Field label="Asset code (để trống = tự sinh)"><input value={createForm.assetCode} onChange={(event) => setCreateForm((current) => ({ ...current, assetCode: event.target.value }))} className={inputClass} /></Field><Field label="Serial nhà sản xuất"><input value={createForm.serialNumber} onChange={(event) => setCreateForm((current) => ({ ...current, serialNumber: event.target.value }))} className={inputClass} /></Field></div> : <Field label="Số lượng (1–100)"><input required type="number" min={1} max={100} value={createForm.quantity} onChange={(event) => setCreateForm((current) => ({ ...current, quantity: event.target.value }))} className={inputClass} /></Field>}
             <div className="grid gap-3 sm:grid-cols-2"><Field label="Tình trạng ban đầu"><select value={createForm.condition} onChange={(event) => setCreateForm((current) => ({ ...current, condition: event.target.value as CreateForm["condition"] }))} className={inputClass}>{(["NEW", "GOOD", "FAIR"] as const).map((condition) => <option key={condition} value={condition}>{conditionLabel[condition]}</option>)}</select></Field><Field label="Ngày nhập kho"><input type="date" value={createForm.acquiredAt} onChange={(event) => setCreateForm((current) => ({ ...current, acquiredAt: event.target.value }))} className={inputClass} /></Field></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={createForm.mode === "batch" ? "Mã lô nhập (cả lô dùng chung)" : "Mã lô nhập"}><input value={createForm.batchCode} maxLength={60} onChange={(event) => setCreateForm((current) => ({ ...current, batchCode: event.target.value }))} className={inputClass} placeholder="Ví dụ: LO-2026-11-A" /></Field>
+              <Field label="Hạn dùng (để trống = không có hạn)"><input type="date" min={vnToday(1)} value={createForm.expiresAt} onChange={(event) => setCreateForm((current) => ({ ...current, expiresAt: event.target.value }))} className={inputClass} /></Field>
+            </div>
+            <Field label={createForm.mode === "batch" ? "Ghi chú thực trạng lúc nhập (áp cho cả lô)" : "Ghi chú thực trạng lúc nhập"}><textarea value={createForm.conditionNotes} maxLength={2000} onChange={(event) => setCreateForm((current) => ({ ...current, conditionNotes: event.target.value }))} className={`${inputClass} min-h-20 py-3`} placeholder="Ví dụ: vỏ xước nhẹ ở góc, đủ phụ kiện" /></Field>
+            <p className="text-[10px] leading-5 text-slate-500">Thiết bị chỉ phục vụ đơn kết thúc trước ngày hết hạn (tính cả thời gian kho kiểm đồ sau khi trả), nên số lượng cho thuê giảm dần khi gần hết hạn. Từ ngày hết hạn, nếu đang ở kho thì tự chuyển Ngừng sử dụng; nếu đang cho thuê thì chuyển khi kho nhận về. Nhân viên kho chỉ được rút ngắn hạn dùng, kéo dài phải nhờ Admin.</p>
             <ModalActions saving={saving} onCancel={() => setShowCreate(false)} submitLabel={createForm.mode === "single" ? "Tạo thiết bị" : "Tạo hàng loạt"} />
           </form>
         </Modal>
@@ -827,6 +1071,17 @@ export function StaffInventory() {
             <Field label="Kho gốc"><select required value={editLocationId} onChange={(event) => setEditLocationId(event.target.value)} className={inputClass}>{locations.map((location) => <option key={location.id} value={location.id}>{location.code} · {location.name}</option>)}</select></Field>
             <Field label="Serial nhà sản xuất"><input value={editSerialNumber} onChange={(event) => setEditSerialNumber(event.target.value)} className={inputClass} /></Field>
             <Field label="Ngày nhập kho"><input type="date" value={editAcquiredAt} onChange={(event) => setEditAcquiredAt(event.target.value)} className={inputClass} /></Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Mã lô nhập"><input value={editBatchCode} maxLength={60} onChange={(event) => setEditBatchCode(event.target.value)} className={inputClass} /></Field>
+              <Field label={currentExpiry ? "Hạn dùng (chỉ được rút ngắn)" : "Hạn dùng (để trống = không có hạn)"}><input type="date" max={currentExpiry || undefined} value={editExpiresAt} onChange={(event) => setEditExpiresAt(event.target.value)} className={inputClass} /></Field>
+            </div>
+            <Field label="Ghi chú thực trạng lúc nhập"><textarea value={editConditionNotes} maxLength={2000} onChange={(event) => setEditConditionNotes(event.target.value)} className={`${inputClass} min-h-20 py-3`} /></Field>
+            {editExtendsExpiry && (
+              <p className="rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-800">Kéo dài hoặc xoá hạn dùng cần Admin kiểm tra và đổi ở trang Kho vật tư của Admin. Bạn chỉ được giữ nguyên hoặc rút ngắn ({formatDay(currentExpiry)}).</p>
+            )}
+            {editExpiresAt && editExpiresAt <= vnToday() && (
+              <p className="rounded-lg bg-red-50 p-3 text-[10px] leading-5 text-red-800">Hạn dùng đã qua: nếu thiết bị đang ở kho, hệ thống sẽ tự chuyển sang Ngừng sử dụng trong vòng 1 giờ.</p>
+            )}
             <p className="text-[10px] leading-5 text-slate-500">API chỉ cho sửa metadata. Trạng thái, condition, QR và kho hiện tại thuộc lifecycle riêng.</p>
             <ModalActions saving={saving} onCancel={() => setShowEdit(false)} submitLabel="Lưu cập nhật" />
           </form>
@@ -836,7 +1091,18 @@ export function StaffInventory() {
       {showMaintenance && activeUnit && (
         <Modal title={activeUnit.status === "MAINTENANCE" ? "Hoàn tất bảo trì" : "Bắt đầu bảo trì"} onClose={() => setShowMaintenance(false)}>
           <form onSubmit={submitMaintenance} className="space-y-4">
-            {activeUnit.status === "MAINTENANCE" ? <Field label="Tình trạng sau bảo trì"><select value={resultingCondition} onChange={(event) => setResultingCondition(event.target.value as EquipmentCondition)} className={inputClass}>{allConditions.map((condition) => <option key={condition} value={condition}>{conditionLabel[condition]}</option>)}</select></Field> : <><Field label="Lý do"><input required value={maintenanceReason} onChange={(event) => setMaintenanceReason(event.target.value)} className={inputClass} placeholder="Ví dụ: khóa kéo bị hỏng" /></Field><Field label="Ghi chú"><textarea value={maintenanceNotes} onChange={(event) => setMaintenanceNotes(event.target.value)} className={`${inputClass} min-h-24 py-3`} /></Field></>}
+            {activeUnit.status === "MAINTENANCE" ? <><Field label="Tình trạng sau bảo trì"><select value={resultingCondition} onChange={(event) => setResultingCondition(event.target.value as EquipmentCondition)} className={inputClass}>{allConditions.map((condition) => <option key={condition} value={condition}>{conditionLabel[condition]}</option>)}</select></Field>
+              {resultingCondition !== "DAMAGED" && resultingCondition !== "LOST" ? (
+                <fieldset className="space-y-2 rounded-lg border border-slate-200 p-3 text-xs">
+                  <legend className="px-1 font-bold text-slate-700">Sau bảo trì</legend>
+                  {unitWornOut(activeUnit) ? (
+                    <p className="text-[10px] leading-4 text-amber-800">Thiết bị đã đạt ngưỡng hao mòn ({activeUnit.rentalCount}/{activeUnit.product.maxRentalCycles} lượt thuê).</p>
+                  ) : null}
+                  <label className="flex items-center gap-2"><input type="radio" name="after-maintenance" checked={!retireAfterMaintenance} onChange={() => setRetireAfterMaintenance(false)} />Dùng tiếp — về kệ cho thuê{unitWornOut(activeUnit) ? ", đếm lượt thuê lại từ 0" : ""}</label>
+                  <label className="flex items-center gap-2"><input type="radio" name="after-maintenance" checked={retireAfterMaintenance} onChange={() => setRetireAfterMaintenance(true)} />Ngừng sử dụng — không cho thuê nữa</label>
+                  {activeUnit.isExpired ? <p className="text-[10px] leading-4 text-red-700">Thiết bị đã hết hạn dùng nên sẽ chuyển Ngừng sử dụng dù chọn dùng tiếp.</p> : null}
+                </fieldset>
+              ) : null}</> : <><Field label="Lý do"><input required value={maintenanceReason} onChange={(event) => setMaintenanceReason(event.target.value)} className={inputClass} placeholder="Ví dụ: khóa kéo bị hỏng" /></Field><Field label="Ghi chú"><textarea value={maintenanceNotes} onChange={(event) => setMaintenanceNotes(event.target.value)} className={`${inputClass} min-h-24 py-3`} /></Field></>}
             <ModalActions saving={saving} onCancel={() => setShowMaintenance(false)} submitLabel={activeUnit.status === "MAINTENANCE" ? "Hoàn tất" : "Bắt đầu"} />
           </form>
         </Modal>

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { TripData } from "@/features/trips/data/mockTripsData";
+import { create } from "zustand";
+import type { TripData } from "@/features/trips/data/mockTripsData";
 import { TripDetailClient } from "@/features/trips/components/TripDetail/TripDetailClient";
 import { bookingApiService } from "@/features/bookings/services/booking.api";
 import { getTripCostPlan } from "@/features/leaders/services/leader-pricing.api";
@@ -14,40 +15,54 @@ import { apiClient } from "@/lib/axios";
 import { getPublicTripDetail } from "@/features/trips/services/public-trips.api";
 import type { PublicTripImageFields } from "@/features/trips/types/public-trip-images";
 
+type TripDetailSnapshot = {
+  viewerKey: string;
+  trip: TripData;
+  trailCode: string | null;
+};
+
+const useTripDetailStore = create<{ snapshot: TripDetailSnapshot | null }>(() => ({ snapshot: null }));
+
 export default function TripDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [trip, setTrip] = useState<TripData | null>(null);
-  const [trailCode, setTrailCode] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const viewer = useAuthStore((state) => state.accessToken ? state.user : null);
+  const viewerId = viewer?.id;
+  const viewerRole = viewer?.role;
+  const viewerKey = JSON.stringify([viewerId, viewerRole]);
+  const detailKey = JSON.stringify([id, viewerKey]);
+  const snapshot = useTripDetailStore((state) =>
+    state.snapshot && state.snapshot.trip.id === id && state.snapshot.viewerKey === viewerKey ? state.snapshot : null,
+  );
   const [attempt, setAttempt] = useState(0);
-  const refreshOnReturn = useCallback(() => setAttempt((value) => value + 1), []);
+  const requestKey = JSON.stringify([detailKey, attempt]);
+  const [failedRequest, setFailedRequest] = useState<string | null>(null);
+  const refreshOnReturn = useCallback(() => setAttempt((value) => value + 1), [setAttempt]);
   useRefreshOnReturn(refreshOnReturn);
 
   useEffect(() => {
     if (!id) return;
-    let cancelled = false;
+    const cached = useTripDetailStore.getState().snapshot;
+    if (cached && cached.viewerKey !== viewerKey) useTripDetailStore.setState({ snapshot: null });
+
     const controller = new AbortController();
+    const { signal } = controller;
 
     async function loadTripDetail() {
-      setIsLoading(true);
-      setError(null);
-
       try {
         let rawData: any = null;
-        const publicTrip = getPublicTripDetail(id, controller.signal).catch(() => null);
+        const publicTrip = getPublicTripDetail(id, signal).catch(() => null);
 
         // 1. Thử lấy từ Public Booking Discovery API (/api/v1/trips/:id)
         try {
-          rawData = await bookingApiService.getPublicTripDetail(id);
+          rawData = await bookingApiService.getPublicTripDetail(id, signal);
         } catch {
           // Bỏ qua nếu lỗi 404
         }
 
         // 2. Thử lấy từ Leader Public Trip (/api/v1/leader/public-trips/:id) nếu có quyền
-        if (!rawData) {
+        if (!rawData && viewerId && !signal.aborted) {
           try {
-            const leaderRes = await apiClient.get<any>(`/api/v1/leader/public-trips/${id}`);
+            const leaderRes = await apiClient.get<any>(`/api/v1/leader/public-trips/${id}`, { signal });
             if (leaderRes.data) {
               rawData = leaderRes.data;
             }
@@ -59,7 +74,7 @@ export default function TripDetailPage() {
           rawData = await publicTrip;
         }
 
-        if (cancelled) return;
+        if (signal.aborted) return;
         if (!rawData) throw new Error("Không thể tải thông tin chuyến đi.");
         const gallery: PublicTripImageFields = Array.isArray(rawData.images) ? rawData : (await publicTrip) ?? {};
 
@@ -68,7 +83,7 @@ export default function TripDetailPage() {
         const destId = rawData.destination?.id || rawData.destinationId;
         if (!destName && destId) {
           try {
-            const destRes = await apiClient.get<any>(`/api/v1/destinations/${destId}`);
+            const destRes = await apiClient.get<any>(`/api/v1/destinations/${destId}`, { signal });
             destName = destRes.data?.name || destRes.data?.data?.name;
           } catch {}
         }
@@ -80,6 +95,7 @@ export default function TripDetailPage() {
           try {
             const pickupRes = await apiClient.get<any>("/api/v1/leader/trip-options/pickup-points", {
               params: { destinationId: destId },
+              signal,
             });
             const pItems = pickupRes.data?.items || pickupRes.data;
             if (Array.isArray(pItems)) {
@@ -137,11 +153,9 @@ export default function TripDetailPage() {
 
         // 7.5. Lấy bảng chi phí chi tiết nếu người dùng là Leader (tránh lỗi 403 Forbidden cho trekker)
         let costItems = rawData.costItems || [];
-        let priceExplanation = rawData.priceExplanation || null;
-        const currentUser = useAuthStore.getState().user;
-        if (currentUser?.role === "LEADER") {
+        if (viewerRole === "LEADER") {
           try {
-            const planRes = await getTripCostPlan(id);
+            const planRes = await getTripCostPlan(id, signal);
             if (planRes?.plan?.items && planRes.plan.items.length > 0) {
               costItems = planRes.plan.items.map((i: any) => ({
                 id: i.id,
@@ -176,6 +190,7 @@ export default function TripDetailPage() {
           if (destinationId || routeSnapshotName) {
             try {
               const trailsRes = await apiClient.get<any>("/api/v1/system-trails", {
+                signal,
                 params: {
                   destinationId: destinationId || undefined,
                   keyword: routeSnapshotName || undefined,
@@ -195,7 +210,7 @@ export default function TripDetailPage() {
                 sysTrailCode = chosen.code || chosen.id;
               }
             } catch (err) {
-              console.warn("Không thể tra cứu System Trail từ địa danh:", err);
+              if (!signal.aborted) console.warn("Không thể tra cứu System Trail từ địa danh:", err);
             }
           }
         }
@@ -210,9 +225,8 @@ export default function TripDetailPage() {
           CANCELLED: { label: "Đã hủy chuyến", color: "text-red-600" },
         };
 
-        if (!cancelled) {
-          setTrailCode(sysTrailCode);
-          setTrip({
+        if (!signal.aborted) {
+          const trip: TripData = {
             id: rawData.id,
             title: rawData.title,
             description: rawData.description || "",
@@ -266,33 +280,33 @@ export default function TripDetailPage() {
             includedServices: rawData.includedServices || [],
             excludedServices: rawData.excludedServices || [],
             costItems: costItems.length > 0 ? costItems : (rawData.costItems || []),
-            priceExplanation: priceExplanation || rawData.priceExplanation || null,
+            priceExplanation: rawData.priceExplanation || null,
             action: {
               label: remainingSlots > 0 && rawData.status === "OPEN" ? "Đặt chỗ ngay" : "Đóng đăng ký",
               variant: remainingSlots > 0 && rawData.status === "OPEN" ? "primary" : "disabled",
             },
-          });
+          };
+          useTripDetailStore.setState({ snapshot: { trip, trailCode: sysTrailCode, viewerKey } });
         }
       } catch (err) {
+        if (signal.aborted) return;
         console.error("Lỗi tải chi tiết chuyến đi:", err);
-        if (!cancelled) {
-          setError("Không thể tải thông tin chuyến đi.");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+        setFailedRequest(requestKey);
+        useTripDetailStore.setState((state) =>
+          state.snapshot && state.snapshot.trip.id === id && state.snapshot.viewerKey === viewerKey ? { snapshot: null } : state,
+        );
       }
     }
 
     loadTripDetail();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [id, attempt]);
+    return () => controller.abort();
+  }, [id, requestKey, viewerId, viewerKey, viewerRole]);
 
-  if (isLoading) {
+  if (snapshot) {
+    return <TripDetailClient key={detailKey} trip={snapshot.trip} trailCode={snapshot.trailCode} />;
+  }
+
+  if (failedRequest !== requestKey) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6 bg-[#F7F7F4]">
         <LoadingState message="Đang tải chi tiết chuyến đi..." />
@@ -300,11 +314,7 @@ export default function TripDetailPage() {
     );
   }
 
-  if (error || !trip) {
-    return (
-      <PageShell maxWidth="md"><PageHeader title="Thông tin chuyến đi" /><UnavailableBookingTrip key={id} tripId={id} onReload={refreshOnReturn} /></PageShell>
-    );
-  }
-
-  return <TripDetailClient trip={trip} trailCode={trailCode} />;
+  return (
+    <PageShell maxWidth="md"><PageHeader title="Thông tin chuyến đi" /><UnavailableBookingTrip key={id} tripId={id} onReload={refreshOnReturn} /></PageShell>
+  );
 }

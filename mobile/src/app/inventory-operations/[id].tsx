@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
+import { ApiError } from "@/lib/api-client";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import {
@@ -124,9 +125,10 @@ export default function InventoryTaskDetailScreen() {
       await load();
     } catch (requestError) {
       setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Thao tác chưa thể hoàn tất.",
+        pickReasonMessage(requestError) ??
+          (requestError instanceof Error
+            ? requestError.message
+            : "Thao tác chưa thể hoàn tất."),
       );
     } finally {
       setBusy(null);
@@ -285,6 +287,7 @@ export default function InventoryTaskDetailScreen() {
                       <Text style={styles.rowTitle}>Mã {shortAssetCode(candidate.assetCode)}</Text>
                       <Text style={styles.rowMeta}>
                         {CONDITION_LABEL[candidate.condition] ?? candidate.condition} · {candidate.location || "Chưa có vị trí"}
+                        {candidate.expiresAt ? ` · HSD ${candidate.expiresAt.split("-").reverse().join("/")}` : ""}
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -579,3 +582,16 @@ const styles = StyleSheet.create({
   },
   successTitle: { color: Colors.primaryDark, fontSize: 15, fontWeight: "600" },
 });
+
+/** Lý do chi tiết backend gửi khi pick / đổi thiết bị bị từ chối. */
+function pickReasonMessage(error: unknown): string | null {
+  if (!(error instanceof ApiError) || !error.details || typeof error.details !== "object") return null;
+  const details = error.details as { reason?: unknown; expiresAt?: unknown; assetCode?: unknown };
+  if (details.reason !== "EXPIRES_BEFORE_RETURN") return null;
+  const day =
+    typeof details.expiresAt === "string" && /^\d{4}-\d{2}-\d{2}/.test(details.expiresAt)
+      ? details.expiresAt.slice(0, 10).split("-").reverse().join("/")
+      : null;
+  const code = typeof details.assetCode === "string" ? `${details.assetCode} ` : "";
+  return `Thiết bị ${code}hết hạn dùng${day ? ` ngày ${day}` : ""}, trước hạn khách trả đồ. Hãy chọn thiết bị khác.`;
+}

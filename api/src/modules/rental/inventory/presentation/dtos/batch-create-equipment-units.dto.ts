@@ -12,6 +12,10 @@ export const BatchCreateEquipmentUnitsSchema = z.object({
   assetCodes: z.array(z.string().trim().min(1).max(100)).optional(),
   condition: EquipmentConditionEnum.default('GOOD'),
   acquiredAt: dateOnlySchema.optional(),
+  // Lô nhập, hạn dùng (YYYY-MM-DD) và ghi chú thực trạng lúc nhập.
+  batchCode: z.string().trim().min(1).max(60).optional(),
+  expiresAt: dateOnlySchema.optional(),
+  conditionNotes: z.string().trim().min(1).max(2000).optional(),
 }).strict().refine(data => {
   if (data.assetCodeMode === 'PROVIDED') {
     if (!data.assetCodes || data.assetCodes.length !== data.quantity) return false;

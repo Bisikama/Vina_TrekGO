@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import type { RentalAvailabilityQuery } from '../../application/ports/rental-availability.port';
 import { calculateSafeCapacity } from '../../application/services/capacity-safety-gate';
+import { vnCalendarDate } from '../../../inventory/application/services/equipment-lifecycle.rules';
 
 /** Read under the caller's existing product-level DB lock for mutation paths. */
 export async function getVerifiedCapacitySnapshot(
@@ -28,6 +29,9 @@ export async function getVerifiedCapacitySnapshot(
         condition: {
           notIn: [EquipmentCondition.DAMAGED, EquipmentCondition.LOST],
         },
+        // Shelf life: a unit that expires before the occupied window ends cannot serve it.
+        // `expiresAt` is a Vietnam calendar date, so compare with the VN day the window ends on.
+        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: vnCalendarDate(q.occupiedUntil) } }] }],
         ...(q.inventoryLocationId
           ? {
               OR: [

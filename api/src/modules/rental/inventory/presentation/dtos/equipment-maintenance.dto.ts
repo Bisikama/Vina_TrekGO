@@ -11,8 +11,13 @@ const startSchema = z.object({
 const completeSchema = z.object({
   action: z.literal('COMPLETE'),
   resultingCondition: z.enum(['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST']),
+  // true = Ngừng sử dụng (RETIRED) thay vì đưa về kệ, vd món đạt ngưỡng hao mòn không nên cho thuê tiếp.
+  retire: z.boolean().optional(),
   expectedVersion: z.number().int().positive(),
-}).strict();
+}).strict().refine((body) => !body.retire || !['DAMAGED', 'LOST'].includes(body.resultingCondition), {
+  message: 'retire chỉ dùng với NEW/GOOD/FAIR (DAMAGED/LOST đã có trạng thái riêng)',
+  path: ['retire'],
+});
 
 export const ChangeEquipmentMaintenanceSchema = z.discriminatedUnion('action', [
   startSchema,

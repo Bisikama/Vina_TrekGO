@@ -1,7 +1,5 @@
-import { AdminCashflowPage } from '@/features/payments/components/AdminCashflowPage';
-
-export const metadata = { title: 'Dòng tiền & giao dịch | Vina TrekGO' };
+import { redirect } from 'next/navigation';
 
 export default function CashflowPage() {
-  return <AdminCashflowPage />;
+  redirect('/admin');
 }

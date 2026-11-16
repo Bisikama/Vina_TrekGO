@@ -102,6 +102,26 @@ function mapStaffProduct(product: ApiRentalProduct): RentalProduct {
   };
 }
 
+function formatDay(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
+/** Lý do chi tiết backend gửi trong `error.details` (pick, đổi món, nhập thiết bị). */
+function inventoryReasonMessage(details: unknown): string | null {
+  if (!isRecord(details)) return null;
+  if (details.reason === "EXPIRES_BEFORE_RETURN") {
+    const day = formatDay(details.expiresAt);
+    const code = typeof details.assetCode === "string" ? `${details.assetCode} ` : "";
+    return `Thiết bị ${code}hết hạn dùng${day ? ` ngày ${day}` : ""}, trước hạn khách trả đồ. Hãy chọn thiết bị khác.`;
+  }
+  if (details.field === "expiresAt" && typeof details.message === "string") {
+    return details.message;
+  }
+  return null;
+}
+
 export function getStaffInventoryErrorMessage(
   error: unknown,
   fallback = "Không thể kết nối tới API kho thiết bị.",
@@ -111,6 +131,11 @@ export function getStaffInventoryErrorMessage(
 
     if (isRecord(responseData)) {
       const apiError = responseData.error;
+
+      if (isRecord(apiError)) {
+        const reasonMessage = inventoryReasonMessage(apiError.details);
+        if (reasonMessage) return reasonMessage;
+      }
 
       if (isRecord(apiError) && typeof apiError.message === "string") {
         return apiError.message;
@@ -210,6 +235,8 @@ export async function getEquipmentUnits(
         condition: options?.condition || undefined,
         inventoryLocationId: options?.inventoryLocationId || undefined,
         q: options?.q?.trim() || undefined,
+        batchCode: options?.batchCode?.trim() || undefined,
+        expiringBefore: options?.expiringBefore || undefined,
       },
       signal: options?.signal,
     },

@@ -22,6 +22,7 @@ import { AppError } from 'src/shared/errors/app-error';
 import { PREPARATION_ERROR_CODES as PR, WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location';
 import { preparationTaskPriority } from '../../domain/preparation-task-priority';
+import { isUnitExpired, vnCalendarDate } from '../../../inventory/application/services/equipment-lifecycle.rules';
 import type {
   ClaimPreparationTaskCommand,
   ClaimPreparationTaskResult,
@@ -260,6 +261,14 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           ) {
             throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, {
               details: { assetCode, physicalStatus: unit.status, condition: unit.condition, reason: 'UNAVAILABLE_OR_WRONG_LOCATION' },
+            });
+          }
+
+          // Shelf life: the unit must outlast the rental it is picked for.
+          // `expiresAt` is a Vietnam calendar date: compare it with the VN day of the return deadline.
+          if (unit.expiresAt && isUnitExpired(unit.expiresAt, order.rentalEndAt)) {
+            throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, {
+              details: { assetCode, reason: 'EXPIRES_BEFORE_RETURN', expiresAt: unit.expiresAt.toISOString().slice(0, 10) },
             });
           }
 
@@ -690,6 +699,18 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
         ) {
           throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, { details: { newUnitId: command.newUnitId, reason: 'NOT_VALID_REPLACEMENT' } });
         }
+        if (newLocked.expiresAt) {
+          const rental = await tx.rentalOrder.findUnique({ where: { id: task.orderId }, select: { rentalEndAt: true } });
+          if (rental && isUnitExpired(newLocked.expiresAt, rental.rentalEndAt)) {
+            throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, {
+              details: {
+                newUnitId: command.newUnitId,
+                reason: 'EXPIRES_BEFORE_RETURN',
+                expiresAt: newLocked.expiresAt.toISOString().slice(0, 10),
+              },
+            });
+          }
+        }
         const newActiveAssignment = await tx.rentalUnitAssignment.findFirst({
           where: { equipmentUnitId: newLocked.id, status: { in: ACTIVE_ASSIGNMENT_STATUSES } },
           select: { id: true },
@@ -919,6 +940,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
       include: { orderLine: true },
     });
     if (!assignment) throw AppError.fromCode(WH.ASSIGNMENT_NOT_FOUND);
+    const order = await this.prisma.rentalOrder.findUnique({ where: { id: task.orderId }, select: { rentalEndAt: true } });
 
     return this.findCandidates({
       page: query.page,
@@ -926,6 +948,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
       productId: assignment.orderLine.productId,
       inventoryLocationId: task.inventoryLocationId,
       excludeUnitId: query.oldUnitId,
+      mustOutlast: order?.rentalEndAt,
     });
   }
 
@@ -969,6 +992,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
       productIds,
       inventoryLocationId: task.inventoryLocationId,
       q: query.q,
+      mustOutlast: task.order.rentalEndAt,
     });
   }
 
@@ -980,6 +1004,8 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
     inventoryLocationId: string;
     excludeUnitId?: string;
     q?: string;
+    /** Same rule as pick/replace: a unit expiring by the return deadline is not offered. */
+    mustOutlast?: Date;
   }): Promise<PaginatedPreparationCandidatesResult> {
     const where: Prisma.EquipmentUnitWhereInput = {
       productId: input.productId ?? (input.productIds ? { in: input.productIds } : undefined),
@@ -988,6 +1014,9 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
       condition: { in: SAFE_PICK_CONDITIONS },
       id: input.excludeUnitId ? { not: input.excludeUnitId } : undefined,
       rentalUnitAssignmentsViaEquipmentUnitId: { none: { status: { in: ACTIVE_ASSIGNMENT_STATUSES } } },
+      AND: input.mustOutlast
+        ? [{ OR: [{ expiresAt: null }, { expiresAt: { gt: vnCalendarDate(input.mustOutlast) } }] }]
+        : undefined,
       OR: input.q
         ? [
             { assetCode: { contains: input.q, mode: 'insensitive' } },
@@ -1001,7 +1030,8 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
         where,
         skip,
         take: input.pageSize,
-        orderBy: [{ productId: 'asc' }, { assetCode: 'asc' }],
+        // Hết hạn trước, xuất trước: món sắp hết hạn (vẫn còn dùng hết đơn này) được gợi ý lên đầu.
+        orderBy: [{ productId: 'asc' }, { expiresAt: { sort: 'asc', nulls: 'last' } }, { assetCode: 'asc' }],
         include: { currentInventoryLocation: { select: { id: true, name: true } } },
       }),
       this.prisma.equipmentUnit.count({ where }),
@@ -1172,6 +1202,7 @@ function mapCandidateView(unit: {
   condition: unknown;
   status: unknown;
   expectedReadyAt: Date | null;
+  expiresAt?: Date | null;
   version: number;
   currentInventoryLocation: { id: string; name: string } | null;
 }): PreparationCandidateView {
@@ -1183,6 +1214,7 @@ function mapCandidateView(unit: {
     physicalStatus: String(unit.status),
     location: unit.currentInventoryLocation?.name ?? null,
     expectedReadyAt: unit.expectedReadyAt?.toISOString() ?? null,
+    expiresAt: unit.expiresAt ? unit.expiresAt.toISOString().slice(0, 10) : null,
     version: unit.version,
     custodian: unit.currentInventoryLocation
       ? { type: 'INVENTORY_LOCATION', id: unit.currentInventoryLocation.id, displayName: unit.currentInventoryLocation.name }

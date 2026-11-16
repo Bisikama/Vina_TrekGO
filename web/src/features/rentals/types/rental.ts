@@ -99,6 +99,8 @@ export type RentalProduct = {
   imageUrls: string[];
   spec: Record<string, unknown>;
   recommendationTags?: string[];
+  /** Ngưỡng hao mòn (số lượt thuê). Unit đạt ngưỡng tự chuyển bảo trì khi kho đưa về; null = không giới hạn. */
+  maxRentalCycles?: number | null;
 };
 
 export type RentalAvailability = {
@@ -283,6 +285,8 @@ export type CreateStaffRentalProductInput = {
   spec?: Record<string, unknown>;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
+  /** Ngưỡng hao mòn (số lượt thuê); bỏ trống = không giới hạn. */
+  maxRentalCycles?: number | null;
   /** Chỉ ADMIN. Có grade, không gradeGroupId = mở nhóm hạng mới; có gradeGroupId = vào nhóm sẵn có. Hạng bắt buộc cọc FIXED. */
   grade?: RentalGrade;
   gradeGroupId?: string;
@@ -303,6 +307,8 @@ export type UpdateStaffRentalProductInput = {
   spec?: Record<string, unknown>;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
+  /** null = bỏ ngưỡng hao mòn. */
+  maxRentalCycles?: number | null;
 };
 
 export type ChangeStaffRentalProductStatusInput = {
@@ -343,6 +349,8 @@ export type EquipmentUnit = {
     id: string;
     sku: string;
     name: string;
+    /** Ngưỡng hao mòn của sản phẩm; null = không giới hạn. */
+    maxRentalCycles?: number | null;
   };
   homeInventoryLocation: {
     id: string;
@@ -359,6 +367,17 @@ export type EquipmentUnit = {
   expectedReadyAt: string | null;
   acquiredAt: string | null;
   retiredAt: string | null;
+  /** Mã lô nhập (các unit nhập cùng đợt dùng chung). */
+  intakeBatchCode?: string | null;
+  /** Hạn dùng YYYY-MM-DD: từ ngày này unit không còn được cho thuê (hệ thống tự chuyển Ngừng sử dụng). */
+  expiresAt?: string | null;
+  isExpired?: boolean;
+  /** Ghi chú thực trạng riêng của unit lúc nhập. */
+  conditionNotes?: string | null;
+  /** Số lượt thuê đã hoàn tất. */
+  rentalCount?: number;
+  /** rentalCount / maxRentalCycles (0–100); null khi sản phẩm không đặt ngưỡng. */
+  wearPercent?: number | null;
   version: number;
 };
 
@@ -374,6 +393,8 @@ export type EquipmentUnitCounts = {
   damaged: number;
   lost: number;
   retired: number;
+  /** Món còn cho thuê (không mất / ngừng dùng) đã hoặc sẽ hết hạn dùng trong 30 ngày, tính trên toàn kho. */
+  expiringSoon?: number;
 };
 
 export type EquipmentUnitHistoryEvent = {
@@ -403,6 +424,9 @@ export type ListEquipmentUnitsOptions = {
   condition?: EquipmentCondition;
   inventoryLocationId?: string;
   q?: string;
+  batchCode?: string;
+  /** YYYY-MM-DD: chỉ lấy unit có hạn dùng trước hoặc đúng ngày này. */
+  expiringBefore?: string;
   signal?: AbortSignal;
 };
 
@@ -413,6 +437,10 @@ export type CreateEquipmentUnitInput = {
   serialNumber?: string;
   condition?: "NEW" | "GOOD" | "FAIR";
   acquiredAt?: string;
+  batchCode?: string;
+  /** YYYY-MM-DD, phải sau hôm nay. */
+  expiresAt?: string;
+  conditionNotes?: string;
 };
 
 export type BatchCreateEquipmentUnitsInput = {
@@ -423,6 +451,10 @@ export type BatchCreateEquipmentUnitsInput = {
   assetCodes?: string[];
   condition?: "NEW" | "GOOD" | "FAIR";
   acquiredAt?: string;
+  batchCode?: string;
+  /** YYYY-MM-DD, phải sau hôm nay. */
+  expiresAt?: string;
+  conditionNotes?: string;
 };
 
 export type UpdateEquipmentUnitInput = {
@@ -430,6 +462,9 @@ export type UpdateEquipmentUnitInput = {
   homeInventoryLocationId?: string;
   serialNumber?: string | null;
   acquiredAt?: string | null;
+  batchCode?: string | null;
+  expiresAt?: string | null;
+  conditionNotes?: string | null;
 };
 
 export type ChangeEquipmentMaintenanceInput =
@@ -442,6 +477,8 @@ export type ChangeEquipmentMaintenanceInput =
   | {
       action: "COMPLETE";
       resultingCondition: EquipmentCondition;
+      /** true = Ngừng sử dụng thay vì về kệ (chỉ với NEW/GOOD/FAIR). */
+      retire?: boolean;
       expectedVersion: number;
     };
 

@@ -322,6 +322,7 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
         ? product.recommendationTags
         : [],
       requiresDeepInspectionAfterReturn: Boolean(product.requiresDeepReturnInspection),
+      maxRentalCycles: product.maxRentalCycles ?? null,
       gradeGroupId: product.gradeGroupId ?? null,
       grade: product.grade ?? null,
     };
@@ -493,6 +494,21 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
     });
   }
 
+  /** Ngưỡng hao mòn bằng nhau trong cả nhóm hạng (món hạ hạng mang theo số lượt thuê). */
+  private async syncGroupMaxRentalCycles(
+    tx: Prisma.TransactionClient,
+    gradeGroupId: string | null,
+    exceptId: string,
+    maxRentalCycles: number | null,
+  ): Promise<void> {
+    if (!gradeGroupId) return;
+    await tx.rentalProduct.updateMany({
+      // So sánh bằng `NOT` bỏ sót hàng NULL trong SQL, nên cập nhật mọi sản phẩm còn lại của nhóm.
+      where: { gradeGroupId, id: { not: exceptId } },
+      data: { maxRentalCycles, version: { increment: 1 } },
+    });
+  }
+
   /** replacementValue bằng nhau trong cả nhóm hạng: đổi một bên thì các bên còn lại đổi theo. */
   private async syncGroupReplacementValue(
     tx: Prisma.TransactionClient,
@@ -643,6 +659,10 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
               ? params.recommendationTags
               : undefined,
             requiresDeepReturnInspection: params.requiresDeepInspectionAfterReturn ?? false,
+            // Ngưỡng hao mòn theo món vật lý (lượt thuê giữ nguyên khi hạ hạng) nên dùng chung cả nhóm hạng:
+            // không gửi thì lấy theo nhóm.
+            maxRentalCycles:
+              params.maxRentalCycles !== undefined ? params.maxRentalCycles : (siblings[0]?.maxRentalCycles ?? null),
             gradeGroupId,
             grade: params.grade ?? null,
             status: isAdmin ? RentalProductStatus.ACTIVE : RentalProductStatus.INACTIVE,
@@ -654,6 +674,9 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
         await this.recordPriceHistory(tx, created, params.actorUserId, now, 'CREATE');
         if (isAdmin && siblings.length > 0) {
           await this.syncGroupReplacementValue(tx, siblings, created.replacementValue, params.actorUserId, now);
+        }
+        if (siblings.length > 0 && params.maxRentalCycles !== undefined) {
+          await this.syncGroupMaxRentalCycles(tx, created.gradeGroupId, created.id, created.maxRentalCycles);
         }
         if (gradeGroupId) {
           await this.assertGroupPriceOrder(tx, gradeGroupId);
@@ -715,6 +738,7 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
     if (params.requiresDeepInspectionAfterReturn !== undefined) {
       dataToUpdate.requiresDeepReturnInspection = params.requiresDeepInspectionAfterReturn;
     }
+    if (params.maxRentalCycles !== undefined) dataToUpdate.maxRentalCycles = params.maxRentalCycles;
 
     await this.prisma.$transaction(async (tx) => {
       await this.lockProductAndGroup(tx, params.id);
@@ -756,6 +780,10 @@ export class PrismaRentalProductAdapter implements RentalProductPort {
         throw AppError.fromCode(RENTAL_ERROR_CODES.RENTAL_PRODUCT_NOT_FOUND, {
           details: { id: params.id },
         });
+      }
+
+      if (after.gradeGroupId && after.maxRentalCycles !== current.maxRentalCycles) {
+        await this.syncGroupMaxRentalCycles(tx, after.gradeGroupId, after.id, after.maxRentalCycles);
       }
 
       const replacementChanged = !new Prisma.Decimal(after.replacementValue).equals(current.replacementValue);

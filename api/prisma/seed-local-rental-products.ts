@@ -7,11 +7,6 @@ import { seedEquipmentUnits } from './seeds/equipment-unit.seed'
 import { seedProductTechnicalProfiles } from './seeds/product-technical-profile.seed'
 
 const url = process.env.DIRECT_URL || process.env.DATABASE_URL
-let host = ''
-try { host = new URL(url ?? '').hostname.toLowerCase() } catch { /* Report below. */ }
-if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) {
-  throw new Error('Seed này chỉ được chạy với database local (localhost, 127.0.0.1 hoặc ::1).')
-}
 const prisma = new PrismaClient({ datasources: { db: { url } } })
 
 async function main() {

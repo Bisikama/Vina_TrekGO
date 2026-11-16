@@ -14,6 +14,8 @@ export const UpdateRentalProductSchema = z.object({
   spec: z.any().optional(),
   recommendationTags: z.array(z.string()).optional(),
   requiresDeepInspectionAfterReturn: z.boolean().optional(),
+  // Ngưỡng hao mòn (số lượt thuê); null = bỏ ngưỡng.
+  maxRentalCycles: z.number().int().min(1).max(100000).nullable().optional(),
   expectedVersion: z.number().int().min(1),
 });
 

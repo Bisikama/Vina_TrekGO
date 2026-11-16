@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateOnlySchema } from '../../../../../shared/utils/zod-date.util';
 import { EquipmentUnitStatusValue, EquipmentConditionValue } from '../../application/ports/equipment-unit.port';
 
 const EquipmentUnitStatusEnum = z.enum([
@@ -17,6 +18,8 @@ export const ListEquipmentUnitsSchema = z.object({
   condition: EquipmentConditionEnum.optional(),
   inventoryLocationId: z.string().uuid().optional(),
   q: z.string().optional(),
+  batchCode: z.string().trim().min(1).max(60).optional(),
+  expiringBefore: dateOnlySchema.optional(),
 });
 
 export type ListEquipmentUnitsDto = z.infer<typeof ListEquipmentUnitsSchema>;

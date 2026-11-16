@@ -92,6 +92,8 @@ export type PreparationCandidate = {
   condition: PreparationUnit["condition"];
   physicalStatus: string;
   location: string | null;
+  /** Hạn dùng YYYY-MM-DD; server đã xếp món hết hạn sớm lên trước. */
+  expiresAt?: string | null;
 };
 
 export type RentalDeliveryAssignee = {

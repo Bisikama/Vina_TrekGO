@@ -73,7 +73,9 @@ export function DeductionReviewCard({
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
+  const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
   const reviewKey = useRef<string | null>(null);
+  const acceptKey = useRef<string | null>(null);
   const uploadedIds = useRef<Map<string, string>>(new Map());
   const expiredRefetched = useRef(false);
 
@@ -145,6 +147,38 @@ export function DeductionReviewCard({
     }
   }
 
+  async function acceptDeduction() {
+    if (!accessToken || !assessmentId) return;
+    setBusy("accept");
+    setError(undefined);
+    try {
+      if (!acceptKey.current) acceptKey.current = newIdempotencyKey("assessment-accept");
+      const result = await deductionReviewApi.acceptDeduction(orderId, assessmentId, acceptKey.current, accessToken);
+      acceptKey.current = null;
+      setAcceptConfirmOpen(false);
+      setNotice(
+        result.settlementStatus === "SETTLED"
+          ? result.settlement && result.settlement.refundAmount > 0
+            ? `Đã đồng ý khoản trừ. Phần cọc còn lại ${money(result.settlement.refundAmount, currency)} đang được hoàn cho bạn.`
+            : "Đã đồng ý khoản trừ. Khoản cọc đã được quyết toán."
+          : "Đã đồng ý khoản trừ. Hệ thống sẽ quyết toán cọc trong ít phút.",
+      );
+      await onChanged();
+    } catch (acceptError) {
+      if (isUnknownOutcome(acceptError)) {
+        // Giữ nguyên key: bấm lại sẽ retry đúng yêu cầu cũ.
+        setError("Mất kết nối khi gửi. Bấm “Xác nhận đồng ý” lần nữa để thử lại an toàn.");
+        return;
+      }
+      acceptKey.current = null;
+      setAcceptConfirmOpen(false);
+      setError(messageOf(acceptError, "Không gửi được đồng ý."));
+      await onChanged();
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   async function pickFiles() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -210,6 +244,8 @@ export function DeductionReviewCard({
   }
 
   const status = (() => {
+    if (item.deductionAcceptedAt)
+      return { warn: false, text: `Bạn đã đồng ý khoản trừ lúc ${dateTime(item.deductionAcceptedAt)}. Phần cọc còn lại được quyết toán theo trạng thái ở trên.` };
     if (item.reviewStatus === "SUBMITTED")
       return { warn: true, text: "Bạn đã gửi phản đối. Admin đang xem xét, khoản cọc được giữ tới khi có kết quả." };
     if (item.reviewStatus === "RESOLVED")
@@ -217,7 +253,7 @@ export function DeductionReviewCard({
     if (item.canSubmitReview && item.reviewWindowEndsAt)
       return {
         warn: false,
-        text: `${remainingText(item.reviewWindowEndsAt, now)} để phản đối · hạn ${dateTime(item.reviewWindowEndsAt)}. Hết hạn mà không phản đối, khoản trừ sẽ được quyết toán.`,
+        text: `${remainingText(item.reviewWindowEndsAt, now)} để phản đối · hạn ${dateTime(item.reviewWindowEndsAt)}. Hết hạn mà không phản đối, khoản trừ sẽ được quyết toán. Nếu bạn đồng ý, có thể bấm “Đồng ý khoản trừ” để quyết toán ngay.`,
       };
     if (reasonCode === "EVIDENCE_ACCESS_INTERRUPTED" && item.evidenceAccessCustomerConfirmationRequired)
       return { warn: true, text: "Bạn đã báo không xem được chứng cứ. Hãy mở lại chứng cứ; nếu xem được, bấm “Tôi đã xem được chứng cứ”." };
@@ -243,7 +279,19 @@ export function DeductionReviewCard({
             <Text style={styles.secondaryText}>{evidenceOpen ? "Ẩn chứng cứ" : "Xem chứng cứ"}</Text>
           </TouchableOpacity>
         ) : null}
-        {item.canSubmitReview && !formOpen ? (
+        {item.canAcceptDeduction && !formOpen && !acceptConfirmOpen ? (
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => {
+              setAcceptConfirmOpen(true);
+              setNotice(undefined);
+              setError(undefined);
+            }}
+          >
+            <Text style={styles.primaryText}>Đồng ý khoản trừ</Text>
+          </TouchableOpacity>
+        ) : null}
+        {item.canSubmitReview && !formOpen && !acceptConfirmOpen ? (
           <TouchableOpacity
             style={styles.dangerButton}
             onPress={() => {
@@ -303,6 +351,31 @@ export function DeductionReviewCard({
               ) : null}
             </>
           )}
+        </View>
+      ) : null}
+
+      {acceptConfirmOpen ? (
+        <View style={styles.box}>
+          <Text style={styles.confirmText}>
+            Bạn đồng ý để TrekGo trừ <Text style={styles.bold}>{money(approved, currency)}</Text> vào tiền cọc của thiết bị này?
+            Khoản cọc sẽ được quyết toán ngay và <Text style={styles.bold}>bạn sẽ không thể phản đối khoản trừ này nữa</Text>.
+          </Text>
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.primaryButton, busy === "accept" && styles.disabled]}
+              disabled={busy === "accept"}
+              onPress={() => void acceptDeduction()}
+            >
+              <Text style={styles.primaryText}>{busy === "accept" ? "Đang gửi..." : "Xác nhận đồng ý"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              disabled={busy === "accept"}
+              onPress={() => setAcceptConfirmOpen(false)}
+            >
+              <Text style={styles.secondaryText}>Huỷ</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : null}
 
@@ -389,6 +462,8 @@ const styles = StyleSheet.create({
   muted: { marginTop: 6, color: Colors.onSurfaceVariant, fontSize: 13 },
   warnText: { marginTop: 6, color: "#7A4B00", fontSize: 13 },
   label: { color: Colors.onSurface, fontSize: 14, fontWeight: "700" },
+  confirmText: { color: Colors.onSurface, fontSize: 13, lineHeight: 20 },
+  bold: { fontWeight: "700" },
   input: { marginTop: 6, minHeight: 90, padding: 10, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.surfaceContainerHighest, color: Colors.onSurface, fontSize: 14, textAlignVertical: "top" },
   counter: { marginTop: 2, color: Colors.onSurfaceMuted, fontSize: 11, textAlign: "right" },
   fileRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },

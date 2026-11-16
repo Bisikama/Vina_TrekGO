@@ -18,8 +18,81 @@ export type StaffReturnSummary = {
   normalCount: number;
   issueCount: number;
   missingCount: number;
+  /** Số món giao hàng báo có vấn đề khi nhận từ khách. */
+  deliveryReportedIssueCount?: number;
+  /** Số lỗi nhân viên giao ghi lúc GIAO đồ cho khách (biên bản bàn giao). */
+  handoverReportedIssueCount?: number;
+  /** Số món đã vào kho nhưng chưa kiểm định cuối. */
+  pendingInspectionCount?: number;
   scheduledAt: string | null;
   version: number;
+};
+
+/** Giai đoạn của từng thiết bị theo góc nhìn kho (backend tính, RB-API-614 `units[].stage`). */
+export type ReturnUnitStage =
+  | "MISSING"
+  | "AWAITING_RECEIPT"
+  | "AWAITING_FINAL_INSPECTION"
+  | "AWAITING_ADMIN"
+  | "WAITING_CLEANING"
+  | "READY"
+  | "CLOSED_DAMAGED"
+  | "CLOSED_LOST";
+
+/** Một dòng "lỗi ghi nhận khi giao" trong biên bản bàn giao (RB-API-404). */
+export type HandoverReportedIssue = { type: string; description: string };
+
+export type StaffReturnUnit = {
+  unitId: string;
+  assetCode: string | null;
+  productId: string | null;
+  productName: string | null;
+  assignmentStatus: string;
+  unitStatus: string | null;
+  unitCondition: string | null;
+  unitVersion: number | null;
+  /** Hạn dùng YYYY-MM-DD; `unitExpired` = món sẽ chuyển Ngừng sử dụng khi đưa ra, không cần phân hạng. */
+  unitExpiresAt?: string | null;
+  unitExpired?: boolean;
+  stage: ReturnUnitStage;
+  /** Bắt buộc ít nhất 1 ảnh khi kiểm định cuối (đúng quy tắc backend RB-API-605). */
+  evidenceRequired: boolean;
+  requiresDeepInspection: boolean;
+  returnedAt: string | null;
+  inventoryReceivedAt: string | null;
+  inspectionDueAt: string | null;
+  deliveryObservation: {
+    outcome: "NORMAL" | "ISSUE" | string;
+    /** null: ghi nhận cũ, trước khi backend lưu chi tiết này. */
+    visibleDamage: boolean | null;
+    accessoryObservations: string[];
+    notes: string | null;
+    evidenceIds: string[];
+    observedAt: string | null;
+  } | null;
+  handoverBaseline: {
+    condition: string;
+    accessories: unknown;
+    notes: string | null;
+    evidenceIds: string[];
+  } | null;
+  /** Lỗi nhân viên giao ghi lúc GIAO món này cho khách: có từ trước kỳ thuê, không được trừ cọc. */
+  handoverReportedIssues?: HandoverReportedIssue[];
+  finalInspection: ReturnInspection | null;
+  deposit: { status: string; depositAmount: number; deductionAmount: number; refundAmount: number } | null;
+  exceptionCase: { id: string; caseType: string; status: string; reason: string } | null;
+};
+
+export type StaffReturnSummaryCounts = {
+  totalUnits: number;
+  queueStatus: ReturnQueueStatus;
+  deliveryReportedIssueCount: number;
+  handoverReportedIssueCount?: number;
+  /** Lỗi ghi lúc giao nhưng không gắn với món cụ thể. */
+  handoverOrderLevelIssues?: HandoverReportedIssue[];
+  handedOverAt?: string | null;
+  evidenceRequiredPendingCount: number;
+  stageCounts: Record<ReturnUnitStage, number>;
 };
 
 export type ReturnInspection = {
@@ -76,6 +149,9 @@ export type StaffReturnDetail = {
     accessories: unknown;
     evidenceIds: string[];
   }[];
+  /** Thông tin gom sẵn cho từng thiết bị (backend mới). */
+  units?: StaffReturnUnit[];
+  summary?: StaffReturnSummaryCounts;
 };
 
 export type DamageAssessmentRule = {
@@ -109,6 +185,7 @@ function key(prefix: string, entityId: string, version: number) {
 
 /** Lý do chi tiết (`error.details.reason`) mà backend gửi kèm các mã lỗi chung như INVALID_RETURN_STATE. */
 const returnReasonMessages: Record<string, string> = {
+  APPROVED_DEDUCTION_ABOVE_PROPOSAL: "Mức khấu trừ không được cao hơn mức đề xuất từ kiểm định.",
   USER_48H_REVIEW_WINDOW_NOT_CLOSED: "Chưa hết thời hạn khách phản hồi khoản trừ (48 giờ kể từ khi công bố chứng cứ).",
   USER_DISPUTE_MUST_BE_RESOLVED: "Khách đang khiếu nại khoản trừ; cần xử lý xong khiếu nại trước khi quyết toán.",
   EVIDENCE_ACCESS_INTERRUPTED: "Khách đang không xem được chứng cứ; thời hạn phản hồi tạm dừng tới khi khôi phục.",
@@ -121,15 +198,44 @@ const returnReasonMessages: Record<string, string> = {
   EVIDENCE_NOT_READY_OR_FOREIGN: "Ảnh bằng chứng chưa tải xong hoặc không phải ảnh bạn tải lên. Hãy tải lại ảnh.",
   PASS_CONFLICTS_WITH_DAMAGE: "Thiết bị đã chọn hư hỏng thì không thể đánh dấu đạt.",
   PHYSICALLY_RECEIVED_UNIT_CANNOT_BE_LOST: "Thiết bị đã nhận vào kho nên không thể ghi là thất lạc.",
+  DAMAGE_EVIDENCE_REQUIRED: "Thiết bị ghi hư hỏng phải có ít nhất 1 ảnh bằng chứng.",
+  FINAL_OUTCOME_MISMATCH: "Kết quả chốt không khớp với kết quả kiểm định cuối của thiết bị.",
+  DEDUCTION_ALREADY_ACCEPTED: "Khách đã đồng ý khoản trừ; hệ thống đang quyết toán cọc.",
+  RETRY_REFUND_ONLY_FOR_REFUND_FAILURE: "Chỉ hồ sơ hoàn tiền thất bại mới có thể gửi lại lệnh hoàn tiền.",
+  REFUND_NOT_FAILED: "Giao dịch hoàn tiền vẫn đang xử lý tại cổng thanh toán, chưa thể tạo lệnh hoàn lại.",
+  NO_FAILED_DEPOSIT_ITEM: "Không còn khoản hoàn cọc lỗi nào cần gửi lại.",
 };
 
 export function getStaffReturnErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as
-      | { message?: string; error?: { message?: string; code?: string; details?: { reason?: unknown } } }
+      | {
+          message?: string;
+          error?: {
+            message?: string;
+            code?: string;
+            details?: { reason?: unknown; earliestAt?: unknown; maximum?: unknown };
+          };
+        }
       | undefined;
+    const code = data?.error?.code;
+    const details = data?.error?.details;
+    if (code === "LOST_CONFIRMATION_TOO_EARLY") {
+      const earliestAt = typeof details?.earliestAt === "string" ? details.earliestAt : null;
+      const formatted = earliestAt
+        ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(
+            new Date(earliestAt),
+          )
+        : null;
+      return formatted
+        ? `Chưa đủ 48 giờ chờ xác minh thất lạc. Chỉ có thể xác nhận thất lạc từ sau ${formatted}.`
+        : "Chưa đủ 48 giờ chờ xác minh thất lạc để khấu trừ cọc.";
+    }
+    if (code === "EVIDENCE_NOT_READY") {
+      return "Hồ sơ này chưa có ảnh bằng chứng kiểm định cuối tại kho nên không thể duyệt khấu trừ hư hỏng.";
+    }
     const base = data?.error?.message || data?.message || error.message;
-    const reason = data?.error?.details?.reason;
+    const reason = details?.reason;
     if (typeof reason === "string" && reason) {
       return returnReasonMessages[reason] ?? `${base} — ${reason}`;
     }
@@ -250,7 +356,12 @@ export type GradeDecisionInput =
   | { decision: "DOWNGRADE"; reason: string; note?: string; evidenceIds?: string[] };
 
 export type MarkReturnedUnitReadyResult = {
-  unit?: { id: string; productId?: string; status?: string; version?: number };
+  unit?: { id: string; productId?: string; status?: string; version?: number; rentalCount?: number };
+  /**
+   * Nơi thiết bị đi sau khi kho xác nhận: AVAILABLE (về kệ), RETIRED (đã hết hạn dùng),
+   * MAINTENANCE (đạt ngưỡng hao mòn, đã mở phiếu bảo trì).
+   */
+  disposition?: "AVAILABLE" | "RETIRED" | "MAINTENANCE";
   readyAt?: string;
   gradeReview: {
     id: string;
@@ -298,6 +409,12 @@ export type RentalExceptionSummary = {
   };
   unit: { id: string; assetCode: string } | null;
   type: string;
+  /**
+   * Cùng một lần kiểm định có thể có 2 hồ sơ DAMAGE_DISPUTE: quyết định ban đầu (đã công bố chứng cứ)
+   * và hồ sơ mở khi khách phản đối. `relatedCaseId` trỏ sang hồ sơ còn lại.
+   */
+  role?: "ORIGINAL_DECISION" | "CUSTOMER_DISPUTE" | null;
+  relatedCaseId?: string | null;
   status: string;
   reason: string;
   dueAt: string | null;
@@ -309,6 +426,21 @@ export type RentalExceptionSummary = {
 export type RentalExceptionDetail = {
   case: RentalExceptionSummary & { resolution?: string | null; approvalRef?: string | null };
   assessment: ReturnInspection | null;
+  /** Tiền cọc của món và mức khấu trừ: `proposed` là mức tối đa Admin được duyệt. */
+  deduction?: {
+    status?: string;
+    depositAmount: number;
+    proposed: number;
+    approved: number | null;
+    deductionAmount?: number;
+    refundAmount?: number;
+  } | null;
+  /** Lỗi nhân viên giao ghi lúc GIAO đồ cho khách: đối chiếu trước khi duyệt trừ cọc. */
+  handoverReportedIssues?: {
+    handedOverAt: string | null;
+    unit: HandoverReportedIssue[];
+    orderLevel: HandoverReportedIssue[];
+  };
   refund: {
     id: string;
     amount: number;
@@ -321,7 +453,8 @@ export type RentalExceptionDetail = {
   } | null;
   evidence: string[];
   reviews: { id: string; reason: string; evidenceIds: string[]; createdAt: string }[];
-  history: { action: string; userId: string; createdAt: string }[];
+  /** `userId` null = thao tác do hệ thống (job/worker) ghi. */
+  history: { action: string; userId: string | null; createdAt: string }[];
   allowedActions: string[];
 };
 
@@ -362,10 +495,17 @@ export async function getRentalException(exceptionId: string) {
 
 export async function resolveRentalException(input: {
   exceptionId: string;
-  decision: "APPROVE_DEDUCTION" | "REJECT_DEDUCTION" | "CONFIRM_LOST" | "CLOSE_NO_ACTION";
+  decision:
+    | "APPROVE_DEDUCTION"
+    | "REJECT_DEDUCTION"
+    | "CONFIRM_LOST"
+    | "CLOSE_NO_ACTION"
+    | "RETRY_REFUND";
   reason: string;
   assessmentVersion?: number;
   expectedVersion: number;
+  /** Chỉ với APPROVE_DEDUCTION: duyệt thấp hơn mức đề xuất (VND). */
+  approvedDeductionAmount?: number;
 }) {
   const response = await apiClient.post<Envelope<{ resolution: string; nextAction: string; approvalRef: string }>>(
     `/api/v1/admin/rental-exceptions/${encodeURIComponent(input.exceptionId)}/resolve`,
@@ -374,6 +514,9 @@ export async function resolveRentalException(input: {
       reason: input.reason,
       assessmentVersion: input.assessmentVersion,
       expectedVersion: input.expectedVersion,
+      ...(input.approvedDeductionAmount !== undefined
+        ? { approvedDeductionAmount: input.approvedDeductionAmount }
+        : {}),
     },
     { headers: { "Idempotency-Key": key("resolve-return", input.exceptionId, input.expectedVersion) } },
   );

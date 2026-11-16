@@ -708,7 +708,7 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
           },
         ],
         deliveryTasksViaOrderId: [
-          { id: 'dt-ret-active', taskType: 'RETURN', status: DeliveryTaskStatus.SCHEDULED },
+          { id: 'dt-ret-active', taskType: 'RETURN', status: DeliveryTaskStatus.SCHEDULED, staffId: 'shipper-1' },
         ],
       };
 
@@ -746,6 +746,8 @@ describe('Phase 07A: Trip Lifecycle Integration & Hardening Unit Tests', () => {
       }));
       expect(mockTx.rentalOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
         where: { deduplicationKey: 'rental-early-return:early-1:RECONFIRM_REQUIRED:3' },
+        // Shipper đang giữ task được báo lịch sớm không còn hiệu lực.
+        create: expect.objectContaining({ payload: expect.objectContaining({ assigneeId: 'shipper-1' }) }),
       }));
 
       // Verify active user's actual occupation is updated and extended

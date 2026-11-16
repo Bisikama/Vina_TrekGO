@@ -101,14 +101,14 @@ export class StaffReturnController {
                 items: {
                   type: 'object',
                   properties: {
-                    ruleId: { type: 'string', format: 'uuid', description: 'UUID quy tắc hư hỏng' },
+                    ruleId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', description: 'Id quy tắc hư hỏng (định dạng UUID hex, không bắt buộc đúng version RFC)' },
                     quantity: { type: 'integer', minimum: 1, description: 'Số lượng', example: 1 },
                     notes: { type: 'string', description: 'Ghi chú hư hỏng' },
-                    evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'UUID ảnh minh chứng' },
+                    evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'UUID ảnh minh chứng (scope RETURN_EVIDENCE / EXCEPTION_EVIDENCE / CONDITION_EVIDENCE, trạng thái READY)' },
                   },
                 },
               },
-              evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 20, description: 'UUID ảnh/video minh chứng kiểm tra' },
+              evidenceIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 20, description: 'UUID ảnh/video minh chứng kiểm tra (scope RETURN_EVIDENCE / EXCEPTION_EVIDENCE / CONDITION_EVIDENCE). Có damage thì bắt buộc ít nhất 1 ảnh ở đây hoặc trong damage[].evidenceIds' },
               notes: { type: 'string', maxLength: 2000, description: 'Ghi chú kiểm tra' },
             },
           },
@@ -119,7 +119,7 @@ export class StaffReturnController {
   })
   @ApiResponse({ status: 201, description: 'Kiểm tra cuối cùng đã được ghi nhận' })
   @ApiResponse({ status: 409, description: 'Xung đột phiên bản' })
-  @ApiResponse({ status: 422, description: 'outcome=PASS xung đột với condition=DAMAGED hoặc có damage' })
+  @ApiResponse({ status: 422, description: 'outcome=PASS xung đột với condition=DAMAGED hoặc có damage; EVIDENCE_NOT_READY (DAMAGE_EVIDENCE_REQUIRED) khi có damage mà không kèm ảnh nào' })
   async finalInspection(@Param(new ZodValidationPipe(ReturnIdParamSchema)) params: ReturnIdParamDto, @Body(new ZodValidationPipe(FinalInspectionBodySchema)) body: FinalInspectionBodyDto, @Headers('idempotency-key') rawKey: string | undefined, @ActiveUser('id') actorUserId: string) {
     const items = body.items.map(item => ({
       issueUnitId: item.unitId ?? item.issueUnitId!, outcome: item.outcome,
@@ -232,7 +232,15 @@ export class StaffReturnController {
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Trạng thái task trả hàng', enum: ['WAITING_CLEANING', 'REVIEW_REQUIRED', 'TRANSFER_PENDING', 'INVENTORY_RECEIVED', 'COMPLETED'] })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang hiện tại (mặc định 1)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Số item mỗi trang (mặc định 20)', example: 20 })
-  @ApiResponse({ status: 200, description: 'Danh sách task trả hàng và thông tin phân trang' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Danh sách task trả hàng và phân trang. status được suy ra từ giai đoạn của từng thiết bị theo thứ tự việc kho cần làm: ' +
+      'TRANSFER_PENDING (còn món chờ kho nhận) → INVENTORY_RECEIVED (còn món chờ kiểm định cuối) → WAITING_CLEANING → ' +
+      'REVIEW_REQUIRED (chỉ còn chờ Admin/thất lạc) → COMPLETED. Mỗi item có thêm deliveryReportedIssueCount ' +
+      '(số món giao hàng báo có vấn đề khi THU HỒI từ khách), handoverReportedIssueCount (số lỗi giao hàng ghi lúc GIAO cho khách), ' +
+      'pendingInspectionCount và stageCounts.',
+  })
   async list(@Query(new ZodValidationPipe(ListReturnsQuerySchema)) query: ListReturnsQueryDto, @ActiveUser('id') actorUserId: string) {
     return this.listUseCase.execute({ actorUserId, ...query });
   }
@@ -246,7 +254,18 @@ export class StaffReturnController {
       'kết quả kiểm tra, trạng thái custody, và tracking trả hàng một phần (partial return).',
   })
   @ApiParam({ name: 'returnId', type: String, format: 'uuid', description: 'UUID task trả hàng', example: '550e8400-e29b-41d4-a716-446655440000' })
-  @ApiResponse({ status: 200, description: 'Chi tiết task trả hàng' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Chi tiết task trả hàng. units[] gom sẵn cho từng thiết bị: stage (MISSING, AWAITING_RECEIPT, AWAITING_FINAL_INSPECTION, ' +
+      'AWAITING_ADMIN, WAITING_CLEANING, READY, CLOSED_DAMAGED, CLOSED_LOST), evidenceRequired (đúng quy tắc RB-API-605), ' +
+      'deliveryObservation (kết quả sơ bộ của giao hàng khi THU HỒI từ khách: outcome, visibleDamage, accessoryObservations, notes, evidenceIds), ' +
+      'handoverBaseline (tình trạng + ảnh kho chụp trước khi giao), handoverReportedIssues ([{type, description}] lỗi giao hàng ghi ' +
+      'lúc GIAO cho khách — có từ trước kỳ thuê, không được trừ cọc), finalInspection, deposit, exceptionCase. ' +
+      'summary: totalUnits, queueStatus, deliveryReportedIssueCount, handoverReportedIssueCount, handoverOrderLevelIssues ' +
+      '(lỗi lúc giao không gắn món), handedOverAt, evidenceRequiredPendingCount, stageCounts. ' +
+      'Các trường cũ (expectedUnits, inspection, beforeEvidence, depositActions…) vẫn giữ nguyên.',
+  })
   @ApiResponse({ status: 404, description: 'Task trả hàng không tồn tại' })
   async detail(@Param(new ZodValidationPipe(ReturnIdParamSchema)) params: ReturnIdParamDto, @ActiveUser('id') actorUserId: string, @ActiveUser('role') actorRole: string) {
     return this.getUseCase.execute({ actorUserId, actorRole, returnId: params.returnId });

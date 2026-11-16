@@ -26,11 +26,15 @@ export const rentalNotificationEvents = [
   EARLY_RETURN_EVENT_TYPE,
 ] as const
 
-/** CUSTOMER = chủ đơn; STAFF = mọi ADMIN + STAFF_INVENTORY đang hoạt động (consumer tự tra). */
-export type RentalNotificationAudience = 'CUSTOMER' | 'STAFF'
+/**
+ * CUSTOMER = chủ đơn; STAFF = mọi ADMIN + STAFF_INVENTORY đang hoạt động (consumer tự tra);
+ * USER = đúng một người (`recipientId`), vd shipper được gán thu hồi.
+ */
+export type RentalNotificationAudience = 'CUSTOMER' | 'STAFF' | 'USER'
 export type RentalNotificationDelivery = {
   semanticType: string
   audience: RentalNotificationAudience
+  recipientId?: string
   data: Omit<Partial<Notification>, 'userId'>
 }
 export type RentalNotificationContext = {
@@ -66,6 +70,9 @@ const earlyReturnPayloadSchema = z.object({
   slotAt: z.string(),
   reason: z.string().optional(),
   wasConfirmed: z.boolean().optional(),
+  assigneeId: z.string().optional(),
+  assigneeName: z.string().optional(),
+  previousAssigneeId: z.string().optional(),
 })
 
 const CUSTODY_PRESERVED_INTRO: Record<string, string> = {
@@ -120,6 +127,24 @@ export function rentalNotificationProjection(
   const staff = (title: string, content: string, metadata: Record<string, unknown>): RentalNotificationDelivery => ({
     semanticType: `${eventType}:STAFF`,
     audience: 'STAFF',
+    data: {
+      ...base,
+      notificationType: N.RENTAL_STAFF_ACTION_REQUIRED,
+      title,
+      content,
+      metadata: { schemaVersion: 1, orderId: ctx.orderId, ...metadata },
+    },
+  })
+  const user = (
+    recipientId: string,
+    role: string,
+    title: string,
+    content: string,
+    metadata: Record<string, unknown>,
+  ): RentalNotificationDelivery => ({
+    semanticType: `${eventType}:${role}`,
+    audience: 'USER',
+    recipientId,
     data: {
       ...base,
       notificationType: N.RENTAL_STAFF_ACTION_REQUIRED,
@@ -253,9 +278,33 @@ export function rentalNotificationProjection(
             customer(
               N.RENTAL_SCHEDULE_CHANGED,
               'Lịch trả đồ sớm đã được xác nhận',
-              `TrekGo đã xác nhận lịch nhận lại đồ của đơn thuê ${ref} lúc ${when}. Phí thuê và tiền cọc vẫn xử lý như khi trả đúng hạn.`,
+              `TrekGo đã xác nhận lịch nhận lại đồ của đơn thuê ${ref} lúc ${when}` +
+                (e.assigneeName ? `, nhân viên ${e.assigneeName} sẽ đến nhận.` : '.') +
+                ' Phí thuê và tiền cọc vẫn xử lý như khi trả đúng hạn.',
               meta,
             ),
+            ...(e.assigneeId
+              ? [
+                  user(
+                    e.assigneeId,
+                    'ASSIGNEE',
+                    `Thu hồi sớm đơn ${ref}`,
+                    `Bạn được giao thu hồi thiết bị của đơn thuê ${ref} lúc ${when} (khách trả sớm). Kiểm tra task thu hồi trong danh sách của bạn.`,
+                    { ...meta, assigneeId: e.assigneeId },
+                  ),
+                ]
+              : []),
+            ...(e.previousAssigneeId && e.previousAssigneeId !== e.assigneeId
+              ? [
+                  user(
+                    e.previousAssigneeId,
+                    'PREVIOUS_ASSIGNEE',
+                    `Đã chuyển task thu hồi đơn ${ref}`,
+                    `Task thu hồi đơn thuê ${ref} đã được chuyển cho nhân viên khác theo lịch trả sớm lúc ${when}. Bạn không cần đi thu hồi đơn này.`,
+                    meta,
+                  ),
+                ]
+              : []),
           ]
         case 'REJECTED':
           return [
@@ -286,6 +335,17 @@ export function rentalNotificationProjection(
                   `Khách đã huỷ lịch trả đồ sớm lúc ${when} của đơn thuê ${ref}. Việc thu hồi quay về lịch thường.`,
                   meta,
                 ),
+                ...(e.assigneeId
+                  ? [
+                      user(
+                        e.assigneeId,
+                        'ASSIGNEE',
+                        `Khách huỷ lịch trả sớm đơn ${ref}`,
+                        `Khách đã huỷ lịch trả đồ sớm lúc ${when} của đơn thuê ${ref}. Task thu hồi vẫn giao cho bạn nhưng quay về lịch thường; xem giờ mới trong task.`,
+                        meta,
+                      ),
+                    ]
+                  : []),
               ]
             : []
         case 'RECONFIRM_REQUIRED':
@@ -301,6 +361,68 @@ export function rentalNotificationProjection(
               `Chuyến đi đổi lịch nên lịch trả đồ sớm lúc ${when} của đơn thuê ${ref} cần được xác nhận lại hoặc từ chối.`,
               meta,
             ),
+            ...(e.assigneeId
+              ? [
+                  user(
+                    e.assigneeId,
+                    'ASSIGNEE',
+                    `Tạm dừng thu hồi sớm đơn ${ref}`,
+                    `Chuyến đi đổi lịch nên lịch thu hồi sớm lúc ${when} của đơn thuê ${ref} không còn hiệu lực. Đừng đến theo giờ này; task quay về hạn trả mới cho tới khi kho xác nhận lại.`,
+                    { ...meta, assigneeId: e.assigneeId },
+                  ),
+                ]
+              : []),
+          ]
+        case 'REASSIGNED':
+          return [
+            customer(
+              N.RENTAL_SCHEDULE_CHANGED,
+              e.previousAssigneeId ? 'Đổi nhân viên nhận lại đồ' : 'Đã có nhân viên nhận lại đồ',
+              `Lịch trả đồ sớm của đơn thuê ${ref} lúc ${when} giữ nguyên` +
+                (e.assigneeName ? `; nhân viên ${e.assigneeName} sẽ đến nhận.` : '.'),
+              meta,
+            ),
+            ...(e.assigneeId
+              ? [
+                  user(
+                    e.assigneeId,
+                    'ASSIGNEE',
+                    `Thu hồi sớm đơn ${ref}`,
+                    `Bạn được giao thu hồi thiết bị của đơn thuê ${ref} lúc ${when} (khách trả sớm). Kiểm tra task thu hồi trong danh sách của bạn.`,
+                    { ...meta, assigneeId: e.assigneeId },
+                  ),
+                ]
+              : []),
+            ...(e.previousAssigneeId && e.previousAssigneeId !== e.assigneeId
+              ? [
+                  user(
+                    e.previousAssigneeId,
+                    'PREVIOUS_ASSIGNEE',
+                    `Đã chuyển task thu hồi đơn ${ref}`,
+                    `Task thu hồi đơn thuê ${ref} lúc ${when} đã được chuyển cho nhân viên khác. Bạn không cần đi thu hồi đơn này.`,
+                    meta,
+                  ),
+                ]
+              : []),
+          ]
+        case 'SLOT_MISSED':
+          return [
+            staff(
+              `Lỡ hẹn thu hồi sớm đơn ${ref}`,
+              `Đã quá giờ hẹn trả đồ sớm lúc ${when} của đơn thuê ${ref} mà chưa thu hồi. Liên hệ nhân viên giao nhận hoặc khách để xếp lại.`,
+              meta,
+            ),
+            ...(e.assigneeId
+              ? [
+                  user(
+                    e.assigneeId,
+                    'ASSIGNEE',
+                    `Chưa thu hồi đơn ${ref}`,
+                    `Lịch thu hồi sớm lúc ${when} của đơn thuê ${ref} đã quá giờ mà chưa quét nhận đồ. Hãy liên hệ khách hoặc báo kho nếu không đi được.`,
+                    { ...meta, assigneeId: e.assigneeId },
+                  ),
+                ]
+              : []),
           ]
       }
       return []
