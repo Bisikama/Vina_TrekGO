@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useLeaderPublicTrips } from "../../hooks";
-import { EmptyState, LoadingState, ErrorAlert } from "@/components/ui";
+import { EmptyState, LoadingState, ErrorAlert, PageHeader } from "@/components/ui";
 
 type TripStatus =
   | "draft"
@@ -142,31 +142,31 @@ export function LeaderTrips() {
 
   return (
     <main className="min-h-screen bg-[#F7F7F4]">
-      <Link href="/leader/trip-cancellation-requests" className="inline-block rounded-lg border px-4 py-2 text-sm font-semibold">Theo dõi yêu cầu hủy chuyến</Link>
       <section className="border-b border-[#E5E7EB] bg-white px-5 py-5 lg:px-8">
         <div className="mx-auto max-w-[1540px]">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#125238]">
-                Quản lý vận hành
-              </p>
+          <PageHeader
+            eyebrow="Quản lý vận hành"
+            title="Chuyến đi của tôi"
+            description="Theo dõi lịch khởi hành, thành viên và doanh thu của các chuyến trekking."
+            actions={(
+              <>
+                <Link
+                  href="/leader/trip-cancellation-requests"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 transition hover:border-amber-300 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
+                >
+                  Theo dõi yêu cầu hủy chuyến
+                  <span aria-hidden="true" className="shrink-0 text-base leading-none">→</span>
+                </Link>
 
-              <h1 className="mt-1 text-2xl font-bold text-[#1F2937]">
-                Chuyến đi của tôi
-              </h1>
-
-              <p className="mt-1 text-sm text-[#6B7280]">
-                Theo dõi lịch khởi hành, thành viên và doanh thu của các chuyến trekking.
-              </p>
-            </div>
-
-            <Link
-              href="/leader/create-trip"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-[#2F6B4F] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1F4A36]"
-            >
-              ＋ Tạo chuyến đi mới
-            </Link>
-          </div>
+                <Link
+                  href="/leader/create-trip"
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-[#2F6B4F] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1F4A36]"
+                >
+                  ＋ Tạo chuyến đi mới
+                </Link>
+              </>
+            )}
+          />
         </div>
       </section>
 
