@@ -51,6 +51,9 @@ export type StaffReturnUnit = {
   unitStatus: string | null;
   unitCondition: string | null;
   unitVersion: number | null;
+  /** Hạn dùng YYYY-MM-DD; `unitExpired` = món sẽ chuyển Ngừng sử dụng khi đưa ra, không cần phân hạng. */
+  unitExpiresAt?: string | null;
+  unitExpired?: boolean;
   stage: ReturnUnitStage;
   /** Bắt buộc ít nhất 1 ảnh khi kiểm định cuối (đúng quy tắc backend RB-API-605). */
   evidenceRequired: boolean;
@@ -182,6 +185,7 @@ function key(prefix: string, entityId: string, version: number) {
 
 /** Lý do chi tiết (`error.details.reason`) mà backend gửi kèm các mã lỗi chung như INVALID_RETURN_STATE. */
 const returnReasonMessages: Record<string, string> = {
+  APPROVED_DEDUCTION_ABOVE_PROPOSAL: "Mức khấu trừ không được cao hơn mức đề xuất từ kiểm định.",
   USER_48H_REVIEW_WINDOW_NOT_CLOSED: "Chưa hết thời hạn khách phản hồi khoản trừ (48 giờ kể từ khi công bố chứng cứ).",
   USER_DISPUTE_MUST_BE_RESOLVED: "Khách đang khiếu nại khoản trừ; cần xử lý xong khiếu nại trước khi quyết toán.",
   EVIDENCE_ACCESS_INTERRUPTED: "Khách đang không xem được chứng cứ; thời hạn phản hồi tạm dừng tới khi khôi phục.",
@@ -197,15 +201,41 @@ const returnReasonMessages: Record<string, string> = {
   DAMAGE_EVIDENCE_REQUIRED: "Thiết bị ghi hư hỏng phải có ít nhất 1 ảnh bằng chứng.",
   FINAL_OUTCOME_MISMATCH: "Kết quả chốt không khớp với kết quả kiểm định cuối của thiết bị.",
   DEDUCTION_ALREADY_ACCEPTED: "Khách đã đồng ý khoản trừ; hệ thống đang quyết toán cọc.",
+  RETRY_REFUND_ONLY_FOR_REFUND_FAILURE: "Chỉ hồ sơ hoàn tiền thất bại mới có thể gửi lại lệnh hoàn tiền.",
+  REFUND_NOT_FAILED: "Giao dịch hoàn tiền vẫn đang xử lý tại cổng thanh toán, chưa thể tạo lệnh hoàn lại.",
+  NO_FAILED_DEPOSIT_ITEM: "Không còn khoản hoàn cọc lỗi nào cần gửi lại.",
 };
 
 export function getStaffReturnErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as
-      | { message?: string; error?: { message?: string; code?: string; details?: { reason?: unknown } } }
+      | {
+          message?: string;
+          error?: {
+            message?: string;
+            code?: string;
+            details?: { reason?: unknown; earliestAt?: unknown; maximum?: unknown };
+          };
+        }
       | undefined;
+    const code = data?.error?.code;
+    const details = data?.error?.details;
+    if (code === "LOST_CONFIRMATION_TOO_EARLY") {
+      const earliestAt = typeof details?.earliestAt === "string" ? details.earliestAt : null;
+      const formatted = earliestAt
+        ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(
+            new Date(earliestAt),
+          )
+        : null;
+      return formatted
+        ? `Chưa đủ 48 giờ chờ xác minh thất lạc. Chỉ có thể xác nhận thất lạc từ sau ${formatted}.`
+        : "Chưa đủ 48 giờ chờ xác minh thất lạc để khấu trừ cọc.";
+    }
+    if (code === "EVIDENCE_NOT_READY") {
+      return "Hồ sơ này chưa có ảnh bằng chứng kiểm định cuối tại kho nên không thể duyệt khấu trừ hư hỏng.";
+    }
     const base = data?.error?.message || data?.message || error.message;
-    const reason = data?.error?.details?.reason;
+    const reason = details?.reason;
     if (typeof reason === "string" && reason) {
       return returnReasonMessages[reason] ?? `${base} — ${reason}`;
     }
@@ -326,7 +356,12 @@ export type GradeDecisionInput =
   | { decision: "DOWNGRADE"; reason: string; note?: string; evidenceIds?: string[] };
 
 export type MarkReturnedUnitReadyResult = {
-  unit?: { id: string; productId?: string; status?: string; version?: number };
+  unit?: { id: string; productId?: string; status?: string; version?: number; rentalCount?: number };
+  /**
+   * Nơi thiết bị đi sau khi kho xác nhận: AVAILABLE (về kệ), RETIRED (đã hết hạn dùng),
+   * MAINTENANCE (đạt ngưỡng hao mòn, đã mở phiếu bảo trì).
+   */
+  disposition?: "AVAILABLE" | "RETIRED" | "MAINTENANCE";
   readyAt?: string;
   gradeReview: {
     id: string;
@@ -385,6 +420,15 @@ export type RentalExceptionSummary = {
 export type RentalExceptionDetail = {
   case: RentalExceptionSummary & { resolution?: string | null; approvalRef?: string | null };
   assessment: ReturnInspection | null;
+  /** Tiền cọc của món và mức khấu trừ: `proposed` là mức tối đa Admin được duyệt. */
+  deduction?: {
+    status?: string;
+    depositAmount: number;
+    proposed: number;
+    approved: number | null;
+    deductionAmount?: number;
+    refundAmount?: number;
+  } | null;
   /** Lỗi nhân viên giao ghi lúc GIAO đồ cho khách: đối chiếu trước khi duyệt trừ cọc. */
   handoverReportedIssues?: {
     handedOverAt: string | null;
@@ -403,7 +447,8 @@ export type RentalExceptionDetail = {
   } | null;
   evidence: string[];
   reviews: { id: string; reason: string; evidenceIds: string[]; createdAt: string }[];
-  history: { action: string; userId: string; createdAt: string }[];
+  /** `userId` null = thao tác do hệ thống (job/worker) ghi. */
+  history: { action: string; userId: string | null; createdAt: string }[];
   allowedActions: string[];
 };
 
@@ -444,10 +489,17 @@ export async function getRentalException(exceptionId: string) {
 
 export async function resolveRentalException(input: {
   exceptionId: string;
-  decision: "APPROVE_DEDUCTION" | "REJECT_DEDUCTION" | "CONFIRM_LOST" | "CLOSE_NO_ACTION";
+  decision:
+    | "APPROVE_DEDUCTION"
+    | "REJECT_DEDUCTION"
+    | "CONFIRM_LOST"
+    | "CLOSE_NO_ACTION"
+    | "RETRY_REFUND";
   reason: string;
   assessmentVersion?: number;
   expectedVersion: number;
+  /** Chỉ với APPROVE_DEDUCTION: duyệt thấp hơn mức đề xuất (VND). */
+  approvedDeductionAmount?: number;
 }) {
   const response = await apiClient.post<Envelope<{ resolution: string; nextAction: string; approvalRef: string }>>(
     `/api/v1/admin/rental-exceptions/${encodeURIComponent(input.exceptionId)}/resolve`,
@@ -456,6 +508,9 @@ export async function resolveRentalException(input: {
       reason: input.reason,
       assessmentVersion: input.assessmentVersion,
       expectedVersion: input.expectedVersion,
+      ...(input.approvedDeductionAmount !== undefined
+        ? { approvedDeductionAmount: input.approvedDeductionAmount }
+        : {}),
     },
     { headers: { "Idempotency-Key": key("resolve-return", input.exceptionId, input.expectedVersion) } },
   );

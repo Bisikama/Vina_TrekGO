@@ -183,7 +183,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
                     {candidates.filter((candidate) => candidate.productId === line.productId).map((candidate) => (
                       <label key={candidate.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white p-3 text-xs">
                         <input type="checkbox" checked={selectedCodes.includes(candidate.assetCode)} onChange={() => toggleCandidate(candidate)} className="h-4 w-4 accent-emerald-800" />
-                        <span><strong>Mã {shortId(candidate.assetCode)}</strong><br /><span className="text-slate-500">{CONDITION_LABELS[candidate.condition] ?? candidate.condition} · {candidate.location ?? "Kho chính"}</span></span>
+                        <span><strong>Mã {shortId(candidate.assetCode)}</strong><br /><span className="text-slate-500">{CONDITION_LABELS[candidate.condition] ?? candidate.condition} · {candidate.location ?? "Kho chính"}{candidate.expiresAt ? ` · HSD ${candidate.expiresAt.split("-").reverse().join("/")}` : ""}</span></span>
                       </label>
                     ))}
                     {candidates.filter((candidate) => candidate.productId === line.productId).length === 0 && <p className="text-xs text-orange-800">Không còn thiết bị khả dụng cho sản phẩm này.</p>}

@@ -275,6 +275,8 @@ export function StaffReturnsInspection() {
   }) {
     let shortageCount = 0;
     let downgraded = false;
+    let disposition: "AVAILABLE" | "RETIRED" | "MAINTENANCE" = "AVAILABLE";
+    let rentalCount: number | undefined;
     await run(async () => {
       const draft: GradeDraft = gradeDrafts[input.unitId] ?? { decision: "KEEP", reason: "" };
       try {
@@ -290,6 +292,8 @@ export function StaffReturnsInspection() {
         });
         shortageCount = result?.gradeReview?.shortageOrderIds?.length ?? 0;
         downgraded = result?.gradeReview?.decision === "DOWNGRADE";
+        disposition = result?.disposition ?? "AVAILABLE";
+        rentalCount = result?.unit?.rentalCount;
       } catch (requestError) {
         if (getStaffReturnErrorCode(requestError) === "RENTAL_GRADE_DECISION_REQUIRED") {
           setGradeRequiredUnits((current) => (current.includes(input.unitId) ? current : [...current, input.unitId]));
@@ -298,7 +302,12 @@ export function StaffReturnsInspection() {
         throw requestError;
       }
     }, () =>
-      `Mã ${shortId(input.assetCode)} đã sẵn sàng cho thuê${downgraded ? " và chuyển sang hạng Sử dụng tốt" : ""}.` +
+      (disposition === "RETIRED"
+        ? `Mã ${shortId(input.assetCode)} đã hết hạn dùng nên chuyển sang Ngừng sử dụng, không đưa về kệ cho thuê.`
+        : disposition === "MAINTENANCE"
+          ? `Mã ${shortId(input.assetCode)} đạt ngưỡng hao mòn${rentalCount ? ` (${rentalCount} lượt thuê)` : ""} nên chuyển sang bảo trì; hệ thống đã mở phiếu bảo trì.`
+          : `Mã ${shortId(input.assetCode)} đã sẵn sàng cho thuê`) +
+      `${downgraded ? (disposition === "AVAILABLE" ? " và chuyển sang hạng Sử dụng tốt" : " Đã ghi nhận hạ xuống hạng Sử dụng tốt.") : ""}${disposition === "AVAILABLE" ? "." : ""}` +
       (shortageCount > 0
         ? ` Hạ hạng làm thiếu hàng cho ${shortageCount} đơn đã đặt; các đơn này đã được đánh dấu cần xử lý.`
         : ""),
@@ -564,7 +573,8 @@ export function StaffReturnsInspection() {
                   const draft = drafts[unit.unitId] ?? emptyDraft(unit);
                   const productRules = rules.filter((rule) => rule.productId === unit.productId);
                   const grade = unit.productId ? productGrades[unit.productId] ?? null : null;
-                  const needsGrade = Boolean(grade) || gradeRequiredUnits.includes(unit.unitId);
+                  // Món hết hạn dùng sẽ chuyển Ngừng sử dụng, backend không hỏi hạng.
+                  const needsGrade = !unit.unitExpired && (Boolean(grade) || gradeRequiredUnits.includes(unit.unitId));
                   const gradeDraft: GradeDraft = gradeDrafts[unit.unitId] ?? { decision: "KEEP", reason: "" };
                   const downgradeReasonMissing = gradeDraft.decision === "DOWNGRADE" && gradeDraft.reason.trim().length < 3;
                   const observation = unit.deliveryObservation;
@@ -727,6 +737,11 @@ export function StaffReturnsInspection() {
 
                       {unit.stage === "WAITING_CLEANING" && unit.unitStatus === "CLEANING" && unit.finalInspection ? (
                         <div className="mt-4 space-y-3">
+                          {unit.unitExpired ? (
+                            <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                              Thiết bị đã hết hạn dùng{unit.unitExpiresAt ? ` (${unit.unitExpiresAt.split("-").reverse().join("/")})` : ""}: khi xác nhận sẽ chuyển Ngừng sử dụng, không cần phân hạng.
+                            </p>
+                          ) : null}
                           {needsGrade ? (
                             <div className="rounded-lg border border-slate-200 p-3">
                               <p className="text-xs font-bold text-slate-700">

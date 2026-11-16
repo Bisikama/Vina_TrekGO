@@ -18,6 +18,7 @@ import {
   getStaffRentalProducts,
 } from "@/features/rentals/services/staff-inventory.api";
 import type { EquipmentUnit, EquipmentUnitStatus, InventoryLocation, RentalProduct } from "@/features/rentals/types/rental";
+import { AdminUnitExpiryPanel } from "@/features/inventory/components/AdminUnitExpiryPanel";
 
 // Kho vật tư (Admin) — toàn bộ số liệu lấy từ api thật:
 // sản phẩm /staff/rental-products, thiết bị /staff/equipment-units, kho /staff/inventory-locations,
@@ -621,6 +622,8 @@ export const InventoryManagement = () => {
               )}
             </div>
           </section>
+
+          <AdminUnitExpiryPanel />
 
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-4">
