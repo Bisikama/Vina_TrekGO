@@ -39,6 +39,8 @@ export const TripDetailClient = ({
     };
   }, [trip, trailDetail]);
 
+  const description = stripEmojis(enrichedTrip.description).trim();
+
   return (
     <div className="bg-[#F7F7F4] min-h-screen pb-20">
       <TripHeader trip={enrichedTrip} />
@@ -48,19 +50,14 @@ export const TripDetailClient = ({
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Main Content Column */}
           <div className="flex-1 lg:max-w-[700px] xl:max-w-[800px] space-y-8">
-            {/* Giới thiệu & Mô tả chi tiết chuyến đi */}
-            {enrichedTrip.description ? (
-              <SurfaceCard as="section" padding="lg" className="rounded-2xl">
-                <div className="mb-4 border-b border-gray-100 pb-3">
-                  <h2 className="text-xl font-extrabold text-gray-900">
-                    Giới thiệu &amp; Kế hoạch chuyến đi
-                  </h2>
-                </div>
-                <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 font-normal">
-                  {stripEmojis(enrichedTrip.description)}
-                </div>
-              </SurfaceCard>
-            ) : null}
+            <SurfaceCard as="section" padding="lg" className="rounded-2xl" aria-labelledby="trip-description-title">
+              <h2 id="trip-description-title" className="mb-4 border-b border-gray-100 pb-3 text-xl font-extrabold text-gray-900">
+                Mô tả chuyến đi
+              </h2>
+              <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-7 text-gray-700">
+                {description || "Chuyến đi này chưa có mô tả."}
+              </p>
+            </SurfaceCard>
 
             {/* Map 3D Section */}
             <SurfaceCard as="section" padding="lg" className="rounded-2xl">
