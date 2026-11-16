@@ -5,53 +5,45 @@ import { TripData, TripCostBreakdownItem } from "../../data/mockTripsData";
 
 const CATEGORY_META: Record<
   string,
-  { label: string; icon: string; badgeClass: string; rowBg: string }
+  { label: string; badgeClass: string; rowBg: string }
 > = {
   TRANSPORT: {
     label: "Di chuyển / Xe",
-    icon: "🚌",
     badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
     rowBg: "hover:bg-blue-50/30",
   },
   FOOD: {
     label: "Ăn uống dã ngoại",
-    icon: "🍱",
     badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
     rowBg: "hover:bg-amber-50/30",
   },
   SAFETY: {
     label: "Bảo hiểm & An toàn",
-    icon: "🛡️",
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
     rowBg: "hover:bg-emerald-50/30",
   },
   STAFF: {
     label: "Nhân sự / Porter",
-    icon: "🎒",
     badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
     rowBg: "hover:bg-purple-50/30",
   },
   ACCOMMODATION: {
     label: "Lưu trú / Lều trại",
-    icon: "⛺",
     badgeClass: "bg-teal-50 text-teal-700 border-teal-200",
     rowBg: "hover:bg-teal-50/30",
   },
   PERMIT: {
     label: "Vé VQG & Giấy phép",
-    icon: "🎫",
     badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
     rowBg: "hover:bg-indigo-50/30",
   },
   EQUIPMENT: {
     label: "Trang bị đoàn",
-    icon: "🧗",
     badgeClass: "bg-orange-50 text-orange-700 border-orange-200",
     rowBg: "hover:bg-orange-50/30",
   },
   OTHER: {
     label: "Khoản chi khác",
-    icon: "💡",
     badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
     rowBg: "hover:bg-slate-50/30",
   },
@@ -157,14 +149,9 @@ export const TripCostBreakdown = ({ trip }: { trip: TripData }) => {
       {/* Header */}
       <div className="flex flex-col gap-2 border-b border-gray-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-lg text-emerald-800 shadow-sm">
-              💵
-            </span>
-            <h2 className="text-xl font-extrabold text-gray-900">
-              Chi Tiết Khoản Tiền &amp; Minh Bạch Giá Vé
-            </h2>
-          </div>
+          <h2 className="text-xl font-extrabold text-gray-900">
+            Chi Tiết Khoản Tiền &amp; Minh Bạch Giá Vé
+          </h2>
           <p className="mt-1.5 text-xs text-gray-500">
             Cam kết tài chính minh bạch: Mọi khoản chi phí thuê xe, ăn uống, vé rừng, bảo hiểm...
             đều được công khai rõ ràng cho thành viên.
@@ -193,10 +180,9 @@ export const TripCostBreakdown = ({ trip }: { trip: TripData }) => {
               <div className="space-y-1.5 sm:max-w-[62%]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold ${meta.badgeClass}`}
+                    className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold ${meta.badgeClass}`}
                   >
-                    <span>{meta.icon}</span>
-                    <span>{meta.label}</span>
+                    {meta.label}
                   </span>
                   {item.basis && (
                     <span className="text-xs font-medium text-slate-400">
@@ -289,7 +275,7 @@ export const TripCostBreakdown = ({ trip }: { trip: TripData }) => {
           <div className="mt-4 border-t border-emerald-100 pt-3 text-xs text-slate-700 space-y-2">
             <div className="rounded-xl bg-white p-3.5 border border-emerald-100/80">
               <div className="font-bold text-slate-900 mb-1">
-                📌 Cơ chế phân bổ chi phí của Vina TrekGO:
+                Cơ chế phân bổ chi phí của Vina TrekGO
               </div>
               <ul className="list-disc pl-4 space-y-1 text-slate-600">
                 <li>

@@ -351,10 +351,6 @@ export const BookingSidebar = ({ trip }: { trip: TripData }) => {
                   : "Đặt chuyến đi này →"}
               </Link>
 
-              <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1B5E41]/10 py-2 text-xs font-bold text-[#1B5E41] transition-colors hover:bg-[#1B5E41]/20">
-                Yêu cầu tư vấn thêm qua Zalo/Hotline
-              </button>
-
               <div className="flex items-center justify-center gap-2 pt-2 text-[10px] text-gray-500">
                 Bảo mật thanh toán VNPAY/Momo 100%
               </div>
