@@ -14,6 +14,7 @@ import { resolveActivePrimaryRentalLocation } from '../../shared/primary-invento
 import { effectiveDueAt } from './rental-extension.policy';
 import { issueExtensionAppendixTx } from '../../documents/application/rental-document-events';
 import { returnTaskScheduleAt } from '../../lifecycle/application/services/rental-return-task';
+import { vnCalendarDate } from '../../inventory/application/services/equipment-lifecycle.rules';
 
 /**
  * Transactional B2 extension workflow. A quote never holds equipment.
@@ -56,6 +57,7 @@ export class RentalExtensionService {
     const chosen = resolveRentalReturn({ ...context, activePolicy: { ...context.activePolicy, maxRentalAfterTripHours: maxExtraHours } }, returnAt, returnOptionId);
     if (!chosen.returnOptionSnapshot) throw error('RENTAL_RETURN_OPTION_UNAVAILABLE');
     if (returnAt <= order.rentalEndAt) throw error('EXTENSION_END_NOT_LATER');
+    await assertHeldUnitsOutlast(this.prisma, orderId, returnAt);
     // Configuration belongs to the historical order, not mutable live policy.
     const cutoff = requiredPolicyInt(policy.extensionRequestCutoffMinutes, 'extensionRequestCutoffMinutes');
     const ttl = requiredPolicyInt(policy.extensionHoldMinutes, 'extensionHoldMinutes');
@@ -188,6 +190,7 @@ export class RentalExtensionService {
         if (await tx.rentalEarlyReturnRequest.findFirst({ where: { orderId, status: { in: ['PENDING', 'CONFIRMED'] } }, select: { id: true } }))
           throw AppError.fromCode('OPERATION_CONFLICT', { message: 'Hãy hủy yêu cầu trả sớm trước khi gia hạn.' });
         checkExtendable(order, now);
+        await assertHeldUnitsOutlast(tx, orderId, raw.requestedRentalEndAt);
         if (order.version !== expectedVersion || raw.quotedOrderVersion !== order.version || raw.previousRentalEndAt.getTime() !== order.rentalEndAt.getTime()) throw error('VERSION_CONFLICT');
         if (raw.quoteExpiresAt <= now || raw.status !== RentalExtensionStatus.QUOTED) throw error('EXTENSION_QUOTE_EXPIRED');
         if ((await tx.rentalExtensionRequest.count({ where: { orderId, status: RentalExtensionStatus.PENDING_PAYMENT } })) > 0) throw error('EXTENSION_ALREADY_PENDING');
@@ -298,6 +301,33 @@ export class RentalExtensionService {
 }
 
 function error(code: string): AppError { return new AppError({ code, message: code }); }
+
+/**
+ * Shelf life: every unit the customer holds (or will receive) must still be usable on the new
+ * return day (Vietnam calendar, same rule as pick). Otherwise the extension is refused.
+ */
+async function assertHeldUnitsOutlast(
+  db: Pick<Prisma.TransactionClient, 'equipmentUnit'>,
+  orderId: string,
+  returnAt: Date,
+) {
+  const unit = await db.equipmentUnit.findFirst({
+    where: {
+      expiresAt: { lte: vnCalendarDate(returnAt) },
+      rentalUnitAssignmentsViaEquipmentUnitId: {
+        some: { status: { in: ['ASSIGNED', 'PACKED', 'HANDED_OVER'] }, orderLine: { orderId } },
+      },
+    },
+    orderBy: { expiresAt: 'asc' },
+    select: { assetCode: true, expiresAt: true },
+  });
+  if (!unit?.expiresAt) return;
+  const day = unit.expiresAt.toISOString().slice(0, 10);
+  throw AppError.fromCode('EXTENSION_NOT_APPLICABLE', {
+    message: `Thiết bị ${unit.assetCode} hết hạn dùng ngày ${day.split('-').reverse().join('/')}, không thể gia hạn tới sau ngày này.`,
+    details: { reason: 'UNIT_EXPIRES_BEFORE_NEW_END', assetCode: unit.assetCode, expiresAt: day },
+  });
+}
 function requiredPolicyInt(value: unknown, field: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) throw new AppError({ code: 'EXTENSION_POLICY_NOT_CONFIGURED', message: `Missing approved extension policy value: ${field}` });
   return Number(value);

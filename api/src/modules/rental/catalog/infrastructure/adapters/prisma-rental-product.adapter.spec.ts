@@ -565,6 +565,23 @@ describe('PrismaRentalProductAdapter — Media Integration & Catalog Lifecycle',
       expect(result).toMatchObject({ gradeGroupId: GROUP_ID, grade: 'GOOD_USED' });
     });
 
+    it('keeps one wear limit for the whole grade group (a downgraded unit keeps its rental count)', async () => {
+      const likeNew = makeRawProduct({ id: 'prod-ln', gradeGroupId: GROUP_ID, grade: 'LIKE_NEW', maxRentalCycles: null });
+      mockPrisma.rentalProduct.findUnique
+        .mockResolvedValueOnce(likeNew)
+        .mockResolvedValueOnce({ ...likeNew, version: 2, maxRentalCycles: 30 })
+        .mockResolvedValueOnce({ ...likeNew, version: 2, maxRentalCycles: 30 });
+      mockPrisma.rentalProduct.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.mediaAsset.findMany.mockResolvedValue([]);
+
+      await adapter.updateProduct({ ...staff, id: 'prod-ln', expectedVersion: 1, maxRentalCycles: 30 });
+
+      expect(mockPrisma.rentalProduct.updateMany).toHaveBeenCalledWith({
+        where: { gradeGroupId: GROUP_ID, id: { not: 'prod-ln' } },
+        data: { maxRentalCycles: 30, version: { increment: 1 } },
+      });
+    });
+
     it('rejects a GOOD_USED deposit that is not below LIKE_NEW when both are ACTIVE', async () => {
       const likeNew = makeRawProduct({ id: 'prod-ln', gradeGroupId: GROUP_ID, grade: 'LIKE_NEW', categoryId: 'cat-1' });
       const goodUsed = makeRawProduct({

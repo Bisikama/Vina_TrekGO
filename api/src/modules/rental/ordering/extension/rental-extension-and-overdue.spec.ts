@@ -103,6 +103,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
       },
       equipmentUnit: {
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'unit-1',
@@ -140,6 +141,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       inventoryLocation: {
         findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
       },
+      equipmentUnit: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
     mockContext = {
@@ -219,6 +221,23 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
   };
 
   describe('1. Extension Conditions & Guard Rules', () => {
+    it('refuses an extension past the shelf life of a unit the customer holds', async () => {
+      mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
+      mockPrisma.equipmentUnit.findFirst.mockResolvedValueOnce({
+        assetCode: 'ROPE-001',
+        expiresAt: new Date('2026-10-26T00:00:00Z'),
+      });
+      await expect(
+        extensionService.quote('user-1', 'order-ext-1', new Date('2026-10-26T18:00:00Z'), 'RETURN_POINT_1', new Date('2026-10-24T10:00:00Z')),
+      ).rejects.toMatchObject({
+        code: 'EXTENSION_NOT_APPLICABLE',
+        details: { reason: 'UNIT_EXPIRES_BEFORE_NEW_END', assetCode: 'ROPE-001', expiresAt: '2026-10-26' },
+      });
+      // Compared on the Vietnam calendar: 18:00 UTC on the 26th is already the 27th in Vietnam.
+      expect(mockPrisma.equipmentUnit.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ expiresAt: { lte: new Date('2026-10-27T00:00:00Z') } }) }),
+      );
+    });
     it('rejects a new extension while an early-return request is active', async () => {
       mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
       mockPrisma.rentalEarlyReturnRequest.findFirst.mockResolvedValueOnce({ id: 'early-request' });
