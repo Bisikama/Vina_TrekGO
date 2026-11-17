@@ -1,5 +1,6 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
 import { HANDOVER_SHORTAGE_REASON } from '../../../../../shared/constants/rental-event-reasons.constant'
+import { isHandoverShortageCase, isHandoverShortageRefundCase } from '../../../shared/handover-shortage'
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
@@ -88,10 +89,6 @@ import type {
 const DELIVERY_CUSTODY_DISCREPANCY = 'DELIVERY_CUSTODY_DISCREPANCY'
 const DELIVERY_TRANSFER_OMISSION = `${DELIVERY_CUSTODY_DISCREPANCY}:TRANSFER_OMISSION`
 const DELIVERY_RECEIPT_SHORTAGE = `${DELIVERY_CUSTODY_DISCREPANCY}:WAREHOUSE_RECEIPT_SHORTAGE`
-/** Case mở lúc bàn giao cho món thiếu trong kiện (prisma-delivery.adapter `recordHandoverShortageWithTx`). */
-export function isHandoverShortageCase(reason: string | null | undefined): boolean {
-  return typeof reason === 'string' && reason.startsWith(`${HANDOVER_SHORTAGE_REASON}:`)
-}
 /** RB-API-605: scopes accepted for both item-level and damage-level evidence. */
 export const FINAL_INSPECTION_EVIDENCE_SCOPES: MediaScope[] = [
   MediaScope.RETURN_EVIDENCE,
@@ -2290,8 +2287,12 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { reason: 'DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER' },
           })
-        // The unit never reached the customer; the case only tracks the warehouse search.
-        if (isHandoverShortageCase(exceptionCase.reason) && command.decision !== 'CLOSE_NO_ACTION')
+        // The unit never reached the customer: the case tracks the warehouse search, or a refund an
+        // admin pays by hand. Neither can touch the customer's deposit.
+        if (
+          (isHandoverShortageCase(exceptionCase.reason) || isHandoverShortageRefundCase(exceptionCase.reason)) &&
+          command.decision !== 'CLOSE_NO_ACTION'
+        )
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { reason: 'HANDOVER_SHORTAGE_CANNOT_BE_CHARGED_TO_CUSTOMER' },
           })
@@ -2938,7 +2939,7 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       allowedActions:
         query.actorRole === UserRole.ADMIN &&
         [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(row.status as any)
-          ? isHandoverShortageCase(row.reason)
+          ? isHandoverShortageCase(row.reason) || isHandoverShortageRefundCase(row.reason)
             ? ['CLOSE_NO_ACTION']
             : [
                 'APPROVE_DEDUCTION',
@@ -4671,6 +4672,14 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
     (item) => allowedCaseStatuses.includes(item.status as any) || isHandoverShortageCase(item.reason),
   )
   if (!casesFinal) return false
+
+  // 8b. A refund for units missing at handover must have settled; a failed one has an open case above.
+  if (typeof (tx.refund as any)?.count === 'function') {
+    const pendingShortageRefunds = await tx.refund.count({
+      where: { rentalOrderId: order.id, reason: HANDOVER_SHORTAGE_REASON, status: { in: ['PENDING', 'PROCESSING'] } },
+    })
+    if (pendingShortageRefunds) return false
+  }
 
   // 9. Atomic CAS update on RentalOrder (guards against concurrent closure from cron and payment worker)
   let updatedCount = 1

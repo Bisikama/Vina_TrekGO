@@ -15,7 +15,7 @@ import { effectiveDueAt } from './rental-extension.policy';
 import { issueExtensionAppendixTx } from '../../documents/application/rental-document-events';
 import { returnTaskScheduleAt } from '../../lifecycle/application/services/rental-return-task';
 import { vnCalendarDate } from '../../inventory/application/services/equipment-lifecycle.rules';
-import { HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reasons.constant';
+import { handoverShortageByLine } from '../../shared/handover-shortage';
 
 /**
  * Transactional B2 extension workflow. A quote never holds equipment.
@@ -80,13 +80,13 @@ export class RentalExtensionService {
     const nextOccupiedUntil = new Date(Math.max(order.occupiedEndAt.getTime(), ...lineOccupiedUntilDates.map((d: Date) => d.getTime())));
 
     const chargedDays = calculateChargedDays(order.rentalStartAt, returnAt);
-    // Units missing at handover were never rented: extend only what the customer holds, net of the refunded fee.
+    // Units missing at handover were never rented: extend only what the customer holds, net of their contract fee.
     const shortage = await handoverShortageByLine(this.prisma, orderId);
     const lineAmounts = order.rentalOrderLinesViaOrderId.map((line: any) => {
       const missing = shortage.get(line.id);
       const heldQuantity = line.quantity - (missing?.count ?? 0);
       const newFee = parseWholeVnd(line.dailyPriceSnapshot.toString()) * BigInt(heldQuantity) * BigInt(chargedDays);
-      const previousFee = parseWholeVnd(line.lineRentalFee.toString()) - (missing?.refundedFee ?? 0n);
+      const previousFee = parseWholeVnd(line.lineRentalFee.toString()) - (missing?.missingFee ?? 0n);
       const amount = newFee > previousFee ? newFee - previousFee : 0n;
       return { line, amount };
     });
@@ -314,36 +314,6 @@ function error(code: string): AppError { return new AppError({ code, message: co
  * Shelf life: every unit the customer holds (or will receive) must still be usable on the new
  * return day (Vietnam calendar, same rule as pick). Otherwise the extension is refused.
  */
-/**
- * Units TrekGo failed to hand over (assignment UNASSIGNED after packing) and the rental fee already
- * refunded for them, per order line. Extension fees and reservations cover only the units held.
- */
-export async function handoverShortageByLine(
-  db: Pick<Prisma.TransactionClient, 'rentalUnitAssignment' | 'refundAllocation'>,
-  orderId: string,
-): Promise<Map<string, { count: number; refundedFee: bigint }>> {
-  const missing = await db.rentalUnitAssignment.findMany({
-    where: { orderLine: { orderId }, status: 'UNASSIGNED', packedAt: { not: null }, handedOverAt: null },
-    select: { orderLineId: true },
-  });
-  const result = new Map<string, { count: number; refundedFee: bigint }>();
-  if (!missing.length) return result;
-  for (const row of missing)
-    result.set(row.orderLineId, { count: (result.get(row.orderLineId)?.count ?? 0) + 1, refundedFee: 0n });
-  const refunded = await db.refundAllocation.findMany({
-    where: {
-      refund: { rentalOrderId: orderId, reason: HANDOVER_SHORTAGE_REASON, status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } },
-      paymentAllocation: { component: 'RENTAL_FEE' },
-    },
-    select: { amount: true, paymentAllocation: { select: { rentalOrderLineId: true } } },
-  });
-  for (const row of refunded) {
-    const entry = result.get(row.paymentAllocation.rentalOrderLineId);
-    if (entry) entry.refundedFee += parseWholeVnd(row.amount.toString());
-  }
-  return result;
-}
-
 async function assertHeldUnitsOutlast(
   db: Pick<Prisma.TransactionClient, 'equipmentUnit'>,
   orderId: string,

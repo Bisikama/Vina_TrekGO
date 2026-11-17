@@ -4,6 +4,7 @@ import { ActiveUser } from 'src/shared/decorators/active-user.decorator';
 import { ApiErrorResponses } from 'src/shared/swagger/api-error-response.helper';
 import { CancelRentalOrderSystemFaultUseCase } from '../../application/use-cases/cancel-rental-order-system-fault.use-case';
 import { SYSTEM_FAULT_REASON_CODES } from '../../application/ports/rental-system-fault-cancellation.port';
+import { isHandoverShortageAssignment } from '../../../shared/handover-shortage';
 import { Prisma, RentalFinancialStatus, RentalOrderExceptionStatus, RentalOrderStatus } from '@prisma/client';
 import { UserRole } from 'src/shared/constants/enum.constant';
 import { AuthType } from 'src/shared/constants/auth.constant';
@@ -434,7 +435,7 @@ Trả về chi tiết toàn diện của đơn thuê thiết bị:
               // Units the courier reported missing: not handed over, fee + deposit refunded (reason HANDOVER_SHORTAGE).
               shortageUnits: order.rentalOrderLinesViaOrderId.flatMap((line) =>
                 line.rentalUnitAssignmentsViaOrderLineId
-                  .filter((a) => a.status === 'UNASSIGNED' && a.packedAt && !a.handedOverAt)
+                  .filter(isHandoverShortageAssignment)
                   .map((a) => ({
                     assignmentId: a.id,
                     productName: line.product.name,

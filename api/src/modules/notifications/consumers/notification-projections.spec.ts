@@ -86,12 +86,12 @@ describe('rentalNotificationProjection', () => {
     expect(() => rental('RENTAL_SCHEDULE_NOTICE_ISSUED', {})).toThrow('RENTAL_SCHEDULE_NOTICE_INVALID')
   })
 
-  it('labels sandbox-simulated deposit refunds', () => {
+  it('words sandbox-simulated deposit refunds like real ones, flagging them only in metadata', () => {
     const [real] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' })
     const [sandbox] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' }, { refundSimulated: true })
-    expect(real.data.title).toBe('Hoàn tiền cọc thiết bị')
-    expect(sandbox.data.title).toBe('Hoàn tiền cọc thiết bị')
-    expect(sandbox.data.content).toMatch(/không có tiền thật/)
+    expect(sandbox.data.title).toBe(real.data.title)
+    expect(sandbox.data.content).toBe(real.data.content)
+    expect(sandbox.data.metadata).toMatchObject({ sandboxSimulated: true })
   })
   it('falls back to generic wording for cancellations without cancellationSource (events from before the field)', () => {
     const [d] = rental('RENTAL_ORDER_CANCELLED', { financialStatus: 'REFUND_PENDING' })

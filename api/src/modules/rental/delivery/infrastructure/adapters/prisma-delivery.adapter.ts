@@ -35,6 +35,11 @@ import {
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
 import { HANDOVER_SHORTAGE_EVENT_TYPE, HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reasons.constant';
+import {
+  HANDOVER_SHORTAGE_CASE_PREFIX,
+  HANDOVER_SHORTAGE_REFUND_CASE_PREFIX,
+  UNIT_MISSING_ISSUE_TYPE,
+} from '../../../shared/handover-shortage';
 import { AppError } from 'src/shared/errors/app-error';
 import { DELIVERY_ERROR_CODES as DL, LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
 import type {
@@ -516,24 +521,6 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           },
         });
 
-        // Document business snapshot shares the same transaction, not the asynchronous PDF lifecycle.
-        await issueHandoverDocumentTx(
-          tx,
-          order.id,
-          handover.id,
-          command.now,
-          missingItems.length
-            ? {
-                missingUnitIds: missingItems.map((item) => item.equipmentUnitId),
-                descriptions: Object.fromEntries(shortageDescriptions),
-                refund: {
-                  rentalFee: shortageAmounts.rentalFee.toFixed(0),
-                  deposit: shortageAmounts.deposit.toFixed(0),
-                  total: shortageAmounts.total.toFixed(0),
-                },
-              }
-            : undefined,
-        );
         await tx.rentalPickupCode.update({ where: { id: pickupCode.id }, data: { usedAt: command.now } });
         await tx.package.update({ where: { id: pkg.id }, data: { status: PackageStatus.HANDED_OVER, version: { increment: 1 } } });
         const updatedTask = await tx.deliveryTask.update({
@@ -577,6 +564,27 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
               now: command.now,
             })
           : null;
+        // Document business snapshot shares the same transaction, not the asynchronous PDF lifecycle.
+        // Issued after the refund attempt so the document only promises a refund that exists.
+        await issueHandoverDocumentTx(
+          tx,
+          order.id,
+          handover.id,
+          command.now,
+          shortage
+            ? {
+                missingUnitIds: missingItems.map((item) => item.equipmentUnitId),
+                descriptions: Object.fromEntries(shortageDescriptions),
+                refund: shortage.refund.refundRef
+                  ? {
+                      rentalFee: shortageAmounts.rentalFee.toFixed(0),
+                      deposit: shortageAmounts.deposit.toFixed(0),
+                      total: shortageAmounts.total.toFixed(0),
+                    }
+                  : null,
+              }
+            : undefined,
+        );
 
         await ensurePerUnitDepositLedger(tx, order, handedItems);
         const recipientUserId = recipientUserIdFromSnapshot(order.recipientSnapshot) ?? order.userId;
@@ -1396,13 +1404,17 @@ async function ensurePerUnitDepositLedger(tx: Prisma.TransactionClient, order: a
   }
 }
 
-/** Units the courier reported as missing from the package: unitId → description (first one wins). */
+/**
+ * Units the courier reported as missing from the package entirely: unitId → description (first one wins).
+ * Only `UNIT_MISSING` takes a unit out of the order; any other type (including the older `MISSING`,
+ * often a missing accessory) is recorded on the handover as before.
+ */
 export function handoverShortageDescriptions(
   issues: CommitHandoverCommand['reportedIssues'],
 ): Map<string, string> {
   const missing = new Map<string, string>();
   for (const issue of issues ?? []) {
-    if (issue.unitId && issue.type.trim().toUpperCase() === 'MISSING' && !missing.has(issue.unitId))
+    if (issue.unitId && issue.type.trim().toUpperCase() === UNIT_MISSING_ISSUE_TYPE && !missing.has(issue.unitId))
       missing.set(issue.unitId, issue.description.trim());
   }
   return missing;
@@ -1479,7 +1491,7 @@ async function recordHandoverShortageWithTx(
         unitId: item.equipmentUnitId,
         caseType: RentalExceptionType.OTHER,
         openedBy: input.actorUserId,
-        reason: `${HANDOVER_SHORTAGE_REASON}: ${description}`,
+        reason: `${HANDOVER_SHORTAGE_CASE_PREFIX} ${description}`,
         evidenceIds: [],
       },
     });
@@ -1539,18 +1551,19 @@ async function recordHandoverShortageWithTx(
     // Reconciliation problems go to an admin; a database error still rolls the handover back.
     if (!(failure instanceof Error) || !/^(RENTAL_REFUND_|MULTI_PAYMENT_RENTAL_CANCELLATION_)/.test(failure.message)) throw failure;
     failureReason = failure.message;
+    // An admin refunds by hand. The order is not flagged: ACTION_REQUIRED would block extensions for a
+    // money issue the customer did not cause. The case sits on a missing unit's assignment so it holds
+    // the order open until closed without blocking the deposit refunds of the units handed over.
     await tx.rentalExceptionCase.create({
       data: {
         orderId: order.id,
+        assignmentId: input.missingItems[0].assignmentId,
+        unitId: input.missingItems[0].equipmentUnitId,
         caseType: RentalExceptionType.REFUND_FAILURE,
         openedBy: input.actorUserId,
-        reason: `${HANDOVER_SHORTAGE_REASON}_REFUND_REQUIRED: ${failure.message}; hoàn tay ${input.amounts.total.toFixed(0)} VND`,
+        reason: `${HANDOVER_SHORTAGE_REFUND_CASE_PREFIX} ${failure.message}; hoàn tay ${input.amounts.total.toFixed(0)} VND`,
         evidenceIds: [],
       },
-    });
-    await tx.rentalOrder.update({
-      where: { id: order.id },
-      data: { exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED, version: { increment: 1 } },
     });
   }
 

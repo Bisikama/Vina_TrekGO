@@ -26,6 +26,7 @@ import {
 } from '@prisma/client'
 import { PrismaService } from 'src/shared/services/prisma.service'
 import { HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reasons.constant'
+import { isHandoverShortageAssignment } from '../../../shared/handover-shortage'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
 import type {
@@ -1345,7 +1346,7 @@ function mapCancellationRefund(refund: {
 function mapHandoverShortage(order: any): { handoverShortage?: Record<string, unknown> } {
   const missing = order.rentalOrderLinesViaOrderId.flatMap((line: any) =>
     line.rentalUnitAssignmentsViaOrderLineId
-      .filter((a: any) => a.status === 'UNASSIGNED' && a.packedAt && !a.handedOverAt)
+      .filter(isHandoverShortageAssignment)
       .map((a: any) => ({ line, assignment: a })),
   )
   if (!missing.length) return {}
@@ -1401,11 +1402,7 @@ function buildTimeline(order: {
   if (order.paidAt) timeline.push({ type: 'PAID', at: order.paidAt.toISOString() })
   const lines = order.rentalOrderLinesViaOrderId.map((line) => ({
     // Units missing at handover were refunded and leave the order: they no longer count toward "all units".
-    quantity:
-      line.quantity -
-      line.rentalUnitAssignmentsViaOrderLineId.filter(
-        (assignment) => assignment.status === 'UNASSIGNED' && assignment.packedAt && !assignment.handedOverAt,
-      ).length,
+    quantity: line.quantity - line.rentalUnitAssignmentsViaOrderLineId.filter(isHandoverShortageAssignment).length,
     assignments: line.rentalUnitAssignmentsViaOrderLineId.filter(
       (assignment) => !['REPLACED', 'UNASSIGNED'].includes(assignment.status),
     ),

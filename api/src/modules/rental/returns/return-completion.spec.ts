@@ -627,6 +627,16 @@ describe('tryCompleteOrder when the customer kept every unit', () => {
     const tx = txFor({ ...withShortage, rentalExceptionCasesViaOrderId: [shortage, refundCase] })
     await expect(tryCompleteOrder(tx, ORDER, AFTER_DUE)).resolves.toBe(false)
   })
+
+  it('waits for the refund of units missing at handover before settling the order', async () => {
+    const tx = txFor(order({}))
+    tx.refund = { count: jest.fn().mockResolvedValue(1) }
+    await expect(tryCompleteOrder(tx, ORDER, AFTER_DUE)).resolves.toBe(false)
+    expect(tx.refund.count).toHaveBeenCalledWith({
+      where: { rentalOrderId: ORDER, reason: 'HANDOVER_SHORTAGE', status: { in: ['PENDING', 'PROCESSING'] } },
+    })
+    expect(tx.rentalOrder.updateMany).not.toHaveBeenCalled()
+  })
 })
 
 describe('RB-API-604 receiving one round while Delivery still holds the next', () => {

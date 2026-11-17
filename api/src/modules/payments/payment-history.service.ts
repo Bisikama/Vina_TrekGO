@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../shared/services/prisma.service'
+import { HANDOVER_SHORTAGE_REASON } from '../../shared/constants/rental-event-reasons.constant'
 import { AppError, PAYMENT_ERROR_CODES, RENTAL_ORDERING_ERROR_CODES as RO } from '../../shared/errors'
 import type {
   RentalOrderPaymentHistoryItemDto,
@@ -871,7 +872,7 @@ export class PaymentHistoryService {
               (SELECT ds.total_deduction FROM deposit_settlements ds WHERE ds.id = r.deposit_settlement_id),
               0
             )::text
-          WHEN r.purpose = 'RENTAL_CANCELLATION' AND r.reason = 'HANDOVER_SHORTAGE' THEN '0'::text
+          WHEN r.purpose = 'RENTAL_CANCELLATION' AND r.reason = ${HANDOVER_SHORTAGE_REASON} THEN '0'::text
           WHEN r.purpose IN ('BOOKING_CANCELLATION', 'RENTAL_CANCELLATION') THEN
             GREATEST(0, p.amount - r.amount)::text
           ELSE '0'::text
@@ -1692,7 +1693,7 @@ export class PaymentHistoryService {
       }
       // A handover-shortage refund returns part of a live order; the rest is not a deduction.
       deductionDec =
-        refund.reason === 'HANDOVER_SHORTAGE' || !payAmt.gt(refundAmt) ? new Prisma.Decimal(0) : payAmt.sub(refundAmt)
+        refund.reason === HANDOVER_SHORTAGE_REASON || !payAmt.gt(refundAmt) ? new Prisma.Decimal(0) : payAmt.sub(refundAmt)
     } else if (refund.purpose === 'BOOKING_CANCELLATION') {
       deductionDec = payAmt.gt(refundAmt) ? payAmt.sub(refundAmt) : new Prisma.Decimal(0)
     }
@@ -1828,7 +1829,7 @@ export class PaymentHistoryService {
     isExtension?: boolean,
     refundReason?: string | null,
   ): string {
-    if (kind === 'REFUND' && purpose === 'RENTAL_CANCELLATION' && refundReason === 'HANDOVER_SHORTAGE')
+    if (kind === 'REFUND' && purpose === 'RENTAL_CANCELLATION' && refundReason === HANDOVER_SHORTAGE_REASON)
       return 'Hoàn tiền thiết bị TrekGo giao thiếu'
     if (kind === 'PAYMENT') {
       switch (source) {

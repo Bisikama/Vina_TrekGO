@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { PrismaDeliveryAdapter, handoverShortageAmounts, handoverShortageDescriptions } from './prisma-delivery.adapter'
 import { issueHandoverDocumentTx } from '../../../documents/application/rental-document-events'
+import { handoverShortageByLine } from '../../../shared/handover-shortage'
+import { publishRefundSettlement } from '../../../../payments/refund-settlement'
 
 jest.mock('../../../documents/application/rental-document-events', () => ({
   issueHandoverDocumentTx: jest.fn().mockResolvedValue({ id: 'doc-1' }),
@@ -198,7 +200,7 @@ describe('RB-API-404 partial handover (units missing from the package)', () => {
     const { tx, adapter } = buildTx()
 
     const result = await handover(adapter, [
-      { unitId: 'tent-2', type: 'MISSING', description: 'Kiện không có lều thứ hai' },
+      { unitId: 'tent-2', type: 'UNIT_MISSING', description: 'Kiện không có lều thứ hai' },
       { unitId: 'pack-1', type: 'DAMAGED', description: 'Trầy nhẹ quai đeo' },
     ])
 
@@ -278,19 +280,19 @@ describe('RB-API-404 partial handover (units missing from the package)', () => {
 
     await expect(
       handover(adapter, [
-        { unitId: 'tent-1', type: 'MISSING', description: 'thiếu' },
-        { unitId: 'tent-2', type: 'MISSING', description: 'thiếu' },
-        { unitId: 'pack-1', type: 'MISSING', description: 'thiếu' },
+        { unitId: 'tent-1', type: 'UNIT_MISSING', description: 'thiếu' },
+        { unitId: 'tent-2', type: 'UNIT_MISSING', description: 'thiếu' },
+        { unitId: 'pack-1', type: 'UNIT_MISSING', description: 'thiếu' },
       ]),
     ).rejects.toMatchObject({ code: 'PACKAGE_INCOMPLETE', details: { reason: 'ALL_UNITS_MISSING' } })
     expect(tx.rentalHandover.create).not.toHaveBeenCalled()
   })
 
-  it('still hands over when the refund cannot be reserved, flagging the order for a manual refund', async () => {
+  it('still hands over when the refund cannot be reserved: admin case on the missing unit, order not flagged, no refund promised', async () => {
     const { tx, adapter } = buildTx()
     tx.payment.count.mockResolvedValue(2) // e.g. a second applied payment → needs reconciliation
 
-    const result = await handover(adapter, [{ unitId: 'pack-1', type: 'MISSING', description: 'Không thấy balo' }])
+    const result = await handover(adapter, [{ unitId: 'pack-1', type: 'UNIT_MISSING', description: 'Không thấy balo' }])
 
     expect(result.shortage?.refund).toMatchObject({
       refundRef: null,
@@ -298,22 +300,87 @@ describe('RB-API-404 partial handover (units missing from the package)', () => {
       failureReason: 'MULTI_PAYMENT_RENTAL_CANCELLATION_REVIEW_REQUIRED',
     })
     expect(tx.rentalExceptionCase.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ caseType: 'REFUND_FAILURE' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          caseType: 'REFUND_FAILURE',
+          assignmentId: 'as-pack-1',
+          reason: expect.stringMatching(/^HANDOVER_SHORTAGE_REFUND_REQUIRED: /),
+        }),
+      }),
     )
-    expect(tx.rentalOrder.update).toHaveBeenLastCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ exceptionStatus: 'ACTION_REQUIRED' }) }),
-    )
+    // Extensions stay possible: the order keeps its normal standing.
+    const orderUpdates = tx.rentalOrder.update.mock.calls.map(([arg]: any) => arg.data.exceptionStatus)
+    expect(orderUpdates).not.toContain('ACTION_REQUIRED')
+    expect((issueHandoverDocumentTx as jest.Mock).mock.calls.at(-1)[4]).toMatchObject({ refund: null })
+  })
+
+  it('keeps the old meaning of MISSING (e.g. a missing accessory): recorded only, the unit is handed over', async () => {
+    const { tx, adapter } = buildTx()
+
+    const result = await handover(adapter, [{ unitId: 'tent-1', type: 'MISSING', description: 'Thiếu túi cọc lều' }])
+
+    expect(result.shortage).toBeNull()
+    expect(result.units.map((unit) => unit.unitId)).toEqual(['tent-1', 'tent-2', 'pack-1'])
+    expect(tx.refund.create).not.toHaveBeenCalled()
+    expect(tx.rentalHandover.create.mock.calls[0][0].data.reportedIssues).toEqual([
+      { unitId: 'tent-1', type: 'MISSING', description: 'Thiếu túi cọc lều' },
+    ])
   })
 })
 
 describe('handover shortage helpers', () => {
-  it('only treats issues typed MISSING with a unit as missing units', () => {
+  it('only treats issues typed UNIT_MISSING with a unit as missing units', () => {
     const missing = handoverShortageDescriptions([
-      { unitId: 'u1', type: 'missing', description: ' thiếu ' },
+      { unitId: 'u1', type: 'unit_missing', description: ' thiếu ' },
       { unitId: 'u2', type: 'DAMAGED', description: 'hỏng' },
-      { type: 'MISSING', description: 'không gắn món' },
+      { unitId: 'u3', type: 'MISSING', description: 'thiếu phụ kiện' },
+      { type: 'UNIT_MISSING', description: 'không gắn món' },
     ])
     expect([...missing]).toEqual([['u1', 'thiếu']])
+  })
+
+  it('prices extensions off the missing units’ contract fee, whatever happened to their refund', async () => {
+    // 2 tents × 3 days × 100k = 600k, one missing; a later extension added 200k for the tent still held.
+    const db: any = {
+      rentalUnitAssignment: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ orderLineId: 'line-a', orderLine: { quantity: 2, lineRentalFee: D(800000) } }]),
+      },
+      rentalExtensionLine: {
+        findMany: jest.fn().mockResolvedValue([{ orderLineId: 'line-a', additionalFee: D(200000) }]),
+      },
+    }
+    const byLine = await handoverShortageByLine(db, ORDER_ID)
+    expect(byLine.get('line-a')).toEqual({ count: 1, missingFee: 300000n })
+  })
+
+  it('opens an admin case, without flagging the live order, when a shortage refund fails at the provider', async () => {
+    const tx: any = {
+      invoice: { update: jest.fn() },
+      paymentOutboxEvent: { create: jest.fn() },
+      rentalOrder: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      rentalExceptionCase: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      rentalUnitAssignment: { findFirst: jest.fn().mockResolvedValue({ id: 'as-tent-2', equipmentUnitId: 'tent-2' }) },
+    }
+    const refund: any = {
+      id: 'refund-9',
+      purpose: 'RENTAL_CANCELLATION',
+      reason: 'HANDOVER_SHORTAGE',
+      rentalOrderId: ORDER_ID,
+      amount: D(800000),
+      payment: { application: { status: 'APPLIED' } },
+    }
+    await publishRefundSettlement(tx, refund, { status: 'FAILED', refundTransactionRef: null })
+
+    expect(tx.rentalOrder.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ORDER_ID, status: 'CANCELLED' } }),
+    )
+    expect(tx.rentalExceptionCase.create.mock.calls[0][0].data).toMatchObject({
+      caseType: 'REFUND_FAILURE',
+      assignmentId: 'as-tent-2',
+      reason: expect.stringMatching(/^\[refund:refund-9\] HANDOVER_SHORTAGE_REFUND_REQUIRED: /),
+    })
   })
 
   it('splits fee per unit from the line and adds the deposit per unit', () => {
