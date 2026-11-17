@@ -314,29 +314,39 @@ describe('RB-API-404 partial handover (units missing from the package)', () => {
     expect((issueHandoverDocumentTx as jest.Mock).mock.calls.at(-1)[4]).toMatchObject({ refund: null })
   })
 
-  it('keeps the old meaning of MISSING (e.g. a missing accessory): recorded only, the unit is handed over', async () => {
+  it('treats MISSING (sent by apps from the start) as a whole unit missing too', async () => {
     const { tx, adapter } = buildTx()
 
-    const result = await handover(adapter, [{ unitId: 'tent-1', type: 'MISSING', description: 'Thiếu túi cọc lều' }])
+    const result = await handover(adapter, [{ unitId: 'pack-1', type: 'MISSING', description: 'Balo bị giao thiếu' }])
+
+    expect(result.units.map((unit) => unit.unitId)).toEqual(['tent-1', 'tent-2'])
+    expect(result.shortage?.units.map((unit) => unit.unitId)).toEqual(['pack-1'])
+    expect(tx.refund.create.mock.calls[0][0].data.amount.toString()).toBe('400000')
+  })
+
+  it('only records a damaged unit or missing accessory; the unit is still handed over', async () => {
+    const { tx, adapter } = buildTx()
+
+    const result = await handover(adapter, [{ unitId: 'tent-1', type: 'DAMAGED', description: 'Thiếu túi cọc lều' }])
 
     expect(result.shortage).toBeNull()
     expect(result.units.map((unit) => unit.unitId)).toEqual(['tent-1', 'tent-2', 'pack-1'])
     expect(tx.refund.create).not.toHaveBeenCalled()
-    expect(tx.rentalHandover.create.mock.calls[0][0].data.reportedIssues).toEqual([
-      { unitId: 'tent-1', type: 'MISSING', description: 'Thiếu túi cọc lều' },
-    ])
   })
 })
 
 describe('handover shortage helpers', () => {
-  it('only treats issues typed UNIT_MISSING with a unit as missing units', () => {
+  it('treats MISSING / UNIT_MISSING issues with a unit as missing units', () => {
     const missing = handoverShortageDescriptions([
       { unitId: 'u1', type: 'unit_missing', description: ' thiếu ' },
       { unitId: 'u2', type: 'DAMAGED', description: 'hỏng' },
-      { unitId: 'u3', type: 'MISSING', description: 'thiếu phụ kiện' },
+      { unitId: 'u3', type: 'MISSING', description: 'không có trong kiện' },
       { type: 'UNIT_MISSING', description: 'không gắn món' },
     ])
-    expect([...missing]).toEqual([['u1', 'thiếu']])
+    expect([...missing]).toEqual([
+      ['u1', 'thiếu'],
+      ['u3', 'không có trong kiện'],
+    ])
   })
 
   it('prices extensions off the missing units’ contract fee, whatever happened to their refund', async () => {

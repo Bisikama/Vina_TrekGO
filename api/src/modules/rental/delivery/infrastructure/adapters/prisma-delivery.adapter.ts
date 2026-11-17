@@ -38,7 +38,7 @@ import { HANDOVER_SHORTAGE_EVENT_TYPE, HANDOVER_SHORTAGE_REASON } from 'src/shar
 import {
   HANDOVER_SHORTAGE_CASE_PREFIX,
   HANDOVER_SHORTAGE_REFUND_CASE_PREFIX,
-  UNIT_MISSING_ISSUE_TYPE,
+  UNIT_MISSING_ISSUE_TYPES,
 } from '../../../shared/handover-shortage';
 import { AppError } from 'src/shared/errors/app-error';
 import { DELIVERY_ERROR_CODES as DL, LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
@@ -1405,16 +1405,15 @@ async function ensurePerUnitDepositLedger(tx: Prisma.TransactionClient, order: a
 }
 
 /**
- * Units the courier reported as missing from the package entirely: unitId → description (first one wins).
- * Only `UNIT_MISSING` takes a unit out of the order; any other type (including the older `MISSING`,
- * often a missing accessory) is recorded on the handover as before.
+ * Units the courier reported as missing from the package entirely (`MISSING` / `UNIT_MISSING` with a unit):
+ * unitId → description (first one wins). Other types, e.g. a missing accessory, are only recorded.
  */
 export function handoverShortageDescriptions(
   issues: CommitHandoverCommand['reportedIssues'],
 ): Map<string, string> {
   const missing = new Map<string, string>();
   for (const issue of issues ?? []) {
-    if (issue.unitId && issue.type.trim().toUpperCase() === UNIT_MISSING_ISSUE_TYPE && !missing.has(issue.unitId))
+    if (issue.unitId && UNIT_MISSING_ISSUE_TYPES.includes(issue.type.trim().toUpperCase()) && !missing.has(issue.unitId))
       missing.set(issue.unitId, issue.description.trim());
   }
   return missing;

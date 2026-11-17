@@ -6,8 +6,11 @@ import { HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reas
  * UNASSIGNED mà chưa từng bàn giao. Mọi nơi nhận diện món thiếu dùng các helper ở đây.
  */
 
-/** Loại `reportedIssues[].type` shipper gửi khi cả món không có trong kiện (khác thiếu phụ kiện). */
-export const UNIT_MISSING_ISSUE_TYPE = 'UNIT_MISSING'
+/**
+ * `reportedIssues[].type` báo cả món không có trong kiện. `MISSING` là giá trị app gửi từ đầu (nút "Thiếu");
+ * `UNIT_MISSING` là tên rõ nghĩa hơn của web/mobile mới. Thiếu phụ kiện đi qua loại khác (vd `DAMAGED`).
+ */
+export const UNIT_MISSING_ISSUE_TYPES: readonly string[] = ['MISSING', 'UNIT_MISSING']
 
 /** Case kho tìm lại món thiếu: chỉ đóng không trừ cọc, không giữ đơn của khách. */
 export const HANDOVER_SHORTAGE_CASE_PREFIX = `${HANDOVER_SHORTAGE_REASON}:`
