@@ -148,6 +148,13 @@ function visibleReason(reason: string) {
       .trim();
     return rest || "Sai lệch bàn giao nội bộ giữa nhân viên giao hàng và kho";
   }
+  if (value.startsWith("HANDOVER_SHORTAGE_REFUND_REQUIRED:")) {
+    return `Giao thiếu thiết bị nhưng chưa tạo được khoản hoàn tự động — cần hoàn tay (${value.slice("HANDOVER_SHORTAGE_REFUND_REQUIRED:".length).trim()})`;
+  }
+  if (value.startsWith("HANDOVER_SHORTAGE:")) {
+    const note = value.slice("HANDOVER_SHORTAGE:".length).trim();
+    return `Thiếu trong kiện lúc giao cho khách${note ? ` — ${note}` : ""}`;
+  }
   if (value === "SYSTEM: unit not handed back in the collection round") {
     return "Thiết bị không được bàn giao lại trong đợt thu hồi";
   }
@@ -606,6 +613,8 @@ export function AdminRentalReturnExceptions() {
     ["PENDING", "PROCESSING"].includes(currentRefundInfo.status);
   const isCustodyIncident =
     detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
+  // Case mở lúc bàn giao cho món thiếu trong kiện; chỉ CLOSE_NO_ACTION (khách đã được hoàn).
+  const isHandoverShortage = detail?.case.reason.startsWith("HANDOVER_SHORTAGE:") ?? false;
   const isMissingUnitCase =
     detail?.case.type === "RETURN_INCOMPLETE" ||
     detail?.assessment?.outcome === "MISSING_PENDING_REVIEW";
@@ -1387,7 +1396,30 @@ export function AdminRentalReturnExceptions() {
                     </div>
                   )}
                 </div>
-              ) : !caseOpen ? null : isCustodyIncident ? (
+              ) : !caseOpen ? null : isHandoverShortage ? (
+                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-950">
+                    Thiết bị thiếu trong kiện lúc giao, khách chưa từng nhận.
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-amber-900">
+                    Khách đã được hoàn phí thuê và tiền cọc của món này ngay khi bàn giao. Hồ sơ chỉ để kho tìm lại thiết bị
+                    (đang ở trạng thái bảo trì): tìm thấy thì hoàn tất bảo trì để đưa về kệ, không thấy thì ghi mất ở màn kho.
+                    Đóng hồ sơ không ảnh hưởng tiền của khách.
+                  </p>
+                  <Button
+                    disabled={
+                      busy ||
+                      reason.trim().length < 3 ||
+                      !detail.allowedActions.includes("CLOSE_NO_ACTION")
+                    }
+                    onClick={() => void decide("CLOSE_NO_ACTION")}
+                    className="mt-3"
+                    fullWidth
+                  >
+                    Đóng hồ sơ thiếu khi giao
+                  </Button>
+                </div>
+              ) : isCustodyIncident ? (
                 <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
                   <p className="text-sm font-semibold text-amber-950">
                     Sai lệch xảy ra sau khi Delivery đã nhận đồ từ khách.

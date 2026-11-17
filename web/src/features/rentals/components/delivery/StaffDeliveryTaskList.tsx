@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Button,
+  ConfirmModal,
   EmptyState,
   ErrorAlert,
   FormField,
@@ -85,6 +86,10 @@ const TIMELINE_LABEL: Record<string, string> = {
 
 const CHECK_LABEL: Record<Exclude<UnitCheck, "PENDING">, string> = { OK: "Đủ / tốt", MISSING: "Thiếu", DAMAGED: "Hư hỏng" };
 
+function formatVnd(value: number) {
+  return `${new Intl.NumberFormat("vi-VN").format(value)} ₫`;
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return "Chưa có";
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -140,6 +145,7 @@ export function StaffDeliveryTaskList() {
   const [reviews, setReviews] = useState<Record<string, UnitReview>>({});
   const [uploadingUnit, setUploadingUnit] = useState<string>();
   const [noShowOpen, setNoShowOpen] = useState(false);
+  const [shortageConfirmOpen, setShortageConfirmOpen] = useState(false);
   const [noShowReason, setNoShowReason] = useState<NoShowReason>("USER_NO_SHOW");
   const [noShowNotes, setNoShowNotes] = useState("");
   const [incidentNote, setIncidentNote] = useState("");
@@ -210,14 +216,14 @@ export function StaffDeliveryTaskList() {
   };
 
   /** Chạy một thao tác rồi tải lại danh sách + chi tiết với dữ liệu mới nhất từ API. */
-  async function run(action: () => Promise<void>, success: string, fallback: string) {
+  async function run(action: () => Promise<string | void>, success: string, fallback: string) {
     if (!selected) return;
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      await action();
-      setNotice(success);
+      const message = await action();
+      setNotice(message || success);
       const refreshed = await listDeliveryTasks();
       setTasks(refreshed.items);
       setNow(Date.now());
@@ -314,14 +320,26 @@ export function StaffDeliveryTaskList() {
       "Không xác minh được người nhận.",
     );
 
+  // Món "Thiếu" lúc giao không được giao cho khách: backend hoàn phí thuê + cọc của món đó.
+  const missingAtHandover = units.filter((unit) => reviews[unit.unitId]?.status === "MISSING");
+  const allMissingAtHandover = units.length > 0 && missingAtHandover.length === units.length;
+
+  const requestHandover = () => {
+    if (missingAtHandover.length) setShortageConfirmOpen(true);
+    else void handover();
+  };
+
   const handover = () =>
     run(
       async () => {
+        setShortageConfirmOpen(false);
         if (!detail?.package || !order) throw new Error("Thiếu thông tin kiện hoặc đơn thuê. Hãy tải lại.");
         const ref = verificationRef ?? verificationRefOf(detail);
         if (!ref) throw new Error("Cần xác minh mã nhận hàng trước khi bàn giao.");
         if (!reviewsComplete) throw new Error("Kiểm từng thiết bị; món thiếu hoặc hư hỏng phải có ghi chú.");
-        await commitRentalHandover(selected!.orderSummary.orderId, {
+        if (allMissingAtHandover)
+          throw new Error("Kiện thiếu toàn bộ thiết bị: dùng “Khách không đến / từ chối nhận” với lý do “Kiện bàn giao thiếu thiết bị”.");
+        const result = await commitRentalHandover(selected!.orderSummary.orderId, {
           packageId: detail.package.id,
           verificationRef: ref,
           recipientNotes: recipientNotes.trim() || undefined,
@@ -331,6 +349,12 @@ export function StaffDeliveryTaskList() {
           }),
           expectedVersion: order.order.version,
         });
+        const shortage = result.shortage;
+        if (!shortage) return;
+        const money = formatVnd(shortage.refund.amount);
+        return shortage.refund.refundRef
+          ? `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Khách được hoàn ${money}; kho sẽ tìm lại thiết bị thiếu.`
+          : `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Chưa tạo được khoản hoàn ${money} tự động — Admin sẽ hoàn tay.`;
       },
       "Đã bàn giao thiết bị cho khách.",
       "Bàn giao thiết bị thất bại.",
@@ -532,7 +556,20 @@ export function StaffDeliveryTaskList() {
             <FormField label="Ghi chú bàn giao (không bắt buộc)">
               <Textarea value={recipientNotes} onChange={(event) => setRecipientNotes(event.target.value)} rows={2} />
             </FormField>
-            <Button onClick={() => void handover()} loading={busy} disabled={!reviewsComplete} fullWidth>Bàn giao cho khách</Button>
+            {allMissingAtHandover ? (
+              <InfoBanner tone="warning" title="Kiện thiếu toàn bộ thiết bị">
+                Không bàn giao được. Dùng “Khách không đến / từ chối nhận” với lý do “Kiện bàn giao thiếu thiết bị” để huỷ đơn và hoàn tiền cho khách.
+              </InfoBanner>
+            ) : missingAtHandover.length > 0 ? (
+              <InfoBanner tone="warning" title={`Bàn giao thiếu ${missingAtHandover.length} thiết bị`}>
+                Món thiếu không giao cho khách; khách được hoàn phí thuê và tiền cọc của món đó, kho nhận việc tìm lại.
+              </InfoBanner>
+            ) : null}
+            <Button onClick={requestHandover} loading={busy} disabled={!reviewsComplete || allMissingAtHandover} fullWidth>
+              {missingAtHandover.length && !allMissingAtHandover
+                ? `Bàn giao ${units.length - missingAtHandover.length}/${units.length} thiết bị`
+                : "Bàn giao cho khách"}
+            </Button>
             {noShowBlock}
           </div>
         );
@@ -725,6 +762,31 @@ export function StaffDeliveryTaskList() {
           </SurfaceCard>
         </section>
       </div>
+      <ConfirmModal
+        isOpen={shortageConfirmOpen}
+        onClose={() => setShortageConfirmOpen(false)}
+        onConfirm={() => void handover()}
+        loading={busy}
+        title={`Bàn giao thiếu ${missingAtHandover.length} thiết bị?`}
+        confirmLabel={`Bàn giao ${units.length - missingAtHandover.length} thiết bị`}
+        confirmVariant="danger"
+        description={
+          <div className="space-y-2 text-sm text-[#1F2937]">
+            <p>Các thiết bị sau không có trong kiện và sẽ không giao cho khách:</p>
+            <ul className="list-disc pl-5">
+              {missingAtHandover.map((unit) => (
+                <li key={unit.unitId}>
+                  {unitName(unit)} · mã {shortId(unit.assetCode)}
+                </li>
+              ))}
+            </ul>
+            <p>
+              Khách được hoàn phí thuê và tiền cọc của các thiết bị này; thiết bị chuyển sang bảo trì để kho tìm lại. Không thể hoàn tác sau
+              khi bàn giao.
+            </p>
+          </div>
+        }
+      />
     </main>
   );
 }

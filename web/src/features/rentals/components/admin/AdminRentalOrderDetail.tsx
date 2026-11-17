@@ -226,6 +226,17 @@ export function AdminRentalOrderDetail({ orderId }: { orderId: string }) {
                 {tasks.handover.recipientNotes ? ` · ${tasks.handover.recipientNotes}` : ""}
               </p>
             ) : null}
+            {tasks.handover?.shortageUnits?.length ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                <p className="font-medium">Giao thiếu {tasks.handover.shortageUnits.length} thiết bị (đã hoàn phí thuê + cọc cho khách)</p>
+                {tasks.handover.shortageUnits.map((unit) => (
+                  <p key={unit.assignmentId} className="text-xs">
+                    {unit.productName} · <span className="font-mono">{unit.equipmentUnit.assetCode}</span> ·{" "}
+                    {label(UNIT_STATUS_LABELS, unit.equipmentUnit.status)}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             {tasks.returnInspections.map((inspection) => (
               <p key={inspection.id} className="text-[#6B7280]">
                 Kiểm tra {inspection.stage === "FINAL" ? "sau trả" : "sơ bộ"}:{" "}
@@ -285,7 +296,12 @@ export function AdminRentalOrderDetail({ orderId }: { orderId: string }) {
             <div className="mt-3 space-y-1 border-t border-[#E5E7EB] pt-3 text-sm text-[#6B7280]">
               {money.refunds.map((refund) => (
                 <p key={refund.id}>
-                  Hoàn tiền {formatMoney(refund.amount, refund.currency)} · {label(PAYMENT_STATUS_LABELS, refund.status)}
+                  {refund.reason === "HANDOVER_SHORTAGE"
+                    ? "Hoàn món giao thiếu"
+                    : refund.purpose === "DEPOSIT"
+                      ? "Hoàn cọc"
+                      : "Hoàn tiền"}{" "}
+                  {formatMoney(refund.amount, refund.currency)} · {label(PAYMENT_STATUS_LABELS, refund.status)}
                 </p>
               ))}
             </div>

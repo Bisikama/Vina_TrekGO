@@ -501,6 +501,37 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </section>
 
+            {detail.handoverShortage ? (
+              <InfoBanner
+                className="mt-6"
+                tone="warning"
+                title={`TrekGo giao thiếu ${detail.handoverShortage.units.length} thiết bị`}
+              >
+                <ul className="mt-2 list-disc pl-5">
+                  {detail.handoverShortage.units.map((unit) => (
+                    <li key={unit.unitId}>
+                      {unit.productName} · mã {unit.assetCode}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2">
+                  Các thiết bị này không được giao nên không tính vào đơn: bạn không phải trả lại hay chịu cọc cho chúng.
+                </p>
+                {detail.handoverShortage.refund ? (
+                  <p className="mt-1 font-semibold">
+                    Hoàn {money(detail.handoverShortage.refund.amount, detail.handoverShortage.refund.currency)} (phí thuê{" "}
+                    {money(detail.handoverShortage.refund.rentalFeeAmount, detail.handoverShortage.refund.currency)} + cọc{" "}
+                    {money(detail.handoverShortage.refund.depositAmount, detail.handoverShortage.refund.currency)}) ·{" "}
+                    {detail.handoverShortage.refund.settlementMode === "SANDBOX_SIMULATED"
+                      ? "Hoàn tiền (mô phỏng, không có tiền thật)"
+                      : labelOf(refundStatusLabels, detail.handoverShortage.refund.status)}
+                  </p>
+                ) : (
+                  <p className="mt-1 font-semibold">TrekGo sẽ liên hệ để hoàn phí thuê và tiền cọc của các thiết bị này.</p>
+                )}
+              </InfoBanner>
+            ) : null}
+
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <Location title="Điểm nhận" point={detail.pickupPoint} />
               <Location title="Điểm trả" point={detail.returnPoint} />
