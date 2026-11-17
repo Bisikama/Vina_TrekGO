@@ -612,6 +612,21 @@ describe('tryCompleteOrder when the customer kept every unit', () => {
     await expect(tryCompleteOrder(tx, ORDER, AFTER_DUE)).resolves.toBe(false)
     expect(tx.rentalOrder.updateMany).not.toHaveBeenCalled()
   })
+
+  it('does not wait for the warehouse search of a unit missing at handover, but does wait for other open cases', async () => {
+    const shortage = { status: 'OPEN', reason: 'HANDOVER_SHORTAGE: kiện thiếu lều' }
+    const withShortage = order({
+      rentalOrderLinesViaOrderId: [
+        { rentalUnitAssignmentsViaOrderLineId: [{ status: 'CLOSED' }, { status: 'UNASSIGNED' }] },
+      ],
+      rentalExceptionCasesViaOrderId: [{ status: 'RESOLVED' }, shortage],
+    })
+    await expect(tryCompleteOrder(txFor(withShortage), ORDER, AFTER_DUE)).resolves.toBe(true)
+
+    const refundCase = { status: 'OPEN', reason: 'HANDOVER_SHORTAGE_REFUND_REQUIRED: MULTI_PAYMENT' }
+    const tx = txFor({ ...withShortage, rentalExceptionCasesViaOrderId: [shortage, refundCase] })
+    await expect(tryCompleteOrder(tx, ORDER, AFTER_DUE)).resolves.toBe(false)
+  })
 })
 
 describe('RB-API-604 receiving one round while Delivery still holds the next', () => {

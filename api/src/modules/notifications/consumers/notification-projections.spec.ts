@@ -231,6 +231,43 @@ describe('paymentNotificationProjection', () => {
     expect(d.data.title).toBe('Hoàn tiền thành công')
     expect(d.data.metadata).toMatchObject({ sandboxSimulated: true })
   })
+
+  it('does not call a handover-shortage refund a cancelled order', () => {
+    const [d] = paymentNotificationProjection('REFUND_SUCCEEDED', refund({ rentalHandoverShortage: true }))
+    expect(d.data.content).toMatch(/thiết bị TrekGo giao thiếu của đơn thuê #11111111/)
+    expect(d.data.content).not.toMatch(/đã huỷ/)
+  })
+})
+
+describe('rentalNotificationProjection — partial handover', () => {
+  const payload = (over: Record<string, unknown> = {}) => ({
+    handoverId: 'handover-1',
+    units: [{ unitId: 'unit-9', assetCode: 'TENT-009', productName: 'Lều 3 người' }],
+    refundAmount: 800000,
+    refundRef: 'refund-1',
+    refundCreated: true,
+    ...over,
+  })
+
+  it('tells the customer what was missing and what is refunded, and asks staff to find the unit', () => {
+    const [customer, staff] = rentalNotificationProjection('RENTAL_HANDOVER_SHORTAGE', payload(), { orderId: ORDER })
+    expect(customer.audience).toBe('CUSTOMER')
+    expect(customer.data.content).toMatch(/giao thiếu 1 thiết bị: Lều 3 người/)
+    expect(customer.data.content).toMatch(/Khoản hoàn 800\.000.*đang được xử lý/)
+    expect(customer.data.content).not.toMatch(/đã (được )?hoàn/)
+    expect(staff.audience).toBe('STAFF')
+    expect(staff.data.content).toMatch(/TENT-009/)
+    expect(staff.data.content).not.toMatch(/hoàn tay/)
+  })
+
+  it('asks admin for a manual refund when none could be reserved', () => {
+    const [, staff] = rentalNotificationProjection(
+      'RENTAL_HANDOVER_SHORTAGE',
+      payload({ refundRef: undefined, refundCreated: false }),
+      { orderId: ORDER },
+    )
+    expect(staff.data.content).toMatch(/Admin cần hoàn tay/)
+  })
 })
 
 describe('bookingNotificationProjection — trip cancellations', () => {

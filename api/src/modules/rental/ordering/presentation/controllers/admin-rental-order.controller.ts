@@ -430,6 +430,17 @@ Trả về chi tiết toàn diện của đơn thuê thiết bị:
               verificationRef: order.rentalHandoverViaOrderId.verificationRef,
               recipientNotes: order.rentalHandoverViaOrderId.recipientNotes,
               handedOverAt: order.rentalHandoverViaOrderId.handedOverAt.toISOString(),
+              reportedIssues: order.rentalHandoverViaOrderId.reportedIssues,
+              // Units the courier reported missing: not handed over, fee + deposit refunded (reason HANDOVER_SHORTAGE).
+              shortageUnits: order.rentalOrderLinesViaOrderId.flatMap((line) =>
+                line.rentalUnitAssignmentsViaOrderLineId
+                  .filter((a) => a.status === 'UNASSIGNED' && a.packedAt && !a.handedOverAt)
+                  .map((a) => ({
+                    assignmentId: a.id,
+                    productName: line.product.name,
+                    equipmentUnit: a.equipmentUnit,
+                  })),
+              ),
             }
           : null,
         returnInspections: order.returnInspectionsViaOrderId.map((insp) => ({
@@ -482,6 +493,8 @@ Trả về chi tiết toàn diện của đơn thuê thiết bị:
           : null,
         refunds: order.refundsViaRentalOrderId.map((ref) => ({
           id: ref.id,
+          purpose: ref.purpose,
+          reason: ref.reason,
           amount: Number(ref.amount),
           currency: ref.currency,
           status: ref.status,

@@ -72,7 +72,9 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       },
       rentalUnitAssignment: {
         count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([]),
       },
+      refundAllocation: { findMany: jest.fn().mockResolvedValue([]) },
       deliveryTask: {
         update: jest.fn().mockResolvedValue({}),
       },
@@ -142,6 +144,8 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
       },
       equipmentUnit: { findFirst: jest.fn().mockResolvedValue(null) },
+      rentalUnitAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+      refundAllocation: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     mockContext = {

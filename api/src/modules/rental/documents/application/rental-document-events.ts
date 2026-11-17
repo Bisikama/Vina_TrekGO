@@ -89,7 +89,20 @@ async function insertEventDocument(
   return document
 }
 
-export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverId: string, issuedAt: Date) {
+/** Món TrekGo giao thiếu lúc bàn giao (không giao cho khách) và khoản hoàn tương ứng. */
+export type HandoverShortageDocumentInput = {
+  missingUnitIds: string[]
+  descriptions: Record<string, string>
+  refund: { rentalFee: string; deposit: string; total: string } | null
+}
+
+export async function issueHandoverDocumentTx(
+  tx: Tx,
+  orderId: string,
+  handoverId: string,
+  issuedAt: Date,
+  shortage?: HandoverShortageDocumentInput,
+) {
   const existing = await tx.rentalDocument.findUnique({
     where: { documentType_sourceRef: { documentType: RentalDocumentType.HANDOVER, sourceRef: handoverId } },
   })
@@ -117,6 +130,9 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
   if (packageItems.some((x) => !conditionMap.has(x.assignmentId)))
     throw new Error('HANDOVER_DOCUMENT_CONDITION_MISSING')
   const policyVersion = (order.policySnapshot as any)?.policyVersion ?? '1.5.2'
+  const missing = new Set(shortage?.missingUnitIds ?? [])
+  const handedItems = packageItems.filter((x) => !missing.has(x.equipmentUnitId))
+  const missingItems = packageItems.filter((x) => missing.has(x.equipmentUnitId))
   return insertEventDocument(tx, {
     orderId,
     documentType: RentalDocumentType.HANDOVER,
@@ -147,7 +163,7 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
       currency: order.currency,
       pickupPointId: order.pickupPointId,
       returnPointId: order.returnPointId,
-      units: packageItems.map((x) => {
+      units: handedItems.map((x) => {
         const c = conditionMap.get(x.assignmentId)!
         return {
           unitId: x.equipmentUnitId,
@@ -161,6 +177,18 @@ export async function issueHandoverDocumentTx(tx: Tx, orderId: string, handoverI
           conditionSnapshotId: c.id,
         }
       }),
+      // Chỉ có khi giao thiếu, để chứng từ cũ giữ nguyên snapshot (và hash).
+      ...(missingItems.length
+        ? {
+            missingUnits: missingItems.map((x) => ({
+              unitId: x.equipmentUnitId,
+              assetCode: x.equipmentUnit.assetCode,
+              productName: x.equipmentUnit.product?.name ?? null,
+              description: shortage?.descriptions[x.equipmentUnitId] ?? null,
+            })),
+            shortageRefund: shortage?.refund ?? null,
+          }
+        : {}),
       verificationMethod: 'STAFF_DELIVERY_PICKUP_CODE',
       signatureMethod: 'NONE',
       policySnapshot: order.policySnapshot,

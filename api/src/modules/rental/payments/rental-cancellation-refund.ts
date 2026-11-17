@@ -125,7 +125,13 @@ export async function cancelPendingRentalChargesWithTx(tx: Prisma.TransactionCli
 export async function reserveRentalCancellationRefundWithTx(
   tx: Prisma.TransactionClient,
   input: { orderId: string; paymentId: string; amount: Prisma.Decimal; reason: string;
-    idempotencyKey: string; now: Date },
+    idempotencyKey: string; now: Date;
+    /**
+     * Partial refunds (handover shortage) must come out of the exact order line they belong to,
+     * otherwise a later per-line deposit refund finds its allocation already consumed.
+     * Omitted = whole-order cancellation, deposit allocations first.
+     */
+    lineAmounts?: Array<{ rentalOrderLineId: string; component: 'RENTAL_FEE' | 'RENTAL_DEPOSIT'; amount: Prisma.Decimal }> },
 ) {
   const existing = await tx.refund.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing) {
@@ -157,7 +163,20 @@ export async function reserveRentalCancellationRefundWithTx(
     .sort((a, b) => Number(b.component === 'RENTAL_DEPOSIT') - Number(a.component === 'RENTAL_DEPOSIT'));
   let remaining = input.amount;
   const selected: { paymentAllocationId: string; amount: Prisma.Decimal }[] = [];
-  for (const a of allocations) {
+  if (input.lineAmounts) {
+    for (const wanted of input.lineAmounts.filter((line) => line.amount.gt(0))) {
+      const a = allocations.find((row) => row.rentalOrderLineId === wanted.rentalOrderLineId && row.component === wanted.component);
+      if (!a) throw new Error('RENTAL_REFUND_ALLOCATION_EXCEEDED');
+      const used = await tx.refundAllocation.aggregate({
+        where: { paymentAllocationId: a.id, refund: { status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } } },
+        _sum: { amount: true },
+      });
+      if (wanted.amount.gt(a.amount.minus(used._sum.amount ?? 0))) throw new Error('RENTAL_REFUND_ALLOCATION_EXCEEDED');
+      selected.push({ paymentAllocationId: a.id, amount: wanted.amount });
+      remaining = remaining.minus(wanted.amount);
+    }
+  }
+  for (const a of input.lineAmounts ? [] : allocations) {
     const used = await tx.refundAllocation.aggregate({
       where: { paymentAllocationId: a.id, refund: { status: { in: ['PENDING', 'PROCESSING', 'SUCCEEDED'] } } },
       _sum: { amount: true },

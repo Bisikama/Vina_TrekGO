@@ -1,4 +1,5 @@
 import { assertPrimaryRentalLocation } from '../../../shared/primary-inventory-location'
+import { HANDOVER_SHORTAGE_REASON } from '../../../../../shared/constants/rental-event-reasons.constant'
 import { effectiveDueAt } from '../../../ordering/extension/rental-extension.policy'
 import { createHash, randomUUID } from 'crypto'
 import { inspectionDeadlines } from '../../application/return-policy-152'
@@ -87,6 +88,10 @@ import type {
 const DELIVERY_CUSTODY_DISCREPANCY = 'DELIVERY_CUSTODY_DISCREPANCY'
 const DELIVERY_TRANSFER_OMISSION = `${DELIVERY_CUSTODY_DISCREPANCY}:TRANSFER_OMISSION`
 const DELIVERY_RECEIPT_SHORTAGE = `${DELIVERY_CUSTODY_DISCREPANCY}:WAREHOUSE_RECEIPT_SHORTAGE`
+/** Case mở lúc bàn giao cho món thiếu trong kiện (prisma-delivery.adapter `recordHandoverShortageWithTx`). */
+export function isHandoverShortageCase(reason: string | null | undefined): boolean {
+  return typeof reason === 'string' && reason.startsWith(`${HANDOVER_SHORTAGE_REASON}:`)
+}
 /** RB-API-605: scopes accepted for both item-level and damage-level evidence. */
 export const FINAL_INSPECTION_EVIDENCE_SCOPES: MediaScope[] = [
   MediaScope.RETURN_EVIDENCE,
@@ -2285,6 +2290,11 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
           throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
             details: { reason: 'DELIVERY_CUSTODY_LOSS_CANNOT_BE_CHARGED_TO_CUSTOMER' },
           })
+        // The unit never reached the customer; the case only tracks the warehouse search.
+        if (isHandoverShortageCase(exceptionCase.reason) && command.decision !== 'CLOSE_NO_ACTION')
+          throw AppError.fromCode(RR.INVALID_RETURN_STATE, {
+            details: { reason: 'HANDOVER_SHORTAGE_CANNOT_BE_CHARGED_TO_CUSTOMER' },
+          })
 
         if (command.decision === 'RETRY_REFUND') {
           nextAction = await queueDepositRefundRetry(tx, {
@@ -2928,17 +2938,19 @@ export class PrismaRentalReturnAdapter implements RentalReturnPort {
       allowedActions:
         query.actorRole === UserRole.ADMIN &&
         [RentalExceptionCaseStatus.OPEN, RentalExceptionCaseStatus.UNDER_REVIEW].includes(row.status as any)
-          ? [
-              'APPROVE_DEDUCTION',
-              'REJECT_DEDUCTION',
-              'CONFIRM_LOST',
-              'CLOSE_NO_ACTION',
-              // Only a refund the provider definitively FAILED can be sent again.
-              ...(row.caseType === RentalExceptionType.REFUND_FAILURE &&
-              referencedRefund?.status === RefundStatus.FAILED
-                ? ['RETRY_REFUND']
-                : []),
-            ]
+          ? isHandoverShortageCase(row.reason)
+            ? ['CLOSE_NO_ACTION']
+            : [
+                'APPROVE_DEDUCTION',
+                'REJECT_DEDUCTION',
+                'CONFIRM_LOST',
+                'CLOSE_NO_ACTION',
+                // Only a refund the provider definitively FAILED can be sent again.
+                ...(row.caseType === RentalExceptionType.REFUND_FAILURE &&
+                referencedRefund?.status === RefundStatus.FAILED
+                  ? ['RETRY_REFUND']
+                  : []),
+              ]
           : [],
     }
   }
@@ -4654,8 +4666,9 @@ export async function tryCompleteOrder(tx: Prisma.TransactionClient, orderId: st
     RentalExceptionCaseStatus.REJECTED,
     RentalExceptionCaseStatus.CLOSED,
   ]
-  const casesFinal = (order.rentalExceptionCasesViaOrderId || []).every((item) =>
-    allowedCaseStatuses.includes(item.status as any),
+  // A handover-shortage case is the warehouse's search for its own unit; it does not hold the customer's order open.
+  const casesFinal = (order.rentalExceptionCasesViaOrderId || []).every(
+    (item) => allowedCaseStatuses.includes(item.status as any) || isHandoverShortageCase(item.reason),
   )
   if (!casesFinal) return false
 
