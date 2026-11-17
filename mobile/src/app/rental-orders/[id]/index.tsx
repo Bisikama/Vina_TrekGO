@@ -664,10 +664,15 @@ export default function RentalOrderDetailScreen() {
   const {
     order,
     items,
-    assignedUnits = [],
+    assignedUnits: allAssignedUnits = [],
     timeline = [],
     cancellationRefunds = [],
+    handoverShortage,
   } = detail;
+  // Món bị đổi lúc soạn hoặc thiếu lúc giao không thuộc đơn nữa (món thiếu hiện ở mục riêng).
+  const assignedUnits = allAssignedUnits.filter(
+    (unit) => unit.assignmentStatus !== "REPLACED" && unit.assignmentStatus !== "UNASSIGNED",
+  );
   const eventTimes = new Map<string, string>();
   timeline.forEach((event) => {
     const key = event.type || event.status;
@@ -1103,6 +1108,46 @@ export default function RentalOrderDetailScreen() {
                 </Text>
               </View>
             ))}
+          </Section>
+        )}
+
+        {handoverShortage && (
+          <Section
+            title={`TrekGo giao thiếu ${handoverShortage.units.length} thiết bị`}
+            subtitle="Các thiết bị này không được giao nên không tính vào đơn: bạn không phải trả lại hay chịu cọc cho chúng"
+          >
+            {handoverShortage.units.map((unit) => (
+              <View key={unit.unitId} style={styles.depositItem}>
+                <View style={styles.flexOne}>
+                  <Text style={styles.lineName}>{unit.productName}</Text>
+                  <Text style={styles.lineMeta}>Mã {unit.assetCode}</Text>
+                </View>
+              </View>
+            ))}
+            {handoverShortage.refund ? (
+              <View style={styles.depositItem}>
+                <View style={styles.flexOne}>
+                  <Text style={styles.lineName}>
+                    {cancellationRefundLabel(
+                      handoverShortage.refund.status,
+                      handoverShortage.refund.settlementMode,
+                    )}
+                  </Text>
+                  <Text style={styles.lineMeta}>
+                    Phí thuê{" "}
+                    {money(handoverShortage.refund.rentalFeeAmount, handoverShortage.refund.currency)} + cọc{" "}
+                    {money(handoverShortage.refund.depositAmount, handoverShortage.refund.currency)}
+                  </Text>
+                </View>
+                <Text style={styles.lineAmount}>
+                  {money(handoverShortage.refund.amount, handoverShortage.refund.currency)}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.readOnlyNote}>
+                TrekGo sẽ liên hệ để hoàn phí thuê và tiền cọc của các thiết bị này.
+              </Text>
+            )}
           </Section>
         )}
 
