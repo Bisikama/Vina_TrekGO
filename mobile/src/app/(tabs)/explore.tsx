@@ -483,9 +483,9 @@ export default function ExploreScreen() {
                     color={Colors.primaryDark}
                   />
                 </View>
-                <View>
+                <View style={styles.bentoTextCol}>
                   <Text style={styles.bentoLabel}>KHOẢNG CÁCH</Text>
-                  <Text style={styles.bentoValue}>
+                  <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                     {selectedTrailDetail?.distanceKm ?? currentSelectedTrail.distanceKm} km
                   </Text>
                 </View>
@@ -495,9 +495,9 @@ export default function ExploreScreen() {
                 <View style={styles.bentoIconBg}>
                   <Ionicons name="time" size={16} color={Colors.secondary} />
                 </View>
-                <View>
+                <View style={styles.bentoTextCol}>
                   <Text style={styles.bentoLabel}>THỜI GIAN</Text>
-                  <Text style={styles.bentoValue}>
+                  <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                     {selectedTrailDetail?.estimatedDurationMinutes
                       ? formatTrailDuration(selectedTrailDetail.estimatedDurationMinutes)
                       : currentSelectedTrail.duration}
@@ -509,9 +509,9 @@ export default function ExploreScreen() {
                 <View style={styles.bentoIconBg}>
                   <Ionicons name="trending-up" size={16} color="#725c00" />
                 </View>
-                <View>
+                <View style={styles.bentoTextCol}>
                   <Text style={styles.bentoLabel}>ĐỘ CAO LŨY KẾ</Text>
-                  <Text style={styles.bentoValue}>
+                  <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                     +{selectedTrailDetail?.elevationGainM ?? currentSelectedTrail.elevationGainM}m
                   </Text>
                 </View>
@@ -521,9 +521,9 @@ export default function ExploreScreen() {
                 <View style={styles.bentoIconBg}>
                   <Ionicons name="flag" size={16} color={Colors.primaryDark} />
                 </View>
-                <View>
+                <View style={styles.bentoTextCol}>
                   <Text style={styles.bentoLabel}>CHECKPOINTS</Text>
-                  <Text style={styles.bentoValue}>
+                  <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                     {systemCheckpoints.length || selectedTrailDetail?.checkpointCount || currentSelectedTrail.checkpoints?.length || 0} Mốc GPS
                   </Text>
                 </View>
@@ -673,9 +673,9 @@ export default function ExploreScreen() {
                           color={Colors.primaryDark}
                         />
                       </View>
-                      <View>
+                      <View style={styles.bentoTextCol}>
                         <Text style={styles.bentoLabel}>QUÃNG ĐƯỜNG</Text>
-                        <Text style={styles.bentoValue}>
+                        <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                           {activePersonal.distanceKm} km
                         </Text>
                       </View>
@@ -689,9 +689,9 @@ export default function ExploreScreen() {
                           color="#725c00"
                         />
                       </View>
-                      <View>
+                      <View style={styles.bentoTextCol}>
                         <Text style={styles.bentoLabel}>ĐỘ CAO</Text>
-                        <Text style={styles.bentoValue}>
+                        <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                           +{activePersonal.elevationGainM}m
                         </Text>
                       </View>
@@ -705,9 +705,9 @@ export default function ExploreScreen() {
                           color={Colors.secondary}
                         />
                       </View>
-                      <View>
+                      <View style={styles.bentoTextCol}>
                         <Text style={styles.bentoLabel}>THỜI GIAN</Text>
-                        <Text style={styles.bentoValue}>
+                        <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                           {activePersonal.duration}
                         </Text>
                       </View>
@@ -721,9 +721,9 @@ export default function ExploreScreen() {
                           color={Colors.primaryDark}
                         />
                       </View>
-                      <View>
+                      <View style={styles.bentoTextCol}>
                         <Text style={styles.bentoLabel}>ĐỊA HÌNH</Text>
-                        <Text style={styles.bentoValue} numberOfLines={1}>
+                        <Text style={styles.bentoValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                           {activePersonal.terrainType || "Rừng núi"}
                         </Text>
                       </View>
@@ -780,17 +780,24 @@ export default function ExploreScreen() {
                 {/* Nút hành động */}
                 <View style={styles.ctaRow}>
                   <TouchableOpacity
-                    style={styles.primaryCta}
+                    style={[styles.primaryCta, styles.primaryCtaWide]}
                     onPress={() =>
                       router.push(
                         `/personal-trails/${activePersonal.id}` as Href,
                       )
                     }
                     activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Xem chi tiết cung đường"
                   >
-                    <Ionicons name="eye" size={18} color={Colors.onPrimary} />
-                    <Text style={styles.primaryCtaText}>
-                      Xem Chi Tiết Cung Đường
+                    <Ionicons name="eye" size={18} color="#ffffff" />
+                    <Text
+                      style={styles.primaryCtaText}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      Xem chi tiết
                     </Text>
                   </TouchableOpacity>
 
@@ -1364,7 +1371,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bentoTile: {
-    width: "48.5%",
+    flexGrow: 1,
+    flexBasis: "45%",
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1379,6 +1388,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+  },
+  bentoTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   bentoLabel: {
     fontSize: 10,
@@ -1390,6 +1404,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Colors.onSurface,
     marginTop: 1,
+    fontVariant: ["tabular-nums"],
   },
   mapSectionCard: {
     margin: 12,
@@ -1446,7 +1461,8 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     flex: 1,
-    height: 46,
+    minHeight: 46,
+    paddingHorizontal: 14,
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryDark,
     flexDirection: "row",
@@ -1455,7 +1471,11 @@ const styles = StyleSheet.create({
     gap: 6,
     ...Shadows.hover,
   },
+  primaryCtaWide: {
+    flex: 1.4,
+  },
   primaryCtaText: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: "900",
     color: "#ffffff",
