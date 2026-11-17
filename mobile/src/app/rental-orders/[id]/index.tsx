@@ -142,10 +142,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 const paymentLabel = (status?: string | null) =>
   status ? PAYMENT_LABELS[status] || "Đang cập nhật" : "Chưa cập nhật";
 
-const cancellationRefundLabel = (status: string, settlementMode: string) => {
-  if (status === "SUCCEEDED" && settlementMode === "SANDBOX_SIMULATED") {
-    return "Hoàn tiền";
-  }
+const cancellationRefundLabel = (status: string) => {
   const labels: Record<string, string> = {
     PENDING: "Đang chờ hoàn tiền",
     PROCESSING: "Đang xử lý hoàn tiền",
@@ -1090,18 +1087,8 @@ export default function RentalOrderDetailScreen() {
               <View key={refund.refundId} style={styles.depositItem}>
                 <View style={styles.flexOne}>
                   <Text style={styles.lineName}>
-                    {cancellationRefundLabel(
-                      refund.status,
-                      refund.settlementMode,
-                    )}
+                    {cancellationRefundLabel(refund.status)}
                   </Text>
-                  {refund.status === "SUCCEEDED" &&
-                    refund.settlementMode === "SANDBOX_SIMULATED" && (
-                      <Text style={styles.lineMeta}>
-                        Kết quả mô phỏng để kiểm thử, không xác nhận tiền đã về
-                        tài khoản.
-                      </Text>
-                    )}
                 </View>
                 <Text style={styles.lineAmount}>
                   {money(refund.amount, refund.currency)}
@@ -1128,10 +1115,7 @@ export default function RentalOrderDetailScreen() {
               <View style={styles.depositItem}>
                 <View style={styles.flexOne}>
                   <Text style={styles.lineName}>
-                    {cancellationRefundLabel(
-                      handoverShortage.refund.status,
-                      handoverShortage.refund.settlementMode,
-                    )}
+                    {cancellationRefundLabel(handoverShortage.refund.status)}
                   </Text>
                   <Text style={styles.lineMeta}>
                     Phí thuê{" "}

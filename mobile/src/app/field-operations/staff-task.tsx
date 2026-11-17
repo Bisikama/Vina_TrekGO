@@ -317,10 +317,17 @@ export default function StaffTaskScreen() {
     }
     setShortageConfirmVisible(false);
 
+    // "Thiếu cả món" → UNIT_MISSING (backend rút món khỏi đơn và hoàn tiền); thiếu phụ kiện ghi ở "Hư hỏng".
     const reportedIssues = units.flatMap((unit) => {
       const review = reviews[unit.unitId];
-      if (!review || review.status === "OK") return [];
-      return [{ unitId: unit.unitId, type: review.status, description: review.note.trim() }];
+      if (!review || review.status === "OK" || review.status === "PENDING") return [];
+      return [
+        {
+          unitId: unit.unitId,
+          type: review.status === "MISSING" ? "UNIT_MISSING" : review.status,
+          description: review.note.trim(),
+        },
+      ];
     });
 
     setBusy(true);
@@ -489,7 +496,7 @@ export default function StaffTaskScreen() {
                   <View style={styles.statusRow}>
                     {(["OK", "MISSING", "DAMAGED"] as ItemStatus[]).map((status) => (
                       <TouchableOpacity key={status} style={[styles.statusButton, review.status === status && styles.statusSelected]} onPress={() => setReview(unit.unitId, { status })}>
-                        <Text style={[styles.statusText, review.status === status && styles.statusTextSelected]}>{status === "OK" ? "Đủ / tốt" : status === "MISSING" ? "Thiếu" : "Hư hỏng"}</Text>
+                        <Text style={[styles.statusText, review.status === status && styles.statusTextSelected]}>{status === "OK" ? "Đủ / tốt" : status === "MISSING" ? "Thiếu cả món" : "Hỏng / thiếu phụ kiện"}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
