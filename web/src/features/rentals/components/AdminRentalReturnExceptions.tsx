@@ -149,7 +149,7 @@ function visibleReason(reason: string) {
     return rest || "Sai lệch bàn giao nội bộ giữa nhân viên giao hàng và kho";
   }
   if (value.startsWith("HANDOVER_SHORTAGE_REFUND_REQUIRED:")) {
-    return `Giao thiếu thiết bị nhưng chưa tạo được khoản hoàn tự động — cần hoàn tay (${value.slice("HANDOVER_SHORTAGE_REFUND_REQUIRED:".length).trim()})`;
+    return `Chưa hoàn được tiền thiết bị giao thiếu — cần hoàn tay (${value.slice("HANDOVER_SHORTAGE_REFUND_REQUIRED:".length).trim()})`;
   }
   if (value.startsWith("HANDOVER_SHORTAGE:")) {
     const note = value.slice("HANDOVER_SHORTAGE:".length).trim();
@@ -580,7 +580,9 @@ export function AdminRentalReturnExceptions() {
     }
   }
 
-  const isRefundFailure = detail?.case.type === "REFUND_FAILURE";
+  // Hoàn phí + cọc món giao thiếu không tạo được / thất bại: Admin hoàn tay rồi đóng hồ sơ (chỉ CLOSE_NO_ACTION).
+  const isShortageRefundCase = detail?.case.reason.includes("HANDOVER_SHORTAGE_REFUND_REQUIRED:") ?? false;
+  const isRefundFailure = detail?.case.type === "REFUND_FAILURE" && !isShortageRefundCase;
   const currentRefundInfo =
     refundInfo &&
     detail?.refund &&
@@ -614,7 +616,7 @@ export function AdminRentalReturnExceptions() {
   const isCustodyIncident =
     detail?.case.reason.startsWith("DELIVERY_CUSTODY_DISCREPANCY") ?? false;
   // Case mở lúc bàn giao cho món thiếu trong kiện; chỉ CLOSE_NO_ACTION (khách đã được hoàn).
-  const isHandoverShortage = detail?.case.reason.startsWith("HANDOVER_SHORTAGE:") ?? false;
+  const isHandoverShortage = (detail?.case.reason.startsWith("HANDOVER_SHORTAGE:") ?? false) || isShortageRefundCase;
   const isMissingUnitCase =
     detail?.case.type === "RETURN_INCOMPLETE" ||
     detail?.assessment?.outcome === "MISSING_PENDING_REVIEW";
@@ -1399,12 +1401,14 @@ export function AdminRentalReturnExceptions() {
               ) : !caseOpen ? null : isHandoverShortage ? (
                 <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
                   <p className="text-sm font-semibold text-amber-950">
-                    Thiết bị thiếu trong kiện lúc giao, khách chưa từng nhận.
+                    {isShortageRefundCase
+                      ? "Chưa hoàn được phí thuê và tiền cọc của thiết bị giao thiếu."
+                      : "Thiết bị thiếu trong kiện lúc giao, khách chưa từng nhận."}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-amber-900">
-                    Khách đã được hoàn phí thuê và tiền cọc của món này ngay khi bàn giao. Hồ sơ chỉ để kho tìm lại thiết bị
-                    (đang ở trạng thái bảo trì): tìm thấy thì hoàn tất bảo trì để đưa về kệ, không thấy thì ghi mất ở màn kho.
-                    Đóng hồ sơ không ảnh hưởng tiền của khách.
+                    {isShortageRefundCase
+                      ? "Hoàn tự động không tạo được hoặc cổng thanh toán báo thất bại. Hãy hoàn tay số tiền ghi ở lý do cho khách, rồi đóng hồ sơ kèm ghi chú (mã giao dịch). Đơn chỉ hoàn tất được sau khi hồ sơ này đóng."
+                      : "Khách đã được hoàn phí thuê và tiền cọc của món này ngay khi bàn giao. Hồ sơ chỉ để kho tìm lại thiết bị (đang ở trạng thái bảo trì): tìm thấy thì hoàn tất bảo trì để đưa về kệ, không thấy thì ghi mất ở màn kho. Đóng hồ sơ không ảnh hưởng tiền của khách."}
                   </p>
                   <Button
                     disabled={
@@ -1416,7 +1420,7 @@ export function AdminRentalReturnExceptions() {
                     className="mt-3"
                     fullWidth
                   >
-                    Đóng hồ sơ thiếu khi giao
+                    {isShortageRefundCase ? "Đã hoàn tay cho khách — đóng hồ sơ" : "Đóng hồ sơ thiếu khi giao"}
                   </Button>
                 </div>
               ) : isCustodyIncident ? (

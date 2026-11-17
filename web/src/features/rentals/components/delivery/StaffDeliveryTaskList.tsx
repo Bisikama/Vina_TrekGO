@@ -16,6 +16,7 @@ import {
   SurfaceCard,
   Textarea,
 } from "@/components/ui";
+import { formatMoney } from "@/features/rentals/components/admin/admin-rental-labels";
 import { orderShortCode, productLabel, shortId } from "@/features/rentals/services/rental-display";
 import {
   claimDeliveryTask,
@@ -86,9 +87,18 @@ const TIMELINE_LABEL: Record<string, string> = {
 
 const CHECK_LABEL: Record<Exclude<UnitCheck, "PENDING">, string> = { OK: "Đủ / tốt", MISSING: "Thiếu", DAMAGED: "Hư hỏng" };
 
-function formatVnd(value: number) {
-  return `${new Intl.NumberFormat("vi-VN").format(value)} ₫`;
-}
+/** Lúc giao: "Thiếu" là cả món không có trong kiện (rút khỏi đơn); thiếu phụ kiện ghi ở "Hư hỏng". */
+const HANDOVER_CHECK_LABEL: Record<Exclude<UnitCheck, "PENDING">, string> = {
+  OK: "Đủ / tốt",
+  MISSING: "Thiếu cả món",
+  DAMAGED: "Hư hỏng / thiếu phụ kiện",
+};
+
+/** Loại lỗi backend dùng để rút cả món khỏi đơn (RB-API-404). */
+const HANDOVER_ISSUE_TYPE: Record<Exclude<UnitCheck, "PENDING" | "OK">, string> = {
+  MISSING: "UNIT_MISSING",
+  DAMAGED: "DAMAGED",
+};
 
 function formatDateTime(value?: string | null) {
   if (!value) return "Chưa có";
@@ -345,13 +355,15 @@ export function StaffDeliveryTaskList() {
           recipientNotes: recipientNotes.trim() || undefined,
           reportedIssues: units.flatMap((unit) => {
             const review = reviews[unit.unitId];
-            return review && review.status !== "OK" ? [{ unitId: unit.unitId, type: review.status, description: review.note.trim() }] : [];
+            return review && review.status !== "OK" && review.status !== "PENDING"
+              ? [{ unitId: unit.unitId, type: HANDOVER_ISSUE_TYPE[review.status], description: review.note.trim() }]
+              : [];
           }),
           expectedVersion: order.order.version,
         });
         const shortage = result.shortage;
         if (!shortage) return;
-        const money = formatVnd(shortage.refund.amount);
+        const money = formatMoney(shortage.refund.amount);
         return shortage.refund.refundRef
           ? `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Khách được hoàn ${money}; kho sẽ tìm lại thiết bị thiếu.`
           : `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Chưa tạo được khoản hoàn ${money} tự động — Admin sẽ hoàn tay.`;
@@ -460,7 +472,7 @@ export function StaffDeliveryTaskList() {
                       : "border-[#E5E7EB] bg-white text-[#1F2937] hover:border-[#2F6B4F]"
                   }`}
                 >
-                  {CHECK_LABEL[option]}
+                  {withPhotos ? CHECK_LABEL[option] : HANDOVER_CHECK_LABEL[option]}
                 </button>
               ))}
             </div>
