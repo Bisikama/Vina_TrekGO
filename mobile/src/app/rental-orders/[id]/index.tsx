@@ -26,7 +26,9 @@ import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { EarlyReturnCard } from "@/features/rentals/EarlyReturnCard";
 import { ApiError } from "@/lib/api-client";
+import { splitGradeName } from "@/features/rentals/display";
 import {
+  RentalDepositItem,
   RentalDepositStatus,
   RentalHandoverPreview,
   RentalOrderDetail,
@@ -97,6 +99,32 @@ const EXCEPTION_LABELS: Record<string, string> = {
 
 const money = (value = 0, currency = "VND") =>
   `${value.toLocaleString("vi-VN")} ${currency === "VND" ? "đ" : currency}`;
+
+const REFUND_STATUS_TEXT: Record<string, string> = {
+  PENDING: "Đã gửi yêu cầu hoàn",
+  PROCESSING: "Cổng thanh toán đang xử lý",
+  SUCCEEDED: "Đã hoàn tiền",
+  FAILED: "Hoàn tiền thất bại · TrekGo đang hỗ trợ",
+};
+
+/** Kết quả kiểm định của kho cho từng thiết bị, viết bằng lời cho khách. */
+function inspectionText(item: RentalDepositItem) {
+  switch (item.inspectionStatus) {
+    case "FINAL_PASS":
+      return { label: "Kiểm định đạt", tone: "ok" as const };
+    case "FINAL_ISSUE":
+      return { label: "Kiểm định ghi nhận lỗi", tone: "bad" as const };
+    case "PENDING":
+      return {
+        label: item.inventoryCustodyReceivedAt
+          ? `Kho đã nhận ${dateTime(item.inventoryCustodyReceivedAt)} · đang kiểm định`
+          : "Kho đang kiểm định",
+        tone: "wait" as const,
+      };
+    default:
+      return { label: "Chưa về kho", tone: "wait" as const };
+  }
+}
 
 const dateTime = (value?: string | null) => {
   if (!value) return "Chưa cập nhật";
@@ -1228,25 +1256,65 @@ export default function RentalOrderDetailScreen() {
                   </Text>
                 ) : null;
               })()}
-              {deposit.items.map((item) => (
+              {[...deposit.items]
+                .map((item) => {
+                  const unit = allAssignedUnits.find((entry) => entry.unitId === item.unitId);
+                  return { item, name: unit?.productName ? splitGradeName(unit.productName) : null };
+                })
+                // Gom món cùng sản phẩm đứng cạnh nhau.
+                .sort((a, b) => (a.name?.base ?? "~").localeCompare(b.name?.base ?? "~", "vi"))
+                .map(({ item, name }) => {
+                  const inspection = inspectionText(item);
+                  const deduction = item.deduction || item.approvedDeduction || 0;
+                  return (
                 <View key={item.unitId}>
                   <View style={styles.depositItem}>
                     <View style={styles.flexOne}>
                       <Text style={styles.lineName}>
-                        Mã thiết bị {shortAssetCode(item.assetCode)}
+                        {name ? name.base : "Thiết bị"}
+                        {name?.grade ? ` · ${name.grade}` : ""}
                       </Text>
                       <Text style={styles.lineMeta}>
-                        {depositBadgeLabel(item)}
+                        Mã {shortAssetCode(item.assetCode)} · {depositBadgeLabel(item)}
                       </Text>
+                      <Text
+                        style={[
+                          styles.lineMeta,
+                          inspection.tone === "ok" && styles.depositOk,
+                          inspection.tone === "bad" && styles.depositBad,
+                        ]}
+                      >
+                        {inspection.label}
+                      </Text>
+                      {deduction > 0 ? (
+                        <Text style={[styles.lineMeta, styles.depositBad]}>
+                          Khấu trừ {money(deduction, order.currency)}
+                        </Text>
+                      ) : null}
+                      {item.refundStatus ? (
+                        <Text
+                          style={[
+                            styles.lineMeta,
+                            item.refundStatus === "SUCCEEDED" && styles.depositOk,
+                            item.refundStatus === "FAILED" && styles.depositBad,
+                          ]}
+                        >
+                          {REFUND_STATUS_TEXT[item.refundStatus] ?? item.refundStatus}
+                          {item.refundAmount ? ` · hoàn ${money(item.refundAmount, order.currency)}` : ""}
+                        </Text>
+                      ) : null}
                       {depositReasonText(item.reason) ? (
                         <Text style={styles.lineMeta}>
                           {depositReasonText(item.reason)}
                         </Text>
                       ) : null}
                     </View>
-                    <Text style={styles.lineAmount}>
-                      {money(item.depositAmount ?? item.amount, order.currency)}
-                    </Text>
+                    <View style={styles.depositAmountCol}>
+                      <Text style={styles.depositAmountLabel}>Cọc</Text>
+                      <Text style={styles.lineAmount}>
+                        {money(item.depositAmount ?? item.amount, order.currency)}
+                      </Text>
+                    </View>
                   </View>
                   {orderId ? (
                     <DeductionReviewCard
@@ -1258,7 +1326,8 @@ export default function RentalOrderDetailScreen() {
                     />
                   ) : null}
                 </View>
-              ))}
+                  );
+                })}
               {deposit.items.some(
                 (item) =>
                   item.status === "REVIEW_REQUIRED" ||
@@ -1654,6 +1723,10 @@ const styles = StyleSheet.create({
   lineGrade: { marginTop: 4 },
   lineMeta: { marginTop: 3, color: Colors.onSurfaceVariant, fontSize: 12 },
   lineAmount: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600" },
+  depositOk: { color: Colors.primaryDark, fontWeight: "600" },
+  depositBad: { color: Colors.error, fontWeight: "600" },
+  depositAmountCol: { alignItems: "flex-end" },
+  depositAmountLabel: { color: Colors.onSurfaceVariant, fontSize: 11 },
   unitWrap: {
     marginTop: 12,
     padding: 12,

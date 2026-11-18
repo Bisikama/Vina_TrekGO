@@ -524,6 +524,9 @@ export type RentalDepositItem = {
   amount?: number;
   status: string;
   inspectionStatus?: string | null;
+  /** Lúc kho nhận thiết bị trả về và hạn kiểm định. */
+  inventoryCustodyReceivedAt?: string | null;
+  inspectionDueAt?: string | null;
   refundRef?: string | null;
   refundStatus?: string | null;
   refundAmount?: number | null;

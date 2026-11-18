@@ -2,7 +2,7 @@ import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
-import { productLabel } from "@/features/rentals/display";
+import { productLabel, splitGradeName } from "@/features/rentals/display";
 import { DeliveryTaskSummary } from "@/features/rentals/types";
 import {
   DeliveryMonthCalendar,
@@ -57,6 +57,9 @@ type EnrichedDeliveryTask = DeliveryTaskSummary & {
   tripStartAt?: string;
   tripEndAt?: string;
   itemSummary?: string;
+  /** Món trong đơn đã gộp theo tên + hạng, để hiện danh sách gọn trên thẻ. */
+  itemLines?: { name: string; grade: string | null; quantity: number }[];
+  itemCount?: number;
   /** Mốc thời gian của đơn từ GET /rental-orders/:id (PACKED, HANDED_OVER, RETURNED, CLOSED…). */
   timeline?: { type: string; at: string }[];
 };
@@ -211,6 +214,16 @@ export default function FieldOperationsHome() {
                 (total, item) => total + item.quantity,
                 0,
               );
+              const lineMap = new Map<string, { name: string; grade: string | null; quantity: number }>();
+              detail.items.forEach((item) => {
+                const raw = item.product?.name || item.name || item.sku;
+                if (!raw) return;
+                const { base, grade } = splitGradeName(raw);
+                const key = `${base}|${grade ?? ""}`;
+                const existing = lineMap.get(key);
+                if (existing) existing.quantity += item.quantity;
+                else lineMap.set(key, { name: base, grade, quantity: item.quantity });
+              });
               const trip = detail.order.trip;
 
               return {
@@ -228,6 +241,8 @@ export default function FieldOperationsHome() {
                     ? [{ type: step.type, at: step.at }]
                     : [],
                 ),
+                itemLines: [...lineMap.values()],
+                itemCount: quantity,
                 itemSummary: visibleNames
                   ? `${visibleNames}${remainingNames ? ` +${remainingNames} món` : ""} · ${quantity} thiết bị`
                   : undefined,
@@ -651,6 +666,23 @@ export default function FieldOperationsHome() {
                   ))}
                 </View>
               ) : null}
+              {task.itemLines?.length ? (
+                <View style={styles.itemList}>
+                  {task.itemLines.slice(0, 3).map((line) => (
+                    <View key={`${line.name}-${line.grade}`} style={styles.itemLine}>
+                      <View style={styles.itemDot} />
+                      <Text style={styles.itemName} numberOfLines={1}>
+                        {line.name}
+                      </Text>
+                      {line.grade ? <Text style={styles.itemGrade}>{line.grade}</Text> : null}
+                      <Text style={styles.itemQty}>×{line.quantity}</Text>
+                    </View>
+                  ))}
+                  {task.itemLines.length > 3 ? (
+                    <Text style={styles.itemMore}>+{task.itemLines.length - 3} món khác</Text>
+                  ) : null}
+                </View>
+              ) : null}
               <View style={styles.taskItems}>
                 <Ionicons
                   name={task.type === "RETURN" ? "return-down-back-outline" : "cube-outline"}
@@ -658,12 +690,13 @@ export default function FieldOperationsHome() {
                   color={Colors.primaryDark}
                 />
                 <Text style={styles.taskItemsText}>
-                  {task.itemSummary ||
-                    (task.package.status === "HANDED_OVER"
+                  {task.itemLines?.length
+                    ? `${task.itemLines.length} món · ${task.itemCount ?? 0} thiết bị`
+                    : task.package.status === "HANDED_OVER"
                       ? "Gói thiết bị đã bàn giao"
                       : task.package.status === "READY"
                         ? "Gói thiết bị sẵn sàng"
-                        : "Thông tin gói thiết bị")}
+                        : "Thông tin gói thiết bị"}
                 </Text>
                 <Text style={styles.openTaskText}>Mở nhiệm vụ</Text>
                 <Ionicons name="chevron-forward" size={17} color={Colors.primaryDark} />
@@ -784,6 +817,13 @@ const styles = StyleSheet.create({
   },
   earlyReturnText: { color: "#92400E", fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
   taskItems: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: Colors.surfaceContainer, paddingTop: 12, marginTop: 7 },
+  itemList: { marginTop: 10, gap: 6, padding: 10, borderRadius: 12, backgroundColor: "#f6f9f3" },
+  itemLine: { flexDirection: "row", alignItems: "center", gap: 7 },
+  itemDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.primary },
+  itemName: { flexShrink: 1, color: Colors.ink, fontSize: 14, fontWeight: "500" },
+  itemGrade: { color: Colors.primaryDark, fontSize: 11, fontWeight: "600", backgroundColor: "#fff", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
+  itemQty: { marginLeft: "auto", color: Colors.onSurfaceVariant, fontSize: 13 },
+  itemMore: { color: Colors.onSurfaceVariant, fontSize: 12, marginLeft: 12 },
   taskItemsText: { flex: 1, color: Colors.onSurfaceVariant, fontSize: 14 },
   openTaskText: { color: Colors.primaryDark, fontSize: 12, fontWeight: "600" },
   pointGroup: { marginBottom: 8 },

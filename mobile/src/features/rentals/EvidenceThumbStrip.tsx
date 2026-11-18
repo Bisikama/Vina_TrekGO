@@ -139,6 +139,12 @@ export function EvidenceThumbStrip({
         </TouchableOpacity>
       </ScrollView>
 
+      {failed ? (
+        <Text style={styles.errorText} numberOfLines={3}>
+          Lỗi tải ảnh: {items.find((item) => item.status === "error")?.errorMessage ?? "không rõ"}. Chạm vào ảnh đỏ để thử lại.
+        </Text>
+      ) : null}
+
       <Modal
         visible={Boolean(viewing)}
         transparent
@@ -207,6 +213,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#1f2a1c",
   },
+  errorText: { color: Colors.error, fontSize: 12, lineHeight: 17, marginTop: 8 },
   overlay: {
     position: "absolute",
     top: 0,
