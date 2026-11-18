@@ -624,8 +624,23 @@ const styles = StyleSheet.create({
   successTitle: { color: Colors.primaryDark, fontSize: 15, fontWeight: "600" },
 });
 
+/** "HH:mm dd/MM" theo giờ Việt Nam (UTC+7). */
+function formatVnDateTime(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return null;
+  const vn = new Date(time + 7 * 3_600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())} ${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}`;
+}
+
 /** Lý do chi tiết backend gửi khi pick / đổi thiết bị bị từ chối. */
 function pickReasonMessage(error: unknown): string | null {
+  if (error instanceof ApiError && error.code === "PREPARATION_PICK_TOO_EARLY") {
+    const pickableFrom = (error.details as { pickableFrom?: unknown } | undefined)?.pickableFrom;
+    const from = formatVnDateTime(pickableFrom);
+    return `Chưa thể soạn sớm: lấy thiết bị lúc này sẽ làm thiếu đồ cho đơn khác giao trước đơn này.${from ? ` Có thể soạn từ ${from}.` : ""}`;
+  }
   if (!(error instanceof ApiError) || !error.details || typeof error.details !== "object") return null;
   const details = error.details as { reason?: unknown; expiresAt?: unknown; assetCode?: unknown };
   if (details.reason !== "EXPIRES_BEFORE_RETURN") return null;
