@@ -150,8 +150,18 @@ jobs:
             fi
 
             # 3. Dang nhap Docker Hub (can neu repo private), pull image moi, chay lai
-            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
-            docker compose pull api
+            # Retry: mang VPS -> Docker Hub doi khi timeout (Client.Timeout exceeded)
+            retry() {
+              n=1
+              until "$@"; do
+                if [ "$n" -ge 5 ]; then echo "That bai sau $n lan: $*"; return 1; fi
+                echo "Lan $n that bai, thu lai sau $((n * 10))s..."
+                sleep $((n * 10)); n=$((n + 1))
+              done
+            }
+            dh_login() { echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin; }
+            retry dh_login
+            retry docker compose pull api
             docker compose up -d
             docker image prune -f
 
