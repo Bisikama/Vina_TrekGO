@@ -5,11 +5,13 @@ import {
   EARLY_RETURN_EVENT_TYPE,
   GRADE_DOWNGRADE_SHORTAGE_REASON,
   GRADE_SHORTAGE_HANDOVER_DEADLINE_KIND,
+  HANDOVER_SHORTAGE_EVENT_TYPE,
+  HANDOVER_SHORTAGE_REASON,
   SYSTEM_FAULT_CANCELLATION_REASON,
 } from '../../../shared/constants/rental-event-reasons.constant'
 import type { Notification } from '../schemas/notification.schema'
 import { NotificationType as N, ReferenceType as R } from '../schemas/notification.enums'
-import { formatDateTimeVi, shortRef } from './notification-format'
+import { formatDateTimeVi, formatVnd, shortRef } from './notification-format'
 
 export const RENTAL_NOTIFICATION_CONSUMER = 'rental-notifications-v1'
 
@@ -24,7 +26,16 @@ export const rentalNotificationEvents = [
   'RENTAL_SCHEDULE_NOTICE_ISSUED',
   // Thêm sau migration backfill; event mới phát sau khi deploy nên không cần backfill.
   EARLY_RETURN_EVENT_TYPE,
+  HANDOVER_SHORTAGE_EVENT_TYPE,
 ] as const
+
+const handoverShortagePayloadSchema = z.object({
+  handoverId: z.string(),
+  units: z.array(z.object({ unitId: z.string(), assetCode: z.string(), productName: z.string().optional() })).min(1),
+  refundAmount: z.number().int().nonnegative(),
+  refundRef: z.string().optional(),
+  refundCreated: z.boolean(),
+})
 
 /**
  * CUSTOMER = chủ đơn; STAFF = mọi ADMIN + STAFF_INVENTORY đang hoạt động (consumer tự tra);
@@ -171,8 +182,7 @@ export function rentalNotificationProjection(
         customer(
           N.RENTAL_DEPOSIT_REFUNDED,
           'Hoàn tiền cọc thiết bị',
-          `Tiền đặt cọc cho đơn thuê ${ref} đã được hoàn về tài khoản thanh toán của bạn.` +
-            (sandbox ? ' (Giao dịch mô phỏng, không có tiền thật.)' : ''),
+          `Tiền đặt cọc cho đơn thuê ${ref} đã được hoàn về tài khoản thanh toán của bạn.`,
           { refundId: p.refundId, ...(sandbox ? { sandboxSimulated: true } : {}) },
         ),
       ]
@@ -209,6 +219,34 @@ export function rentalNotificationProjection(
             cancellationSource: p.cancellationSource ?? null,
             financialStatus: p.financialStatus ?? null,
           },
+        ),
+      ]
+    }
+    case HANDOVER_SHORTAGE_EVENT_TYPE: {
+      const s = handoverShortagePayloadSchema.parse(raw)
+      const names = s.units.map((unit) => unit.productName ?? unit.assetCode).join(', ')
+      const codes = s.units.map((unit) => unit.assetCode).join(', ')
+      // Chỉ là khoản hoàn đang xử lý; "đã hoàn" do REFUND_SUCCEEDED báo riêng.
+      const money = s.refundCreated
+        ? ` Khoản hoàn ${formatVnd(String(s.refundAmount))} (phí thuê và tiền cọc của ${s.units.length} thiết bị này) đang được xử lý về tài khoản thanh toán của bạn; TrekGo sẽ báo khi tiền về.`
+        : ` TrekGo sẽ liên hệ để hoàn ${formatVnd(String(s.refundAmount))} (phí thuê và tiền cọc của ${s.units.length} thiết bị này) cho bạn.`
+      return [
+        customer(
+          N.RENTAL_ACTION_REQUIRED,
+          'Đơn thuê được giao thiếu thiết bị',
+          `Đơn thuê ${ref} được bàn giao thiếu ${s.units.length} thiết bị: ${names}. Bạn không phải trả hay đặt cọc cho các thiết bị này.${money}`,
+          {
+            reason: HANDOVER_SHORTAGE_REASON,
+            handoverId: s.handoverId,
+            refundId: s.refundRef,
+            refundAmount: s.refundAmount,
+          },
+        ),
+        staff(
+          'Thiếu thiết bị khi bàn giao',
+          `Đơn thuê ${ref} bàn giao thiếu ${s.units.length} thiết bị (${codes}). Các món này đã chuyển sang bảo trì: kho cần tìm lại, rồi hoàn tất bảo trì để đưa về kệ hoặc ghi mất.` +
+            (s.refundCreated ? '' : ' Chưa tạo được khoản hoàn tự động — Admin cần hoàn tay cho khách.'),
+          { reason: HANDOVER_SHORTAGE_REASON, handoverId: s.handoverId, unitIds: s.units.map((unit) => unit.unitId) },
         ),
       ]
     }

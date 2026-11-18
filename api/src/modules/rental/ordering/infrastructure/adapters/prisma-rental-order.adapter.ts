@@ -25,6 +25,8 @@ import {
   ReservationStatus,
 } from '@prisma/client'
 import { PrismaService } from 'src/shared/services/prisma.service'
+import { HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reasons.constant'
+import { isHandoverShortageAssignment } from '../../../shared/handover-shortage'
 import { AppError } from 'src/shared/errors/app-error'
 import { RENTAL_ORDERING_ERROR_CODES as RT } from 'src/shared/errors/codes/rental-ordering.error-codes'
 import type {
@@ -527,9 +529,18 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
         returnPoint: { select: { id: true, name: true, address: true } },
         refundsViaRentalOrderId: {
           where: { purpose: 'RENTAL_CANCELLATION' },
-          select: { id: true, amount: true, currency: true, status: true, providerPayload: true },
+          select: {
+            id: true,
+            amount: true,
+            currency: true,
+            status: true,
+            reason: true,
+            providerPayload: true,
+            allocations: { select: { amount: true, paymentAllocation: { select: { component: true } } } },
+          },
           orderBy: { createdAt: 'desc' },
         },
+        rentalHandoverViaOrderId: { select: { handedOverAt: true, reportedIssues: true } },
         depositSettlementViaOrderId: {
           include: {
             depositSettlementItemsViaSettlementId: {
@@ -600,17 +611,10 @@ export class PrismaRentalOrderAdapter implements RentalOrderPort {
       pickupPoint: order.pickupPoint,
       returnPoint: order.returnPoint,
       deposit: mapDepositLifecycle(order),
-      cancellationRefunds: (order.refundsViaRentalOrderId ?? []).map((refund) => {
-        const simulation = jsonObject(refund.providerPayload).sandboxSimulation as Record<string, unknown> | undefined
-        const simulated = refund.status === 'SUCCEEDED' && Boolean(simulation)
-        return {
-          refundId: refund.id,
-          amount: decimalVndToApiInteger(refund.amount.toString()),
-          currency: refund.currency,
-          status: refund.status,
-          settlementMode: simulated ? 'SANDBOX_SIMULATED' : 'STANDARD',
-        }
-      }),
+      cancellationRefunds: (order.refundsViaRentalOrderId ?? [])
+        .filter((refund) => refund.reason !== HANDOVER_SHORTAGE_REASON)
+        .map(mapCancellationRefund),
+      ...mapHandoverShortage(order),
       timeline: buildTimeline(order),
       allowedActions: buildAllowedActions(
         query.actorRole,
@@ -1320,6 +1324,63 @@ function mapPayment(
   }
 }
 
+function mapCancellationRefund(refund: {
+  id: string
+  amount: Prisma.Decimal
+  currency: string
+  status: unknown
+  providerPayload: Prisma.JsonValue
+}) {
+  const simulation = jsonObject(refund.providerPayload).sandboxSimulation as Record<string, unknown> | undefined
+  const simulated = refund.status === 'SUCCEEDED' && Boolean(simulation)
+  return {
+    refundId: refund.id,
+    amount: decimalVndToApiInteger(refund.amount.toString()),
+    currency: refund.currency,
+    status: refund.status,
+    settlementMode: simulated ? 'SANDBOX_SIMULATED' : 'STANDARD',
+  }
+}
+
+/** Units TrekGo failed to hand over (courier reported MISSING) and their fee + deposit refund. */
+function mapHandoverShortage(order: any): { handoverShortage?: Record<string, unknown> } {
+  const missing = order.rentalOrderLinesViaOrderId.flatMap((line: any) =>
+    line.rentalUnitAssignmentsViaOrderLineId
+      .filter(isHandoverShortageAssignment)
+      .map((a: any) => ({ line, assignment: a })),
+  )
+  if (!missing.length) return {}
+  const issues = Array.isArray(order.rentalHandoverViaOrderId?.reportedIssues)
+    ? (order.rentalHandoverViaOrderId.reportedIssues as Array<Record<string, unknown>>)
+    : []
+  const refund = (order.refundsViaRentalOrderId ?? []).find((row: any) => row.reason === HANDOVER_SHORTAGE_REASON)
+  const componentSum = (component: string) =>
+    (refund?.allocations ?? [])
+      .filter((row: any) => row.paymentAllocation.component === component)
+      .reduce((sum: number, row: any) => sum + decimalVndToApiInteger(row.amount.toString()), 0)
+  return {
+    handoverShortage: {
+      handedOverAt: order.rentalHandoverViaOrderId?.handedOverAt?.toISOString() ?? null,
+      units: missing.map(({ line, assignment }: any) => ({
+        unitId: assignment.equipmentUnit.id,
+        assetCode: assignment.equipmentUnit.assetCode,
+        productId: line.productId,
+        productName: line.product.name,
+        description:
+          issues.find((issue) => issue.unitId === assignment.equipmentUnit.id && typeof issue.description === 'string')
+            ?.description ?? null,
+      })),
+      refund: refund
+        ? {
+            ...mapCancellationRefund(refund),
+            rentalFeeAmount: componentSum('RENTAL_FEE'),
+            depositAmount: componentSum('RENTAL_DEPOSIT'),
+          }
+        : null,
+    },
+  }
+}
+
 function buildTimeline(order: {
   createdAt: Date
   paidAt: Date | null
@@ -1340,7 +1401,8 @@ function buildTimeline(order: {
   const timeline: Array<{ type: string; at: string }> = [{ type: 'ORDER_CREATED', at: order.createdAt.toISOString() }]
   if (order.paidAt) timeline.push({ type: 'PAID', at: order.paidAt.toISOString() })
   const lines = order.rentalOrderLinesViaOrderId.map((line) => ({
-    quantity: line.quantity,
+    // Units missing at handover were refunded and leave the order: they no longer count toward "all units".
+    quantity: line.quantity - line.rentalUnitAssignmentsViaOrderLineId.filter(isHandoverShortageAssignment).length,
     assignments: line.rentalUnitAssignmentsViaOrderLineId.filter(
       (assignment) => !['REPLACED', 'UNASSIGNED'].includes(assignment.status),
     ),

@@ -17,6 +17,8 @@ import { PaymentWebhooksService } from './payment-webhooks.service'
 import { RefundsService } from './refunds.service'
 import { paymentFailure, paymentTransaction } from './payment-transaction'
 import { paymentReturnPath } from './payment-return-path'
+import { openHandoverShortageRefundCase } from './refund-settlement'
+import { HANDOVER_SHORTAGE_REASON } from '../../shared/constants/rental-event-reasons.constant'
 
 type Kind = 'payment' | 'refund'
 type Claim<T> = { row: T; review: boolean; now: Date }
@@ -115,6 +117,8 @@ export class PaymentRecoveryService {
         select: {
           id: true,
           rentalOrderId: true,
+          reason: true,
+          amount: true,
           depositSettlement: { select: { orderId: true } },
           depositSettlementItem: {
             select: { settlement: { select: { orderId: true } } },
@@ -126,6 +130,11 @@ export class PaymentRecoveryService {
         refund?.depositSettlement?.orderId ??
         refund?.depositSettlementItem?.settlement.orderId
       if (!refund || !rentalOrderId) return
+      // Refund of units missing at handover: the order is still live, so it is not flagged ACTION_REQUIRED.
+      if (refund.reason === HANDOVER_SHORTAGE_REASON) {
+        await openHandoverShortageRefundCase(tx, refund, reason)
+        return
+      }
 
       const reference = refundReviewReference(refund.id)
       const existing = await tx.rentalExceptionCase.findFirst({

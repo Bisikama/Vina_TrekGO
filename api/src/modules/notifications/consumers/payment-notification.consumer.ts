@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
 import envConfig from '../../../shared/config'
+import { HANDOVER_SHORTAGE_REASON } from '../../../shared/constants/rental-event-reasons.constant'
 import { PrismaService } from '../../../shared/services/prisma.service'
 import { NotificationsService } from '../notifications.service'
 import { drainNotificationOutbox, NOTIFICATION_OUTBOX_SOURCES, NotificationOutboxEvent } from './notification-outbox-drain'
@@ -86,6 +87,7 @@ export class PaymentNotificationConsumer {
           status: true,
           amount: true,
           purpose: true,
+          reason: true,
           rentalOrderId: true,
           providerPayload: true,
           bookingCancellation: { select: { bookingId: true } },
@@ -104,6 +106,7 @@ export class PaymentNotificationConsumer {
         rentalOrderId: refund.rentalOrderId,
         bookingId: refund.bookingCancellation?.bookingId ?? null,
         simulated: Boolean(providerPayload?.sandboxSimulation),
+        rentalHandoverShortage: refund.reason === HANDOVER_SHORTAGE_REASON,
       }
     }
     return null

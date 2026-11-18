@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../shared/services/prisma.service'
+import { HANDOVER_SHORTAGE_REASON } from '../../shared/constants/rental-event-reasons.constant'
 import { AppError, PAYMENT_ERROR_CODES, RENTAL_ORDERING_ERROR_CODES as RO } from '../../shared/errors'
 import type {
   RentalOrderPaymentHistoryItemDto,
@@ -53,6 +54,8 @@ interface RawTimelineRow {
   executionMode: string | null
   confirmationSource: string | null
   refundPurpose: string | null
+  /** `refunds.reason`; HANDOVER_SHORTAGE = hoàn món TrekGo giao thiếu (đơn không bị huỷ). */
+  refundReason?: string | null
   isExtension: boolean
 }
 
@@ -376,6 +379,7 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         NULL::text AS "refundPurpose",
+        NULL::text AS "refundReason",
         NULL::text AS "executionMode",
         NULL::text AS "confirmationSource",
         CASE
@@ -425,6 +429,7 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         r.purpose::text AS "refundPurpose",
+        r.reason AS "refundReason",
         r.execution_mode::text AS "executionMode",
         CASE WHEN r.status = 'SUCCEEDED' AND (r.provider_payload -> 'sandboxSimulation') IS NOT NULL THEN 'SANDBOX_SIMULATION'
           WHEN r.execution_mode = 'MANUAL_BANK_TRANSFER' AND r.status = 'SUCCEEDED' THEN 'ADMIN_MANUAL' ELSE NULL END AS "confirmationSource",
@@ -499,6 +504,7 @@ export class PaymentHistoryService {
         row.source,
         row.refundPurpose,
         row.isExtension,
+        row.refundReason,
       )
 
       return {
@@ -715,6 +721,7 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         NULL::text AS "refundPurpose",
+        NULL::text AS "refundReason",
         NULL::text AS "executionMode",
         NULL::text AS "confirmationSource",
         NULL::text AS "manualRefundStatus",
@@ -802,6 +809,7 @@ export class PaymentHistoryService {
         i.invoice_no AS "invoiceNo",
         i.revision_no AS "revisionNo",
         r.purpose::text AS "refundPurpose",
+        r.reason AS "refundReason",
         r.execution_mode::text AS "executionMode",
         CASE
           WHEN r.status = 'SUCCEEDED' AND (r.provider_payload -> 'sandboxSimulation') IS NOT NULL THEN 'SANDBOX_SIMULATION'
@@ -864,6 +872,7 @@ export class PaymentHistoryService {
               (SELECT ds.total_deduction FROM deposit_settlements ds WHERE ds.id = r.deposit_settlement_id),
               0
             )::text
+          WHEN r.purpose = 'RENTAL_CANCELLATION' AND r.reason = ${HANDOVER_SHORTAGE_REASON} THEN '0'::text
           WHEN r.purpose IN ('BOOKING_CANCELLATION', 'RENTAL_CANCELLATION') THEN
             GREATEST(0, p.amount - r.amount)::text
           ELSE '0'::text
@@ -1018,7 +1027,7 @@ export class PaymentHistoryService {
         refundPurpose: row.refundPurpose ?? null,
         manualRefundStatus: row.manualRefundStatus ?? null,
         canSimulateSandbox,
-        description: this.formatDescription(row.kind, row.source, row.refundPurpose, isExt),
+        description: this.formatDescription(row.kind, row.source, row.refundPurpose, isExt, row.refundReason),
         createdAt: new Date(row.createdAt).toISOString(),
         completedAt: row.completedAt ? new Date(row.completedAt).toISOString() : null,
       }
@@ -1682,7 +1691,9 @@ export class PaymentHistoryService {
         depositDec = refundAmt
         serviceFeeDec = new Prisma.Decimal(0)
       }
-      deductionDec = payAmt.gt(refundAmt) ? payAmt.sub(refundAmt) : new Prisma.Decimal(0)
+      // A handover-shortage refund returns part of a live order; the rest is not a deduction.
+      deductionDec =
+        refund.reason === HANDOVER_SHORTAGE_REASON || !payAmt.gt(refundAmt) ? new Prisma.Decimal(0) : payAmt.sub(refundAmt)
     } else if (refund.purpose === 'BOOKING_CANCELLATION') {
       deductionDec = payAmt.gt(refundAmt) ? payAmt.sub(refundAmt) : new Prisma.Decimal(0)
     }
@@ -1816,7 +1827,10 @@ export class PaymentHistoryService {
     source: TransactionSource,
     purpose?: string | null,
     isExtension?: boolean,
+    refundReason?: string | null,
   ): string {
+    if (kind === 'REFUND' && purpose === 'RENTAL_CANCELLATION' && refundReason === HANDOVER_SHORTAGE_REASON)
+      return 'Hoàn tiền thiết bị TrekGo giao thiếu'
     if (kind === 'PAYMENT') {
       switch (source) {
         case 'RENTAL':

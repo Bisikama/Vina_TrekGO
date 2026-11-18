@@ -156,10 +156,25 @@ export interface VerifyRecipientResult {
   taskVersion: number;
 }
 
+/** Bàn giao một phần: món shipper báo `MISSING` không giao cho khách và được hoàn phí + cọc. */
+export interface HandoverShortageResult {
+  units: Array<{ unitId: string; assetCode: string; productName: string | null; description: string }>;
+  refund: {
+    /** null khi không tạo được refund tự động (đơn chuyển ACTION_REQUIRED, Admin hoàn tay). */
+    refundRef: string | null;
+    status: string | null;
+    amount: number;
+    rentalFeeAmount: number;
+    depositAmount: number;
+    failureReason: string | null;
+  };
+}
+
 export interface CommitHandoverResult {
   order: Record<string, unknown>;
   units: Array<Record<string, unknown>>;
   handoverRecord: Record<string, unknown>;
+  shortage?: HandoverShortageResult | null;
 }
 
 export interface MarkNoShowResult {

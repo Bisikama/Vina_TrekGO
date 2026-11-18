@@ -211,6 +211,7 @@ function WearMeter({ unit }: { unit: EquipmentUnit }) {
 
 const maintenanceReasonLabel: Record<string, string> = {
   WEAR_LIMIT_REACHED: "Đạt ngưỡng hao mòn (tự động)",
+  HANDOVER_SHORTAGE: "Thiếu trong kiện lúc giao — cần tìm lại",
 };
 
 function percentage(value: number, total: number) {
