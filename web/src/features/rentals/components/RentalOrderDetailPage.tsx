@@ -37,6 +37,7 @@ import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
 import { RentalResumePayment } from "./RentalResumePayment";
 import { GradeBadge } from "./GradeBadge";
 import { EarlyReturnPanel } from "./EarlyReturnPanel";
+import { RentalExtensionPanel } from "./RentalExtensionPanel";
 
 type ProductVisual = { name: string; sku?: string; imageUrl?: string };
 
@@ -429,6 +430,18 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
 
             <OrderProgress detail={detail} />
             <EarlyReturnPanel orderId={orderId} orderStatus={detail.order.status} dueAt={detail.order.dueAt} />
+            <RentalExtensionPanel
+              orderId={orderId}
+              tripId={detail.order.tripId}
+              orderStatus={detail.order.status}
+              dueAt={detail.order.dueAt}
+              currency={detail.order.currency}
+              onExtended={() => {
+                getMyRentalOrder(orderId)
+                  .then(setDetail)
+                  .catch(() => undefined);
+              }}
+            />
 
             {detail.order.status === "PENDING_PAYMENT" ? (
               <>

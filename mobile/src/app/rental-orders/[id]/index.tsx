@@ -25,6 +25,7 @@ import { StatusSign } from "@/features/rentals/StatusSign";
 import { RentalDocumentsCard } from "@/features/rentals/RentalDocumentsCard";
 import { GradeBadge } from "@/features/rentals/GradeBadge";
 import { EarlyReturnCard } from "@/features/rentals/EarlyReturnCard";
+import { RentalExtensionCard } from "@/features/rentals/RentalExtensionCard";
 import { ApiError } from "@/lib/api-client";
 import { splitGradeName } from "@/features/rentals/display";
 import {
@@ -800,6 +801,15 @@ export default function RentalOrderDetailScreen() {
           accessToken={accessToken}
           orderStatus={order.status}
           dueAt={detail.trip?.dueAt || order.dueAt}
+        />
+        <RentalExtensionCard
+          orderId={order.id}
+          tripId={order.tripId}
+          accessToken={accessToken}
+          orderStatus={order.status}
+          dueAt={detail.trip?.dueAt || order.dueAt}
+          currency={order.currency}
+          onExtended={() => void loadOrder(true)}
         />
         {order.exceptionStatus && order.exceptionStatus !== "NONE" && (
           <InfoBanner
