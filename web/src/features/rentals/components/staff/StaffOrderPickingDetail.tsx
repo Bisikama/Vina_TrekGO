@@ -8,6 +8,7 @@ import { EvidencePhotoPicker, type EvidencePhoto } from "./EvidencePhotoPicker";
 import {
   claimPreparationTask,
   getPreparationPickCandidates,
+  getPreparationOrderBrief,
   getPreparationTask,
   pickPreparationUnits,
   savePreparationCondition,
@@ -25,6 +26,7 @@ import type {
   EquipmentCondition,
   PreparationCandidate,
   PreparationTaskDetail,
+  PreparationOrderBrief,
   PreparationUnit,
 } from "@/features/rentals/services/staff-preparation.api";
 
@@ -38,7 +40,9 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
   const [photos, setPhotos] = useState<Record<string, EvidencePhoto[]>>({});
   const fileById = useRef(new Map<string, File>());
   const removedIds = useRef(new Set<string>());
-  const [conditions, setConditions] = useState<Record<string, EquipmentCondition>>({});
+  // Không chọn sẵn tình trạng: nhân viên phải tự đánh giá từng thiết bị.
+  const [conditions, setConditions] = useState<Record<string, EquipmentCondition | undefined>>({});
+  const [brief, setBrief] = useState<PreparationOrderBrief | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +60,11 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
         ? await getPreparationPickCandidates(taskId, { signal })
         : { items: [] };
       setDetail(task);
+      getPreparationOrderBrief(task.task.orderId, signal)
+        .then((value) => {
+          if (!signal?.aborted) setBrief(value);
+        })
+        .catch(() => undefined);
       setCandidates(pickCandidates.items);
       setSelectedCodes([]);
     } catch (loadError) {
@@ -162,6 +171,11 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
       setError("Ảnh của thiết bị này đang tải lên, chờ vài giây rồi bấm Lưu.");
       return;
     }
+    const condition = conditions[unit.unitId];
+    if (!condition) {
+      setError("Hãy chọn tình trạng thiết bị trước khi lưu.");
+      return;
+    }
     if (!mediaIds.length) {
       setError("Hãy chụp hoặc chọn ít nhất 1 ảnh hiện trạng trước khi lưu.");
       return;
@@ -169,7 +183,7 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
     await run(`evidence-${unit.unitId}`, async () => {
       await savePreparationCondition(taskId, {
         unitId: unit.unitId,
-        condition: conditions[unit.unitId] ?? "GOOD",
+        condition,
         notes: notes[unit.unitId]?.trim() || undefined,
         evidenceIds: mediaIds,
         expectedVersion: detail.task.version,
@@ -210,6 +224,23 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
             Đơn thuê này đã bị hủy. Nhiệm vụ kho đã đóng và không thể thao tác soạn hàng.
           </div>
         )}
+
+        {brief ? (
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold">Thông tin đơn</h2>
+            <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+              <OrderInfo label="Giao cho khách" value={formatOrderTime(brief.handoverAt)} strong />
+              <OrderInfo label="Khách trả đồ" value={formatOrderTime(brief.dueAt)} />
+              <OrderInfo label="Đặt đơn lúc" value={formatOrderTime(brief.createdAt)} />
+              <OrderInfo label="Thanh toán lúc" value={formatOrderTime(brief.paidAt)} />
+              <OrderInfo label="Điểm nhận" value={[brief.pickupName, brief.pickupAddress].filter(Boolean).join(" · ") || "—"} />
+              <OrderInfo label="Điểm trả" value={brief.returnName ?? "—"} />
+              <OrderInfo label="Phí thuê" value={formatOrderMoney(brief.rentalFee, brief.currency)} />
+              <OrderInfo label="Tiền cọc" value={formatOrderMoney(brief.totalDeposit, brief.currency)} />
+              <OrderInfo label="Số thiết bị" value={`${detail.progress.required} thiết bị · ${detail.requiredLines.length} món`} />
+            </dl>
+          </section>
+        ) : null}
 
         <section className="mt-5 grid gap-4 md:grid-cols-3">
           <article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Điểm nhận</p><p className="mt-2 font-bold">{detail.pickupContext.name}</p></article>
@@ -267,9 +298,9 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
                         onRetry={(photoId) => void uploadPhoto(unit.unitId, photoId)}
                       />
                       <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
-                        <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition] ?? condition}</option>)}</select>
+                        <select value={conditions[unit.unitId] ?? ""} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: (event.target.value || undefined) as EquipmentCondition | undefined }))} className={`rounded-lg border bg-white px-3 py-2 text-xs ${conditions[unit.unitId] ? "" : "border-orange-300 text-slate-400"}`}><option value="" disabled>Chọn tình trạng…</option>{conditionOptions.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition] ?? condition}</option>)}</select>
                         <input value={notes[unit.unitId] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [unit.unitId]: event.target.value }))} placeholder="Ghi chú ngoại quan" className="rounded-lg border bg-white px-3 py-2 text-xs" />
-                        <button type="button" disabled={!(photos[unit.unitId] ?? []).some((photo) => photo.status === "done") || (photos[unit.unitId] ?? []).some((photo) => photo.status === "uploading") || Boolean(busyAction)} onClick={() => void captureEvidence(unit)} className="rounded-lg bg-[#0d5b3a] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyAction === `evidence-${unit.unitId}` ? "Đang lưu..." : "Lưu"}</button>
+                        <button type="button" disabled={!conditions[unit.unitId] || !(photos[unit.unitId] ?? []).some((photo) => photo.status === "done") || (photos[unit.unitId] ?? []).some((photo) => photo.status === "uploading") || Boolean(busyAction)} onClick={() => void captureEvidence(unit)} className="rounded-lg bg-[#0d5b3a] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyAction === `evidence-${unit.unitId}` ? "Đang lưu..." : "Lưu"}</button>
                       </div>
                     </div>
                   )}
@@ -290,5 +321,24 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
         )}
       </div>
     </main>
+  );
+}
+
+function formatOrderTime(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatOrderMoney(value: number | null, currency: string) {
+  if (value == null) return "—";
+  return new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function OrderInfo({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-slate-100 pb-1.5">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className={`text-right tabular-nums ${strong ? "font-bold text-emerald-800" : "font-medium text-slate-800"}`}>{value}</dd>
+    </div>
   );
 }

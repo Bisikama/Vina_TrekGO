@@ -19,10 +19,17 @@ import {
   PreparationTaskDetail,
   RentalDeliveryAssignee,
   staffInventoryApi,
+  PreparationOrderBrief,
 } from "@/features/rentals/staff-inventory-api";
 import { orderShortCode, productLabel } from "@/features/rentals/display";
 import { EvidenceThumbStrip } from "@/features/rentals/EvidenceThumbStrip";
 import { useEvidenceUploads } from "@/features/rentals/useEvidenceUploads";
+import { formatVnd, Typography } from "@/constants/designTokens";
+
+const briefTime = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })
+    : "—";
 
 type BusyAction = "claim" | "pick" | "evidence" | "pack" | "ready" | "transfer";
 
@@ -67,6 +74,7 @@ export default function InventoryTaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [brief, setBrief] = useState<PreparationOrderBrief | null>(null);
   const evidence = useEvidenceUploads(accessToken);
 
   const isCancelled = detail?.task.status === "CANCELLED";
@@ -82,6 +90,10 @@ export default function InventoryTaskDetailScreen() {
     try {
       const nextDetail = await staffInventoryApi.getTask(id, accessToken);
       setDetail(nextDetail);
+      staffInventoryApi
+        .getOrderBrief(nextDetail.task.orderId, accessToken)
+        .then(setBrief)
+        .catch(() => undefined);
       const nextRemaining = nextDetail.requiredLines.find(
         (line) => line.remainingQty > 0,
       );
@@ -214,6 +226,20 @@ export default function InventoryTaskDetailScreen() {
             {TASK_STATUS_LABEL[detail.task.status] ?? "Đang cập nhật"}
           </Text>
         </View>
+
+        {brief ? (
+          <View style={[styles.card, styles.briefCard]}>
+            <Text style={styles.briefTitle}>Thông tin đơn</Text>
+            <BriefRow label="Giao cho khách" value={briefTime(brief.handoverAt)} strong />
+            <BriefRow label="Khách trả đồ" value={briefTime(brief.dueAt)} />
+            <BriefRow label="Đặt đơn lúc" value={briefTime(brief.createdAt)} />
+            <BriefRow label="Thanh toán lúc" value={briefTime(brief.paidAt)} />
+            <BriefRow label="Điểm nhận" value={[brief.pickupName, brief.pickupAddress].filter(Boolean).join(" · ") || "—"} />
+            {brief.returnName ? <BriefRow label="Điểm trả" value={brief.returnName} /> : null}
+            <BriefRow label="Phí thuê" value={brief.rentalFee != null ? formatVnd(brief.rentalFee) : "—"} />
+            <BriefRow label="Tiền cọc" value={brief.totalDeposit != null ? formatVnd(brief.totalDeposit) : "—"} />
+          </View>
+        ) : null}
 
         {error && <Text style={styles.errorBanner}>{error}</Text>}
 
@@ -475,7 +501,22 @@ function ActionButton({
   );
 }
 
+function BriefRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <View style={styles.briefRow}>
+      <Text style={styles.briefLabel}>{label}</Text>
+      <Text style={[styles.briefValue, strong && styles.briefValueStrong]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  briefCard: { marginTop: 14, gap: 6 },
+  briefTitle: { color: Colors.ink, fontSize: 15, fontWeight: "700", marginBottom: 2 },
+  briefRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  briefLabel: { color: Colors.onSurfaceMuted, fontSize: 13 },
+  briefValue: { flexShrink: 1, textAlign: "right", color: Colors.ink, fontSize: 13, fontWeight: "500", ...Typography.tabularNums },
+  briefValueStrong: { color: Colors.primaryDark, fontWeight: "700" },
   safe: { flex: 1, backgroundColor: Colors.surface },
   center: {
     flex: 1,

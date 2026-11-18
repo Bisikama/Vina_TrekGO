@@ -9,7 +9,11 @@ import type {
   PreparationTaskStatus,
   PreparationTaskSummary,
 } from "@/features/rentals/services/staff-preparation.api";
-import { getPreparationTasks } from "@/features/rentals/services/staff-preparation.api";
+import {
+  getPreparationOrderBrief,
+  getPreparationTasks,
+  type PreparationOrderBrief,
+} from "@/features/rentals/services/staff-preparation.api";
 import { orderShortCode, PREPARATION_STATUS, splitGradeName } from "@/features/rentals/services/rental-display";
 
 type Column = {
@@ -47,9 +51,44 @@ const PRIORITY_BADGE: Record<PreparationTaskPriority, { label: string; tone: str
   LOW: null,
 };
 
+type SortKey = "HANDOVER_ASC" | "HANDOVER_DESC" | "CREATED_DESC" | "PRIORITY";
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: "HANDOVER_ASC", label: "Ngày giao khách gần nhất" },
+  { value: "HANDOVER_DESC", label: "Ngày giao khách xa nhất" },
+  { value: "CREATED_DESC", label: "Đơn mới đặt nhất" },
+  { value: "PRIORITY", label: "Theo mức ưu tiên kho" },
+];
+
+const timeOf = (value?: string | null) => (value ? new Date(value).getTime() : Number.NaN);
+
+/** Sắp theo ngày; đơn chưa có dữ liệu ngày luôn xuống cuối. "PRIORITY" giữ thứ tự backend trả. */
+function sortTasks(tasks: PreparationTaskSummary[], briefs: Record<string, PreparationOrderBrief>, key: SortKey) {
+  if (key === "PRIORITY") return tasks;
+  const pick = (task: PreparationTaskSummary) =>
+    key === "CREATED_DESC" ? timeOf(briefs[task.orderId]?.createdAt) : timeOf(briefs[task.orderId]?.handoverAt);
+  const direction = key === "HANDOVER_ASC" ? 1 : -1;
+  return [...tasks].sort((a, b) => {
+    const [x, y] = [pick(a), pick(b)];
+    if (Number.isNaN(x) && Number.isNaN(y)) return 0;
+    if (Number.isNaN(x)) return 1;
+    if (Number.isNaN(y)) return -1;
+    return (x - y) * direction;
+  });
+}
+
+/** "Hôm nay", "Ngày mai", "Còn 3 ngày", "Đã qua 1 ngày" theo lịch Việt Nam. */
+function dayDistance(value: string, now: number) {
+  const day = (time: number) => Math.floor((time + 7 * 3_600_000) / 86_400_000);
+  const diff = day(new Date(value).getTime()) - day(now);
+  if (diff === 0) return "hôm nay";
+  if (diff === 1) return "ngày mai";
+  return diff > 0 ? `còn ${diff} ngày` : `đã qua ${-diff} ngày`;
+}
+
 const isUrgent = (task: PreparationTaskSummary) => task.priority === "URGENT" || task.status === "BLOCKED";
 
-function TaskCard({ task, now }: { task: PreparationTaskSummary; now: number }) {
+function TaskCard({ task, now, brief }: { task: PreparationTaskSummary; now: number; brief?: PreparationOrderBrief }) {
   const lines = task.requiredLineSummary.map((line) => ({ ...splitGradeName(line.productName), quantity: line.quantity }));
   const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
   const statusInfo = PREPARATION_STATUS[task.status] ?? { label: "Đang cập nhật", tone: "bg-slate-100 text-slate-600" };
@@ -79,6 +118,21 @@ function TaskCard({ task, now }: { task: PreparationTaskSummary; now: number }) 
       </div>
 
       <h3 className="mt-3 text-sm font-semibold text-slate-950">{task.pickup.name}</h3>
+      {brief?.handoverAt ? (
+        <p className="mt-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-900">
+          Giao khách: <strong className="tabular-nums">{formatDateTime(brief.handoverAt)}</strong>
+          <span className="text-emerald-700"> · {dayDistance(brief.handoverAt, now)}</span>
+        </p>
+      ) : null}
+      {brief?.createdAt ? (
+        <p className="mt-1 text-[11px] text-slate-600">
+          Đặt đơn: <strong className="tabular-nums">{formatDateTime(brief.createdAt)}</strong>
+          {brief.paidAt ? <span className="text-slate-400"> · thanh toán {formatDateTime(brief.paidAt)}</span> : null}
+        </p>
+      ) : null}
+      {brief?.dueAt ? (
+        <p className="mt-1 text-[11px] text-slate-600">Khách trả: <strong className="tabular-nums">{formatDateTime(brief.dueAt)}</strong></p>
+      ) : null}
       <p className="mt-1 text-[11px] text-slate-600">Kho: <strong>{task.inventoryLocation.name}</strong></p>
       {task.sentToInventoryAt ? (
         <p className="mt-1 text-[11px] text-slate-600">
@@ -136,6 +190,8 @@ export function StaffWorkQueue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [briefs, setBriefs] = useState<Record<string, PreparationOrderBrief>>({});
+  const [sortKey, setSortKey] = useState<SortKey>("HANDOVER_ASC");
 
   const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -144,6 +200,13 @@ export function StaffWorkQueue() {
       const result = await getPreparationTasks({ pageSize: 100, signal });
       setTasks(result.items);
       setNow(Date.now());
+      // Ngày tạo đơn, ngày giao khách… nằm ở chi tiết đơn; tải song song, đơn nào lỗi thì bỏ qua.
+      const orderIds = [...new Set(result.items.map((task) => task.orderId))];
+      const settled = await Promise.allSettled(orderIds.map((orderId) => getPreparationOrderBrief(orderId, signal)));
+      if (signal?.aborted) return;
+      setBriefs(
+        Object.fromEntries(settled.flatMap((entry) => (entry.status === "fulfilled" ? [[entry.value.orderId, entry.value]] : []))),
+      );
     } catch (loadError) {
       if (signal?.aborted) return;
       setError(getStaffInventoryErrorMessage(loadError));
@@ -165,15 +228,16 @@ export function StaffWorkQueue() {
 
   const visibleTasks = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return tasks;
-    return tasks.filter((task) =>
+    const sorted = sortTasks(tasks, briefs, sortKey);
+    if (!keyword) return sorted;
+    return sorted.filter((task) =>
       `${orderShortCode(task.orderId)} ${task.orderCode} ${task.pickup.name} ${task.inventoryLocation.name}`
         .toLowerCase()
         .includes(keyword.replace(/^#/, "")),
     );
-  }, [search, tasks]);
+  }, [briefs, search, sortKey, tasks]);
 
-  // Giữ nguyên thứ tự backend trả về (đã xếp theo mức ưu tiên); chỉ tách nhóm cần xử lý gấp lên đầu.
+  // Thứ tự theo lựa chọn sắp xếp (mặc định ngày giao khách gần nhất); nhóm cần xử lý gấp vẫn tách lên đầu.
   const urgentTasks = useMemo(() => visibleTasks.filter(isUrgent), [visibleTasks]);
   const overdueCount = urgentTasks.filter((task) => task.isOverdue).length;
   const blockedCount = urgentTasks.filter((task) => task.status === "BLOCKED").length;
@@ -192,8 +256,16 @@ export function StaffWorkQueue() {
           </button>
         </div>
 
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-lg bg-[#edf3ff] px-4 text-xs outline-none" placeholder="Tìm theo mã đơn, điểm nhận hoặc kho" />
+        <section className="mt-5 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 min-w-[220px] flex-1 rounded-lg bg-[#edf3ff] px-4 text-xs outline-none" placeholder="Tìm theo mã đơn, điểm nhận hoặc kho" />
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Sắp xếp
+            <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800">
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
         </section>
 
         {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
@@ -214,7 +286,7 @@ export function StaffWorkQueue() {
               </p>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {urgentTasks.map((task) => <TaskCard key={task.id} task={task} now={now} />)}
+              {urgentTasks.map((task) => <TaskCard key={task.id} task={task} now={now} brief={briefs[task.orderId]} />)}
             </div>
           </section>
         )}
@@ -229,7 +301,7 @@ export function StaffWorkQueue() {
                   <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">{columnTasks.length}</span>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-500">{column.hint}</p>
-                <div className="mt-3 space-y-3">{columnTasks.map((task) => <TaskCard key={task.id} task={task} now={now} />)}</div>
+                <div className="mt-3 space-y-3">{columnTasks.map((task) => <TaskCard key={task.id} task={task} now={now} brief={briefs[task.orderId]} />)}</div>
               </div>
             );
           })}
