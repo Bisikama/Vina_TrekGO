@@ -130,7 +130,7 @@ export class PreparationTaskController {
     },
   })
   @ApiResponse({ status: 200, description: 'Kết quả pick: pickedUnits, assignments, progress, taskVersion' })
-  @ApiResponse({ status: 409, description: 'Xung đột phiên bản — task đã bị cập nhật bởi người khác' })
+  @ApiResponse({ status: 409, description: 'Xung đột phiên bản — task đã bị cập nhật bởi người khác; hoặc PREPARATION_PICK_TOO_EARLY — pick trước thời điểm giữ chỗ của đơn (giờ nhận − 12h) sẽ làm thiếu thiết bị cho đơn khác (details: productId, requestedQuantity, availableCount, pickableFrom)' })
   @ApiResponse({ status: 422, description: 'AssetCode không hợp lệ hoặc thiết bị không khả dụng' })
   async pickUnits(
     @Param(new ZodValidationPipe(PreparationTaskIdParamSchema)) params: PreparationTaskIdParamDto,
@@ -308,7 +308,7 @@ export class PreparationTaskController {
     },
   })
   @ApiResponse({ status: 200, description: 'Thiết bị đã được thay thế thành công' })
-  @ApiResponse({ status: 409, description: 'Xung đột phiên bản' })
+  @ApiResponse({ status: 409, description: 'Xung đột phiên bản; hoặc PREPARATION_PICK_TOO_EARLY — đổi sang thiết bị mới trước thời điểm giữ chỗ của đơn sẽ làm thiếu thiết bị cho đơn khác' })
   @ApiResponse({ status: 422, description: 'Thiết bị mới không cùng loại hoặc không khả dụng' })
   async replaceUnit(
     @Param(new ZodValidationPipe(PreparationTaskIdParamSchema)) params: PreparationTaskIdParamDto,

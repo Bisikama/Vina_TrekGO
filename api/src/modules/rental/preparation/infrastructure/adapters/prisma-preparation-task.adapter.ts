@@ -22,6 +22,7 @@ import { AppError } from 'src/shared/errors/app-error';
 import { PREPARATION_ERROR_CODES as PR, WAREHOUSE_ERROR_CODES as WH } from 'src/shared/errors/codes/preparation.error-codes';
 import { resolveActivePrimaryRentalLocation } from '../../../shared/primary-inventory-location';
 import { preparationTaskPriority } from '../../domain/preparation-task-priority';
+import { assertEarlyPickKeepsCapacity, lockProductsForEarlyPick } from '../early-pick-capacity';
 import { isUnitExpired, vnCalendarDate } from '../../../inventory/application/services/equipment-lifecycle.rules';
 import type {
   ClaimPreparationTaskCommand,
@@ -250,7 +251,15 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
         const normalizedCodes = [...new Set(command.assetCodes.map((code) => code.trim().toUpperCase()))].sort();
         const assignments: PickPreparationUnitsResult['assignments'] = [];
         const pickedUnitIds: string[] = [];
+        // Lock order: task -> product -> unit (products before units, as grade transfer does).
+        const earlyPick = await lockProductsForEarlyPick(
+          tx,
+          order.occupiedStartAt,
+          command.now,
+          order.rentalOrderLinesViaOrderId.map((line) => line.productId),
+        );
 
+        const toPick: Array<{ unitId: string; productId: string; lineId: string }> = [];
         for (const assetCode of normalizedCodes) {
           const unit = await lockEquipmentUnitByAssetCode(tx, assetCode);
           if (!unit) throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, { details: { assetCode, reason: 'UNIT_NOT_FOUND' } });
@@ -285,22 +294,37 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
             throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, { details: { assetCode, reason: 'ALREADY_ASSIGNED' } });
           }
 
+          remainingByLine.set(line.id, (remainingByLine.get(line.id) ?? 0) - 1);
+          toPick.push({ unitId: unit.id, productId: unit.productId, lineId: line.id });
+        }
+
+        if (earlyPick) {
+          const requestedByProduct = new Map<string, number>();
+          for (const p of toPick) requestedByProduct.set(p.productId, (requestedByProduct.get(p.productId) ?? 0) + 1);
+          await assertEarlyPickKeepsCapacity(tx, {
+            orderId: order.id,
+            occupiedStartAt: order.occupiedStartAt,
+            inventoryLocationId: task.inventoryLocationId,
+            now: command.now,
+            requestedByProduct,
+          });
+        }
+
+        for (const p of toPick) {
           const assignment = await tx.rentalUnitAssignment.create({
             data: {
-              orderLineId: line.id,
-              equipmentUnitId: unit.id,
+              orderLineId: p.lineId,
+              equipmentUnitId: p.unitId,
               status: RentalUnitAssignmentStatus.ASSIGNED,
               assignedAt: command.now,
             },
           });
           await tx.equipmentUnit.update({
-            where: { id: unit.id },
+            where: { id: p.unitId },
             data: { status: EquipmentUnitStatus.PICKED, version: { increment: 1 } },
           });
-
-          remainingByLine.set(line.id, (remainingByLine.get(line.id) ?? 0) - 1);
-          assignments.push({ assignmentId: assignment.id, orderLineId: line.id, unitId: unit.id });
-          pickedUnitIds.push(unit.id);
+          assignments.push({ assignmentId: assignment.id, orderLineId: p.lineId, unitId: p.unitId });
+          pickedUnitIds.push(p.unitId);
         }
 
         const updatedTask = await tx.inventoryTask.update({
@@ -679,6 +703,19 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           : null;
         if (pendingTransfer) throw AppError.fromCode(WH.CUSTODY_TRANSFER_ALREADY_PENDING);
 
+        const rental = await tx.rentalOrder.findUnique({
+          where: { id: task.orderId },
+          select: { rentalEndAt: true, occupiedStartAt: true, rentalOrderLinesViaOrderId: { select: { productId: true } } },
+        });
+        if (!rental) throw AppError.fromCode(WH.INVALID_TASK_STATE);
+        // Lock order: task -> product -> unit, same as pick.
+        const earlyPick = await lockProductsForEarlyPick(
+          tx,
+          rental.occupiedStartAt,
+          command.now,
+          rental.rentalOrderLinesViaOrderId.map((line) => line.productId),
+        );
+
         const [oldLocked, newLocked] = await lockTwoEquipmentUnits(tx, command.oldUnitId, command.newUnitId);
         if (!oldLocked || !newLocked) throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK);
 
@@ -700,8 +737,7 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, { details: { newUnitId: command.newUnitId, reason: 'NOT_VALID_REPLACEMENT' } });
         }
         if (newLocked.expiresAt) {
-          const rental = await tx.rentalOrder.findUnique({ where: { id: task.orderId }, select: { rentalEndAt: true } });
-          if (rental && isUnitExpired(newLocked.expiresAt, rental.rentalEndAt)) {
+          if (isUnitExpired(newLocked.expiresAt, rental.rentalEndAt)) {
             throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, {
               details: {
                 newUnitId: command.newUnitId,
@@ -716,6 +752,16 @@ export class PrismaPreparationTaskAdapter implements PreparationTaskPort {
           select: { id: true },
         });
         if (newActiveAssignment) throw AppError.fromCode(WH.UNIT_NOT_ELIGIBLE_FOR_PICK, { details: { reason: 'ALREADY_ASSIGNED' } });
+        // The old unit is already off the shelf; only the new unit leaves stock early.
+        if (earlyPick) {
+          await assertEarlyPickKeepsCapacity(tx, {
+            orderId: task.orderId,
+            occupiedStartAt: rental.occupiedStartAt,
+            inventoryLocationId: task.inventoryLocationId,
+            now: command.now,
+            requestedByProduct: new Map([[newLocked.productId, 1]]),
+          });
+        }
 
         const oldPackageItem = await tx.packageItem.findUnique({ where: { assignmentId: oldAssignment.id } });
         if (oldPackageItem) await tx.packageItem.delete({ where: { id: oldPackageItem.id } });
