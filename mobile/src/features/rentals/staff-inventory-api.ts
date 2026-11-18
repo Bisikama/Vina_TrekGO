@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { File as DeviceFile, UploadType } from "expo-file-system";
+import { Platform } from "react-native";
 import { apiRequest } from "@/lib/api-client";
 
 type Envelope<T> = T | { data: T };
@@ -321,8 +323,11 @@ export async function uploadInventoryEvidence(
     asset.mimeType?.startsWith("video/") === true ||
     /\.(mp4|mov|m4v|webm)(?:$|\?)/i.test(mediaPath);
   const resourceType = isVideo ? "VIDEO" : "IMAGE";
-  const fallbackName = `condition-${Date.now()}.${isVideo ? "mp4" : "jpg"}`;
-  const contentType = asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg");
+  const contentType = normalizeEvidenceMime(asset.mimeType, mediaPath, isVideo);
+  const fallbackName = `condition-${Date.now()}.${MIME_EXTENSION[contentType] ?? (isVideo ? "mp4" : "jpg")}`;
+  // Máy Android hay không trả fileSize cho ảnh vừa chụp; backend bắt buộc sizeBytes > 0.
+  const sizeBytes = asset.fileSize || (await readEvidenceSize(asset.uri));
+  if (!sizeBytes) throw new Error("Không đọc được tệp vừa chụp trên máy. Hãy chụp lại.");
   const intentPayload = await apiRequest<
     Envelope<{
       mediaId: string;
@@ -340,46 +345,28 @@ export async function uploadInventoryEvidence(
       resourceType,
       fileName: asset.fileName || fallbackName,
       contentType,
-      sizeBytes: asset.fileSize,
+      sizeBytes,
       captureSource: "CAMERA",
       clientCapturedAt: new Date().toISOString(),
     }),
   });
   const intent = unwrap(intentPayload);
-  const formData = new FormData();
-  Object.entries(intent.upload.formFields).forEach(([key, value]) => {
-    formData.append(key, String(value));
-  });
   const fileName = asset.fileName || fallbackName;
-  // React Native gửi file trực tiếp từ uri (ổn định trên cả Android và iOS).
-  // Cách cũ fetch(uri).blob() hay lỗi "Network request failed" trên Android.
-  formData.append("file", {
-    uri: asset.uri,
-    name: fileName,
-    type: contentType,
-  } as unknown as Blob);
-
-  let uploadedResponse: Response;
-  try {
-    uploadedResponse = await fetch(intent.upload.uploadUrl, {
-      method: intent.upload.method || "POST",
-      body: formData,
-    });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Không gửi được tệp lên kho media (${reason}).`);
-  }
-  if (!uploadedResponse.ok) {
-    const detail = (await uploadedResponse.text().catch(() => "")).slice(0, 160);
+  const fields = Object.fromEntries(
+    Object.entries(intent.upload.formFields).map(([key, value]) => [key, String(value)]),
+  );
+  const { status, body } = await sendEvidenceFile(asset.uri, fileName, contentType, intent.upload, fields);
+  if (status < 200 || status >= 300) {
     throw new Error(
-      `Kho media từ chối tệp (HTTP ${uploadedResponse.status})${detail ? `: ${detail}` : "."}`,
+      `Kho media từ chối tệp (HTTP ${status})${body ? `: ${body.slice(0, 160)}` : "."}`,
     );
   }
-  const uploaded = (await uploadedResponse.json()) as {
-    public_id: string;
-    version: number;
-    signature: string;
-  };
+  let uploaded: { public_id: string; version: number; signature: string };
+  try {
+    uploaded = JSON.parse(body);
+  } catch {
+    throw new Error("Kho media trả về kết quả không hợp lệ. Vui lòng thử lại.");
+  }
   await apiRequest(`/api/v1/media/${intent.mediaId}/complete`, {
     method: "POST",
     accessToken,
@@ -390,4 +377,93 @@ export async function uploadInventoryEvidence(
     }),
   });
   return intent.mediaId;
+}
+
+/**
+ * Gửi tệp lên kho media đã ký sẵn.
+ * Trên máy thật dùng File của expo-file-system (upload multipart gốc): fetch của Expo không nhận
+ * part kiểu { uri, name, type } ("Unsupported FormDataPart implementation") và fetch(uri).blob()
+ * hay lỗi trên Android. Trên web dùng FormData + Blob bình thường.
+ */
+async function sendEvidenceFile(
+  uri: string,
+  fileName: string,
+  contentType: string,
+  upload: { uploadUrl: string; method: string },
+  fields: Record<string, string>,
+): Promise<{ status: number; body: string }> {
+  try {
+    if (Platform.OS !== "web") {
+      const file = new DeviceFile(uri);
+      if (!file.exists) throw new Error("Không mở được tệp vừa chụp trên máy");
+      const result = await file.upload(upload.uploadUrl, {
+        httpMethod: (upload.method || "POST") as "POST",
+        uploadType: UploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: contentType,
+        parameters: fields,
+        sessionType: "foreground",
+      });
+      return { status: result.status, body: result.body };
+    }
+    const blob = await (await fetch(uri)).blob();
+    const form = new FormData();
+    Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+    form.append("file", blob, fileName);
+    const response = await fetch(upload.uploadUrl, { method: upload.method || "POST", body: form });
+    return { status: response.status, body: await response.text() };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Không gửi được tệp lên kho media (${reason}).`);
+  }
+}
+
+/** Đuôi tệp theo loại nội dung backend chấp nhận. */
+const MIME_EXTENSION: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+};
+
+/**
+ * Chuẩn hoá loại tệp: iOS quay video ra .mov (video/quicktime), một số máy Android trả "image/jpg"
+ * hoặc không trả mimeType. Backend chỉ nhận đúng danh sách trong MIME_EXTENSION.
+ */
+function normalizeEvidenceMime(mimeType: string | null | undefined, path: string, isVideo: boolean) {
+  const raw = (mimeType ?? "").toLowerCase();
+  if (raw === "image/jpg" || raw === "image/pjpeg") return "image/jpeg";
+  if (raw === "video/mov") return "video/quicktime";
+  if (MIME_EXTENSION[raw]) return raw;
+  const ext = /\.([a-z0-9]+)(?:$|\?)/.exec(path)?.[1];
+  const byExt: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    heic: "image/heic",
+    heif: "image/heif",
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+  };
+  if (ext && byExt[ext]) return byExt[ext];
+  return isVideo ? "video/mp4" : "image/jpeg";
+}
+
+async function readEvidenceSize(uri: string): Promise<number> {
+  try {
+    if (Platform.OS !== "web") {
+      const file = new DeviceFile(uri);
+      return file.exists ? file.size : 0;
+    }
+    return (await (await fetch(uri)).blob()).size;
+  } catch {
+    return 0;
+  }
 }
