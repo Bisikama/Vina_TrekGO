@@ -681,6 +681,11 @@ export const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
     message: 'Equipment unit is not eligible for pick',
     retryable: false,
   },
+  [PR.PREPARATION_PICK_TOO_EARLY]: {
+    status: 409,
+    message: 'Picking this early would leave other rentals short of equipment before this order is prepared',
+    retryable: true,
+  },
   [PR.UNIT_NOT_ASSIGNED_TO_TASK]: {
     status: 409,
     message: 'Equipment unit is not assigned to this task',

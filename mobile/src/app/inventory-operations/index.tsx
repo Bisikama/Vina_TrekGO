@@ -62,9 +62,9 @@ const FILTERS: {
 
 type SortKey = "HANDOVER_ASC" | "HANDOVER_DESC" | "CREATED_DESC";
 const SORTS: { value: SortKey; label: string }[] = [
-  { value: "HANDOVER_ASC", label: "Giao khách gần nhất" },
-  { value: "HANDOVER_DESC", label: "Giao khách xa nhất" },
-  { value: "CREATED_DESC", label: "Mới đặt nhất" },
+  { value: "HANDOVER_ASC", label: "Ngày giao sớm nhất" },
+  { value: "HANDOVER_DESC", label: "Ngày giao muộn nhất" },
+  { value: "CREATED_DESC", label: "Đặt gần đây nhất" },
 ];
 
 const timeOf = (value?: string | null) => (value ? new Date(value).getTime() : Number.NaN);
