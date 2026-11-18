@@ -23,6 +23,7 @@ import {
   type SystemFaultReasonCode,
 } from "@/features/rentals/services/admin-rental.api";
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
+import { AdminReturnUnitsPanel } from "./AdminReturnUnitsPanel";
 import {
   ASSIGNMENT_STATUS_LABELS,
   EXCEPTION_STATUS_LABELS,
@@ -200,6 +201,11 @@ export function AdminRentalOrderDetail({ orderId }: { orderId: string }) {
           ))}
         </div>
       </SurfaceCard>
+
+      {(() => {
+        const returnTask = tasks.deliveryTasks.find((task) => task.taskType === "RETURN");
+        return returnTask ? <AdminReturnUnitsPanel returnTaskId={returnTask.id} currency={order.currency} /> : null;
+      })()}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SurfaceCard>

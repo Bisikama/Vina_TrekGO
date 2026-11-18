@@ -10,7 +10,7 @@ import type {
   PreparationTaskSummary,
 } from "@/features/rentals/services/staff-preparation.api";
 import { getPreparationTasks } from "@/features/rentals/services/staff-preparation.api";
-import { orderShortCode, PREPARATION_STATUS, productLabel } from "@/features/rentals/services/rental-display";
+import { orderShortCode, PREPARATION_STATUS, splitGradeName } from "@/features/rentals/services/rental-display";
 
 type Column = {
   key: "new" | "picking" | "packing" | "ready";
@@ -50,9 +50,8 @@ const PRIORITY_BADGE: Record<PreparationTaskPriority, { label: string; tone: str
 const isUrgent = (task: PreparationTaskSummary) => task.priority === "URGENT" || task.status === "BLOCKED";
 
 function TaskCard({ task, now }: { task: PreparationTaskSummary; now: number }) {
-  const items = task.requiredLineSummary
-    .map((line) => `${productLabel(line.productName)} ×${line.quantity}`)
-    .join(" · ");
+  const lines = task.requiredLineSummary.map((line) => ({ ...splitGradeName(line.productName), quantity: line.quantity }));
+  const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
   const statusInfo = PREPARATION_STATUS[task.status] ?? { label: "Đang cập nhật", tone: "bg-slate-100 text-slate-600" };
   const transferred = task.status === "TRANSFERRED";
   const percent = task.progress.required
@@ -88,7 +87,26 @@ function TaskCard({ task, now }: { task: PreparationTaskSummary; now: number }) 
         </p>
       ) : null}
       <p className={`mt-1 text-[11px] ${task.isOverdue ? "text-red-700" : "text-slate-600"}`}>Hạn: <strong>{formatDateTime(task.deadline)}</strong></p>
-      <div className="mt-3 rounded-lg bg-[#edf3ff] p-3 text-[11px] leading-5 text-slate-700">{items || "Chưa có dòng thiết bị"}</div>
+      <div className="mt-3 rounded-lg bg-[#edf3ff] p-3 text-[11px] text-slate-700">
+        {lines.length ? (
+          <>
+            <p className="mb-1.5 font-semibold text-slate-500">{lines.length} món · {totalUnits} thiết bị</p>
+            <ul className="space-y-1">
+              {lines.map((line, index) => (
+                <li key={`${line.base}-${index}`} className="flex items-start justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="font-semibold text-slate-800">{line.base}</span>
+                    {line.grade ? <span className="ml-1.5 rounded bg-white px-1.5 py-0.5 text-[10px] text-emerald-800">{line.grade}</span> : null}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-slate-500">×{line.quantity}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          "Chưa có dòng thiết bị"
+        )}
+      </div>
 
       {transferred ? (
         <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-800">

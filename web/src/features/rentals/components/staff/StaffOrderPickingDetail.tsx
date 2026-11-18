@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { EvidencePhotoPicker, type EvidencePhoto } from "./EvidencePhotoPicker";
 
 import {
   claimPreparationTask,
@@ -32,7 +34,10 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
   const [detail, setDetail] = useState<PreparationTaskDetail | null>(null);
   const [candidates, setCandidates] = useState<PreparationCandidate[]>([]);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
-  const [files, setFiles] = useState<Record<string, File | undefined>>({});
+  // Ảnh theo từng thiết bị; mỗi ảnh tải lên nền ngay khi chọn, độc lập với nhau.
+  const [photos, setPhotos] = useState<Record<string, EvidencePhoto[]>>({});
+  const fileById = useRef(new Map<string, File>());
+  const removedIds = useRef(new Set<string>());
   const [conditions, setConditions] = useState<Record<string, EquipmentCondition>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -105,21 +110,71 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
     }
   }
 
+  function patchPhoto(unitId: string, photoId: string, update: Partial<EvidencePhoto>) {
+    setPhotos((current) => ({
+      ...current,
+      [unitId]: (current[unitId] ?? []).map((photo) => (photo.id === photoId ? { ...photo, ...update } : photo)),
+    }));
+  }
+
+  async function uploadPhoto(unitId: string, photoId: string) {
+    const file = fileById.current.get(photoId);
+    if (!file) return;
+    patchPhoto(unitId, photoId, { status: "uploading", error: undefined });
+    try {
+      const mediaId = await uploadConditionEvidence(file);
+      if (!removedIds.current.has(photoId)) patchPhoto(unitId, photoId, { status: "done", mediaId });
+    } catch (uploadError) {
+      if (!removedIds.current.has(photoId)) {
+        patchPhoto(unitId, photoId, {
+          status: "error",
+          error: getStaffInventoryErrorMessage(uploadError, "Không tải được ảnh"),
+        });
+      }
+    }
+  }
+
+  function addPhotos(unitId: string, selected: File[]) {
+    const added = selected.map((file) => {
+      const id = `${unitId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      fileById.current.set(id, file);
+      return { id, previewUrl: URL.createObjectURL(file), fileName: file.name, status: "uploading" as const };
+    });
+    setPhotos((current) => ({ ...current, [unitId]: [...(current[unitId] ?? []), ...added] }));
+    added.forEach((photo) => void uploadPhoto(unitId, photo.id));
+  }
+
+  function removePhoto(unitId: string, photoId: string) {
+    removedIds.current.add(photoId);
+    fileById.current.delete(photoId);
+    setPhotos((current) => {
+      const target = (current[unitId] ?? []).find((photo) => photo.id === photoId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return { ...current, [unitId]: (current[unitId] ?? []).filter((photo) => photo.id !== photoId) };
+    });
+  }
+
   async function captureEvidence(unit: PreparationUnit) {
-    const file = files[unit.unitId];
-    if (!file || !detail) {
-      setError("Hãy chọn ảnh hiện trạng trước khi xác nhận.");
+    const unitPhotos = photos[unit.unitId] ?? [];
+    const mediaIds = unitPhotos.flatMap((photo) => (photo.status === "done" && photo.mediaId ? [photo.mediaId] : []));
+    if (!detail) return;
+    if (unitPhotos.some((photo) => photo.status === "uploading")) {
+      setError("Ảnh của thiết bị này đang tải lên, chờ vài giây rồi bấm Lưu.");
+      return;
+    }
+    if (!mediaIds.length) {
+      setError("Hãy chụp hoặc chọn ít nhất 1 ảnh hiện trạng trước khi lưu.");
       return;
     }
     await run(`evidence-${unit.unitId}`, async () => {
-      const mediaId = await uploadConditionEvidence(file);
       await savePreparationCondition(taskId, {
         unitId: unit.unitId,
         condition: conditions[unit.unitId] ?? "GOOD",
         notes: notes[unit.unitId]?.trim() || undefined,
-        evidenceIds: [mediaId],
+        evidenceIds: mediaIds,
         expectedVersion: detail.task.version,
       });
+      setPhotos((current) => ({ ...current, [unit.unitId]: [] }));
     });
   }
 
@@ -204,11 +259,18 @@ export function StaffOrderPickingDetail({ orderId: taskId }: { orderId: string }
                 <article key={unit.unitId} className="rounded-xl bg-[#edf3ff] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3"><div><strong>{productLabel(detail.requiredLines.find((line) => line.productId === unit.productId)?.productName ?? "Thiết bị")}</strong><p className="text-xs text-slate-500">Mã {shortId(unit.assetCode)}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${unit.evidenceCaptured ? "bg-emerald-100 text-emerald-800" : "bg-orange-100 text-orange-800"}`}>{unit.evidenceCaptured ? "Đã lưu ảnh" : "Chưa có ảnh"}</span></div>
                   {!unit.evidenceCaptured && !isCancelled && (
-                    <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_1fr_auto]">
-                      <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition] ?? condition}</option>)}</select>
-                      <input type="file" accept="image/*" capture="environment" onChange={(event) => setFiles((current) => ({ ...current, [unit.unitId]: event.target.files?.[0] }))} className="rounded-lg bg-white px-3 py-2 text-xs" />
-                      <input value={notes[unit.unitId] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [unit.unitId]: event.target.value }))} placeholder="Ghi chú ngoại quan" className="rounded-lg border bg-white px-3 py-2 text-xs" />
-                      <button type="button" disabled={!files[unit.unitId] || Boolean(busyAction)} onClick={() => void captureEvidence(unit)} className="rounded-lg bg-[#0d5b3a] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyAction === `evidence-${unit.unitId}` ? "Đang tải..." : "Lưu"}</button>
+                    <div className="mt-4 space-y-3">
+                      <EvidencePhotoPicker
+                        photos={photos[unit.unitId] ?? []}
+                        onAdd={(selected) => addPhotos(unit.unitId, selected)}
+                        onRemove={(photoId) => removePhoto(unit.unitId, photoId)}
+                        onRetry={(photoId) => void uploadPhoto(unit.unitId, photoId)}
+                      />
+                      <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                        <select value={conditions[unit.unitId] ?? "GOOD"} onChange={(event) => setConditions((current) => ({ ...current, [unit.unitId]: event.target.value as EquipmentCondition }))} className="rounded-lg border bg-white px-3 py-2 text-xs">{conditionOptions.map((condition) => <option key={condition} value={condition}>{CONDITION_LABELS[condition] ?? condition}</option>)}</select>
+                        <input value={notes[unit.unitId] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [unit.unitId]: event.target.value }))} placeholder="Ghi chú ngoại quan" className="rounded-lg border bg-white px-3 py-2 text-xs" />
+                        <button type="button" disabled={!(photos[unit.unitId] ?? []).some((photo) => photo.status === "done") || (photos[unit.unitId] ?? []).some((photo) => photo.status === "uploading") || Boolean(busyAction)} onClick={() => void captureEvidence(unit)} className="rounded-lg bg-[#0d5b3a] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyAction === `evidence-${unit.unitId}` ? "Đang lưu..." : "Lưu"}</button>
+                      </div>
                     </div>
                   )}
                 </article>

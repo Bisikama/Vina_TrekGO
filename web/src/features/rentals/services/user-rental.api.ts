@@ -62,6 +62,19 @@ export type RentalOrderDetail = {
       depositAmount: number;
     };
   };
+  /** Thiết bị cụ thể kho đã gán cho đơn (có sau khi kho soạn). */
+  assignedUnits?: Array<{
+    unitId: string;
+    assetCode: string;
+    productId: string;
+    productName: string;
+    grade?: RentalGrade | null;
+    assignmentStatus: string;
+    packedAt?: string | null;
+    handedOverAt?: string | null;
+    returnedAt?: string | null;
+    closedAt?: string | null;
+  }>;
   /** Mốc thời gian thật do API trả: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
   timeline?: Array<{ type: string; at: string }>;
 };
@@ -73,6 +86,9 @@ export type RentalDepositItem = {
   amount?: number;
   status: string;
   inspectionStatus?: string | null;
+  /** Lúc kho nhận thiết bị trả về và hạn kiểm định. */
+  inventoryCustodyReceivedAt?: string | null;
+  inspectionDueAt?: string | null;
   refundRef?: string | null;
   refundStatus?: string | null;
   refundAmount?: number | null;
