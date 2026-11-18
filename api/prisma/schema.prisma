@@ -2037,6 +2037,8 @@ model RentalProduct {
   /// partial unique (grade_group_id, grade) WHERE grade_group_id IS NOT NULL (raw SQL trong migration).
   gradeGroupId                 String?             @map("grade_group_id") @db.Uuid
   grade                        RentalGrade?
+  /// Ngưỡng hao mòn: unit đạt số lượt thuê này thì về MAINTENANCE thay vì AVAILABLE. NULL = không giới hạn.
+  maxRentalCycles              Int?                @map("max_rental_cycles")
   status                       RentalProductStatus @default(ACTIVE)
   version                      Int                 @default(1)
   createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -2106,6 +2108,14 @@ model EquipmentUnit {
   expectedReadyAt            DateTime?           @map("expected_ready_at") @db.Timestamptz(6)
   acquiredAt                 DateTime?           @map("acquired_at") @db.Date
   retiredAt                  DateTime?           @map("retired_at") @db.Date
+  /// Mã lô nhập: các unit nhập cùng đợt dùng chung một mã.
+  intakeBatchCode            String?             @map("intake_batch_code") @db.VarChar(60)
+  /// Hạn dùng: từ ngày này unit không còn được cho thuê (job tự chuyển RETIRED). NULL = không có hạn.
+  expiresAt                  DateTime?           @map("expires_at") @db.Date
+  /// Ghi chú thực trạng riêng của unit lúc nhập.
+  conditionNotes             String?             @map("condition_notes")
+  /// Số lượt thuê đã hoàn tất (unit quay về kho và được đưa lại vào cho thuê).
+  rentalCount                Int                 @default(0) @map("rental_count")
   version                    Int                 @default(1)
   createdAt                  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                  DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -2129,6 +2139,8 @@ model EquipmentUnit {
   @@index([productId, status, condition])
   @@index([currentInventoryLocationId, status])
   @@index([status, expectedReadyAt])
+  @@index([intakeBatchCode])
+  @@index([status, expiresAt])
   @@map("equipment_units")
 }
 
@@ -2724,6 +2736,8 @@ model ReturnInspection {
   receivedAt   DateTime?               @map("received_at") @db.Timestamptz(6)
   notes        String?
   evidenceIds  Json?                   @map("evidence_ids")
+  /// PRELIMINARY only: what Delivery saw at pickup, { visibleDamage, accessoryObservations } (RB-API-602).
+  observations Json?
   version      Int                     @default(1)
   createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -2791,6 +2805,8 @@ model RentalExceptionCase {
   evidenceCompleteAt     DateTime?                 @map("evidence_complete_at") @db.Timestamptz(6)
   evidencePublishedAt    DateTime?                 @map("evidence_published_at") @db.Timestamptz(6)
   inAppNoticePublishedAt DateTime?                 @map("in_app_notice_published_at") @db.Timestamptz(6)
+  /// Customer accepted the published deduction: closes the review window early (RB-API-617).
+  customerAcceptedAt     DateTime?                 @map("customer_accepted_at") @db.Timestamptz(6)
   version                Int                       @default(1)
   createdAt              DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

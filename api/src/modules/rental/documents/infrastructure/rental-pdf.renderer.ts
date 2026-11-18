@@ -346,6 +346,35 @@ export function documentContent(doc: RentalDocument): DocContent {
           })),
         })
       } else note('Không có thiết bị trong dữ liệu bàn giao.', 'warn')
+      const missingUnits = arr(s.missingUnits).map(obj)
+      if (missingUnits.length) {
+        section(`Thiết bị TrekGo giao thiếu (${missingUnits.length})`)
+        blocks.push({
+          kind: 'table',
+          columns: [
+            { title: 'STT', width: 30 },
+            { title: 'Thiết bị', width: 150 },
+            { title: 'Mã tài sản', width: 92 },
+            { title: 'Ghi nhận của nhân viên giao', width: 0 },
+          ],
+          rows: missingUnits.map((unit, i) => ({
+            cells: [
+              String(i + 1),
+              displayName(unit.productName),
+              displayName(unit.assetCode),
+              hasText(unit.description) ? clean(unit.description) : '—',
+            ],
+            tones: [undefined, undefined, undefined, 'warn'],
+          })),
+        })
+        const refund = obj(s.shortageRefund)
+        note(
+          hasText(refund.total)
+            ? `Các thiết bị trên không được giao cho khách và không tính vào đơn. TrekGo hoàn ${amount(refund.total)} (phí thuê ${amount(refund.rentalFee)} + tiền cọc ${amount(refund.deposit)}) về nguồn thanh toán gốc.`
+            : 'Các thiết bị trên không được giao cho khách và không tính vào đơn. TrekGo sẽ liên hệ để hoàn phí thuê và tiền cọc của các thiết bị này.',
+          'warn',
+        )
+      }
       const issues = arr(s.reportedIssues).map(obj)
       if (hasText(s.recipientNotes) || issues.length) {
         section('Ghi nhận khi bàn giao')

@@ -13,6 +13,7 @@ import { CreateDepositSettlementUseCase } from './application/use-cases/create-d
 import { GetDepositUseCase } from './application/use-cases/get-deposit.use-case';
 import { FinalizeReturnUseCase } from './application/use-cases/finalize-return.use-case';
 import { CreateAssessmentReviewUseCase } from './application/use-cases/create-assessment-review.use-case';
+import { AcceptAssessmentUseCase } from './application/use-cases/accept-assessment.use-case';
 import { ResolveRentalExceptionUseCase } from './application/use-cases/resolve-rental-exception.use-case';
 import { MarkReturnedUnitReadyUseCase } from './application/use-cases/mark-returned-unit-ready.use-case';
 import { ListRentalExceptionsUseCase } from './application/use-cases/list-rental-exceptions.use-case';
@@ -76,6 +77,7 @@ import { RentalEarlyReturnExpiryWorker } from './infrastructure/jobs/rental-earl
     GetDepositUseCase,
     FinalizeReturnUseCase,
     CreateAssessmentReviewUseCase,
+    AcceptAssessmentUseCase,
     ResolveRentalExceptionUseCase,
     MarkReturnedUnitReadyUseCase,
     ListRentalExceptionsUseCase,

@@ -19,6 +19,15 @@ export const CUSTODY_PRESERVED_REASONS = {
   MEMBERSHIP: 'ACTIVE_RENTAL_MEMBERSHIP_REVOKED_CUSTODY_PRESERVED',
 } as const
 
+/**
+ * Bàn giao một phần: shipper báo món thiếu trong kiện (`reportedIssues[].type = MISSING`).
+ * Dùng làm `refunds.reason` của khoản hoàn phí + cọc món thiếu, tiền tố `reason` của case nội bộ
+ * và `maintenance_records.reason` của món bị rút khỏi kho.
+ */
+export const HANDOVER_SHORTAGE_REASON = 'HANDOVER_SHORTAGE'
+/** Event outbox báo khách + ADMIN/STAFF_INVENTORY khi bàn giao thiếu món. */
+export const HANDOVER_SHORTAGE_EVENT_TYPE = 'RENTAL_HANDOVER_SHORTAGE'
+
 /** Nguồn huỷ ghi trong payload RENTAL_ORDER_CANCELLED của lifecycle. */
 export type RentalCancellationSource = 'TRIP' | 'BOOKING' | 'MEMBERSHIP'
 
@@ -31,5 +40,9 @@ export const EARLY_RETURN_EVENT_STATUSES = [
   'EXPIRED',
   'CANCELLED',
   'RECONFIRM_REQUIRED',
+  /** Quá giờ hẹn đã xác nhận mà shipper chưa thu hồi; chỉ cảnh báo, không đổi trạng thái yêu cầu. */
+  'SLOT_MISSED',
+  /** Lịch đã xác nhận được giao / đổi sang shipper khác; giờ hẹn giữ nguyên. */
+  'REASSIGNED',
 ] as const
 export type EarlyReturnEventStatus = (typeof EARLY_RETURN_EVENT_STATUSES)[number]

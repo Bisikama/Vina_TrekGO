@@ -72,6 +72,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       },
       rentalUnitAssignment: {
         count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       deliveryTask: {
         update: jest.fn().mockResolvedValue({}),
@@ -103,6 +104,7 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
         findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
       },
       equipmentUnit: {
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([
           {
             id: 'unit-1',
@@ -140,6 +142,8 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
       inventoryLocation: {
         findUnique: jest.fn().mockResolvedValue({ id: PRIMARY_LOC_ID, status: 'ACTIVE' }),
       },
+      equipmentUnit: { findFirst: jest.fn().mockResolvedValue(null) },
+      rentalUnitAssignment: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     mockContext = {
@@ -219,6 +223,23 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
   };
 
   describe('1. Extension Conditions & Guard Rules', () => {
+    it('refuses an extension past the shelf life of a unit the customer holds', async () => {
+      mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
+      mockPrisma.equipmentUnit.findFirst.mockResolvedValueOnce({
+        assetCode: 'ROPE-001',
+        expiresAt: new Date('2026-10-26T00:00:00Z'),
+      });
+      await expect(
+        extensionService.quote('user-1', 'order-ext-1', new Date('2026-10-26T18:00:00Z'), 'RETURN_POINT_1', new Date('2026-10-24T10:00:00Z')),
+      ).rejects.toMatchObject({
+        code: 'EXTENSION_NOT_APPLICABLE',
+        details: { reason: 'UNIT_EXPIRES_BEFORE_NEW_END', assetCode: 'ROPE-001', expiresAt: '2026-10-26' },
+      });
+      // Compared on the Vietnam calendar: 18:00 UTC on the 26th is already the 27th in Vietnam.
+      expect(mockPrisma.equipmentUnit.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ expiresAt: { lte: new Date('2026-10-27T00:00:00Z') } }) }),
+      );
+    });
     it('rejects a new extension while an early-return request is active', async () => {
       mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce(baseOrder);
       mockPrisma.rentalEarlyReturnRequest.findFirst.mockResolvedValueOnce({ id: 'early-request' });
@@ -875,6 +896,47 @@ describe('Phase 07B: Rental Extension & Overdue Lifecycle Unit Tests', () => {
           eventType: 'TECHNICAL_REVERSAL_REQUESTED',
           payload: expect.objectContaining({ reasonCode: 'EXTENSION_NOT_APPLICABLE' }),
         }),
+      }));
+    });
+
+    it('R9: không cho báo giá gia hạn khi đơn đang bị thu hồi sớm (ACTION_REQUIRED)', async () => {
+      mockPrisma.rentalOrder.findUnique.mockResolvedValueOnce({
+        ...baseOrder,
+        exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+      });
+      await expect(
+        extensionService.quote('user-1', 'order-ext-1', new Date('2026-10-26T18:00:00Z'), 'RETURN_POINT_1', new Date('2026-10-24T10:00:00Z')),
+      ).rejects.toMatchObject({ code: 'EXTENSION_INVALID_ORDER_STATE' });
+    });
+
+    it('R9: tiền gia hạn về sau khi đơn bị thu hồi sớm thì hoàn tiền, không gia hạn và không xoá cờ', async () => {
+      const paidAt = new Date('2026-10-24T10:00:00Z');
+      const ext = {
+        id: 'ext-recalled', orderId: mixedOrder.id, status: RentalExtensionStatus.PENDING_PAYMENT,
+        invoiceId: 'inv-recalled', paymentRef: 'pay-recalled',
+        currency: 'VND', additionalFee: new Prisma.Decimal('200000.00'),
+        holdExpiresAt: new Date('2026-10-24T10:15:00Z'),
+        previousRentalEndAt: mixedOrder.rentalEndAt,
+        previousOccupiedUntil: mixedOrder.occupiedEndAt,
+        acceptedAt: paidAt, acceptedByUserId: 'user-1', termsHash: 'a'.repeat(64),
+        lines: [],
+      };
+      mockTx.rentalExtensionRequest.findUnique.mockResolvedValue(ext);
+      // Membership revoked while the payment was in flight: order stays ACTIVE but is recalled.
+      mockTx.rentalOrder.findUnique.mockResolvedValue({
+        ...mixedOrder, exceptionStatus: RentalOrderExceptionStatus.ACTION_REQUIRED,
+      });
+
+      const result = await consumeExtensionPaymentWithTx(mockTx, ext.id, {
+        id: ext.paymentRef, invoiceId: ext.invoiceId, amount: ext.additionalFee,
+        currency: ext.currency, transactionRef: 'provider-2', paidAt,
+      }, 'SUCCEEDED', 'provider-2', paidAt);
+
+      expect(result).toEqual({ applied: false, reasonCode: 'EXTENSION_NOT_APPLICABLE' });
+      expect(mockTx.rentalOrder.update).not.toHaveBeenCalled();
+      expect(mockTx.deliveryTask.update).not.toHaveBeenCalled();
+      expect(mockTx.paymentOutboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        create: expect.objectContaining({ eventType: 'TECHNICAL_REVERSAL_REQUESTED' }),
       }));
     });
 

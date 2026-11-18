@@ -7,6 +7,8 @@ import { TripRouteReviewMap } from "./TripRouteReviewMap";
 import { getRentalCategories } from "@/features/rentals/services/rental.api";
 import type { RentalCategory } from "@/features/rentals/types/rental";
 import { PublicTripCarousel } from "@/features/trips/components/PublicTripCarousel";
+import { Button, ErrorAlert, SurfaceCard } from "@/components/ui";
+import type { LeaderTripView } from "../../types";
 
 const DEFAULT_FALLBACK_CATEGORIES: RentalCategory[] = [
   { id: "seed-1", name: "Lều và mái che", slug: "leu-trai", description: "Lều trekking, tăng và mái che chống mưa cho chuyến đi nhiều ngày." },
@@ -104,9 +106,10 @@ import {
 } from "../../hooks";
 
 type DraftData = {
+  id?: string;
   title?: string;
   name?: string;
-  description?: string;
+  description?: string | null;
   priceExplanation?: string | null;
   visibility?: "public" | "private";
   cancellationPolicy?: "flexible" | "standard" | "strict";
@@ -155,7 +158,8 @@ export function LeaderCreateTripReview() {
     }
   }, [tripIdFromParam]);
 
-  const { trip, isLoading: isLoadingTrip, refetch: refetchTrip } = useLeaderTripDetail({ tripId });
+  const { trip: loadedTrip, refetch: refetchTrip } = useLeaderTripDetail({ tripId });
+  const trip = loadedTrip?.id === tripId ? loadedTrip : null;
   const { readiness, isLoading: isLoadingReadiness, refetch: refetchReadiness } =
     useLeaderTripReadiness({ tripId });
   const { publishTrip: apiPublishTrip, updateTrip, isSubmitting } = useLeaderTripMutations();
@@ -166,10 +170,24 @@ export function LeaderCreateTripReview() {
   const [errorMsg, setErrorMsg] = useState("");
   const [draftData, setDraftData] = useState<DraftData>({});
   const [priceExplanationInput, setPriceExplanationInput] = useState("");
-  const [descriptionInput, setDescriptionInput] = useState("");
+  const [editedDescription, setEditedDescription] = useState<{ tripId: string; text: string } | null>(null);
   const [descriptionSaved, setDescriptionSaved] = useState(false);
+  const [descriptionAction, setDescriptionAction] = useState<"description" | "draft" | "publish" | null>(null);
+  const writingDescription = useRef(false);
   const [isPreviewTab, setIsPreviewTab] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionInput = (editedDescription?.tripId === tripId ? editedDescription?.text : undefined)
+    ?? trip?.description
+    ?? (draftData.id === tripId ? draftData.description : undefined)
+    ?? "";
+  const canEditDescription = trip?.status === "DRAFT" && !published;
+  const descriptionBusy = descriptionAction !== null || isSubmitting;
+
+  function setDescriptionInput(text: string) {
+    if (!canEditDescription || !tripId || writingDescription.current) return;
+    setEditedDescription({ tripId, text });
+    setDescriptionSaved(false);
+  }
 
   const [categories, setCategories] = useState<RentalCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
@@ -219,7 +237,7 @@ export function LeaderCreateTripReview() {
       : [...selectedCategories, catName];
 
     setSelectedCategories(nextSelected);
-    setDescriptionInput((prev) => updateGearRecommendationInText(prev, nextSelected));
+    setDescriptionInput(updateGearRecommendationInText(descriptionInput, nextSelected));
   };
 
   useEffect(() => {
@@ -231,9 +249,6 @@ export function LeaderCreateTripReview() {
           setDraftData(parsed);
           if (parsed.priceExplanation) {
             setPriceExplanationInput(String(parsed.priceExplanation));
-          }
-          if (parsed.description && !descriptionInput) {
-            setDescriptionInput(String(parsed.description));
           }
         } catch (err) {
           console.error("Lỗi đọc draft:", err);
@@ -247,12 +262,6 @@ export function LeaderCreateTripReview() {
       setPriceExplanationInput(trip.priceExplanation);
     }
   }, [trip?.priceExplanation]);
-
-  useEffect(() => {
-    if (trip?.description !== undefined && trip?.description !== null) {
-      setDescriptionInput(trip.description);
-    }
-  }, [trip?.description]);
 
   const applyFormat = (format: "bold" | "italic" | "underline" | "list" | "link") => {
     const el = textareaRef.current;
@@ -297,36 +306,58 @@ export function LeaderCreateTripReview() {
     }, 0);
   };
 
-  async function handleSaveDescription() {
-    if (!tripId || !trip) return;
-    setErrorMsg("");
+  async function persistDescription(currentTrip: LeaderTripView) {
+    const description = descriptionInput.trim() || null;
+    const updatedTrip = description === (currentTrip.description?.trim() || null)
+      ? currentTrip
+      : await updateTrip(currentTrip.id, { expectedVersion: currentTrip.version, description });
+    if ((updatedTrip.description?.trim() || null) !== description) {
+      await refetchTrip();
+      throw new Error("Máy chủ chưa lưu đúng mô tả chuyến đi. Vui lòng thử lại.");
+    }
+
+    setDraftData((draft) => draft.id === currentTrip.id ? { ...draft, description } : draft);
     try {
-      await updateTrip(tripId, {
-        expectedVersion: trip.version,
-        description: descriptionInput.trim() || null,
-      });
-      if (typeof window !== "undefined") {
-        const storedDraft = window.sessionStorage.getItem("leader-create-trip-draft");
-        if (storedDraft) {
-          try {
-            const parsed = JSON.parse(storedDraft);
-            window.sessionStorage.setItem(
-              "leader-create-trip-draft",
-              JSON.stringify({
-                ...parsed,
-                description: descriptionInput.trim() || null,
-              })
-            );
-          } catch {}
+      const snapshot = window.sessionStorage.getItem("leader-create-trip-draft");
+      if (snapshot) {
+        const draft: DraftData = JSON.parse(snapshot);
+        if (draft.id === currentTrip.id) {
+          window.sessionStorage.setItem("leader-create-trip-draft", JSON.stringify({ ...draft, description }));
         }
       }
-      await Promise.all([refetchTrip(), refetchReadiness()]);
-      setDescriptionSaved(true);
-      setTimeout(() => setDescriptionSaved(false), 2500);
+    } catch {
+      // Bản nháp đã lưu qua API, cập nhật bộ nhớ phiên chỉ hỗ trợ giao diện.
+    }
+
+    const latestTrip = updatedTrip === currentTrip ? currentTrip : await refetchTrip();
+    if (latestTrip?.id === currentTrip.id && (latestTrip.description?.trim() || null) === description) {
+      setEditedDescription(null);
+    }
+    return updatedTrip.version;
+  }
+
+  async function handleSaveDescription(asDraft = false) {
+    if (!trip || !canEditDescription || writingDescription.current || isSubmitting) return;
+    writingDescription.current = true;
+    setDescriptionAction(asDraft ? "draft" : "description");
+    setErrorMsg("");
+    try {
+      const version = await persistDescription(trip);
+      if (version !== trip.version) await refetchReadiness();
+      if (asDraft) {
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2500);
+      } else {
+        setDescriptionSaved(true);
+        window.setTimeout(() => setDescriptionSaved(false), 2500);
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Không thể cập nhật mô tả chuyến đi.";
       setErrorMsg(msg);
+    } finally {
+      writingDescription.current = false;
+      setDescriptionAction(null);
     }
   }
 
@@ -359,18 +390,7 @@ export function LeaderCreateTripReview() {
     }
   }
 
-  function handleSaveDraft() {
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-    }, 2500);
-  }
-
   const tripTitle = trip?.title || draftData.title || draftData.name || "Chuyến đi Trekking";
-  const tripDescription =
-    trip?.description ||
-    draftData.description ||
-    "Khám phá trọn vẹn hành trình trekking cùng Leader chuyên nghiệp theo chuẩn an toàn VFRS.";
 
   const startDateFormatted = trip?.startAt
     ? new Date(trip.startAt).toLocaleDateString("vi-VN")
@@ -474,23 +494,14 @@ export function LeaderCreateTripReview() {
   };
 
   async function handleConfirmPublish() {
-    if (!tripId || !trip) return;
+    if (!trip || !canEditDescription || writingDescription.current || isSubmitting) return;
+    writingDescription.current = true;
+    setDescriptionAction("publish");
     setErrorMsg("");
 
     try {
-      let currentVersion = trip.version;
-      if (descriptionInput.trim() && descriptionInput.trim() !== (trip.description || "")) {
-        const updatedTrip = await updateTrip(tripId, {
-          expectedVersion: currentVersion,
-          description: descriptionInput.trim(),
-        });
-        currentVersion = updatedTrip.version;
-        // Refresh trip state (version + description) để lần thử lại sau lỗi publish
-        // không so với description cũ và không gửi expectedVersion đã lỗi thời.
-        await refetchTrip();
-      }
-
-      await apiPublishTrip(tripId, { expectedVersion: currentVersion });
+      const currentVersion = await persistDescription(trip);
+      await apiPublishTrip(trip.id, { expectedVersion: currentVersion });
       setPublished(true);
       setShowPublishModal(false);
 
@@ -507,13 +518,16 @@ export function LeaderCreateTripReview() {
       const msg = err instanceof Error ? err.message : "Chưa đủ điều kiện xuất bản.";
       setErrorMsg(msg);
       setShowPublishModal(false);
+    } finally {
+      writingDescription.current = false;
+      setDescriptionAction(null);
     }
   }
 
   const canPublishTrip = readiness?.canPublish ?? false;
 
   return (
-    <main className="min-h-screen bg-[#f4f7fb] px-5 py-6 lg:px-8">
+    <main id="leader-create-trip-review" className="min-h-screen bg-[#f4f7fb] px-5 py-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -534,22 +548,20 @@ export function LeaderCreateTripReview() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="h-11 rounded-xl bg-[#eef3fb] px-4 text-sm font-bold text-slate-700 hover:bg-slate-200"
+              <Button
+                variant="secondary"
+                disabled={!canEditDescription || descriptionBusy}
+                loading={descriptionAction === "draft"}
+                onClick={() => void handleSaveDescription(true)}
               >
-                ▣ Lưu bản nháp
-              </button>
+                Lưu bản nháp
+              </Button>
             </div>
           </div>
         </section>
 
         {errorMsg && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            <strong className="font-bold">Lỗi xuất bản: </strong>
-            {errorMsg}
-          </div>
+          <ErrorAlert message={errorMsg} className="mt-4" />
         )}
 
         <section className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-3">
@@ -677,20 +689,21 @@ export function LeaderCreateTripReview() {
                         <button
                           type="button"
                           onClick={handleApplyReviewTemplate}
+                          disabled={!canEditDescription || descriptionBusy}
                           title="Tự động tạo bài viết rủ rê truyền cảm hứng từ toàn bộ thông tin chuyến đi"
                           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition cursor-pointer"
                         >
                           🌿 Dùng mẫu mô tả
                         </button>
 
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={handleSaveDescription}
-                          className="inline-flex items-center gap-1 rounded-lg bg-[#125238] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#236747] disabled:bg-slate-300 transition"
+                        <Button
+                          size="sm"
+                          disabled={!canEditDescription || descriptionBusy}
+                          loading={descriptionAction === "description"}
+                          onClick={() => void handleSaveDescription()}
                         >
-                          {descriptionSaved ? "✓ Đã lưu" : isSubmitting ? "Đang lưu..." : "Lưu mô tả"}
-                        </button>
+                          {descriptionSaved ? "✓ Đã lưu" : "Lưu mô tả"}
+                        </Button>
                       </div>
                     </div>
 
@@ -727,6 +740,7 @@ export function LeaderCreateTripReview() {
                                 key={cat.id}
                                 type="button"
                                 onClick={() => handleToggleCategory(cat.name)}
+                                disabled={!canEditDescription || descriptionBusy}
                                 title={cat.description || cat.name}
                                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer ${
                                   isSelected
@@ -824,6 +838,7 @@ export function LeaderCreateTripReview() {
                           rows={11}
                           className="w-full resize-y bg-[#fcfdfe] p-3 text-sm leading-6 text-slate-800 outline-none focus:bg-white"
                           value={descriptionInput}
+                          readOnly={!canEditDescription || descriptionBusy}
                           onChange={(e) => setDescriptionInput(e.target.value)}
                           placeholder="Bấm '🌿 Dùng mẫu mô tả' phía trên để tự động tạo bài viết từ thông tin chuyến đi..."
                         />
@@ -1064,8 +1079,8 @@ export function LeaderCreateTripReview() {
             </section>
           </div>
 
-          <aside className="sticky top-20 hidden space-y-5 xl:block">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <aside className="sticky top-20 hidden max-h-[calc(100dvh-6rem)] space-y-5 overflow-y-auto rounded-xl xl:block">
+            <SurfaceCard as="section" padding="none" className="p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-[#125238]">
                   ✓
@@ -1088,7 +1103,7 @@ export function LeaderCreateTripReview() {
                 }`}
               >
                 <div
-                  className={`flex h-14 w-14 items-center justify-center rounded-full border-4 text-sm font-bold ${
+                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 text-center text-xs font-bold leading-tight ${
                     canPublishTrip
                       ? "border-[#125238] text-[#125238]"
                       : "border-orange-500 text-orange-700"
@@ -1141,29 +1156,32 @@ export function LeaderCreateTripReview() {
                   ? "✓ Đủ điều kiện kích hoạt mở bán tự động"
                   : "⚠ Cần hoàn thiện cung đường & trạm dừng"}
               </div>
-            </section>
+            </SurfaceCard>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <SurfaceCard as="section" padding="none" className="p-5">
               <button
                 type="button"
-                disabled={published || isSubmitting || !canPublishTrip}
+                disabled={!canEditDescription || descriptionBusy || !canPublishTrip}
                 onClick={() => setShowPublishModal(true)}
                 className="h-12 w-full rounded-xl bg-[#125238] px-5 text-sm font-bold text-white shadow-md hover:bg-[#2f6b4f] disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {published
                   ? "✓ Chuyến đi đã công khai"
-                  : isSubmitting
+                  : descriptionAction === "publish"
                   ? "Đang xuất bản..."
                   : "Công khai chuyến đi ngay"}
               </button>
 
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="mt-3 h-11 w-full rounded-xl bg-[#eef3fb] px-5 text-sm font-bold text-slate-700 hover:bg-slate-200"
+              <Button
+                variant="secondary"
+                fullWidth
+                disabled={!canEditDescription || descriptionBusy}
+                loading={descriptionAction === "draft"}
+                onClick={() => void handleSaveDescription(true)}
+                className="mt-3"
               >
-                ▣ Lưu bản nháp để duyệt sau
-              </button>
+                Lưu bản nháp để duyệt sau
+              </Button>
 
               <button
                 type="button"
@@ -1178,7 +1196,7 @@ export function LeaderCreateTripReview() {
               >
                 ← Quay lại Bước 2
               </button>
-            </section>
+            </SurfaceCard>
           </aside>
         </div>
 
@@ -1199,7 +1217,7 @@ export function LeaderCreateTripReview() {
 
           <button
             type="button"
-            disabled={published || isSubmitting || !canPublishTrip}
+            disabled={!canEditDescription || descriptionBusy || !canPublishTrip}
             onClick={() => setShowPublishModal(true)}
             className="h-11 rounded-xl bg-[#125238] px-6 text-sm font-bold text-white disabled:bg-slate-400"
           >
@@ -1265,11 +1283,11 @@ export function LeaderCreateTripReview() {
 
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={descriptionBusy}
                 onClick={handleConfirmPublish}
                 className="h-11 rounded-xl bg-[#125238] px-5 text-sm font-bold text-white hover:bg-[#2f6b4f] disabled:bg-slate-400"
               >
-                {isSubmitting ? "Đang xuất bản..." : "Xác nhận công khai"}
+                {descriptionAction === "publish" ? "Đang xuất bản..." : "Xác nhận công khai"}
               </button>
             </div>
           </div>

@@ -52,6 +52,28 @@ export type UserTransactionsQueryDto = z.infer<typeof UserTransactionsQuerySchem
 export type TransactionKind = 'PAYMENT' | 'REFUND'
 export type TransactionSource = 'RENTAL' | 'BOOKING' | 'TRAIL_ACCESS'
 export type FinancialEffect = 'DEBIT' | 'CREDIT' | 'NONE'
+export type RefundPurpose = 'DEPOSIT' | 'BOOKING_CANCELLATION' | 'RENTAL_CANCELLATION' | 'TRAIL_ACCESS' | 'TECHNICAL_REVERSAL'
+
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+/** Vietnam business day (UTC+7, no DST). */
+const VIETNAM_OFFSET = '+07:00'
+
+/**
+ * Inclusive start / exclusive end of the user's filter. A date-only value means the whole
+ * Vietnam calendar day: `to=2026-10-31` keeps every transaction of Oct 31 (local time).
+ */
+export function transactionDateRange(query: { from?: string; to?: string }): { from?: Date; toExclusive?: Date } {
+  const from = query.from
+    ? new Date(DATE_ONLY_REGEX.test(query.from) ? `${query.from}T00:00:00${VIETNAM_OFFSET}` : query.from)
+    : undefined
+  let toExclusive: Date | undefined
+  if (query.to) {
+    toExclusive = DATE_ONLY_REGEX.test(query.to)
+      ? new Date(new Date(`${query.to}T00:00:00${VIETNAM_OFFSET}`).getTime() + 86_400_000)
+      : new Date(new Date(query.to).getTime() + 1)
+  }
+  return { from, toExclusive }
+}
 
 export interface UserTransactionItemDto {
   settlementMode?: 'SANDBOX_SIMULATED' | null
@@ -70,6 +92,8 @@ export interface UserTransactionItemDto {
   status: string
   financialEffect: FinancialEffect
   description: string
+  /** Refund type for kind=REFUND (e.g. DEPOSIT, RENTAL_CANCELLATION); null for payments. */
+  purpose: RefundPurpose | null
   paymentMethod: string | null
   createdAt: string
   completedAt: string | null

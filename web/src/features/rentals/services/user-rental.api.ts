@@ -48,6 +48,20 @@ export type RentalOrderDetail = {
   returnPoint: null | { id: string; name: string; address: string };
   allowedActions: string[];
   cancellationRefunds?: Array<{ refundId: string; amount: number; currency: string; status: string; settlementMode: "STANDARD" | "SANDBOX_SIMULATED" }>;
+  /** Có khi TrekGo giao thiếu thiết bị lúc bàn giao: các món này không tính vào đơn và được hoàn phí thuê + cọc. */
+  handoverShortage?: {
+    handedOverAt: string | null;
+    units: Array<{ unitId: string; assetCode: string; productId: string; productName: string; description: string | null }>;
+    refund: null | {
+      refundId: string;
+      amount: number;
+      currency: string;
+      status: string;
+      settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
+      rentalFeeAmount: number;
+      depositAmount: number;
+    };
+  };
   /** Mốc thời gian thật do API trả: ORDER_CREATED | PAID | CANCELLED | COMPLETED. */
   timeline?: Array<{ type: string; at: string }>;
 };
@@ -78,6 +92,9 @@ export type RentalDepositItem = {
   reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
   canSubmitReview?: boolean;
   cannotSubmitReviewReason?: string | null;
+  /** RB-API-617: khách có thể đồng ý khoản trừ để quyết toán ngay (cùng điều kiện với phản đối). */
+  canAcceptDeduction?: boolean;
+  deductionAcceptedAt?: string | null;
   approvedDeduction?: number | null;
 };
 

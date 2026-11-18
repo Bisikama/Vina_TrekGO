@@ -86,12 +86,12 @@ describe('rentalNotificationProjection', () => {
     expect(() => rental('RENTAL_SCHEDULE_NOTICE_ISSUED', {})).toThrow('RENTAL_SCHEDULE_NOTICE_INVALID')
   })
 
-  it('labels sandbox-simulated deposit refunds', () => {
+  it('words sandbox-simulated deposit refunds like real ones, flagging them only in metadata', () => {
     const [real] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' })
     const [sandbox] = rental('DEPOSIT_REFUND_SUCCEEDED', { refundId: 'r' }, { refundSimulated: true })
-    expect(real.data.title).toBe('Hoàn tiền cọc thiết bị')
-    expect(sandbox.data.title).toBe('Hoàn tiền cọc thiết bị')
-    expect(sandbox.data.content).toMatch(/không có tiền thật/)
+    expect(sandbox.data.title).toBe(real.data.title)
+    expect(sandbox.data.content).toBe(real.data.content)
+    expect(sandbox.data.metadata).toMatchObject({ sandboxSimulated: true })
   })
   it('falls back to generic wording for cancellations without cancellationSource (events from before the field)', () => {
     const [d] = rental('RENTAL_ORDER_CANCELLED', { financialStatus: 'REFUND_PENDING' })
@@ -126,6 +126,66 @@ describe('rentalNotificationProjection', () => {
     expect(early('CANCELLED', { wasConfirmed: true }).map((d) => d.audience)).toEqual(['STAFF'])
     expect(early('RECONFIRM_REQUIRED').map((d) => d.audience)).toEqual(['CUSTOMER', 'STAFF'])
     expect(() => early('UNKNOWN')).toThrow()
+  })
+
+  it('tells the assigned delivery staff (and the replaced one) about a confirmed early return', () => {
+    const early = (status: string, extra: Record<string, unknown>) =>
+      rental('RENTAL_EARLY_RETURN_UPDATED', {
+        orderId: ORDER,
+        requestId: 'req-1',
+        status,
+        slotAt: '2026-11-08T03:00:00.000Z',
+        ...extra,
+      })
+    const confirmed = early('CONFIRMED', {
+      assigneeId: 'shipper-new',
+      assigneeName: 'Shipper B',
+      previousAssigneeId: 'shipper-old',
+    })
+    expect(confirmed.map((d) => [d.audience, d.recipientId])).toEqual([
+      ['CUSTOMER', undefined],
+      ['USER', 'shipper-new'],
+      ['USER', 'shipper-old'],
+    ])
+    expect(confirmed[0].data.content).toMatch(/Shipper B/)
+    expect(new Set(confirmed.map((d) => d.semanticType)).size).toBe(3)
+    const cancelled = early('CANCELLED', { wasConfirmed: true, assigneeId: 'shipper-new' })
+    expect(cancelled.map((d) => [d.audience, d.recipientId])).toEqual([
+      ['STAFF', undefined],
+      ['USER', 'shipper-new'],
+    ])
+    // Trip đổi lịch: shipper giữ task phải biết giờ sớm không còn hiệu lực.
+    const reconfirm = early('RECONFIRM_REQUIRED', { assigneeId: 'shipper-new' })
+    expect(reconfirm.map((d) => [d.audience, d.recipientId])).toEqual([
+      ['CUSTOMER', undefined],
+      ['STAFF', undefined],
+      ['USER', 'shipper-new'],
+    ])
+    expect(reconfirm[2].data.content).toMatch(/không còn hiệu lực/)
+    // Lỡ hẹn: báo kho/Admin và shipper, không báo khách.
+    const missed = early('SLOT_MISSED', { assigneeId: 'shipper-new' })
+    expect(missed.map((d) => [d.audience, d.recipientId])).toEqual([
+      ['STAFF', undefined],
+      ['USER', 'shipper-new'],
+    ])
+    expect(early('SLOT_MISSED', {}).map((d) => d.audience)).toEqual(['STAFF'])
+    // Đổi shipper sau khi đã xác nhận: khách biết người mới, shipper cũ được báo không cần đi.
+    const reassigned = early('REASSIGNED', {
+      assigneeId: 'shipper-new',
+      assigneeName: 'Shipper B',
+      previousAssigneeId: 'shipper-old',
+    })
+    expect(reassigned.map((d) => [d.audience, d.recipientId])).toEqual([
+      ['CUSTOMER', undefined],
+      ['USER', 'shipper-new'],
+      ['USER', 'shipper-old'],
+    ])
+    expect(reassigned[0].data.content).toMatch(/Shipper B/)
+    expect(reassigned[0].data.title).toBe('Đổi nhân viên nhận lại đồ')
+    // Lịch cũ chưa ai nhận: không nói "đổi".
+    const firstAssign = early('REASSIGNED', { assigneeId: 'shipper-new', assigneeName: 'Shipper B' })
+    expect(firstAssign[0].data.title).toBe('Đã có nhân viên nhận lại đồ')
+    expect(firstAssign.map((d) => d.recipientId)).toEqual([undefined, 'shipper-new'])
   })
 })
 
@@ -170,6 +230,43 @@ describe('paymentNotificationProjection', () => {
     const [d] = paymentNotificationProjection('REFUND_SUCCEEDED', refund({ simulated: true }))
     expect(d.data.title).toBe('Hoàn tiền thành công')
     expect(d.data.metadata).toMatchObject({ sandboxSimulated: true })
+  })
+
+  it('does not call a handover-shortage refund a cancelled order', () => {
+    const [d] = paymentNotificationProjection('REFUND_SUCCEEDED', refund({ rentalHandoverShortage: true }))
+    expect(d.data.content).toMatch(/thiết bị TrekGo giao thiếu của đơn thuê #11111111/)
+    expect(d.data.content).not.toMatch(/đã huỷ/)
+  })
+})
+
+describe('rentalNotificationProjection — partial handover', () => {
+  const payload = (over: Record<string, unknown> = {}) => ({
+    handoverId: 'handover-1',
+    units: [{ unitId: 'unit-9', assetCode: 'TENT-009', productName: 'Lều 3 người' }],
+    refundAmount: 800000,
+    refundRef: 'refund-1',
+    refundCreated: true,
+    ...over,
+  })
+
+  it('tells the customer what was missing and what is refunded, and asks staff to find the unit', () => {
+    const [customer, staff] = rentalNotificationProjection('RENTAL_HANDOVER_SHORTAGE', payload(), { orderId: ORDER })
+    expect(customer.audience).toBe('CUSTOMER')
+    expect(customer.data.content).toMatch(/giao thiếu 1 thiết bị: Lều 3 người/)
+    expect(customer.data.content).toMatch(/Khoản hoàn 800\.000.*đang được xử lý/)
+    expect(customer.data.content).not.toMatch(/đã (được )?hoàn/)
+    expect(staff.audience).toBe('STAFF')
+    expect(staff.data.content).toMatch(/TENT-009/)
+    expect(staff.data.content).not.toMatch(/hoàn tay/)
+  })
+
+  it('asks admin for a manual refund when none could be reserved', () => {
+    const [, staff] = rentalNotificationProjection(
+      'RENTAL_HANDOVER_SHORTAGE',
+      payload({ refundRef: undefined, refundCreated: false }),
+      { orderId: ORDER },
+    )
+    expect(staff.data.content).toMatch(/Admin cần hoàn tay/)
   })
 })
 

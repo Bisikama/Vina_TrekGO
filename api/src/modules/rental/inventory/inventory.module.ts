@@ -22,6 +22,7 @@ import { ChangeEquipmentMaintenanceUseCase } from './application/use-cases/chang
 import { DowngradeEquipmentGradeUseCase } from './application/use-cases/downgrade-equipment-grade.use-case';
 import { EQUIPMENT_UNIT_PORT } from './application/ports/equipment-unit.port';
 import { PrismaEquipmentUnitAdapter } from './infrastructure/adapters/prisma-equipment-unit.adapter';
+import { EquipmentUnitExpiryScheduler } from './infrastructure/jobs/equipment-unit-expiry.scheduler';
 
 @Module({
   imports: [SharedModule, CatalogModule],
@@ -43,6 +44,7 @@ import { PrismaEquipmentUnitAdapter } from './infrastructure/adapters/prisma-equ
     GenerateEquipmentLabelsUseCase,
     ChangeEquipmentMaintenanceUseCase,
     DowngradeEquipmentGradeUseCase,
+    EquipmentUnitExpiryScheduler,
     {
       provide: INVENTORY_LOCATION_PORT,
       useClass: PrismaInventoryLocationAdapter,

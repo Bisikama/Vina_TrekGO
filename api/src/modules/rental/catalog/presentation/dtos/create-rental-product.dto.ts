@@ -21,6 +21,8 @@ export const CreateRentalProductSchema = z
     spec: z.any().optional(),
     recommendationTags: z.array(z.string()).optional(),
     requiresDeepInspectionAfterReturn: z.boolean().optional(),
+    // Ngưỡng hao mòn (số lượt thuê); bỏ trống hoặc null = không giới hạn.
+    maxRentalCycles: z.number().int().min(1).max(100000).nullable().optional(),
     // Hạng: chỉ gửi grade = mở nhóm mới; gửi thêm gradeGroupId = vào nhóm sẵn có.
     grade: z.enum(['LIKE_NEW', 'GOOD_USED']).optional(),
     gradeGroupId: z.string().uuid().optional(),

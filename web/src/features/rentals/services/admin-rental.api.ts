@@ -140,7 +140,18 @@ export type AdminRentalOrderDetail = {
       handoverAt: string | null;
       returnedAt: string | null;
     }>;
-    handover: null | { id: string; staffId: string | null; recipientNotes: string | null; handedOverAt: string };
+    handover: null | {
+      id: string;
+      staffId: string | null;
+      recipientNotes: string | null;
+      handedOverAt: string;
+      /** Món shipper báo thiếu lúc giao: không giao cho khách, đã hoàn phí + cọc, đang chờ kho tìm lại. */
+      shortageUnits?: Array<{
+        assignmentId: string;
+        productName: string;
+        equipmentUnit: { id: string; assetCode: string; status: string; condition: string };
+      }>;
+    };
     returnInspections: Array<{
       id: string;
       stage: string;
@@ -169,7 +180,7 @@ export type AdminRentalOrderDetail = {
       totalDeduction: number;
       refundAmount: number;
     };
-    refunds: Array<{ id: string; amount: number; currency: string; status: string }>;
+    refunds: Array<{ id: string; purpose?: string; reason?: string | null; amount: number; currency: string; status: string }>;
   };
 };
 

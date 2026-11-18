@@ -46,7 +46,7 @@ export class RentalReturnAdminController {
   @ApiResponse({ status: 409, description: 'Đã quyết toán trước đó' })
   @ApiResponse({ status: 404, description: 'Đơn hàng hoặc assessment không tồn tại' })
   async settle(@Param(new ZodValidationPipe(RentalOrderIdParamSchema)) params: RentalOrderIdParamDto, @Body(new ZodValidationPipe(CreateDepositSettlementBodySchema)) body: CreateDepositSettlementBodyDto, @Headers('idempotency-key') rawKey: string | undefined, @ActiveUser('id') actorUserId: string) {
-    return this.settlementUseCase.execute({ actorUserId, orderId: params.id, ...body, idempotencyKey: requireKey(rawKey), now: new Date() });
+    return this.settlementUseCase.execute({ actorUserId, orderId: params.id, ...body, idempotencyKey: requireKey(rawKey), now: new Date(), systemTriggered: false });
   }
 
   @Post('admin/rental-exceptions/:id/resolve')
@@ -57,7 +57,9 @@ export class RentalReturnAdminController {
     description:
       'Admin giải quyết một ngoại lệ (exception) phát sinh trong quy trình trả hàng. ' +
       'Các quyết định khả dụng: APPROVE_DEDUCTION (trừ tiền), REJECT_DEDUCTION (từ chối trừ), ' +
-      'CONFIRM_LOST (xác nhận mất), CLOSE_NO_ACTION (đóng không xử lý).',
+      'CONFIRM_LOST (xác nhận mất), CLOSE_NO_ACTION (đóng không xử lý), ' +
+      'RETRY_REFUND (chỉ cho ngoại lệ REFUND_FAILURE: gửi lại khoản hoàn cọc mà cổng thanh toán đã báo lỗi; ' +
+      'refund còn đang xử lý hoặc đối soát thì bị từ chối với REFUND_RECONCILIATION_REQUIRED).',
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid', description: 'UUID ngoại lệ cần xử lý', example: '990e8400-e29b-41d4-a716-446655440010' })
   @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'Khóa duy nhất để tránh gọi trùng', example: 'resolve-20261005-def456' })
@@ -67,10 +69,19 @@ export class RentalReturnAdminController {
       type: 'object',
       required: ['decision', 'reason', 'expectedVersion'],
       properties: {
-        decision: { type: 'string', enum: ['APPROVE_DEDUCTION', 'REJECT_DEDUCTION', 'CONFIRM_LOST', 'CLOSE_NO_ACTION'], description: 'Quyết định của Admin', example: 'APPROVE_DEDUCTION' },
+        decision: { type: 'string', enum: ['APPROVE_DEDUCTION', 'REJECT_DEDUCTION', 'CONFIRM_LOST', 'CLOSE_NO_ACTION', 'RETRY_REFUND'], description: 'Quyết định của Admin', example: 'APPROVE_DEDUCTION' },
         reason: { type: 'string', minLength: 3, maxLength: 3000, description: 'Lý do quyết định chi tiết', example: 'Xác nhận hư hỏng theo ảnh minh chứng, trừ tiền theo biểu phí' },
         assessmentVersion: { type: 'integer', minimum: 1, description: 'Phiên bản assessment (tùy chọn)' },
         expectedVersion: { type: 'integer', minimum: 1, description: 'Phiên bản exception hiện tại', example: 1 },
+        approvedDeductionAmount: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'Chỉ với APPROVE_DEDUCTION: mức khấu trừ Admin duyệt (VND), chỉ được thấp hơn hoặc bằng mức đề xuất ' +
+            '(`deduction.proposed` ở RB-API-615). Bỏ trống = duyệt đúng mức đề xuất. Vượt mức → INVALID_RETURN_STATE ' +
+            'reason APPROVED_DEDUCTION_ABOVE_PROPOSAL.',
+          example: 150000,
+        },
       },
     },
   })

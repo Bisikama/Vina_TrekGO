@@ -37,6 +37,8 @@ export type RefundSucceededContext = {
   /** Có giá trị khi refund thuộc huỷ booking (`refund.bookingCancellation.bookingId`). */
   bookingId: string | null
   simulated: boolean
+  /** Hoàn phí + cọc món TrekGo giao thiếu lúc bàn giao (`refund.reason = HANDOVER_SHORTAGE`); đơn không bị huỷ. */
+  rentalHandoverShortage?: boolean
 }
 
 /**
@@ -77,7 +79,9 @@ export function paymentNotificationProjection(
     const forBooking = ctx.purpose === 'BOOKING_CANCELLATION' && ctx.bookingId
     // Không xác định được đối tượng nguồn thì không đoán; thông báo vẫn gắn với payment.
     const target = forRental
-      ? `đơn thuê thiết bị ${shortRef(ctx.rentalOrderId!)} đã huỷ`
+      ? ctx.rentalHandoverShortage
+        ? `thiết bị TrekGo giao thiếu của đơn thuê ${shortRef(ctx.rentalOrderId!)}`
+        : `đơn thuê thiết bị ${shortRef(ctx.rentalOrderId!)} đã huỷ`
       : forBooking
         ? `đặt chỗ chuyến đi ${shortRef(ctx.bookingId!)} đã huỷ`
         : 'giao dịch đã huỷ'
@@ -91,14 +95,13 @@ export function paymentNotificationProjection(
           referenceType: forRental ? R.RENTAL_ORDER : forBooking ? R.BOOKING : R.PAYMENT,
           referenceId: forRental ? ctx.rentalOrderId! : forBooking ? ctx.bookingId! : ctx.refundId,
           title: 'Hoàn tiền thành công',
-          content:
-            `TrekGo đã hoàn ${formatVnd(ctx.amount)} cho ${target}. Thời gian tiền về tài khoản tuỳ ngân hàng hoặc cổng thanh toán.` +
-            (sandbox ? ' (Giao dịch mô phỏng, không có tiền thật.)' : ''),
+          content: `TrekGo đã hoàn ${formatVnd(ctx.amount)} cho ${target}. Thời gian tiền về tài khoản tuỳ ngân hàng hoặc cổng thanh toán.`,
           metadata: {
             refundId: ctx.refundId,
             purpose: ctx.purpose,
             amount: ctx.amount,
             ...(forRental ? { orderId: ctx.rentalOrderId } : {}),
+            ...(forRental && ctx.rentalHandoverShortage ? { reason: 'HANDOVER_SHORTAGE' } : {}),
             ...(forBooking ? { bookingId: ctx.bookingId } : {}),
             ...(sandbox ? { sandboxSimulated: true } : {}),
           },

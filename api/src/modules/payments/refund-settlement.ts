@@ -1,6 +1,44 @@
 import { Prisma } from '@prisma/client'
+import { HANDOVER_SHORTAGE_REASON } from '../../shared/constants/rental-event-reasons.constant'
+import {
+  HANDOVER_SHORTAGE_ASSIGNMENT_WHERE,
+  HANDOVER_SHORTAGE_REFUND_CASE_PREFIX,
+} from '../rental/shared/handover-shortage'
 
 type SettledRefund = Prisma.RefundGetPayload<{ include: { payment: { include: { application: true } } } }>
+
+/**
+ * Refund of units missing at handover failed or needs review: one REFUND_FAILURE case per refund (a later
+ * SUCCEEDED resolves it through the `[refund:<id>]` tag). The order stays as it is — it is still live.
+ */
+export async function openHandoverShortageRefundCase(
+  tx: Prisma.TransactionClient,
+  refund: { id: string; rentalOrderId: string | null; amount: Prisma.Decimal },
+  status: string,
+) {
+  if (!refund.rentalOrderId) return
+  const tag = `[refund:${refund.id}]`
+  const existing = await tx.rentalExceptionCase.findFirst({
+    where: { orderId: refund.rentalOrderId!, reason: { contains: tag } },
+    select: { id: true },
+  })
+  if (existing) return
+  // Attached to a missing unit's assignment so it does not block the deposit refunds of handed-over units.
+  const missing = await tx.rentalUnitAssignment.findFirst({
+    where: { orderLine: { orderId: refund.rentalOrderId! }, ...HANDOVER_SHORTAGE_ASSIGNMENT_WHERE },
+    select: { id: true, equipmentUnitId: true },
+  })
+  await tx.rentalExceptionCase.create({
+    data: {
+      orderId: refund.rentalOrderId!,
+      assignmentId: missing?.id ?? null,
+      unitId: missing?.equipmentUnitId ?? null,
+      caseType: 'REFUND_FAILURE',
+      reason: `${tag} ${HANDOVER_SHORTAGE_REFUND_CASE_PREFIX} refund ${status}; hoàn tay ${refund.amount.toFixed(0)} VND`,
+      evidenceIds: [],
+    },
+  })
+}
 /** Caller owns invoice/payment/refund locks and has already validated its evidence source. */
 export async function publishRefundSettlement(
   tx: Prisma.TransactionClient,
@@ -112,6 +150,9 @@ export async function publishRefundSettlement(
         where: { id: refund.rentalOrderId, status: 'CANCELLED' },
         data: { exceptionStatus: 'ACTION_REQUIRED', version: { increment: 1 } },
       })
+      // The order of a handover-shortage refund is still live, so the flag above does not apply:
+      // an admin case makes the failed refund visible and holds the order open until it is paid.
+      if (refund.reason === HANDOVER_SHORTAGE_REASON) await openHandoverShortageRefundCase(tx, refund, event.status)
     }
   }
 }

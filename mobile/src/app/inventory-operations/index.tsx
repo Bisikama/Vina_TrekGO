@@ -169,6 +169,19 @@ export default function InventoryQueueScreen() {
             </View>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={[styles.operationCard, styles.operationWide]}
+          onPress={() => router.push("/inventory-operations/early-returns" as never)}
+        >
+          <View style={[styles.operationIcon, styles.earlyIcon]}>
+            <Ionicons name="calendar-outline" size={21} color="#0B4F8A" />
+          </View>
+          <View style={styles.operationWideBody}>
+            <Text style={[styles.operationTitle, styles.operationWideTitle]}>Lịch trả đồ sớm</Text>
+            <Text style={styles.operationCopy}>Xác nhận hoặc từ chối giờ khách muốn trả sớm</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.primaryDark} />
+        </TouchableOpacity>
 
         <View style={styles.queueHeading}>
           <View>
@@ -348,6 +361,10 @@ const styles = StyleSheet.create({
   operationCardActive: { borderColor: "#cfe5c5", backgroundColor: "#fbfef9" },
   operationIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#e4f4db" },
   returnIcon: { backgroundColor: "#fff0d9" },
+  earlyIcon: { backgroundColor: "#e0f0ff" },
+  operationWide: { flex: 0, minHeight: 0, marginTop: 10, flexDirection: "row", alignItems: "center", gap: 12 },
+  operationWideBody: { flex: 1 },
+  operationWideTitle: { marginTop: 0 },
   operationTitle: { color: Colors.ink, fontSize: 15, fontWeight: "600", marginTop: 10 },
   operationCopy: { color: Colors.onSurfaceVariant, fontSize: 12, lineHeight: 17, marginTop: 4 },
   operationCount: { color: Colors.primaryDark, fontSize: 13, fontWeight: "600", marginTop: 9 },

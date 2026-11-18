@@ -413,6 +413,9 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
             const confirmedEarlyReturns = await tx.rentalEarlyReturnRequest.findMany({
               where: { orderId: order.id, status: 'CONFIRMED' },
             })
+            // Shipper đã nhận lịch sớm phải biết lịch đó không còn hiệu lực (task về hạn mới bên dưới).
+            const returnAssigneeId =
+              order.deliveryTasksViaOrderId.find((dt) => dt.taskType === 'RETURN')?.staffId ?? null
             for (const early of confirmedEarlyReturns) {
               const updated = await tx.rentalEarlyReturnRequest.update({
                 where: { id: early.id },
@@ -424,6 +427,7 @@ export class PrismaTripLifecycleAdapter implements TripLifecyclePort {
                 status: 'RECONFIRM_REQUIRED',
                 version: updated.version,
                 slotAt: early.requestedSlotAt,
+                assigneeId: returnAssigneeId,
               })
             }
             const earlyReturnsToReconfirm = { count: confirmedEarlyReturns.length }

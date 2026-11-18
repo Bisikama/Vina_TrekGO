@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, ErrorAlert, LoadingState, SurfaceCard } from "@/components/ui";
+import { Button, ErrorAlert, InfoBanner, LoadingState, SurfaceCard } from "@/components/ui";
 
 const inputClass =
   "h-12 w-full rounded-xl border border-[#E5E7EB] bg-[#F7F7F4] px-4 text-sm text-[#1F2937] outline-none transition focus:border-[#2F6B4F] focus:bg-white focus:ring-2 focus:ring-[#2F6B4F]/15";
@@ -163,7 +163,8 @@ export function LeaderCreateTripStepOne() {
   const [startDate, setStartDate] = useState(() => getMinTripStartDate(3));
   const [endDate, setEndDate] = useState(() => getDefaultTripEndDate(4));
   const [meetingTime, setMeetingTime] = useState(nextMeetingTime);
-  const [registrationOpenLocal, setRegistrationOpenLocal] = useState<string>("");
+  const [registrationOpenLocal, setRegistrationOpenLocal] = useState<string | null>(null);
+  const opensOnPublish = registrationOpenLocal === null;
   const [registrationDeadlineLocal, setRegistrationDeadlineLocal] = useState<string>(() =>
     computeDeadlineBeforeStart(getMinTripStartDate(3), nextMeetingTime(), 48)
   );
@@ -250,12 +251,10 @@ export function LeaderCreateTripStepOne() {
           setEndDate(dateInputValue(endObj));
         }
       }
-      if (trip.registrationOpenAt) {
-        const openObj = new Date(trip.registrationOpenAt);
-        if (!isNaN(openObj.getTime())) {
-          setRegistrationOpenLocal(toDateTimeLocalValue(openObj));
-        }
-      }
+      const openDate = trip.registrationOpenAt ? new Date(trip.registrationOpenAt) : null;
+      setRegistrationOpenLocal(
+        openDate && !isNaN(openDate.getTime()) ? toDateTimeLocalValue(openDate) : null,
+      );
       if (trip.registrationDeadlineAt) {
         const deadlineObj = new Date(trip.registrationDeadlineAt);
         if (!isNaN(deadlineObj.getTime())) {
@@ -280,7 +279,7 @@ export function LeaderCreateTripStepOne() {
           if (draft.startDate) setStartDate(draft.startDate);
           if (draft.endDate) setEndDate(draft.endDate);
           if (draft.meetingTime) setMeetingTime(draft.meetingTime);
-          if (draft.registrationOpenLocal) setRegistrationOpenLocal(draft.registrationOpenLocal);
+          setRegistrationOpenLocal(draft.registrationOpenLocal || null);
           if (draft.registrationDeadlineLocal) {
             setRegistrationDeadlineLocal(draft.registrationDeadlineLocal);
             setCustomDeadlineTouched(true);
@@ -347,7 +346,7 @@ export function LeaderCreateTripStepOne() {
     setDestinationId("");
     setPickupPointId("");
     setApiPickups([]);
-    setRegistrationOpenLocal("");
+    setRegistrationOpenLocal(null);
     setCustomDeadlineTouched(false);
     setSubmitError("");
     router.replace("/leader/create-trip");
@@ -426,7 +425,11 @@ export function LeaderCreateTripStepOne() {
     }
 
     let openDate: Date | null = null;
-    if (registrationOpenLocal.trim()) {
+    if (registrationOpenLocal !== null) {
+      if (!registrationOpenLocal) {
+        setDateError("Vui lòng chọn ngày giờ mở đăng ký hoặc chọn mở ngay khi công khai.");
+        return;
+      }
       openDate = new Date(registrationOpenLocal);
       if (isNaN(openDate.getTime()) || openDate.getTime() < Date.now() - 60_000) {
         setDateError("Giờ mở nhận đăng ký không được chọn ngày giờ trong quá khứ.");
@@ -861,29 +864,49 @@ export function LeaderCreateTripStepOne() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <label>
-                      <FieldLabel>Giờ mở nhận đăng ký (Tùy chọn)</FieldLabel>
-                      <input
-                        type="datetime-local"
-                        className={inputClass}
-                        value={registrationOpenLocal}
-                        suppressHydrationWarning
-                        min={minNowLocal}
-                        max={registrationDeadlineLocal || maxAllowedDeadlineLocal}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setRegistrationOpenLocal(val);
-                          if (val && new Date(val).getTime() < Date.now() - 60_000) {
-                            setDateError("Giờ mở nhận đăng ký không được chọn ngày giờ trong quá khứ.");
-                          } else {
-                            setDateError("");
-                          }
+                    <div>
+                      <div aria-live="polite">
+                        {opensOnPublish ? (
+                          <>
+                            <FieldLabel>Giờ mở nhận đăng ký</FieldLabel>
+                            <InfoBanner tone="success">Ngay khi chuyến đi được công khai</InfoBanner>
+                          </>
+                        ) : (
+                          <label className="block">
+                            <FieldLabel required>Giờ mở nhận đăng ký</FieldLabel>
+                            <input
+                              type="datetime-local"
+                              className={inputClass}
+                              value={registrationOpenLocal}
+                              suppressHydrationWarning
+                              min={minNowLocal}
+                              max={registrationDeadlineLocal || maxAllowedDeadlineLocal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setRegistrationOpenLocal(val);
+                                if (val && new Date(val).getTime() < Date.now() - 60_000) {
+                                  setDateError("Giờ mở nhận đăng ký không được chọn ngày giờ trong quá khứ.");
+                                } else {
+                                  setDateError("");
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={opensOnPublish ? "secondary" : "primary"}
+                        disabled={isSaving || awaitingDraft}
+                        className="mt-2"
+                        onClick={() => {
+                          setRegistrationOpenLocal(opensOnPublish ? "" : null);
+                          setDateError("");
                         }}
-                      />
-                      <span className="mt-1 block text-[11px] text-[#6B7280]">
-                        Để trống nếu muốn mở đăng ký ngay lập tức khi Publish chuyến đi. Không được chọn ngày quá khứ.
-                      </span>
-                    </label>
+                      >
+                        {opensOnPublish ? "Hẹn giờ mở" : "Mở ngay khi công khai"}
+                      </Button>
+                    </div>
 
                     <label>
                       <FieldLabel required>Hạn chót đóng form đăng ký</FieldLabel>

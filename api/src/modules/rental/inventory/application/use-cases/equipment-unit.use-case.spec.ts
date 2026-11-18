@@ -163,12 +163,13 @@ describe('Equipment Unit Use Cases', () => {
   })
 
   describe('UpdateEquipmentUnitUseCase', () => {
+    const STAFF = { id: 'staff-1', role: 'STAFF_INVENTORY' }
     it('should update successfully', async () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({ id: 'unit-1' })
       mockInventoryLocationPort.getLocationById.mockResolvedValue({ status: 'ACTIVE' })
       mockEquipmentUnitPort.updateMetadata.mockResolvedValue({ id: 'unit-1' })
 
-      await updateUseCase.execute('unit-1', { expectedVersion: 1, homeInventoryLocationId: 'loc-1' })
+      await updateUseCase.execute('unit-1', { expectedVersion: 1, homeInventoryLocationId: 'loc-1' }, STAFF)
       expect(mockEquipmentUnitPort.updateMetadata).toHaveBeenCalled()
     })
 
@@ -176,7 +177,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({ id: 'unit-1' })
       mockEquipmentUnitPort.updateMetadata.mockResolvedValue({ id: 'unit-1' })
 
-      await updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: null, acquiredAt: null })
+      await updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: null, acquiredAt: null }, STAFF)
       expect(mockEquipmentUnitPort.updateMetadata).toHaveBeenCalledWith(
         expect.objectContaining({ serialNumber: null, acquiredAt: null }),
       )
@@ -186,7 +187,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.getUnitById.mockResolvedValue({ id: 'unit-1' })
       mockInventoryLocationPort.getLocationById.mockResolvedValue({ status: 'INACTIVE' })
       await expect(
-        updateUseCase.execute('unit-1', { expectedVersion: 1, homeInventoryLocationId: 'loc-inactive' }),
+        updateUseCase.execute('unit-1', { expectedVersion: 1, homeInventoryLocationId: 'loc-inactive' }, STAFF),
       ).rejects.toThrow(expect.objectContaining({ code: RENTAL_ERROR_CODES.INVENTORY_LOCATION_INACTIVE }))
     })
 
@@ -194,7 +195,7 @@ describe('Equipment Unit Use Cases', () => {
       mockEquipmentUnitPort.updateMetadata.mockRejectedValue(
         AppError.fromCode(RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_FOUND),
       )
-      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: 'ABC' })).rejects.toThrow(
+      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: 'ABC' }, STAFF)).rejects.toThrow(
         expect.objectContaining({ code: RENTAL_ERROR_CODES.EQUIPMENT_UNIT_NOT_FOUND }),
       )
     })
@@ -202,19 +203,19 @@ describe('Equipment Unit Use Cases', () => {
     it('should throw on version conflict', async () => {
       mockEquipmentUnitPort.updateMetadata.mockRejectedValue(AppError.fromCode(RENTAL_ERROR_CODES.VERSION_CONFLICT))
 
-      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: 'ABC' })).rejects.toThrow(
+      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: 'ABC' }, STAFF)).rejects.toThrow(
         expect.objectContaining({ code: RENTAL_ERROR_CODES.VERSION_CONFLICT }),
       )
     })
 
     it('should reject empty patch', async () => {
-      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1 })).rejects.toThrow(
+      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1 }, STAFF)).rejects.toThrow(
         expect.objectContaining({ code: COMMON_ERROR_CODES.VALIDATION_ERROR }),
       )
     })
 
     it('should reject empty patch with explicit undefined', async () => {
-      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: undefined })).rejects.toThrow(
+      await expect(updateUseCase.execute('unit-1', { expectedVersion: 1, serialNumber: undefined }, STAFF)).rejects.toThrow(
         expect.objectContaining({ code: COMMON_ERROR_CODES.VALIDATION_ERROR }),
       )
     })

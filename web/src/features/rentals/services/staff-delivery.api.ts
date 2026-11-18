@@ -25,11 +25,22 @@ export type DeliveryTaskStatus =
 
 type Recipient = { displayName?: string; fullName?: string; name?: string; phone?: string };
 
+/**
+ * Task thu hồi gắn với lịch trả đồ sớm của khách. `RECONFIRM_REQUIRED`: chuyến đổi lịch,
+ * giờ sớm tạm mất hiệu lực cho tới khi kho xác nhận lại.
+ */
+export type DeliveryTaskEarlyReturn = {
+  requestId: string;
+  status: "CONFIRMED" | "RECONFIRM_REQUIRED";
+  slotAt: string;
+};
+
 export type DeliveryTaskSummary = {
   id: string;
   type: DeliveryTaskType;
   status: DeliveryTaskStatus;
   scheduledAt: string | null;
+  earlyReturn?: DeliveryTaskEarlyReturn | null;
   point: { id: string; name: string; address?: string | null };
   package: { id: string; code: string; status: string } | null;
   orderSummary: {
@@ -59,6 +70,7 @@ export type DeliveryTaskDetail = {
     status: DeliveryTaskStatus;
     assignee: { id: string; displayName: string } | null;
     scheduledAt: string | null;
+    earlyReturn?: DeliveryTaskEarlyReturn | null;
     point: { id: string; name: string; address?: string | null };
     version: number;
     allowedActions: string[];
@@ -170,6 +182,20 @@ export async function verifyDeliveryRecipient(taskId: string, input: { pickupCod
   return unwrap<{ verificationRef: string; expiresAt: string; taskVersion: number }>(response.data);
 }
 
+/** Bàn giao một phần: món báo `MISSING` không giao cho khách, được hoàn phí thuê + cọc. */
+export type HandoverShortage = {
+  units: { unitId: string; assetCode: string; productName: string | null; description: string }[];
+  refund: {
+    refundRef: string | null;
+    status: string | null;
+    amount: number;
+    rentalFeeAmount: number;
+    depositAmount: number;
+    /** Có giá trị khi không tạo được khoản hoàn tự động; Admin hoàn tay. */
+    failureReason: string | null;
+  };
+};
+
 export async function commitRentalHandover(
   orderId: string,
   input: {
@@ -180,11 +206,12 @@ export async function commitRentalHandover(
     expectedVersion: number;
   },
 ) {
-  await apiClient.post(
+  const response = await apiClient.post<Envelope<{ shortage?: HandoverShortage | null }>>(
     `/api/v1/rental-orders/${encodeURIComponent(orderId)}/handover`,
     input,
     idempotency("commit-handover"),
   );
+  return unwrap<{ shortage?: HandoverShortage | null }>(response.data);
 }
 
 export async function markRentalNoShow(

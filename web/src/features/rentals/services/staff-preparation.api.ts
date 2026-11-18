@@ -103,6 +103,8 @@ export type PreparationCandidate = {
   physicalStatus: string;
   location: string | null;
   expectedReadyAt?: string | null;
+  /** Hạn dùng YYYY-MM-DD; server đã xếp món hết hạn sớm lên trước và bỏ món hết hạn trước ngày khách trả. */
+  expiresAt?: string | null;
   version?: number;
 };
 

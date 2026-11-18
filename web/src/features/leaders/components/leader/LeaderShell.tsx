@@ -121,7 +121,7 @@ export function LeaderShell({
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[#E5E7EB] bg-white lg:flex lg:flex-col">
         <Link
           href="/leader"
-          className="flex h-[72px] items-center gap-3 border-b border-[#E5E7EB] px-5"
+          className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-300 px-5"
         >
           <Image
             src="/1789664610087_6373285567144304261_g1044842043242625655_88c212cbd53a46aec527c6c81b77f57b.jpg"
@@ -182,21 +182,7 @@ export function LeaderShell({
       </aside>
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white/95 px-4 py-3 backdrop-blur md:px-6">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5 font-medium text-[#125238]">
-              ◎ Hệ thống radar cảnh báo thời tiết núi hoạt động tốt
-            </span>
-
-            <span className="rounded-lg bg-[#F7F7F4] border border-[#E5E7EB] px-3 py-1.5 tabular-nums">
-              ☼ Fansipan: <b>14°C</b>
-            </span>
-
-            <span className="rounded-lg bg-[#F7F7F4] border border-[#E5E7EB] px-3 py-1.5 tabular-nums">
-              ☁ Tà Xùa: <b>16°C</b>
-            </span>
-          </div>
-
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-end border-b border-gray-300 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
           <div className="flex shrink-0 items-center gap-2">
             <span className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white">
               {userRole}

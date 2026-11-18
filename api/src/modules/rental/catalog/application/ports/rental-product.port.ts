@@ -42,6 +42,8 @@ export interface RentalProductView {
   spec: any;
   recommendationTags: string[];
   requiresDeepInspectionAfterReturn: boolean;
+  /** Ngưỡng hao mòn: unit đạt số lượt thuê này thì về bảo trì thay vì sẵn sàng. null = không giới hạn. */
+  maxRentalCycles: number | null;
   /** Nhóm hạng; null = sản phẩm thường. FE gom các sản phẩm cùng gradeGroupId thành một thẻ. */
   gradeGroupId: string | null;
   grade: 'LIKE_NEW' | 'GOOD_USED' | null;
@@ -96,6 +98,7 @@ export interface CreateRentalProductParams extends RentalProductActor {
   spec?: any;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
+  maxRentalCycles?: number | null;
 }
 
 /** Nhóm và hạng không đổi được sau khi tạo (đổi hạng của món đồ đi qua luồng phân hạng, không qua đây). */
@@ -114,6 +117,8 @@ export interface UpdateRentalProductParams extends RentalProductActor {
   spec?: any;
   recommendationTags?: string[];
   requiresDeepInspectionAfterReturn?: boolean;
+  /** null = bỏ ngưỡng hao mòn. */
+  maxRentalCycles?: number | null;
   expectedVersion: number;
 }
 

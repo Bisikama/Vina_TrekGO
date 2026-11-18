@@ -228,6 +228,8 @@ export type RentalAssignedUnit = {
   unitId: string;
   assetCode?: string;
   status?: string;
+  /** REPLACED (đổi lúc soạn) / UNASSIGNED (thiếu lúc giao) không còn thuộc đơn. */
+  assignmentStatus?: string;
   condition?: string;
   productName?: string;
 };
@@ -237,6 +239,8 @@ export type DeliveryTaskSummary = {
   type: "OUTBOUND" | "RETURN";
   status: string;
   scheduledAt?: string | null;
+  /** Task thu hồi theo lịch trả sớm; RECONFIRM_REQUIRED = chuyến đổi lịch, chờ kho xác nhận lại. */
+  earlyReturn?: { requestId: string; status: "CONFIRMED" | "RECONFIRM_REQUIRED"; slotAt: string } | null;
   point: { id: string; name: string; address?: string | null };
   package: { id: string; code: string; status: string };
   orderSummary: {
@@ -372,6 +376,20 @@ export type RentalOrderTimelineItem = {
   createdAt?: string;
 };
 
+/** Bàn giao một phần (RB-API-404): món shipper báo thiếu không giao cho khách, được hoàn phí thuê + cọc. */
+export type HandoverShortage = {
+  units: { unitId: string; assetCode: string; productName: string | null; description: string }[];
+  refund: {
+    refundRef: string | null;
+    status: string | null;
+    amount: number;
+    rentalFeeAmount: number;
+    depositAmount: number;
+    /** Có giá trị khi không tạo được khoản hoàn tự động; Admin hoàn tay. */
+    failureReason: string | null;
+  };
+};
+
 export type RentalOrderDetail = {
   order: RentalOrderSummary;
   items: RentalOrderLine[];
@@ -395,6 +413,20 @@ export type RentalOrderDetail = {
     status: string;
     settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
   }[];
+  /** Có khi TrekGo giao thiếu thiết bị lúc bàn giao: các món này không tính vào đơn và được hoàn phí thuê + cọc. */
+  handoverShortage?: {
+    handedOverAt: string | null;
+    units: { unitId: string; assetCode: string; productId: string; productName: string; description: string | null }[];
+    refund: null | {
+      refundId: string;
+      amount: number;
+      currency: string;
+      status: string;
+      settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
+      rentalFeeAmount: number;
+      depositAmount: number;
+    };
+  };
   timeline?: RentalOrderTimelineItem[];
   /** Thời gian thuê theo chuyến đi (dự kiến), không phải mốc bàn giao/trả thực tế. */
   trip?: { id?: string; rentalStartAt?: string; dueAt?: string; occupiedUntil?: string } | null;
@@ -509,6 +541,9 @@ export type RentalDepositItem = {
   reviewStatus?: "NOT_SUBMITTED" | "SUBMITTED" | "RESOLVED" | string;
   canSubmitReview?: boolean;
   cannotSubmitReviewReason?: string | null;
+  /** RB-API-617: khách có thể đồng ý khoản trừ để quyết toán ngay (cùng điều kiện với phản đối). */
+  canAcceptDeduction?: boolean;
+  deductionAcceptedAt?: string | null;
   approvedDeduction?: number | null;
 };
 

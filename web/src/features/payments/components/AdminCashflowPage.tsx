@@ -5,7 +5,7 @@ import { useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
 import useSWR from 'swr';
 import { useAuth } from '@/features/auth';
-import { Button, EmptyState, ErrorAlert, FormField, InfoBanner, Input, LoadingState, PageHeader, PageShell, PaginationBar, Select, StatusBadge, SurfaceCard, SurfaceSectionHeader } from '@/components/ui';
+import { Button, EmptyState, ErrorAlert, FormField, Input, LoadingState, PageHeader, PageShell, PaginationBar, Select, StatusBadge, SurfaceCard, SurfaceSectionHeader } from '@/components/ui';
 import { buildCashflowQueries, confirmationLabels, DEFAULT_CASHFLOW_FILTERS, formatCashflowDate, formatCashflowMoney, gatewayLabels, paymentMethodLabel, reconcileLabels, sourceLabels, transactionMoneyEffect, transactionStatusLabel } from '../cashflow.utils';
 import { cashflowErrorMessage, getAdminCashflowSummary, getAdminTransactions } from '../services/admin-cashflow.api';
 import type { AdminTransaction, CashflowFilters, TransactionStatus } from '../types/admin-cashflow.types';
@@ -40,6 +40,10 @@ function AdminCashflowView({ userId }: { userId: string }) {
   const summary = useSWR(['admin-cashflow-summary', userId, queries.summary], () => getAdminCashflowSummary(queries.summary), swrOptions);
   const ledger = useSWR(['admin-cashflow-transactions', userId, queries.transactions], () => getAdminTransactions(queries.transactions), swrOptions);
   const refreshing = summary.isValidating || ledger.isValidating;
+  const periodLabel = [
+    filters.fromDate && `Từ ngày ${filters.fromDate.split('-').reverse().join('/')}`,
+    filters.toDate && `Đến ngày ${filters.toDate.split('-').reverse().join('/')}`,
+  ].filter(Boolean).join(' · ') || 'Toàn bộ thời gian';
 
   function updateDraft<Key extends keyof CashflowFilters>(key: Key, value: CashflowFilters[Key]) {
     setDraft((previous) => ({ ...previous, [key]: value }));
@@ -100,12 +104,8 @@ function AdminCashflowView({ userId }: { userId: string }) {
       </form>
     </SurfaceCard>
 
-    <InfoBanner title="Cách tính số liệu">
-      Dữ liệu hiện gồm các khoản thanh toán VNPay sandbox và khoản hoàn mô phỏng tương ứng. Tổng thu và tổng hoàn chỉ tính các giao dịch thành công; các khoản đang chờ được thống kê riêng.
-    </InfoBanner>
-
     <section aria-label="Tổng quan dòng tiền" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">{sourceLabels[filters.source]} · {gatewayLabels[filters.gateway]}</h2><p className="text-xs text-[#6B7280]">{filters.fromDate || 'Từ trước đến nay'} → {filters.toDate || 'Hiện tại'}</p></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">{sourceLabels[filters.source]} · {gatewayLabels[filters.gateway]}</h2><p className="text-xs text-[#6B7280]">{periodLabel}</p></div>
       {summary.isLoading && <LoadingState message="Đang tải tổng quan dòng tiền..." />}
       {summary.error && <ErrorAlert message={cashflowErrorMessage(summary.error)} onRetry={() => void summary.mutate()} />}
       {summary.data && !summary.error && <CashflowSummaryCards summary={summary.data} />}

@@ -501,6 +501,35 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </section>
 
+            {detail.handoverShortage ? (
+              <InfoBanner
+                className="mt-6"
+                tone="warning"
+                title={`TrekGo giao thiếu ${detail.handoverShortage.units.length} thiết bị`}
+              >
+                <ul className="mt-2 list-disc pl-5">
+                  {detail.handoverShortage.units.map((unit) => (
+                    <li key={unit.unitId}>
+                      {unit.productName} · mã {unit.assetCode}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2">
+                  Các thiết bị này không được giao nên không tính vào đơn: bạn không phải trả lại hay chịu cọc cho chúng.
+                </p>
+                {detail.handoverShortage.refund ? (
+                  <p className="mt-1 font-semibold">
+                    Hoàn {money(detail.handoverShortage.refund.amount, detail.handoverShortage.refund.currency)} (phí thuê{" "}
+                    {money(detail.handoverShortage.refund.rentalFeeAmount, detail.handoverShortage.refund.currency)} + cọc{" "}
+                    {money(detail.handoverShortage.refund.depositAmount, detail.handoverShortage.refund.currency)}) ·{" "}
+                    {labelOf(refundStatusLabels, detail.handoverShortage.refund.status)}
+                  </p>
+                ) : (
+                  <p className="mt-1 font-semibold">TrekGo sẽ liên hệ để hoàn phí thuê và tiền cọc của các thiết bị này.</p>
+                )}
+              </InfoBanner>
+            ) : null}
+
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <Location title="Điểm nhận" point={detail.pickupPoint} />
               <Location title="Điểm trả" point={detail.returnPoint} />
@@ -519,16 +548,8 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
                   <div key={refund.refundId} className="mt-2">
                     <p>
                       {money(refund.amount, refund.currency)} ·{" "}
-                      {refund.settlementMode === "SANDBOX_SIMULATED"
-                        ? "Hoàn tiền"
-                        : labelOf(refundStatusLabels, refund.status)}
+                      {labelOf(refundStatusLabels, refund.status)}
                     </p>
-                    {refund.settlementMode === "SANDBOX_SIMULATED" && (
-                      <p className="mt-1 text-xs text-amber-900">
-                        Kết quả phục vụ kiểm thử; không có tiền thật được chuyển
-                        về tài khoản.
-                      </p>
-                    )}
                   </div>
                 ))}
               </InfoBanner>
@@ -682,12 +703,6 @@ function DepositSettlementPanel({
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
               Khoản “Chờ hoàn” mới là yêu cầu đang xử lý. Chỉ khi cổng thanh
               toán trả trạng thái thành công, số tiền mới chuyển sang “Đã hoàn”.
-            </p>
-          ) : null}
-
-          {deposit.settlementMode === "SANDBOX_SIMULATED" ? (
-            <p className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs leading-5 text-violet-800">
-              Đây là kết quả hoàn cọc.
             </p>
           ) : null}
 

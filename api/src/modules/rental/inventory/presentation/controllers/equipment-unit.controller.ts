@@ -203,6 +203,13 @@ Tạo một thiết bị vật lý mới trong hệ thống. Quyền: STAFF_INVE
           description: 'Tình trạng thiết bị ban đầu',
         },
         acquiredAt: { type: 'string', format: 'date', description: 'Ngày mua/nhập kho (YYYY-MM-DD)' },
+        batchCode: { type: 'string', maxLength: 60, description: 'Mã lô nhập (các unit nhập cùng đợt dùng chung)' },
+        expiresAt: {
+          type: 'string',
+          format: 'date',
+          description: 'Hạn dùng (YYYY-MM-DD): từ ngày này unit tự rút khỏi cho thuê (RETIRED)',
+        },
+        conditionNotes: { type: 'string', maxLength: 2000, description: 'Ghi chú thực trạng riêng của unit lúc nhập' },
       },
       example: {
         productId: '11111111-1111-4111-8111-111111111111',
@@ -398,7 +405,7 @@ Lấy thông tin cần thiết để in tem nhãn QR cho thiết bị. Quyền: 
   @ApiOperation({
     summary: 'Cập nhật thông tin metadata của đơn vị thiết bị',
     description: `
-Chỉ cho phép cập nhật các trường metadata: homeInventoryLocationId, serialNumber, acquiredAt. Quyền: STAFF_INVENTORY
+Chỉ cho phép cập nhật các trường metadata: homeInventoryLocationId, serialNumber, acquiredAt, batchCode, expiresAt, conditionNotes. Quyền: STAFF_INVENTORY
 - Không thể cập nhật lifecycle fields (status, condition, currentInventoryLocationId, qrCode).
 - Yêu cầu expectedVersion để chặn xung đột phiên bản (optimistic concurrency).
 - Gửi null để xóa trường (ví dụ serialNumber: null).
@@ -420,6 +427,9 @@ Chỉ cho phép cập nhật các trường metadata: homeInventoryLocationId, s
         homeInventoryLocationId: { type: 'string', format: 'uuid', nullable: true },
         serialNumber: { type: 'string', nullable: true },
         acquiredAt: { type: 'string', format: 'date', nullable: true },
+        batchCode: { type: 'string', maxLength: 60, nullable: true },
+        expiresAt: { type: 'string', format: 'date', nullable: true, description: 'Hạn dùng; null = bỏ hạn' },
+        conditionNotes: { type: 'string', maxLength: 2000, nullable: true },
       },
       example: {
         expectedVersion: 1,
@@ -438,13 +448,16 @@ Chỉ cho phép cập nhật các trường metadata: homeInventoryLocationId, s
     },
   })
   @ApiErrorResponse(409, 'Xung đột phiên bản', 'VERSION_CONFLICT', 'Thiết bị đã thay đổi; lấy version mới rồi thử lại')
-  @Roles(UserRole.STAFF_INVENTORY)
+  @ApiErrorResponse(403, 'Kéo dài hoặc xoá hạn dùng cần quyền ADMIN', 'FORBIDDEN', 'Chỉ Admin được kéo dài hoặc xoá hạn dùng')
+  // ADMIN: kéo dài / xoá hạn dùng (STAFF_INVENTORY chỉ được rút ngắn).
+  @Roles(UserRole.STAFF_INVENTORY, UserRole.ADMIN)
   @Patch(':id')
   async updateUnit(
     @Param(new ZodValidationPipe(IdParamSchema)) params: { id: string },
     @Body(new ZodValidationPipe(UpdateEquipmentUnitSchema)) body: UpdateEquipmentUnitDto,
+    @ActiveUser() actor: ActiveUserData,
   ) {
-    return this.updateEquipmentUnitUseCase.execute(params.id, body)
+    return this.updateEquipmentUnitUseCase.execute(params.id, body, { id: actor.id, role: String(actor.role) })
   }
 
   @ApiOperation({
@@ -459,6 +472,9 @@ COMPLETE:
 - Cập nhật lại condition (tình trạng) sau bảo trì.
 - Nếu chọn NEW/GOOD/FAIR -> Thiết bị sẽ sẵn sàng (AVAILABLE).
 - Nếu chọn DAMAGED/LOST -> Thiết bị sẽ bị khóa ở DAMAGED/LOST.
+- retire=true (chỉ với NEW/GOOD/FAIR) -> Ngừng sử dụng (RETIRED) thay vì về kệ.
+- Món đã hết hạn dùng -> RETIRED dù chọn về kệ.
+- Phiếu bảo trì do đạt ngưỡng hao mòn (WEAR_LIMIT_REACHED) mà món về kệ -> đếm lượt thuê lại từ 0 (số cũ ghi audit).
 - Giá trị affectedOrdersEvaluated=false có nghĩa là chưa thực hiện đánh giá ảnh hưởng đơn hàng tương lai.
 `,
   })
@@ -496,6 +512,7 @@ COMPLETE:
           properties: {
             action: { type: 'string', enum: ['COMPLETE'] },
             resultingCondition: { type: 'string', enum: ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'LOST'] },
+            retire: { type: 'boolean', description: 'Ngừng sử dụng thay vì về kệ (chỉ NEW/GOOD/FAIR)' },
             expectedVersion: { type: 'integer', minimum: 1 },
           },
           example: {
@@ -535,7 +552,7 @@ COMPLETE:
     if (body.action === 'START') {
       return this.changeEquipmentMaintenanceUseCase.execute(params.id, { ...body, staffId: actor.id })
     }
-    return this.changeEquipmentMaintenanceUseCase.execute(params.id, body)
+    return this.changeEquipmentMaintenanceUseCase.execute(params.id, { ...body, actorId: actor.id })
   }
 
   @ApiOperation({

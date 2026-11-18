@@ -30,5 +30,11 @@ export class RentalExtensionScheduler {
     if (result.overdueOrderIds.length > 0) {
       this.logger.log(`Marked ${result.overdueOrderIds.length} rental order(s) as OVERDUE`);
     }
+    try {
+      const missing = await this.overdueService.openMissingUnitReviews();
+      if (missing) this.logger.log(`Opened ${missing} missing-unit review case(s)`);
+    } catch (error) {
+      this.logger.error(`Missing-unit review scan failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

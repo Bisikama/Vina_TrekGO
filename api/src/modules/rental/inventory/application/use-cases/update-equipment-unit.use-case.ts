@@ -7,6 +7,9 @@ export interface UpdateEquipmentUnitInput {
   homeInventoryLocationId?: string
   serialNumber?: string | null
   acquiredAt?: string | null
+  batchCode?: string | null
+  expiresAt?: string | null
+  conditionNotes?: string | null
 }
 
 @Injectable()
@@ -18,11 +21,14 @@ export class UpdateEquipmentUnitUseCase {
     private readonly inventoryLocationPort: InventoryLocationPort,
   ) {}
 
-  async execute(id: string, input: UpdateEquipmentUnitInput) {
+  async execute(id: string, input: UpdateEquipmentUnitInput, actor: { id: string; role: string }) {
     if (
       input.homeInventoryLocationId === undefined &&
       input.serialNumber === undefined &&
-      input.acquiredAt === undefined
+      input.acquiredAt === undefined &&
+      input.batchCode === undefined &&
+      input.expiresAt === undefined &&
+      input.conditionNotes === undefined
     ) {
       throw AppError.fromCode(COMMON_ERROR_CODES.VALIDATION_ERROR, {
         details: { message: 'No editable fields provided' },
@@ -49,6 +55,11 @@ export class UpdateEquipmentUnitUseCase {
       homeInventoryLocationId: input.homeInventoryLocationId,
       serialNumber: input.serialNumber,
       acquiredAt: input.acquiredAt,
+      batchCode: input.batchCode,
+      expiresAt: input.expiresAt,
+      conditionNotes: input.conditionNotes,
+      actorId: actor.id,
+      actorRole: actor.role,
     })
   }
 }

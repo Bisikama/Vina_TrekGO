@@ -14,6 +14,8 @@ export interface ListEquipmentUnitsInput {
   condition?: EquipmentConditionValue
   inventoryLocationId?: string
   q?: string
+  batchCode?: string
+  expiringBefore?: string
 }
 
 @Injectable()

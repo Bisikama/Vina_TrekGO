@@ -74,24 +74,6 @@ export const AuthBrandingHero = () => {
           </div>
         </div>
       </div>
-
-      {/* Bottom Stats */}
-      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
-          <div className="text-2xl lg:text-3xl font-bold text-white mb-1">12,500+</div>
-          <div className="text-sm text-gray-300">Trekker tin dùng</div>
-        </div>
-        
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
-          <div className="text-2xl lg:text-3xl font-bold text-white mb-1">45+ Tuyến leo</div>
-          <div className="text-sm text-gray-300 line-clamp-2">Fansipan, Tà Xùa, Lảo Thẩn</div>
-        </div>
-        
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
-          <div className="text-2xl lg:text-3xl font-bold text-white mb-1">100% Leader</div>
-          <div className="text-sm text-gray-300 line-clamp-2">Chứng chỉ WFA & Cứu hộ</div>
-        </div>
-      </div>
     </div>
   );
 };

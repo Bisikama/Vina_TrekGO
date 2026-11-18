@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getRentalApiErrorMessage } from "@/features/rentals/services/rental.api";
 import {
+  acceptAssessmentDeduction,
   confirmEvidenceAccessRestored,
   evidenceIdsOf,
   getApiErrorReason,
@@ -61,7 +62,9 @@ export function DeductionReviewPanel({
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
+  const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
   const reviewKey = useRef<string | null>(null);
+  const acceptKey = useRef<string | null>(null);
   const uploadedIds = useRef<Map<File, string>>(new Map());
   const expiredRefetched = useRef(false);
 
@@ -144,6 +147,39 @@ export function DeductionReviewPanel({
     }
   }
 
+  async function acceptDeduction() {
+    if (!assessmentId) return;
+    setBusy("accept");
+    setError(undefined);
+    try {
+      if (!acceptKey.current) acceptKey.current = newIdempotencyKey("assessment-accept");
+      const result = await acceptAssessmentDeduction(orderId, assessmentId, acceptKey.current);
+      acceptKey.current = null;
+      setAcceptConfirmOpen(false);
+      setNotice(
+        result.settlementStatus === "SETTLED"
+          ? result.settlement && result.settlement.refundAmount > 0
+            ? `Đã đồng ý khoản trừ. Phần cọc còn lại ${money(result.settlement.refundAmount, currency)} đang được hoàn cho bạn.`
+            : "Đã đồng ý khoản trừ. Khoản cọc đã được quyết toán."
+          : "Đã đồng ý khoản trừ. Hệ thống sẽ quyết toán cọc trong ít phút.",
+      );
+      await onChanged();
+    } catch (reasonError) {
+      if (isUnknownOutcome(reasonError)) {
+        // Giữ nguyên key: bấm lại sẽ retry đúng yêu cầu cũ.
+        setError("Mất kết nối khi gửi. Bấm “Xác nhận đồng ý” lần nữa để thử lại an toàn.");
+        return;
+      }
+      acceptKey.current = null;
+      setAcceptConfirmOpen(false);
+      const code = getApiErrorReason(reasonError);
+      setError((code && reviewReasonMessages[code]) || getRentalApiErrorMessage(reasonError, "Không gửi được đồng ý."));
+      await onChanged();
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   function pickFiles(list: FileList | null) {
     if (!list) return;
     const picked = Array.from(list).filter(
@@ -197,6 +233,8 @@ export function DeductionReviewPanel({
   }
 
   const status = (() => {
+    if (item.deductionAcceptedAt)
+      return { tone: "slate", text: `Bạn đã đồng ý khoản trừ lúc ${dateTime(item.deductionAcceptedAt)}. Phần cọc còn lại được quyết toán theo trạng thái ở trên.` };
     if (item.reviewStatus === "SUBMITTED")
       return { tone: "amber", text: "Bạn đã gửi phản đối. Admin đang xem xét, khoản cọc được giữ tới khi có kết quả." };
     if (item.reviewStatus === "RESOLVED")
@@ -204,7 +242,7 @@ export function DeductionReviewPanel({
     if (item.canSubmitReview && item.reviewWindowEndsAt)
       return {
         tone: "emerald",
-        text: `${remainingText(item.reviewWindowEndsAt, now)} để phản đối · hạn ${dateTime(item.reviewWindowEndsAt)}. Hết hạn mà không phản đối, khoản trừ sẽ được quyết toán.`,
+        text: `${remainingText(item.reviewWindowEndsAt, now)} để phản đối · hạn ${dateTime(item.reviewWindowEndsAt)}. Hết hạn mà không phản đối, khoản trừ sẽ được quyết toán. Nếu bạn đồng ý, có thể bấm “Đồng ý khoản trừ” để quyết toán ngay.`,
       };
     if (reasonCode === "EVIDENCE_ACCESS_INTERRUPTED" && item.evidenceAccessCustomerConfirmationRequired)
       return { tone: "amber", text: "Bạn đã báo không xem được chứng cứ. Hãy mở lại chứng cứ; nếu xem được, bấm “Tôi đã xem được chứng cứ”." };
@@ -240,7 +278,20 @@ export function DeductionReviewPanel({
             {evidenceOpen ? "Ẩn chứng cứ" : "Xem chứng cứ"}
           </button>
         ) : null}
-        {item.canSubmitReview && !formOpen ? (
+        {item.canAcceptDeduction && !formOpen && !acceptConfirmOpen ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAcceptConfirmOpen(true);
+              setNotice(undefined);
+              setError(undefined);
+            }}
+            className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-extrabold text-white"
+          >
+            Đồng ý khoản trừ
+          </button>
+        ) : null}
+        {item.canSubmitReview && !formOpen && !acceptConfirmOpen ? (
           <button
             type="button"
             onClick={() => {
@@ -319,6 +370,33 @@ export function DeductionReviewPanel({
               ) : null}
             </>
           )}
+        </div>
+      ) : null}
+
+      {acceptConfirmOpen ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+          <p className="text-xs leading-5 text-slate-800">
+            Bạn đồng ý để TrekGo trừ <strong>{money(approved, currency)}</strong> vào tiền cọc của thiết bị này?
+            Khoản cọc sẽ được quyết toán ngay và <strong>bạn sẽ không thể phản đối khoản trừ này nữa</strong>.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void acceptDeduction()}
+              disabled={busy === "accept"}
+              className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+            >
+              {busy === "accept" ? "Đang gửi..." : "Xác nhận đồng ý"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAcceptConfirmOpen(false)}
+              disabled={busy === "accept"}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
+            >
+              Huỷ
+            </button>
+          </div>
         </div>
       ) : null}
 

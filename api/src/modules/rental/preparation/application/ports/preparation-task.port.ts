@@ -123,6 +123,8 @@ export interface PreparationCandidateView {
   physicalStatus: string;
   location: string | null;
   expectedReadyAt?: string | null;
+  /** Hạn dùng YYYY-MM-DD (lịch VN); danh sách xếp món hết hạn sớm lên trước. */
+  expiresAt?: string | null;
   version?: number;
   custodian?: {
     type: 'INVENTORY_LOCATION' | 'WAREHOUSE';
