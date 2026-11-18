@@ -28,6 +28,11 @@ import {
 
 import { RentalCancellation } from "./RentalCancellation";
 import { DeductionReviewPanel } from "./DeductionReviewPanel";
+import { DepositUnitList } from "./DepositUnitList";
+import {
+  getRentalAssessment,
+  type RentalAssessmentItem,
+} from "@/features/rentals/services/deduction-review.api";
 import { RentalDocumentsPanel } from "./RentalDocumentsPanel";
 import { RentalResumePayment } from "./RentalResumePayment";
 import { GradeBadge } from "./GradeBadge";
@@ -256,6 +261,7 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
   const [deposit, setDeposit] = useState<RentalDepositStatus>();
   const [depositError, setDepositError] = useState<string>();
   const [depositLoading, setDepositLoading] = useState(true);
+  const [assessments, setAssessments] = useState<RentalAssessmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -263,7 +269,13 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
     setDepositLoading(true);
     setDepositError(undefined);
     try {
-      setDeposit(await getRentalDeposit(orderId));
+      const [depositStatus, assessment] = await Promise.all([
+        getRentalDeposit(orderId),
+        // Kết quả kiểm định chỉ có sau khi kho kiểm; lỗi ở đây không chặn phần cọc.
+        getRentalAssessment(orderId).catch(() => ({ items: [] as RentalAssessmentItem[] })),
+      ]);
+      setDeposit(depositStatus);
+      setAssessments(assessment.items);
     } catch (reason) {
       setDepositError(
         getRentalApiErrorMessage(
@@ -559,6 +571,9 @@ export function RentalOrderDetailPage({ orderId }: { orderId: string }) {
               orderId={orderId}
               deposit={deposit}
               currency={detail.order.currency}
+              units={detail.assignedUnits ?? []}
+              visuals={visuals}
+              assessments={assessments}
               loading={depositLoading}
               error={depositError}
               onRetry={() => void loadDeposit()}
@@ -596,6 +611,9 @@ function DepositSettlementPanel({
   orderId,
   deposit,
   currency,
+  units,
+  visuals,
+  assessments,
   loading,
   error,
   onRetry,
@@ -603,6 +621,9 @@ function DepositSettlementPanel({
   orderId: string;
   deposit?: RentalDepositStatus;
   currency: string;
+  units: NonNullable<RentalOrderDetail["assignedUnits"]>;
+  visuals: Record<string, ProductVisual>;
+  assessments: RentalAssessmentItem[];
   loading: boolean;
   error?: string;
   onRetry: () => void;
@@ -707,56 +728,23 @@ function DepositSettlementPanel({
           ) : null}
 
           {deposit.items.length ? (
-            <div className="mt-5 space-y-3">
-              {deposit.items.map((item) => (
-                <div key={item.unitId}>
-                  <article className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                        Thiết bị {item.assetCode || shortCode(item.unitId)}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        Cọc{" "}
-                        {money(
-                          item.depositAmount ?? item.amount ?? 0,
-                          currency,
-                        )}
-                      </p>
-                      {depositReasonText(item.reason) ? (
-                        <p className="mt-1 text-xs text-slate-500">
-                          {depositReasonText(item.reason)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${depositBadge(item).tone}`}
-                      >
-                        {depositBadge(item).label}
-                      </span>
-                      {item.refundStatus ? (
-                        <p className="mt-2 text-xs text-slate-500">
-                          {labelOf(refundStatusLabels, item.refundStatus)}
-                          {item.refundAmount
-                            ? ` · ${money(item.refundAmount, currency)}`
-                            : ""}
-                        </p>
-                      ) : item.deduction ? (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Khấu trừ {money(item.deduction, currency)}
-                        </p>
-                      ) : null}
-                    </div>
-                  </article>
-                  <DeductionReviewPanel
-                    orderId={orderId}
-                    item={item}
-                    currency={currency}
-                    onChanged={onRetry}
-                  />
-                </div>
-              ))}
-            </div>
+            <DepositUnitList
+              items={deposit.items}
+              units={units}
+              visuals={visuals}
+              assessments={assessments}
+              currency={currency}
+              badge={depositBadge}
+              reasonText={depositReasonText}
+              renderExtra={(item) => (
+                <DeductionReviewPanel
+                  orderId={orderId}
+                  item={item}
+                  currency={currency}
+                  onChanged={onRetry}
+                />
+              )}
+            />
           ) : (
             <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
               Chưa phát sinh quyết toán theo thiết bị. Tiền cọc sẽ được theo dõi
