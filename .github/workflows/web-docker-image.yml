@@ -107,8 +107,18 @@ jobs:
             echo "$COMPOSE_B64" | base64 -d > docker-compose.yml
 
             # 2. Pull image moi va chay lai
-            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
-            docker compose pull web
+            # Retry: mang VPS -> Docker Hub doi khi timeout (context deadline exceeded)
+            retry() {
+              n=1
+              until "$@"; do
+                if [ "$n" -ge 5 ]; then echo "That bai sau $n lan: $*"; return 1; fi
+                echo "Lan $n that bai, thu lai sau $((n * 10))s..."
+                sleep $((n * 10)); n=$((n + 1))
+              done
+            }
+            dh_login() { echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin; }
+            retry dh_login
+            retry docker compose pull web
             docker compose up -d
             docker image prune -f
 
