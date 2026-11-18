@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -15,10 +15,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import {
+  PreparationOrderBrief,
   PreparationTaskStatus,
   PreparationTaskSummary,
   staffInventoryApi,
 } from "@/features/rentals/staff-inventory-api";
+import { Typography } from "@/constants/designTokens";
 import { orderShortCode, productLabel } from "@/features/rentals/display";
 
 const TASK_STATUS_LABEL: Record<string, string> = {
@@ -58,6 +60,26 @@ const FILTERS: {
   { label: "Đã giao", value: "TRANSFERRED" },
 ];
 
+type SortKey = "HANDOVER_ASC" | "HANDOVER_DESC" | "CREATED_DESC";
+const SORTS: { value: SortKey; label: string }[] = [
+  { value: "HANDOVER_ASC", label: "Giao khách gần nhất" },
+  { value: "HANDOVER_DESC", label: "Giao khách xa nhất" },
+  { value: "CREATED_DESC", label: "Mới đặt nhất" },
+];
+
+const timeOf = (value?: string | null) => (value ? new Date(value).getTime() : Number.NaN);
+const shortDateTime = (value: string) =>
+  new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+
+/** "hôm nay", "ngày mai", "còn 3 ngày", "đã qua 1 ngày" theo lịch Việt Nam. */
+function dayDistance(value: string) {
+  const day = (time: number) => Math.floor((time + 7 * 3_600_000) / 86_400_000);
+  const diff = day(new Date(value).getTime()) - day(Date.now());
+  if (diff === 0) return "hôm nay";
+  if (diff === 1) return "ngày mai";
+  return diff > 0 ? `còn ${diff} ngày` : `đã qua ${-diff} ngày`;
+}
+
 export default function InventoryQueueScreen() {
   const router = useRouter();
   const { accessToken, user, signOut } = useAuth();
@@ -66,6 +88,8 @@ export default function InventoryQueueScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [briefs, setBriefs] = useState<Record<string, PreparationOrderBrief>>({});
+  const [sortKey, setSortKey] = useState<SortKey>("HANDOVER_ASC");
 
   const load = useCallback(
     async (silent = false) => {
@@ -76,9 +100,15 @@ export default function InventoryQueueScreen() {
       try {
         const result = await staffInventoryApi.listTasks(accessToken, filter);
         // Việc còn phải làm lên trước, đơn đã giao xuống cuối.
-        setTasks(
-          [...result.items].sort(
-            (a, b) => Number(isFinished(a.status)) - Number(isFinished(b.status)),
+        setTasks(result.items);
+        // Ngày đặt, ngày giao khách… nằm ở chi tiết đơn; tải song song, đơn nào lỗi thì bỏ qua.
+        const orderIds = [...new Set(result.items.map((task) => task.orderId))];
+        const settled = await Promise.allSettled(
+          orderIds.map((orderId) => staffInventoryApi.getOrderBrief(orderId, accessToken)),
+        );
+        setBriefs(
+          Object.fromEntries(
+            settled.flatMap((entry) => (entry.status === "fulfilled" ? [[entry.value.orderId, entry.value]] : [])),
           ),
         );
       } catch (loadError) {
@@ -102,6 +132,21 @@ export default function InventoryQueueScreen() {
   );
 
   const activeCount = tasks.filter((task) => !isFinished(task.status)).length;
+  // Việc còn phải làm lên trước; trong mỗi nhóm sắp theo ngày đã chọn, đơn thiếu ngày xuống cuối.
+  const sortedTasks = useMemo(() => {
+    const pick = (task: PreparationTaskSummary) =>
+      sortKey === "CREATED_DESC" ? timeOf(briefs[task.orderId]?.createdAt) : timeOf(briefs[task.orderId]?.handoverAt);
+    const direction = sortKey === "HANDOVER_ASC" ? 1 : -1;
+    return [...tasks].sort((a, b) => {
+      const finished = Number(isFinished(a.status)) - Number(isFinished(b.status));
+      if (finished) return finished;
+      const [x, y] = [pick(a), pick(b)];
+      if (Number.isNaN(x) && Number.isNaN(y)) return 0;
+      if (Number.isNaN(x)) return 1;
+      if (Number.isNaN(y)) return -1;
+      return (x - y) * direction;
+    });
+  }, [briefs, sortKey, tasks]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -218,6 +263,18 @@ export default function InventoryQueueScreen() {
             );
           })}
         </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sorts}>
+          <Ionicons name="swap-vertical" size={16} color={Colors.onSurfaceMuted} />
+          {SORTS.map((item) => (
+            <TouchableOpacity
+              key={item.value}
+              style={[styles.sortChip, sortKey === item.value && styles.sortChipActive]}
+              onPress={() => setSortKey(item.value)}
+            >
+              <Text style={[styles.sortText, sortKey === item.value && styles.sortTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
         {loading ? (
           <TrekkingLoader
@@ -237,10 +294,11 @@ export default function InventoryQueueScreen() {
             <Text style={styles.empty}>Không có nhiệm vụ kho ở trạng thái này.</Text>
           </View>
         ) : (
-          tasks.map((task) => (
+          sortedTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
+              brief={briefs[task.orderId]}
               onPress={() =>
                 router.push({
                   pathname: "/inventory-operations/[id]",
@@ -257,9 +315,11 @@ export default function InventoryQueueScreen() {
 
 function TaskCard({
   task,
+  brief,
   onPress,
 }: {
   task: PreparationTaskSummary;
+  brief?: PreparationOrderBrief;
   onPress: () => void;
 }) {
   const percent = task.progress.required
@@ -294,6 +354,20 @@ function TaskCard({
         </Text>
       </View>
       <Text style={styles.meta}>{task.inventoryLocation.name}</Text>
+      {brief?.handoverAt ? (
+        <View style={styles.handoverRow}>
+          <Ionicons name="calendar-outline" size={14} color="#2f6b1a" />
+          <Text style={styles.handoverText}>
+            Giao khách {shortDateTime(brief.handoverAt)} · {dayDistance(brief.handoverAt)}
+          </Text>
+        </View>
+      ) : null}
+      {brief?.createdAt ? (
+        <Text style={styles.metaSmall}>
+          Đặt đơn {shortDateTime(brief.createdAt)}
+          {brief.dueAt ? ` · khách trả ${shortDateTime(brief.dueAt)}` : ""}
+        </Text>
+      ) : null}
       {task.status === "TRANSFERRED" ? (
         <View style={styles.doneRow}>
           <Ionicons name="checkmark-circle" size={16} color="#2f6b1a" />
@@ -419,6 +493,14 @@ const styles = StyleSheet.create({
   tripRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
   tripName: { flex: 1, color: Colors.primaryDark, fontSize: 14, lineHeight: 19, fontWeight: "600" },
   meta: { color: Colors.body, fontSize: 14, lineHeight: 20, marginTop: 5 },
+  metaSmall: { color: Colors.onSurfaceMuted, fontSize: 13, lineHeight: 18, marginTop: 4, ...Typography.tabularNums },
+  handoverRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, alignSelf: "flex-start", borderRadius: 8, backgroundColor: "#eef7e8", paddingHorizontal: 8, paddingVertical: 5 },
+  handoverText: { color: "#2f6b1a", fontSize: 13, fontWeight: "600", ...Typography.tabularNums },
+  sorts: { gap: 8, alignItems: "center", paddingBottom: 14 },
+  sortChip: { borderRadius: 16, borderWidth: 1, borderColor: Colors.surfaceContainer, backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 7 },
+  sortChipActive: { borderColor: Colors.primaryDark, backgroundColor: Colors.primaryPale },
+  sortText: { color: Colors.body, fontSize: 13, fontWeight: "500" },
+  sortTextActive: { color: Colors.primaryDark, fontWeight: "700" },
   progressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
