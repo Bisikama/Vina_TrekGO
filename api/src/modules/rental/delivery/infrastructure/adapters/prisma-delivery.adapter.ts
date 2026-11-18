@@ -24,6 +24,7 @@ import {
   RefundPurpose,
   RefundStatus,
   RentalFinancialStatus,
+  RentalExceptionType,
   RentalOrderExceptionStatus,
   RentalOrderStatus,
   RentalUnitAssignmentStatus,
@@ -33,6 +34,12 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { PrismaService } from 'src/shared/services/prisma.service';
+import { HANDOVER_SHORTAGE_EVENT_TYPE, HANDOVER_SHORTAGE_REASON } from 'src/shared/constants/rental-event-reasons.constant';
+import {
+  HANDOVER_SHORTAGE_CASE_PREFIX,
+  HANDOVER_SHORTAGE_REFUND_CASE_PREFIX,
+  UNIT_MISSING_ISSUE_TYPES,
+} from '../../../shared/handover-shortage';
 import { AppError } from 'src/shared/errors/app-error';
 import { DELIVERY_ERROR_CODES as DL, LOGISTICS_ERROR_CODES as LG } from 'src/shared/errors/codes/delivery.error-codes';
 import type {
@@ -52,6 +59,7 @@ import type {
   DeliveryPort,
   DeliveryTaskDetailResult,
   DeliveryTaskListResult,
+  HandoverShortageResult,
   MarkNoShowCommand,
   MarkNoShowResult,
   PickupCodeResult,
@@ -66,6 +74,11 @@ const ACTIVE_ASSIGNMENT_STATUSES: RentalUnitAssignmentStatus[] = [
   RentalUnitAssignmentStatus.ASSIGNED,
   RentalUnitAssignmentStatus.PACKED,
   RentalUnitAssignmentStatus.HANDED_OVER,
+];
+
+const INACTIVE_ASSIGNMENT_STATUSES: RentalUnitAssignmentStatus[] = [
+  RentalUnitAssignmentStatus.REPLACED,
+  RentalUnitAssignmentStatus.UNASSIGNED,
 ];
 
 const HANDOVER_TASK_MUTABLE_STATUSES: DeliveryTaskStatus[] = [
@@ -428,7 +441,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
             packageItemsViaPackageId: {
               include: {
                 assignment: { include: { orderLine: true } },
-                equipmentUnit: true,
+                equipmentUnit: { include: { product: { select: { name: true } } } },
               },
             },
           },
@@ -475,6 +488,22 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
         for (const unitId of issueUnitIds) {
           if (!packageUnitIds.has(unitId)) throw AppError.fromCode(LG.PACKAGE_MISMATCH, { details: { unitId, reason: 'ISSUE_UNIT_NOT_IN_PACKAGE' } });
         }
+        for (const item of pkg.packageItemsViaPackageId) {
+          if (item.assignment.orderLine.orderId !== order.id || item.assignment.status !== RentalUnitAssignmentStatus.PACKED || item.equipmentUnit.status !== EquipmentUnitStatus.PACKED) {
+            throw AppError.fromCode(LG.PACKAGE_INCOMPLETE, { details: { unitId: item.equipmentUnitId, reason: 'UNIT_NOT_PACKED_FOR_ORDER' } });
+          }
+        }
+
+        // Partial handover: units the courier reported MISSING are not given to the customer.
+        const shortageDescriptions = handoverShortageDescriptions(command.reportedIssues);
+        const handedItems = pkg.packageItemsViaPackageId.filter((item) => !shortageDescriptions.has(item.equipmentUnitId));
+        const missingItems = pkg.packageItemsViaPackageId.filter((item) => shortageDescriptions.has(item.equipmentUnitId));
+        if (!handedItems.length) {
+          throw AppError.fromCode(LG.PACKAGE_INCOMPLETE, {
+            details: { reason: 'ALL_UNITS_MISSING', nextAction: 'MARK_NO_SHOW_SYSTEM_MISSING_EQUIPMENT' },
+          });
+        }
+        const shortageAmounts = handoverShortageAmounts(missingItems.map((item) => item.assignment.orderLine));
 
         const handover = await tx.rentalHandover.create({
           data: {
@@ -492,8 +521,6 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           },
         });
 
-        // Document business snapshot shares the same transaction, not the asynchronous PDF lifecycle.
-        await issueHandoverDocumentTx(tx, order.id, handover.id, command.now);
         await tx.rentalPickupCode.update({ where: { id: pickupCode.id }, data: { usedAt: command.now } });
         await tx.package.update({ where: { id: pkg.id }, data: { status: PackageStatus.HANDED_OVER, version: { increment: 1 } } });
         const updatedTask = await tx.deliveryTask.update({
@@ -516,10 +543,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           'HANDOVER',
         );
 
-        for (const item of pkg.packageItemsViaPackageId) {
-          if (item.assignment.orderLine.orderId !== order.id || item.assignment.status !== RentalUnitAssignmentStatus.PACKED || item.equipmentUnit.status !== EquipmentUnitStatus.PACKED) {
-            throw AppError.fromCode(LG.PACKAGE_INCOMPLETE, { details: { unitId: item.equipmentUnitId, reason: 'UNIT_NOT_PACKED_FOR_ORDER' } });
-          }
+        for (const item of handedItems) {
           await tx.rentalUnitAssignment.update({
             where: { id: item.assignmentId },
             data: { status: RentalUnitAssignmentStatus.HANDED_OVER, handedOverAt: command.now, version: { increment: 1 } },
@@ -529,15 +553,47 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
             data: { status: EquipmentUnitStatus.RENTED, currentInventoryLocationId: null, expectedReadyAt: order.occupiedEndAt, version: { increment: 1 } },
           });
         }
+        const shortage = missingItems.length
+          ? await recordHandoverShortageWithTx(tx, {
+              order,
+              handoverId: handover.id,
+              actorUserId: command.actorUserId,
+              missingItems,
+              descriptions: shortageDescriptions,
+              amounts: shortageAmounts,
+              now: command.now,
+            })
+          : null;
+        // Document business snapshot shares the same transaction, not the asynchronous PDF lifecycle.
+        // Issued after the refund attempt so the document only promises a refund that exists.
+        await issueHandoverDocumentTx(
+          tx,
+          order.id,
+          handover.id,
+          command.now,
+          shortage
+            ? {
+                missingUnitIds: missingItems.map((item) => item.equipmentUnitId),
+                descriptions: Object.fromEntries(shortageDescriptions),
+                refund: shortage.refund.refundRef
+                  ? {
+                      rentalFee: shortageAmounts.rentalFee.toFixed(0),
+                      deposit: shortageAmounts.deposit.toFixed(0),
+                      total: shortageAmounts.total.toFixed(0),
+                    }
+                  : null,
+              }
+            : undefined,
+        );
 
-        await ensurePerUnitDepositLedger(tx, order, pkg.packageItemsViaPackageId);
+        await ensurePerUnitDepositLedger(tx, order, handedItems);
         const recipientUserId = recipientUserIdFromSnapshot(order.recipientSnapshot) ?? order.userId;
         await writeCustodyPackageAndUnits(tx, {
           idempotencyKey: command.idempotencyKey,
           orderId: order.id,
           packageId: pkg.id,
           deliveryTaskId: task.id,
-          unitIds: pkg.packageItemsViaPackageId.map((item) => item.equipmentUnitId),
+          unitIds: handedItems.map((item) => item.equipmentUnitId),
           eventType: CustodyEventType.DELIVERY_TO_USER,
           fromActorType: CustodyActorType.DELIVERY_STAFF,
           fromUserId: command.actorUserId,
@@ -575,9 +631,10 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
           requestId: command.idempotencyKey,
         });
 
+        const finalOrder = shortage ? await tx.rentalOrder.findUniqueOrThrow({ where: { id: order.id } }) : updatedOrder;
         return {
-          order: mapRentalOrderForHandover(updatedOrder),
-          units: pkg.packageItemsViaPackageId.map((item) => ({
+          order: mapRentalOrderForHandover(finalOrder),
+          units: handedItems.map((item) => ({
             unitId: item.equipmentUnitId,
             assetCode: item.equipmentUnit.assetCode,
             condition: item.equipmentUnit.condition,
@@ -590,6 +647,7 @@ export class PrismaDeliveryAdapter implements DeliveryPort {
             reportedIssues: jsonObjectOrArray(handover.reportedIssues),
             handedOverAt: handover.handedOverAt.toISOString(),
           },
+          shortage,
         };
       },
     );
@@ -1142,7 +1200,10 @@ function mapDeliveryTaskDetail(task: any): DeliveryTaskDetailResult {
           requestedAt: task.custodyTransfersViaDeliveryTaskId[0].requestedAt.toISOString(),
         }
       : null,
-    units: task.package?.packageItemsViaPackageId.map((item: any) => {
+    // A unit missing at handover (UNASSIGNED) never reached the customer, so it is not collected either.
+    units: task.package?.packageItemsViaPackageId
+      .filter((item: any) => !INACTIVE_ASSIGNMENT_STATUSES.includes(item.assignment.status))
+      .map((item: any) => {
       const snapshot = snapshotsByUnit.get(item.equipmentUnitId);
       return {
         unitId: item.equipmentUnitId,
@@ -1309,6 +1370,12 @@ function hashPickupCode(orderId: string, code: string): string {
 }
 
 async function ensurePerUnitDepositLedger(tx: Prisma.TransactionClient, order: any, packageItems: any[]) {
+  // Only units the customer actually received hold a deposit; a shortage unit was refunded at handover.
+  // settlement-progress closes the settlement when the settled items add up to this total.
+  const heldDeposit = packageItems.reduce(
+    (sum: Prisma.Decimal, item: any) => sum.plus(item.assignment.orderLine.depositPerUnitSnapshot),
+    new Prisma.Decimal(0),
+  );
   const settlement = await tx.depositSettlement.upsert({
     where: { orderId: order.id },
     update: {},
@@ -1316,7 +1383,7 @@ async function ensurePerUnitDepositLedger(tx: Prisma.TransactionClient, order: a
       orderId: order.id,
       rentalPolicyId: order.rentalPolicyId,
       idempotencyKey: `rental-deposit:${order.id}`,
-      totalDeposit: order.totalDeposit,
+      totalDeposit: heldDeposit,
       status: DepositSettlementStatus.OPEN,
       policySnapshot: order.policySnapshot,
     },
@@ -1335,6 +1402,211 @@ async function ensurePerUnitDepositLedger(tx: Prisma.TransactionClient, order: a
       },
     });
   }
+}
+
+/**
+ * Units the courier reported as missing from the package entirely (`MISSING` / `UNIT_MISSING` with a unit):
+ * unitId → description (first one wins). Other types, e.g. a missing accessory, are only recorded.
+ */
+export function handoverShortageDescriptions(
+  issues: CommitHandoverCommand['reportedIssues'],
+): Map<string, string> {
+  const missing = new Map<string, string>();
+  for (const issue of issues ?? []) {
+    if (issue.unitId && UNIT_MISSING_ISSUE_TYPES.includes(issue.type.trim().toUpperCase()) && !missing.has(issue.unitId))
+      missing.set(issue.unitId, issue.description.trim());
+  }
+  return missing;
+}
+
+type ShortageLine = { id: string; quantity: number; lineRentalFee: Prisma.Decimal; depositPerUnitSnapshot: Prisma.Decimal };
+
+/** Fee + deposit of the missing units, per order line (one entry per missing unit in `lines`). */
+export function handoverShortageAmounts(lines: ShortageLine[]) {
+  const byLine = new Map<string, { line: ShortageLine; count: number }>();
+  for (const line of lines) byLine.set(line.id, { line, count: (byLine.get(line.id)?.count ?? 0) + 1 });
+  const perLine = [...byLine.values()].map(({ line, count }) => ({
+    rentalOrderLineId: line.id,
+    count,
+    // lineRentalFee = dailyPrice × chargedDays × quantity before handover, so this divides exactly.
+    rentalFee: line.lineRentalFee.mul(count).div(line.quantity).toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN),
+    deposit: line.depositPerUnitSnapshot.mul(count),
+  }));
+  const rentalFee = perLine.reduce((sum, line) => sum.plus(line.rentalFee), new Prisma.Decimal(0));
+  const deposit = perLine.reduce((sum, line) => sum.plus(line.deposit), new Prisma.Decimal(0));
+  return { perLine, rentalFee, deposit, total: rentalFee.plus(deposit) };
+}
+
+/**
+ * Takes the missing units out of the order inside the handover transaction: assignment UNASSIGNED,
+ * unit pulled into maintenance for the warehouse to locate, an internal case that can only be closed
+ * without charging the customer, the line's reservation reduced, and the fee + deposit refunded.
+ */
+async function recordHandoverShortageWithTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    order: any;
+    handoverId: string;
+    actorUserId: string;
+    missingItems: any[];
+    descriptions: Map<string, string>;
+    amounts: ReturnType<typeof handoverShortageAmounts>;
+    now: Date;
+  },
+): Promise<HandoverShortageResult> {
+  const { order, now } = input;
+  for (const item of input.missingItems) {
+    const description = input.descriptions.get(item.equipmentUnitId) ?? '';
+    // Booked against its warehouse, so a unit found again returns to stock when maintenance completes.
+    const locationId: string = item.equipmentUnit.currentInventoryLocationId ?? item.equipmentUnit.homeInventoryLocationId;
+    await tx.rentalUnitAssignment.update({
+      where: { id: item.assignmentId },
+      data: { status: RentalUnitAssignmentStatus.UNASSIGNED, closedAt: now, version: { increment: 1 } },
+    });
+    await tx.equipmentUnit.update({
+      where: { id: item.equipmentUnitId },
+      data: {
+        status: EquipmentUnitStatus.MAINTENANCE,
+        currentInventoryLocationId: locationId,
+        expectedReadyAt: null,
+        version: { increment: 1 },
+      },
+    });
+    await tx.maintenanceRecord.create({
+      data: {
+        unitId: item.equipmentUnitId,
+        inventoryLocationId: locationId,
+        staffId: input.actorUserId,
+        reason: HANDOVER_SHORTAGE_REASON,
+        notes: `Thiếu khi giao đơn ${order.id}: ${description}`.slice(0, 2000),
+        status: 'IN_PROGRESS',
+        startAt: now,
+      },
+    });
+    await tx.rentalExceptionCase.create({
+      data: {
+        orderId: order.id,
+        assignmentId: item.assignmentId,
+        unitId: item.equipmentUnitId,
+        caseType: RentalExceptionType.OTHER,
+        openedBy: input.actorUserId,
+        reason: `${HANDOVER_SHORTAGE_CASE_PREFIX} ${description}`,
+        evidenceIds: [],
+      },
+    });
+  }
+
+  // The line keeps its contract quantity; only the capacity it still holds shrinks.
+  for (const line of input.amounts.perLine) {
+    const reservation = await tx.rentalQuantityReservation.findFirst({
+      where: { orderLineId: line.rentalOrderLineId, status: ReservationStatus.CONFIRMED },
+      orderBy: { reservationCycle: 'desc' },
+    });
+    if (!reservation) continue;
+    const quantity = Math.max(0, reservation.quantity - line.count);
+    await tx.rentalQuantityReservation.update({
+      where: { id: reservation.id },
+      data: quantity
+        ? { quantity, version: { increment: 1 } }
+        : { status: ReservationStatus.RELEASED, releasedAt: now, version: { increment: 1 } },
+    });
+  }
+
+  let refundRef: string | null = null;
+  let refundStatus: string | null = null;
+  let failureReason: string | null = null;
+  const payment = await findSucceededRentalPayment(tx, order.id);
+  try {
+    if (!payment) throw new Error('RENTAL_REFUND_SOURCE_NOT_VERIFIED');
+    const refund = await reserveRentalCancellationRefundWithTx(tx, {
+      orderId: order.id,
+      paymentId: payment.id,
+      amount: input.amounts.total,
+      reason: HANDOVER_SHORTAGE_REASON,
+      idempotencyKey: `rental-handover-shortage:${input.handoverId}`,
+      now,
+      lineAmounts: input.amounts.perLine.flatMap((line) => [
+        { rentalOrderLineId: line.rentalOrderLineId, component: 'RENTAL_FEE' as const, amount: line.rentalFee },
+        { rentalOrderLineId: line.rentalOrderLineId, component: 'RENTAL_DEPOSIT' as const, amount: line.deposit },
+      ]),
+    });
+    refundRef = refund.id;
+    refundStatus = refund.status;
+    await tx.rentalOutboxEvent.upsert({
+      where: { deduplicationKey: `refund-request:${refund.id}` },
+      update: {},
+      create: {
+        deduplicationKey: `refund-request:${refund.id}`,
+        eventType: 'RENTAL_REFUND_REQUESTED',
+        aggregateType: 'RentalOrder',
+        aggregateId: order.id,
+        payload: jsonValue({
+          refundRef: refund.id, paymentRef: payment.id, rentalOrderId: order.id, component: HANDOVER_SHORTAGE_REASON,
+          amount: input.amounts.total.toFixed(0), currency: order.currency, reason: HANDOVER_SHORTAGE_REASON,
+        }),
+      },
+    });
+  } catch (failure) {
+    // Reconciliation problems go to an admin; a database error still rolls the handover back.
+    if (!(failure instanceof Error) || !/^(RENTAL_REFUND_|MULTI_PAYMENT_RENTAL_CANCELLATION_)/.test(failure.message)) throw failure;
+    failureReason = failure.message;
+    // An admin refunds by hand. The order is not flagged: ACTION_REQUIRED would block extensions for a
+    // money issue the customer did not cause. The case sits on a missing unit's assignment so it holds
+    // the order open until closed without blocking the deposit refunds of the units handed over.
+    await tx.rentalExceptionCase.create({
+      data: {
+        orderId: order.id,
+        assignmentId: input.missingItems[0].assignmentId,
+        unitId: input.missingItems[0].equipmentUnitId,
+        caseType: RentalExceptionType.REFUND_FAILURE,
+        openedBy: input.actorUserId,
+        reason: `${HANDOVER_SHORTAGE_REFUND_CASE_PREFIX} ${failure.message}; hoàn tay ${input.amounts.total.toFixed(0)} VND`,
+        evidenceIds: [],
+      },
+    });
+  }
+
+  const units = input.missingItems.map((item) => ({
+    unitId: item.equipmentUnitId as string,
+    assetCode: item.equipmentUnit.assetCode as string,
+    productName: (item.equipmentUnit.product?.name ?? null) as string | null,
+    description: input.descriptions.get(item.equipmentUnitId) ?? '',
+  }));
+  const refund = {
+    refundRef,
+    status: refundStatus,
+    amount: decimalVndToApiInteger(input.amounts.total.toFixed(0)),
+    rentalFeeAmount: decimalVndToApiInteger(input.amounts.rentalFee.toFixed(0)),
+    depositAmount: decimalVndToApiInteger(input.amounts.deposit.toFixed(0)),
+    failureReason,
+  };
+  await tx.rentalOutboxEvent.upsert({
+    where: { deduplicationKey: `rental-handover-shortage:${input.handoverId}` },
+    update: {},
+    create: {
+      deduplicationKey: `rental-handover-shortage:${input.handoverId}`,
+      eventType: HANDOVER_SHORTAGE_EVENT_TYPE,
+      aggregateType: 'RentalOrder',
+      aggregateId: order.id,
+      payload: jsonValue({
+        handoverId: input.handoverId,
+        units: units.map(({ unitId, assetCode, productName }) => ({ unitId, assetCode, ...(productName ? { productName } : {}) })),
+        refundAmount: refund.amount,
+        ...(refundRef ? { refundRef } : {}),
+        refundCreated: refundRef !== null,
+      }),
+    },
+  });
+  await writeDeliveryAudit(tx, {
+    actorUserId: input.actorUserId,
+    action: 'RENTAL_HANDOVER_SHORTAGE_RECORDED',
+    entityType: 'RentalHandover',
+    entityId: input.handoverId,
+    oldValues: { unitIds: units.map((unit) => unit.unitId) },
+    newValues: { assignmentStatus: 'UNASSIGNED', unitStatus: 'MAINTENANCE', refund },
+    requestId: `rental-handover-shortage:${input.handoverId}`,
+  });
+  return { units, refund };
 }
 
 async function validateExceptionEvidence(tx: Prisma.TransactionClient, actorUserId: string, evidenceIds: string[]) {

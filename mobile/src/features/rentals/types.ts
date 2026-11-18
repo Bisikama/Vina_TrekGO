@@ -228,6 +228,8 @@ export type RentalAssignedUnit = {
   unitId: string;
   assetCode?: string;
   status?: string;
+  /** REPLACED (đổi lúc soạn) / UNASSIGNED (thiếu lúc giao) không còn thuộc đơn. */
+  assignmentStatus?: string;
   condition?: string;
   productName?: string;
 };
@@ -374,6 +376,20 @@ export type RentalOrderTimelineItem = {
   createdAt?: string;
 };
 
+/** Bàn giao một phần (RB-API-404): món shipper báo thiếu không giao cho khách, được hoàn phí thuê + cọc. */
+export type HandoverShortage = {
+  units: { unitId: string; assetCode: string; productName: string | null; description: string }[];
+  refund: {
+    refundRef: string | null;
+    status: string | null;
+    amount: number;
+    rentalFeeAmount: number;
+    depositAmount: number;
+    /** Có giá trị khi không tạo được khoản hoàn tự động; Admin hoàn tay. */
+    failureReason: string | null;
+  };
+};
+
 export type RentalOrderDetail = {
   order: RentalOrderSummary;
   items: RentalOrderLine[];
@@ -397,6 +413,20 @@ export type RentalOrderDetail = {
     status: string;
     settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
   }[];
+  /** Có khi TrekGo giao thiếu thiết bị lúc bàn giao: các món này không tính vào đơn và được hoàn phí thuê + cọc. */
+  handoverShortage?: {
+    handedOverAt: string | null;
+    units: { unitId: string; assetCode: string; productId: string; productName: string; description: string | null }[];
+    refund: null | {
+      refundId: string;
+      amount: number;
+      currency: string;
+      status: string;
+      settlementMode: "STANDARD" | "SANDBOX_SIMULATED";
+      rentalFeeAmount: number;
+      depositAmount: number;
+    };
+  };
   timeline?: RentalOrderTimelineItem[];
   /** Thời gian thuê theo chuyến đi (dự kiến), không phải mốc bàn giao/trả thực tế. */
   trip?: { id?: string; rentalStartAt?: string; dueAt?: string; occupiedUntil?: string } | null;

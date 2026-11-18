@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/api-client";
 import {
   DeliveryTaskDetail,
   DeliveryTaskSummary,
+  HandoverShortage,
   PaginatedResult,
   RentalAvailability,
   RentalCancellationPreview,
@@ -686,7 +687,7 @@ export const rentalApi = {
     idempotencyKey: string,
     accessToken: string,
   ) {
-    const response = await apiRequest<Envelope<Record<string, unknown>>>(
+    const response = await apiRequest<Envelope<{ shortage?: HandoverShortage | null }>>(
       `/api/v1/rental-orders/${orderId}/handover`,
       {
         method: "POST",

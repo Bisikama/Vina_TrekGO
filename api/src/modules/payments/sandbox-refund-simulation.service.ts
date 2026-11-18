@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../shared/services/prisma.service'
 import envconfig from '../../shared/config'
+import { HANDOVER_SHORTAGE_REASON } from '../../shared/constants/rental-event-reasons.constant'
 import { AppError } from '../../shared/errors'
 import { PAYMENT_ERROR_CODES as P } from '../../shared/errors/codes/payment.error-codes'
 import type { VerifiedRefundEvent } from './payment-provider.port'
@@ -333,7 +334,11 @@ export class SandboxRefundSimulationService {
         const order = refund.rentalOrderId
           ? await tx.rentalOrder.findUnique({ where: { id: refund.rentalOrderId }, select: { id: true, status: true, userId: true } })
           : null
-        if (!order || order.status !== 'CANCELLED' || refund.payment.invoice.invoiceType !== 'RENTAL' ||
+        // A handover-shortage refund returns part of a live order (the units never handed over).
+        const orderStateValid =
+          order?.status === 'CANCELLED' ||
+          (refund.reason === HANDOVER_SHORTAGE_REASON && order?.status !== 'PENDING_PAYMENT' && order?.status !== 'EXPIRED')
+        if (!order || !orderStateValid || refund.payment.invoice.invoiceType !== 'RENTAL' ||
             refund.payment.invoice.rentalOrderId !== order.id || refund.payment.invoice.userId !== order.userId || refund.payment.status !== 'SUCCEEDED' ||
             refund.payment.application?.status !== 'APPLIED' || refund.requestHashVersion !== 1 ||
             !refund.businessActionId?.startsWith(`rental-cancellation:${order.id}:`) ||

@@ -89,7 +89,8 @@ describe('RentalNotificationConsumer.deliver', () => {
     const { service, consumer } = rentalConsumer()
     await consumer.deliver(event('DEPOSIT_REFUND_SUCCEEDED', { orderId: ORDER, refundId: 'ref-1' }))
     expect(service.deliverEvent.mock.calls[0][2].title).toBe('Hoàn tiền cọc thiết bị')
-    expect(service.deliverEvent.mock.calls[0][2].content).toMatch(/không có tiền thật/)
+    expect(service.deliverEvent.mock.calls[0][2].content).not.toMatch(/mô phỏng/)
+    expect(service.deliverEvent.mock.calls[0][2].metadata).toMatchObject({ sandboxSimulated: true })
   })
 })
 

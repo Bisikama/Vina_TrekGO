@@ -1,5 +1,6 @@
 import { FieldModal } from "@/components/FieldModal";
 import { TrekkingLoader } from "@/components/common/TrekkingLoader";
+import { ConfirmModal, formatVnd } from "@/components/ui";
 import { Colors, Radius, Shadows } from "@/constants/theme";
 import { useAuth } from "@/features/auth/AuthContext";
 import { rentalApi } from "@/features/rentals/api";
@@ -128,6 +129,9 @@ export default function StaffTaskScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [complete, setComplete] = useState(false);
+  /** Câu báo sau khi bàn giao thiếu (số món + khoản hoàn); null = bàn giao bình thường. */
+  const [shortageMessage, setShortageMessage] = useState<string | null>(null);
+  const [shortageConfirmVisible, setShortageConfirmVisible] = useState(false);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<{ title: string; message: string } | null>(null);
   const [noShowVisible, setNoShowVisible] = useState(false);
@@ -204,6 +208,9 @@ export default function StaffTaskScreen() {
       const review = reviews[unit.unitId];
       return review && review.status !== "PENDING" && (review.status === "OK" || review.note.trim().length > 0);
     });
+  // Món "Thiếu" lúc giao không giao cho khách; backend hoàn phí thuê + cọc của món đó.
+  const missingUnits = units.filter((unit) => reviews[unit.unitId]?.status === "MISSING");
+  const allMissing = units.length > 0 && missingUnits.length === units.length;
   const currentVerificationRef = verifiedRef || verificationRef(task);
   const serverStatus = task?.task.status || summary?.status;
   const statusPresentation = deliveryStatus(serverStatus);
@@ -301,17 +308,32 @@ export default function StaffTaskScreen() {
       setFeedback({ title: "Chưa kiểm đủ", message: "Kiểm tra từng thiết bị; món thiếu hoặc hỏng phải có ghi chú." });
       return;
     }
+    if (allMissing) {
+      setFeedback({
+        title: "Kiện thiếu toàn bộ thiết bị",
+        message: "Không bàn giao được. Dùng “Khách không đến / từ chối nhận” với lý do “Gói bàn giao thiếu thiết bị”.",
+      });
+      return;
+    }
+    setShortageConfirmVisible(false);
 
+    // "Thiếu cả món" → UNIT_MISSING (backend rút món khỏi đơn và hoàn tiền); thiếu phụ kiện ghi ở "Hư hỏng".
     const reportedIssues = units.flatMap((unit) => {
       const review = reviews[unit.unitId];
-      if (!review || review.status === "OK") return [];
-      return [{ unitId: unit.unitId, type: review.status, description: review.note.trim() }];
+      if (!review || review.status === "OK" || review.status === "PENDING") return [];
+      return [
+        {
+          unitId: unit.unitId,
+          type: review.status === "MISSING" ? "UNIT_MISSING" : review.status,
+          description: review.note.trim(),
+        },
+      ];
     });
 
     setBusy(true);
     setError(undefined);
     try {
-      await rentalApi.commitRentalHandover(
+      const result = await rentalApi.commitRentalHandover(
         summary.orderSummary.orderId,
         {
           packageId: task.package.id,
@@ -322,6 +344,14 @@ export default function StaffTaskScreen() {
         },
         keys.current.handover,
         accessToken,
+      );
+      const shortage = result?.shortage;
+      setShortageMessage(
+        shortage
+          ? shortage.refund.refundRef
+            ? `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Khách được hoàn ${formatVnd(shortage.refund.amount)}; kho sẽ tìm lại thiết bị thiếu.`
+            : `Đã bàn giao, thiếu ${shortage.units.length} thiết bị. Chưa tạo được khoản hoàn ${formatVnd(shortage.refund.amount)} tự động — Admin sẽ hoàn tay.`
+          : null,
       );
       setComplete(true);
     } catch (requestError) {
@@ -466,7 +496,7 @@ export default function StaffTaskScreen() {
                   <View style={styles.statusRow}>
                     {(["OK", "MISSING", "DAMAGED"] as ItemStatus[]).map((status) => (
                       <TouchableOpacity key={status} style={[styles.statusButton, review.status === status && styles.statusSelected]} onPress={() => setReview(unit.unitId, { status })}>
-                        <Text style={[styles.statusText, review.status === status && styles.statusTextSelected]}>{status === "OK" ? "Đủ / tốt" : status === "MISSING" ? "Thiếu" : "Hư hỏng"}</Text>
+                        <Text style={[styles.statusText, review.status === status && styles.statusTextSelected]}>{status === "OK" ? "Đủ / tốt" : status === "MISSING" ? "Thiếu cả món" : "Hỏng / thiếu phụ kiện"}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -477,8 +507,30 @@ export default function StaffTaskScreen() {
               );
             })}
             <TextInput value={recipientNotes} onChangeText={setRecipientNotes} placeholder="Ghi chú của người nhận (không bắt buộc)" placeholderTextColor={Colors.onSurfaceMuted} multiline style={[styles.input, styles.notes]} />
-            <TouchableOpacity disabled={busy || !allReviewed} style={[styles.primary, (busy || !allReviewed) && styles.disabled]} onPress={() => void handover()}>
-              <Text style={styles.primaryText}>{busy ? "ĐANG BÀN GIAO..." : "XÁC NHẬN BÀN GIAO"}</Text>
+            {missingUnits.length > 0 ? (
+              <View style={styles.shortageBox}>
+                <Text style={styles.shortageTitle}>
+                  {allMissing ? "Kiện thiếu toàn bộ thiết bị" : `Bàn giao thiếu ${missingUnits.length} thiết bị`}
+                </Text>
+                <Text style={styles.shortageText}>
+                  {allMissing
+                    ? "Không bàn giao được. Dùng “Khách không đến / từ chối nhận” với lý do “Gói bàn giao thiếu thiết bị”."
+                    : "Món thiếu không giao cho khách; khách được hoàn phí thuê và tiền cọc của món đó, kho nhận việc tìm lại."}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              disabled={busy || !allReviewed || allMissing}
+              style={[styles.primary, (busy || !allReviewed || allMissing) && styles.disabled]}
+              onPress={() => (missingUnits.length ? setShortageConfirmVisible(true) : void handover())}
+            >
+              <Text style={styles.primaryText}>
+                {busy
+                  ? "ĐANG BÀN GIAO..."
+                  : missingUnits.length && !allMissing
+                    ? `BÀN GIAO ${units.length - missingUnits.length}/${units.length} THIẾT BỊ`
+                    : "XÁC NHẬN BÀN GIAO"}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -537,10 +589,22 @@ export default function StaffTaskScreen() {
         </Pressable>
       </Modal>
 
+      <ConfirmModal
+        visible={shortageConfirmVisible}
+        title={`Bàn giao thiếu ${missingUnits.length} thiết bị?`}
+        description={`Không có trong kiện và sẽ không giao cho khách: ${missingUnits
+          .map((unit) => `${unit.product?.name ? productLabel(unit.product.name) : "Thiết bị"} (mã ${shortAssetCode(unit.assetCode)})`)
+          .join(", ")}. Khách được hoàn phí thuê và tiền cọc của các món này; thiết bị chuyển sang bảo trì để kho tìm lại. Không thể hoàn tác.`}
+        confirmLabel={`Bàn giao ${units.length - missingUnits.length} thiết bị`}
+        variant="danger"
+        loading={busy}
+        onConfirm={() => void handover()}
+        onClose={() => setShortageConfirmVisible(false)}
+      />
       <FieldModal
         visible={complete}
-        title="Đã cập nhật nhiệm vụ"
-        message="Thông tin giao nhận đã được lưu thành công."
+        title={shortageMessage ? "Đã bàn giao (thiếu thiết bị)" : "Đã cập nhật nhiệm vụ"}
+        message={shortageMessage ?? "Thông tin giao nhận đã được lưu thành công."}
         icon="checkmark-circle"
         actionLabel="Về dashboard"
         onAction={() => { setComplete(false); router.replace("/field-operations" as never); }}
@@ -606,6 +670,9 @@ const styles = StyleSheet.create({
   statusTextSelected: { color: "#fff" },
   issueInput: { borderWidth: 1, borderColor: Colors.error, borderRadius: 7, padding: 9, color: Colors.ink, marginTop: 8 },
   errorBox: { backgroundColor: "#ffe8e5", borderRadius: Radius.sm, padding: 12, marginBottom: 12 },
+  shortageBox: { backgroundColor: "#fff1c7", borderRadius: Radius.sm, padding: 12, marginTop: 12 },
+  shortageTitle: { color: "#7a4a00", fontSize: 15, fontWeight: "800" },
+  shortageText: { color: Colors.body, fontSize: 14, lineHeight: 20, marginTop: 4 },
   errorText: { color: Colors.error, fontSize: 14, marginTop: 8 },
   noShowButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14 },
   noShowText: { color: Colors.error, fontWeight: "600", fontSize: 13 },
