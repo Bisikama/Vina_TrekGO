@@ -262,3 +262,4 @@ sudo grep " 50[0-9] " /var/log/nginx/access.log | tail -20   # request trả l�
 - [ ] Nginx `trekgo-web` + `client_max_body_size`
 - [ ] `certbot --nginx` + `renew --dry-run`
 - [ ] Sửa URL redirect thanh toán trong `TREKGO_ENV`, chạy lại workflow API
+pre deploy
