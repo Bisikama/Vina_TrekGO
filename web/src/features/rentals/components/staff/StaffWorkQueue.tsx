@@ -54,9 +54,9 @@ const PRIORITY_BADGE: Record<PreparationTaskPriority, { label: string; tone: str
 type SortKey = "HANDOVER_ASC" | "HANDOVER_DESC" | "CREATED_DESC" | "PRIORITY";
 
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
-  { value: "HANDOVER_ASC", label: "Ngày giao khách gần nhất" },
-  { value: "HANDOVER_DESC", label: "Ngày giao khách xa nhất" },
-  { value: "CREATED_DESC", label: "Đơn mới đặt nhất" },
+  { value: "HANDOVER_ASC", label: "Ngày giao sớm nhất" },
+  { value: "HANDOVER_DESC", label: "Ngày giao muộn nhất" },
+  { value: "CREATED_DESC", label: "Đặt gần đây nhất" },
   { value: "PRIORITY", label: "Theo mức ưu tiên kho" },
 ];
 

@@ -109,6 +109,22 @@ function formatDay(value: unknown) {
 }
 
 /** Lý do chi tiết backend gửi trong `error.details` (pick, đổi món, nhập thiết bị). */
+/** "HH:mm dd/MM" theo giờ Việt Nam (UTC+7). */
+function formatVnDateTime(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return null;
+  const vn = new Date(time + 7 * 3_600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())} ${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}`;
+}
+
+/** Pick/đổi thiết bị sớm bị từ chối vì sẽ làm thiếu thiết bị cho đơn khác giao trước. */
+function pickTooEarlyMessage(details: unknown): string {
+  const from = isRecord(details) ? formatVnDateTime(details.pickableFrom) : null;
+  return `Chưa thể soạn sớm: lấy thiết bị lúc này sẽ làm thiếu đồ cho đơn khác giao trước đơn này.${from ? ` Có thể soạn từ ${from}.` : ""}`;
+}
+
 function inventoryReasonMessage(details: unknown): string | null {
   if (!isRecord(details)) return null;
   if (details.reason === "EXPIRES_BEFORE_RETURN") {
@@ -133,6 +149,7 @@ export function getStaffInventoryErrorMessage(
       const apiError = responseData.error;
 
       if (isRecord(apiError)) {
+        if (apiError.code === "PREPARATION_PICK_TOO_EARLY") return pickTooEarlyMessage(apiError.details);
         const reasonMessage = inventoryReasonMessage(apiError.details);
         if (reasonMessage) return reasonMessage;
       }
