@@ -349,21 +349,29 @@ export async function uploadInventoryEvidence(
     formData.append(key, String(value));
   });
   const fileName = asset.fileName || fallbackName;
-  const localFileResponse = await fetch(asset.uri);
+  // React Native gửi file trực tiếp từ uri (ổn định trên cả Android và iOS).
+  // Cách cũ fetch(uri).blob() hay lỗi "Network request failed" trên Android.
+  formData.append("file", {
+    uri: asset.uri,
+    name: fileName,
+    type: contentType,
+  } as unknown as Blob);
 
-  if (!localFileResponse.ok) {
-    throw new Error("Không thể đọc tệp bằng chứng trên thiết bị.");
+  let uploadedResponse: Response;
+  try {
+    uploadedResponse = await fetch(intent.upload.uploadUrl, {
+      method: intent.upload.method || "POST",
+      body: formData,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Không gửi được tệp lên kho media (${reason}).`);
   }
-
-  const fileBlob = await localFileResponse.blob();
-  formData.append("file", fileBlob, fileName);
-
-  const uploadedResponse = await fetch(intent.upload.uploadUrl, {
-    method: intent.upload.method || "POST",
-    body: formData,
-  });
   if (!uploadedResponse.ok) {
-    throw new Error("Không thể tải bằng chứng lên kho media.");
+    const detail = (await uploadedResponse.text().catch(() => "")).slice(0, 160);
+    throw new Error(
+      `Kho media từ chối tệp (HTTP ${uploadedResponse.status})${detail ? `: ${detail}` : "."}`,
+    );
   }
   const uploaded = (await uploadedResponse.json()) as {
     public_id: string;
