@@ -176,6 +176,33 @@ export const staffInventoryApi = {
     return unwrap(response);
   },
 
+  /** Thông tin đơn kho cần khi soạn: ngày đặt, thanh toán, giao khách, hạn trả, điểm nhận/trả, phí/cọc. */
+  async getOrderBrief(orderId: string, accessToken: string): Promise<PreparationOrderBrief> {
+    const detail = unwrap(
+      await apiRequest<
+        Envelope<{
+          order?: { createdAt?: string; dueAt?: string; rentalFee?: number; totalDeposit?: number };
+          trip?: { rentalStartAt?: string; dueAt?: string };
+          pickupPoint?: { name?: string; address?: string } | null;
+          returnPoint?: { name?: string } | null;
+          timeline?: { type: string; at: string }[];
+        }>
+      >(`/api/v1/rental-orders/${encodeURIComponent(orderId)}`, { method: "GET", accessToken }),
+    );
+    return {
+      orderId,
+      createdAt: detail.order?.createdAt ?? null,
+      paidAt: detail.timeline?.find((step) => step.type === "PAID")?.at ?? null,
+      handoverAt: detail.trip?.rentalStartAt ?? null,
+      dueAt: detail.trip?.dueAt ?? detail.order?.dueAt ?? null,
+      pickupName: detail.pickupPoint?.name ?? null,
+      pickupAddress: detail.pickupPoint?.address ?? null,
+      returnName: detail.returnPoint?.name ?? null,
+      rentalFee: detail.order?.rentalFee ?? null,
+      totalDeposit: detail.order?.totalDeposit ?? null,
+    };
+  },
+
   async getTask(taskId: string, accessToken: string) {
     const response = await apiRequest<Envelope<PreparationTaskDetail>>(
       `/api/v1/inventory/tasks/${encodeURIComponent(taskId)}`,
@@ -304,6 +331,20 @@ export const staffInventoryApi = {
       accessToken,
     );
   },
+};
+
+export type PreparationOrderBrief = {
+  orderId: string;
+  createdAt: string | null;
+  paidAt: string | null;
+  /** Giờ giao đồ cho khách (bắt đầu thuê). */
+  handoverAt: string | null;
+  dueAt: string | null;
+  pickupName: string | null;
+  pickupAddress: string | null;
+  returnName: string | null;
+  rentalFee: number | null;
+  totalDeposit: number | null;
 };
 
 export async function uploadInventoryEvidence(

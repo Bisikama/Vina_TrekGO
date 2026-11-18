@@ -266,3 +266,45 @@ export async function requestPreparationTransfer(
   );
   return unwrap<{ custodyTransferId: string; status: string; toStaffId: string; packageId: string; taskVersion: number }>(response.data);
 }
+
+/** Thông tin đơn kho cần biết khi soạn: lấy từ GET /rental-orders/:id (nhân viên kho được phép đọc). */
+export type PreparationOrderBrief = {
+  orderId: string;
+  createdAt: string | null;
+  paidAt: string | null;
+  /** Giờ giao đồ cho khách (bắt đầu thuê). */
+  handoverAt: string | null;
+  dueAt: string | null;
+  pickupName: string | null;
+  pickupAddress: string | null;
+  returnName: string | null;
+  rentalFee: number | null;
+  totalDeposit: number | null;
+  currency: string;
+  status: string | null;
+};
+
+export async function getPreparationOrderBrief(orderId: string, signal?: AbortSignal): Promise<PreparationOrderBrief> {
+  const response = await apiClient.get<unknown>(`/api/v1/rental-orders/${encodeURIComponent(orderId)}`, { signal });
+  const detail = unwrap<{
+    order?: { createdAt?: string; dueAt?: string; rentalFee?: number; totalDeposit?: number; currency?: string; status?: string };
+    trip?: { rentalStartAt?: string; dueAt?: string };
+    pickupPoint?: { name?: string; address?: string } | null;
+    returnPoint?: { name?: string } | null;
+    timeline?: Array<{ type: string; at: string }>;
+  }>(response.data);
+  return {
+    orderId,
+    createdAt: detail.order?.createdAt ?? null,
+    paidAt: detail.timeline?.find((step) => step.type === "PAID")?.at ?? null,
+    handoverAt: detail.trip?.rentalStartAt ?? null,
+    dueAt: detail.trip?.dueAt ?? detail.order?.dueAt ?? null,
+    pickupName: detail.pickupPoint?.name ?? null,
+    pickupAddress: detail.pickupPoint?.address ?? null,
+    returnName: detail.returnPoint?.name ?? null,
+    rentalFee: detail.order?.rentalFee ?? null,
+    totalDeposit: detail.order?.totalDeposit ?? null,
+    currency: detail.order?.currency ?? "VND",
+    status: detail.order?.status ?? null,
+  };
+}
